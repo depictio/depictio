@@ -13,15 +13,15 @@
   <path d="M40.0,204.2 C39.1,180.0 39.0,153.9 39.6,129.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <text x="150.0" y="157.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">alice</text>
   <text x="150.0" y="181.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">direct owner</text>
-  <rect x="40.0" y="234.0" width="220.0" height="74.0" rx="6" fill="#e7f5ff"/>
+  <rect x="40.0" y="234.0" width="220.0" height="90.0" rx="6" fill="#e7f5ff"/>
   <path d="M40.2,234.5 C114.8,234.3 188.0,234.7 260.6,233.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M39.8,233.6 C112.7,234.2 187.5,233.6 259.8,234.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <path d="M259.6,233.5 C260.1,258.4 259.6,283.1 260.4,307.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <path d="M259.9,234.6 C259.8,258.4 260.1,283.6 259.6,307.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <path d="M259.7,308.1 C186.8,308.6 114.0,308.5 39.5,308.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <path d="M259.3,308.2 C186.9,308.5 112.5,306.8 39.8,307.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <path d="M39.5,308.2 C41.2,283.0 38.9,257.7 39.6,233.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <path d="M40.2,307.2 C38.9,282.4 40.0,258.8 40.1,233.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M259.6,233.5 C260.1,263.8 259.6,293.8 260.4,323.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M259.9,234.6 C259.8,263.8 260.1,294.2 259.6,323.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M259.7,324.1 C186.8,324.6 114.0,324.5 39.5,324.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M259.3,324.2 C186.9,324.5 112.5,322.8 39.8,323.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M39.5,324.2 C41.2,293.7 38.9,263.0 39.6,233.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M40.2,323.2 C38.9,293.1 40.0,264.1 40.1,233.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <text x="150.0" y="261.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">bob</text>
   <text x="150.0" y="285.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">direct viewer</text>
   <text x="150.0" y="306.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">member of Lab X</text>
@@ -83,10 +83,10 @@
   <path d="M259.8,167.6 C313.8,188.6 370.1,206.0 423.1,226.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M424.4,226.5 C421.0,223.2 418.6,218.8 414.9,216.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M423.9,226.0 C419.8,227.1 415.2,226.6 409.9,228.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <path d="M259.8,271.2 C313.7,273.3 368.9,273.6 423.2,274.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <path d="M260.7,270.6 C315.2,273.7 367.6,272.3 423.9,274.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <path d="M423.5,273.9 C420.2,271.1 415.0,269.1 411.6,267.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <path d="M424.2,274.5 C419.5,276.2 416.3,277.8 411.8,280.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M259.8,279.2 C313.7,278.7 368.9,276.3 423.2,274.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M260.7,278.6 C315.2,279.0 367.6,275.0 423.9,274.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M423.5,273.9 C420.1,271.3 414.8,269.5 411.3,268.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M424.2,274.5 C419.6,276.4 416.5,278.2 412.1,281.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M260.6,380.4 C316.1,384.0 368.8,384.9 423.2,387.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M259.6,380.9 C315.7,382.5 369.1,385.8 424.5,388.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M424.2,388.2 C419.3,385.3 415.8,383.5 412.2,381.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
@@ -149,7 +149,7 @@
   <path d="M1290.5,503.5 C1289.5,384.9 1290.7,266.4 1289.9,150.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <text x="1405.0" y="177.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">every gate</text>
   <text x="1405.0" y="201.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">projects list/get</text>
-  <text x="1405.0" y="222.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">dashboards (26 sites)</text>
+  <text x="1405.0" y="222.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">dashboards</text>
   <text x="1405.0" y="243.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">workflows</text>
   <text x="1405.0" y="264.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">files / deltatables</text>
   <text x="1405.0" y="285.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">multiqc / advanced viz</text>

@@ -64,7 +64,7 @@ def build_sharing_model() -> Sketch:
 
     # -- principals -------------------------------------------------------
     alice = Box(40, 130, 220, 74, BLUE, "alice", ("direct owner",))
-    bob = Box(40, 234, 220, 74, BLUE, "bob", ("direct viewer", "member of Lab X"))
+    bob = Box(40, 234, 220, 90, BLUE, "bob", ("direct viewer", "member of Lab X"))
     lab = Box(
         40,
         350,
@@ -165,7 +165,7 @@ def build_sharing_model() -> Sketch:
         "every gate",
         (
             "projects list/get",
-            "dashboards (26 sites)",
+            "dashboards",
             "workflows",
             "files / deltatables",
             "multiqc / advanced viz",
@@ -309,7 +309,7 @@ def build_saml_sync() -> Sketch:
         40,
         560,
         280,
-        120,
+        142,
         ORANGE,
         "sysadmin",
         (
@@ -323,7 +323,7 @@ def build_saml_sync() -> Sketch:
         420,
         560,
         280,
-        120,
+        142,
         PINK,
         "P.I.  (carol)",
         (
@@ -336,7 +336,7 @@ def build_saml_sync() -> Sketch:
         800,
         560,
         330,
-        120,
+        142,
         VIOLET,
         "group admins",
         (
@@ -350,7 +350,7 @@ def build_saml_sync() -> Sketch:
         1230,
         560,
         290,
-        120,
+        142,
         BLUE,
         "where",
         (
@@ -368,14 +368,14 @@ def build_saml_sync() -> Sketch:
 
     s.text(
         780,
-        740,
+        766,
         "guards: no self-demotion . a group keeps >= 1 admin (sysadmin may override) .",
         size=14,
         colour=DIM,
     )
     s.text(
         780,
-        762,
+        788,
         "removing a member also drops their admin role and clears P.I. if it was them",
         size=14,
         colour=DIM,
