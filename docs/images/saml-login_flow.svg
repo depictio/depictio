@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1560" height="760" viewBox="0 0 1560 760">
+  <rect width="1560" height="760" fill="#ffffff"/>
+  <text x="40.0" y="52.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="25" fill="#1e1e1e" text-anchor="start" font-weight="normal">SAML SSO login (SP-initiated)</text>
+  <text x="40.0" y="78.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal">the browser round-trips through the IdP, then lands in the viewer with a single-use ticket</text>
+  <rect x="40.0" y="150.0" width="230.0" height="150.0" rx="6" fill="#e7f5ff"/>
+  <path d="M39.3,150.6 C117.6,149.3 194.9,151.2 269.9,149.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M40.8,150.6 C116.9,148.8 192.8,149.8 269.8,150.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M269.6,149.5 C268.7,200.7 268.8,250.5 270.6,300.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M270.6,150.6 C271.5,201.5 271.2,249.6 270.3,300.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M270.6,300.7 C194.3,300.4 117.7,300.4 40.6,300.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M270.5,300.1 C193.5,299.8 117.3,299.7 39.9,299.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M40.5,300.1 C40.8,249.7 40.6,201.4 40.6,150.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M39.6,299.8 C38.5,249.7 41.0,199.8 39.9,150.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="155.0" y="177.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">Browser</text>
+  <text x="155.0" y="201.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">user clicks</text>
+  <text x="155.0" y="222.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">"Sign in with EMBL"</text>
+  <rect x="500.0" y="150.0" width="330.0" height="170.0" rx="6" fill="#fff9db"/>
+  <path d="M499.4,150.1 C608.8,150.2 718.9,150.2 830.3,150.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M500.3,150.0 C608.9,150.1 718.7,149.0 829.3,150.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.2,149.5 C829.3,205.9 830.4,263.1 829.3,319.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.3,149.9 C830.0,205.9 829.8,261.8 830.4,320.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M830.4,320.5 C720.6,319.7 610.8,320.1 500.6,319.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M830.2,319.8 C721.5,320.5 608.6,320.4 499.9,319.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M499.5,320.4 C500.0,264.0 501.2,205.4 500.8,150.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M500.0,320.4 C498.8,263.3 498.6,205.5 500.1,150.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="665.0" y="177.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">Depictio API</text>
+  <text x="665.0" y="201.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">GET  /auth/saml/login</text>
+  <text x="665.0" y="222.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">POST /auth/saml/callback</text>
+  <rect x="1100.0" y="150.0" width="280.0" height="150.0" rx="6" fill="#f3f0ff"/>
+  <path d="M1100.3,149.7 C1193.3,150.1 1285.2,148.5 1379.5,150.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1100.3,150.6 C1193.1,150.9 1286.6,150.2 1379.8,149.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1380.7,149.5 C1381.0,199.8 1380.1,251.4 1379.4,300.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1379.2,150.1 C1380.3,199.3 1381.4,249.2 1380.2,299.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1379.5,299.3 C1285.4,301.4 1194.5,299.6 1100.0,299.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1379.7,299.6 C1286.3,298.8 1193.1,299.6 1099.5,300.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1099.8,300.4 C1099.2,248.9 1101.5,199.3 1100.2,149.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1099.3,299.9 C1100.2,250.6 1101.6,201.0 1100.7,149.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1240.0" y="177.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">IdP (Keycloak)</text>
+  <text x="1240.0" y="201.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">SAML realm</text>
+  <text x="1240.0" y="222.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">authenticates the user</text>
+  <path d="M269.3,190.5 C345.0,191.6 422.0,191.0 499.4,189.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M269.9,190.1 C346.8,191.5 421.6,188.7 500.5,189.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M499.7,189.8 C496.3,187.4 491.2,185.2 487.7,183.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M500.2,190.1 C496.5,193.0 492.4,194.8 487.7,196.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="385.0" y="176.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">1  /login</text>
+  <path d="M830.2,190.8 C921.5,190.9 1010.1,188.8 1100.9,190.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M830.2,190.0 C920.9,190.0 1008.1,191.2 1100.1,189.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1099.8,190.2 C1096.6,188.5 1091.3,186.3 1087.6,183.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1099.5,190.1 C1096.2,192.5 1090.9,194.8 1087.5,196.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="965.0" y="176.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">2  AuthnRequest</text>
+  <text x="965.0" y="208.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="middle" font-weight="normal">(redirect binding)</text>
+  <path d="M1159.3,149.8 C1160.9,142.0 1160.3,132.5 1159.4,123.8" fill="none" stroke="#5c5c5c" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M1159.6,150.4 C1160.2,142.4 1158.9,133.5 1159.2,123.4" fill="none" stroke="#5c5c5c" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M1160.0,123.2 C823.8,122.1 489.1,122.0 155.8,124.0" fill="none" stroke="#5c5c5c" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M1159.1,124.0 C825.7,124.1 491.5,122.4 154.7,124.6" fill="none" stroke="#5c5c5c" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M155.4,124.6 C154.2,131.0 156.8,142.7 155.5,149.5" fill="none" stroke="#5c5c5c" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M154.7,124.5 C153.7,131.3 156.5,142.9 155.7,150.3" fill="none" stroke="#5c5c5c" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M155.3,149.9 C156.8,146.6 158.9,141.2 161.9,137.7" fill="none" stroke="#5c5c5c" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M155.0,150.4 C151.8,146.9 150.6,141.7 148.1,137.7" fill="none" stroke="#5c5c5c" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="660.0" y="114.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">3  user signs in at the IdP, browser POSTs the signed SAMLResponse</text>
+  <path d="M270.6,270.2 C345.5,271.9 422.6,270.2 499.1,270.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M270.6,269.2 C345.1,271.7 425.3,271.7 500.0,269.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M500.0,270.5 C495.5,267.0 492.0,265.8 488.0,263.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M499.7,269.8 C495.1,272.3 492.4,273.6 487.8,277.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="385.0" y="256.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">4  ACS</text>
+  <rect x="500.0" y="470.0" width="330.0" height="230.0" rx="6" fill="#ebfbee"/>
+  <path d="M499.6,469.5 C608.8,468.4 721.4,469.1 829.3,470.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M500.6,469.3 C610.3,469.5 718.8,470.6 830.6,469.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M830.7,470.3 C831.2,546.0 828.9,622.8 830.3,700.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.8,470.7 C829.4,547.9 828.9,622.9 829.5,699.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M830.7,700.8 C719.5,699.2 609.4,701.6 499.3,699.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.3,699.3 C721.0,701.3 610.8,698.6 500.0,700.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M500.4,699.9 C501.1,624.6 501.3,546.1 500.2,470.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M499.2,700.7 C498.6,624.0 499.4,547.1 499.5,470.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="665.0" y="497.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">ACS validates</text>
+  <text x="665.0" y="521.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">InResponseTo is one WE issued</text>
+  <text x="665.0" y="542.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">(shared one-shot store, replay-safe)</text>
+  <text x="665.0" y="563.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">assertion signature vs IdP cert</text>
+  <text x="665.0" y="584.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">email from attribute or NameID</text>
+  <text x="665.0" y="605.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">RelayState from the IdP: ignored</text>
+  <path d="M665.2,319.3 C666.3,370.2 663.7,418.9 664.8,470.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M664.1,320.0 C663.9,368.6 663.9,421.0 665.2,469.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M664.6,470.4 C667.1,466.8 669.8,462.2 671.6,457.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M664.6,470.3 C663.5,466.4 661.2,461.7 658.0,457.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <rect x="40.0" y="470.0" width="340.0" height="140.0" rx="6" fill="#ffe8cc"/>
+  <path d="M40.2,470.4 C153.7,468.8 267.9,469.1 380.2,469.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M39.9,469.9 C153.4,470.4 266.7,471.3 379.3,469.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M380.7,470.3 C380.5,517.3 381.1,562.5 380.6,610.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M379.7,469.8 C379.7,515.9 380.9,562.3 379.8,610.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M380.7,609.9 C265.7,610.3 153.6,608.6 40.3,609.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M379.5,610.1 C267.3,610.9 151.9,611.3 39.7,609.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M40.1,610.4 C41.1,564.8 38.9,515.4 40.0,469.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M39.4,609.6 C38.9,563.2 40.8,517.7 40.3,470.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="210.0" y="497.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">auth state store</text>
+  <text x="210.0" y="521.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">Redis SET NX EX / GETDEL</text>
+  <text x="210.0" y="542.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">in-process fallback if Redis is down</text>
+  <text x="210.0" y="563.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">request id -&gt; relay path</text>
+  <path d="M499.1,539.9 C461.7,538.1 420.6,539.6 379.4,540.7" fill="none" stroke="#5c5c5c" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M500.8,539.9 C458.0,540.9 421.3,541.1 380.4,540.3" fill="none" stroke="#5c5c5c" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M379.7,540.4 C384.8,542.9 387.8,543.6 392.3,546.4" fill="none" stroke="#5c5c5c" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M380.0,539.8 C385.0,538.6 388.0,536.6 392.4,533.8" fill="none" stroke="#5c5c5c" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="210.0" y="640.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="middle" font-weight="normal">/login stores the id, the ACS consumes it once</text>
+  <rect x="960.0" y="470.0" width="420.0" height="230.0" rx="6" fill="#ffe3e3"/>
+  <path d="M959.4,469.7 C1101.3,470.4 1239.3,468.9 1379.8,469.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M959.7,470.1 C1099.6,469.2 1239.1,470.8 1379.9,470.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1379.7,469.4 C1380.9,547.5 1378.8,623.7 1380.7,700.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1379.8,469.5 C1378.9,546.5 1381.2,623.8 1379.3,700.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1379.8,699.5 C1241.4,701.1 1099.2,700.2 959.5,700.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1379.7,699.3 C1239.9,700.3 1099.4,701.4 959.3,700.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M959.8,700.0 C958.6,622.2 960.7,546.7 959.5,470.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M960.2,699.2 C961.3,621.8 960.0,545.8 960.1,469.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1170.0" y="497.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">user + session</text>
+  <text x="1170.0" y="521.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">create_or_get_sso_user(email)</text>
+  <text x="1170.0" y="542.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">(registration_disabled -&gt; refused)</text>
+  <text x="1170.0" y="563.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">magic-link ticket, 2 min, single use</text>
+  <text x="1170.0" y="584.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">303 -&gt; /auth/magic#ticket=...&amp;next=/path</text>
+  <text x="1170.0" y="605.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">fragment: never sent to servers or logs</text>
+  <path d="M830.5,584.7 C873.7,583.1 915.4,584.2 959.5,584.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M830.2,585.2 C874.8,585.6 916.8,583.4 960.1,584.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M960.2,584.5 C955.5,583.5 952.4,581.0 947.3,578.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M960.4,585.3 C956.6,588.1 950.8,590.3 947.3,591.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="895.0" y="570.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">5</text>
+  <text x="1170.0" y="730.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#c92a2a" text-anchor="middle" font-weight="normal">6  viewer's MagicLinkCallback redeems the ticket - no JWT in a URL</text>
+</svg>
