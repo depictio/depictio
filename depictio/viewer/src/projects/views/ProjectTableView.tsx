@@ -539,7 +539,11 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
                   />
                 </Table.Th>
               ))}
-              <Table.Th style={{ width: 120, textAlign: 'right' }} aria-label="Actions" />
+              <Table.Th
+                className="dc-actions-col"
+                style={{ width: 120, textAlign: 'right' }}
+                aria-label="Actions"
+              />
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -582,7 +586,7 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
                       {renderCell(r, col.key)}
                     </Table.Td>
                   ))}
-                  <Table.Td>
+                  <Table.Td className="dc-actions-col">
                     <Group gap={4} wrap="nowrap" justify="flex-end">
                       <Tooltip label="Workflows & data collections" withinPortal>
                         <ActionIcon

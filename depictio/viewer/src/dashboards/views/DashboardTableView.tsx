@@ -667,7 +667,7 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
                   />
                 </Table.Th>
               ))}
-              <Table.Th style={{ width: 36 }} aria-label="Actions" />
+              <Table.Th className="dc-actions-col" style={{ width: 36 }} aria-label="Actions" />
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -717,7 +717,7 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
                       {renderCell(r, col.key)}
                     </Table.Td>
                   ))}
-                  <Table.Td>
+                  <Table.Td className="dc-actions-col">
                     <DashboardActionsMenu
                       dashboard={r.dashboard}
                       isOwner={r.isOwner}
