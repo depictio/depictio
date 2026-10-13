@@ -3,6 +3,37 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.17.4
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.17.4</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.17.3 → 1.17.4 [33bb41467]
+* fix(guide): ring the header comments button only when it is visible [7913a2481]
+* feat(guide): Comments and Versions parts, with real components [4478780ee]
+* fix(walkthrough): keep the public tour to the dashboards list [b1ff98487]
+* feat(viewer): a landing hint on a dashboard replaces the tour there [46ffbfbfc]
+* Update CHANGELOG.md for v1.17.3 [d23eb3f39]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.17.3
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
