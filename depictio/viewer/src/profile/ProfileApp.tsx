@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActionIcon,
+  Alert,
   AppShell,
   Avatar,
   Box,
@@ -18,6 +19,8 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
+import SignInProviders from '../auth/components/SignInProviders';
+import { useGuestSignIn } from '../hooks/useGuestSignIn';
 import { Camera, Compass } from 'lucide-react';
 import { Icon } from '@iconify/react';
 import { GlassPage, useGlassPages } from '../chrome/variants/glass/pages';
@@ -166,6 +169,7 @@ const GettingStarted: React.FC = () => {
 
 const ProfileApp: React.FC = () => {
   const [user, setUser] = useState<ProfileUser | null>(null);
+  const guest = useGuestSignIn();
   const [status, setStatus] = useState<AuthStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   // Account is open on a first visit; the rest start folded and are remembered.
@@ -281,6 +285,23 @@ const ProfileApp: React.FC = () => {
     </Center>
   ) : (
     <Stack gap="md" maw={860} data-testid="account-settings">
+      {guest.available && (
+        <Alert color="blue" title="You are browsing as a guest" data-testid="guest-sign-in-note">
+          <Stack gap="xs" align="flex-start">
+            <Text size="sm">
+              This temporary account expires on its own, and so do the copies of dashboards you
+              make with it. Sign in to leave comments.
+            </Text>
+            <Stack gap="xs" w="100%" maw={320} data-testid="guest-sign-in-profile">
+              <SignInProviders
+                googleEnabled={guest.googleEnabled}
+                samlEnabled={guest.samlEnabled}
+                samlLabel={guest.samlLabel}
+              />
+            </Stack>
+          </Stack>
+        </Alert>
+      )}
       <SectionAccordion
         value={visibleSections}
         onChange={handleSectionsChange}

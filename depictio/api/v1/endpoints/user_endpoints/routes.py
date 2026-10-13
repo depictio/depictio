@@ -657,6 +657,8 @@ async def get_current_user_info_optional(
                 "id": str(user.id),
                 "email": user.email,
                 "is_admin": getattr(user, "is_admin", False),
+                # A public-mode guest: the SPA offers it a way to sign in.
+                "is_temporary": bool(getattr(user, "is_temporary", False)),
                 **_avatar_payload(user.id),
             }
 

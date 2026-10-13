@@ -1,3 +1,4 @@
+import { canGuestSignIn } from '../../auth/guestSignIn';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { useMyAvatar } from './avatar';
 
@@ -18,7 +19,8 @@ export function initialsOf(email: string): string {
 
 export interface AccountIdentity {
   loading: boolean;
-  /** Anonymous on an instance that has a login: offer Sign in instead. */
+  /** Anonymous on an instance that has a login, or a guest on a public one
+   *  that has an identity provider: offer Sign in instead. */
   signIn: boolean;
   /** The line that names the reader: the email, or the mode they run in. */
   name: string;
@@ -29,9 +31,19 @@ export interface AccountIdentity {
 }
 
 export function useAccountIdentity(): AccountIdentity {
-  const { user, authMode, isPublicMode, isDemoMode, loading } = useCurrentUser();
+  const me = useCurrentUser();
+  const { user, authMode, isPublicMode, isDemoMode, loading } = me;
   const avatarUrl = useMyAvatar();
-  const signIn = !loading && !user && authMode === 'standard' && !isPublicMode && !isDemoMode;
+  const signIn =
+    (!loading && !user && authMode === 'standard' && !isPublicMode && !isDemoMode) ||
+    canGuestSignIn({
+      loading,
+      isPublicMode,
+      isDemoMode,
+      isGuest: Boolean(user?.is_temporary),
+      googleOAuthEnabled: me.googleOAuthEnabled,
+      samlEnabled: me.samlEnabled,
+    });
   const name =
     authMode === 'single_user'
       ? 'Single user mode'

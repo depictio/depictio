@@ -367,7 +367,7 @@ async def get_comment_access(
     if getattr(current_user, "is_anonymous", False) and not settings.auth.is_single_user_mode:
         return CommentAccess(can_comment=False)
     if settings.comments.viewers_can_comment and getattr(current_user, "is_temporary", False):
-        return CommentAccess(can_comment=False)
+        return CommentAccess(can_comment=False, sign_in_required=True)
     try:
         dashboard = dashboards_collection.find_one(
             {"dashboard_id": ObjectId(dashboard_id)}, {"project_id": 1}

@@ -31,6 +31,7 @@ import type {
 import { useUiStore } from '../../store/useUiStore';
 import type { CurrentUser } from '../../hooks/useCurrentUser';
 import CommentsDrawer from './CommentsDrawer';
+import GuestSignInModal from './GuestSignInModal';
 import { buildViewState, componentLabel } from './viewState';
 
 const EMPTY_COUNTS: CommentCounts = { open: {}, proposed: {} };
@@ -85,6 +86,10 @@ const CommentsProvider: React.FC<CommentsProviderProps> = ({
   children,
 }) => {
   const [access, setAccess] = useState<Access>('unknown');
+  // A public-mode guest on an instance where signing in unlocks comments: the
+  // chrome shows the comments entry points, and they ask to sign in.
+  const [signInRequired, setSignInRequired] = useState(false);
+  const [signInPrompt, setSignInPrompt] = useState(false);
   const [counts, setCounts] = useState<CommentCounts>(EMPTY_COUNTS);
   const [threads, setThreads] = useState<CommentThread[] | null>(null);
   const [threadsError, setThreadsError] = useState<string | null>(null);
@@ -112,6 +117,8 @@ const CommentsProvider: React.FC<CommentsProviderProps> = ({
 
   useEffect(() => {
     setAccess('unknown');
+    setSignInRequired(false);
+    setSignInPrompt(false);
     setCounts(EMPTY_COUNTS);
     setThreads(null);
     setThreadsError(null);
@@ -123,8 +130,10 @@ const CommentsProvider: React.FC<CommentsProviderProps> = ({
     fetchCommentAccess(dashboardId)
       .then((r) => {
         if (cancelled) return;
-        if (!r.can_comment) setAccess('viewer');
-        else setAccess(r.can_moderate === false ? 'commenter' : 'editor');
+        if (!r.can_comment) {
+          setAccess('viewer');
+          setSignInRequired(Boolean(r.sign_in_required));
+        } else setAccess(r.can_moderate === false ? 'commenter' : 'editor');
       })
       // An unreachable comments API is the same as no access.
       .catch(() => {
@@ -224,6 +233,7 @@ const CommentsProvider: React.FC<CommentsProviderProps> = ({
     return c;
   }, [threads]);
 
+  const guestPrompt = signInRequired && !canDiscuss && !!dashboardId;
   const control = useMemo<CommentsControl | null>(
     () =>
       canDiscuss
@@ -234,8 +244,17 @@ const CommentsProvider: React.FC<CommentsProviderProps> = ({
             openDrawer: (componentIndex) => openComments(componentIndex ?? null),
             canComment: true,
           }
-        : null,
-    [canDiscuss, counts, staleCounts, openComments],
+        : guestPrompt
+          ? {
+              openCounts: {},
+              proposedCounts: {},
+              staleCounts: {},
+              // There is no drawer to open: the way in is to sign in.
+              openDrawer: () => setSignInPrompt(true),
+              canComment: false,
+            }
+          : null,
+    [canDiscuss, guestPrompt, counts, staleCounts, openComments],
   );
 
   // ── Annotation layer ──────────────────────────────────────────────────────
@@ -351,6 +370,9 @@ const CommentsProvider: React.FC<CommentsProviderProps> = ({
         onStats={isEditor ? mergeStats : undefined}
       >
         {children}
+        {guestPrompt && (
+          <GuestSignInModal opened={signInPrompt} onClose={() => setSignInPrompt(false)} />
+        )}
         {canDiscuss && dashboardId && (
           <CommentsDrawer
             canModerate={isEditor}

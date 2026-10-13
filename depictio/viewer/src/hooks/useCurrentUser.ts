@@ -25,6 +25,8 @@ export interface CurrentUser {
   id?: string;
   email: string;
   is_admin: boolean;
+  /** A public-mode guest (a temporary account), as opposed to a signed-in user. */
+  is_temporary?: boolean;
 }
 
 export type AuthMode = 'standard' | 'single_user' | 'unauthenticated';
@@ -40,6 +42,12 @@ export interface UseCurrentUserResult {
   /** True when the server is in demo mode (a public_mode variant with a
    *  curated set of read-only example dashboards). */
   isDemoMode: boolean;
+  /** True when Google OAuth is configured: a guest can sign in with it. */
+  googleOAuthEnabled: boolean;
+  /** True when SAML single sign-on is configured. */
+  samlEnabled: boolean;
+  /** Label of the SAML sign-in button, when the server names one. */
+  samlLabel: string | undefined;
   /** True when the server is in development mode (DEPICTIO_DEV_MODE=true).
    *  Used to suppress the walkthrough during local dev — devs hot-reload
    *  constantly and don't need the tour relaunching on every version bump. */
@@ -86,6 +94,9 @@ export function useCurrentUser(): UseCurrentUserResult {
   const [authMode, setAuthMode] = useState<AuthMode>('standard');
   const [isPublicMode, setIsPublicMode] = useState<boolean>(false);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
+  const [googleOAuthEnabled, setGoogleOAuthEnabled] = useState<boolean>(false);
+  const [samlEnabled, setSamlEnabled] = useState<boolean>(false);
+  const [samlLabel, setSamlLabel] = useState<string | undefined>(undefined);
   const [isDevMode, setIsDevMode] = useState<boolean>(false);
   const [walkthroughDisabled, setWalkthroughDisabled] = useState<boolean>(false);
   const [isSingleUserMode, setIsSingleUserMode] = useState<boolean>(false);
@@ -109,6 +120,9 @@ export function useCurrentUser(): UseCurrentUserResult {
         setAuthMode((data.auth_mode as AuthMode) ?? 'standard');
         setIsPublicMode(Boolean(data.is_public_mode));
         setIsDemoMode(Boolean(data.is_demo_mode));
+        setGoogleOAuthEnabled(Boolean(data.google_oauth_enabled));
+        setSamlEnabled(Boolean(data.saml_enabled));
+        setSamlLabel(data.saml_login_label);
         setIsDevMode(Boolean(data.is_dev_mode));
         setWalkthroughDisabled(Boolean(data.walkthrough_disabled));
         setIsSingleUserMode(Boolean(data.is_single_user_mode));
@@ -129,7 +143,16 @@ export function useCurrentUser(): UseCurrentUserResult {
           setTemporaryUserExpiryMinutes(data.temporary_user_expiry_minutes);
         }
         const u = data.user;
-        setUser(u?.email ? { id: u.id, email: u.email, is_admin: Boolean(u.is_admin) } : null);
+        setUser(
+          u?.email
+            ? {
+                id: u.id,
+                email: u.email,
+                is_admin: Boolean(u.is_admin),
+                is_temporary: Boolean(u.is_temporary),
+              }
+            : null,
+        );
         // Feeds the shared avatar store (`chrome/account/avatar.ts`); anonymous
         // visitors and users without a picture clear it (no fetch).
         syncMyAvatar(u?.email ? (u.avatar_updated_at ?? null) : null, { startedAt });
@@ -149,6 +172,9 @@ export function useCurrentUser(): UseCurrentUserResult {
     authMode,
     isPublicMode,
     isDemoMode,
+    googleOAuthEnabled,
+    samlEnabled,
+    samlLabel,
     isDevMode,
     walkthroughDisabled,
     isSingleUserMode,

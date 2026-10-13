@@ -5,6 +5,9 @@ interface PublicExplorerOptions {
    *  step so the visitor knows exactly how long their copy will live. */
   expiryHours: number;
   expiryMinutes: number;
+  /** A guest can sign in on this instance (see `canGuestSignIn`): the welcome
+   *  step then says that signing in is how to leave comments. */
+  canSignIn?: boolean;
 }
 
 /** What a manual trigger (header button, Account settings) calls this tour. */
@@ -47,7 +50,9 @@ export function buildPublicExplorerWalkthrough(
         id: 'welcome',
         target: null,
         title: 'Welcome to Depictio',
-        body: `👋 Welcome! This Depictio instance has been made public so the dashboards and datasets it contains can be shared. Open any dashboard below to explore it — or **duplicate** one to get your own editable copy in a temporary session (lasts ${ttl}). The tour walks you through both.`,
+        body: `👋 Welcome! This Depictio instance has been made public so the dashboards and datasets it contains can be shared. Open any dashboard below to explore it — or **duplicate** one to get your own editable copy in a temporary session (lasts ${ttl}). The tour walks you through both.${
+          opts.canSignIn ? ' To leave comments, sign in with the avatar at the top right.' : ''
+        }`,
         position: 'bottom',
         image: {
           src: '/dashboard/favicon.svg',

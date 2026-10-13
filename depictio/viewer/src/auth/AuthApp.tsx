@@ -1,4 +1,5 @@
-import { Loader, Stack, Text } from '@mantine/core';
+import { Button, Loader, Stack, Text } from '@mantine/core';
+import { UserRound } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { createTemporaryUser, getAnonymousSession, persistSession } from 'depictio-react-core';
 
@@ -13,6 +14,7 @@ import { useAuthMode } from './hooks/useAuthMode';
 import { withAuthPreview } from './preview';
 import './styles/auth.css';
 
+import { SIGN_IN_PATH } from './guestSignIn';
 import { postAuthDestination } from './postAuthTarget';
 import { useGlassPages } from '../chrome/variants/glass/pages';
 import {
@@ -41,6 +43,13 @@ export default function AuthApp() {
   const [autoSessionError, setAutoSessionError] = useState<string | null>(null);
   const glass = useGlassPages();
   const branding = useBranding();
+  // `/auth/login` is an explicit request to sign in. On a public instance
+  // `/auth` mints a guest session and moves on; here the form is shown
+  // instead, so a guest can swap that session for an account.
+  const wantsSignIn = useMemo(
+    () => window.location.pathname.replace(/\/+$/, '') === SIGN_IN_PATH,
+    [],
+  );
 
   // Auto-redirect on /auth load. Three cases:
   // 1. Single-user mode — always fetch a fresh admin session and persist it
@@ -69,6 +78,7 @@ export default function AuthApp() {
           if (cancelled) return;
           persistSession(session);
         } else if (status.is_public_mode) {
+          if (wantsSignIn) return; // show the sign-in form, keep the guest session
           // A protected public deployment asks for its shared code first, so
           // the session is minted by the gate rather than on page load.
           if (status.public_access_code_required) return;
@@ -90,7 +100,7 @@ export default function AuthApp() {
     })();
 
     return () => { cancelled = true; };
-  }, [loading, status, view]);
+  }, [loading, status, view, wantsSignIn]);
 
   const handleSuccess = () => window.location.assign(postAuthDestination());
 
@@ -115,7 +125,7 @@ export default function AuthApp() {
           <p className="gp-auth-error" role="alert">{error}</p>
         </GlassAuthCard>
       );
-    } else if (status?.is_public_mode && status?.public_access_code_required) {
+    } else if (status?.is_public_mode && status?.public_access_code_required && !wantsSignIn) {
       card = (
         <GlassAuthCard
           title="Enter the access code"
@@ -124,7 +134,7 @@ export default function AuthApp() {
           <PublicAccessGate onSuccess={handleSuccess} />
         </GlassAuthCard>
       );
-    } else if (status?.is_single_user_mode || status?.is_public_mode) {
+    } else if ((status?.is_single_user_mode || (status?.is_public_mode && !wantsSignIn))) {
       card = (
         <GlassAuthCard title={status.is_single_user_mode ? 'Starting your session' : 'Starting a guest session'}>
           {autoSessionError ? (
@@ -176,6 +186,22 @@ export default function AuthApp() {
             passwordLoginDisabled={status?.password_login_disabled ?? false}
             onSuccess={handleSuccess}
           />
+          {wantsSignIn && status?.is_public_mode && (
+            // Signing in was the visitor's own request; this is the way back to
+            // the read-only session they already have.
+            <>
+              <div className="gp-auth-or">or</div>
+              <Button
+                variant="default"
+                fullWidth
+                leftSection={<UserRound size={18} strokeWidth={1.8} aria-hidden />}
+                onClick={handleSuccess}
+                data-testid="continue-as-guest"
+              >
+                Continue as guest
+              </Button>
+            </>
+          )}
         </GlassAuthCard>
       );
     }
@@ -207,11 +233,11 @@ export default function AuthApp() {
           <AuthCard heading="Welcome to Depictio :">
             <Text c="red" ta="center">{error}</Text>
           </AuthCard>
-        ) : status?.is_public_mode && status?.public_access_code_required ? (
+        ) : status?.is_public_mode && status?.public_access_code_required && !wantsSignIn ? (
           <AuthCard heading="Welcome to Depictio :">
             <PublicAccessGate onSuccess={handleSuccess} />
           </AuthCard>
-        ) : status?.is_single_user_mode || status?.is_public_mode ? (
+        ) : (status?.is_single_user_mode || (status?.is_public_mode && !wantsSignIn)) ? (
           <AuthCard heading="Welcome to Depictio :">
             <Stack align="center" gap="md">
               {autoSessionError ? (

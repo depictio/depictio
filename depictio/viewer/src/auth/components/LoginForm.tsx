@@ -1,9 +1,9 @@
 import { Anchor, Button, Divider, Group, PasswordInput, Stack, Text, TextInput } from '@mantine/core';
 import { useState } from 'react';
-import { KeyRound } from 'lucide-react';
-import { loginUser, persistSession, samlLoginUrl, startGoogleOAuth } from 'depictio-react-core';
+import { loginUser, persistSession, startGoogleOAuth } from 'depictio-react-core';
 
 import { useGlassPages } from '../../chrome/variants/glass/pages';
+import SignInProviders from './SignInProviders';
 
 const EMAIL_RE = /^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$/;
 
@@ -103,19 +103,12 @@ export default function LoginForm({
       <>
         {providers && (
           <div className="gp-auth-providers">
-            {samlEnabled && (
-              <Button
-                id="saml-login-button"
-                data-testid="saml-login-button"
-                variant="default"
-                fullWidth
-                leftSection={<KeyRound size={18} strokeWidth={1.8} aria-hidden />}
-                onClick={() => window.location.assign(samlLoginUrl('/dashboards'))}
-              >
-                {samlLabel || 'Sign in with SSO'}
-              </Button>
-            )}
-            {googleEnabled && googleButton('Sign in with Google', 'default')}
+            <SignInProviders
+              googleEnabled={googleEnabled}
+              samlEnabled={samlEnabled}
+              samlLabel={samlLabel}
+              onError={setError}
+            />
           </div>
         )}
         {providers && showCredentials && <div className="gp-auth-or">or with your email</div>}

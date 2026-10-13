@@ -555,6 +555,14 @@ button.gp-status:focus-visible {
   flex: none;
   color: var(--gl-faint);
 }
+.gp-mode--link {
+  text-decoration: none;
+}
+.gp-mode--link:hover,
+.gp-mode--link:focus-visible {
+  color: var(--gl-fg);
+  text-decoration: underline;
+}
 
 /* ------------------------------------------------------------------ main */
 
