@@ -93,6 +93,10 @@ HTML_UNAVAILABLE_KINDS: dict[str, str] = {
         "A group comparison computes on the server for the two groups picked in the "
         "tile, so no offline page can stand for it. Open the dashboard instead."
     ),
+    "bioimage_viewer": (
+        "The bioimage viewer draws on WebGL and fetches its image chunks with the "
+        "viewer's credentials, so it cannot be taken offline. Open the dashboard instead."
+    ),
 }
 
 #: Views drawn by GenomeSpy (see above), by kind. The kind's default view is
@@ -169,6 +173,7 @@ AV_JSON_SOURCE: dict[str, AvJsonSource] = {
     "genome_chord": "client_only",
     "record_card": "client_only",
     "parallel_coordinates": "client_only",
+    "bioimage_viewer": "client_only",
 }
 
 

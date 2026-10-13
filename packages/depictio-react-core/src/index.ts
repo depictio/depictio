@@ -648,6 +648,7 @@ export {
   fetchVizSuggestions,
   fetchPhylogenyNewick,
   fetchBioimageStores,
+  fetchBioimageProvenance,
   bioimageStoreUrl,
   createBioimageZarrStore,
   dispatchComputeEmbedding,
@@ -1066,6 +1067,8 @@ export type {
   AdvancedVizKindDescriptor,
   AdvancedVizDataResponse,
   BioimageStoreInfo,
+  BioimageProvenance,
+  BioimageProvenanceStore,
   BioimageZarrStore,
   BioimageRangeQuery,
 } from './api';

@@ -2244,6 +2244,38 @@ export async function fetchBioimageStores(dcId: string): Promise<BioimageStoreIn
   return res.json();
 }
 
+/** One store's origin: where it is registered, when, and how big it is.
+ *  `location` is a path, or the URL of a remote store; the times and size are
+ *  null for a store with no File document (found on S3 only). */
+export interface BioimageProvenanceStore {
+  name: string;
+  location: string | null;
+  creation_time: string | null;
+  registration_time: string | null;
+  filesize: number | null;
+  remote: boolean;
+}
+
+/** Where a `bioimage` DC's images come from (`GET .../bioimage/{dc}/provenance`). */
+export interface BioimageProvenance {
+  description: string | null;
+  format: BioimageFormat;
+  ngff_version: string | null;
+  upload: boolean;
+  image_path: string | null;
+  scan_source: string | null;
+  stores: BioimageProvenanceStore[];
+}
+
+/** The provenance of a `bioimage` DC: its description, scan and store origins. */
+export async function fetchBioimageProvenance(dcId: string): Promise<BioimageProvenance> {
+  const res = await authFetch(
+    `${API_BASE}/advanced_viz/bioimage/${encodeURIComponent(dcId)}/provenance`,
+  );
+  if (!res.ok) throw new Error(`Failed to fetch image provenance: ${res.status}`);
+  return res.json();
+}
+
 /** Root URL of one store. Zarr keys (`.zattrs` or `zarr.json`, `0/.zarray`,
  *  chunks and shards) resolve under it; a single-file store (OME-TIFF) is the
  *  file itself. No trailing slash. */

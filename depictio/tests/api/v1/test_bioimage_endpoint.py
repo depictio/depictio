@@ -374,6 +374,79 @@ class TestServing:
         assert resp.status_code == 502
 
 
+class TestProvenance:
+    def test_stores_carry_their_registration_record(self, tmp_path):
+        env = Env(tmp_path, props={"ngff_version": "0.4"})
+        env.dc_doc["description"] = "Mouse kidney, 3 channels"
+        store = make_store(tmp_path, "sample_A.zarr")
+        env.file_docs.append(
+            {
+                "_id": FILE_ID,
+                "file_location": str(store),
+                "creation_time": "2026-10-01 09:00:00",
+                "registration_time": "2026-10-01 09:05:00",
+                "filesize": 2048,
+            }
+        )
+        with env as client:
+            resp = client.get(f"{PREFIX}/bioimage/{DC_ID}/provenance", headers=AUTH)
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["description"] == "Mouse kidney, 3 channels"
+        assert body["format"] == "ome-zarr"
+        assert body["ngff_version"] == "0.4"
+        assert body["upload"] is True
+        assert body["stores"] == [
+            {
+                "name": "sample_A.zarr",
+                "location": str(store),
+                "creation_time": "2026-10-01 09:00:00",
+                "registration_time": "2026-10-01 09:05:00",
+                "filesize": 2048,
+                "remote": False,
+            }
+        ]
+
+    def test_remote_store_is_listed_with_its_url(self, tmp_path):
+        url = "https://images.example.org/kidney/remote_B.zarr"
+        env = Env(tmp_path, props={"remote_stores": [url]})
+        with env as client:
+            body = client.get(f"{PREFIX}/bioimage/{DC_ID}/provenance", headers=AUTH).json()
+
+        assert body["stores"] == [
+            {
+                "name": "remote_B.zarr",
+                "location": url,
+                "creation_time": None,
+                "registration_time": None,
+                "filesize": None,
+                "remote": True,
+            }
+        ]
+
+    def test_store_found_by_scan_has_null_registration(self, tmp_path):
+        make_store(tmp_path, "sample_A.zarr")
+        env = Env(tmp_path, scan_filename=str(tmp_path))
+        with env as client:
+            body = client.get(f"{PREFIX}/bioimage/{DC_ID}/provenance", headers=AUTH).json()
+
+        assert body["scan_source"] == str(tmp_path)
+        (store,) = body["stores"]
+        assert store["name"] == "sample_A.zarr"
+        assert store["creation_time"] is None
+        assert store["registration_time"] is None
+        assert store["filesize"] is None
+
+    def test_denied_before_any_read(self, tmp_path):
+        env = Env(tmp_path, permitted=False)
+        with env as client:
+            resp = client.get(f"{PREFIX}/bioimage/{DC_ID}/provenance", headers=AUTH)
+
+        assert resp.status_code == 404
+        env.files.find.assert_not_called()
+
+
 class TestStoresListing:
     def test_registered_stores_sorted_with_sample_names(self, tmp_path):
         env = Env(tmp_path)

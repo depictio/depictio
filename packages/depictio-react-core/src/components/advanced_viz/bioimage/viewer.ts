@@ -13,7 +13,7 @@
 // the space viv's MultiscaleImageLayer draws in.
 
 import { Deck, OrthographicView } from '@deck.gl/core';
-import { PolygonLayer, ScatterplotLayer } from '@deck.gl/layers';
+import { BitmapLayer, PolygonLayer, ScatterplotLayer } from '@deck.gl/layers';
 import {
   MultiscaleImageLayer,
   getChannelStats,
@@ -36,6 +36,7 @@ import {
   type Rgb,
 } from './channels';
 import { fitViewState, rectToPolygon, type Polygon, type Vec2 } from './geometry';
+import { labelContourRgba } from './labelContours';
 import { normaliseOmeTiffMetadata, type OmeXmlImage } from './omeTiff';
 
 export type SelectionMode = 'pan' | 'lasso' | 'rect';
@@ -48,6 +49,8 @@ export interface BioimageInfo {
   sizes: { c: number; z: number; t: number };
   dtype: string;
   levels: number;
+  /** Shape of every pyramid level, level 0 first, in `labels` order. */
+  levelShapes: number[][];
   /** Channel state in effect after the load: the starting state (config, then
    *  omero, then data statistics), or the kept one on a `keepView` reload. */
   channels: ChannelState[];
@@ -120,6 +123,10 @@ const STATS_MAX_CHANNELS = 16;
 /** Screen pixels a lasso has to travel before it records another vertex. */
 const LASSO_MIN_STEP_PX = 3;
 const DEFAULT_ACCENT: Rgb = [250, 176, 5];
+/** Largest label plane drawn as an outline: the finest pyramid level under this many pixels. */
+const LABEL_MAX_PIXELS = 4_000_000;
+/** Where an OME-Zarr store keeps its first label image (NGFF `labels/<name>`). */
+const LABEL_PREFIX = 'labels/0';
 
 type PixelSource = {
   shape: number[];
@@ -148,6 +155,36 @@ async function openOmeZarr(store: BioimageZarrStore): Promise<OpenedImage> {
     omero: rootAttrs.omero ?? null,
     physicalSize: physicalPixelSize(rootAttrs),
   };
+}
+
+/** The store seen from inside `labels/0`, so the image reader finds that group's `.zattrs`. */
+function labelsSubStore(store: BioimageZarrStore): BioimageZarrStore {
+  const at = (key: string) => `${LABEL_PREFIX}/${key.replace(/^\/+/, '')}`;
+  return {
+    get: (key, opts) => store.get(at(key), opts),
+    getRange: (key, range, opts) => store.getRange(at(key), range, opts),
+  };
+}
+
+/** The store's first label image, or null when it has none (or it cannot be read).
+ *  The outline is an extra on top of the image: a failure here must not break the image. */
+async function openLabels(store: BioimageZarrStore): Promise<PixelSource[] | null> {
+  try {
+    const loaded = await loadOmeZarrFromStore(labelsSubStore(store) as never);
+    return loaded.data as unknown as PixelSource[];
+  } catch {
+    return null;
+  }
+}
+
+/** Finest level whose plane stays under the outline budget; the coarsest otherwise. */
+function labelLevel(pyramid: PixelSource[]): PixelSource {
+  const fits = pyramid.find((level) => {
+    const w = level.shape[level.labels.indexOf('x')] ?? 0;
+    const h = level.shape[level.labels.indexOf('y')] ?? 0;
+    return w * h <= LABEL_MAX_PIXELS;
+  });
+  return fits ?? pyramid[pyramid.length - 1];
 }
 
 async function openOmeTiff(tiff: BioimageTiffSource): Promise<OpenedImage> {
@@ -198,6 +235,9 @@ export async function createBioimageViewer(
   let mode: SelectionMode = 'pan';
   let accent: Rgb = DEFAULT_ACCENT;
   let draft: Polygon | null = null;
+  // Label outline: the store's label pyramid, and the outline of the plane on screen.
+  let labelPyramid: PixelSource[] | null = null;
+  let labelImage: { key: string; canvas: HTMLCanvasElement } | null = null;
   let loadToken = 0;
   // Load whose first viewport has been reported, so onViewportLoad fires once per load.
   let readyToken = -1;
@@ -261,6 +301,36 @@ export async function createBioimageViewer(
     opts.onViewportLoad?.();
   }
 
+  // Redraw the outline for the plane on screen. A read superseded by a newer
+  // plane or load is dropped; a failed read leaves the outline off.
+  const refreshLabels = async () => {
+    const pyramid = labelPyramid;
+    if (!pyramid || !info) return;
+    const token = loadToken;
+    const { z, t } = plane;
+    const key = `${token}:${z}:${t}`;
+    if (labelImage?.key === key) return;
+    const level = labelLevel(pyramid);
+    const w = level.shape[level.labels.indexOf('x')] ?? 0;
+    const h = level.shape[level.labels.indexOf('y')] ?? 0;
+    try {
+      const selection = selectionFor(level.labels, { c: 0, z, t });
+      const raster = await level.getRaster({ selection });
+      if (disposed || token !== loadToken || z !== plane.z || t !== plane.t) return;
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      const rgba = labelContourRgba(raster.data, w, h);
+      ctx.putImageData(new ImageData(rgba as never, w, h), 0, 0);
+      labelImage = { key, canvas };
+      render();
+    } catch {
+      labelImage = null;
+    }
+  };
+
   const render = () => {
     if (disposed) return;
     const layers: unknown[] = [];
@@ -284,6 +354,19 @@ export async function createBioimageViewer(
         },
       };
       layers.push(new MultiscaleImageLayer(imageProps as never));
+    }
+    if (labelImage && info) {
+      layers.push(
+        new BitmapLayer({
+          id: 'bioimage-labels',
+          image: labelImage.canvas,
+          // Row 0 is the top of the image, as in the tiles, and the labels cover the whole image.
+          bounds: [0, info.height, info.width, 0],
+          pickable: false,
+          // Nearest keeps each outline pixel crisp when zoomed in.
+          textureParameters: { minFilter: 'nearest', magFilter: 'nearest' },
+        }),
+      );
     }
     if (points.length) {
       layers.push(
@@ -384,6 +467,45 @@ export async function createBioimageViewer(
   host.addEventListener('pointerup', onPointerUp, listen);
   host.addEventListener('pointercancel', onPointerUp, listen);
 
+  // Wheel zoom needs Ctrl (Cmd on macOS): a plain wheel over the image scrolls
+  // the page, as it does over any other tile. Stopped in the capture phase, so
+  // deck's own wheel handler never sees it; a modified wheel passes through to
+  // deck's zoom untouched.
+  let hint: HTMLDivElement | null = null;
+  let hintTimer = 0;
+  const showWheelHint = () => {
+    if (!hint) {
+      hint = document.createElement('div');
+      Object.assign(hint.style, {
+        position: 'absolute',
+        left: '50%',
+        bottom: '12px',
+        transform: 'translateX(-50%)',
+        padding: '4px 10px',
+        borderRadius: '6px',
+        background: 'rgba(0, 0, 0, 0.7)',
+        color: '#fff',
+        fontSize: '12px',
+        pointerEvents: 'none',
+        transition: 'opacity 150ms',
+        zIndex: '1',
+      });
+      hint.textContent = 'Hold Ctrl (⌘ on Mac) and scroll to zoom';
+      host.appendChild(hint);
+    }
+    hint.style.opacity = '1';
+    window.clearTimeout(hintTimer);
+    hintTimer = window.setTimeout(() => {
+      if (hint) hint.style.opacity = '0';
+    }, 1200);
+  };
+  const onWheel = (e: WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) return;
+    e.stopPropagation();
+    showWheelHint();
+  };
+  host.addEventListener('wheel', onWheel, { ...listen, capture: true, passive: true });
+
   return {
     async load(source, configChannels, loadOpts) {
       loadToken += 1;
@@ -392,6 +514,9 @@ export async function createBioimageViewer(
         source.kind === 'tiff' ? await openOmeTiff(source.tiff) : await openOmeZarr(source.store);
       if (token !== loadToken || disposed) throw new LoadSupersededError();
       const { pyramid, omero } = opened;
+      labelImage = null;
+      labelPyramid = source.kind === 'zarr' ? await openLabels(source.store) : null;
+      if (token !== loadToken || disposed) throw new LoadSupersededError();
       const base = pyramid[0];
       const labels = [...base.labels];
       const shape = [...base.shape];
@@ -404,22 +529,17 @@ export async function createBioimageViewer(
       const defaultZ = clampIndex(rdefs?.defaultZ, sizes.z, Math.floor(sizes.z / 2));
       const defaultT = clampIndex(rdefs?.defaultT, sizes.t, 0);
 
-      // Contrast statistics off the lowest level, only for channels that
-      // have no window from the config or omero.
+      // Contrast statistics off the lowest level, for every channel. The slider
+      // spans the data range they give; omero's window is the dtype's full range
+      // in most stores (0-65535 for a 12-bit image), which would leave the
+      // window a sliver of the track. The window itself still comes from the
+      // config or omero, in resolveChannels.
       const lowest = pyramid[pyramid.length - 1];
       const lowPixels =
         (lowest.shape[labels.indexOf('x')] ?? 0) * (lowest.shape[labels.indexOf('y')] ?? 0);
-      const pinned = new Set(
-        (configChannels ?? []).filter((c) => c.contrast_limits).map((c) => c.index),
-      );
-      const omeroChannels = (omero?.channels ?? []) as Array<{
-        window?: { start?: number; end?: number };
-      }>;
       const stats: Array<ChannelStats | null> = [];
       if (lowPixels > 0 && lowPixels <= STATS_MAX_PIXELS) {
-        const wanted = Array.from({ length: Math.min(sizes.c, STATS_MAX_CHANNELS) }, (_, c) => c)
-          .filter((c) => !pinned.has(c))
-          .filter((c) => typeof omeroChannels[c]?.window?.end !== 'number');
+        const wanted = Array.from({ length: Math.min(sizes.c, STATS_MAX_CHANNELS) }, (_, c) => c);
         await Promise.all(
           wanted.map(async (c) => {
             try {
@@ -463,6 +583,7 @@ export async function createBioimageViewer(
         sizes,
         dtype: base.dtype,
         levels: pyramid.length,
+        levelShapes: pyramid.map((level) => [...level.shape]),
         channels,
         defaultZ,
         defaultT,
@@ -470,6 +591,7 @@ export async function createBioimageViewer(
       };
       if (!keep || !userMoved) fit();
       render();
+      void refreshLabels();
       return info;
     },
 
@@ -482,6 +604,7 @@ export async function createBioimageViewer(
       if (sel.z === plane.z && sel.t === plane.t) return;
       plane = { z: sel.z, t: sel.t };
       render();
+      void refreshLabels();
     },
 
     setPoints(next, radius) {
@@ -527,6 +650,7 @@ export async function createBioimageViewer(
       disposed = true;
       loadToken += 1;
       listeners.abort();
+      window.clearTimeout(hintTimer);
       try {
         deck.finalize();
       } catch {
