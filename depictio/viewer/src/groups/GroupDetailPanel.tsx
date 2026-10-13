@@ -413,7 +413,7 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
       {
         field: 'is_group_admin',
         headerName: 'Group admin',
-        width: glass ? 120 : 130,
+        width: glass ? 112 : 130,
         cellRenderer: 'agCheckboxCellRenderer',
         cellStyle: { textAlign: 'center' },
         // The backend rejects self-demotion — lock the current user's own
@@ -425,7 +425,7 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
       {
         field: 'is_pi',
         headerName: 'P.I.',
-        width: glass ? 80 : 90,
+        width: glass ? 100 : 90,
         editable: false,
         sortable: true,
         cellRenderer: (params: ICellRendererParams<GroupMember>) => {

@@ -21,7 +21,7 @@ import { Crown, Plus, Search, ShieldCheck, UsersRound } from 'lucide-react';
 import { AgGridReact } from 'ag-grid-react';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
-import type { ColDef, ICellRendererParams, RowClassParams } from 'ag-grid-community';
+import type { ColDef, GridApi, ICellRendererParams, RowClassParams } from 'ag-grid-community';
 
 import {
   deleteGroup as apiDeleteGroup,
@@ -108,6 +108,13 @@ const GroupsWorkspace: React.FC<GroupsWorkspaceProps> = ({ scope }) => {
   // Selecting the first group on the very first load only — later refreshes
   // must not yank the selection away from whatever the user is editing.
   const autoSelected = useRef(false);
+
+  // AG Grid evaluates a row's class when the row is drawn, not when the
+  // callback changes: redraw so the selection wash follows the selected group.
+  const gridApi = useRef<GridApi<GroupRow> | null>(null);
+  useEffect(() => {
+    gridApi.current?.redrawRows();
+  }, [selectedId, glass]);
 
   const refreshList = useCallback(() => setRefreshKey((k) => k + 1), []);
 
@@ -410,6 +417,9 @@ const GroupsWorkspace: React.FC<GroupsWorkspaceProps> = ({ scope }) => {
                   rowSelection="single"
                   getRowStyle={getRowStyle}
                   getRowClass={getRowClass}
+                  onGridReady={(e) => {
+                    gridApi.current = e.api;
+                  }}
                   onRowClicked={(e) => e.data && setSelectedId(e.data.id)}
                   overlayNoRowsTemplate={
                     '<span style="color:var(--mantine-color-dimmed);font-size:12px">No groups match.</span>'
