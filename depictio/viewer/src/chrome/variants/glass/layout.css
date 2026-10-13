@@ -62,6 +62,13 @@
   height: 48px;
   padding: 0;
 }
+/* The rose sits in an inline-block span (its `display` is inline, so it cannot
+ * be overridden here). That span keeps a line box under the mark, room for
+ * descenders, and so is taller than it: centred in the key, the mark rode high.
+ * A zero line height drops the room. */
+.hy-top-brand--mark > span {
+  line-height: 0;
+}
 .hy-top-brand:focus-visible {
   box-shadow: 0 0 0 2px var(--gl-ring);
 }
