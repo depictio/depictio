@@ -33,6 +33,21 @@ function hasBox(el: Element): boolean {
   return r.width > 0 && r.height > 0;
 }
 
+/**
+ * Whether the element is there to be pointed at: on screen and not under
+ * something else. The dashboard's own controls sit beneath the Guide's layer
+ * while it is open, so a ring around one would circle empty space.
+ */
+function isShown(el: Element): boolean {
+  const r = el.getBoundingClientRect();
+  if (r.width <= 0 || r.height <= 0) return false;
+  const x = r.left + r.width / 2;
+  const y = r.top + r.height / 2;
+  if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return false;
+  const top = document.elementFromPoint(x, y);
+  return top !== null && (top === el || el.contains(top));
+}
+
 function first(root: ParentNode, selector: string): HTMLElement | null {
   for (const el of root.querySelectorAll<HTMLElement>(selector)) {
     if (hasBox(el)) return el;
@@ -80,9 +95,10 @@ export function findDemoTargets(target: GuideTarget, demo: ParentNode): HTMLElem
       // The step to take now, which the demo lights.
       return one(first(demo, '[data-testid^="guide-analysis-step-"][data-active]'));
     case 'comments': {
-      // The header's own button rings with the demo's icon, when it is on
-      // screen (it sits outside the Guide's layer, beside it).
-      const header = first(document, '[data-tour-id="comments-header"]');
+      // The header's own button rings with the demo's icon, when it can be
+      // seen: with the Guide open it is usually under the Guide's layer.
+      const headerEl = document.querySelector<HTMLElement>('[data-tour-id="comments-header"]');
+      const header = headerEl && isShown(headerEl) ? headerEl : null;
       // The real figure's own comments icon, or the stand-in's.
       const icon = demo.querySelectorAll<HTMLElement>(
         '[data-guide-comments-icon] button[aria-label*="omment" i], button[aria-label="Comments"]',
