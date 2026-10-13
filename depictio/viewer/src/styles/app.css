@@ -287,3 +287,15 @@ body.panel-transitioning .react-grid-layout {
   place-items: center;
   pointer-events: none;
 }
+
+/* The actions column of the Dashboards and Projects tables stays at the right
+ * edge while a narrow viewport scrolls the table sideways, so a row's menu and
+ * shortcuts never scroll out of reach. The blur keeps what slides under it
+ * from showing through. */
+.dc-actions-col {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background-color: color-mix(in srgb, var(--mantine-color-body) 86%, transparent);
+  backdrop-filter: blur(6px);
+}
