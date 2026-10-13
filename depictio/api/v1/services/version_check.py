@@ -261,7 +261,12 @@ def _claim(now: datetime) -> bool:
     """Take the right to check now. At most one process wins per interval.
 
     One atomic upsert: it matches only when ``next_check_at`` is due or missing and
-    pushes it a full interval forward. "Missing" includes a non-date value: a backup
+    pushes it a full interval forward. A check is also due when the version that
+    last checked is not the one running: an upgrade makes the stored "latest
+    release" stale on the spot (it was fetched before the release the instance now
+    runs), and the admin panel would show "latest 1.17.3" next to "current 1.17.4"
+    for up to a full interval. The version is stored by the same upsert, so two
+    workers cannot both see it as changed. "Missing" includes a non-date value: a backup
     restore writes this document back with its datetimes as strings, which neither
     ``$lte`` nor ``$exists: False`` would match, so the claim would fail for good.
     When the document exists but is not due, the
@@ -270,6 +275,7 @@ def _claim(now: datetime) -> bool:
     means no check, not an unguarded one.
     """
     interval = timedelta(hours=settings.version_check.interval_hours)
+    running = get_version()
     try:
         get_instance_settings_collection().find_one_and_update(
             {
@@ -277,9 +283,10 @@ def _claim(now: datetime) -> bool:
                 "$or": [
                     {"next_check_at": {"$lte": now}},
                     {"next_check_at": {"$not": {"$type": "date"}}},
+                    {"checked_version": {"$ne": running}},
                 ],
             },
-            {"$set": {"next_check_at": now + interval}},
+            {"$set": {"next_check_at": now + interval, "checked_version": running}},
             upsert=True,
         )
     except DuplicateKeyError:
@@ -308,7 +315,11 @@ def _persist(
     rate limit from being hammered. A forced run has not claimed, so it sets the
     same value itself.
     """
-    update: dict[str, Any] = {"checked_at": now, "last_error": error}
+    update: dict[str, Any] = {
+        "checked_at": now,
+        "last_error": error,
+        "checked_version": get_version(),
+    }
     if latest is not None:
         update["latest"] = latest
     if force:
