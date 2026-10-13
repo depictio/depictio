@@ -1,0 +1,8 @@
+sample	taxonomy	rel_abundance	Kingdom	Phylum
+pb1	Fungi;Ascomycota	0.6202849958088852	Fungi	Ascomycota
+pb1	Fungi;Basidiomycota	0.37468566638725903	Fungi	Basidiomycota
+pb1	Fungi;Mortierellomycota	0.005029337803855826	Fungi	Mortierellomycota
+pb2	Fungi;Ascomycota	0.43139097744360905	Fungi	Ascomycota
+pb2	Fungi;Basidiomycota	0.568609022556391	Fungi	Basidiomycota
+pb3	Fungi;Ascomycota	0.9766355140186916	Fungi	Ascomycota
+pb3	Fungi;Basidiomycota	0.02336448598130841	Fungi	Basidiomycota

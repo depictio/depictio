@@ -99,7 +99,7 @@ next_row() {
 
 run_cli() {
   "$DEPICTIO_CLI" run \
-      --CLI-config-path "$CLI_CONFIG" \
+      --server "$CLI_CONFIG" \
       --project-config-path "$PROJECT_CONFIG" \
       --update-config \
       --rescan-folders \

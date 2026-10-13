@@ -37,7 +37,9 @@ persistence:
   mongo:
     size: 1Gi
     accessMode: ReadWriteOnce  # Fixed: Use ReadWriteOnce for better performance with single-pod MongoDB
-  minio:
+  # Bundled S3 store PVC (still named "<release>-minio-pvc"). Legacy key:
+  # persistence.minio (still honoured, overrides this block when set).
+  s3:
     size: 1Gi
     accessMode: ReadWriteMany
   screenshots:
@@ -55,10 +57,12 @@ persistence:
 
 # Secrets
 secrets:
-  # Optionally override the generated MinIO access key
-  minioRootUser: ""
-  # Optionally override the generated MinIO secret key
-  minioRootPassword: ""
+  # Optionally override the generated S3 access key (bundled SeaweedFS).
+  # Legacy key: secrets.minioRootUser (still honoured).
+  s3RootUser: ""
+  # Optionally override the generated S3 secret key.
+  # Legacy key: secrets.minioRootPassword (still honoured).
+  s3RootPassword: ""
   # First-boot admin bootstrap. Replaces the legacy initial_users.yaml file
   # that shipped admin@example.com / changeme. Both REQUIRED for fresh
   # installs — backend pods refuse to start when no admin exists in MongoDB
@@ -75,6 +79,14 @@ secrets:
   seedTestUser: false
   testUserEmail: "test_user@example.com"
   testUserPassword: "test_pwd"
+  # Shared access code gating public mode (DEPICTIO_AUTH_PUBLIC_ACCESS_CODE).
+  # Only meaningful with backend.env.DEPICTIO_AUTH_PUBLIC_MODE=true, where it
+  # turns "anyone who loads the page gets a session" into "anyone who knows the
+  # code does". It lives under secrets (not backend.env) because it is a shared
+  # secret: ConfigMaps are readable by anything in-cluster and sit unencrypted
+  # in etcd by default. Everyone who enters it still gets their own throwaway
+  # user, so it is a door code, not an account.
+  publicAccessCode: ""
 
 local_development: false # Set to true for local development
 
@@ -168,15 +180,22 @@ redis:
     seccompProfile:
       type: RuntimeDefault
 
-# MinIO settings
-minio:
+# Bundled S3 object store settings.
+# The store is SeaweedFS (`weed mini`, Apache-2.0). Set `enabled: false` and
+# `env.DEPICTIO_S3_PUBLIC_URL` for an external S3 endpoint.
+# Backward compatibility: a legacy `minio:` block (and DEPICTIO_MINIO_* env
+# keys) is still read and merged over this one, so older values files render
+# the same manifests. Kubernetes resource names keep the historical `-minio`
+# suffix, the `app: minio` selector and the MINIO_ROOT_* Secret keys, because
+# renaming them would break upgrades of live releases.
+s3:
   enabled: true
   image:
-    repository: minio/minio
-    # Pin to a specific MinIO release. The :latest tag is mutable and was
-    # flagged as a supply-chain risk; override per-deployment when MinIO
+    repository: chrislusf/seaweedfs
+    # Pin to a specific SeaweedFS release. The :latest tag is mutable and was
+    # flagged as a supply-chain risk; override per-deployment when SeaweedFS
     # publishes a security update you want to roll out deliberately.
-    tag: "RELEASE.2024-12-18T13-15-44Z"
+    tag: "4.46"
     pullPolicy: IfNotPresent
   resources:
     requests:
@@ -187,8 +206,23 @@ minio:
       cpu: "1"
   service:
     type: ClusterIP
+    # S3 API port (weed mini is started with -s3.port=<httpPort>).
     httpPort: 9000
-    consolePort: 9001
+    # SeaweedFS admin UI port — only exposed when adminUI.enabled is true.
+    adminPort: 23646
+  # SeaweedFS admin UI. Off by default: upstream serves it unauthenticated and
+  # it can mint S3 identities. When enabled it is protected with the root
+  # access/secret key pair from the depictio-secrets Secret.
+  adminUI:
+    enabled: false
+  # Public S3 URL for signature verification behind a proxy that does NOT set
+  # X-Forwarded-Host/Proto (SeaweedFS auto-detects those headers). Leave empty
+  # unless clients get SignatureDoesNotMatch through the ingress, then set e.g.
+  # "https://<release>-minio.<domain>" (the public host keeps its legacy name).
+  s3ExternalUrl: ""
+  # Extra `weed mini` flags, e.g. ["-volume.index=leveldb"] for very large
+  # object counts (the default in-memory index grows with the number of objects).
+  extraArgs: []
   podSecurityContext:
     runAsUser: 1000
     runAsGroup: 1000
@@ -206,13 +240,13 @@ minio:
   env:
     # No default credentials. Root user / password come from the
     # ``{{ .Release.Name }}-depictio-secrets`` Kubernetes Secret (set via
-    # secrets.minioRootUser / secrets.minioRootPassword in this values file)
-    # and are injected into the pod via envFrom: secretRef in the MinIO
-    # Deployment template. Shipping `minio` / `minio123` as a baked default
+    # secrets.s3RootUser / secrets.s3RootPassword in this values file)
+    # and are injected into the SeaweedFS pod as AWS_ACCESS_KEY_ID /
+    # AWS_SECRET_ACCESS_KEY. Shipping `minio` / `minio123` as a baked default
     # was a Critical finding — handing the bucket to anyone who could reach
     # the service on the cluster network.
-    DEPICTIO_MINIO_BUCKET: "depictio-bucket"
-    DEPICTIO_MINIO_SERVICE_PORT: "9000"
+    DEPICTIO_S3_BUCKET: "depictio-bucket"
+    DEPICTIO_S3_SERVICE_PORT: "9000"
   ingress:
     separateRoute: false
     ingressClassName: ""
@@ -228,9 +262,14 @@ minio:
 backend:
   image:
     repository: ghcr.io/depictio/depictio-api # FastAPI backend image (post-Dash split)
-    tag: "1.5.1"
+    tag: "1.17.4"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
+  # Raw container env entries (name/value or valueFrom), appended after the
+  # chart-managed ones. The ConfigMap is an explicit key allowlist, so this is
+  # the way to set variables it does not know, e.g. the botocore checksum
+  # switches an S3 gateway may need.
+  extraEnv: []
   resources:
     requests:
       memory: "1Gi"
@@ -251,10 +290,10 @@ backend:
     DEPICTIO_VIEWER_SERVICE_PORT: "80"
     DEPICTIO_MONGODB_WIPE: "false" # Set to true for development to wipe MongoDB on startup
     DEPICTIO_MONGODB_SERVICE_PORT: "27018"
-    # DEPICTIO_MINIO_SERVICE_PORT: "9000"
+    # DEPICTIO_S3_SERVICE_PORT: "9000"
     # DEPICTIO_VIEWER_SERVICE_NAME: "depictio-viewer"
     # DEPICTIO_FASTAPI_PUBLIC_URL: "https://{{ .Release.Name }}-api.{{ .Values.global.domain }}"
-    # DEPICTIO_MINIO_PUBLIC_URL: "https://{{ .Release.Name }}-minio.{{ .Values.global.domain }}"
+    # DEPICTIO_S3_PUBLIC_URL: "https://{{ .Release.Name }}-minio.{{ .Values.global.domain }}"
     # Performance - Reduced workers for better stability with multiple replicas
     DEPICTIO_FASTAPI_WORKERS: "4"
 
@@ -312,11 +351,41 @@ backend:
     # Set true to log the payload instead of sending it.
     DEPICTIO_TELEMETRY_DEBUG: "false"
 
+    # Release check: admins are told when a newer Depictio release exists (outbound
+    # GET to the GitHub Releases API, nothing about this installation is sent).
+    # On by default; admins can toggle it from /admin. Uncomment to override.
+    # Setting ENABLED (true or false) forces it and locks the /admin toggle.
+    # DEPICTIO_VERSION_CHECK_ENABLED: "false"
+    # DEPICTIO_VERSION_CHECK_INTERVAL_HOURS: "6"
+    # DEPICTIO_VERSION_CHECK_REPOSITORY: "depictio/depictio"
+
+    # Dashboard feedback link, served to the SPA through /utils/public-config.
+    # Both halves are required: the flag alone renders nothing, and so does a URL
+    # without it. The URL is a template whose {dashboard}, {dashboard_id}, {tab}
+    # and {url} are filled in the browser, so a remark arrives already carrying
+    # what the reader was looking at.
+    DEPICTIO_FEEDBACK_ENABLED: "false"
+    DEPICTIO_FEEDBACK_URL: ""
+    DEPICTIO_FEEDBACK_LABEL: "Feedback"
+
+    # Which view /dashboards opens in for someone who never picked one
+    # ("thumbnails" or "table"), and the geometry of the thumbnails it shows:
+    # the CSS viewport the dashboard is laid out at, times a pixel density that
+    # keeps the shot readable once a card shrinks it.
+    DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW: "table"
+    DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_WIDTH: "1440"
+    DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_HEIGHT: "900"
+    DEPICTIO_PERFORMANCE_SCREENSHOT_SCALE: "2.0"
+
     # Google Analytics configuration (GA4)
     # Enable to track page views, user interactions, and engagement metrics
     # Get your tracking ID from Google Analytics dashboard (Property → Data Streams)
     DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "false"
     DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-XXXXXXXXXX"
+
+    # Let viewers read and write comment threads (editors and owners only otherwise).
+    # They still cannot resolve a thread, publish an annotation or review an agent's proposal.
+    DEPICTIO_COMMENTS_VIEWERS_CAN_COMMENT: "false"
 
     # Dashboard YAML Sync Feature (disabled by default in K8s)
     # When enabled, dashboards are synced to/from YAML files for version control
@@ -335,6 +404,48 @@ backend:
     # WebSocket / direct event publishing still work even on standalone.
     # DEPICTIO_EVENTS_ENABLED: "true"
     # DEPICTIO_EVENTS_MONGODB_CHANGE_STREAMS_ENABLED: "true"
+
+    # Remote data sources (URL / manifest scan modes). Policy for the SSRF
+    # gateway in api/v1/remote_fetch.py. Rendered into BOTH the backend and
+    # the celery ConfigMaps (templates/configmaps.yaml), since the worker
+    # performs the reads the API enqueues and the two must agree. Defaults are
+    # the safe ones; an overlay values file that omits them gets the same
+    # defaults from the template.
+    # Accept plain http:// sources. Keep false anywhere but a local demo.
+    DEPICTIO_REMOTE_ALLOW_HTTP: "false"
+    # Comma-separated host names. EXCLUSIVE while set: every host not listed
+    # is rejected, public ones included, and a listed host bypasses the
+    # private-address check. Empty means no allowlist.
+    DEPICTIO_REMOTE_URL_ALLOWLIST: ""
+    # Comma-separated host names rejected outright. Checked before the allowlist.
+    DEPICTIO_REMOTE_URL_DENYLIST: ""
+    # Comma-separated S3 locations readable without credentials, each either
+    # "bucket" or "bucket/prefix". Empty means unsigned access is off, which
+    # is the default: a bucket listed here is read with no signature, every
+    # other s3:// URL needs the project's storage settings.
+    DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS: ""
+    # Comma-separated S3 locations the backend and the worker may read with
+    # their own ambient credentials (IAM role, IRSA, AWS_* env), same syntax.
+    # Empty by default: a user-supplied location that is neither public nor
+    # covered by the project's storage settings is refused, and the instance's
+    # own S3 keys are never used for one. Any user can read what is listed.
+    DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS: ""
+    # Component export / embed API (/depictio/api/v1/export): serves one
+    # dashboard component to another site, as a Plotly spec or a self-contained
+    # page, and puts "Export / embed" on every tile. Off by default, because it
+    # relaxes framing protections on that path. While on, anyone may export
+    # components of PUBLIC projects without a token; private ones need one.
+    DEPICTIO_FASTAPI_EMBED_ENABLED: "false"
+    # Comma-separated origins allowed to frame an embed (CSP frame-ancestors),
+    # e.g. "https://lab.example.org". Empty: embeds open standalone but no site
+    # can iframe them. "*" is rejected.
+    DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS: ""
+    # Per-download size cap in bytes (500 MiB).
+    DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES: "524288000"
+    # Per-request timeout in seconds.
+    DEPICTIO_REMOTE_TIMEOUT_S: "30"
+    # Redirect hops followed; each hop is re-validated by the gateway.
+    DEPICTIO_REMOTE_MAX_REDIRECTS: "3"
 
   podSecurityContext:
     runAsUser: 1000
@@ -368,9 +479,11 @@ celery:
   image:
     # Distinct worker image (Celery + Playwright/chromium for screenshots).
     repository: ghcr.io/depictio/depictio-worker
-    tag: "1.5.1"
+    tag: "1.17.4"
     pullPolicy: Always
   replicas: 1
+  # Same as backend.extraEnv, for the worker container.
+  extraEnv: []
   resources:
     requests:
       memory: "512Mi"
@@ -403,7 +516,7 @@ celery:
 viewer:
   image:
     repository: ghcr.io/depictio/depictio-viewer # nginx + built React SPA
-    tag: "1.5.1"
+    tag: "1.17.4"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
   # Deployment update strategy. Default "Recreate" matches the other
@@ -426,7 +539,7 @@ viewer:
     # 8080. The Service port stays 80 for callers; only the pod target moved.
     targetPort: 8080
   # Non-root hardening so the viewer pod passes Pod Security Standards
-  # "restricted" — matches backend / celery / mongo / minio. The
+  # "restricted" — matches backend / celery / mongo / s3. The
   # nginx-unprivileged image already runs as uid 101 on an unprivileged
   # port, so no NET_BIND_SERVICE capability is required.
   podSecurityContext:
@@ -456,9 +569,9 @@ podDisruptionBudget:
 # Gateway API (HTTPRoute) configuration.
 # Enable this instead of ingress when the cluster uses a Gateway API controller.
 # gateway.parentRefs points to the Gateway resource(s) the HTTPRoute attaches to.
-# Separate HTTPRoutes are always created for frontend, backend, and minio.
+# Separate HTTPRoutes are always created for frontend, backend, and the S3 store.
 # Auth filters (gateway-implementation-specific) go in gateway.filters (frontend only)
-# or backend.httpRoute.filters / minio.httpRoute.filters.
+# or backend.httpRoute.filters / s3.httpRoute.filters.
 gateway:
   enabled: false
   # parentRefs defines the Gateway this HTTPRoute attaches to.
@@ -467,7 +580,7 @@ gateway:
   labels: {}
   annotations: {}
   # Arbitrary ExtensionRef / RequestRedirect / etc. filters for the frontend HTTPRoute.
-  # Backend and MinIO routes never inherit these.
+  # Backend and S3 routes never inherit these.
   filters: []
   # NGINX Gateway Fabric SnippetsFilter for injecting raw nginx config into the
   # frontend HTTPRoute. Serve populates snippets at deploy time (auth_request for
@@ -546,6 +659,6 @@ global:
       # Frontend service URL pattern
       # Default: "{{ .Release.Name }}.{{ .Values.global.domain }}"
       frontend: ""
-      # MinIO service URL pattern
+      # S3 store URL pattern (legacy key: `minio`, still honoured)
       # Default: "{{ .Release.Name }}-minio.{{ .Values.global.domain }}"
-      minio: ""
+      s3: ""

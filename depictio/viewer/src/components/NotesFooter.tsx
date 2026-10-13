@@ -18,9 +18,11 @@
 import React, { useCallback, useState } from 'react';
 import { ActionIcon, Drawer, Group, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { Z_LAYERS } from 'depictio-react-core';
 import type { DashboardPermissions } from 'depictio-react-core';
 import { useNotesEditor } from './notes/useNotesEditor';
 import NotesEditorSurface, { NotesSaveStatusIndicator } from './notes/NotesEditorSurface';
+import './notes/notesSurface.css';
 
 interface NotesFooterProps {
   dashboardId: string;
@@ -30,6 +32,8 @@ interface NotesFooterProps {
    *  view of the same content. Server still authorizes the underlying save
    *  endpoint; this is a UI-level affordance. */
   permissions?: DashboardPermissions;
+  /** After each notes save (see `useNotesEditor`). */
+  onSaved?: () => void;
 }
 
 const STORAGE_KEY_PREFIX = 'notes-footer-open:';
@@ -54,6 +58,7 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
   dashboardId,
   initialContent,
   permissions,
+  onSaved,
 }) => {
   const [opened, setOpened] = useState<boolean>(() => readStoredOpen(dashboardId));
   const [fullscreen, setFullscreen] = useState<boolean>(false);
@@ -61,6 +66,7 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
     dashboardId,
     initialContent,
     permissions,
+    onSaved,
   );
 
   const handleToggle = useCallback(() => {
@@ -84,6 +90,8 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
       <Tooltip label="Dashboard notes" position="left" withArrow>
         <ActionIcon
           aria-label="Toggle dashboard notes"
+          className="dc-notes-toggle"
+          data-testid="notes-toggle"
           onClick={handleToggle}
           variant="filled"
           color="gray"
@@ -91,9 +99,10 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
           radius="xl"
           style={{
             position: 'fixed',
-            bottom: 16,
+            // Clears a layout's bottom action bar, when it has one.
+            bottom: 'calc(16px + var(--dc-bottom-offset, 0px))',
             right: 16,
-            zIndex: 200,
+            zIndex: Z_LAYERS.furniture,
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
           }}
         >
@@ -106,6 +115,9 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
         onClose={handleClose}
         position="bottom"
         size={fullscreen ? '100%' : 420}
+        // Above the floating map card (see Z_LAYERS) — a bottom drawer and the
+        // card's default bottom-right anchor land on the same pixels.
+        zIndex={Z_LAYERS.overlay}
         padding="md"
         withCloseButton={false}
         title={

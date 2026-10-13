@@ -1,0 +1,28 @@
+id: cooltools_domains
+name: TAD domains
+mode: insulation
+description: >-
+  TAD intervals derived from the insulation track's boundary calls, one row per
+  domain per window size, with its span, the bins it covers and the boundary
+  strength at each edge.
+find:
+  path_glob: "**/*_balanced_insulation.tsv"
+recipe: cooltools/domains.py
+fixture: domains.tsv
+renders_as:
+  # Intervals on a chromosome-aware axis: one rectangle per domain. The
+  # dashboard tile sets `mark: rect`, which is what turns pos/end into a span.
+  - id: domain_track
+    component: advanced_viz
+    kind: genome_view
+    roles: {chr: chrom, pos: start, score: size_kb, end: end, sample: sample}
+  # Same intervals on the Plotly track, so a tab still reads if the GenomeSpy
+  # renderer is unavailable.
+  - id: domain_size_track
+    component: advanced_viz
+    kind: coverage_track
+    roles: {chromosome: chrom, position: start, value: size_kb, end: end, sample: sample}
+  - { component: card, column: size_kb, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: size_kb, aggregation: count, secondary_layout: top_n, breakdown_col: chrom, top_n_count: 3 }
+  - { component: card, column: valid_fraction, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
+  - { component: table }

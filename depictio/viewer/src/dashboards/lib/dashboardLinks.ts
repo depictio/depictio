@@ -10,14 +10,16 @@ export type DashboardMode = 'view' | 'edit';
 export function dashboardHref(
   dashboardId: string,
   mode: DashboardMode = 'view',
-  /** Encoded `#filters=` payload (from `encodeFiltersForHash`). Appended so
-   *  the current view survives the full page navigation a tab switch is —
-   *  the destination consumes and strips it on load. */
-  filterHash?: string | null,
+  versionId?: string | null,
 ): string {
   const base =
     mode === 'edit' ? `/dashboard-edit/${dashboardId}` : `/dashboard/${dashboardId}`;
-  return filterHash ? `${base}#filters=${filterHash}` : base;
+  // A version snapshot is family-scoped, so the same id is valid on every
+  // sibling tab. Tab switching is a full page navigation, so without carrying
+  // the param the preview would silently drop back to live data on the first
+  // tab click.
+  if (!versionId || mode === 'edit') return base;
+  return `${base}?version=${encodeURIComponent(versionId)}`;
 }
 
 export function dashboardHrefFor(d: DashboardListEntry, mode: DashboardMode = 'view'): string {

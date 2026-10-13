@@ -1,22 +1,42 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Accordion,
+  Alert,
   Anchor,
   Badge,
   Code,
+  Collapse,
   CopyButton,
   Divider,
   Group,
+  Modal,
+  ScrollArea,
   Stack,
+  Switch,
+  Table,
   Text,
+  TextInput,
   Tooltip,
+  UnstyledButton,
   ActionIcon,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { DashboardData } from 'depictio-react-core';
-import { fetchProject } from 'depictio-react-core';
-import { parseTemplateOrigin, TemplateChip } from '../projects/template';
+import { fetchProject, Z_LAYERS } from 'depictio-react-core';
+import {
+  parseTemplateOrigin,
+  TemplateChip,
+  TemplateSourceLogo,
+  type ParsedTemplate,
+} from '../projects/template';
+import RunProvenanceCard from '../projects/detail/RunProvenanceCard';
 import { formatDateTime } from '../lib/datetime';
+import {
+  isUnsetProvenanceValue,
+  matchesProvenanceQuery,
+  type ProvenanceEntryLike,
+} from '../lib/provenance';
 
 interface DashboardInfoBodyProps {
   dashboard: DashboardData | null;
@@ -35,6 +55,54 @@ function formatTimestamp(raw: string): string {
 function pickOwnerEmail(dashboard: DashboardData | null): string | null {
   const perms = dashboard?.permissions as { owners?: Array<{ email?: string }> } | undefined;
   return perms?.owners?.[0]?.email ?? null;
+}
+
+/** The run provenance a project's `template_origin` carries, flattened for
+ *  display; empty when the project was not built from a template run. */
+export function readRunProvenance(templateOrigin: unknown): {
+  entries: ProvenanceEntryLike[];
+  files: string[];
+} {
+  const origin = templateOrigin as {
+    run_provenance?: Array<{
+      source?: string;
+      key?: string;
+      value?: string;
+      group?: string;
+      highlight?: boolean;
+    }>;
+    run_provenance_files?: unknown;
+  } | null;
+  const entries = Array.isArray(origin?.run_provenance)
+    ? origin.run_provenance
+        .filter((e) => e && e.key)
+        .map((e) => ({
+          source: String(e.source ?? ''),
+          key: String(e.key),
+          value: String(e.value ?? ''),
+          group: String(e.group ?? 'Other'),
+          highlight: Boolean(e.highlight),
+        }))
+    : [];
+  const files = Array.isArray(origin?.run_provenance_files)
+    ? origin.run_provenance_files.map(String)
+    : [];
+  return { entries, files };
+}
+
+/** Re-group the flat entry list the way the report's endpoint already does —
+ *  consecutive runs of the same group, in collection order. */
+export function groupRunProvenance(
+  entries: ProvenanceEntryLike[],
+): Array<{ group: string; entries: ProvenanceEntryLike[] }> {
+  const out: Array<{ group: string; entries: ProvenanceEntryLike[] }> = [];
+  for (const e of entries) {
+    const name = e.group || 'Other';
+    const last = out[out.length - 1];
+    if (last && last.group === name) last.entries.push(e);
+    else out.push({ group: name, entries: [e] });
+  }
+  return out;
 }
 
 /**
@@ -98,6 +166,12 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
 
   const parsedTemplate = parseTemplateOrigin(projectTemplateOrigin);
 
+  // The run-provenance keys the template flagged as highlights — the primer /
+  // truncation / filtering settings a reader needs to interpret the dashboard.
+  // The complete listing lives in the ingestion report; this is the digest.
+  const { entries: runProvenance, files: runProvenanceFiles } =
+    readRunProvenance(projectTemplateOrigin);
+
   return (
     <Stack gap="md">
       {title && (
@@ -121,7 +195,19 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
           color="teal"
           label="Project"
           value={
-            projectName ? (
+            projectName && projectId ? (
+              <Tooltip label={`Open project: ${projectName}`} withArrow withinPortal>
+                <Anchor
+                  href={`/projects/${projectId}`}
+                  size="sm"
+                  fw={500}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                >
+                  {projectName}
+                  <Icon icon="mdi:open-in-new" width={12} />
+                </Anchor>
+              </Tooltip>
+            ) : projectName ? (
               <Text size="sm" fw={500}>
                 {projectName}
               </Text>
@@ -140,7 +226,7 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
             value={<TemplateChip parsed={parsedTemplate} verbose />}
           />
         )}
-        {parsedTemplate && projectId && (
+        {projectId && (
           <MetaRow
             icon="mdi:clipboard-check-outline"
             color="indigo"
@@ -149,6 +235,21 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
               <Anchor href={`/projects/${projectId}#ingestion`} size="sm" fw={500}>
                 View ingestion report
               </Anchor>
+            }
+          />
+        )}
+        {runProvenance.length > 0 && (
+          <MetaRow
+            icon="mdi:tune-variant"
+            color="orange"
+            label="Run parameters"
+            value={
+              <RunParameters
+                entries={runProvenance}
+                files={runProvenanceFiles}
+                projectId={projectId}
+                template={parsedTemplate}
+              />
             }
           />
         )}
@@ -200,12 +301,9 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
         )}
       </Stack>
 
-      <Divider label="Identifiers" labelPosition="left" my="xs" />
-
-      <Stack gap="xs">
-        {dashboardId && <CopyableId label="Dashboard ID" value={dashboardId} />}
-        {projectId && <CopyableId label="Project ID" value={projectId} />}
-      </Stack>
+      {(dashboardId || projectId) && (
+        <IdentifiersBlock dashboardId={dashboardId} projectId={projectId} />
+      )}
     </Stack>
   );
 };
@@ -231,6 +329,45 @@ const MetaRow: React.FC<MetaRowProps> = ({ icon, color, label, value }) => (
   </Group>
 );
 
+/**
+ * Dashboard / project IDs, folded by default: technical detail for someone
+ * filing an issue or calling the API, not something a reader needs on every
+ * open. Local state, so the drawer and the inspector's Info tab each start
+ * folded.
+ */
+const IdentifiersBlock: React.FC<{ dashboardId: string | null; projectId: string | null }> = ({
+  dashboardId,
+  projectId,
+}) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <Stack gap="xs" data-testid="dashboard-identifiers">
+      <UnstyledButton
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        data-testid="dashboard-identifiers-toggle"
+      >
+        <Divider
+          labelPosition="left"
+          my={4}
+          label={
+            <Group gap={4} wrap="nowrap">
+              <Icon icon={open ? 'mdi:chevron-down' : 'mdi:chevron-right'} width={14} />
+              <span>Identifiers</span>
+            </Group>
+          }
+        />
+      </UnstyledButton>
+      <Collapse in={open}>
+        <Stack gap="xs">
+          {dashboardId && <CopyableId label="Dashboard ID" value={dashboardId} />}
+          {projectId && <CopyableId label="Project ID" value={projectId} />}
+        </Stack>
+      </Collapse>
+    </Stack>
+  );
+};
+
 const CopyableId: React.FC<{ label: string; value: string }> = ({ label, value }) => (
   <Group gap="xs" wrap="nowrap" align="center">
     <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
@@ -249,6 +386,215 @@ const CopyableId: React.FC<{ label: string; value: string }> = ({ label, value }
       )}
     </CopyButton>
   </Group>
+);
+
+/**
+ * The pipeline's own settings, from a 400px drawer.
+ *
+ * Two levels, because the two readings want different room. The template's
+ * `provenance.highlight` keys stay inline — the handful of settings needed to
+ * read the dashboard at all (primers, truncation, filtering thresholds), short
+ * enough for a key/value table at panel width. Everything else opens in a
+ * modal running the SAME component as the ingestion report, rather than a
+ * cramped copy of it: a 235-row grouped table needs the width, and one
+ * implementation means one behaviour to learn.
+ *
+ * Highlighting therefore decides the ORDER of discovery, not what exists —
+ * which is what keeps the mechanism honest for a pipeline whose template
+ * names no highlight at all.
+ */
+const RunParameters: React.FC<{
+  entries: ProvenanceEntryLike[];
+  files: string[];
+  projectId: string | null;
+  /** The template the project was instantiated from, when there is one — it
+   *  names who wrote the files these values were read from. */
+  template: ParsedTemplate | null;
+}> = ({ entries, files, projectId, template }) => {
+  const [modalOpen, setModalOpen] = useState(false);
+  const highlights = useMemo(() => entries.filter((e) => e.highlight), [entries]);
+
+  const groups = useMemo(() => groupRunProvenance(entries), [entries]);
+
+  return (
+    <>
+      <Accordion
+        variant="default"
+        chevronPosition="left"
+        styles={{
+          item: { border: 'none' },
+          control: { padding: 0 },
+          content: { padding: 0 },
+          label: { padding: 0 },
+        }}
+      >
+        <Accordion.Item value="run-params">
+          <Accordion.Control>
+            <Text size="sm" fw={500}>
+              {highlights.length > 0
+                ? `${highlights.length} key settings`
+                : `${entries.length} parameters`}
+            </Text>
+          </Accordion.Control>
+          <Accordion.Panel>
+            {highlights.length > 0 && (
+              <Table verticalSpacing={2} withRowBorders={false}>
+                <Table.Tbody>
+                  {highlights.map((e) => (
+                    <Table.Tr key={e.key}>
+                      <Table.Td px={0} w={150}>
+                        <Text size="xs" fw={500} style={{ overflowWrap: 'anywhere' }}>
+                          {e.key}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td px={0}>
+                        <Code fz={11} style={{ overflowWrap: 'anywhere' }}>
+                          {e.value}
+                        </Code>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            )}
+            <Group gap="sm" mt={6} wrap="nowrap">
+              <Anchor
+                component="button"
+                type="button"
+                size="xs"
+                fw={500}
+                onClick={() => setModalOpen(true)}
+              >
+                All {entries.length} parameters →
+              </Anchor>
+              {projectId && (
+                <Anchor href={`/projects/${projectId}#ingestion`} size="xs" fw={500}>
+                  Ingestion report →
+                </Anchor>
+              )}
+            </Group>
+          </Accordion.Panel>
+        </Accordion.Item>
+      </Accordion>
+
+      <RunParametersModal
+        opened={modalOpen}
+        onClose={() => setModalOpen(false)}
+        template={template}
+        groups={groups}
+        files={files}
+      />
+    </>
+  );
+};
+
+/**
+ * Every parameter the run recorded, in a dialog: the Settings drawer's "All
+ * parameters" and a dashboard's own `params:` links (RunParametersHost) open
+ * the same one.
+ */
+export const RunParametersModal: React.FC<{
+  opened: boolean;
+  onClose: () => void;
+  template: ParsedTemplate | null;
+  groups: Array<{ group: string; entries: ProvenanceEntryLike[] }>;
+  files: string[];
+  /** Pre-filled search, e.g. `dada2` from a `params:dada2` link. */
+  initialQuery?: string;
+}> = ({ opened, onClose, template, groups, files, initialQuery }) => (
+  <Modal
+    opened={opened}
+    onClose={onClose}
+    title={<RunParametersTitle template={template} />}
+    // Centre the title on the dialog's own axis. Mantine lays the header
+    // out as title-then-close with asymmetric padding, so a title box that
+    // merely grows still ends up short of centre by half the button. Take
+    // the button out of the flow instead and the title box is the header.
+    styles={{
+      header: { position: 'relative', justifyContent: 'center', paddingRight: 16 },
+      title: { flex: 1, marginRight: 0 },
+      close: { position: 'absolute', top: 12, right: 12 },
+    }}
+    size="xl"
+    // Above the Settings drawer that may have opened it.
+    zIndex={Z_LAYERS.nestedOverlay}
+    scrollAreaComponent={ScrollArea.Autosize}
+  >
+    <Stack gap="sm">
+      <ProvenanceOriginNote template={template} />
+      <RunProvenanceCard
+        groups={groups}
+        files={files}
+        withCard={false}
+        withHeading={false}
+        initialQuery={initialQuery}
+      />
+    </Stack>
+  </Modal>
+);
+
+/**
+ * Modal header for the run parameters: the pipeline's brand mark, then the
+ * template that wrote the values underneath the title.
+ *
+ * The mark comes from the template-source registry, so a Snakemake or Galaxy
+ * template gets its own without a second code path — but in practice this
+ * reads "nf-core", because nf-core is where the convention these values are
+ * collected under comes from.
+ */
+const RunParametersTitle: React.FC<{ template: ParsedTemplate | null }> = ({ template }) => (
+  <Group gap="sm" wrap="nowrap" align="center" justify="center">
+    {template ? (
+      <TemplateSourceLogo source={template.source} size={30} />
+    ) : (
+      <Icon icon="mdi:tune-variant" width={28} color="var(--mantine-color-orange-6)" />
+    )}
+    <Stack gap={0}>
+      <Text fw={700} size="lg" ta="center">
+        Run parameters
+      </Text>
+      {template && (
+        <Text size="sm" fw={500} ff="monospace" ta="center">
+          {template.repo ? `${template.source}/${template.repo}` : template.source}
+          {template.version ? ` v${template.version.replace(/^v/i, '')}` : ''}
+        </Text>
+      )}
+    </Stack>
+  </Group>
+);
+
+/**
+ * Where these values came from, which is the one thing a reader can get wrong
+ * here.
+ *
+ * Nothing on this screen is Depictio's own reading of the data: the CLI parses
+ * files the run left behind and stores what they said. Saying so matters most
+ * for nf-core, whose `pipeline_info/` dump is a convention of the nf-core
+ * template rather than a Nextflow feature, which is exactly why a pipeline
+ * from outside that ecosystem has to name its own files in the template.
+ */
+const ProvenanceOriginNote: React.FC<{ template: ParsedTemplate | null }> = ({ template }) => (
+  <Alert
+    variant="light"
+    color="gray"
+    p="sm"
+    radius="md"
+    icon={<Icon icon="mdi:file-document-outline" width={18} />}
+  >
+    <Text size="sm">
+      Depictio computes none of these values. They are read at ingestion from the files the run
+      itself wrote.{' '}
+      {template?.source.toLowerCase() === 'nf-core' ? (
+        <>
+          Every nf-core pipeline dumps <Code fz={12}>pipeline_info/params_*.json</Code> and a
+          software versions YAML when it finishes. Nextflow on its own writes neither, so a
+          pipeline from outside nf-core declares its own provenance files in its template.
+        </>
+      ) : (
+        <>Which files to read is declared by the template that created this project.</>
+      )}
+    </Text>
+  </Alert>
 );
 
 export default DashboardInfoBody;

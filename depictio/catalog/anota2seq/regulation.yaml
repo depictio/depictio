@@ -1,0 +1,32 @@
+id: anota2seq_regulation
+name: Translational regulation mode per gene
+mode: translation/regulation
+description: >-
+  One row per contrast and gene with the four anota2seq analyses side by side
+  and one regulatory mode: translation, buffering, mRNA abundance or not
+  regulated, assigned with anota2seq's default selection thresholds.
+find: { path_glob: "**/*.anota2seq.results.tsv" }
+recipe: anota2seq/regulation.py
+fixture: regulation.tsv
+renders_as:
+  # The anota2seq fold-change plane: total mRNA change on x, ribosome-bound
+  # mRNA change on y. Translation-regulated genes leave the diagonal, buffered
+  # genes lie flat along x, mRNA-abundance genes ride the diagonal.
+  - id: fold_change_plane
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: total_mrna_lfc, y: translated_mrna_lfc, label: gene_name, color: regulation_mode }
+  - id: translation_volcano
+    component: advanced_viz
+    kind: volcano
+    roles: { feature_id: gene_name, effect_size: translation_effect, significance: translation_padj, category: regulation_mode }
+  - id: gene_record
+    component: advanced_viz
+    kind: record_card
+    roles: { id: gene_id, title: gene_name }
+  - { component: card, column: gene_id, aggregation: nunique, secondary_layout: donut, breakdown_col: regulation_mode }
+  - { component: card, column: translation_effect, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: total_mrna_lfc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: translated_mrna_lfc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: interactive, interactive_type: MultiSelect, column_name: regulation_mode }
+  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }

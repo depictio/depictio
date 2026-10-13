@@ -1,0 +1,15 @@
+id: hamronization_gene_matrix
+name: Gene by sample matrix
+mode: arg/matrix
+description: >-
+  Resistance gene by sample hit-count matrix, one row per gene symbol with its
+  most frequent drug class as a row annotation and one numeric column per
+  sample.
+find:
+  path_glob: "**/hamronization_summarize/*combined_report.tsv"
+  path_glob_alt: ["**/hamronization/*combined_report.tsv"]
+recipe: hamronization/gene_matrix.py
+fixture: gene_matrix.tsv
+renders_as:
+  - { id: arg_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: gene_symbol, row_annotation_cols: [drug_class_primary]} }
+  - { component: table }

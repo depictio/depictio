@@ -21,7 +21,7 @@ from typing import Any
 
 import yaml
 
-from depictio.models.components.advanced_viz.catalog import CATALOG_DIR
+from depictio.models.components.advanced_viz.catalog import CATALOG_DIR, role_config_key
 
 # Prebuilt single-file viewer bundle (`pnpm run build:catalog-preview`).
 TEMPLATE_PATH = CATALOG_DIR.parent / "viewer" / "dist-catalog-preview" / "catalog-preview.html"
@@ -38,6 +38,20 @@ _DEPICTIO_COLORWAY = [
     "#7A5DC7",
 ]
 _CARD_ACCENTS = ["#45B8AC", "#7A5DC7", "#6495ED", "#8BC34A", "#F68B33", "#E6779F"]
+# Card fields that configure the secondary strip rather than the hero number.
+# Copied verbatim onto the preview metadata — `SecondaryMetrics` reads them
+# from there, exactly as it does for a saved card.
+_CARD_STRIP_META = (
+    "secondary_layout",
+    "breakdown_col",
+    "top_n_count",
+    "coverage_max",
+    "threshold_value",
+    "threshold_direction",
+    "threshold_warn",
+    "attrition_cols",
+    "trend_col",
+)
 _TABLE_PREVIEW_ROWS = 1000
 
 
@@ -88,7 +102,13 @@ def _figure_payload(df, render) -> dict[str, Any]:
         import pandas as pd
         import polars as pl
 
+        from depictio.api.v1.services.figure.groups import code_group_globals
+
         ns.update(pd=pd, pl=pl, np=np)
+        # The grouping names a dashboard render binds, at their ungrouped
+        # values: a recipe that spreads them must preview exactly as it renders
+        # before anyone has saved a group.
+        ns.update(code_group_globals())
         try:
             exec(render.code, ns)  # noqa: S102 — trusted, repo-authored catalog snippet
         except Exception as exc:
@@ -218,27 +238,71 @@ def _table_payload(df) -> dict[str, Any]:
 _ADVANCED_VIZ_DISPATCH_KINDS = frozenset(
     {"embedding", "upset_plot", "upset", "coverage_track", "sankey"}
 )
+# The two spellings the catalog and the renderer use for the same plot.
+_UPSET_KINDS = frozenset({"upset_plot", "upset"})
+
+# Kinds whose renderer offers a column menu at render time — colour-by and
+# hover extras on an embedding, the grouping on a rarefaction. On a dashboard
+# those menus are filled from ``GET /datacollections/polars_schema`` and the
+# column the user picks is fetched on demand; offline the preview can do
+# neither, so for these kinds it ships the unbound fixture columns alongside the
+# bound roles and advertises them as the DC's schema. Every other kind stays on
+# its roles, which is all its renderer ever asks for.
+_COLUMN_MENU_KINDS = frozenset({"embedding", "rarefaction"})
+
+# Cell budget for those extra columns, per render. `_load_fixture_df` already
+# caps rows, so this only bites on a *wide* fixture — a matrix-shaped output
+# would otherwise inline every one of its columns into the bundle for the sake
+# of a menu nobody would scroll that far down.
+_COLUMN_MENU_CELL_BUDGET = 20_000
+
+
+def _menu_columns(df, bound: list[str]) -> list[str]:
+    """Unbound fixture columns worth shipping for a ``_COLUMN_MENU_KINDS`` render."""
+    budget = _COLUMN_MENU_CELL_BUDGET
+    extra: list[str] = []
+    for col in df.columns:
+        if col in bound or df.height > budget:
+            continue
+        budget -= df.height
+        extra.append(col)
+    return extra
+
+
+def _column_menu_support(df, dc_id: str, data: dict[str, Any], columns: list[str]) -> None:
+    """Answer the per-DC endpoints a render-time column menu reads.
+
+    ``fetchPolarsSchema`` names what can be picked and ``fetchUniqueValues``
+    orders a categorical legend. Only the columns the payload actually carries
+    are advertised, so the menu can never offer one whose values the offline
+    bundle left out.
+    """
+    data["schemas"][dc_id] = {name: str(df.schema[name]) for name in columns}
+    for name in columns:
+        col = df[name]
+        if col.dtype.is_numeric() or col.n_unique() > _UNIQUE_VALUES_CAP:
+            continue
+        data["unique"][f"{dc_id}::{name}"] = [
+            str(v) for v in col.drop_nulls().unique().sort().to_list()
+        ]
 
 
 def _advanced_viz_config_and_data(df, render) -> tuple[dict[str, Any], dict[str, Any]]:
     """Build the advanced-viz ``config`` blob + the projected role columns.
 
-    Mirrors ``buildAdvancedVizConfigBlob`` (``<role>_col`` per role; sunburst's
-    ``ranks`` → ``rank_cols``; ``compute_method`` stays scalar). The renderer
+    Role → config field comes from ``role_config_key``, the shared twin of
+    ``buildAdvancedVizConfigBlob``. The renderer
     fetches the role columns via ``fetchAdvancedVizData`` and plots client-side,
-    so the payload is just those columns projected from the fixture.
+    so the payload is just those columns projected from the fixture — plus, for
+    a kind with a column menu, whatever else the menu may be pointed at.
     """
     config: dict[str, Any] = {"viz_kind": render.kind}
     columns: list[str] = []
     for role, col in (render.roles or {}).items():
-        if render.kind == "sunburst" and role == "ranks":
-            config["rank_cols"] = col
-            columns.extend(col if isinstance(col, list) else [col])
-        elif role == "compute_method":
-            config["compute_method"] = col
-        else:
-            config[f"{role}_col"] = col
-            columns.append(col)
+        config[role_config_key(render.kind, role)] = col
+        if role == "compute_method":
+            continue  # a setting (pca/umap/…), not a column to project
+        columns.extend(col if isinstance(col, list) else [col])
 
     # Sunburst needs ≥2 hierarchical rank columns. Catalog cards bind only
     # `abundance` and let the runtime auto-bind the taxonomy ranks by name;
@@ -265,6 +329,8 @@ def _advanced_viz_config_and_data(df, render) -> tuple[dict[str, Any], dict[str,
         raise CatalogPayloadError(
             f"advanced_viz {render.kind}: column(s) {missing} absent from fixture {list(df.columns)}"
         )
+    if render.kind in _COLUMN_MENU_KINDS:
+        present += _menu_columns(df, present)
     rows = {c: df[c].to_list() for c in present}
     return config, {
         "columns": present,
@@ -329,12 +395,15 @@ def _coverage_track_payload(df, render) -> tuple[dict[str, Any], dict[str, Any]]
 _MULTIQC_MAX_PLOTS = 3
 
 
-def _multiqc_module(anchor: str) -> str:
+def multiqc_module(anchor: str) -> str:
     """MultiQC module that owns a plot anchor — its leading token.
 
     Anchors are prefixed by the producing module: ``fastqc_*``, ``samtools-*``,
     ``bcftools_stats_*``, ``mosdepth-*``, … One catalog output per module keys
     off this so each ``section: <module>`` card surfaces only that tool's plots.
+
+    Public because the compose endpoint normalises an ingested report's anchor
+    list with the same rule before deciding which sections a project offers.
     """
     import re
 
@@ -360,7 +429,12 @@ def _multiqc_payload(df, render) -> list[dict[str, Any]]:
     rows_sorted = [
         r
         for r in plot_rows.iter_rows(named=True)
-        if section == "report" or _multiqc_module(r["anchor"]) == section
+        # Lowercased on both sides. The compose endpoint already normalises this
+        # way (`multiqc_module(str(m).lower())`), and a recipe names the module
+        # in lower case, so a camelCase anchor like `featureCounts_assignment_plot`
+        # matched there and not here — the one module in the catalog whose
+        # preview was a placeholder for no reason but casing.
+        if section == "report" or multiqc_module(r["anchor"]).lower() == section.lower()
     ]
 
     results = []
@@ -495,6 +569,50 @@ def _complex_heatmap_payload(df, render) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _card_secondary_payload(df, render) -> tuple[dict[str, Any], list[str]]:
+    """A card's secondary strip, computed on the fixture.
+
+    Returns ``(secondary_values, aggregations)`` in the shape
+    ``bulkComputeCards`` returns for a saved card, so the picker's preview and
+    the component the picker adds render the same strip.
+
+    The categorical and QC/progress layouts delegate to the two services the
+    saved card's compute path uses, rather than re-deriving them here — the same
+    "preview and saved self cannot disagree" rule those modules were factored
+    out for. Imported at call time: this module is otherwise free of API-layer
+    imports and the CLI reaches it too (``depictio catalog preview``).
+    """
+    layout = render.secondary_layout
+    aggregations = list(render.aggregations or [])
+    # Tukey: one synthetic aggregation, computed locally (the server's own
+    # box_plot_stats path is not a frame-level service).
+    if layout == "box_plot" or "box_plot_stats" in aggregations:
+        return {"box_plot_stats": _box_plot_stats(df, render.column)}, ["box_plot_stats"]
+    if not layout or layout in ("coverage", "gauge"):
+        # coverage/gauge draw from the hero value + `coverage_max` alone.
+        return {}, []
+
+    from depictio.api.v1.services.card_breakdown import BREAKDOWN_LAYOUTS, compute_breakdown
+    from depictio.api.v1.services.card_metrics import NUMERIC_LAYOUTS, numeric_layout_payload
+
+    if layout in BREAKDOWN_LAYOUTS:
+        if not render.breakdown_col:
+            return {}, []
+        breakdown = compute_breakdown(
+            df,
+            render.column,
+            render.breakdown_col,
+            render.aggregation or "count",
+            render.top_n_count or 3,
+        )
+        return {"__breakdown__": breakdown}, []
+    if layout in NUMERIC_LAYOUTS:
+        payload = numeric_layout_payload(df, render.model_dump(), render.column, layout)
+        return ({f"__{layout}__": payload}, []) if payload is not None else ({}, [])
+    # vertical / compact / grid — the declared scalar aggregations.
+    return {a: _aggregate(df, render.column, a) for a in aggregations}, aggregations
+
+
 def _empty_data() -> dict[str, Any]:
     return {
         "figures": {},
@@ -507,8 +625,74 @@ def _empty_data() -> dict[str, Any]:
         "unique": {},
         "ranges": {},
         "specs": {},
+        "schemas": {},
         "advancedVizData": {},
         "compute": {},
+    }
+
+
+# ---------------------------------------------------------------------------
+# interactive + card secondary strips
+# ---------------------------------------------------------------------------
+
+# The interactive renderers read a column's bounds and distinct values from the
+# same endpoints the dashboard uses, which the offline shim keys as
+# ``"<dc_id>::<column>"``. `mockApi.fetchUniqueValues` / `fetchColumnRange` /
+# `fetchSpecs` have always looked here; until interactive renders existed there
+# was simply nothing to put in.
+_UNIQUE_VALUES_CAP = 200
+
+
+def _interactive_meta(df, render) -> dict[str, Any]:
+    """StoredMetadata fields the interactive renderers dispatch on."""
+    import polars as pl
+
+    column = render.column_name
+    if column not in df.columns:
+        raise CatalogPayloadError(
+            f"interactive column {column!r} absent from fixture {list(df.columns)}"
+        )
+    dtype = df.schema[column]
+    if dtype.is_numeric():
+        column_type = "int64" if dtype.is_integer() else "float64"
+    elif dtype in (pl.Date, pl.Datetime):
+        column_type = "datetime"
+    elif dtype == pl.Boolean:
+        column_type = "bool"
+    else:
+        column_type = "object"
+    return {
+        "interactive_component_type": render.interactive_type,
+        "column_name": column,
+        "column_type": column_type,
+        "_preview_height": 120,
+    }
+
+
+def _interactive_data(df, render, dc_id: str, data: dict[str, Any]) -> None:
+    """The distinct values / bounds / specs a filter control needs to draw."""
+    column = render.column_name
+    col = df[column]
+    key = f"{dc_id}::{column}"
+    # Capped: a Select over a key column is a mistake the author should see as
+    # a long list, not a reason to inline every row into the bundle.
+    data["unique"][key] = [str(v) for v in col.drop_nulls().unique().sort().to_list()][
+        :_UNIQUE_VALUES_CAP
+    ]
+    if col.dtype.is_numeric():
+        low, high = col.min(), col.max()
+        data["ranges"][key] = {
+            "min": float(low) if low is not None else None,
+            "max": float(high) if high is not None else None,
+        }
+    # `buildNumericScale` reads the dtype and the distinct count to decide
+    # whether a slider stops on whole values, so the specs carry both.
+    specs = data["specs"].setdefault(dc_id, {})
+    specs[column] = {
+        "type": _interactive_meta(df, render)["column_type"],
+        "unique": int(col.n_unique()),
+        "min": float(col.min()) if col.dtype.is_numeric() and col.min() is not None else None,
+        "max": float(col.max()) if col.dtype.is_numeric() and col.max() is not None else None,
     }
 
 
@@ -572,6 +756,95 @@ def advanced_viz_persist_config(output: Any, render, df: Any = None) -> dict[str
         return None
 
 
+def _is_live_embedding(render) -> bool:
+    """True when an ``embedding`` render re-projects rather than plots columns.
+
+    Mirrors ``EmbeddingRenderer``'s ``liveMode = Boolean(config.compute_method)``.
+    Every embedding the catalog ships today is the other case: the recipe already
+    emitted the coordinates, so the render binds ``dim_1``/``dim_2`` and goes
+    through the ordinary role-projection path.
+    """
+    return bool((render.roles or {}).get("compute_method"))
+
+
+def _upset_payload(df, render) -> dict[str, Any]:
+    """Pre-compute the UpSet figure from the fixture.
+
+    plotly-upset builds the figure in Python, so unlike a role-projecting kind
+    there is nothing the browser could draw on its own — without this the tile
+    could only ever show a placeholder. Runs the worker's own kernel so the
+    gallery and a live dashboard cannot drift apart.
+    """
+    from depictio.api.v1.celery_tasks import _upset_result_from_frame
+
+    # A catalog `Render` is `extra="forbid"` and carries only `roles`, so every
+    # tunable here is the renderer's own default. That is the contract the user
+    # asked for: a preview for every render, tuning only where a dashboard can
+    # actually carry the setting.
+    roles = render.roles or {}
+    set_columns = roles.get("sets")
+    return _upset_result_from_frame(
+        df,
+        set_columns=list(set_columns) if isinstance(set_columns, list) else None,
+        sort_by="cardinality",
+        sort_order="descending",
+        min_size=1,
+        max_degree=None,
+        show_set_sizes=True,
+        show_values=False,
+        color_intersections_by="none",
+        set_colors=None,
+        annotation_cols=[],
+    )
+
+
+def _sankey_payload(df, render) -> dict[str, Any]:
+    """Pre-compute the Sankey figure and node metadata from the fixture."""
+    from depictio.api.v1.celery_tasks import _sankey_result_from_frame
+
+    roles = render.roles or {}
+    step_cols = list(roles.get("steps") or [])
+    if len(step_cols) < 2:
+        raise CatalogPayloadError(f"sankey: needs >=2 step columns, got {step_cols!r}")
+    missing = [c for c in step_cols if c not in df.columns]
+    if missing:
+        raise CatalogPayloadError(
+            f"sankey: step column(s) {missing} absent from fixture {list(df.columns)}"
+        )
+    return _sankey_result_from_frame(
+        df,
+        value_col=roles.get("value"),
+        step_cols=step_cols,
+        sort_mode="total_flow",
+        min_link_value=0.0,
+        step_filters={},
+    )
+
+
+def _embedding_payload(df, render) -> dict[str, Any]:
+    """Project the fixture for a *live* embedding (one that names a method).
+
+    Only reached when the render declares ``compute_method``. An embedding whose
+    coordinates the recipe already emitted binds ``dim_1``/``dim_2`` like any
+    other kind and never comes through here.
+    """
+    from depictio.api.v1.celery_tasks import _embedding_result_from_frame
+
+    roles = render.roles or {}
+    feature_id_col = roles.get("sample_id") or "sample_id"
+    if feature_id_col not in df.columns:
+        raise CatalogPayloadError(
+            f"embedding: sample id column {feature_id_col!r} absent from fixture {list(df.columns)}"
+        )
+    return _embedding_result_from_frame(
+        df,
+        feature_id_col=feature_id_col,
+        method=str(roles.get("compute_method") or "pca"),
+        params={},
+        extra_cols=[],
+    )
+
+
 def _render_variant(render) -> str:
     """Sub-label qualifying a component (the type itself is shown as a badge).
 
@@ -632,6 +905,11 @@ def _output_info(output: Any, tool: Any = None, df: Any = None) -> dict[str, Any
     edam = out_edam or (list(tool.edam_topics) if tool else [])
     info: dict[str, Any] = {
         "id": output.id,
+        # The catalog's own short label ("ARG hits"). The compose endpoint has
+        # always sent it and the picker titles its panel with it; without it here
+        # the docs gallery had to fall back to the raw id, so the two surfaces
+        # named the same output differently.
+        "name": output.name or output.id,
         "description": output.description or "",
         "mode": output.mode,
         "find": output.find.model_dump(exclude_none=True),
@@ -662,6 +940,10 @@ def _render_meta(render, output: Any, i: int) -> dict[str, Any]:
         "dc_id": f"catalog::{index}",
         "_variant": _render_variant(render),
         "_yaml": _render_yaml(render),
+        # The `renders_as` entry itself, so the panel can build the dashboard
+        # tile that reproduces this render without reconstructing it from the
+        # preview metadata (which is a lossy, differently-shaped view of it).
+        "_render": render.model_dump(exclude_none=True, exclude_defaults=True),
     }
     binds = _render_binds(render)
     if binds:
@@ -695,7 +977,11 @@ def _normalise_theme(theme: str) -> str:
     return "dark" if theme == "dark" else "light"
 
 
-_NON_TABULAR_COMPONENTS = frozenset({"image", "interactive", "text", "map"})
+# Components with no tabular preview path. ``interactive`` used to be here:
+# it had no catalog spelling, so there was nothing to render. Now that a render
+# names its widget and column, the real interactive renderers draw it from the
+# unique values / ranges / specs computed below.
+_NON_TABULAR_COMPONENTS = frozenset({"image", "text", "map"})
 
 
 def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[str, Any]:
@@ -739,31 +1025,44 @@ def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[s
                     meta["mode"] = "code"  # code shown via the _yaml block
                 meta["_preview_height"] = _FIGURE_PREVIEW_HEIGHT
                 data["figures"][index] = _figure_payload(df, render)
+            elif comp == "interactive":
+                meta.update(_interactive_meta(df, render))
+                _interactive_data(df, render, dc_id, data)
             elif comp == "card":
                 meta["column_name"] = render.column
                 meta["icon_color"] = _CARD_ACCENTS[i % len(_CARD_ACCENTS)]
-                if render.secondary_layout == "box_plot":
-                    # Tukey box-plot card: hero = declared aggregation (defaults to
-                    # median), distribution in the strip.
-                    stats = _box_plot_stats(df, render.column)
+                secondary, aggregations = _card_secondary_payload(df, render)
+                is_box_plot = "box_plot_stats" in aggregations
+                # A box_plot render need not name an aggregation — the strip is
+                # the point — but `_aggregate` has no default, so the hero falls
+                # back to the median the strip already computed.
+                if is_box_plot:
                     meta["title"] = render.column
                     meta["aggregation"] = render.aggregation or "median"
-                    meta["aggregations"] = ["box_plot_stats"]
-                    meta["secondary_layout"] = "box_plot"
                     meta["icon_name"] = "mdi:chart-box-outline"
-                    data["cards"]["values"][index] = (
+                    hero = (
                         _aggregate(df, render.column, render.aggregation)
                         if render.aggregation
-                        else stats["median"]
+                        else secondary["box_plot_stats"]["median"]
                     )
-                    data["cards"]["secondary"][index] = {"box_plot_stats": stats}
-                    data["cards"]["aggregations"][index] = ["box_plot_stats"]
                 else:
                     meta["aggregation"] = render.aggregation
                     meta["icon_name"] = "mdi:chart-line"
-                    data["cards"]["values"][index] = _aggregate(
-                        df, render.column, render.aggregation
-                    )
+                    hero = _aggregate(df, render.column, render.aggregation)
+                # The renderer reads the strip's config off the metadata, so the
+                # layout and its parameters travel with it — the payload alone
+                # would draw a `vertical` list of whatever keys it found.
+                for key in _CARD_STRIP_META:
+                    value = getattr(render, key, None)
+                    if value not in (None, [], {}):
+                        meta[key] = value
+                if aggregations:
+                    meta["aggregations"] = aggregations
+                data["cards"]["values"][index] = hero
+                if secondary:
+                    data["cards"]["secondary"][index] = secondary
+                if aggregations:
+                    data["cards"]["aggregations"][index] = aggregations
             elif comp == "table":
                 data["tables"][index] = _table_payload(df)
             elif comp == "advanced_viz" and render.kind == "coverage_track":
@@ -778,10 +1077,27 @@ def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[s
                 meta["viz_kind"] = "complex_heatmap"
                 meta["_preview_height"] = _AV_PREVIEW_HEIGHT.get("complex_heatmap", 680)
                 data["compute"][dc_id] = _complex_heatmap_payload(df, render)
-            elif comp == "advanced_viz" and render.kind in _ADVANCED_VIZ_DISPATCH_KINDS:
-                meta["_unsupported"] = (
-                    f"preview for advanced_viz '{render.kind}' (server-computed) is not wired yet"
-                )
+            elif comp == "advanced_viz" and render.kind in _UPSET_KINDS:
+                # mockApi.dispatchUpset → finishedJob(dc_id) → DATA().compute[dc_id]
+                meta["viz_kind"] = render.kind
+                meta["_preview_height"] = _AV_PREVIEW_HEIGHT.get(render.kind, 520)
+                data["compute"][dc_id] = _upset_payload(df, render)
+            elif comp == "advanced_viz" and render.kind == "sankey":
+                meta["viz_kind"] = "sankey"
+                meta["_preview_height"] = _AV_PREVIEW_HEIGHT.get("sankey", 520)
+                data["compute"][dc_id] = _sankey_payload(df, render)
+            elif (
+                comp == "advanced_viz" and render.kind == "embedding" and _is_live_embedding(render)
+            ):
+                # Live mode re-projects the matrix; the renderer keys the result
+                # under the literal dim_1/dim_2, so no column bindings travel.
+                meta["viz_kind"] = "embedding"
+                meta["config"] = {
+                    "viz_kind": "embedding",
+                    "compute_method": render.roles["compute_method"],
+                }
+                meta["_preview_height"] = _AV_PREVIEW_HEIGHT.get("embedding", 480)
+                data["compute"][dc_id] = _embedding_payload(df, render)
             elif comp == "advanced_viz":
                 config, av = _advanced_viz_config_and_data(df, render)
                 _advanced_viz_defaults(df, render, config)
@@ -789,6 +1105,8 @@ def build_payload(output: Any, theme: str = "light", tool: Any = None) -> dict[s
                 meta["config"] = config
                 meta["_preview_height"] = _AV_PREVIEW_HEIGHT.get(render.kind, 480)
                 data["advancedVizData"][dc_id] = av
+                if render.kind in _COLUMN_MENU_KINDS:
+                    _column_menu_support(df, dc_id, data, av["columns"])
             else:
                 # Phase B: multiqc / image / map / interactive / text.
                 meta["_unsupported"] = (
@@ -919,36 +1237,57 @@ def _logo_data_uris() -> dict[str, str]:
     return result
 
 
-def _json_safe(o: Any) -> Any:
-    """Replace non-finite floats (NaN / ±Infinity) with ``None``.
+def json_safe(o: Any) -> Any:
+    """Make a computed payload serialisable: no non-finite floats, no numpy.
 
     Plotly figures and computed stats can carry NaN/Inf; Python's ``json`` emits
     them as bare ``NaN``/``Infinity`` tokens, which are valid for ``json.loads``
     but make the browser's ``JSON.parse`` throw — blanking the embedded bundle.
+
+    Public because the same payload is also served as JSON by the preview
+    endpoint, where FastAPI's serialiser raises outright on a numpy array
+    instead of blanking anything.
     """
     if isinstance(o, dict):
-        return {k: _json_safe(v) for k, v in o.items()}
+        return {k: json_safe(v) for k, v in o.items()}
     if isinstance(o, (list, tuple)):
-        return [_json_safe(v) for v in o]
+        return [json_safe(v) for v in o]
     # numpy arrays / scalars — Plotly UI-mode figures (px.* on a pandas frame)
     # keep numpy in their traces; json.dumps(default=str) would stringify an
     # ndarray into a useless "['a' 'b']" blob. Convert to plain Python first.
     if hasattr(o, "dtype") and hasattr(o, "tolist"):
-        return _json_safe(o.tolist())
+        return json_safe(o.tolist())
     if isinstance(o, float):
         return o if math.isfinite(o) else None
     return o
 
 
-def _inject(payload: dict[str, Any]) -> str:
-    """Embed a computed payload into the prebuilt single-file bundle."""
+def _inject(payload: dict[str, Any], nonce: str | None = None) -> str:
+    """Embed a computed payload into the prebuilt single-file bundle.
+
+    ``nonce`` stamps the bundle's module script so a caller serving this over
+    HTTP can admit exactly that script through a `script-src` policy. Opening
+    the file from disk needs no nonce, which is why it is optional.
+    """
     if not TEMPLATE_PATH.exists():
         raise CatalogPayloadError(
-            f"catalog-preview bundle not built: {TEMPLATE_PATH} is missing — run "
+            f"catalog-preview bundle not built: {TEMPLATE_PATH} is missing. Run "
             f"`cd depictio/viewer && pnpm run build:catalog-preview`"
         )
-    blob = json.dumps(_json_safe(payload), default=str).replace("</", "<\\/")
+    blob = json.dumps(json_safe(payload), default=str).replace("</", "<\\/")
     html = TEMPLATE_PATH.read_text().replace("__CATALOG_PAYLOAD__", blob)
+    if nonce is not None:
+        # Only the module tag: it is the bundle's sole executable script, and
+        # matching bare "<script" would also rewrite the tag strings that appear
+        # inside its own inlined JS. The payload <script> is application/json,
+        # which never executes, so it needs no nonce.
+        marker = '<script type="module"'
+        if marker not in html:
+            raise CatalogPayloadError(
+                f"catalog-preview bundle at {TEMPLATE_PATH} has no {marker!r} tag to "
+                "nonce. Rebuild it with `cd depictio/viewer && pnpm run build:catalog-preview`"
+            )
+        html = html.replace(marker, f'<script nonce="{nonce}" type="module"', 1)
     # Patch server-relative logo paths → inline data URIs so they render offline.
     for server_path, data_uri in _logo_data_uris().items():
         html = html.replace(server_path, data_uri)
@@ -960,6 +1299,7 @@ def render_html(
     theme: str = "light",
     tool: Any = None,
     render_id: str | None = None,
+    nonce: str | None = None,
 ) -> str:
     """Inject a single output (wrapped as a one-item gallery) into the bundle.
 
@@ -995,9 +1335,9 @@ def render_html(
         "tools": [tool_group],
         "data": blob["data"],
     }
-    return _inject(payload)
+    return _inject(payload, nonce)
 
 
-def render_gallery_html(entries: Any, theme: str = "light") -> str:
+def render_gallery_html(entries: Any, theme: str = "light", nonce: str | None = None) -> str:
     """Inject the whole catalog (gallery + every output's live payload)."""
-    return _inject(build_gallery_payload(entries, theme))
+    return _inject(build_gallery_payload(entries, theme), nonce)

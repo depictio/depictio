@@ -1,7 +1,7 @@
 import React from 'react';
-import { Icon } from '@iconify/react';
 
 import type { FilterSectionSpec } from '../api';
+import Glyph, { glyphColorVar } from './Glyph';
 
 /**
  * A section's icon, tinted with the section's colour.
@@ -20,6 +20,9 @@ import type { FilterSectionSpec } from '../api';
  * keeps its title flush against the chevron. Authoring UIs — where a row must
  * stay aligned whether or not an icon has been picked yet — pass `fallbackIcon`
  * to get a placeholder instead.
+ *
+ * `icon` may also be an image path, as a tab's may: a section of MultiQC
+ * reports can carry the MultiQC logo its tab carries.
  */
 export const SectionIcon: React.FC<{
   spec?: Pick<FilterSectionSpec, 'icon' | 'color'>;
@@ -28,14 +31,7 @@ export const SectionIcon: React.FC<{
 }> = ({ spec, size = 22, fallbackIcon }) => {
   const icon = spec?.icon || fallbackIcon;
   if (!icon) return null;
-  return (
-    <Icon
-      icon={icon}
-      width={size}
-      height={size}
-      style={{ color: sectionColorVar(spec?.color), flexShrink: 0 }}
-    />
-  );
+  return <Glyph icon={icon} color={spec?.color} size={size} />;
 };
 
 /**
@@ -45,8 +41,42 @@ export const SectionIcon: React.FC<{
  * section chose grey on purpose.
  */
 export function sectionColorVar(color?: string | null): string {
-  if (!color) return 'var(--mantine-color-dimmed)';
-  return `var(--mantine-color-${color}-6)`;
+  return glyphColorVar(color);
 }
+
+/**
+ * The palette a section falls back to when its spec names no colour. Kept to
+ * four calm Mantine hues on purpose: enough to tell neighbouring sections
+ * apart, few enough that an undecorated dashboard does not turn into a
+ * rainbow.
+ */
+export const DEFAULT_SECTION_PALETTE = ['blue', 'teal', 'violet', 'orange'] as const;
+
+/**
+ * The palette name a section is drawn with: its declared `color`, else one
+ * picked from `DEFAULT_SECTION_PALETTE` by hashing the section's name. Keyed
+ * on the name rather than the position so the same section keeps its colour
+ * in the grid, the filter panel and on every tab it is pinned to.
+ */
+export function resolveSectionColor(
+  color?: string | null,
+  name?: string | null,
+): string | null {
+  if (color) return color;
+  if (!name) return null;
+  let hash = 0;
+  for (let i = 0; i < name.length; i += 1) {
+    hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  }
+  return DEFAULT_SECTION_PALETTE[hash % DEFAULT_SECTION_PALETTE.length];
+}
+
+/**
+ * The resolved palette name of the section a component is rendered in, or
+ * null outside any section. Cards read it to tint their icon (and secondary
+ * strip) when their own `icon_color` is unset, so a section's cards share its
+ * colour without every YAML spelling it out.
+ */
+export const SectionColorContext = React.createContext<string | null>(null);
 
 export default SectionIcon;

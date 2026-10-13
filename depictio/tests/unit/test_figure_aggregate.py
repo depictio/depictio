@@ -14,6 +14,7 @@ import pytest
 
 from depictio.api.v1.services.figure.aggregate import (
     build_aggregated_figure,
+    figure_content_demand,
     plan_aggregation,
 )
 from depictio.api.v1.services.figure.figure_builder import (
@@ -58,6 +59,26 @@ def test_box_quartiles_match_numpy(frame):
     # Fences are Tukey, clipped to the observed extremes.
     assert trace.lowerfence[i] >= subset.min()
     assert trace.upperfence[i] <= subset.max()
+
+
+def test_box_coloured_by_its_own_x_column(frame):
+    """`x=g, color=g` is ordinary, and it used to fall off the aggregate path.
+
+    The keys were built as `[plan.x, plan.color]`, which names the same column
+    twice, and Polars rejects a duplicate group-by key. The figure still
+    appeared, because the caller catches the failure and re-renders through px,
+    so the only symptom was a warning in the log and the loss of the reduction
+    on exactly the config the iris demo ships.
+    """
+    plan = plan_aggregation("box", {"x": "g", "y": "v", "color": "g"})
+    fig = build_aggregated_figure(frame.lazy(), plan, "light", {})
+    assert fig is not None, "duplicate group-by key sent this back to px"
+
+    # One trace per group, each holding that group's single box.
+    assert {t.name for t in fig.data} == {"a", "b", "c"}
+    trace = next(t for t in fig.data if t.name == "b")
+    subset = frame.filter(pl.col("g") == "b")["v"].to_numpy()
+    assert trace.median[0] == pytest.approx(np.percentile(subset, 50))
 
 
 def test_box_without_grouping_is_a_single_box(frame):
@@ -406,3 +427,173 @@ def test_decimation_is_a_noop_below_the_cap():
 def test_series_types_use_ordered_decimation_not_random_sampling():
     assert _ORDERED_PLOT_TYPES <= _SAMPLABLE_PLOT_TYPES
     assert "line" in _ORDERED_PLOT_TYPES and "area" in _ORDERED_PLOT_TYPES
+
+
+# --------------------------------------------------------------------------- #
+# Axis-shaping style on the graph_objects paths
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def long_tail() -> pl.DataFrame:
+    """A peak-width-shaped distribution: most values small, a long right tail."""
+    rng = np.random.default_rng(0)
+    return pl.DataFrame(
+        {
+            "width": np.exp(rng.normal(6.5, 0.8, 20_000)),
+            "sample": ["a"] * 10_000 + ["b"] * 10_000,
+        }
+    )
+
+
+def test_log_x_histogram_bins_in_log_space(long_tail):
+    """`log_x` must reach the drawn axis, and the bins must follow it.
+
+    Plotly bins in the axis's own coordinates, so linear bins under a log axis
+    would put nearly everything in the first bar. That is the shape a log axis
+    is asked for to avoid, and for a long time it was silently what came back.
+    """
+    plan = plan_aggregation("histogram", {"x": "width", "nbins": 60, "log_x": True})
+    fig = build_aggregated_figure(long_tail.lazy(), plan, "light", {})
+    assert fig is not None
+    assert fig.layout.xaxis.type == "log"
+
+    centres = list(fig.data[0].x)
+    assert len(centres) == 60
+    # Geometric, not arithmetic: every consecutive ratio is the same.
+    ratios = [b / a for a, b in zip(centres, centres[1:])]
+    assert ratios[0] == pytest.approx(ratios[-1])
+    assert ratios[0] > 1
+
+    # No bar holds the bulk of the frame any more.
+    counts = list(fig.data[0].y)
+    assert sum(counts) == long_tail.height
+    assert max(counts) < long_tail.height / 4
+
+
+def test_log_x_histogram_leaves_the_bar_width_to_plotly(long_tail):
+    """Bar width is read in the axis's coordinates, so a linear one is wrong."""
+    log_plan = plan_aggregation("histogram", {"x": "width", "nbins": 60, "log_x": True})
+    log_fig = build_aggregated_figure(long_tail.lazy(), log_plan, "light", {})
+    assert log_fig.data[0].width is None
+
+    plan = plan_aggregation("histogram", {"x": "width", "nbins": 60})
+    fig = build_aggregated_figure(long_tail.lazy(), plan, "light", {})
+    assert fig.layout.xaxis.type is None
+    assert fig.data[0].width == pytest.approx(
+        (long_tail["width"].max() - long_tail["width"].min()) / 60
+    )
+
+
+def test_log_x_histogram_drops_the_values_a_log_axis_cannot_place():
+    frame = pl.DataFrame({"v": [-2.0, 0.0, 1.0, 10.0, 100.0]})
+    plan = plan_aggregation("histogram", {"x": "v", "nbins": 4, "log_x": True})
+    fig = build_aggregated_figure(frame.lazy(), plan, "light", {})
+    assert fig is not None
+    assert sum(fig.data[0].y) == 3
+
+
+def test_log_y_reaches_the_count_axis(long_tail):
+    plan = plan_aggregation("histogram", {"x": "width", "log_y": True})
+    fig = build_aggregated_figure(long_tail.lazy(), plan, "light", {})
+    assert fig.layout.yaxis.type == "log"
+    # The counts themselves stay untransformed; Plotly takes the log.
+    assert sum(fig.data[0].y) == long_tail.height
+
+
+def test_a_range_on_a_log_axis_is_given_in_log10_units(long_tail):
+    plan = plan_aggregation("histogram", {"x": "width", "log_x": True, "range_x": [100, 10_000]})
+    fig = build_aggregated_figure(long_tail.lazy(), plan, "light", {})
+    assert tuple(fig.layout.xaxis.range) == pytest.approx((2.0, 4.0))
+
+    linear = plan_aggregation("histogram", {"x": "width", "range_x": [100, 10_000]})
+    fig = build_aggregated_figure(long_tail.lazy(), linear, "light", {})
+    assert tuple(fig.layout.xaxis.range) == pytest.approx((100.0, 10_000.0))
+
+
+def test_density_with_a_log_axis_goes_back_to_px(frame):
+    """The grid is binned here in linear space; px would bin it in log space."""
+    assert plan_aggregation("density_heatmap", {"x": "v", "y": "w", "log_x": True}) is None
+    assert plan_aggregation("density_contour", {"x": "v", "y": "w", "log_y": True}) is None
+    # Without the log axis it still plans.
+    assert plan_aggregation("density_heatmap", {"x": "v", "y": "w"}) is not None
+
+
+# ---------------------------------------------------------------------------
+# Content demand (what a figure tells the grid about its own height)
+# ---------------------------------------------------------------------------
+
+
+def _bar(categories: list[str]) -> dict:
+    return {"data": [{"type": "bar", "x": categories, "y": [1] * len(categories)}], "layout": {}}
+
+
+def test_two_bars_ask_for_two_rows():
+    """The whole point: a two-category bar chart is not a five-row tile."""
+    assert figure_content_demand("bar", _bar(["a", "b"])) == {"rows": 2}
+
+
+def test_the_demand_grows_with_the_categories():
+    two = figure_content_demand("bar", _bar(["a", "b"]))["rows"]
+    twelve = figure_content_demand("bar", _bar([str(i) for i in range(12)]))["rows"]
+    assert twelve > two
+
+
+def test_a_horizontal_bar_is_counted_on_its_own_axis():
+    horizontal = {
+        "data": [{"type": "bar", "orientation": "h", "y": ["a", "b", "c"], "x": [1, 2, 3]}],
+        "layout": {},
+    }
+    assert figure_content_demand("bar", horizontal) == figure_content_demand(
+        "bar", _bar(["a", "b", "c"])
+    )
+
+
+def test_a_box_counts_its_groups_not_its_rows():
+    """Raw box traces repeat the group label per observation."""
+    raw = {"data": [{"type": "box", "x": ["a"] * 500 + ["b"] * 500, "y": [1] * 1000}], "layout": {}}
+    assert figure_content_demand("box", raw) == {"rows": 2}
+
+
+def test_faceted_rows_stack_their_demands():
+    faceted = {
+        "data": [{"type": "bar", "x": ["a", "b"], "y": [1, 2]}],
+        "layout": {
+            "yaxis": {"domain": [0.0, 0.3]},
+            "yaxis2": {"domain": [0.35, 0.65]},
+            "yaxis3": {"domain": [0.7, 1.0]},
+        },
+    }
+    assert (
+        figure_content_demand("bar", faceted)["rows"]
+        > figure_content_demand("bar", _bar(["a", "b"]))["rows"]
+    )
+
+
+def test_a_vertical_legend_taller_than_the_bars_sets_the_height():
+    """Four groups split by eleven phyla: the legend, not the bars, is the height."""
+    stacked = {
+        "data": [
+            {"type": "bar", "orientation": "h", "name": f"p{i}", "y": ["a", "b", "c", "d"]}
+            for i in range(11)
+        ],
+        "layout": {},
+    }
+    four = {"data": [{"type": "bar", "orientation": "h", "y": ["a", "b", "c", "d"]}], "layout": {}}
+    assert (
+        figure_content_demand("bar", stacked)["rows"] > figure_content_demand("bar", four)["rows"]
+    )
+    # A legend laid out across the width, or hidden, leaves the bars to decide.
+    across = {**stacked, "layout": {"legend": {"orientation": "h"}}}
+    hidden = {**stacked, "layout": {"showlegend": False}}
+    assert figure_content_demand("bar", across) == figure_content_demand("bar", four)
+    assert figure_content_demand("bar", hidden) == figure_content_demand("bar", four)
+
+
+def test_point_plots_have_no_opinion_about_height():
+    """Ten thousand points want the same box as ten."""
+    scatter = {"data": [{"type": "scatter", "x": [1, 2, 3], "y": [1, 2, 3]}], "layout": {}}
+    assert figure_content_demand("scatter", scatter) is None
+    assert figure_content_demand("line", scatter) is None
+    assert figure_content_demand("bar", {"data": [], "layout": {}}) is None
+    assert figure_content_demand("bar", None) is None

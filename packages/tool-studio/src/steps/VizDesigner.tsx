@@ -1,0 +1,388 @@
+import { useMemo, useState } from 'react';
+import {
+  Stack,
+  Title,
+  Text,
+  Button,
+  Group,
+  Card,
+  Code,
+  Tabs,
+  Alert,
+  Badge,
+  ThemeIcon,
+  ActionIcon,
+  Paper,
+  TextInput,
+  Divider,
+} from '@mantine/core';
+import { CodeHighlight } from '@mantine/code-highlight';
+import { Icon } from '@iconify/react';
+import { useStudioStore } from '../state/useStudioStore';
+import { validateRender } from '../catalog/grounding';
+import { renderToSnippet, outputId } from '../catalog/yamlGen';
+import { metaFor, variantOf, bindsOf } from '../viz/renderMeta';
+import { renderSpecFromManifest } from '../catalog/fromManifestRender';
+import type { ManifestRender } from '../catalog/catalog';
+import RenderPreview from '../viz/RenderPreview';
+import AddComponentModal from '../builder/AddComponentModal';
+import type { KindsMap, ParsedFixture, RenderSpec } from '../types';
+import { HEADING_FONT } from '../theme';
+
+const slugify = (s: string) =>
+  s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+
+/** One added visualization, styled like the depictio Catalog `ComponentCard`
+ *  (colored type icon + name/variant + render index, role→column binds, a
+ *  collapsible `renders_as` snippet, and the live preview). */
+function RenderCard({
+  render,
+  index,
+  position,
+  fileName,
+  toolId,
+  fixture,
+  kinds,
+  onRemove,
+  onUpdate,
+}: {
+  render: RenderSpec;
+  index: string;
+  position: number;
+  fileName: string;
+  toolId: string;
+  fixture: ParsedFixture;
+  kinds: KindsMap;
+  onRemove: () => void;
+  onUpdate: (patch: Partial<RenderSpec>) => void;
+}) {
+  const meta = metaFor(render.component);
+  const variant = variantOf(render, kinds);
+  const binds = bindsOf(render);
+  const issues = validateRender(render, fixture.columns, kinds);
+  const errors = issues.filter((i) => i.severity === 'error');
+
+  return (
+    <Card withBorder radius="md" shadow="sm" p="md">
+      <Group justify="space-between" mb="xs" wrap="nowrap" align="flex-start">
+        <Group gap="sm" wrap="nowrap">
+          <ThemeIcon size={42} radius="md" variant="light" color={meta.color}>
+            <Icon icon={meta.icon} width={24} />
+          </ThemeIcon>
+          <div>
+            <Text fz="lg" fw={700}>
+              {meta.name}
+              {variant && (
+                <Text span c="dimmed" fw={400}>
+                  {' · '}
+                  {variant}
+                </Text>
+              )}
+            </Text>
+            <Code fz="xs" c="dimmed" bg="transparent">
+              {index}
+            </Code>
+          </div>
+        </Group>
+        <Group gap="xs" wrap="nowrap">
+          {errors.length > 0 && (
+            <Badge color="red" variant="light" size="sm">
+              {errors.length} issue{errors.length > 1 ? 's' : ''}
+            </Badge>
+          )}
+          <ActionIcon variant="subtle" color="red" onClick={onRemove} aria-label="Remove">
+            <Icon icon="mdi:trash-can-outline" />
+          </ActionIcon>
+        </Group>
+      </Group>
+
+      {binds.length > 0 && (
+        <Group gap="xs" mb="xs" align="center">
+          <Text fz="xs" fw={700} c="dimmed" tt="uppercase">
+            Binds
+          </Text>
+          {binds.map(([role, col]) => (
+            <Badge key={role} size="sm" variant="light" color="gray" radius="sm">
+              {role} → {col}
+            </Badge>
+          ))}
+        </Group>
+      )}
+
+      {/* Two sections: the user-facing preview and the developer-facing catalog
+          YAML (identical to what's written to <output>.yaml under renders_as). */}
+      <Tabs defaultValue="user" variant="outline">
+        <Tabs.List>
+          <Tabs.Tab value="user" leftSection={<Icon icon="tabler:eye" width={14} />}>
+            For dashboard users
+          </Tabs.Tab>
+          <Tabs.Tab value="dev" leftSection={<Icon icon="mdi:code-braces" width={14} />}>
+            For catalog developers
+          </Tabs.Tab>
+        </Tabs.List>
+
+        {/* USER: what it looks like + how to reuse it in a dashboard. */}
+        <Tabs.Panel value="user" pt="sm">
+          <Text size="xs" c="dimmed" mb={6}>
+            How this renders on a dashboard.
+          </Text>
+          <Paper withBorder radius="sm" p="xs" bg="var(--app-subtle-bg)">
+            <RenderPreview
+              fixture={fixture}
+              render={render}
+              index={index}
+              position={position}
+            />
+          </Paper>
+          {issues.length > 0 && (
+            <Stack gap={4} mt="sm">
+              {issues.map((i, k) => (
+                <Text key={k} size="xs" c={i.severity === 'error' ? 'red' : 'orange'}>
+                  <Icon
+                    icon={i.severity === 'error' ? 'mdi:alert-circle' : 'mdi:alert'}
+                    width={12}
+                    style={{ verticalAlign: 'middle' }}
+                  />{' '}
+                  {i.message}
+                </Text>
+              ))}
+            </Stack>
+          )}
+          {render.id && (
+            <>
+              <Divider my="sm" label="Reuse in a dashboard" labelPosition="left" />
+              <Text size="xs" c="dimmed" mb={6}>
+                Drop this component into a dashboard YAML and point it at your workflow &amp; data
+                collection:
+              </Text>
+              <CodeHighlight
+                code={[
+                  `- use: ${toolId}/${render.id}`,
+                  `  component_type: ${render.component}`,
+                  `  workflow_tag: <your-workflow>`,
+                  `  data_collection_tag: <your-data-collection>`,
+                ].join('\n')}
+                language="yaml"
+                withCopyButton
+              />
+              {render.component !== 'advanced_viz' && (
+                <Text c="dimmed" mt={4} style={{ fontSize: 10 }}>
+                  Note: depictio currently resolves <Code fz="xs">use:</Code> for advanced_viz renders;
+                  broader component support is planned.
+                </Text>
+              )}
+            </>
+          )}
+        </Tabs.Panel>
+
+        {/* DEVELOPER: the render id + the catalog entry line this tool contributes. */}
+        <Tabs.Panel value="dev" pt="sm">
+          <TextInput
+            label="Render id"
+            description="Unique handle for this render; dashboards reference it as use: <tool>/<id>"
+            placeholder={slugify(variant || meta.name)}
+            value={render.id ?? ''}
+            onChange={(e) => onUpdate({ id: slugify(e.currentTarget.value) || undefined })}
+            leftSection={<Icon icon="mdi:identifier" width={14} />}
+            size="xs"
+            mb="sm"
+          />
+          <Text size="xs" c="dimmed" mb={6}>
+            Catalog definition, written into <Code fz="xs">{fileName}</Code> under{' '}
+            <Code fz="xs">renders_as</Code>:
+          </Text>
+          <CodeHighlight code={renderToSnippet(render)} language="yaml" withCopyButton />
+        </Tabs.Panel>
+      </Tabs>
+    </Card>
+  );
+}
+
+/** The renders already committed on the output you are appending to.
+ *
+ *  They used to be a row of grey badges — the component type and, if you were
+ *  lucky, its kind. You could not see what any of them actually drew, which is
+ *  the one thing worth knowing before adding another. They render here through
+ *  the same preview as your own, over the fixture committed alongside them
+ *  (`fixtureContent` in the catalog manifest: a header and up to 200 rows), so
+ *  no network access and nothing to configure. */
+function ExistingRenders({
+  toolId,
+  outputSlug,
+  outputId: existingOutputId,
+  renders,
+  fixture,
+}: {
+  toolId: string;
+  outputSlug: string;
+  outputId: string;
+  renders: ManifestRender[];
+  fixture: ParsedFixture | null;
+}) {
+  const specs = useMemo(
+    () =>
+      renders.map((raw, i) => ({
+        raw,
+        spec: renderSpecFromManifest(raw, `existing-${i}`),
+        index: `${existingOutputId}-${i}`,
+      })),
+    [renders, existingOutputId],
+  );
+
+  return (
+    <Alert
+      color="brand"
+      variant="light"
+      icon={<Icon icon="mdi:playlist-edit" />}
+      title={`Existing renders on ${toolId} / ${outputSlug} (read-only)`}
+    >
+      {specs.length === 0 ? (
+        <Text size="sm">This output has no renders yet; you're adding the first.</Text>
+      ) : (
+        <Stack gap="sm" mt={6}>
+          {specs.map(({ raw, spec, index }) => {
+            const variant = raw.kind || raw.visu_type;
+            return (
+              <Paper key={index} withBorder radius="sm" p="xs" bg="var(--app-subtle-bg)">
+                <Group gap="xs" wrap="nowrap" mb={6}>
+                  <Badge variant="light" color="gray" size="sm" radius="sm">
+                    {variant ? `${raw.component} · ${variant}` : raw.component}
+                  </Badge>
+                  {raw.id && (
+                    <Code fz="xs" c="dimmed" bg="transparent">
+                      {toolId}/{raw.id}
+                    </Code>
+                  )}
+                </Group>
+                {spec && fixture ? (
+                  <RenderPreview fixture={fixture} render={spec} index={index} />
+                ) : (
+                  <Text size="xs" c="dimmed">
+                    No preview for this render here — it still renders in depictio.
+                  </Text>
+                )}
+              </Paper>
+            );
+          })}
+        </Stack>
+      )}
+      <Text size="xs" c="dimmed" mt={8}>
+        Previewed over the fixture committed with this output (up to 200 rows). Your new
+        render(s) below append alongside these; nothing existing is modified.
+      </Text>
+    </Alert>
+  );
+}
+
+export default function VizDesigner({ kinds }: { kinds: KindsMap }) {
+  const fixture = useStudioStore((s) => s.fixture);
+  const tool = useStudioStore((s) => s.tool);
+  const output = useStudioStore((s) => s.output);
+  const renders = useStudioStore((s) => s.renders);
+  const existing = useStudioStore((s) => s.existing);
+  const addRender = useStudioStore((s) => s.addRender);
+  const removeRender = useStudioStore((s) => s.removeRender);
+  const updateRender = useStudioStore((s) => s.updateRender);
+  const setStep = useStudioStore((s) => s.setStep);
+  const [modalOpen, setModalOpen] = useState(false);
+
+  if (!fixture) {
+    // Reached from "add a visualization here" on an output whose fixture the
+    // manifest can't embed (parquet: no CSV text, no declared columns). That is
+    // ~12 of the catalog's 28 outputs today, and the old bare "Drop a fixture
+    // first." left them dead-ended — the Fixture step is a click away, but
+    // nothing said so.
+    if (existing) {
+      return (
+        <Alert
+          color="yellow"
+          variant="light"
+          icon={<Icon icon="mdi:table-off" />}
+          title={`No sample data for ${existing.outputSlug}`}
+        >
+          <Stack gap="sm" align="flex-start">
+            <Text size="sm">
+              This output's fixture isn't a CSV/TSV the app can read (parquet outputs carry no
+              inline sample), so there are no columns to bind against. Drop a sample of{' '}
+              <Code>{existing.outputSlug}</Code> on the Fixture step and come back; it is used
+              for the preview only and is not committed by the append flow.
+            </Text>
+            <Button
+              size="xs"
+              variant="light"
+              leftSection={<Icon icon="mdi:chevron-left" />}
+              onClick={() => setStep(1)}
+            >
+              Go to Fixture
+            </Button>
+          </Stack>
+        </Alert>
+      );
+    }
+    return <Text c="dimmed">Drop a fixture first.</Text>;
+  }
+
+  const baseId = outputId(tool.id || 'tool', output.slug || 'output');
+  const fileName = `${output.slug || 'output'}.yaml`;
+
+  return (
+    <Stack gap="lg">
+      <Group justify="space-between" align="flex-end">
+        <div>
+          <Title order={3} style={{ fontFamily: HEADING_FONT, fontWeight: 600 }}>
+            Visualizations
+          </Title>
+          <Text c="dimmed" size="sm">
+            Add dashboard components with depictio's component builder. Each card mirrors how it
+            appears in the depictio Catalog.
+          </Text>
+        </div>
+        <Button leftSection={<Icon icon="mdi:plus" />} color="brand" onClick={() => setModalOpen(true)}>
+          Add visualization
+        </Button>
+      </Group>
+
+      {existing && (
+        <ExistingRenders
+          toolId={existing.toolId}
+          outputSlug={existing.outputSlug}
+          outputId={existing.outputId}
+          renders={existing.baseRenders}
+          fixture={fixture}
+        />
+      )}
+
+      {renders.length === 0 && (
+        <Alert color="brand" variant="light" icon={<Icon icon="mdi:information-outline" />}>
+          {existing
+            ? 'Add at least one new visualization to append to this tool.'
+            : 'No visualizations yet. Add at least one to continue.'}
+        </Alert>
+      )}
+
+      <Stack gap="md">
+        {renders.map((render, i) => (
+          <RenderCard
+            key={render.uid}
+            render={render}
+            index={`${baseId}-${i}`}
+            position={i}
+            fileName={fileName}
+            toolId={tool.id || 'tool'}
+            fixture={fixture}
+            kinds={kinds}
+            onRemove={() => removeRender(render.uid)}
+            onUpdate={(patch) => updateRender(render.uid, patch)}
+          />
+        ))}
+      </Stack>
+
+      <AddComponentModal
+        opened={modalOpen}
+        onClose={() => setModalOpen(false)}
+        fixture={fixture}
+        onAdd={addRender}
+      />
+    </Stack>
+  );
+}

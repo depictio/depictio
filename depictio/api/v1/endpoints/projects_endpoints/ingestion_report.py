@@ -22,6 +22,7 @@ from depictio.api.v1.db import (
     multiqc_collection,
     runs_collection,
 )
+from depictio.api.v1.source_links import github_blob_url
 
 # DC statuses surfaced in the report.
 STATUS_IDENTIFIED = "identified"  # included + files found and/or aggregated
@@ -32,9 +33,6 @@ STATUS_GATED_OUT = "gated_out"  # excluded by a template conditional / missing-f
 # (legacy projects created before the manifest was persisted — gated-out DCs are unknown there).
 SOURCE_MANIFEST = "template_manifest"
 SOURCE_LIVE = "live_project"
-
-# Recipe source lives in the depictio repo; link to it on the default branch.
-RECIPE_REPO_BASE = "https://github.com/depictio/depictio/blob/main/"
 
 
 def _recipe_github_url(recipe_ref: str | None) -> str | None:
@@ -47,14 +45,9 @@ def _recipe_github_url(recipe_ref: str | None) -> str | None:
     if not recipe_ref:
         return None
     try:
-        from pathlib import Path
-
-        import depictio.recipes as recipes_pkg
         from depictio.recipes import resolve_recipe_path
 
-        repo_root = Path(recipes_pkg.__file__).resolve().parents[2]
-        rel = resolve_recipe_path(recipe_ref).resolve().relative_to(repo_root)
-        return RECIPE_REPO_BASE + str(rel)
+        return github_blob_url(resolve_recipe_path(recipe_ref))
     except Exception:
         return None
 
@@ -120,6 +113,20 @@ class IngestionVariable(BaseModel):
     value: str
 
 
+class ProvenanceReportEntry(BaseModel):
+    source: str
+    key: str
+    value: str
+    highlight: bool = False
+
+
+class ProvenanceReportGroup(BaseModel):
+    """One display group of run-provenance entries (Cutadapt, DADA2, ...)."""
+
+    group: str
+    entries: list[ProvenanceReportEntry] = Field(default_factory=list)
+
+
 class IngestionDataCollection(BaseModel):
     data_collection_tag: str
     type: str | None = None
@@ -128,6 +135,10 @@ class IngestionDataCollection(BaseModel):
     removal_reason: str | None = None
     files_found: int = 0
     files_new: int = 0
+    # Files whose content changed since the last scan. The CLI has always
+    # reported this in dc_stats; nothing surfaced it, so a re-ingested run was
+    # indistinguishable from an untouched one.
+    files_updated: int = 0
     files_skipped: int = 0
     files_failed: int = 0
     ingested: bool = False
@@ -142,6 +153,11 @@ class IngestionRun(BaseModel):
     run_location: str | None = None
     scan_time: str | None = None
     status: str  # ok | partial | no_scan
+    # Per-run tallies from the run's most recent scan, so the runs table can
+    # answer "which run brought in the new data" without expanding every DC.
+    files_total: int = 0
+    files_new: int = 0
+    files_updated: int = 0
 
 
 class IngestionSummary(BaseModel):
@@ -171,11 +187,38 @@ class IngestionTemplate(BaseModel):
     data_root: str | None = None
 
 
+class IngestionPipeline(BaseModel):
+    """What produced the data, as the run-info readers recorded it.
+
+    Read back from the workflow config rather than recomputed: these values
+    describe the run that was ingested, and the directory it came from may be
+    long gone by the time anyone opens the report.
+    """
+
+    engine: str | None = None
+    name: str | None = None
+    version: str | None = None
+    engine_version: str | None = None
+    tool_count: int = 0
+
+
 class IngestionReport(BaseModel):
     project: IngestionReportProject
     template: IngestionTemplate | None = None
     manifest_source: str = SOURCE_LIVE
+    # What invoked the project's most recent ingestion: "manual" when someone ran
+    # the CLI, otherwise the engine whose completion trigger did (e.g. "nextflow").
+    triggered_by: str = "manual"
+    # Identity of the pipeline behind that trigger. Separate from `triggered_by`
+    # because the two answer different questions and can disagree: a manually
+    # ingested directory still carries a pipeline identity, and a triggered one
+    # whose engine left no breadcrumbs carries none.
+    pipeline: IngestionPipeline | None = None
     variables: list[IngestionVariable] = Field(default_factory=list)
+    # Pipeline run provenance (parameters, filtering thresholds, tool
+    # versions), grouped as the template's ProvenanceSpec laid them out.
+    run_provenance: list[ProvenanceReportGroup] = Field(default_factory=list)
+    run_provenance_files: list[str] = Field(default_factory=list)
     data_collections: list[IngestionDataCollection] = Field(default_factory=list)
     runs: list[IngestionRun] = Field(default_factory=list)
     summary: IngestionSummary = Field(default_factory=IngestionSummary)
@@ -199,6 +242,30 @@ def _collect_live_dcs(project: dict) -> dict[str, dict]:
     return live
 
 
+def _source_input_label(rel: str, data_root: str | None) -> str:
+    """How the report names one recipe input: the stored path, joined onto the data root.
+
+    The data root and an override are both the project's word, so this
+    server's disk is probed (``exists``, ``realpath``) only where its
+    local-data policy would read the path anyway: a ``depictio local``
+    server, below a root. Anywhere else a probe would tell the reader whether
+    a server file exists and where a symlink leads. A URL, an absolute path
+    and a remote data root are shown as they are.
+    """
+    if "://" in rel or os.path.isabs(rel) or not data_root:
+        return rel
+    if "://" in data_root:
+        return f"{data_root.rstrip('/')}/{rel}"
+    path = os.path.normpath(os.path.join(data_root, rel))
+
+    from depictio.api.v1.configs.settings_models import local_data_policy
+
+    policy = local_data_policy()
+    if policy is not None and policy.allows(path) and os.path.exists(path):
+        return os.path.realpath(path)
+    return path
+
+
 def _dc_source_inputs(config: dict, data_root: str | None) -> list[str]:
     """Resolve the input paths a recipe-derived (``transformed``) DC aggregates from.
 
@@ -212,6 +279,11 @@ def _dc_source_inputs(config: dict, data_root: str | None) -> list[str]:
     transform = config.get("transform") or {}
     recipe = transform.get("recipe")
     if not recipe:
+        return []
+    # A materialized DC ships as a pre-computed seed file: the recipe never ran
+    # here and its raw SOURCES are not on disk, so resolving them would list
+    # paths that do not exist. The recipe itself still shows as lineage.
+    if transform.get("materialized"):
         return []
     overrides = transform.get("source_overrides") or {}
     out: list[str] = []
@@ -231,8 +303,7 @@ def _dc_source_inputs(config: dict, data_root: str | None) -> list[str]:
             )
             if not rel:
                 continue
-            path = os.path.join(data_root, rel) if (data_root and not os.path.isabs(rel)) else rel
-            out.append(os.path.realpath(path) if os.path.exists(path) else path)
+            out.append(_source_input_label(rel, data_root))
     except Exception:
         return out
     return out
@@ -265,13 +336,22 @@ def _aggregate_run_stats(
 
         dc_stats = (latest or {}).get("dc_stats") or {}
         run_failures = 0
+        run_totals = {"total_files": 0, "new_files": 0, "updated_files": 0}
         for tag, stats in dc_stats.items():
             agg = per_dc.setdefault(
                 tag,
-                {"total_files": 0, "new_files": 0, "skipped_files": 0, "other_failure_files": 0},
+                {
+                    "total_files": 0,
+                    "new_files": 0,
+                    "updated_files": 0,
+                    "skipped_files": 0,
+                    "other_failure_files": 0,
+                },
             )
             for key in agg:
                 agg[key] += int(stats.get(key, 0) or 0)
+            for key in run_totals:
+                run_totals[key] += int(stats.get(key, 0) or 0)
             run_failures += int(stats.get("other_failure_files", 0) or 0)
 
         if latest is None:
@@ -286,6 +366,9 @@ def _aggregate_run_stats(
                 run_location=run.get("run_location"),
                 scan_time=scan_time,
                 status=status,
+                files_total=run_totals["total_files"],
+                files_new=run_totals["new_files"],
+                files_updated=run_totals["updated_files"],
             )
         )
 
@@ -378,6 +461,7 @@ def build_ingestion_report(project: dict) -> IngestionReport:
                 removal_reason=entry.get("removal_reason"),
                 files_found=files_found,
                 files_new=int(stats.get("new_files", 0) or 0),
+                files_updated=int(stats.get("updated_files", 0) or 0),
                 files_skipped=int(stats.get("skipped_files", 0) or 0),
                 files_failed=int(stats.get("other_failure_files", 0) or 0),
                 ingested=ingested,
@@ -430,6 +514,39 @@ def build_ingestion_report(project: dict) -> IngestionReport:
         for name, value in (template_origin.get("variables") or {}).items()
     ]
 
+    # Group the flat, pre-ordered entry list (order is part of the stored data:
+    # spec groups first, catch-alls last) into display groups.
+    run_provenance: list[ProvenanceReportGroup] = []
+    for entry in template_origin.get("run_provenance") or []:
+        group_name = str(entry.get("group") or "Other")
+        if not run_provenance or run_provenance[-1].group != group_name:
+            run_provenance.append(ProvenanceReportGroup(group=group_name))
+        run_provenance[-1].entries.append(
+            ProvenanceReportEntry(
+                source=str(entry.get("source") or ""),
+                key=str(entry.get("key") or ""),
+                value=str(entry.get("value") or ""),
+                highlight=bool(entry.get("highlight")),
+            )
+        )
+
+    # First workflow that names an engine. Projects hold one workflow in every
+    # shipped template; taking the first keeps a hand-assembled multi-workflow
+    # project from showing nothing at all.
+    pipeline: IngestionPipeline | None = None
+    for workflow in project.get("workflows", []) or []:
+        config = workflow.get("config") or {}
+        if not config.get("engine_name"):
+            continue
+        pipeline = IngestionPipeline(
+            engine=str(config["engine_name"]),
+            name=str(workflow.get("name") or "") or None,
+            version=str(config.get("pipeline_version") or "") or None,
+            engine_version=str(config.get("nextflow_version") or "") or None,
+            tool_count=len(config.get("tools_executed") or []),
+        )
+        break
+
     return IngestionReport(
         project=IngestionReportProject(
             id=str(project.get("_id") or project.get("id") or ""),
@@ -438,7 +555,11 @@ def build_ingestion_report(project: dict) -> IngestionReport:
         ),
         template=template,
         manifest_source=manifest_source,
+        triggered_by=str(project.get("triggered_by") or "manual"),
+        pipeline=pipeline,
         variables=variables,
+        run_provenance=run_provenance,
+        run_provenance_files=[str(f) for f in (template_origin.get("run_provenance_files") or [])],
         data_collections=dc_entries,
         runs=runs,
         summary=summary,

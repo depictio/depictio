@@ -1,7 +1,7 @@
 import React from 'react';
 import { Group, SimpleGrid, Stack, Text } from '@mantine/core';
 
-import { formatSecondary } from './format';
+import { formatAggregate } from './format';
 import { MetricCaption, MetricStrip } from './tokens';
 import type { MetricRow } from './types';
 
@@ -24,7 +24,10 @@ const humanise = (name: string) => name.replace(/_/g, ' ');
 const StatList: React.FC<{
   rows: MetricRow[];
   variant: 'vertical' | 'compact' | 'grid';
-}> = ({ rows, variant }) => {
+  /** The card's `format`: a median or a max reads like the value above it,
+   *  a count stays a count. */
+  format?: string;
+}> = ({ rows, variant, format }) => {
   if (!rows.length) return null;
 
   if (variant === 'compact') {
@@ -35,7 +38,7 @@ const StatList: React.FC<{
             <Stack key={row.name} gap={0} align="center" style={{ flex: 1, minWidth: 0 }}>
               <MetricCaption>{humanise(row.name)}</MetricCaption>
               <Text size="sm" fw={600} lh={1.2} ta="center" truncate style={{ minWidth: 0 }}>
-                {formatSecondary(row.value)}
+                {formatAggregate(row.name, row.value, format)}
               </Text>
             </Stack>
           ))}
@@ -52,7 +55,7 @@ const StatList: React.FC<{
             <Stack key={row.name} gap={0} style={{ minWidth: 0 }}>
               <MetricCaption>{humanise(row.name)}</MetricCaption>
               <Text size="sm" fw={600} lh={1.2} truncate style={{ minWidth: 0 }}>
-                {formatSecondary(row.value)}
+                {formatAggregate(row.name, row.value, format)}
               </Text>
             </Stack>
           ))}
@@ -66,7 +69,7 @@ const StatList: React.FC<{
       {rows.map((row) => (
         <Group key={row.name} justify="space-between" gap="xs" wrap="nowrap">
           <MetricCaption>{humanise(row.name)}</MetricCaption>
-          <MetricCaption strong>{formatSecondary(row.value)}</MetricCaption>
+          <MetricCaption strong>{formatAggregate(row.name, row.value, format)}</MetricCaption>
         </Group>
       ))}
     </MetricStrip>

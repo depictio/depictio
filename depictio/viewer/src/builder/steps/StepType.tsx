@@ -19,7 +19,9 @@ import {
   Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { useGlassPages } from '../../chrome/variants/glass/pages';
 import { useBuilderStore } from '../store/useBuilderStore';
+import MultiQCLogo from '../shared/MultiQCLogo';
 import { COMPONENT_TYPES } from '../componentTypes';
 import type { ComponentTypeMeta } from '../componentTypes';
 import type { ComponentType } from '../store/useBuilderStore';
@@ -29,6 +31,7 @@ const StepType: React.FC = () => {
   const setComponentType = useBuilderStore((s) => s.setComponentType);
   const setStep = useBuilderStore((s) => s.setStep);
   const dcConfigType = useBuilderStore((s) => s.dcConfigType);
+  const glass = useGlassPages();
 
   // For consistency with Dash, the type grid is type-first; data is picked in
   // the next step. dcConfigType is null at this point unless edit mode.
@@ -65,15 +68,20 @@ const StepType: React.FC = () => {
 
       <div
         data-tour-id="component-type-grid"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: '1.5rem',
-          maxWidth: 900,
-          width: '100%',
-          margin: '2rem auto',
-          padding: '0 1rem',
-        }}
+        className={glass ? 'bgl-type-grid' : undefined}
+        style={
+          glass
+            ? undefined
+            : {
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '1.5rem',
+                maxWidth: 900,
+                width: '100%',
+                margin: '2rem auto',
+                padding: '0 1rem',
+              }
+        }
       >
         {cards.map((t, i) => (
           <TypeCard
@@ -82,7 +90,8 @@ const StepType: React.FC = () => {
             disabled={t.disabled}
             selected={componentType === t.type}
             onClick={() => !t.disabled && onPick(t.type as ComponentType)}
-            style={i === lastIndexInCol2 ? { gridColumn: '2' } : undefined}
+            style={i === lastIndexInCol2 && !glass ? { gridColumn: '2' } : undefined}
+            lastInMiddle={i === lastIndexInCol2}
           />
         ))}
       </div>
@@ -96,6 +105,8 @@ interface TypeCardProps {
   disabled: boolean;
   onClick: () => void;
   style?: React.CSSProperties;
+  /** The odd card out of a three-column grid, centred under the rest. */
+  lastInMiddle?: boolean;
 }
 
 const TypeCard: React.FC<TypeCardProps> = ({
@@ -104,7 +115,35 @@ const TypeCard: React.FC<TypeCardProps> = ({
   disabled,
   onClick,
   style,
+  lastInMiddle,
 }) => {
+  const glass = useGlassPages();
+  if (glass) {
+    return (
+      <button
+        type="button"
+        className="bgl-tile component-selection-card"
+        // Type-scoped hook for e2e, as on the Classic card below.
+        data-testid={`component-type-${meta.type}`}
+        data-selected={selected || undefined}
+        data-col2={lastInMiddle || undefined}
+        aria-pressed={selected}
+        aria-disabled={disabled || undefined}
+        onClick={onClick}
+        style={{ ['--bgl-tint' as string]: meta.iconBg } as React.CSSProperties}
+      >
+        <span className="bgl-tile-icon" data-brand={meta.type === 'multiqc' ? '' : undefined}>
+          {meta.type === 'multiqc' ? (
+            <MultiQCLogo size={34} />
+          ) : (
+            <Icon icon={meta.icon} width={26} color="currentColor" />
+          )}
+        </span>
+        <span className="bgl-tile-label">{meta.label}</span>
+        <span className="bgl-tile-desc">{meta.description}</span>
+      </button>
+    );
+  }
   return (
     <Card
       withBorder
@@ -113,6 +152,11 @@ const TypeCard: React.FC<TypeCardProps> = ({
       shadow={selected ? 'md' : 'sm'}
       onClick={onClick}
       className="component-selection-card"
+      // Type-scoped hook for e2e: several cards mention another card's label in
+      // their description ("Interactive data visualizations" on Figure,
+      // "Interactive image grid" on Image), so a text filter over
+      // .component-selection-card cannot address one card unambiguously.
+      data-testid={`component-type-${meta.type}`}
       style={{
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.5 : 1,
@@ -136,12 +180,7 @@ const TypeCard: React.FC<TypeCardProps> = ({
           }}
         >
           {meta.type === 'multiqc' ? (
-            <img
-              src="/dashboard/logos/multiqc_icon_dark.svg"
-              alt="MultiQC"
-              className="multiqc-icon-themed"
-              style={{ width: 44, height: 44, objectFit: 'contain' }}
-            />
+            <MultiQCLogo size={44} />
           ) : (
             <Icon icon={meta.icon} width={24} color="white" />
           )}

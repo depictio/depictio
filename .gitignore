@@ -145,30 +145,90 @@ dump.rdb
 # Data Files
 ## Large/Heavy files
 *.parquet
-# Allow nf-core ampliseq multiqc data
-!depictio/projects/nf-core/ampliseq/2.14.0/run_1/multiqc_data/multiqc.parquet
-!depictio/projects/nf-core/ampliseq/2.16.0/multiqc/multiqc_data/multiqc.parquet
+# Allow nf-core ampliseq multiqc data (any template version — `*` matches the
+# version segment so a bump never has to touch these rules)
+!depictio/projects/nf-core/ampliseq/*/run_1/multiqc_data/multiqc.parquet
+!depictio/projects/nf-core/ampliseq/*/multiqc/multiqc_data/multiqc.parquet
 # Allow nf-core viralrecon bundled run_1 (multiqc.parquet only — TSVs allow-listed below)
-!depictio/projects/nf-core/viralrecon/3.0.0/run_1/multiqc/multiqc_data/multiqc.parquet
+!depictio/projects/nf-core/viralrecon/*/run_1/multiqc/multiqc_data/multiqc.parquet
+# Allow the catalog conformance project's synthetic MultiQC report (~70 KB,
+# generated from stub logs so the e2e suite can exercise the MultiQC catalog
+# outputs without vendoring a reference pipeline's 24 MB parquet)
+!depictio/projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
 *.gz
 *.csv
 *.tsv
 # Allow the adapt_feedb_ms realtime-demo seed (imported by the deploy doc's quickstart)
 !depictio/projects/test/adapt_feedb_ms/phenobase.csv
-# Allow nf-core ampliseq data files
-!depictio/projects/nf-core/ampliseq/2.14.0/*.tsv
-!depictio/projects/nf-core/ampliseq/2.16.0/*.tsv
-!depictio/projects/nf-core/ampliseq/2.16.0/input/*.tsv
-!depictio/projects/nf-core/ampliseq/2.16.0/input/samplesheet.csv
+# Allow nf-core ampliseq data files (any template version)
+!depictio/projects/nf-core/ampliseq/*/*.tsv
+!depictio/projects/nf-core/ampliseq/*/input/*.tsv
+!depictio/projects/nf-core/ampliseq/*/input/samplesheet.csv
 # Allow nf-core viralrecon bundled mosdepth TSVs (4 files under run_1/variants/bowtie2/mosdepth)
-!depictio/projects/nf-core/viralrecon/3.0.0/run_1/variants/bowtie2/mosdepth/amplicon/*.tsv
-!depictio/projects/nf-core/viralrecon/3.0.0/run_1/variants/bowtie2/mosdepth/genome/*.tsv
+!depictio/projects/nf-core/viralrecon/*/run_1/variants/bowtie2/mosdepth/amplicon/*.tsv
+!depictio/projects/nf-core/viralrecon/*/run_1/variants/bowtie2/mosdepth/genome/*.tsv
 # Allow nf-core viralrecon canonical seed TSVs (recipe outputs materialised once
 # and committed so init resolver can convert recipe DCs → file_scan instead of
 # pruning them on every fresh deploy)
-!depictio/projects/nf-core/viralrecon/3.0.0/*.tsv
+!depictio/projects/nf-core/viralrecon/*/*.tsv
+# Allow the nf-core template reference inputs that the megatest never publishes.
+# Each pipeline's megatest.yaml carries the curl lines that mirror these from
+# nf-core/test-datasets; they are committed so the template is self-describing and
+# SAMPLESHEET_FILE resolves without network access.
+!depictio/projects/nf-core/differentialabundance/*/input/*.tsv
+!depictio/projects/nf-core/funcscan/*/input/*.csv
+!depictio/projects/nf-core/rnafusion/*/input/*.csv
+!depictio/projects/nf-core/rnaseq/*/input/*.csv
+!depictio/projects/nf-core/taxprofiler/*/input/*.csv
+!depictio/projects/nf-core/riboseq/*/input/*.csv
+!depictio/projects/nf-core/riboseq/*/input/*.tsv
+!depictio/projects/nf-core/smrnaseq/*/input/*.csv
+!depictio/projects/nf-core/smrnaseq/*/input/*.tsv
+!depictio/projects/nf-core/genomeassembler/*/input/*.csv
+!depictio/projects/nf-core/genomeassembler/*/input/*.tsv
+!depictio/projects/nf-core/mhcquant/*/input/*.csv
+!depictio/projects/nf-core/mhcquant/*/input/*.tsv
+!depictio/projects/nf-core/demultiplex/*/input/*.csv
+!depictio/projects/nf-core/demultiplex/*/input/*.tsv
+!depictio/projects/nf-core/rnasplice/*/input/*.csv
+!depictio/projects/nf-core/rnasplice/*/input/*.tsv
+!depictio/projects/nf-core/methylseq/*/input/*.tsv
+!depictio/projects/nf-core/airrflow/*/input/*.csv
+!depictio/projects/nf-core/airrflow/*/input/*.tsv
+!depictio/projects/nf-core/hic/*/input/*.tsv
+!depictio/projects/nf-core/sarek/*/input/*.tsv
+!depictio/projects/nf-core/chipseq/*/input/*.csv
+!depictio/projects/nf-core/chipseq/*/input/*.tsv
+!depictio/projects/nf-core/atacseq/*/input/*.csv
+!depictio/projects/nf-core/cutandrun/*/input/*.csv
+# Lot 2 templates (sarek, scrnaseq, mag, nanoseq, eager, methylseq, hic).
+!depictio/projects/nf-core/sarek/*/input/*.csv
+!depictio/projects/nf-core/scrnaseq/*/input/*.csv
+!depictio/projects/nf-core/mag/*/input/*.csv
+!depictio/projects/nf-core/nanoseq/*/input/*.csv
+!depictio/projects/nf-core/nanoseq/*/input/*.tsv
+!depictio/projects/nf-core/eager/*/input/*.csv
+!depictio/projects/nf-core/eager/*/input/*.tsv
+!depictio/projects/nf-core/methylseq/*/input/*.csv
+!depictio/projects/nf-core/hic/*/input/*.csv
+# chipseq is pre-DSL2 and publishes its software versions as CSV, not YAML.
+!depictio/projects/nf-core/chipseq/*/pipeline_info/*.csv
+# atacseq 1.2.2 is pre-DSL2 too and publishes the same CSV shape.
+!depictio/projects/nf-core/atacseq/*/pipeline_info/*.csv
+# eager 2.4.5 is pre-DSL2 as well (TSV input, CSV software versions).
+!depictio/projects/nf-core/eager/*/pipeline_info/*.csv
 # Allow advanced_viz_showcase synthetic fixtures
 !depictio/projects/init/advanced_viz_showcase/data/*.tsv
+# Allow the catalog conformance project's generated data. Every file here is a
+# copy of a catalog fixture, staged either as a recipe seed at the project root
+# or inside the fake run tree — see scripts/generate_project.py.
+!depictio/projects/init/catalog_conformance/*.tsv
+!depictio/projects/init/catalog_conformance/run_1/**/*.tsv
+# Allow the catalog CLI smoke project's staged raw tool output. Small, derived
+# from the catalog's own fixtures, and the input the CLI runs the recipes on —
+# see scripts/generate_fixtures.py.
+!depictio/projects/test/catalog_cli_smoke/run_1/**/*.tsv
+!depictio/projects/test/catalog_cli_smoke/run_1/**/*.csv
 # Allow catalog fixtures (small samples co-located in each module folder)
 !depictio/catalog/**/*.tsv
 !depictio/catalog/**/*.csv
@@ -223,6 +283,14 @@ depictio/dash/**/screenshots/**
 # copy-screenshot-files init container).
 depictio/api/static/screenshots/**
 
+# Dashboard logos are uploaded at runtime through the editor's Settings drawer
+# (POST /dashboards/upload_logo); the backend mkdir's the dir at boot.
+depictio/api/static/dashboard_logos/**
+
+# Instance branding logos are uploaded at runtime through the admin Branding
+# panel (POST /utils/branding/logo/{variant}); the backend mkdir's the dir.
+depictio/api/static/branding/**
+
 # Allow reference dashboard screenshots (iris, penguins, ampliseq)
 # Iris dashboard (6824cb3b89d2b72169309737)
 !depictio/dash/static/screenshots/6824cb3b89d2b72169309737.png
@@ -231,7 +299,7 @@ depictio/api/static/screenshots/**
 # Penguins dashboard (6824cb3b89d2b72169309738)
 !depictio/dash/static/screenshots/6824cb3b89d2b72169309738_light.png
 !depictio/dash/static/screenshots/6824cb3b89d2b72169309738_dark.png
-# Ampliseq MultiQC dashboard (646b0f3c1e4a2d7f8e5b8ca2)
+# Ampliseq main tab, the Overview (646b0f3c1e4a2d7f8e5b8ca2)
 !depictio/dash/static/screenshots/646b0f3c1e4a2d7f8e5b8ca2.png
 !depictio/dash/static/screenshots/646b0f3c1e4a2d7f8e5b8ca2_light.png
 !depictio/dash/static/screenshots/646b0f3c1e4a2d7f8e5b8ca2_dark.png
@@ -261,8 +329,10 @@ depictio/api/static/screenshots/**
 depictio/tests/dash/screenshots/
 
 # Cloud Storage
-## S3/MinIO
+## S3 (bundled SeaweedFS; legacy MinIO dir kept ignored)
 minio_data/
+seaweedfs_data/
+seaweedfs_backup_data/
 delta_dev/
 
 # Software Specific
@@ -326,6 +396,9 @@ benchmark_datasets/
 # Sensitive Helm values files
 helm-charts/depictio/values-*-secrets.yaml
 helm-charts/depictio/*secrets*.yaml
+# Snapshots of live releases (helm get values/manifest) — carry the same
+# secrets the files above do, since the release has them already merged in.
+.helm-backups/
 
 # Profiling
 prof_files/
@@ -335,9 +408,6 @@ prof_files/
 dev/jbrowse_dev/assets/multiqc/
 dev/jbrowse_dev/assets/
 dev/flask-login/.env
-dev/token/private_key.pem
-dev/token/public_key.pem
-dev/token/token.txt
 dev/celery/jobs.json
 dev/dev_design_visu/data/
 dev/dev_delta/
@@ -402,6 +472,10 @@ depictio/viewer/dist-table-harness/
 # which every `pnpm dev` / `pnpm build` runs first). Regenerate with `pnpm run icons`.
 depictio/viewer/src/generated/
 
+# Generated component-embed single-file bundle (built via pnpm run build:embed).
+# The API image builds and copies this in; see docker-images/Dockerfile.api.
+depictio/viewer/dist-embed/
+
 # Nextflow runtime artifacts (from local pipeline validation runs)
 .nextflow/
 .nextflow.log*
@@ -411,3 +485,14 @@ work/
 # never committed — see benchmark/README.md). The glob covers the per-run
 # directories a `--output` flag creates alongside the default one.
 benchmark/output*/
+
+# `uv sync` inside depictio/cli (the depictio-cli alias) writes a lock nobody uses:
+# the root uv.lock is the only one.
+depictio/cli/uv.lock
+
+# Tabix-indexed gene annotations for file-backed genome_view tracks.
+# dev/advanced_viz_kinds/build_genome_gene_assets.py --format gff3 builds them;
+# they are tens of megabytes, so they are hosted, not committed (the small JSON
+# gene tables beside them are).
+depictio/viewer/public/assets/genomes/*.gff3.gz
+depictio/viewer/public/assets/genomes/*.gff3.gz.tbi

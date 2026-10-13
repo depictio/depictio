@@ -1,15 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  NumberInput,
-  Select,
-  Stack,
-  Switch,
-  Tabs,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
-import Plot from 'react-plotly.js';
+import { Tabs, useMantineColorScheme, useMantineTheme } from '@mantine/core';
+import Plot from './LegendAwarePlot';
+import { VizNumberInput, VizSelect, VizSwitch } from './controls/VizControls';
 
 import {
   fetchAdvancedVizData,
@@ -18,8 +10,16 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { stableColorMap, TAB10_PALETTE } from '../../colors';
+import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
+import type { PlotGraphHandlers } from '../annotations/usePlotAnnotationLayer';
+import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
+import type { PlotEventHandlers } from '../../annotations/plotDecorate';
+import { splitFigureByGroups } from './groupSplit';
+import type { GroupRenderState } from '../../selectionGroups';
+import { useReportGroupColouring } from '../../groupReach';
 import {
   applyDataTheme,
   applyLayoutTheme,
@@ -27,6 +27,7 @@ import {
   plotlyThemeColors,
   plotlyThemeFragment,
 } from './plotlyTheme';
+import { usePersistedVizControl } from './usePersistedVizControl';
 
 interface RarefactionConfig {
   sample_id_col: string;
@@ -50,6 +51,8 @@ interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: RarefactionConfig };
   filters: InteractiveFilter[];
   refreshTick?: number;
+  /** Dashboard-wide analysis grouping, applied to the finished figure. */
+  groupRender?: GroupRenderState;
 }
 
 // Stable Tabs.styles object so Mantine doesn't see a new prop identity on
@@ -76,49 +79,39 @@ const PLOT_CONFIG = {
 };
 
 /**
- * Pure presentation wrapper around <Plot>. Memoised on (figure ref,
- * isDark, theme) so parent re-renders triggered by filter / refresh state
- * don't churn the data + layout props passed to Plotly — that churn was
- * forcing Plotly.react() to rebuild the figure and dropping any in-flight
- * zoom box selection mid-drag.
+ * Pure presentation wrapper around <Plot>. Memoised on the (already themed
+ * and annotated) figure and on each handler so parent re-renders triggered by
+ * filter / refresh state don't churn the data + layout props passed to
+ * Plotly — that churn was forcing Plotly.react() to rebuild the figure and
+ * dropping any in-flight zoom box selection mid-drag.
  */
-const RarefactionPlot = React.memo<{
-  figure: { data?: unknown[]; layout?: Record<string, unknown> };
-  isDark: boolean;
-  theme: ReturnType<typeof useMantineTheme>;
-}>(({ figure, isDark, theme }) => {
-  const themedData = useMemo(
-    () => applyDataTheme(figure.data, isDark, theme),
-    [figure.data, isDark, theme],
-  );
-  const themedLayout = useMemo(
-    () => applyLayoutTheme(figure.layout as any, isDark, theme),
-    [figure.layout, isDark, theme],
-  );
-  return (
-    <Plot
-      data={themedData as any}
-      layout={themedLayout as any}
-      useResizeHandler
-      style={PLOT_STYLE}
-      config={PLOT_CONFIG as any}
-    />
-  );
-});
+const RarefactionPlot = React.memo<
+  { data: unknown[]; layout: Record<string, unknown> } & PlotEventHandlers & PlotGraphHandlers
+>(({ data, layout, ...handlers }) => (
+  <Plot
+    data={data as any}
+    layout={layout as any}
+    useResizeHandler
+    style={PLOT_STYLE}
+    config={PLOT_CONFIG as any}
+    {...handlers}
+  />
+));
 RarefactionPlot.displayName = 'RarefactionPlot';
 
 // Shared tab10 palette via colors.ts so cross-viz colour assignments stay
-// in sync. The local alias keeps the index-based fallback ergonomic.
+// in sync — the fallback when the deployment states no brand of its own.
 const PALETTE = TAB10_PALETTE;
 
-const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
+const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, groupRender }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
+  const palette = resolveCategoricalPalette(theme, PALETTE);
   const config = (metadata.config || {}) as RarefactionConfig;
   const isDark = colorScheme === 'dark';
 
-  const [showCI, setShowCI] = useState<boolean>(config.show_ci ?? true);
-  const [topN, setTopN] = useState<number>(60);
+  const [showCI, setShowCI] = usePersistedVizControl(metadata, 'show_ci', true);
+  const [topN, setTopN] = usePersistedVizControl(metadata, 'top_n', 60);
   const [groupBy, setGroupBy] = useState<string | null>(config.group_col ?? null);
   const [activeMetric, setActiveMetric] = useState<string>(config.metric_col);
 
@@ -163,6 +156,9 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
       cancelled = true;
     };
   }, [metadata.dc_id, groupBy]);
+  // A group wears the dashboard's colour for it, the component's own
+  // `category_palette` winning value by value.
+  const pinnedColours = usePinnedCategoryColors(groupBy, config.category_palette);
 
   const schemaMetricCols = useMemo(() => {
     if (!dcSchema) return [] as string[];
@@ -187,6 +183,10 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
     const cols = [config.sample_id_col, config.depth_col, config.metric_col].filter(Boolean) as string[];
     if (config.iter_col) cols.push(config.iter_col);
     if (config.group_col && !cols.includes(config.group_col)) cols.push(config.group_col);
+    // Whatever the user is grouping by right now — the projection is built from
+    // the roles, so a column picked in the control would otherwise never be
+    // requested and the curves would fall back to one trace.
+    if (groupBy && !cols.includes(groupBy)) cols.push(groupBy);
     // Pull additional metric columns so the user can switch without a refetch.
     for (const m of config.metric_options ?? []) {
       if (m && !cols.includes(m)) cols.push(m);
@@ -197,7 +197,7 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
       if (m && !cols.includes(m)) cols.push(m);
     }
     return cols;
-  }, [config, schemaMetricCols]);
+  }, [config, schemaMetricCols, groupBy]);
 
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -295,8 +295,8 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
     // ordering when the unique-values endpoint hasn't responded yet.
     const colourSource = stableColorMap(
       groupUniverse ?? uniqGroups,
-      PALETTE,
-      config.category_palette ?? null,
+      palette,
+      pinnedColours,
     );
     const colourForGroup = new Map<string, string>(
       uniqGroups.map((g) => [g, colourSource.get(g)]),
@@ -321,7 +321,7 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
       const group = groups ? sampleGroup.get(sid) ?? '—' : sid;
       const colour = groups
         ? colourForGroup.get(group)!
-        : PALETTE[i % PALETTE.length];
+        : palette[i % palette.length];
       const legendName = groups ? group : String(sid);
       const showInLegend = !groups || !seenGroupInLegend.has(group);
       if (showInLegend && groups) seenGroupInLegend.add(group);
@@ -334,6 +334,13 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
         mode: 'lines+markers' as const,
         x: ds,
         y: means,
+        // Slot 0 carries the sample the curve was aggregated from — the value an
+        // analysis group of samples is read back against. Every point of a curve
+        // carries the same id, so a curve is assigned to a group whole rather
+        // than cut in two, which is also what keeps the ±SE array below (a
+        // per-point array the splitter does not slice) aligned with its points.
+        // The hover quotes `sid` directly, so this slot changes no hover text.
+        customdata: ds.map(() => [sid]),
         name: legendName,
         legendgroup: legendName,
         showlegend: showInLegend,
@@ -388,7 +395,7 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
         dragmode: 'zoom',
       },
     };
-  }, [rows, config, isDark, theme, showCI, topN, groupBy, activeMetric, metadata.dc_id]);
+  }, [rows, config, isDark, theme, showCI, topN, groupBy, groupUniverse, activeMetric, metadata.dc_id, pinnedColours]);
 
   // Available metric columns. Prefer the config allowlist; merge in schema-
   // discovered numeric columns so a stale dashboard JSON (config.metric_options
@@ -416,64 +423,144 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
     return Array.from(seed);
   }, [rows, config, schemaMetricCols]);
 
-  // Discover group/metric options from the rows once they arrive.
+  // Discover grouping options from the rows once they arrive: every
+  // categorical column the DC carries alongside the curve — locality,
+  // platform, season, whatever the run's metadata holds — so the curves can be
+  // coloured by any of them and not just by the one the YAML picked.
+  //
+  // Categorical *only*. Excluding the active metric was not enough: the other
+  // metrics, the iteration counter and any numeric metadata column were all
+  // offered as things to colour by, which either paints one curve per distinct
+  // float or silently does nothing.
   const groupOptions = useMemo(() => {
-    if (!rows) return [] as { value: string; label: string }[];
+    const NUMERIC_DTYPE_PREFIXES = ['Int', 'UInt', 'Float', 'Decimal'];
+    const skip = new Set<string>(
+      [config.sample_id_col, config.depth_col, config.iter_col, ...metricOptions].filter(
+        Boolean,
+      ) as string[],
+    );
     const out: { value: string; label: string }[] = [];
-    for (const c of Object.keys(rows)) {
-      if (c === config.sample_id_col || c === config.depth_col || c === config.metric_col)
-        continue;
-      out.push({ value: c, label: c });
+    if (dcSchema) {
+      for (const [col, dtype] of Object.entries(dcSchema)) {
+        if (skip.has(col)) continue;
+        if (NUMERIC_DTYPE_PREFIXES.some((p) => dtype.startsWith(p))) continue;
+        out.push({ value: col, label: col });
+      }
+    } else if (rows) {
+      // No schema endpoint: fall back to what arrived, which is at least the
+      // configured grouping column.
+      for (const c of Object.keys(rows)) {
+        if (skip.has(c)) continue;
+        const first = ((rows[c] || []) as unknown[]).find((v) => v != null);
+        if (typeof first === 'number') continue;
+        out.push({ value: c, label: c });
+      }
+    }
+    // The sample id is a legitimate grouping — one curve per sample is the
+    // plot's own default — so it goes back on the list, first.
+    if (config.sample_id_col) {
+      out.unshift({ value: config.sample_id_col, label: `${config.sample_id_col} (per sample)` });
     }
     return out;
-  }, [rows, config]);
+  }, [rows, dcSchema, config, metricOptions]);
 
-  const controls = (
-    <Stack gap="xs">
+  // Recolour by the dashboard's analysis groups. Slot 0 of `customdata` is the
+  // sample id, so a group of samples lights up the curves it owns and a group
+  // of anything else (taxa, features) leaves the plot untouched — that no-op is
+  // `splitFigureByGroups`' own answer when nothing matches.
+  //
+  // `facetable: false`: "Split" for this kind is the dispatch's job, which
+  // builds one renderer per group from that group's own rows (`SplitPanels`) —
+  // a second, figure-level facet here would only compete with it. There are no
+  // context traces to place either way: every trace is one sample's curve, and
+  // the error bars ride on the trace rather than beside it.
+  const groupedFigure = useMemo(
+    () =>
+      figure
+        ? splitFigureByGroups(figure, {
+            groupRender,
+            identitySlot: 0,
+            facetable: false,
+            showLegend: true,
+          })
+        : figure,
+    [figure, groupRender],
+  );
+  // Whether any curve matched, for the dispatch's "not grouped" badge.
+  useReportGroupColouring(groupRender, figure, groupedFigure);
+
+  // Encoding tier: what the curves are coloured by and how many samples are
+  // drawn. The error bars are an annotation on the same curves.
+  const primaryControls = (
+    <>
       {groupOptions.length > 0 ? (
-        <Select
-          size="xs"
+        <VizSelect
           label="Group by"
           value={groupBy}
           onChange={setGroupBy}
           data={groupOptions}
           clearable
-          description="Colour curves by metadata column"
         />
       ) : null}
-      <NumberInput
-        size="xs"
+      <VizNumberInput
         label="Top-N samples"
         value={topN}
         onChange={(v) => setTopN(Math.max(1, Number(v) || 60))}
         min={1}
         max={200}
       />
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Error
-        </Text>
-        <Switch
-          size="xs"
-          checked={showCI}
-          onChange={(e) => setShowCI(e.currentTarget.checked)}
-          label="Error bars (±SE)"
-        />
-      </Stack>
-    </Stack>
+    </>
   );
+
+  const controls = (
+    <VizSwitch
+      checked={showCI}
+      onChange={(e) => setShowCI(e.currentTarget.checked)}
+      label="Error bars (±SE)"
+    />
+  );
+
+  // Themed once per figure so the annotation layer can memoise on them.
+  const plotData = useMemo(
+    () => (groupedFigure ? applyDataTheme(groupedFigure.data, isDark, theme) : null),
+    [groupedFigure, isDark, theme],
+  );
+  const plotLayout = useMemo(
+    () => (groupedFigure ? applyLayoutTheme(groupedFigure.layout as any, isDark, theme) : null),
+    [groupedFigure, isDark, theme],
+  );
+  // Chart annotations. A point is a sample's mean at one depth, not a row,
+  // so marked points are stored as coordinates.
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: supportsAdvancedVizAnnotation(metadata),
+    data: plotData,
+    layout: plotLayout,
+  });
+  const plot = groupedFigure ? (
+    <>
+      <RarefactionPlot
+        data={annotations.data}
+        layout={annotations.layout}
+        {...annotations.plotProps()}
+      />
+      {annotations.toolbar}
+    </>
+  ) : null;
 
   return (
     <AdvancedVizFrame
       estimated={estimated}
       title={metadata.title || 'Rarefaction curves'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
+      badges={annotations.badges}
     >
       {metricOptions.length > 1 ? (
         // Tabs switcher (same pattern as DaBarplotRenderer's contrast switcher) —
@@ -494,19 +581,11 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
               </Tabs.Tab>
             ))}
           </Tabs.List>
-          <div style={PLOT_CONTAINER_STYLE}>
-            {figure ? (
-              <RarefactionPlot
-                figure={figure}
-                isDark={isDark}
-                theme={theme}
-              />
-            ) : null}
-          </div>
+          <div style={PLOT_CONTAINER_STYLE}>{plot}</div>
         </Tabs>
-      ) : figure ? (
-        <RarefactionPlot figure={figure} isDark={isDark} theme={theme} />
-      ) : null}
+      ) : (
+        plot
+      )}
     </AdvancedVizFrame>
   );
 };

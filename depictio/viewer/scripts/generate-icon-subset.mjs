@@ -33,6 +33,33 @@ const SCAN_DIRS = [
 ];
 
 const SCAN_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx']);
+
+// Individual files outside those trees that *declare* icons the UI renders from
+// data. The advanced-viz kind registry's `icon` values reach the browser over
+// the wire, so nothing in the TS sources mentions them and they would resolve
+// against the Iconify API, which the CSP blocks. The registry is KIND_METADATA
+// in the models package: it moved there from the API route so that `depictio
+// dev catalog kinds` could read it without importing FastAPI, and this list has
+// to follow it or every kind in the picker loses its icon in a built bundle.
+const SCAN_FILES = [
+  join(REPO, 'depictio/models/components/advanced_viz/schemas.py'),
+];
+
+// Shipped dashboard data. Seeded dashboards name their icons in YAML and in the
+// exported `.db_seeds` JSON, so no TS source mentions them and they used to
+// resolve against the Iconify API — i.e. render as an empty box in every built
+// bundle, and only there, since `vite dev` sends no CSP. Scanning the data
+// itself is what makes "add a tile, pick an icon, ship it" work without also
+// remembering to mirror the id into a TS list.
+const SCAN_DATA_DIRS = [join(REPO, 'depictio/projects')];
+const SCAN_DATA_EXTENSIONS = new Set(['.yaml', '.yml', '.json']);
+
+// `<slot>: <icon>` in YAML or JSON, quoted or not. A separate matcher from
+// ICON_LITERAL because YAML writes `icon: mdi:table` bare, and matching every
+// bare `a:b` in arbitrary data would sweep up tags, paths and timestamps.
+const DATA_ICON_LITERAL =
+  /["']?(?:icon|tab_icon|icon_name)["']?\s*:\s*["']?([a-z][a-z0-9]*(?:-[a-z0-9]+)*:[a-z][a-z0-9]*(?:-[a-z0-9]+)*)["']?/g;
+
 const OUT_FILE = join(VIEWER, 'src/generated/iconSubset.ts');
 
 // Collections installed as devDependencies. A prefix outside this list is
@@ -58,7 +85,7 @@ const COLLECTIONS = [
 // what keeps unrelated literals like `group:foo` out of the output.
 const ICON_LITERAL = /['"`]([a-z][a-z0-9]*(?:-[a-z0-9]+)*:[a-z][a-z0-9]*(?:-[a-z0-9]+)*)['"`]/g;
 
-async function* walk(dir) {
+async function* walk(dir, extensions = SCAN_EXTENSIONS) {
   let entries;
   try {
     entries = await readdir(dir, { withFileTypes: true });
@@ -69,8 +96,8 @@ async function* walk(dir) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
       if (entry.name === 'node_modules' || entry.name === 'generated') continue;
-      yield* walk(full);
-    } else if (SCAN_EXTENSIONS.has(entry.name.slice(entry.name.lastIndexOf('.')))) {
+      yield* walk(full, extensions);
+    } else if (extensions.has(entry.name.slice(entry.name.lastIndexOf('.')))) {
       yield full;
     }
   }
@@ -86,19 +113,48 @@ const ICON_CONTEXT = /icon\s*[:=]\s*\{?\s*$/i;
 async function collectUsedNames() {
   // name -> { files: Set<string>, iconContext: boolean } for actionable output
   const found = new Map();
-  for (const dir of SCAN_DIRS) {
-    for await (const file of walk(dir)) {
-      const source = await readFile(file, 'utf8');
-      for (const match of source.matchAll(ICON_LITERAL)) {
-        const name = match[1];
-        if (!found.has(name)) found.set(name, { files: new Set(), iconContext: false });
-        const entry = found.get(name);
-        entry.files.add(relative(REPO, file));
-        if (ICON_CONTEXT.test(source.slice(Math.max(0, match.index - 16), match.index))) {
-          entry.iconContext = true;
-        }
+  const scan = async (file) => {
+    let source;
+    try {
+      source = await readFile(file, 'utf8');
+    } catch {
+      return; // listed file absent (partial checkout) — nothing to scan
+    }
+    for (const match of source.matchAll(ICON_LITERAL)) {
+      const name = match[1];
+      if (!found.has(name)) found.set(name, { files: new Set(), iconContext: false });
+      const entry = found.get(name);
+      entry.files.add(relative(REPO, file));
+      if (ICON_CONTEXT.test(source.slice(Math.max(0, match.index - 16), match.index))) {
+        entry.iconContext = true;
       }
     }
+  };
+  // Data files use the slot-anchored matcher; everything there is an icon by
+  // construction, so it counts as `iconContext` for the missing-collection
+  // report the same way an `icon=` prop does.
+  const scanData = async (file) => {
+    let source;
+    try {
+      source = await readFile(file, 'utf8');
+    } catch {
+      return;
+    }
+    for (const match of source.matchAll(DATA_ICON_LITERAL)) {
+      const name = match[1];
+      if (!found.has(name)) found.set(name, { files: new Set(), iconContext: false });
+      const entry = found.get(name);
+      entry.files.add(relative(REPO, file));
+      entry.iconContext = true;
+    }
+  };
+
+  for (const dir of SCAN_DIRS) {
+    for await (const file of walk(dir)) await scan(file);
+  }
+  for (const file of SCAN_FILES) await scan(file);
+  for (const dir of SCAN_DATA_DIRS) {
+    for await (const file of walk(dir, SCAN_DATA_EXTENSIONS)) await scanData(file);
   }
   return found;
 }

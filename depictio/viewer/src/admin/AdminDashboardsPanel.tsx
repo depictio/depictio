@@ -11,11 +11,14 @@ import {
   Text,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { Globe, LayoutDashboard, Lock } from 'lucide-react';
 
 import { listAllDashboards } from 'depictio-react-core';
 import type { AdminDashboard } from 'depictio-react-core';
 
+import { STROKE, useGlassPages } from '../chrome/variants/glass/pages';
 import { formatDateTime } from '../lib/datetime';
+import Facts from './Facts';
 
 function formatLastSaved(raw: unknown): string {
   if (!raw || typeof raw !== 'string') return 'Never';
@@ -23,6 +26,7 @@ function formatLastSaved(raw: unknown): string {
 }
 
 const AdminDashboardsPanel: React.FC = () => {
+  const glass = useGlassPages();
   const [dashboards, setDashboards] = useState<AdminDashboard[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +90,7 @@ const AdminDashboardsPanel: React.FC = () => {
   }
 
   return (
-    <Accordion radius="md" variant="separated" multiple>
+    <Accordion radius="md" variant="separated" multiple className={glass ? 'ga-rows' : undefined}>
       {sortedDashboards.map((dashboard) => {
         const dashboardId = dashboard.dashboard_id;
         const title = dashboard.title || dashboardId;
@@ -101,61 +105,84 @@ const AdminDashboardsPanel: React.FC = () => {
         return (
           <Accordion.Item key={dashboardId} value={dashboardId}>
             <Accordion.Control>
-              <Group justify="space-between" wrap="nowrap">
-                <Text fw={500} size="lg" style={{ flex: 1, minWidth: 0 }} truncate>
-                  {headerLabel}
-                </Text>
-                <Badge
-                  color={isPublic ? 'blue' : 'gray'}
-                  variant="light"
-                  size="md"
-                  radius="sm"
-                >
-                  {isPublic ? 'Public' : 'Private'}
-                </Badge>
-              </Group>
+              {glass ? (
+                <Group gap="sm" wrap="nowrap">
+                  <LayoutDashboard
+                    size={17}
+                    strokeWidth={STROKE}
+                    className="ga-row-icon"
+                    style={{ color: 'var(--mantine-color-logoOrange-filled)' }}
+                    aria-hidden
+                  />
+                  <Stack gap={1} style={{ flex: 1, minWidth: 0 }}>
+                    <Text fw={550} size="sm" truncate>
+                      {title}
+                    </Text>
+                    <Text size="xs" c="dimmed" truncate>
+                      {ownerEmail}
+                    </Text>
+                  </Stack>
+                  <Badge
+                    color="gray"
+                    size="sm"
+                    leftSection={
+                      isPublic ? (
+                        <Globe size={12} strokeWidth={STROKE} />
+                      ) : (
+                        <Lock size={12} strokeWidth={STROKE} />
+                      )
+                    }
+                  >
+                    {isPublic ? 'Public' : 'Private'}
+                  </Badge>
+                </Group>
+              ) : (
+                <Group justify="space-between" wrap="nowrap">
+                  <Text fw={500} size="lg" style={{ flex: 1, minWidth: 0 }} truncate>
+                    {headerLabel}
+                  </Text>
+                  <Badge
+                    color={isPublic ? 'blue' : 'gray'}
+                    variant="light"
+                    size="md"
+                    radius="sm"
+                  >
+                    {isPublic ? 'Public' : 'Private'}
+                  </Badge>
+                </Group>
+              )}
             </Accordion.Control>
             <Accordion.Panel>
-              <Stack gap="xs">
-                <Group gap="xs">
-                  <Text fw="bold" size="sm">
-                    Dashboard ID:
-                  </Text>
-                  <Text size="sm">{dashboardId}</Text>
-                </Group>
-                <Group gap="xs">
-                  <Text fw="bold" size="sm">
-                    Owner:
-                  </Text>
-                  <Text size="sm">{ownerEmail}</Text>
-                </Group>
-                <Group gap="xs" align="flex-start">
-                  <Text fw="bold" size="sm">
-                    Viewers:
-                  </Text>
-                  {viewers.length === 0 ? (
-                    <Text size="sm">None</Text>
-                  ) : (
-                    <List size="sm" style={{ flex: 1 }}>
-                      {viewers.map((v, i) => (
-                        <List.Item key={`${v?.email ?? i}`}>{v?.email ?? '*'}</List.Item>
-                      ))}
-                    </List>
-                  )}
-                </Group>
-                <Group gap="xs">
-                  <Text fw="bold" size="sm">
-                    Components:
-                  </Text>
-                  <Text size="sm">{componentCount}</Text>
-                </Group>
-                <Group gap="xs">
-                  <Text fw="bold" size="sm">
-                    Last saved:
-                  </Text>
-                  <Text size="sm">{formatLastSaved(dashboard.last_saved_ts)}</Text>
-                </Group>
-              </Stack>
+              <Facts
+                items={[
+                  { label: 'Dashboard ID', value: dashboardId },
+                  { label: 'Owner', value: ownerEmail },
+                  {
+                    label: 'Viewers',
+                    top: true,
+                    value:
+                      viewers.length === 0 ? (
+                        glass ? 'None' : <Text size="sm">None</Text>
+                      ) : glass ? (
+                        <Stack gap={2}>
+                          {viewers.map((v, i) => (
+                            <Text key={`${v?.email ?? i}`} size="sm">
+                              {v?.email ?? '*'}
+                            </Text>
+                          ))}
+                        </Stack>
+                      ) : (
+                        <List size="sm" style={{ flex: 1 }}>
+                          {viewers.map((v, i) => (
+                            <List.Item key={`${v?.email ?? i}`}>{v?.email ?? '*'}</List.Item>
+                          ))}
+                        </List>
+                      ),
+                  },
+                  { label: 'Components', value: String(componentCount) },
+                  { label: 'Last saved', value: formatLastSaved(dashboard.last_saved_ts) },
+                ]}
+              />
             </Accordion.Panel>
           </Accordion.Item>
         );

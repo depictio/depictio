@@ -6,9 +6,10 @@ fire ``generate_dashboard_screenshot_dual.delay(...)`` and saturate the
 celery worker pool — blocking advanced-viz ``compute_*`` tasks behind a
 wall of Playwright renders at boot and after every click.
 
-The guard returns True only when there's actual work to do: dual-theme
-PNGs missing on disk, or older than the 1-hour staleness threshold
-shared with the Dash auto-screenshot callback (``save.py:140``).
+The guard returns True only when there's actual work to do: any of the four
+PNGs (two themes, each at CSS and ``@2x`` resolution) missing on disk, or
+older than the 1-hour staleness threshold shared with the Dash
+auto-screenshot callback (``save.py:140``).
 """
 
 from __future__ import annotations
@@ -28,6 +29,13 @@ def _touch(path: Path, mtime: float | None = None) -> None:
         os.utime(path, (mtime, mtime))
 
 
+def _touch_all(td: str, dashboard_id: str, mtime: float | None = None) -> None:
+    """Everything one capture writes: both themes, both resolutions."""
+    for theme in ("light", "dark"):
+        _touch(Path(td) / f"{dashboard_id}_{theme}.png", mtime=mtime)
+        _touch(Path(td) / f"{dashboard_id}_{theme}@2x.png", mtime=mtime)
+
+
 def test_enqueue_when_pngs_missing() -> None:
     with tempfile.TemporaryDirectory() as td, patch.object(routes, "_SCREENSHOTS_DIR", td):
         assert routes._should_enqueue_screenshot("abc123") is True, "no PNGs on disk → must enqueue"
@@ -43,11 +51,23 @@ def test_enqueue_when_only_one_theme_missing() -> None:
 def test_skip_when_both_pngs_fresh() -> None:
     with tempfile.TemporaryDirectory() as td, patch.object(routes, "_SCREENSHOTS_DIR", td):
         now = time.time()
+        _touch_all(td, "abc123", mtime=now - 10)
+        assert routes._should_enqueue_screenshot("abc123", now_s=now) is False, (
+            "every PNG present and <1h old → skip — saves a Playwright run"
+        )
+
+
+def test_enqueue_when_hidpi_variant_missing() -> None:
+    """A dashboard captured before the `@2x` preview existed must re-render.
+
+    Its base PNGs are fresh, so an mtime-only check would skip it forever and
+    leave the listing's hover preview on the low-resolution fallback.
+    """
+    with tempfile.TemporaryDirectory() as td, patch.object(routes, "_SCREENSHOTS_DIR", td):
+        now = time.time()
         _touch(Path(td) / "abc123_light.png", mtime=now - 10)
         _touch(Path(td) / "abc123_dark.png", mtime=now - 10)
-        assert routes._should_enqueue_screenshot("abc123", now_s=now) is False, (
-            "both PNGs present and <1h old → skip — saves a Playwright run"
-        )
+        assert routes._should_enqueue_screenshot("abc123", now_s=now) is True
 
 
 def test_enqueue_when_pngs_stale() -> None:
@@ -55,8 +75,7 @@ def test_enqueue_when_pngs_stale() -> None:
         now = time.time()
         # 2 hours past the 1h threshold
         old = now - (routes._SCREENSHOT_STALE_AFTER_S + 60 * 60)
-        _touch(Path(td) / "abc123_light.png", mtime=old)
-        _touch(Path(td) / "abc123_dark.png", mtime=old)
+        _touch_all(td, "abc123", mtime=old)
         assert routes._should_enqueue_screenshot("abc123", now_s=now) is True
 
 
@@ -65,6 +84,5 @@ def test_boundary_at_exactly_stale_threshold() -> None:
     with tempfile.TemporaryDirectory() as td, patch.object(routes, "_SCREENSHOTS_DIR", td):
         now = time.time()
         old = now - routes._SCREENSHOT_STALE_AFTER_S
-        _touch(Path(td) / "abc123_light.png", mtime=old)
-        _touch(Path(td) / "abc123_dark.png", mtime=old)
+        _touch_all(td, "abc123", mtime=old)
         assert routes._should_enqueue_screenshot("abc123", now_s=now) is True

@@ -10,57 +10,132 @@ from typing import Any
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.services.multiqc.themes import get_theme_template
 
+# Reference viewport for the fit: the server does not know the panel's real
+# size, so assume a conservative dashboard tile. Underestimating keeps every
+# point on screen in larger panels; only a panel *narrower* than this could
+# clip edge points. A panel narrower than this is exactly what the docked map
+# is, which is why the bounding box travels to the client in ``data_info`` and
+# the viewer redoes the fit against the container it actually measured.
+_FIT_VIEWPORT_PX = (600, 400)
+# Fraction of a zoom level held back so edge markers are not flush against the
+# frame (matches the client-side CoordinatesMapPreview).
+_FIT_ZOOM_PADDING = 0.5
+_FIT_MAX_ZOOM = 12
+_FIT_SINGLE_POINT_ZOOM = 9
 
-def _compute_auto_zoom(lats: list[float], lons: list[float]) -> tuple[dict[str, float], int]:
-    """Compute center and zoom level from coordinate extent.
 
-    Uses the bounding box of all points to determine an appropriate
-    center point and zoom level for the map.
+def _lat_rad(lat: float) -> float:
+    sin = math.sin(lat * math.pi / 180.0)
+    rad = math.log((1 + sin) / (1 - sin)) / 2
+    return max(min(rad, math.pi), -math.pi) / 2
+
+
+def _lat_from_rad(y: float) -> float:
+    """Inverse of :func:`_lat_rad`: a projected ordinate back to degrees."""
+    return math.degrees(math.asin(math.tanh(y * 2)))
+
+
+def _compute_auto_zoom(
+    lats: list[float], lons: list[float]
+) -> tuple[dict[str, float], int, dict[str, float] | None]:
+    """Center, zoom and bounding box that frame every point, web-Mercator fit.
+
+    Mirrors the classic getBoundsZoom (and the client-side ``fitBoundsZoom``
+    in ``CoordinatesMapPreview.tsx``): project the latitude span through the
+    Mercator function, take the tighter of the lat/lon fits against a 512px
+    world tile, and hold back half a level of padding. The previous formula
+    (``int(log2(360/range)) + 1``) ignored the viewport, treated latitude
+    degrees as longitude degrees, and its ``+ 1`` landed a full level too
+    tight — Mediterranean-wide points rendered with the outer sites clipped.
+
+    The bounding box is returned alongside because the zoom is only as good as
+    the viewport guess it was computed against: the viewer re-runs this same
+    fit once it has measured its container.
 
     Args:
         lats: List of latitude values.
         lons: List of longitude values.
 
     Returns:
-        Tuple of (center_dict, zoom_level).
+        Tuple of (center_dict, zoom_level, bounds_dict or None when there is
+        nothing to frame).
     """
     if not lats or not lons:
-        return {"lat": 0.0, "lon": 0.0}, 2
+        return {"lat": 0.0, "lon": 0.0}, 2, None
 
     min_lat, max_lat = min(lats), max(lats)
     min_lon, max_lon = min(lons), max(lons)
+    bounds = {
+        "min_lat": min_lat,
+        "max_lat": max_lat,
+        "min_lon": min_lon,
+        "max_lon": max_lon,
+    }
 
+    # The vertical middle of a Mercator viewport is the middle of the
+    # *projected* span, not of the raw degrees: the projection stretches
+    # towards the poles, so the arithmetic mean of two latitudes sits below
+    # (northern hemisphere) or above (southern) the pixel the map centres on.
+    # The offset grows with the span and is most visible in a short viewport,
+    # which is the docked panel.
     center = {
-        "lat": (min_lat + max_lat) / 2,
+        "lat": _lat_from_rad((_lat_rad(min_lat) + _lat_rad(max_lat)) / 2),
         "lon": (min_lon + max_lon) / 2,
     }
 
-    # Compute zoom from extent using log2-based formula
-    lat_range = max_lat - min_lat
-    lon_range = max_lon - min_lon
-    max_range = max(lat_range, lon_range)
+    if max_lat - min_lat == 0 and max_lon - min_lon == 0:
+        return center, _FIT_SINGLE_POINT_ZOOM, bounds
 
-    if max_range == 0:
-        return center, 12  # Single point
+    world = 512.0
+    width_px, height_px = _FIT_VIEWPORT_PX
+    lat_fraction = (_lat_rad(max_lat) - _lat_rad(min_lat)) / math.pi
+    lon_diff = max_lon - min_lon
+    if lon_diff < 0:
+        lon_diff += 360.0
+    lon_fraction = lon_diff / 360.0
 
-    # Approximate zoom: 360 degrees at zoom 0, halving each level
-    zoom = int(math.log2(360 / max(max_range, 0.001))) + 1
-    zoom = max(1, min(zoom, 14))  # Cap at 14 to avoid over-zooming on few points
+    eps = 1e-12
+    lat_zoom = math.log2(height_px / world / max(lat_fraction, eps))
+    lon_zoom = math.log2(width_px / world / max(lon_fraction, eps))
+    zoom = min(lat_zoom, lon_zoom) - _FIT_ZOOM_PADDING
+    zoom = max(1, min(int(zoom), _FIT_MAX_ZOOM))
 
-    return center, zoom
+    return center, zoom, bounds
 
 
-def _compute_geojson_center_zoom(geojson: dict) -> tuple[dict[str, float], int]:
-    """Compute center and zoom from GeoJSON FeatureCollection coordinates.
+def _fit_payload(bounds: dict[str, float] | None) -> dict[str, float] | None:
+    """The bounding box plus the constants the client needs to redo the fit.
+
+    Shipping the constants rather than letting the viewer hardcode them is what
+    keeps a re-fit against a measured container from drifting away from the
+    server's own framing when either end is tuned.
+    """
+    if not bounds:
+        return None
+    return {
+        **bounds,
+        "padding": _FIT_ZOOM_PADDING,
+        "max_zoom": float(_FIT_MAX_ZOOM),
+        "single_point_zoom": float(_FIT_SINGLE_POINT_ZOOM),
+    }
+
+
+def _compute_geojson_center_zoom(
+    geojson: dict,
+) -> tuple[dict[str, float], int, dict[str, float] | None]:
+    """Compute center, zoom and bounds from GeoJSON FeatureCollection coordinates.
 
     Recursively extracts all coordinate pairs from GeoJSON geometry
-    and delegates to _compute_auto_zoom().
+    and delegates to _compute_auto_zoom(). The bounds matter most here: a
+    choropleth's geometry never reaches the client as coordinates it could
+    measure itself, so forwarding this is the only way the viewer can re-fit
+    one.
 
     Args:
         geojson: GeoJSON FeatureCollection dict.
 
     Returns:
-        Tuple of (center_dict, zoom_level).
+        Tuple of (center_dict, zoom_level, bounds_dict or None).
     """
     lats: list[float] = []
     lons: list[float] = []
@@ -84,12 +159,28 @@ def _compute_geojson_center_zoom(geojson: dict) -> tuple[dict[str, float], int]:
     return _compute_auto_zoom(lats, lons)
 
 
+def _dashboard_column_colors(category_colors: Any, column: str | None) -> dict[str, str]:
+    """The dashboard's colours for one column, ``{}`` when it pins none.
+
+    ``category_colors`` is the dashboard family's effective map
+    (``effective_category_colors``). A ``"*"`` key is a template's "colour every
+    other value from the data", resolved at import; a stray one is not a value.
+    """
+    if not column or not isinstance(category_colors, dict):
+        return {}
+    values = category_colors.get(column)
+    if not isinstance(values, dict):
+        return {}
+    return {str(k): v for k, v in values.items() if str(k) != "*" and isinstance(v, str) and v}
+
+
 def render_map(
     df: Any,
     trigger_data: dict,
     theme: str = "light",
     existing_metadata: dict | None = None,
     access_token: str | None = None,
+    category_colors: dict | None = None,
 ) -> tuple[Any, dict]:
     """Render a Plotly map figure from DataFrame and configuration.
 
@@ -102,6 +193,10 @@ def render_map(
         theme: Theme name ('light' or 'dark').
         existing_metadata: Previous render metadata with stored center/zoom
             to preserve viewport when filters change.
+        category_colors: The dashboard family's ``{column: {value: colour}}``
+            (``effective_category_colors``). A value of ``color_column`` it
+            names is drawn in that colour, as on every other tile; the
+            component's own ``color_discrete_map`` still wins value by value.
 
     Note:
         Selection highlighting is entirely client-side (``MapRenderer`` sets
@@ -200,6 +295,12 @@ def render_map(
     stored_center = (existing_metadata or {}).get("center")
     stored_zoom = (existing_metadata or {}).get("zoom")
 
+    # Bounds of what is plotted, forwarded to the client so it can redo the fit
+    # against the container it measured. Left None whenever the viewport did
+    # not come from the data: an authored default or a viewport carried across
+    # a filter change is a deliberate choice, and re-fitting would discard it.
+    fit_bounds: dict[str, float] | None = None
+
     if default_center and default_zoom is not None:
         center = default_center
         zoom = default_zoom
@@ -210,29 +311,54 @@ def render_map(
     else:
         # First render: compute from data extent
         if map_type == "choropleth_map" and geojson_data:
-            center, zoom = _compute_geojson_center_zoom(geojson_data)
+            center, zoom, fit_bounds = _compute_geojson_center_zoom(geojson_data)
         elif lat_column in pandas_df.columns and lon_column in pandas_df.columns:
             lats = pandas_df[lat_column].tolist()
             lons = pandas_df[lon_column].tolist()
-            center, zoom = _compute_auto_zoom(lats, lons)
+            center, zoom, fit_bounds = _compute_auto_zoom(lats, lons)
         else:
             center, zoom = {"lat": 0.0, "lon": 0.0}, 2
         if default_zoom is not None:
             zoom = default_zoom
+            fit_bounds = None
         if default_center is not None:
             center = default_center
+            fit_bounds = None
 
     # Lock color mapping so palette doesn't shift when data is filtered
     # Priority: existing_metadata > trigger_data > dict_kwargs > auto-generated
-    color_discrete_map = (existing_metadata or {}).get("color_discrete_map")
-    if not color_discrete_map:
-        color_discrete_map = trigger_data.get("color_discrete_map")
-    if not color_discrete_map:
-        color_discrete_map = extra_kwargs.get("color_discrete_map")
-    if not color_discrete_map and color_column and color_column in pandas_df.columns:
+    locked_map = (existing_metadata or {}).get("color_discrete_map")
+    color_discrete_map = (
+        locked_map
+        or trigger_data.get("color_discrete_map")
+        or extra_kwargs.get("color_discrete_map")
+    )
+    # The dashboard's colours for the colour column, so a category is drawn on
+    # the map in the colour every other tile gives it. A locked map already
+    # carries them from the render that locked it.
+    dashboard_map = {} if locked_map else _dashboard_column_colors(category_colors, color_column)
+    if (
+        (dashboard_map or not color_discrete_map)
+        and color_column
+        and color_column in pandas_df.columns
+    ):
         unique_vals = sorted(pandas_df[color_column].dropna().unique().tolist(), key=str)
         palette = px.colors.qualitative.Plotly
-        color_discrete_map = {str(v): palette[i % len(palette)] for i, v in enumerate(unique_vals)}
+        auto_map = {str(v): palette[i % len(palette)] for i, v in enumerate(unique_vals)}
+        if dashboard_map:
+            from depictio.api.v1.services.figure.figure_builder import merge_category_colors
+
+            # Under the component's own map, value by value, as figures get
+            # them; a value neither names keeps its palette slot.
+            color_discrete_map = merge_category_colors(
+                {color_column: {**auto_map, **dashboard_map}},
+                {"color": color_column, "color_discrete_map": color_discrete_map},
+            )["color_discrete_map"]
+            # Left in, the component's own map would replace the merged one
+            # when ``extra_kwargs`` is laid over the Plotly kwargs.
+            extra_kwargs = {k: v for k, v in extra_kwargs.items() if k != "color_discrete_map"}
+        else:
+            color_discrete_map = auto_map
 
     # Build kwargs common to all map types
     # NOTE: opacity is NOT passed here — px.scatter_map opacity interacts with
@@ -269,6 +395,7 @@ def render_map(
                 range_color=range_color,
                 opacity=opacity,
                 extra_kwargs=extra_kwargs,
+                color_discrete_map=color_discrete_map if dashboard_map else None,
                 **common_kwargs,
             )
         else:
@@ -296,6 +423,10 @@ def render_map(
         # across re-renders.  This is map-viewport-specific and does NOT
         # preserve trace selection state (we clear that with selectedpoints=None).
         layout_kwargs: dict[str, Any] = {
+            # The theme's template, as every other figure gets: without it the
+            # map kept Plotly's default one, whose dark-navy text (legend,
+            # hover) was unreadable on a dark page.
+            "template": get_theme_template(theme),
             "margin": {"l": 0, "r": 0, "t": 30 if title else 0, "b": 0},
             "paper_bgcolor": "rgba(0,0,0,0)",
             "map": {"uirevision": "preserve"},
@@ -311,6 +442,9 @@ def render_map(
 
     except Exception as e:
         logger.error(f"Map rendering failed: {e}", exc_info=True)
+        # The fallback figure carries an annotation and no map subplot at all,
+        # so there is nothing for a client-side re-fit to act on.
+        fit_bounds = None
         template = get_theme_template(theme)
         fig = go.Figure()
         fig.update_layout(template=template)
@@ -331,6 +465,7 @@ def render_map(
         "total_count": total_count,
         "center": center,
         "zoom": zoom,
+        "fit": _fit_payload(fit_bounds),
         "color_discrete_map": color_discrete_map,
     }
 
@@ -459,6 +594,7 @@ def _render_choropleth_map(
     range_color: list[float] | None,
     opacity: float,
     extra_kwargs: dict,
+    color_discrete_map: dict[str, str] | None = None,
     **common_kwargs: Any,
 ) -> Any:
     """Render a choropleth_map figure with colored polygon regions.
@@ -501,6 +637,10 @@ def _render_choropleth_map(
 
     if color_column and color_column in plot_df.columns:
         kwargs["color"] = color_column
+        # Only consulted by Plotly when the column is categorical; a numeric
+        # (or aggregated) one keeps its continuous scale.
+        if color_discrete_map:
+            kwargs["color_discrete_map"] = color_discrete_map
     if color_continuous_scale:
         kwargs["color_continuous_scale"] = color_continuous_scale
     if range_color and len(range_color) == 2:

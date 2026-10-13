@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - '.devcontainer/**'
+      # The try codespace has its own image, built by build-try-image.yaml.
+      - '!.devcontainer/try/**'
       - 'docker-compose.dev.yaml'
   workflow_dispatch:
 

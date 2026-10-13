@@ -8,9 +8,35 @@
 // Realtime highlight keyframes (depictio-row-new / depictio-card-new). Imported
 // once here so consumers don't need to add the stylesheet manually.
 import './styles/realtime-highlight.css';
+// Before any Plot mounts: re-attach Plotly listeners after StrictMode's remount.
+import './plotlyStrictMode';
 
 // Grid + top-level renderer
-export { default as DashboardGrid } from './components/DashboardGrid';
+export { default as DashboardGrid, SectionSummary } from './components/DashboardGrid';
+export type { ComponentSection } from './utils/groupInteractive';
+// Content-aware sizing: the demand channel renderers publish on, and the two
+// predicates a host needs to offer "size this tile to its content" as an action.
+export {
+  publishContentDemand,
+  useContentDemand,
+  effectiveFit,
+  isAutofitted,
+} from './components/autofit';
+export type { ContentDemand, FitMode } from './components/autofit';
+export { default as PersistentSectionsHost } from './components/PersistentSectionsHost';
+export type { PersistentSectionsHostProps } from './components/PersistentSectionsHost';
+// The grid's own geometry + per-type default box, for consumers that render a
+// single component outside a grid and want the size it would really have.
+export {
+  GRID_COLS,
+  GRID_ROW_HEIGHT,
+  GRID_ROW_GAP,
+  gridBoxHeight,
+  defaultLayoutForType,
+} from './api';
+// Thrown by the fetch helpers on a non-2xx response; `status` lets a poller
+// stop on a refusal instead of retrying it forever.
+export { HttpStatusError } from './api';
 export { default as ComponentRenderer } from './components/ComponentRenderer';
 export { default as ErrorBoundary } from './components/ErrorBoundary';
 export { default as ComponentSkeleton } from './components/ComponentSkeleton';
@@ -36,6 +62,34 @@ export { default as TableRenderer } from './components/TableRenderer';
 export { default as ImageRenderer } from './components/ImageRenderer';
 export { default as MapRenderer } from './components/MapRenderer';
 export { default as TextRenderer } from './components/TextRenderer';
+export { default as Glyph, glyphColorVar, isImagePath, isMultiqcIcon, themedIconSrc } from './components/Glyph';
+export { TabLinkContext, tabLinkKey, useTabLinkResolver } from './components/tabLinks';
+export type { TabLinkResolver, TabLinkTarget } from './components/tabLinks';
+export {
+  groupTabs,
+  sameTabGroup,
+  tabGroupNames,
+  tabGroupOf,
+  tabIdsInGroup,
+  tabOrderAfterGroupMove,
+  tabOrderAfterRegroup,
+  tabOrderEntries,
+} from './components/tabGroups';
+export type { EditableTab, GroupableTab, TabGroup } from './components/tabGroups';
+export { tabDisplayName, tabFamilyOf } from './components/tabFamily';
+export type { FamilyTab } from './components/tabFamily';
+export { canCopyToTab, copyComponentToTab } from './components/copyToTab';
+export type { CopyToTabInput } from './components/copyToTab';
+export { parseBlocks } from './components/blockMarkdown';
+export type { Block as MarkdownBlock } from './components/blockMarkdown';
+export { MARKDOWN_CHEATSHEET } from './components/markdownCheatsheet';
+export type {
+  MarkdownExample,
+  MarkdownExampleGroup,
+  MarkdownRendering,
+} from './components/markdownCheatsheet';
+export { formatTextValue, hasLiveValues, splitPlaceholders } from './components/textValues';
+export type { TextSegment } from './components/textValues';
 export { default as JBrowseRenderer } from './components/JBrowseRenderer';
 export { default as MultiQCRenderer } from './components/MultiQCRenderer';
 
@@ -50,6 +104,42 @@ export {
   STAT_LIST_LAYOUTS,
 } from './components/card/SecondaryMetrics';
 export type { SecondaryLayout } from './components/card/SecondaryMetrics';
+// Card styles: the grid, the editor and the card builder resolve a card's style
+// against its section's through the same helpers.
+export {
+  CARD_VARIANTS,
+  normalizeCardVariant,
+  resolveCardVariant,
+  withSectionCardVariant,
+  variantForPick,
+  compactKeepsStrip,
+  stripIsMinimal,
+} from './components/cardVariant';
+export type { CardVariant } from './components/cardVariant';
+// Figure styles: same rule, for a figure's `figure_style` and its section's.
+export {
+  FIGURE_STYLES,
+  normalizeFigureStyle,
+  resolveFigureStyle,
+  withSectionFigureStyle,
+  withSectionStyles,
+  figureStyleForPick,
+  figurePlotConfig,
+} from './components/figureStyle';
+export type { FigureStyle } from './components/figureStyle';
+export { default as FigureHeader } from './components/FigureHeader';
+// Highlights: another tab's figure shown again (component_type 'highlight').
+export {
+  canHighlight,
+  findHighlightSource,
+  highlightMetadata,
+  highlightOnTab,
+  highlightSourceRef,
+  highlightStyleRequest,
+  resolveHighlightTab,
+} from './components/highlightTile';
+export type { HighlightOnTabInput, HighlightRef } from './components/highlightTile';
+export type { FigureHeaderProps } from './components/FigureHeader';
 export type {
   HistogramPayload,
   ThresholdPayload,
@@ -57,6 +147,9 @@ export type {
   AttritionPayload,
   TrendPayload,
   UniquenessPayload,
+  // Exported for the same reason as the rest: a consumer that computes these
+  // payloads itself (Tool Studio, with no backend) has to name their shapes.
+  BreakdownPayload,
 } from './components/card/SecondaryMetrics';
 
 // Interactive renderers
@@ -74,6 +167,9 @@ export {
   InteractiveFrame,
   InteractiveTitle,
   defaultInteractiveTitle,
+  interactiveAccent,
+  interactiveAccentRaw,
+  interactiveIcon,
   interactiveTitle,
 } from './components/interactive/frame';
 
@@ -81,20 +177,120 @@ export {
 export { default as FilterPanel } from './components/interactive/FilterPanel';
 export { FILTER_PANEL_RAIL_WIDTH } from './components/interactive/FilterPanel';
 export type { FilterPanelProps } from './components/interactive/FilterPanel';
+export { default as SelectionGroupsPanel } from './components/interactive/SelectionGroupsPanel';
+export type { SelectionGroupsPanelProps } from './components/interactive/SelectionGroupsPanel';
+export { SaveGroupContext } from './components/chrome/SaveGroupAction';
+export type { SaveGroupApi } from './components/chrome/SaveGroupAction';
 export { default as InteractiveGroupCard } from './components/InteractiveGroupCard';
 // One swatch for every place a section is drawn — the two panel headers and the
 // viewer's authoring UI — so a section named "QC" never looks different
 // depending on where you meet it.
-export { default as SectionIcon, sectionColorVar } from './components/SectionIcon';
+export {
+  default as SectionIcon,
+  DEFAULT_SECTION_PALETTE,
+  resolveSectionColor,
+  SectionColorContext,
+  sectionColorVar,
+} from './components/SectionIcon';
+// The section chrome itself, for surfaces that show a section without a grid
+// behind it (the dashboard Guide's demo).
+export {
+  SectionAccordion,
+  SectionAccordionItem,
+  SectionHeader,
+} from './components/SectionAccordion';
 export { default as TopPanel } from './components/TopPanel';
 export { groupInteractiveComponents } from './utils/groupInteractive';
 export type { InteractiveGroup } from './utils/groupInteractive';
+
+// Filter bars: a grid section drawn as one compact row of its interactive
+// components (`display: 'strip'`, filtering the tab), or a section of tiles
+// with a bar of its own (`filter_bar`, filtering that section only). The
+// placement rules are exported so the apps route those components out of the
+// filter panel by the same predicate the grid uses to draw them, and the
+// scoping rules so every fetch applies the same "which filters reach which
+// component".
+export {
+  EmptyBar,
+  FilterStrip,
+  FilterStripControl,
+  FilterStripSection,
+  isMemberActive as isFilterMemberActive,
+  SectionFilterBar,
+} from './components/interactive/strip/FilterStrip';
+export type {
+  FilterStripProps,
+  FilterStripSectionProps,
+  FilterStripVariant,
+  SectionFilterBarProps,
+} from './components/interactive/strip/FilterStrip';
+export {
+  SECTION_BAR_DEFAULT_VISIBLE,
+  barSectionNames,
+  hasSectionBar,
+  isBarMember,
+  isBarSection,
+  isStripSection,
+  partitionBarMembers,
+  sectionBarNames,
+  sectionRuns,
+  stripControlKind,
+  stripLabel,
+  stripShowsIcon,
+  visibleFilterCount,
+} from './components/interactive/strip/stripLayout';
+export type { StripControlKind } from './components/interactive/strip/stripLayout';
+export {
+  NO_FILTER_SCOPES,
+  activeFilterSignature,
+  filtersInScope,
+  mergeFilterScopes,
+  planScopedRequests,
+  scopedFilterIds,
+  sectionFilterScopes,
+  sectionScopeKey,
+} from './filterScope';
+export type { FilterScopes, ScopedRequest } from './filterScope';
+export {
+  MAX_STRIP_CHIPS,
+  MAX_STRIP_SEGMENTS,
+  categoricalDisplay,
+  chipSelectionMode,
+  filterEvent,
+  orderCategoricalOptions,
+  selectedValues,
+  toggleChip,
+} from './components/interactive/categoricalOptions';
+export { useColumnRange, useUniqueValues } from './components/interactive/useInteractiveData';
+
+// Category colours (`DashboardData.category_colors`): one categorical value,
+// one colour, on every surface. The pure resolver is what the figure code
+// shares with the filter bar; the hook binds it to the dashboard and theme.
+export {
+  NEUTRAL_CATEGORY_COLOR,
+  categoryColor,
+  categoryColorMap,
+  dashboardColorway,
+  hasPinnedColors,
+  pinnedCategoryColor,
+  pinnedCategoryDots,
+  sortCategoryValues,
+} from './categoryColors';
+export type { CategoryColorSource } from './categoryColors';
+export {
+  CategoryColorsContext,
+  useCategoryColorMap,
+  useCategoryColorSource,
+  useCategoryDotColors,
+  useCategoryPalette,
+} from './hooks/useCategoryColors';
 export { extractLayoutItems, stripBoxPrefix } from './utils/leftPanelLayout';
-export { countActiveFilters } from './activeFilters';
+export { activeFiltersFor, countActiveFilters } from './activeFilters';
 export {
   PANEL_TOGGLE_EVENTS,
   SIDEBAR_TOGGLE_EVENT,
   FILTER_PANEL_TOGGLE_EVENT,
+  ANALYSIS_PANEL_TOGGLE_EVENT,
   INSPECTOR_TOGGLE_EVENT,
   dispatchPanelToggle,
   PANEL_RESIZE_END_EVENT,
@@ -103,11 +299,42 @@ export {
   isPanelResizing,
 } from './utils/panelToggle';
 export type { PanelToggleDetail } from './utils/panelToggle';
+export { OPEN_RUN_PARAMETERS_EVENT, openRunParameters } from './utils/runParameters';
+export type { OpenRunParametersDetail } from './utils/runParameters';
 // Advanced-viz ↔ inspector bridge. Deliberately a separate module from the
 // renderers so importing it doesn't pull in the plotly-heavy lazy chunk.
 export { AdvancedVizInspectorProvider } from './components/advanced_viz/AdvancedVizInspectorBridge';
 export type { AdvancedVizInspectorPublisher } from './components/advanced_viz/AdvancedVizInspectorBridge';
 export type { AdvancedVizExtrasPayload } from './components/advanced_viz/AdvancedVizExtras';
+// Advanced-viz config write-back. Separate module for the same reason as the
+// inspector bridge: a provider can be mounted without the lazy renderer chunk.
+export { AdvancedVizConfigDraftProvider } from './components/advanced_viz/AdvancedVizConfigDraft';
+export type {
+  VizConfigDraftSink,
+  VizConfigPatch,
+} from './components/advanced_viz/AdvancedVizConfigDraft';
+// The phylogenetic viz's sources and ranks, for the builder. Pure modules, so
+// the same light-import reasoning applies.
+export {
+  abundanceRankCoverage,
+  phyloSourcePatch,
+  preferredTipMetadata,
+  tipLabelColumn,
+} from './components/advanced_viz/phylo/sources';
+export type { PhyloDcRef, PhyloSource } from './components/advanced_viz/phylo/sources';
+export { orderTaxonomicRanks } from './components/advanced_viz/phylo/view';
+export { rankChoices as phyloRankChoices } from './components/advanced_viz/phylo/view';
+// Dashboard-level default for where advanced-viz controls are drawn. Free of
+// renderer imports, like the two providers above, so the app shell can mount it
+// without pulling the plotly-heavy lazy chunk onto its boot path.
+export {
+  AdvancedVizPlacementDefaultProvider,
+  CONTROLS_PLACEMENTS,
+  isControlsPlacement,
+} from './components/advanced_viz/AdvancedVizInlineControls';
+export type { ControlsPlacement } from './components/advanced_viz/AdvancedVizInlineControls';
+// The controls container, so the inspector lays controls out like the popover.
+export { VizControlsGrid } from './components/advanced_viz/controls/VizControls';
 // The shared show-data grid, so the inspector can dock the same table the
 // renderers' popovers show.
 export { default as DataGridBody } from './components/data/DataGridBody';
@@ -124,30 +351,101 @@ export {
   ComponentChrome,
   MetadataPopover,
   MetadataBody,
+  CatalogButton,
+  CatalogOrigin,
   FullscreenButton,
   DownloadButton,
   ResetButton,
+  LoadAllButton,
+  SelectionHintAction,
   InspectorProvider,
   useInspectorControl,
+  CommentsButton,
+  CommentsControlProvider,
+  useCommentsControl,
+  ExportButton,
+  ChromeSourceProvider,
+  ComponentExportControlProvider,
+  useChromeSource,
+  useComponentExportControl,
   actionsFor,
+  canDuplicate,
   wrapWithChrome,
+  EDIT_MENU_STYLE,
+  FULLSCREEN_EXIT_ICON,
+  LOAD_ALL_ACTIVE_ICON,
+  TILE_ACTION_STYLE,
 } from './components/chrome';
 export type {
   ComponentChromeProps,
   ChromeAction,
+  ChromeSource,
+  CommentsControl,
+  ComponentExportControl,
+  ComponentExportTarget,
+  EditMenuStyleKey,
   InspectorControl,
+  LoadAllState,
+  TileActionStyle,
+  TileActionStyleKey,
   WrapWithChromeOpts,
 } from './components/chrome';
+
+// Component comments & annotation threads (/comments API).
+export {
+  TAB_THREAD_KEY,
+  fetchCommentAccess,
+  fetchCommentThreads,
+  fetchCommentCounts,
+  createCommentThread,
+  addThreadComment,
+  editThreadComment,
+  deleteThreadComment,
+  updateCommentThread,
+  reviewCommentThread,
+  deleteCommentThread,
+  fetchPublishedAnnotations,
+} from './api';
+export type {
+  CommentThreadStatus,
+  CommentViewState,
+  CommentSelection,
+  CommentAnchor,
+  CommentAgentInfo,
+  CommentAuthor,
+  CommentEvidence,
+  CommentReview,
+  ThreadComment,
+  ThreadStaleness,
+  CommentThread,
+  ThreadCreatePayload,
+  AnnotationPatch,
+  ThreadUpdatePayload,
+  CommentCounts,
+  PublishedAnnotation,
+  ListThreadsOptions,
+} from './api';
+
+// Component export: what each component of a dashboard can be served as, and
+// the URL that serves it (`/export/...`, on when `embed_enabled`).
+export { fetchExportManifest, componentExportPath, compactExportFilters } from './api';
+export type {
+  ComponentExportFormat,
+  ComponentExportManifestEntry,
+  ComponentExportParams,
+} from './api';
 
 // API surface — fetchers, payload types, filter types
 export {
   fetchDashboard,
   fetchAllDashboards,
   fetchFloatingComponents,
+  fetchCrossTabComponents,
   fetchSpecs,
   fetchUniqueValues,
   fetchBreakdown,
   fetchCardMetric,
+  fetchCardHeroValue,
   fetchColumnRange,
   fetchComponentData,
   bulkComputeCards,
@@ -159,7 +457,13 @@ export {
   renderMultiQC,
   renderMultiQCGeneralStats,
   fetchServerStatus,
+  fetchServerInfo,
+  fetchVersionCheckAdmin,
+  updateVersionCheckAdmin,
+  resetVersionCheckAdmin,
+  runVersionCheckAdmin,
   fetchPublicConfig,
+  onPublicConfig,
   fetchCurrentUser,
   updateTab,
   deleteTab,
@@ -171,6 +475,26 @@ export {
   fetchDeltaShape,
   fetchDataCollectionConfig,
   fetchDataCollectionPreview,
+  fetchDashboardVersions,
+  fetchDashboardVersion,
+  createDashboardVersion,
+  pinDashboardVersion,
+  unpinDashboardVersion,
+  renameDashboardVersion,
+  deleteDashboardVersion,
+  restoreDashboardVersion,
+  fetchVersionCompatibility,
+  fetchDeltaHistory,
+  restoreComponentFromVersion,
+  fetchDataVersionStatus,
+  fetchUniqueValuesAt,
+  fetchColumnRangeAt,
+  HttpError,
+  isHttpStatus,
+  isStaleDataVersionError,
+  isStaleDataVersionDetail,
+  DATA_VERSION_GONE_EVENT,
+  DEFINITION_COLLECTION_CHANGED_MESSAGE,
   previewFigure,
   previewMultiQC,
   fetchMultiQCBuilderOptions,
@@ -183,6 +507,16 @@ export {
   fetchDashboardFilterState,
   saveDashboardFilterState,
   deleteDashboardFilterState,
+  uploadDashboardLogo,
+  updateDashboardAppearance,
+  // Instance branding (admin panel)
+  fetchBrandingAdmin,
+  updateBrandingAdmin,
+  updateInstanceLook,
+  resetBrandingAdmin,
+  fetchBrandPresets,
+  resolveBrandTheme,
+  uploadBrandingLogo,
   // Auth helpers (React /auth page)
   fetchAuthStatus,
   loginUser,
@@ -190,10 +524,13 @@ export {
   createTemporaryUser,
   getAnonymousSession,
   startGoogleOAuth,
+  samlLoginUrl,
   handleGoogleCallback,
   exchangeMagicToken,
   persistSession,
   clearSession,
+  AUTH_SESSION_EVENT,
+  currentSessionId,
   validateSession,
   authFetch,
   refreshAccessToken,
@@ -216,17 +553,36 @@ export {
   fetchIngestionHealth,
   fetchDataCollectionFiles,
   createProject,
+  createProjectFromManifest,
+  createProjectFromRun,
+  listLocalDirs,
+  listS3Dirs,
+  inspectFolder,
+  previewRunFile,
+  findRunFolders,
+  testRunStorage,
+  ApiDetailError,
+  apiErrorCode,
+  refreshManifest,
+  getManifestRefreshRun,
+  listProjectTemplates,
   updateProject,
   deleteProject,
   toggleProjectVisibility,
   updateProjectPermissions,
+  getProjectStorage,
+  setProjectStorage,
+  deleteProjectStorage,
+  testProjectStorage,
   importProjectZip,
   exportProjectZip,
+  exportProjectTemplate,
   fetchUserByEmail,
   fetchMultiQCByDataCollection,
   renameDataCollection,
   deleteDataCollection,
   createDataCollectionFromUpload,
+  createDataCollectionFromUrl,
   // Admin
   listAllUsers,
   deleteUser,
@@ -235,11 +591,26 @@ export {
   listAllDashboards,
   listExampleProjects,
   cleanExampleProjects,
+  // Admin backup & restore
+  listBackups,
+  getBackupSchedule,
+  updateBackupSchedule,
+  createBackup,
+  downloadBackup,
+  uploadBackup,
+  validateBackup,
+  restoreBackup,
   // Admin monitoring (Log & Task)
   fetchMonitoringTasks,
   fetchMonitoringTask,
   fetchIngestionRuns,
   fetchIngestionRun,
+  fetchCliAgents,
+  triggerCliAgentRun,
+  fetchProjectIngestionRuns,
+  fetchIngestionTriggerStatus,
+  triggerProjectIngestion,
+  fetchJob,
   fetchAppLogs,
   fetchMonitoringHealth,
   fetchLogCaptureLevel,
@@ -247,6 +618,9 @@ export {
   // Profile + CLI tokens
   fetchCurrentUserFull,
   editPassword,
+  fetchMyAvatarBlob,
+  uploadMyAvatar,
+  deleteMyAvatar,
   listLongLivedTokens,
   createLongLivedToken,
   deleteLongLivedToken,
@@ -258,6 +632,9 @@ export {
   deleteProjectLink,
   listLinkResolvers,
   fetchMultiQCSampleMappings,
+  fetchLinkMappingPreview,
+  // Funnel filtering (issue #939)
+  fetchFunnelValues,
   // MultiQC management (multipart uploads)
   createMultiQCDataCollection,
   checkMultiQCUniformity,
@@ -285,8 +662,13 @@ export {
   fetchCatalogPreviewPayload,
 } from './api';
 export type {
+  AdminBrandingState,
+  BulkComputeOptions,
+  BrandPreset,
   FloatingComponent,
   FloatingComponentsResponse,
+  PersistentSection,
+  CrossTabComponentsResponse,
   TableMutationResult,
   RoleDtypeSpec,
   IngestionReport,
@@ -295,6 +677,8 @@ export type {
   IngestionSummary,
   RegisteredFile,
   VizKindSuggestion,
+  VizSuggestionContext,
+  VizSuggestionMatch,
   VizSuggestionsResponse,
   CatalogRender,
   CatalogOutputMatch,
@@ -303,6 +687,8 @@ export type {
   CatalogPreviewRender,
   CatalogPreviewPayload,
   BreakdownPayloadDTO,
+  CatalogSource,
+  FigureStyleRequest,
 } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {
@@ -312,7 +698,14 @@ export {
   clearFiltersBySource,
   hasSelectionFilters,
   enrichFilterWithDcId,
+  supportsSelectionGrouping,
+  genomeRegionFilters,
+  genomePosFilterIndex,
+  regionFromFilters,
+  isRegionFilter,
+  cardScopedFilters,
 } from './selection';
+export type { GenomeRegionSelection } from './selection';
 
 // Map panel: a map lifted out of the grid, available from every tab as a
 // floating card or as a dock under the filter panel. Mount both shells — each
@@ -329,18 +722,20 @@ export { default as MapPanelDock } from './components/mapPanel/MapPanelDock';
 export type { MapPanelDockProps } from './components/mapPanel/MapPanelDock';
 export { useMapPanel } from './components/mapPanel/useMapPanel';
 export type { MapPanel, UseMapPanelOptions } from './components/mapPanel/useMapPanel';
+export { useCrossTabComponents } from './hooks/useCrossTabComponents';
+export type { CrossTabComponents } from './hooks/useCrossTabComponents';
 export type {
   MapPanelMode,
   MapPanelCardSize,
   MapPanelState,
 } from './components/mapPanel/useMapPanelState';
 export {
-  readFloatingFilters,
-  writeFloatingFilters,
-  clearFloatingFilters,
-  persistableFloatingFilters,
-} from './floatingFilters';
-export type { FloatingFilterPayload } from './floatingFilters';
+  readCrossTabFilters,
+  writeCrossTabFilters,
+  clearCrossTabFilters,
+  persistableCrossTabFilters,
+} from './crossTabFilters';
+export type { CrossTabFilterPayload } from './crossTabFilters';
 export {
   encodeFiltersForHash,
   decodeFiltersFromHash,
@@ -349,13 +744,85 @@ export {
   buildFilterShareUrl,
   sanitizeRestoredFilters,
 } from './filterShare';
+export {
+  readEditorFilters,
+  writeEditorFilters,
+  clearEditorFilters,
+} from './editorFilters';
+export type { EditorFilterPayload } from './editorFilters';
+
+// Selection groups: named, colored snapshots of selections ("select & compare")
+export {
+  GROUP_FILTER_SOURCE,
+  GROUP_FILTER_INDEX_PREFIX,
+  MAX_GROUP_VALUES,
+  GROUPING_COLOR,
+  useGroupingColor,
+  useGroupingColorVar,
+  COLOR_BY_NONE,
+  resolveGroupRender,
+  selectableSelectionFilters,
+  groupFromSelectionFilter,
+  groupsToFilters,
+  groupsRenderPayload,
+  nextGroupColor,
+  uniqueGroupName,
+  defaultGroupName,
+  readSelectionGroups,
+  writeSelectionGroups,
+} from './selectionGroups';
+export type {
+  SelectionGroup,
+  SelectionGroupsPayload,
+  GroupRenderDef,
+  GroupRenderState,
+  ColorByState,
+  GroupingDisplay,
+} from './selectionGroups';
+export {
+  GROUP_DECLINED_REASONS,
+  GROUP_KIND_NOT_SPLIT_REASON,
+  groupBadgeLabel,
+  summarizeGroupStatus,
+} from './groupStatus';
+export type { GroupStatusEntry, GroupStatusSummary } from './groupStatus';
+export { useSelectionGroups } from './hooks/useSelectionGroups';
+export type { SelectionGroupsApi } from './hooks/useSelectionGroups';
+export { useCategoricalColumns, useColorByColumnRender } from './hooks/useColorByColumns';
+export { defaultFilterValue, withInteractiveDefaults } from './interactiveDefaults';
+export type { ColorByColumn, ColorByColumnRender } from './hooks/useColorByColumns';
+export type { GroupSummaryRow } from './components/interactive/ActiveFilterSummary';
 
 // Cross-DC available-values intersection (powers greying-out unavailable
-// options in interactive filter dropdowns).
+// options in interactive filter dropdowns) + the funnel-filtering layer on
+// top of it (issue #939).
 export {
   AvailableFilterValuesProvider,
   useAvailableSet,
+  useFunnelState,
 } from './availableValues';
+export type { FunnelComponentState } from './availableValues';
+export { default as FunnelView } from './components/interactive/FunnelView';
+export type { FunnelViewProps } from './components/interactive/FunnelView';
+
+// Data time travel: which Delta commit each collection is read at. Set by the
+// viewer, consumed by every renderer's fetch.
+export {
+  DataVersionProvider,
+  useDataVersions,
+  useDataVersionRequest,
+  dataVersionBody,
+  dataPinBody,
+  isDataVersionActive,
+} from './dataVersions';
+export {
+  CurrentDataBadge,
+  isCurrentDataOnlyType,
+  showsCurrentDataOnly,
+  CURRENT_DATA_HINT,
+} from './components/chrome/CurrentDataBadge';
+export { renderDefinitionKey } from './renderKey';
+export type { DataVersionPins, DataVersionState } from './dataVersions';
 
 // Real-time event subscription (WebSocket /events/ws)
 export { useDataCollectionUpdates, useMonitoringEvents, ADMIN_MONITORING_CHANNEL } from './realtime';
@@ -371,6 +838,62 @@ export type { RealtimeJournalEntry } from './hooks/useRealtimeJournal';
 export { batchIdsFromPayload } from './highlight';
 export type { ActiveHighlight } from './highlight';
 
+// Dashboard-wide UI scale (font-size) preference. The viewer app owns the
+// provider; Plotly/AG Grid renderers consume the value for their non-Mantine
+// pixel metrics.
+export { UiScaleContext, useUiScale, UI_SCALE_STEPS, UI_SCALE_DEFAULT } from './uiScale';
+
+// Brand theme (#397): the shared shape and its mapping onto Mantine. Lives
+// here rather than in the viewer so every entry point that mounts its own
+// MantineProvider (catalog preview, dev harnesses) can build the same theme.
+export {
+  BRAND_PALETTES,
+  brandAccent,
+  BrandingContext,
+  LOGO_PALETTES,
+  brandCssVariablesResolver,
+  buildDepictioTheme,
+  depictioTheme,
+  isEmptyBrandTheme,
+  isHexColor,
+  mergeBrandThemes,
+  isMantinePaletteName,
+  resolveBrandLogo,
+  useBrandAccent,
+  useBrandAccents,
+  useBranding,
+} from './brandTheme';
+export type {
+  BrandPlots,
+  BrandRole,
+  BrandSurfaces,
+  BrandTheme,
+  DepictioThemeOptions,
+  LogoMode,
+  TintMode,
+} from './brandTheme';
+
+// Dashboard chrome style: role-based buttons, swappable at runtime.
+export * from './chrome';
+
+// Brand theme editor + live preview, shared by the /admin Branding panel and
+// the per-dashboard appearance panel — the two levels edit the same model, so
+// they share the controls rather than mirroring each other.
+export {
+  BrandScope,
+  BrandThemeForm,
+  BrandThemePreview,
+  PLOT_TEMPLATE_OPTIONS,
+  useBrandScopeAttributes,
+  useResolvedBrandTheme,
+} from './components/branding';
+export type {
+  BrandScopeAttributes,
+  BrandFormScope,
+  BrandThemeFormProps,
+  BrandThemePreviewProps,
+} from './components/branding';
+
 // Render-fetch queue. Apps that own the filter state call
 // ``bumpFetchGeneration`` when it changes, so requests queued for the previous
 // filter are dropped instead of running against a question nobody is asking.
@@ -385,8 +908,10 @@ export {
 
 export type {
   StoredMetadata,
+  TextValueSpec,
   DashboardData,
   FilterSectionSpec,
+  CategoryColors,
   DashboardSummary,
   InteractiveFilter,
   InteractiveFilterSource,
@@ -396,6 +921,9 @@ export type {
   TableResponse,
   JBrowseSessionResponse,
   ServerStatusResponse,
+  ServerInfo,
+  VersionCheckBlock,
+  VersionCheckAdmin,
   PublicConfigResponse,
   CurrentUser,
   UpdateTabPayload,
@@ -403,6 +931,25 @@ export type {
   WorkflowEntry,
   DcShapeResponse,
   PreviewResult,
+  DashboardPreviewInfo,
+  DataVersionKind,
+  DashboardVersionKind,
+  DataCollectionStamp,
+  DashboardVersionSummary,
+  DashboardVersionListResponse,
+  DashboardVersionTab,
+  DashboardVersionDetail,
+  RestoreVersionResult,
+  DataPinFields,
+  DataVersionCollectionState,
+  DataVersionCollectionStatus,
+  DataVersionStatusResponse,
+  DataVersionGoneDetail,
+  CompatibilityCheck,
+  CompatibilityReport,
+  DeltaVersionEntry,
+  DeltaHistoryResponse,
+  RestoreComponentResult,
   FigurePreviewRequest,
   MultiQCPreviewRequest,
   MultiQCBuilderOptions,
@@ -417,6 +964,7 @@ export type {
   // Auth types
   AuthMode,
   AuthStatusResponse,
+  AvatarInfo,
   SessionPayload,
   RegisterResult,
   GoogleCallbackResult,
@@ -432,8 +980,44 @@ export type {
   // Project management types
   CreateProjectInput,
   CreateProjectResult,
+  FromManifestRequest,
+  FromManifestReport,
+  FromRunRequest,
+  FromRunReport,
+  FromRunDCPreview,
+  FromRunRecipePreview,
+  FromRunRecipeSource,
+  DetectedTemplate,
+  TemplateMatch,
+  LocalDirEntry,
+  LocalDirListing,
+  S3DirListing,
+  FolderRequestOptions,
+  RunStorageIn,
+  FolderContents,
+  FolderInspection,
+  RunInfoSummary,
+  RunReportFile,
+  RunTaskSummary,
+  RunInputFile,
+  RunFilePreview,
+  FoundRunFolder,
+  FindRunsResult,
+  ManifestIngestDCResult,
+  ManifestRefreshStatus,
+  ManifestRefreshEntry,
+  ManifestRefreshReport,
+  RefreshManifestInput,
+  DashboardImportResult,
+  TemplateVariable,
+  TemplateInfo,
+  TemplateListResponse,
   EditProjectInput,
   ProjectPermissionsInput,
+  ProjectStorageConfig,
+  ProjectStorageConfigInput,
+  ProjectStorageTestResult,
+  ExportTemplateRequest,
   MultiQCReportSummary,
   MultiQCReportsList,
   CreateDataCollectionUploadInput,
@@ -443,9 +1027,25 @@ export type {
   AdminProject,
   AdminDashboard,
   ExampleProject,
+  // Admin backup & restore types
+  AdminBackupEntry,
+  BackupScheduleStatus,
+  BackupCollectionValidation,
+  BackupValidationResult,
+  BackupCreateResult,
+  BackupUploadResult,
+  BackupRestoreResult,
   // Admin monitoring types
   MonitoringTaskEvent,
   MonitoringIngestionRun,
+  MonitoringIngestionStep,
+  MonitoringIngestionDataCollection,
+  MonitoringIngestionError,
+  MonitoringProgress,
+  MonitoringCliAgent,
+  IngestionTriggerStatus,
+  IngestionTriggerResult,
+  JobStatusResponse,
   MonitoringAppLog,
   MonitoringHealth,
   // Profile + CLI token types
@@ -461,6 +1061,12 @@ export type {
   CreateLinkInput,
   UpdateLinkInput,
   ResolverInfo,
+  LinkMappingPreviewRow,
+  LinkMappingPreviewResponse,
+  // Funnel filtering types (issue #939)
+  FunnelTargetResult,
+  FunnelStage,
+  FunnelValuesResponse,
   // MultiQC management types
   CreateMultiQCDCInput,
   MultiQCMutationResult,
@@ -475,3 +1081,215 @@ export type {
 // package in its Vite config so both apps use one consent implementation.
 export { capture, initTelemetry, isOptedOut, setOptOut } from './telemetry';
 export type { TelemetryConfig } from './telemetry';
+
+export { COMPONENT_TYPE_VISUALS, componentTypeVisual } from './componentTypeMeta';
+export type { ComponentTypeVisual } from './componentTypeMeta';
+
+// Dashboard search: the index and ranking behind the apps' Cmd/Ctrl+K palette,
+// and the request a surface answers by unfolding what hides a component.
+export {
+  boundColumns,
+  buildSpotlightIndex,
+  componentKindLabel,
+  componentTitle,
+  groupSpotlightHits,
+  searchSpotlight,
+  stripMarkdown,
+  SPOTLIGHT_PER_TAB,
+} from './spotlight';
+export type {
+  SpotlightEntry,
+  SpotlightGroup,
+  SpotlightHit,
+  SpotlightSnippet,
+  SpotlightTab,
+  TextRange,
+} from './spotlight';
+export {
+  REVEAL_COMPONENT_EVENT,
+  requestRevealComponent,
+  useRevealComponent,
+} from './reveal';
+export type { RevealComponentDetail } from './reveal';
+export { brandColors } from './brandColors';
+export { catalogToolUrl } from './catalogLinks';
+
+// Shareable listing views: the /dashboards and /projects pages encode their
+// filters into the URL, and both narrow on the template a project came from.
+export {
+  matchesTemplateFilter,
+  parseTemplateOrigin,
+  templateFilterValues,
+} from './templateFilter';
+export type { ParsedTemplate } from './templateFilter';
+// "From a run folder": locations, the template catalog per pipeline, and the
+// reading of a run-folder plan.
+export {
+  folderAncestors,
+  folderName,
+  folderSource,
+  isLocalFolderPath,
+  isS3Location,
+  middleEllipsis,
+  normalizeFolder,
+  parentFolder,
+  pathBarQuery,
+  relativeToFolder,
+  relativeToRunFolder,
+  shortenFolder,
+  shortenHome,
+} from './runFolderPaths';
+export type { FolderSource } from './runFolderPaths';
+export {
+  compareVersions,
+  defaultVersionFor,
+  findRunPipeline,
+  formatVersion,
+  groupRunTemplates,
+  isRunFolderCapable,
+  runTemplateMatch,
+  runTemplateMatchText,
+  sameVersion,
+  sourceLabel,
+  splitTemplateId,
+} from './runFolderTemplates';
+export type {
+  RunPipeline,
+  RunPipelineGroup,
+  RunTemplateEntry,
+  RunTemplateMatch,
+  RunTemplateMatchInput,
+  RunTemplateVersion,
+  TemplateIdParts,
+} from './runFolderTemplates';
+export {
+  groupRunCollections,
+  isCollectionReady,
+  runCollectionSection,
+  runCollectionTotals,
+  runFoundNothing,
+} from './runFolderReport';
+export type { RunCollectionEntry, RunCollectionSection } from './runFolderReport';
+export { humanizeVariableName, templateSettingValue } from './runFolderVariables';
+export type { TemplateSettingValue } from './runFolderVariables';
+export {
+  EMPTY_RUN_STORAGE_FIELDS,
+  isPrivateBucketRefusal,
+  runStorageFieldErrors,
+  runStorageFieldsBlank,
+  runStorageFromFields,
+  s3BucketOf,
+  storageForLocation,
+} from './runFolderStorage';
+export type {
+  RunStorageBinding,
+  RunStorageFieldErrors,
+  RunStorageFields,
+} from './runFolderStorage';
+export {
+  asEnum,
+  asList,
+  asScalar,
+  decodeListingParams,
+  encodeListingParams,
+} from './listingUrlState';
+export type { ListingParams } from './listingUrlState';
+export {
+  ADMIN_TABS,
+  EMPTY_INGESTION_FILTERS,
+  INGESTION_STATUSES,
+  MONITORING_PANES,
+  adminUrl,
+  parseAdminUrl,
+} from './adminUrlState';
+export type {
+  AdminRoute,
+  AdminTab,
+  IngestionFilters,
+  IngestionStatusFilter,
+  MonitoringPane,
+  ParsedAdminUrl,
+} from './adminUrlState';
+export { Z_LAYERS } from './zLayers';
+// The dashboard Guide: what it says about a tab, read from the dashboard.
+export {
+  buildGuideModel,
+  GUIDE_ACTIONS,
+  GUIDE_EDIT_ACTIONS,
+  resolveGuideSettings,
+  tileActions,
+} from './guide/guideModel';
+export {
+  actionsTileRank,
+  analysisCardRank,
+  analysisFigureRank,
+  analysisSelectableFigureRank,
+  analysisTableRank,
+  demoSectionsOf,
+  excludedOnTab,
+  familyOrder,
+  figureDrawsGroups,
+  foldableSectionsOf,
+  groupDisplaysOf,
+  hasCards,
+  pickFilterDemo,
+  pickFromFamily,
+  pinnedDemoSections,
+  selectionColumnOf,
+  siblingDemoSections,
+  takesSelection,
+} from './guide/demoSources';
+export type {
+  GuideDemoSection,
+  GuideFamilyDoc,
+  GuideFamilyPick,
+  GuideFilterDemoPick,
+  GuideSiblingSectionsPick,
+  PinnedDemoSections,
+} from './guide/demoSources';
+// Tiles drawn a second time elsewhere on the page (the Guide) measure under a
+// scope of their own, so the canvas grid never takes their heights.
+export { AutofitScope } from './components/autofit';
+export {
+  editActionsFor,
+  GUIDE_TILE_TYPES,
+  ownControlsFor,
+  rowActionsFor,
+} from './guide/tileActionCatalog';
+export type {
+  GuideEditAction,
+  GuideOwnControl,
+  GuideRowAction,
+  GuideTileType,
+} from './guide/tileActionCatalog';
+export type {
+  GuideAction,
+  GuideActionKey,
+  GuideEditActionKey,
+  GuideFilterSection,
+  GuideGridSection,
+  GuideModel,
+  GuideModelInput,
+  GuideSelectionKind,
+  GuideSelectionSource,
+  GuideSettings,
+  GuideTab,
+  GuideTabGroup,
+} from './guide/guideModel';
+
+// Datawrapper-style chart annotations: types, Plotly conversion, event capture.
+export * from './annotations';
+export {
+  AnnotateToolbar,
+  AnnotationColorPicker,
+  AnnotationEditor,
+  AnnotationForm,
+  InlineAnnotationEditor,
+} from './components/annotations';
+export type {
+  AnnotateToolbarProps,
+  AnnotationColorPickerProps,
+  AnnotationEditorProps,
+  AnnotationFormProps,
+  InlineAnnotationEditorProps,
+} from './components/annotations';

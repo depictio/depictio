@@ -1,0 +1,16 @@
+id: snpeff_variant_upset
+name: Variant overlap between callsets
+mode: concordance
+description: >-
+  One row per PASS variant and one membership column per caller-and-sample
+  pair, so the intersection bars read as "how many calls this combination of
+  callers agrees on". On a run that sequences the same individual twice, the
+  depth axis turns this into a sensitivity comparison rather than a truth
+  comparison.
+find:
+  path_glob: "**/*_snpEff.ann.vcf.gz"
+recipe: snpeff/variant_upset.py
+fixture: variant_upset.tsv
+renders_as:
+  - { id: callset_variant_overlap, component: advanced_viz, kind: upset_plot, roles: {} }
+  - { component: table }

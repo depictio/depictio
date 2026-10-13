@@ -1,0 +1,15 @@
+id: snpeff_gene_upset
+name: Gene overlap between callers
+mode: concordance
+description: >-
+  One row per gene and one membership column per caller, over the genes that
+  carry at least one HIGH or MODERATE variant. Reads as "which callers agree
+  that this gene is hit", which survives the allele-representation differences
+  a variant-level comparison trips on.
+find:
+  path_glob: "**/*_snpEff.genes.txt"
+recipe: snpeff/gene_upset.py
+fixture: gene_upset.tsv
+renders_as:
+  - { id: caller_gene_overlap, component: advanced_viz, kind: upset_plot, roles: {} }
+  - { component: table }

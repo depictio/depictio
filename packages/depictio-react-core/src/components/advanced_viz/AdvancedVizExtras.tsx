@@ -1,15 +1,25 @@
-import React, { createContext, useState } from 'react';
-import { ActionIcon, Group, Popover, Stack, Text } from '@mantine/core';
+import React, { createContext, Suspense, lazy, useState } from 'react';
+import { ActionIcon, Divider, Group, Popover, Stack, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import DataGridBody, { type TierAnnotation } from '../data/DataGridBody';
+// Lazy, matching `MapDataButton`: AG Grid is ~250kB plus its own stylesheets,
+// and this module is now also reached from the (otherwise grid-free) map path,
+// where a static import would drag the whole vendor-aggrid chunk onto a
+// dashboard that never opens a table. Mantine unmounts a closed dropdown, so it
+// resolves on first open and never otherwise.
+const DataGridBody = lazy(() => import('../data/DataGridBody'));
+import type { TierAnnotation } from '../data/DataGridBody';
 import type { LoadAllState } from '../chrome/LoadAllButton';
+import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
+import { TILE_ACTION_STYLE } from '../chrome/actionStyles';
+import { VizControlsGrid } from './controls/VizControls';
 
 /**
  * Bridges the per-renderer Settings + Show-data popovers into ComponentChrome's
  * `extraActions` slot — that way the ActionIcons sit in the same hover-revealed
- * row as metadata/fullscreen/download/reset and match their Mantine styling
- * (variant=light, size=sm), instead of floating in the panel header.
+ * row as metadata/fullscreen/download/reset and match their Mantine styling:
+ * size=sm, and the cluster's subtle-at-rest / filled-when-engaged pair, so a
+ * popover that is open reads as open. Not floating in the panel header.
  *
  * Wiring:
  *  - AdvancedVizDispatch holds the published payload and renders an
@@ -37,11 +47,22 @@ import type { LoadAllState } from '../chrome/LoadAllButton';
 export interface AdvancedVizExtrasPayload {
   /** Tier-2 settings JSX, rendered bare in a tab or inside the settings popover. */
   controls?: React.ReactNode;
+  /**
+   * The encoding tier (axes, colour-by, normalise, rank, run button), split
+   * out from the cosmetic `controls` so a surface can present the two
+   * differently: the frame draws it inline under `controls_placement: header`,
+   * the inspector lists it first, and the popover keeps it above the cosmetic
+   * tier when nothing has been pinned out.
+   */
+  primaryControls?: React.ReactNode;
   data?: {
     rows: Record<string, unknown[]>;
     columns?: string[];
     tierAnnotation?: TierAnnotation;
   };
+  /** The frame shows the controls docked beside or above the plot, so the
+   *  chrome row offers a toggle for them rather than a popover. */
+  docked?: boolean;
   /** Reduced-sampling state, when the renderer can expand to the full view.
    *  Shaped as `LoadAllState` so the dispatch can hand it straight to
    *  `LoadAllButton`. */
@@ -64,9 +85,12 @@ export const AdvancedVizExtrasProvider: React.FC<ProviderProps> = ({ children, o
 
 interface SettingsPopoverProps {
   controls: React.ReactNode;
+  /** Drawn at the right of the header: the placement picker, so the
+   *  controls can be pinned into the tile from where they are read. */
+  headerAction?: React.ReactNode;
 }
 
-export const AdvancedVizSettingsPopover: React.FC<SettingsPopoverProps> = ({ controls }) => {
+export const AdvancedVizSettingsPopover: React.FC<SettingsPopoverProps> = ({ controls, headerAction }) => {
   // Tooltip wraps Popover.Target's child via a sibling span — putting Tooltip
   // *inside* Popover.Target wraps the ActionIcon, which breaks Mantine's
   // ref-forwarding and produces a multi-click open bug (the click-outside
@@ -86,6 +110,10 @@ export const AdvancedVizSettingsPopover: React.FC<SettingsPopoverProps> = ({ con
   // Controlled `opened` state so the in-dropdown close-X can dismiss it;
   // also keeps Mantine's target-click toggle working.
   const [opened, setOpened] = useState(false);
+  // Portaled into the fullscreen element when there is one, otherwise Mantine's
+  // default. Without this the dropdown is painted outside the browser's top
+  // layer and a fullscreen figure's Settings cannot be used at all.
+  const portalTarget = useFullscreenPortalTarget();
   return (
     <Popover
       position="bottom-end"
@@ -95,42 +123,86 @@ export const AdvancedVizSettingsPopover: React.FC<SettingsPopoverProps> = ({ con
       closeOnEscape
       opened={opened}
       onChange={setOpened}
+      portalProps={{ target: portalTarget }}
     >
       <Popover.Target>
         <ActionIcon
-          variant="light"
-          color="teal"
+          variant={opened ? 'filled' : 'subtle'}
+          color={TILE_ACTION_STYLE.settings.color}
           size="sm"
-          aria-label="Viz settings"
-          title="Viz settings"
+          aria-label={TILE_ACTION_STYLE.settings.label}
+          title={TILE_ACTION_STYLE.settings.label}
+          data-tile-action="settings"
           onClick={() => setOpened((v) => !v)}
         >
-          <Icon icon="tabler:adjustments-horizontal" width={16} height={16} />
+          <Icon icon={TILE_ACTION_STYLE.settings.icon} width={16} height={16} />
         </ActionIcon>
       </Popover.Target>
-      <Popover.Dropdown p="sm" style={{ maxWidth: 380 }}>
-        <Stack gap="xs">
+      {/* Capped and scrolled: a renderer with a dozen controls (sashimi has
+          region, zoom, three track heights, per-annotation colours, labels)
+          builds a dropdown taller than the window, and Mantine then floats it
+          past the top edge with its first sections unreachable. The header
+          stays out of the scroller so the close button is always in reach. */}
+      <Popover.Dropdown p="sm" style={{ minWidth: 320, maxWidth: 420 }}>
+        <Stack gap="xs" style={{ maxHeight: 'min(70vh, 560px)' }}>
           <Group justify="space-between" wrap="nowrap" gap="xs">
             <Text size="xs" fw={600} c="dimmed">
-              Viz controls
+              Controls
             </Text>
-            <ActionIcon
-              variant="subtle"
-              size="xs"
-              color="gray"
-              aria-label="Close viz controls"
-              title="Close"
-              onClick={() => setOpened(false)}
-            >
-              <Icon icon="tabler:x" width={14} height={14} />
-            </ActionIcon>
+            <Group gap={6} wrap="nowrap">
+              {headerAction}
+              <ActionIcon
+                variant="subtle"
+                size="xs"
+                color="gray"
+                aria-label="Close viz controls"
+                title="Close"
+                onClick={() => setOpened(false)}
+              >
+                <Icon icon="tabler:x" width={14} height={14} />
+              </ActionIcon>
+            </Group>
           </Group>
-          {controls}
+          <Divider />
+          <div
+            style={{
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              // A flex child scrolls only once it is allowed to shrink below
+              // its content height.
+              minHeight: 0,
+              // Room for the scrollbar so it never sits on top of a slider
+              // thumb or a colour swatch.
+              paddingRight: 6,
+            }}
+          >
+            <VizControlsGrid layout="column">{controls}</VizControlsGrid>
+          </div>
         </Stack>
       </Popover.Dropdown>
     </Popover>
   );
 };
+
+/** The settings icon of a tile whose controls are docked: folds the panel
+ *  away and back, filled while it shows. */
+export const AdvancedVizDockToggle: React.FC<{ open: boolean; onToggle: () => void }> = ({
+  open,
+  onToggle,
+}) => (
+  <ActionIcon
+    variant={open ? 'filled' : 'subtle'}
+    color={TILE_ACTION_STYLE.settings.color}
+    size="sm"
+    aria-label={open ? 'Hide viz controls' : 'Show viz controls'}
+    aria-pressed={open}
+    title={open ? 'Hide viz controls' : 'Show viz controls'}
+    data-tile-action="settings"
+    onClick={onToggle}
+  >
+    <Icon icon={TILE_ACTION_STYLE.settings.icon} width={16} height={16} />
+  </ActionIcon>
+);
 
 export type { TierAnnotation } from '../data/DataGridBody';
 
@@ -168,6 +240,7 @@ export const AdvancedVizDataPopover: React.FC<DataPopoverProps> = ({
   // Controlled so the table's own close button can reach it; Mantine only
   // attaches its toggle to the target while uncontrolled, hence the onClick.
   const [opened, setOpened] = useState(false);
+  const portalTarget = useFullscreenPortalTarget();
 
   // Hide the icon outright when there is nothing behind it. Unlike the map's
   // popover, whose data only arrives once opened, this one is handed its rows
@@ -183,17 +256,19 @@ export const AdvancedVizDataPopover: React.FC<DataPopoverProps> = ({
       closeOnEscape
       opened={opened}
       onChange={setOpened}
+      portalProps={{ target: portalTarget }}
     >
       <Popover.Target>
         <ActionIcon
-          variant="light"
-          color="violet"
+          variant={opened ? 'filled' : 'subtle'}
+          color={TILE_ACTION_STYLE.data.color}
           size="sm"
           aria-label="Show underlying data"
-          title="Show data"
+          title={TILE_ACTION_STYLE.data.label}
+          data-tile-action="data"
           onClick={() => setOpened((v) => !v)}
         >
-          <Icon icon="tabler:table" width={16} height={16} />
+          <Icon icon={TILE_ACTION_STYLE.data.icon} width={16} height={16} />
         </ActionIcon>
       </Popover.Target>
       <Popover.Dropdown
@@ -207,12 +282,14 @@ export const AdvancedVizDataPopover: React.FC<DataPopoverProps> = ({
           overflow: 'auto',
         }}
       >
-        <DataGridBody
-          dataRows={dataRows}
-          dataColumns={dataColumns}
-          tierAnnotation={tierAnnotation}
-          onClose={() => setOpened(false)}
-        />
+        <Suspense fallback={null}>
+          <DataGridBody
+            dataRows={dataRows}
+            dataColumns={dataColumns}
+            tierAnnotation={tierAnnotation}
+            onClose={() => setOpened(false)}
+          />
+        </Suspense>
       </Popover.Dropdown>
     </Popover>
   );

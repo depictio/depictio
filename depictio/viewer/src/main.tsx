@@ -5,7 +5,7 @@ import './icons';
 
 import React, { Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
-import { MantineProvider } from '@mantine/core';
+import { MantineProvider, useMantineColorScheme } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 import { DatesProvider } from '@mantine/dates';
 import '@mantine/core/styles.css';
@@ -22,6 +22,10 @@ import '@mantine/dates/styles.css';
 // as un-styled invisible boxes and the editor surface has no border or
 // padding, producing a large empty gap inside the NotesFooter drawer.
 import '@mantine/tiptap/styles.css';
+// Inter, self-hosted: the minimal figure style sets it as the plot's font
+// (style_presets.MINIMAL_FONT_FAMILY). A subset downloads only when a figure
+// draws a glyph from it.
+import '@fontsource-variable/inter';
 import './styles/app.css';
 
 // Each route tree is its own async chunk. Only one tree renders per page load
@@ -33,6 +37,7 @@ import './styles/app.css';
 // chosen tree's chunk on demand behind the Suspense boundary below.
 const App = React.lazy(() => import('./App'));
 const EditorApp = React.lazy(() => import('./EditorApp'));
+import { rememberReturnTo } from './auth/postAuthTarget';
 const AuthApp = React.lazy(() => import('./auth/AuthApp'));
 const DashboardsApp = React.lazy(() => import('./dashboards/DashboardsApp'));
 const ProjectsApp = React.lazy(() => import('./projects/ProjectsApp'));
@@ -41,7 +46,6 @@ const PermissionsApp = React.lazy(() => import('./projects/detail/PermissionsApp
 const AboutApp = React.lazy(() => import('./about/AboutApp'));
 const AdminApp = React.lazy(() => import('./admin/AdminApp'));
 const ProfileApp = React.lazy(() => import('./profile/ProfileApp'));
-const CliAgentsApp = React.lazy(() => import('./cli-agents/CliAgentsApp'));
 const CreateComponentPage = React.lazy(() => import('./builder/CreateComponentPage'));
 const EditComponentPage = React.lazy(() => import('./builder/EditComponentPage'));
 import { matchEditorRoute } from './builder/routeMatch';
@@ -56,8 +60,18 @@ import {
   startSessionKeepAlive,
   validateSession,
 } from 'depictio-react-core';
+import { UiScaleContext, useChromeStyle } from 'depictio-react-core';
 import BootSplash from './components/BootSplash';
-import { depictioTheme } from './theme';
+import { brandCssVariablesResolver, buildDepictioTheme } from './theme';
+import { readStoredScheme } from './hooks/useColorScheme';
+import {
+  createColorSchemeManager,
+  getEmbedColorScheme,
+  onParentColorScheme,
+} from './lib/embedColorScheme';
+import { useUiScalePref } from './hooks/useUiScalePref';
+import { BrandingContext, getBranding, setBranding, subscribeBranding } from './branding';
+import { setFeedback } from './feedback';
 import { initGoogleAnalytics } from './googleAnalytics';
 import { WalkthroughHost } from './walkthrough';
 
@@ -93,7 +107,16 @@ function resolveTree(): React.ReactElement {
     return <ProfileApp />;
   }
   if (window.location.pathname.startsWith('/cli-agents')) {
-    return <CliAgentsApp />;
+    // CLI agents became a section of the account settings page. Rewrite the
+    // address before rendering so a refresh, bookmark or copied link stays on
+    // the new URL; replace (not push) so Back does not return to a redirect.
+    // The query string rides along (`?chrome=base`, `?no-walkthrough=1`).
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `/profile${window.location.search}#cli-agents`,
+    );
+    return <ProfileApp />;
   }
   const route = matchEditorRoute(window.location.pathname);
   if (!route) return <App />;
@@ -117,18 +140,79 @@ function resolveTree(): React.ReactElement {
 }
 
 // Mirrors depictio/dash/layouts/shared_app_shell.py:create_app_shell MantineProvider config.
-// forceColorScheme initial value comes from localStorage — same key as the Dash app writes.
-// Defensive parse: stale/invalid stored value must NOT crash the SPA on boot.
-function readInitialColorScheme(): 'light' | 'dark' | 'auto' {
-  try {
-    const raw = localStorage.getItem('theme-store');
-    if (!raw) return 'light';
-    const parsed = JSON.parse(raw);
-    const scheme = parsed?.colorScheme;
-    return scheme === 'dark' || scheme === 'auto' ? scheme : 'light';
-  } catch {
-    return 'light';
-  }
+// Initial value comes from localStorage — same key/parser as useColorScheme, so
+// the boot-time read and the hook's hydration can never disagree. A scheme
+// handed down by an embedding page wins (see lib/embedColorScheme.ts).
+function readInitialColorScheme(): 'light' | 'dark' {
+  return getEmbedColorScheme() ?? readStoredScheme() ?? 'light';
+}
+
+// One instance for the page: MantineProvider re-subscribes when it changes.
+const colorSchemeManager = createColorSchemeManager();
+
+/** Applies the scheme a parent frame posts (docs embeds), without touching the
+ *  viewer's stored preference. Renders nothing. */
+function ParentColorSchemeBridge() {
+  const { setColorScheme } = useMantineColorScheme();
+  // Mantine hands out a new `setColorScheme` on every render; a ref keeps one
+  // subscription for the life of the page instead of re-subscribing each time.
+  const setRef = React.useRef(setColorScheme);
+  setRef.current = setColorScheme;
+  React.useEffect(() => onParentColorScheme((scheme) => setRef.current(scheme)), []);
+  return null;
+}
+
+/**
+ * Theme + UI-scale + branding root. Rebuilds the Mantine theme whenever the
+ * instance brand theme resolves (cached in localStorage for a flash-free first
+ * paint on return visits; the /utils/public-config fetch updates it
+ * in-flight). The font-size preference deliberately does NOT touch the theme:
+ * it scales dashboard content only (see useContentScaleStyle), never the app
+ * chrome. The numeric scale reaches the non-Mantine content surfaces (Plotly
+ * fonts, AG Grid row metrics) via UiScaleContext; the branding reaches
+ * logo/title consumers via BrandingContext.
+ *
+ * Surfaces (page/nav/section backgrounds, heading color) travel as CSS
+ * variables rather than theme fields: a brand needs a light *and* a dark value
+ * for each, which is exactly what `cssVariablesResolver` is for.
+ */
+function ThemeRoot({ children }: { children: React.ReactNode }) {
+  const { scale } = useUiScalePref();
+  const branding = React.useSyncExternalStore(subscribeBranding, getBranding);
+  const chrome = useChromeStyle().themeOverrides;
+  const theme = React.useMemo(
+    () => buildDepictioTheme({ brand: branding, chrome }),
+    [branding, chrome],
+  );
+  const cssVariablesResolver = React.useMemo(
+    () => brandCssVariablesResolver(branding),
+    [branding],
+  );
+
+  return (
+    <UiScaleContext.Provider value={scale}>
+      <BrandingContext.Provider value={branding}>
+        <MantineProvider
+          theme={theme}
+          cssVariablesResolver={cssVariablesResolver}
+          colorSchemeManager={colorSchemeManager}
+          defaultColorScheme={readInitialColorScheme()}
+        >
+          <ParentColorSchemeBridge />
+          {/* DatesProvider is required for @mantine/dates components to pick up
+              locale + first-day-of-week settings. Matches what DMC does
+              internally for ``dmc.DatePickerInput``. */}
+          <DatesProvider settings={{ locale: 'en', firstDayOfWeek: 1 }}>
+            <Notifications position="bottom-right" />
+            <ErrorBoundary>
+              <Suspense fallback={<BootSplash />}>{children}</Suspense>
+            </ErrorBoundary>
+            <WalkthroughHost />
+          </DatesProvider>
+        </MantineProvider>
+      </BrandingContext.Provider>
+    </UiScaleContext.Provider>
+  );
 }
 
 // Boot-time session bootstrap. Four jobs:
@@ -185,6 +269,13 @@ function consumeCrossOriginSessionHandoff(): void {
   }
 }
 
+/** Bounce to the gate, remembering the page that was asked for so the visitor
+ *  lands there rather than on the listing once they are through. */
+function redirectToAuth(): void {
+  rememberReturnTo();
+  window.location.replace('/auth');
+}
+
 async function bootstrapSession(): Promise<void> {
   if (window.location.pathname.startsWith('/auth')) return;
 
@@ -198,7 +289,7 @@ async function bootstrapSession(): Promise<void> {
     status = await fetchAuthStatus();
   } catch (err) {
     console.error('Auth bootstrap: failed to read /auth/me/optional', err);
-    window.location.replace('/auth');
+    redirectToAuth();
     return;
   }
 
@@ -218,17 +309,24 @@ async function bootstrapSession(): Promise<void> {
       return;
     }
     if (status.is_public_mode) {
+      // A protected public instance has no session to hand out until the
+      // visitor has passed the shared code, so go to the gate rather than
+      // spend a round-trip on a mint the backend is going to refuse.
+      if (status.public_access_code_required) {
+        redirectToAuth();
+        return;
+      }
       const session = await createTemporaryUser();
       persistSession(session);
       return;
     }
     // Standard mode, no valid session — send to login.
-    window.location.replace('/auth');
+    redirectToAuth();
   } catch (err) {
     console.error('Auth bootstrap failed:', err);
     // Fail safe: when bootstrap can't recover, route to /auth so the user
     // sees an actionable login form rather than a silently broken SPA.
-    window.location.replace('/auth');
+    redirectToAuth();
   }
 }
 
@@ -244,6 +342,15 @@ function bootstrapPublicConfig(): void {
       if (ga?.enabled && ga.tracking_id) {
         initGoogleAnalytics(ga.tracking_id);
       }
+      // Instance brand theme: push into the theme root's store + localStorage
+      // cache. `undefined` means an older backend without the field — leave
+      // whatever the cache holds rather than un-branding a live UI.
+      if (config.branding !== undefined) {
+        setBranding(config.branding);
+      }
+      // Opt-in feedback link. Absent on a backend that predates it, which is
+      // the same as a deployment that configured none: no button.
+      setFeedback(config.feedback ?? null);
     })
     .catch(() => undefined);
 }
@@ -256,7 +363,8 @@ function bootstrapPublicConfig(): void {
 // `/auth`, and `AuthApp.POST_AUTH_REDIRECT` brings them back here.
 const isBareRoot = /^\/(dashboard\/?)?$/.test(window.location.pathname);
 if (isBareRoot) {
-  window.location.replace('/dashboards');
+  // The query rides along so a `?chrome=` look-and-feel pick survives the hop.
+  window.location.replace(`/dashboards${window.location.search}`);
 } else {
   bootstrapPublicConfig();
   bootstrapSession().finally(() => {
@@ -266,20 +374,7 @@ if (isBareRoot) {
     startSessionKeepAlive();
     ReactDOM.createRoot(document.getElementById('root')!).render(
       <React.StrictMode>
-        <MantineProvider theme={depictioTheme} defaultColorScheme={readInitialColorScheme()}>
-          {/* DatesProvider is required for @mantine/dates components to pick up
-              locale + first-day-of-week settings. Matches what DMC does
-              internally for ``dmc.DatePickerInput``. */}
-          <DatesProvider settings={{ locale: 'en', firstDayOfWeek: 1 }}>
-            <Notifications position="bottom-right" />
-            <ErrorBoundary>
-              <Suspense fallback={<BootSplash />}>
-                {resolveTree()}
-              </Suspense>
-            </ErrorBoundary>
-            <WalkthroughHost />
-          </DatesProvider>
-        </MantineProvider>
+        <ThemeRoot>{resolveTree()}</ThemeRoot>
       </React.StrictMode>,
     );
   });

@@ -1,0 +1,16 @@
+sample	caller	gene_name	gene_id	biotype	n_high	n_low	n_moderate	n_modifier	n_variants	n_coding
+NA12878_200M	deepvariant	MUC4	ENSG00000145113	protein_coding	3	104	308	8	423	311
+NA12878_200M	deepvariant	MUC3A	ENSG00000169894	protein_coding	1	64	90	33	188	91
+NA12878_200M	deepvariant	MUC16	ENSG00000181143	protein_coding	0	52	74	62	188	74
+NA12878_200M	deepvariant	HLA-DRB5	ENSG00000198502	protein_coding	10	22	30	80	142	40
+NA12878_200M	deepvariant	MUC6	ENSG00000184956	protein_coding	4	48	80	5	137	84
+NA12878_200M	deepvariant	APC	ENSG00000134982	protein_coding	0	6	1	129	136	1
+NA12878_200M	deepvariant	MUC12	ENSG00000205277	protein_coding	0	32	72	31	135	72
+NA12878_200M	deepvariant	AC254629.1	ENSG00000274993	""	0	0	0	130	130	0
+NA12878_200M	deepvariant	BRCA2	ENSG00000139618	protein_coding	0	4	1	119	124	1
+NA12878_200M	deepvariant	FCGBP	ENSG00000275395	protein_coding	6	52	57	6	121	63
+NA12878_200M	deepvariant	BRCA1	ENSG00000012048	protein_coding	0	3	4	98	105	4
+NA12878_200M	deepvariant	HLA-DRB1	ENSG00000196126	protein_coding	2	16	24	58	100	26
+NA12878_200M	deepvariant	AC245128.1	ENSG00000215765	""	0	1	0	93	94	0
+NA12878_200M	deepvariant	MUC17	ENSG00000169876	protein_coding	2	22	60	2	86	62
+NA12878_200M	deepvariant	AHNAK2	ENSG00000185567	protein_coding	0	38	42	1	81	42

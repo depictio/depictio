@@ -1,0 +1,22 @@
+id: busco_composition
+name: BUSCO class composition
+mode: batch-summary/composition
+description: >-
+  The same BUSCO scores unpivoted into the four classes that add up to the
+  lineage set: complete single-copy, complete duplicated, fragmented and missing.
+  Read as one stacked bar per assembly, it separates an assembly that lost genes
+  from one that kept them twice, which a single complete percentage cannot.
+find:
+  path_glob: "**/*-busco.batch_summary.txt"
+  path_glob_alt:
+    - "**/*-busco/batch_summary.txt"
+    - "**/*batch_summary.txt"
+recipe: busco/composition.py
+fixture: composition.tsv
+renders_as:
+  - { id: class_composition, component: advanced_viz, kind: stacked_taxonomy,
+      roles: {sample_id: assembly_id, taxon: busco_class, rank: rank, abundance: percent} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: assembly_id, y: percent, color: busco_class, barmode: stack, title: BUSCO classes per assembly} }
+  - { component: card, column: percent, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

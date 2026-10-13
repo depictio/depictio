@@ -1,0 +1,28 @@
+CSVTK_JOIN:
+  csvtk: 0.37.0
+CUSTOM_FILTERDIFFERENTIALTABLE:
+  pandas: 1.5.2
+  python: 3.11.15
+CUSTOM_MATRIXFILTER:
+  r-base: 4.2.1
+DESEQ2_DIFFERENTIAL:
+  r-base: 4.1.3
+  bioconductor-deseq2: 1.34.0
+DESEQ2_NORM:
+  r-base: 4.1.3
+  bioconductor-deseq2: 1.34.0
+GTF_TO_TABLE:
+  atlas-gene-annotation-manipulation: 1.1.1
+GUNZIP_GTF:
+  gunzip: 1.13
+PLOT_DIFFERENTIAL:
+  shinyngs: 2.4.0
+PLOT_EXPLORATORY:
+  shinyngs: 2.4.0
+SHINYNGS_APP:
+  shinyngs: 2.4.0
+VALIDATOR:
+  shinyngs: 2.4.0
+Workflow:
+    nf-core/differentialabundance: v2.0.0-g30ed774
+    Nextflow: 26.04.4

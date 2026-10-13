@@ -1,30 +1,30 @@
-taxon	Groundwater	Sediment	Riverwater	Soil
-Bacteria;Verrucomicrobia	1	1	1	1
-Archaea;	1	1	0	0
-Bacteria;Actinobacteria	1	1	1	1
-Bacteria;Acidobacteria	1	1	1	1
-Bacteria;Campilobacterota	1	1	1	0
-Bacteria;Bacteroidetes	1	1	1	1
-Bacteria;Firmicutes	1	1	1	1
-Archaea;Thaumarchaeota	1	1	1	1
-Archaea;Pacearchaeota	1	0	0	0
-Bacteria;Nitrospirae	1	1	1	1
-Archaea;Woesearchaeota	1	0	1	0
-Bacteria;Fusobacteria	0	0	1	0
-Bacteria;Proteobacteria	1	1	1	1
-Bacteria;Planctomycetes	1	1	1	1
-Bacteria;	1	1	1	1
-Bacteria;candidate_division_WPS-1	0	0	0	1
-Bacteria;Deferribacteres	0	1	0	0
-Bacteria;Chloroflexi	1	1	0	1
-Bacteria;Aminicenantes	0	1	0	0
-Bacteria;Armatimonadetes	0	1	0	1
-Bacteria;Candidatus_Saccharibacteria	1	1	1	1
-Archaea;Crenarchaeota	0	1	0	0
-Archaea;Euryarchaeota	1	1	0	0
-Bacteria;Spirochaetes	0	1	0	0
-Archaea;Diapherotrites	1	0	0	0
-Bacteria;Gemmatimonadetes	1	1	0	1
-Bacteria;Ignavibacteriae	0	1	0	0
-Bacteria;Latescibacteria	0	1	1	0
-Bacteria;Parcubacteria	1	0	1	0
+taxon	Sediment	Soil	Groundwater	Riverwater	Kingdom	Phylum
+Archaea;Euryarchaeota	1	0	1	0	Archaea	Euryarchaeota
+Bacteria;Firmicutes	1	1	1	1	Bacteria	Firmicutes
+Bacteria;Planctomycetes	1	1	1	1	Bacteria	Planctomycetes
+Bacteria;Bacteroidetes	1	1	1	1	Bacteria	Bacteroidetes
+Bacteria;Proteobacteria	1	1	1	1	Bacteria	Proteobacteria
+Bacteria;Acidobacteria	1	1	1	1	Bacteria	Acidobacteria
+Bacteria;Actinobacteria	1	1	1	1	Bacteria	Actinobacteria
+Bacteria;Verrucomicrobia	1	1	1	1	Bacteria	Verrucomicrobia
+Bacteria;	1	1	1	1	Bacteria	Unclassified
+Bacteria;Nitrospirae	1	1	1	1	Bacteria	Nitrospirae
+Archaea;Thaumarchaeota	1	1	1	1	Archaea	Thaumarchaeota
+Bacteria;Aminicenantes	1	0	0	0	Bacteria	Aminicenantes
+Bacteria;Parcubacteria	0	0	1	1	Bacteria	Parcubacteria
+Bacteria;Candidatus_Saccharibacteria	1	1	1	1	Bacteria	Candidatus_Saccharibacteria
+Bacteria;Gemmatimonadetes	1	1	1	0	Bacteria	Gemmatimonadetes
+Bacteria;candidate_division_WPS-1	0	1	0	0	Bacteria	candidate_division_WPS-1
+Bacteria;Ignavibacteriae	1	0	0	0	Bacteria	Ignavibacteriae
+Bacteria;Deferribacteres	1	0	0	0	Bacteria	Deferribacteres
+Bacteria;Armatimonadetes	1	1	0	0	Bacteria	Armatimonadetes
+Bacteria;Chloroflexi	1	1	1	0	Bacteria	Chloroflexi
+Bacteria;Campilobacterota	1	0	1	1	Bacteria	Campilobacterota
+Bacteria;Fusobacteria	0	0	0	1	Bacteria	Fusobacteria
+Archaea;Woesearchaeota	0	0	1	1	Archaea	Woesearchaeota
+Archaea;Crenarchaeota	1	0	0	0	Archaea	Crenarchaeota
+Bacteria;Latescibacteria	1	0	0	1	Bacteria	Latescibacteria
+Archaea;	1	0	1	0	Archaea	Unclassified
+Archaea;Pacearchaeota	0	0	1	0	Archaea	Pacearchaeota
+Bacteria;Spirochaetes	1	0	0	0	Bacteria	Spirochaetes
+Archaea;Diapherotrites	0	0	1	0	Archaea	Diapherotrites

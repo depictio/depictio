@@ -1,0 +1,26 @@
+id: funcscan_software_versions
+name: Software versions
+mode: run/versions
+description: >-
+  One row per process and tool with the version the run recorded, plus the
+  screen the process belongs to. nf-core/funcscan feeds MultiQC nothing but
+  this table, so the report has no plot to bind and the versions are read out
+  of the report itself instead.
+# Recognised by nf-core's canonical versions file, which is the same payload
+# MultiQC embeds in its report. The recipe reads the payload back out of the
+# MultiQC parquet rather than this file, because a recipe source is csv, tsv
+# or parquet and the canonical file is YAML; anchoring `find` on the parquet
+# instead would make this output look like one more MultiQC panel, which it
+# is not.
+find:
+  path_glob: "**/pipeline_info/*software_versions.yml"
+  path_glob_alt: ["**/pipeline_info/*software_versions.yaml"]
+recipe: funcscan/software_versions.py
+fixture: software_versions.tsv
+renders_as:
+  - { component: figure, visu_type: bar, dict_kwargs: {x: screen, y: tools, color: tool, title: Tools per screen} }
+  - { component: card, column: tool, aggregation: nunique, secondary_layout: top_n, breakdown_col: screen, top_n_count: 4 }
+  - { component: card, column: process, aggregation: nunique, secondary_layout: donut, breakdown_col: screen, top_n_count: 4 }
+  - { component: card, column: tools, aggregation: sum, secondary_layout: composition, breakdown_col: screen, top_n_count: 4 }
+  - { component: card, column: version, aggregation: nunique, secondary_layout: top_n, breakdown_col: tool, top_n_count: 4 }
+  - { component: table }

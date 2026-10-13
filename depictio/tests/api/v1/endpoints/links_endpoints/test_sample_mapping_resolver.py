@@ -149,3 +149,50 @@ def test_mixed_exact_and_fallback_in_one_call():
     assert "DONOR_A_R1" in resolved
     assert "MISSING" in resolved
     assert unmapped == ["MISSING"]
+
+
+# --- Regression tests for issue #938 -----------------------------------------
+
+
+def test_canonical_only_mapping_is_matched_not_unmapped():
+    """``{sample: []}`` (synthesized from canonical_samples) counts as mapped."""
+    resolver = SampleMappingResolver()
+    resolved, unmapped = resolver.resolve(["HG001"], _config({"HG001": []}))
+    assert resolved == ["HG001"]
+    assert unmapped == []
+
+
+def test_variant_name_as_source_value_matches():
+    """Metadata tables can carry read-level ids that ARE the variants."""
+    resolver = SampleMappingResolver()
+    mappings = {"SRR001": ["SRR001_1", "SRR001_2"]}
+    resolved, unmapped = resolver.resolve(["SRR001_1"], _config(mappings))
+    assert resolved == ["SRR001_1"]
+    assert unmapped == []
+
+
+def test_suffixed_source_value_matches_base_key():
+    """``HG001_R1`` from the source DC against a mapping keyed ``HG001``."""
+    resolver = SampleMappingResolver()
+    mappings = {"HG001": ["HG001 - adapter"]}
+    resolved, unmapped = resolver.resolve(["HG001_R1"], _config(mappings))
+    assert unmapped == []
+    assert "HG001 - adapter" in resolved
+
+
+def test_surrounding_whitespace_does_not_break_matching():
+    resolver = SampleMappingResolver()
+    mappings = {"HG001": ["HG001_R1"]}
+    resolved, unmapped = resolver.resolve([" HG001 "], _config(mappings))
+    assert unmapped == []
+    assert "HG001_R1" in resolved
+
+
+def test_global_dedup_across_source_values():
+    resolver = SampleMappingResolver()
+    mappings = {
+        "HG001_R1": ["HG001_R1", "shared_variant"],
+        "HG001_R2": ["HG001_R2", "shared_variant"],
+    }
+    resolved, _ = resolver.resolve(["HG001_R1", "HG001_R2"], _config(mappings))
+    assert resolved.count("shared_variant") == 1

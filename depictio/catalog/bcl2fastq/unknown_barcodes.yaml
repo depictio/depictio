@@ -1,0 +1,15 @@
+id: bcl2fastq_unknown_barcodes
+name: Top unknown barcodes
+description: >-
+  The index sequences bcl2fastq saw most often among the reads it could not
+  assign, per lane, classed by whether their i7 and i5 belong to libraries of
+  the lane: a pair of indexes both in use points at an index hop or a sample
+  sheet swap.
+find:
+  path_glob: "**/Stats/Stats.json"
+recipe: bcl2fastq/unknown_barcodes.py
+fixture: unknown_barcodes.tsv
+renders_as:
+  - { component: figure, visu_type: bar, dict_kwargs: {x: barcode, y: pct_of_lane, color: swap_class, title: Most frequent unknown barcodes} }
+  - { component: card, column: reads, aggregation: sum, secondary_layout: donut, breakdown_col: swap_class }
+  - { component: table }

@@ -1,0 +1,32 @@
+id: prokka_summary
+name: Bin annotation summary
+mode: summary
+description: >-
+  What Prokka found in each bin: coding sequences, transfer RNAs, ribosomal
+  RNAs and the gene density that follows from them. The RNA counts are the half
+  of the MIMAG high-quality standard that completeness cannot answer, so a bin
+  that looks finished on the completeness axis and carries no ribosomal RNA is
+  visible here and nowhere else.
+find:
+  path_glob: "**/Prokka/**/*.txt"
+  path_glob_alt:
+    - "**/prokka/**/*.txt"
+recipe: prokka/summary.py
+fixture: summary.tsv
+renders_as:
+  - { id: density_vs_size, component: advanced_viz, kind: scatter_xy,
+      roles: {x: bases, y: cds_per_mbp, label: bin_id, color: binner, size: cds} }
+  - { id: trna_vs_rrna, component: advanced_viz, kind: scatter_xy,
+      roles: {x: trna, y: rrna, label: bin_id, color: assembler, size: bases} }
+  - { component: figure, visu_type: histogram, dict_kwargs: {x: cds_per_mbp, color: assembler, title: Gene density per assembler} }
+  - { component: card, column: cds, aggregation: sum,
+      secondary_layout: composition, breakdown_col: binner }
+  - { component: card, column: cds_per_mbp, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: trna, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: rrna, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: histogram }
+  - { component: card, column: bin_id, aggregation: nunique,
+      secondary_layout: top_n, breakdown_col: assembler, top_n_count: 4 }
+  - { component: table }

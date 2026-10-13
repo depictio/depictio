@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1340" height="470" viewBox="0 0 1340 470">
+  <rect width="1340" height="470" fill="#ffffff"/>
+  <text x="46.0" y="52.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="25" fill="#1e1e1e" text-anchor="start" font-weight="normal">A value picked in a persistent filter survives the tab switch</text>
+  <text x="46.0" y="78.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal">tabs are separate documents, so the switch reloads the page</text>
+  <rect x="60.0" y="134.0" width="290.0" height="112.0" rx="6" fill="#f3f0ff"/>
+  <path d="M60.1,133.8 C156.1,132.9 253.8,132.6 349.3,134.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.9,134.5 C155.2,133.8 252.0,132.7 349.4,133.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M350.8,133.3 C350.4,172.8 350.2,208.3 350.6,245.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M349.5,134.1 C348.9,170.1 349.4,209.7 350.2,245.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M350.3,245.9 C253.5,244.6 155.3,245.1 59.7,246.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M349.6,246.1 C253.2,245.4 157.6,246.6 60.0,246.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.9,246.4 C60.7,208.0 61.5,170.1 59.4,134.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.6,245.7 C58.5,209.2 60.8,171.6 60.3,134.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="205.0" y="161.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">Overview tab</text>
+  <text x="205.0" y="185.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">Variety = Virginica,</text>
+  <text x="205.0" y="206.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">picked in the persistent</text>
+  <text x="205.0" y="227.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">filter section</text>
+  <rect x="470.0" y="106.0" width="360.0" height="170.0" rx="6" fill="#fff9db"/>
+  <path d="M470.0,106.3 C590.3,105.9 711.1,107.4 829.3,106.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M469.8,106.3 C590.5,107.6 711.0,105.3 829.2,105.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.4,105.6 C828.9,161.4 828.6,220.2 829.8,276.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M830.5,106.6 C828.7,162.5 830.2,220.6 829.6,275.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.5,275.6 C709.5,277.2 591.5,274.9 469.6,276.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.8,276.1 C710.3,275.2 588.4,275.7 470.7,276.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M470.6,276.4 C470.0,219.7 470.6,161.2 470.6,106.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M469.3,275.3 C469.7,219.0 468.7,163.1 469.5,105.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="650.0" y="133.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">sessionStorage</text>
+  <text x="650.0" y="157.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">depictio:cross-tab-filters</text>
+  <text x="650.0" y="178.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">{ parentDashboardId, filters }</text>
+  <text x="650.0" y="199.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"></text>
+  <text x="650.0" y="220.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">dies with the browser tab, so it</text>
+  <text x="650.0" y="241.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">never leaks into a fresh visit</text>
+  <rect x="950.0" y="134.0" width="330.0" height="112.0" rx="6" fill="#ebfbee"/>
+  <path d="M949.4,133.8 C1059.5,132.6 1168.4,132.9 1279.2,134.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M949.8,133.4 C1060.4,132.9 1169.2,133.5 1280.6,134.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1279.7,133.6 C1279.9,171.3 1278.7,207.4 1280.5,245.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1280.1,133.2 C1278.5,172.8 1280.1,207.5 1280.0,246.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1279.5,246.4 C1171.2,246.6 1059.2,245.6 950.1,246.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1280.6,246.5 C1169.5,245.1 1061.0,247.6 950.5,246.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M949.2,245.6 C949.1,208.7 949.5,169.8 949.6,134.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M950.7,245.8 C951.5,208.5 951.4,172.9 949.6,133.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1115.0" y="161.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">Iris Petal Analysis tab</text>
+  <text x="1115.0" y="185.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">opens already filtered</text>
+  <text x="1115.0" y="206.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">on Virginica: the table</text>
+  <text x="1115.0" y="227.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">and the figures agree</text>
+  <path d="M350.7,190.0 C388.8,188.8 430.5,191.6 470.3,190.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M350.5,190.0 C388.3,190.6 431.6,191.1 469.4,190.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M469.9,190.4 C465.5,188.4 462.7,185.4 457.9,183.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M469.6,190.3 C465.1,191.5 462.6,195.0 458.1,196.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="410.0" y="172.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">write</text>
+  <path d="M830.9,190.3 C869.4,190.2 908.5,188.1 950.1,190.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M829.5,189.6 C869.7,191.5 911.3,188.8 949.5,190.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M949.9,190.0 C945.4,187.6 941.0,186.4 937.7,183.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M950.0,189.5 C945.7,193.0 941.8,194.4 937.6,196.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="890.0" y="160.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">full page</text>
+  <text x="890.0" y="178.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">navigation</text>
+  <path d="M1115.5,246.1 C1113.0,267.2 1113.7,285.9 1114.7,306.0" fill="none" stroke="#adb5bd" stroke-width="1.3" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M1114.5,245.6 C1115.2,267.1 1113.4,286.2 1115.5,306.0" fill="none" stroke="#adb5bd" stroke-width="1.3" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M978.1,331.0 C984.1,337.6 991.0,342.9 996.0,349.2" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M978.2,349.5 C983.9,343.1 989.9,338.1 996.5,330.7" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1007.0" y="346.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">a control re-pointed at another</text>
+  <text x="1007.0" y="366.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">dc / column is pruned at resolve</text>
+  <text x="46.0" y="436.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal">the same storage the floating map panel already used, generalised</text>
+  <text x="1294.0" y="436.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="end" font-weight="normal">only these filters are stored; every other filter still dies on the switch</text>
+</svg>

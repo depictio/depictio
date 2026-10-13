@@ -1,0 +1,19 @@
+# ataqv: multi-output tool, so it gets a folder. The depictio glue
+# (find / recipe / renders_as) lives in the sibling output YAMLs.
+#
+# ataqv is the ATAC-seq-specific QC tool: it reads a filtered alignment plus the
+# peak calls and a TSS annotation and writes one JSON per library holding the
+# metrics an ATAC library is judged by — TSS enrichment, the fragment-length
+# ladder, the high-quality autosomal alignment (HQAA) fractions, duplication
+# and the peak statistics. MultiQC has no ataqv module, so none of this reaches
+# a dashboard through the MultiQC report.
+#
+# The outputs are pipeline-agnostic: every one of them reads the `*.ataqv.json`
+# the tool writes, matched on file name rather than on a pipeline path.
+id: ataqv
+name: ataqv
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ataqv/ataqv
+homepage: https://github.com/ParkerLab/ataqv
+description: Ataqv is a toolkit for measuring and comparing ATAC-seq results.
+biotools_url: https://bio.tools/ataqv
+stage: qc

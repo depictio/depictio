@@ -21,16 +21,29 @@ import type {
   ProjectTypeFilter,
   VisibilityFilter,
 } from './hooks/useProjectViewPrefs';
+import { emptyProjectFilters } from './hooks/useProjectViewPrefs';
+import { useListingAccents } from '../lib/useListingAccents';
+import ShareViewButton from '../components/listing/ShareViewButton';
+import GlassTray from '../chrome/variants/glass/pages/GlassTray';
+
+export type FilterOption = { value: string; label: string };
 
 export interface ProjectsToolbarProps {
   prefs: ProjectViewPrefs;
-  templateSourceOptions: { value: string; label: string }[];
+  templateOptions: FilterOption[];
+  /** Rows currently on screen, for the share confirmation's wording. */
+  matchingCount: number;
+  /** False while the shared-view banner is up: it lists the same filters, and
+   *  two identical chip rows one above the other reads as a bug. */
+  showFilterChips?: boolean;
   pinnedCount: number;
   pinDisabled: boolean;
   setSearch: (s: string) => void;
   setFilters: (f: ProjectFilters) => void;
   setOnlyPinned: (b: boolean) => void;
   clearFilters: () => void;
+  /** The table's display menu (density and columns), last in the tray. */
+  tableDisplay?: React.ReactNode;
 }
 
 const TYPE_DATA = [
@@ -46,12 +59,13 @@ const VISIBILITY_DATA = [
 
 const FilterPopover: React.FC<{
   prefs: ProjectViewPrefs;
-  templateSourceOptions: { value: string; label: string }[];
+  templateOptions: FilterOption[];
   setFilters: (f: ProjectFilters) => void;
-}> = ({ prefs, templateSourceOptions, setFilters }) => {
+}> = ({ prefs, templateOptions, setFilters }) => {
+  const accent = useListingAccents('projects');
   const activeCount =
     prefs.filters.types.length +
-    prefs.filters.templateSources.length +
+    prefs.filters.templates.length +
     (prefs.filters.visibility !== 'all' ? 1 : 0);
 
   return (
@@ -61,13 +75,13 @@ const FilterPopover: React.FC<{
           <Indicator
             label={activeCount}
             size={16}
-            color="orange"
+            color={accent.tertiary}
             disabled={activeCount === 0}
             offset={4}
           >
             <ActionIcon
               variant={activeCount > 0 ? 'light' : 'default'}
-              color={activeCount > 0 ? 'orange' : undefined}
+              color={activeCount > 0 ? accent.tertiary : undefined}
               size="lg"
               radius="md"
               aria-label={`Filters${activeCount > 0 ? ` (${activeCount} active)` : ''}`}
@@ -87,13 +101,7 @@ const FilterPopover: React.FC<{
               <Button
                 variant="subtle"
                 size="compact-xs"
-                onClick={() =>
-                  setFilters({
-                    types: [],
-                    visibility: 'all',
-                    templateSources: [],
-                  })
-                }
+                onClick={() => setFilters(emptyProjectFilters())}
               >
                 Clear all
               </Button>
@@ -128,16 +136,17 @@ const FilterPopover: React.FC<{
           />
 
           <MultiSelect
-            label="Template source"
+            label="Template"
             placeholder={
-              templateSourceOptions.length === 0
+              templateOptions.length === 0
                 ? 'No templated projects loaded'
                 : 'Any template'
             }
-            data={templateSourceOptions}
-            value={prefs.filters.templateSources}
-            onChange={(v) => setFilters({ ...prefs.filters, templateSources: v })}
-            disabled={templateSourceOptions.length === 0}
+            description="Pick a source for every pipeline under it, or one pipeline on its own."
+            data={templateOptions}
+            value={prefs.filters.templates}
+            onChange={(v) => setFilters({ ...prefs.filters, templates: v })}
+            disabled={templateOptions.length === 0}
             searchable
             clearable
             comboboxProps={{ withinPortal: false }}
@@ -150,14 +159,18 @@ const FilterPopover: React.FC<{
 
 const ProjectsToolbar: React.FC<ProjectsToolbarProps> = ({
   prefs,
-  templateSourceOptions,
+  templateOptions,
+  matchingCount,
+  showFilterChips = true,
   pinnedCount,
   pinDisabled,
   setSearch,
   setFilters,
   setOnlyPinned,
   clearFilters,
+  tableDisplay,
 }) => {
+  const accent = useListingAccents('projects');
   const activeFilterChips: { key: string; label: string; onRemove: () => void }[] =
     [];
   for (const t of prefs.filters.types) {
@@ -171,15 +184,15 @@ const ProjectsToolbar: React.FC<ProjectsToolbarProps> = ({
         }),
     });
   }
-  for (const s of prefs.filters.templateSources) {
-    const opt = templateSourceOptions.find((o) => o.value === s);
+  for (const s of prefs.filters.templates) {
+    const opt = templateOptions.find((o) => o.value === s);
     activeFilterChips.push({
       key: `s:${s}`,
       label: opt?.label ?? s,
       onRemove: () =>
         setFilters({
           ...prefs.filters,
-          templateSources: prefs.filters.templateSources.filter((x) => x !== s),
+          templates: prefs.filters.templates.filter((x) => x !== s),
         }),
     });
   }
@@ -204,7 +217,7 @@ const ProjectsToolbar: React.FC<ProjectsToolbarProps> = ({
 
   return (
     <Stack gap="xs" mb="md">
-      <Group gap="xs" wrap="nowrap" align="center">
+      <Group gap="xs" wrap="nowrap" align="center" className="dc-list-toolbar">
         <TextInput
           placeholder="Search projects…"
           value={prefs.search}
@@ -225,52 +238,64 @@ const ProjectsToolbar: React.FC<ProjectsToolbarProps> = ({
           style={{ flex: 1, minWidth: 0 }}
         />
 
-        <Tooltip
-          label={
-            pinDisabled
-              ? 'Pinning is disabled in public mode'
-              : prefs.onlyPinned
-                ? 'Show all projects'
-                : `Show favorites only${pinnedCount ? ` (${pinnedCount})` : ''}`
-          }
-          withinPortal
-        >
-          <ActionIcon
-            variant={prefs.onlyPinned ? 'light' : 'default'}
-            color={prefs.onlyPinned ? 'yellow' : undefined}
-            size="lg"
-            radius="md"
-            onClick={() => setOnlyPinned(!prefs.onlyPinned)}
-            disabled={pinDisabled || (pinnedCount === 0 && !prefs.onlyPinned)}
-            aria-label="Toggle favorites filter"
-            aria-pressed={prefs.onlyPinned}
+        <GlassTray>
+          <Tooltip
+            label={
+              pinDisabled
+                ? 'Pinning is disabled in public mode'
+                : prefs.onlyPinned
+                  ? 'Show all projects'
+                  : `Show favorites only${pinnedCount ? ` (${pinnedCount})` : ''}`
+            }
+            withinPortal
           >
-            <Icon
-              icon={prefs.onlyPinned ? 'mdi:star' : 'mdi:star-outline'}
-              width={18}
-            />
-          </ActionIcon>
-        </Tooltip>
+            <ActionIcon
+              variant={prefs.onlyPinned ? 'light' : 'default'}
+              color={prefs.onlyPinned ? 'yellow' : undefined}
+              size="lg"
+              radius="md"
+              onClick={() => setOnlyPinned(!prefs.onlyPinned)}
+              disabled={pinDisabled || (pinnedCount === 0 && !prefs.onlyPinned)}
+              aria-label="Toggle favorites filter"
+              aria-pressed={prefs.onlyPinned}
+            >
+              <Icon
+                icon={prefs.onlyPinned ? 'mdi:star' : 'mdi:star-outline'}
+                width={18}
+              />
+            </ActionIcon>
+          </Tooltip>
 
-        <FilterPopover
-          prefs={prefs}
-          templateSourceOptions={templateSourceOptions}
-          setFilters={setFilters}
-        />
+          <FilterPopover
+            prefs={prefs}
+            templateOptions={templateOptions}
+            setFilters={setFilters}
+          />
+
+          <ShareViewButton
+            describes={
+              hasAnyActive
+                ? `this filtered view (${matchingCount} project${matchingCount === 1 ? '' : 's'})`
+                : 'the full project list'
+            }
+          />
+
+          {tableDisplay}
+        </GlassTray>
       </Group>
 
-      {activeFilterChips.length > 0 && (
+      {showFilterChips && activeFilterChips.length > 0 && (
         <Group gap="xs" wrap="wrap" align="center">
           {activeFilterChips.map((chip) => (
             <Badge
               key={chip.key}
               variant="light"
-              color="orange"
+              color={accent.tertiary}
               rightSection={
                 <ActionIcon
                   size="xs"
                   variant="transparent"
-                  color="orange"
+                  color={accent.tertiary}
                   onClick={chip.onRemove}
                   aria-label={`Remove filter ${chip.label}`}
                 >

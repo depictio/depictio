@@ -14,6 +14,9 @@ import {
   mapSelectionFilter,
   mapSelectionValues,
 } from '../../selection';
+import { TILE_ACTION_STYLE } from '../chrome/actionStyles';
+import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
+import { useDataVersionRequest } from '../../dataVersions';
 
 // AG Grid is ~250kB of CSS plus its own chunk, and the map branch of
 // ComponentRenderer is imported eagerly — a static import here would put the
@@ -54,6 +57,8 @@ const MapDataButton: React.FC<MapDataButtonProps> = ({
   onFilterChange,
 }) => {
   const componentId = metadata.index;
+  // The map's own pins, so the table lists the rows the map is drawing.
+  const { body: versionBody, key: versionKey } = useDataVersionRequest();
   // The table shows every point the map shows, so it is fetched against the
   // same list the map fetches with: everything *except* this map's own
   // selection. Ticking rows must be able to widen the selection, not just
@@ -74,6 +79,10 @@ const MapDataButton: React.FC<MapDataButtonProps> = ({
     isMapSelectionEnabled(metadata, Boolean(onFilterChange)) && Boolean(selectionColumn);
 
   const [opened, setOpened] = useState(false);
+  // Into the fullscreen tile while there is one, as the advanced-viz popover
+  // does: portaled to the page, the table opened where nothing is painted,
+  // and the icon seemed to do nothing.
+  const portalTarget = useFullscreenPortalTarget();
   const [state, setState] = useState<LoadState>({ status: 'idle' });
   const abortRef = useRef<AbortController | null>(null);
   // What the currently-held data was fetched for; only ever set on success.
@@ -85,13 +94,15 @@ const MapDataButton: React.FC<MapDataButtonProps> = ({
   const loadedKeyRef = useRef<string | null>(null);
 
   const load = () => {
-    const filterKey = JSON.stringify(filtersForFetch);
+    // The pin is part of what the rows were fetched for: switching between
+    // live and past data must refetch, not reopen the other one's table.
+    const filterKey = `${JSON.stringify(filtersForFetch)}|${versionKey}`;
     if (loadedKeyRef.current === filterKey) return;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     setState({ status: 'loading' });
-    fetchMapData(dashboardId, componentId, filtersForFetch, controller.signal)
+    fetchMapData(dashboardId, componentId, filtersForFetch, controller.signal, versionBody)
       .then((data) => {
         if (controller.signal.aborted) return;
         loadedKeyRef.current = filterKey;
@@ -128,18 +139,20 @@ const MapDataButton: React.FC<MapDataButtonProps> = ({
       onChange={setOpened}
       onOpen={load}
       onClose={close}
+      portalProps={{ target: portalTarget }}
     >
       <Popover.Target>
         <ActionIcon
-          variant="light"
-          color="violet"
+          variant={opened ? 'filled' : 'subtle'}
+          color={TILE_ACTION_STYLE.data.color}
           size="sm"
           aria-label="Show underlying data"
-          title="Show data"
+          title={TILE_ACTION_STYLE.data.label}
+          data-tile-action="data"
           data-no-drag
           onClick={() => setOpened((v) => !v)}
         >
-          <Icon icon="tabler:table" width={16} height={16} />
+          <Icon icon={TILE_ACTION_STYLE.data.icon} width={16} height={16} />
         </ActionIcon>
       </Popover.Target>
       <Popover.Dropdown

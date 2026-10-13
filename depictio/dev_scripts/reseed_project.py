@@ -6,7 +6,7 @@ this after editing template.yaml, canonical recipes, or .db_seeds JSON for
 one of the bundled reference datasets (iris, penguins, ampliseq,
 advanced_viz_showcase, …).
 
-Runs INSIDE the API container so it has MongoDB + MinIO + the depictio
+Runs INSIDE the API container so it has MongoDB + S3 + the depictio
 module path.
 
 Usage:
@@ -30,7 +30,7 @@ What it does:
        (via ReferenceDatasetRegistry.STATIC_IDS).
     2. Cascade-delete the project document, its DC docs, Delta-table docs,
        files docs, and the matching dashboards from MongoDB. Also wipes the
-       project's S3 objects from MinIO.
+       project's S3 objects.
     3. Re-create the project + DCs by calling create_reference_project().
     4. Re-create the project's dashboards by calling create_initial_dashboards()
        (scoped to dashboards whose project_id matches).
@@ -57,7 +57,6 @@ from depictio.api.v1.db import (
     initialization_collection,
     multiqc_collection,
     projects_collection,
-    runs_collection,
     tokens_collection,
     users_collection,
 )
@@ -108,8 +107,10 @@ def _drop_project_and_dependents(dataset_name: str) -> None:
         data_collections_collection.delete_many({"_id": {"$in": oids}})
         deltatables_collection.delete_many({"data_collection_id": {"$in": oids + str_query}})
         files_collection.delete_many({"data_collection_id": {"$in": oids + str_query}})
-        runs_collection.delete_many({"data_collection_id": {"$in": oids + str_query}})
         multiqc_collection.delete_many({"data_collection_id": {"$in": oids + str_query}})
+        # Runs are keyed by workflow, never by collection — `_cascade_delete_project`
+        # above is what removes them, and a leftover run makes the next scan skip
+        # the whole workflow.
 
 
 async def _admin_user_and_token() -> tuple[UserBeanie, dict]:
@@ -191,9 +192,15 @@ async def _recreate_dashboards(dataset_names: list[str]) -> None:
     """Re-run create_initial_dashboards. It iterates ALL dashboards, but only
     creates those whose JSON file is on disk and whose project_id resolves to
     an existing project — so wiped-then-recreated targets get rebuilt and the
-    others are no-ops (idempotent path inside create_dashboard_from_json)."""
+    others are no-ops (idempotent path inside create_dashboard_from_json).
+
+    `extra` carries the requested names because the optional datasets
+    (catalog_conformance) have their dashboards filtered out of that iteration
+    unless they are opted into. Naming one on this script's command line IS the
+    opt-in: without it the project and its data collections come back and the
+    dashboard silently does not."""
     admin = await UserBeanie.find_one({"is_admin": True})
-    await create_initial_dashboards(admin_user=admin)
+    await create_initial_dashboards(admin_user=admin, extra=set(dataset_names))
 
 
 async def _trigger_data_materialisation(dataset_names: Iterable[str]) -> None:
@@ -229,7 +236,7 @@ async def _trigger_data_materialisation(dataset_names: Iterable[str]) -> None:
                 },
             },
             "api_base_url": settings.fastapi.url,
-            "s3_storage": settings.minio.model_dump(),
+            "s3_storage": settings.s3.model_dump(),
         }
     )
     processor = ReferenceDatasetProcessor(cli_config)
@@ -262,7 +269,7 @@ async def _replace_dashboards_only(dataset_names: list[str]) -> None:
     admin = await UserBeanie.find_one({"is_admin": True})
     if admin is None:
         raise RuntimeError("reseed: no admin user — run a fresh deploy first")
-    await create_initial_dashboards(admin_user=admin)
+    await create_initial_dashboards(admin_user=admin, extra=set(dataset_names))
 
 
 async def reseed(
@@ -271,36 +278,38 @@ async def reseed(
     for name in dataset_names:
         _ = _resolve_static_ids(name)  # validate up-front
 
-    # Initialise Motor + Beanie ODM — required for UserBeanie/ProjectBeanie/
-    # TokenBeanie queries used downstream. The API process does this on
-    # startup; standalone scripts have to do it themselves.
-    from depictio.api.v1.services.lifespan import init_motor_beanie
+    # Initialise the async MongoDB client + Beanie ODM — required for
+    # UserBeanie/ProjectBeanie/TokenBeanie queries used downstream. The API
+    # process does this on startup; standalone scripts have to do it themselves.
+    from depictio.api.v1.services.lifespan import init_pymongo_beanie
 
-    await init_motor_beanie()
+    mongo_client = await init_pymongo_beanie()
+    try:
+        if dashboards_only:
+            logger.info(f"reseed: dashboards-only refresh for {dataset_names}")
+            await _replace_dashboards_only(dataset_names)
+            logger.info(f"reseed: done for {dataset_names}")
+            return
 
-    if dashboards_only:
-        logger.info(f"reseed: dashboards-only refresh for {dataset_names}")
-        await _replace_dashboards_only(dataset_names)
+        logger.info(f"reseed: dropping existing state for {dataset_names}")
+        for name in dataset_names:
+            _drop_project_and_dependents(name)
+
+        logger.info(f"reseed: recreating project + DC documents for {dataset_names}")
+        await _recreate_project(dataset_names)
+
+        logger.info(f"reseed: recreating dashboards for {dataset_names}")
+        await _recreate_dashboards(dataset_names)
+
+        if materialise_data:
+            logger.info(f"reseed: materialising Delta tables for {dataset_names}")
+            await _trigger_data_materialisation(dataset_names)
+        else:
+            logger.info("reseed: --no-data passed; skipping Delta materialisation")
+
         logger.info(f"reseed: done for {dataset_names}")
-        return
-
-    logger.info(f"reseed: dropping existing state for {dataset_names}")
-    for name in dataset_names:
-        _drop_project_and_dependents(name)
-
-    logger.info(f"reseed: recreating project + DC documents for {dataset_names}")
-    await _recreate_project(dataset_names)
-
-    logger.info(f"reseed: recreating dashboards for {dataset_names}")
-    await _recreate_dashboards(dataset_names)
-
-    if materialise_data:
-        logger.info(f"reseed: materialising Delta tables for {dataset_names}")
-        await _trigger_data_materialisation(dataset_names)
-    else:
-        logger.info("reseed: --no-data passed; skipping Delta materialisation")
-
-    logger.info(f"reseed: done for {dataset_names}")
+    finally:
+        await mongo_client.close()
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:

@@ -9,14 +9,34 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "vol-text",
+      "component_type": "text",
+      "title": "Differential expression",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Differential expression",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "One row per gene from a differential expression test, read three ways with the switch in the tile header: volcano (fold change against significance), MA (fold change against mean abundance, where low-count noise shows as a funnel) and QQ (observed against expected p-values, where a curve lifting off early means an inflated test). The input is a DESeq2 or limma results table as nf-core/differentialabundance publishes it after nf-core/rnaseq.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
     {
       "index": "vol-volcano",
       "component_type": "advanced_viz",
-      "title": "Volcano plot \u2014 differential abundance",
+      "title": "Differential expression",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "volcano_demo",
       "wf_id": {
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Synthetic volcano fixture",
+        "description": "Synthetic volcano: 200 features x 2 contrasts; ~15% are designed hits",
         "data_collection_tag": "volcano_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -38,8 +58,13 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Volcano, MA and QQ views of the same test results. The view switch and the thresholds sit in the tile header.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Differential expression",
       "viz_kind": "volcano",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "volcano",
         "feature_id_col": "feature_id",
         "effect_size_col": "effect_size",
@@ -49,21 +74,244 @@
         "significance_is_neg_log10": false,
         "significance_threshold": 0.05,
         "effect_threshold": 1.0,
-        "top_n_labels": 15
+        "top_n_labels": 15,
+        "show_labels": true,
+        "avg_log_intensity_col": "avg_log_intensity",
+        "log2_fold_change_col": "effect_size",
+        "fold_change_threshold": 1.0,
+        "p_value_col": "significance",
+        "view": "volcano",
+        "views": [
+          "volcano",
+          "ma",
+          "qq"
+        ],
+        "show_ci": true,
+        "show_identity": true,
+        "point_size": 5
       },
-      "wf_tag": "python/advanced_viz_demo",
-      "description": "Effect size vs significance with builtin thresholds, top-N labels and search. Settings \u2699 at top-right."
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "vol-f-category",
+      "component_type": "interactive",
+      "title": "Category",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "volcano_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic volcano: 200 features x 2 contrasts; ~15% are designed hits",
+        "data_collection_tag": "volcano_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Feature scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "category",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Feature filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "custom_color": "#E74C3C",
+      "icon_name": "mdi:form-select",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "vol-f-significance",
+      "component_type": "interactive",
+      "title": "P-value",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "volcano_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic volcano: 200 features x 2 contrasts; ~15% are designed hits",
+        "data_collection_tag": "volcano_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Feature scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "significance",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Feature filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": true,
+      "custom_color": "#F68B33",
+      "icon_name": "mdi:target",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "vol-f-effect",
+      "component_type": "interactive",
+      "title": "Log2 fold change",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "volcano_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic volcano: 200 features x 2 contrasts; ~15% are designed hits",
+        "data_collection_tag": "volcano_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d02"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Feature scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "effect_size",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Feature filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "custom_color": "#1976D2",
+      "icon_name": "mdi:trending-up",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "vol-about",
+      "component_type": "text",
+      "title": "About this showcase",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "About this showcase",
+      "order": 4,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Each tab of this project is one advanced visualisation kind, rendered from a small synthetic fixture rather than a real run. Nothing here is a result. For the same components on real data, look at the nf-core/ampliseq and nf-core/viralrecon reference projects.\n",
+      "wf_tag": "python/advanced_viz_demo"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-vol-f-category",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-vol-f-significance",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-vol-f-effect",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-vol-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-vol-volcano",
       "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-vol-about",
+      "x": 0,
       "y": 0,
-      "w": 12,
-      "h": 8,
+      "w": 8,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",
@@ -84,7 +332,7 @@
     "count": 0
   },
   "title": "Advanced Visualisations",
-  "subtitle": "Showcase of advanced visualisation kinds (volcano, manhattan, clustering, …) backed by synthetic fixtures",
+  "subtitle": "Showcase of the advanced visualisation kinds, each on a small synthetic fixture",
   "icon": "mdi:chart-scatter-plot",
   "icon_color": "red",
   "icon_variant": "filled",
@@ -117,8 +365,43 @@
   "is_main_tab": true,
   "parent_dashboard_id": null,
   "tab_order": 0,
-  "main_tab_name": "Volcano",
+  "main_tab_name": "Differential expression",
   "tab_icon": "mdi:chart-scatter-plot",
   "tab_icon_color": "red",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Feature scope",
+      "icon": "mdi:filter-variant",
+      "color": "red",
+      "description": "Restricts the features drawn before the thresholds are applied",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Differential expression",
+      "icon": "mdi:chart-scatter-plot",
+      "color": "red",
+      "description": "One table of test results read as a volcano, an MA plot or a QQ plot",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "About this showcase",
+      "icon": "mdi:information-outline",
+      "color": "gray",
+      "description": "What this project is, and what it is not",
+      "collapsed": true,
+      "persistent": true,
+      "pin": "bottom"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

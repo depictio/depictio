@@ -1,0 +1,20 @@
+id: cellranger_hvg_dispersion
+name: Highly variable genes
+mode: analysis/hvg_dispersion
+description: >-
+  Mean expression against normalised dispersion for every gene Cell Ranger
+  measured, flagged with whether it kept the gene for the PCA. The feature
+  selection step behind every embedding on the dashboard, and the answer to
+  why a gene is missing from one.
+find:
+  path_glob: "**/analysis/pca/*/dispersion.csv"
+recipe: cellranger/hvg_dispersion.py
+fixture: hvg_dispersion.tsv
+renders_as:
+  - { id: hvg_scatter, component: advanced_viz, kind: scatter_xy, roles: {x: mean_expression, y: normalized_dispersion, color: selection, label: gene} }
+  - { id: hvg_selection_filter, component: interactive, interactive_type: Select, column_name: selection }
+  - { id: hvg_dispersion_filter, component: interactive, interactive_type: RangeSlider, column_name: normalized_dispersion }
+  - { component: card, column: gene, aggregation: nunique, secondary_layout: top_n, breakdown_col: selection, top_n_count: 2 }
+  - { component: card, column: normalized_dispersion, aggregation: median, secondary_layout: box_plot, aggregations: [box_plot_stats] }
+  - { component: card, column: detection_rate, aggregation: average, secondary_layout: histogram }
+  - { component: table }

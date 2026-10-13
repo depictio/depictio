@@ -4,9 +4,13 @@
   "private": true,
   "type": "module",
   "description": "Shared Depictio React grid + renderer code consumed by the SPA viewer and the Dash custom-component package.",
-  "//sideEffects": "Only stylesheets are imported for their side effects; every module's JS exports are pure. This lets bundlers tree-shake unused barrel re-exports (e.g. the plotly/ag-grid renderers) out of consumers that only pull light helpers from the index, instead of dragging the whole visualisation stack onto their boot path.",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "//sideEffects": "Only stylesheets and plotlyStrictMode (a react-plotly.js prototype patch with no exports) are imported for their side effects; every other module's JS exports are pure. This lets bundlers tree-shake unused barrel re-exports (e.g. the plotly/ag-grid renderers) out of consumers that only pull light helpers from the index, instead of dragging the whole visualisation stack onto their boot path.",
   "sideEffects": [
-    "**/*.css"
+    "**/*.css",
+    "**/plotlyStrictMode.ts"
   ],
   "main": "src/index.ts",
   "module": "src/index.ts",
@@ -22,7 +26,9 @@
     "src"
   ],
   "peerDependencies": {
+    "@genome-spy/core": "0.88.1",
     "@iconify/react": "^5.0.2",
+    "@mantine/colors-generator": "^7.17.8",
     "@mantine/core": "^7.14.0",
     "@mantine/dates": "^7.14.0",
     "@mantine/hooks": "^7.14.0",
@@ -37,7 +43,9 @@
     "react-resizable": "^3.0.5"
   },
   "devDependencies": {
+    "@genome-spy/core": "0.88.1",
     "@iconify/react": "^5.0.2",
+    "@mantine/colors-generator": "^7.17.8",
     "@mantine/core": "^7.14.0",
     "@mantine/dates": "^7.14.0",
     "@mantine/hooks": "^7.14.0",
@@ -55,6 +63,7 @@
     "react-grid-layout": "^1.4.4",
     "react-plotly.js": "^2.6.0",
     "react-resizable": "^3.0.5",
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.0",
+    "vitest": "^2.1.9"
   }
 }

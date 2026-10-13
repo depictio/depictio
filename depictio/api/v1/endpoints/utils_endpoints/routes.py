@@ -1,7 +1,18 @@
 import asyncio
 from datetime import datetime
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Header,
+    HTTPException,
+    Response,
+    UploadFile,
+)
+from pydantic import BaseModel
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -13,7 +24,11 @@ from depictio.api.v1.db import (
     runs_collection,
     workflows_collection,
 )
-from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from depictio.api.v1.endpoints.user_endpoints.core_functions import _async_fetch_user_from_token
+from depictio.api.v1.endpoints.user_endpoints.routes import (
+    get_current_user,
+    oauth2_scheme_optional,
+)
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import (
     cleanup_orphaned_s3_files,
 )
@@ -24,8 +39,9 @@ from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import (
     process_initial_data_collections,
 )
 from depictio.api.v1.s3 import s3_client
+from depictio.models.models.branding import BrandTheme, InstanceLook, resolve_brand_theme
 from depictio.models.models.users import UserBeanie
-from depictio.version import get_version
+from depictio.version import get_api_version, get_version
 
 # Define the router
 utils_endpoint_router = APIRouter()
@@ -48,7 +64,7 @@ async def drop_S3_content(current_user=Depends(get_current_user)):
         )
         raise HTTPException(status_code=403, detail="User is not an admin.")
 
-    bucket_name = settings.minio.bucket
+    bucket_name = settings.s3.bucket
 
     # List and delete all objects in the bucket
     objects_to_delete = s3_client.list_objects_v2(Bucket=bucket_name)
@@ -62,7 +78,7 @@ async def drop_S3_content(current_user=Depends(get_current_user)):
 
     # FIXME: remove this - only for testing purposes
     # Delete directory content directly from the file system
-    # shutil.rmtree(settings.minio.data_dir)
+    # shutil.rmtree(settings.s3.data_dir)
 
     return {"message": "S3 bucket content dropped"}
 
@@ -98,8 +114,58 @@ async def status():
     """
     Check if the server is online.
     This endpoint is public and does not require authentication.
+
+    Also reports where the viewer lives. Clients that ingest data have no other
+    way to build a link to what they just created: the CLI knows `api_base_url`
+    and nothing else, and the two are routinely different hosts and ports. This
+    is the deployment's public front door, the address people type into a
+    browser, so publishing it here adds no exposure that browsing to it does not.
     """
-    return {"status": "online", "version": get_version()}
+    return {
+        "status": "online",
+        "version": get_version(),
+        "viewer_url": settings.viewer.external_url,
+    }
+
+
+@utils_endpoint_router.get("/server-info")
+async def server_info(
+    token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+):
+    """Version and links for the account menu, plus the release check for admins.
+
+    Never 401s: the menu is rendered for anonymous and single-user visitors too.
+    The user is resolved from an optional bearer token exactly as
+    ``/auth/me/optional`` does (including its single-user-mode admin), and only
+    to decide whether to include ``version_check``. That block says whether a
+    newer release exists, which is operator information, so everyone else gets
+    ``null``.
+    """
+    from depictio.api.v1.services.version_check import public_block
+
+    user = None
+    if token:
+        try:
+            user = await _async_fetch_user_from_token(token)
+        except Exception as exc:  # noqa: BLE001 - any auth failure means anonymous here
+            logger.debug(f"/server-info: token resolution failed ({exc}); treating as anonymous")
+    if user is None and settings.auth.is_single_user_mode:
+        # Same fallback as `/auth/me/optional`: with no login in single-user mode
+        # (`depictio local up`) the visitor acts as the admin everywhere else, so
+        # they are the one who should hear about an update.
+        user = await UserBeanie.find_one({"is_admin": True, "is_anonymous": {"$ne": True}})
+
+    repository_url = f"https://github.com/{settings.version_check.repository}"
+    version = get_version()
+    return {
+        "status": "online",
+        "version": version,
+        "api_version": get_api_version(),
+        "repository_url": repository_url,
+        "release_notes_url": f"{repository_url}/releases/tag/v{version}",
+        "docs_url": "https://depictio.github.io/depictio-docs/",
+        "version_check": public_block() if getattr(user, "is_admin", False) else None,
+    }
 
 
 @utils_endpoint_router.get("/public-config")
@@ -116,6 +182,11 @@ async def public_config():
     GA measurement ID is already visible in the page's network traffic once
     injected, so exposing it changes nothing.
     """
+    from depictio.api.v1.services.branding import (
+        get_default_chrome,
+        resolve_effective_brand_theme,
+    )
+
     ga = settings.google_analytics
     return {
         "google_analytics": {
@@ -124,7 +195,215 @@ async def public_config():
             # does not leak a property ID it is not using.
             "tracking_id": ga.tracking_id if ga.is_configured else None,
         },
+        # Instance brand theme (#397): logo / name / palette / surfaces /
+        # figure colors for e.g. a core facility deployment. Env defaults
+        # overridden by the admin panel's live settings, with the derived
+        # values (figure colorway, sequential scale) already materialised so
+        # the SPA never re-derives them. Always emitted (an unbranded
+        # instance sends the resolved defaults) so the contract is shape-stable.
+        #
+        # Read past the cache. That cache is a per-process global with a 30s
+        # TTL, and `set_brand_theme_overrides` can only invalidate the worker
+        # that served the write — with the default 4 Gunicorn workers, three
+        # of them keep serving the previous theme for up to 30s, so an admin's
+        # save appeared to apply or not depending on which worker answered.
+        # This endpoint runs once per page load, not per render, so the
+        # find_one it costs is noise next to the rest of a page load; the
+        # cache still shields the figure render path, which is what it was
+        # added for. A store that is down still degrades to env defaults
+        # inside get_effective_brand_theme rather than failing the request.
+        "branding": resolve_effective_brand_theme(use_cache=False).model_dump(exclude_none=True),
+        # Instance default chrome style (Glass / Classic), set from the admin
+        # Branding panel; null means Glass. A reader's own pick overrides it.
+        "default_chrome": get_default_chrome(),
+        # Opt-in "give feedback" link (off unless a deployment points it
+        # somewhere). The URL is a template the SPA fills with what the reader
+        # is looking at; it is already public config, since anyone who can open
+        # the dashboard can read the link off the button.
+        "feedback": {
+            "enabled": settings.feedback.is_configured,
+            "url": settings.feedback.url if settings.feedback.is_configured else None,
+            "label": settings.feedback.label,
+        },
     }
+
+
+# ── Admin branding (issue #397, admin UI) ────────────────────────────────────
+# Live overrides of the DEPICTIO_BRANDING_* env defaults, persisted in the
+# `instance_settings` collection and served to every visitor through
+# /utils/public-config above. Admin only.
+#
+# The request body IS the shared BrandTheme model, so every colour/URL/radius
+# rule is enforced by the model's own validators (FastAPI turns their
+# ValueErrors into 422s) rather than by a hand-written mirror that can drift.
+
+
+def _require_admin(current_user) -> None:
+    if not getattr(current_user, "is_admin", False):
+        raise HTTPException(status_code=403, detail="User is not an admin.")
+
+
+def _branding_admin_view() -> dict:
+    """The three layers the panel needs: what env sets, what the admin
+    overrode, and the resolved result the rest of the app sees."""
+    from depictio.api.v1.services.branding import (
+        env_brand_theme,
+        get_brand_theme_overrides,
+        get_default_chrome,
+        resolve_effective_brand_theme,
+    )
+
+    return {
+        "overrides": get_brand_theme_overrides().model_dump(exclude_none=True),
+        "default_chrome": get_default_chrome(),
+        "env_defaults": env_brand_theme().model_dump(exclude_none=True),
+        "effective": resolve_effective_brand_theme(use_cache=False).model_dump(exclude_none=True),
+    }
+
+
+@utils_endpoint_router.get("/branding/presets")
+async def list_branding_presets():
+    """Named starting palettes offered by the /admin Branding panel.
+
+    Public: these are static design constants, and the login page is already
+    branded before a user is known.
+    """
+    from depictio.models.models.branding import BRAND_PRESETS, BrandTheme, resolve_brand_theme
+
+    return {
+        "presets": [
+            {
+                "id": preset_id,
+                "label": preset["label"],
+                "theme": preset["theme"],
+                # Resolved alongside so the picker can show real swatches
+                # without re-implementing the derivation in TypeScript.
+                "preview": resolve_brand_theme(BrandTheme(**preset["theme"])).model_dump(
+                    exclude_none=True
+                ),
+            }
+            for preset_id, preset in BRAND_PRESETS.items()
+        ]
+    }
+
+
+@utils_endpoint_router.post("/branding/resolve")
+async def resolve_branding(theme: BrandTheme, current_user=Depends(get_current_user)):
+    """Resolve a brand theme without saving it — the live-preview channel.
+
+    The derived figure colors are deliberately computed in one place
+    (``models/branding.py``) so the server and the SPA can't drift. That means
+    an unsaved draft in the Branding panel has to come here to be resolved
+    rather than re-deriving client-side. Pure computation on the supplied
+    input: no instance state is read or written, so any signed-in user may
+    call it (the dashboard appearance panel is used by editors, not admins).
+    """
+    del current_user  # authentication only — nothing user-specific is returned
+    return resolve_brand_theme(theme).model_dump(exclude_none=True)
+
+
+@utils_endpoint_router.get("/branding")
+async def get_branding_admin(current_user=Depends(get_current_user)):
+    """Current branding state for the admin panel: overrides, env, effective."""
+    _require_admin(current_user)
+    return _branding_admin_view()
+
+
+@utils_endpoint_router.put("/branding")
+async def put_branding_admin(theme: BrandTheme, current_user=Depends(get_current_user)):
+    """Replace the admin brand-theme overrides. Null/omitted fields fall back to env."""
+    _require_admin(current_user)
+    from depictio.api.v1.services.branding import set_brand_theme_overrides
+
+    set_brand_theme_overrides(theme)
+    logger.info(f"Branding overrides updated by {getattr(current_user, 'email', '?')}")
+    return _branding_admin_view()
+
+
+@utils_endpoint_router.put("/branding/look")
+async def put_branding_look(look: InstanceLook, current_user=Depends(get_current_user)):
+    """Set the instance's default chrome style (``null`` = Glass)."""
+    _require_admin(current_user)
+    from depictio.api.v1.services.branding import set_default_chrome
+
+    set_default_chrome(look.default_chrome)
+    logger.info(
+        f"Default look set to {look.default_chrome!r} by {getattr(current_user, 'email', '?')}"
+    )
+    return _branding_admin_view()
+
+
+@utils_endpoint_router.delete("/branding")
+async def delete_branding_admin(current_user=Depends(get_current_user)):
+    """Clear every override — the deployment's env defaults apply again."""
+    _require_admin(current_user)
+    from depictio.api.v1.services.branding import set_brand_theme_overrides, set_default_chrome
+
+    set_default_chrome(None)
+    set_brand_theme_overrides(None)
+    logger.info(f"Branding overrides reset by {getattr(current_user, 'email', '?')}")
+    return _branding_admin_view()
+
+
+@utils_endpoint_router.post("/branding/logo/{variant}")
+async def upload_branding_logo(
+    variant: Literal["light", "dark"],
+    file: UploadFile = File(...),
+    current_user=Depends(get_current_user),
+):
+    """Store an instance logo (light or dark variant) and point the override at it.
+
+    The bytes go to MongoDB, not to the container's filesystem: the theme
+    document survives a rebuild and its logo has to survive with it.
+    """
+    _require_admin(current_user)
+    from depictio.api.v1.services.branding import (
+        instance_logo_key,
+        patch_brand_theme_overrides,
+        store_logo_asset,
+        validate_logo_upload,
+    )
+
+    content = await file.read()
+    try:
+        validate_logo_upload(file.content_type, content)
+    except ValueError as exc:
+        raise HTTPException(status_code=415, detail=str(exc))
+
+    logo_url = store_logo_asset(instance_logo_key(variant), content, file.content_type)
+    patch = {"logo_url" if variant == "light" else "logo_url_dark": logo_url}
+    # An upload is an unambiguous "use this logo", so it also lifts a prior
+    # "no logo" choice rather than silently storing an unused URL.
+    if variant == "light":
+        patch["logo_mode"] = "custom"
+    patch_brand_theme_overrides(patch)
+    logger.info(f"Branding logo ({variant}) updated by {getattr(current_user, 'email', '?')}")
+    return _branding_admin_view()
+
+
+@utils_endpoint_router.get("/branding/logo/{variant}")
+async def get_branding_logo(variant: Literal["light", "dark"]):
+    """Serve a stored instance logo.
+
+    Deliberately unauthenticated: the login card renders the deployment's logo
+    before anyone has signed in, and this is the same image `/static/branding`
+    served to everyone before the bytes moved into MongoDB.
+    """
+    from depictio.api.v1.services.branding import (
+        LOGO_CACHE_CONTROL,
+        instance_logo_key,
+        read_logo_asset,
+    )
+
+    asset = read_logo_asset(instance_logo_key(variant))
+    if asset is None:
+        raise HTTPException(status_code=404, detail="No logo stored for this variant.")
+    content, content_type = asset
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Cache-Control": LOGO_CACHE_CONTROL},
+    )
 
 
 @utils_endpoint_router.get("/telemetry/preview")
@@ -167,6 +446,55 @@ async def telemetry_preview(current_user=Depends(get_current_user)):
         "heartbeat_already_sent_today": has_sent(EVENT_HEARTBEAT, daily=True),
         "payload": payload,
         "how_to_disable": "Set DEPICTIO_TELEMETRY_ENABLED=false or DO_NOT_TRACK=1.",
+    }
+
+
+@utils_endpoint_router.get("/capabilities")
+async def capabilities(current_user=Depends(get_current_user)):
+    """
+    What this server supports, so a client can adapt instead of guessing.
+
+    Feature strings are emitted only when the corresponding capability is
+    actually usable, so this reflects runtime configuration rather than build
+    version. Clients treat a 404 as "empty feature set" — which is exactly what
+    a server predating this endpoint returns — and read ``limits`` to size their
+    requests rather than discovering a ceiling by being rejected.
+
+    Authenticated rather than public: the limits and feature set are
+    operational detail, and /status already covers liveness.
+    """
+    from depictio.api.v1.endpoints.files_endpoints.routes import (
+        MAX_FILES_PER_BATCH,
+        MAX_IDS_PER_DELETE_BATCH,
+    )
+
+    features = [
+        "files.delete_batch",
+        "runs.delete_batch",
+        "deltatables.history",
+        "deltatables.provenance",
+        "deltatables.preview_time_travel",
+    ]
+    # Runtime state, not build state: advertised only when the flag is actually
+    # on, so a client can trust the list instead of inferring capability from a
+    # version number.
+    if settings.jobs.enabled:
+        features.append("jobs")
+        if settings.ingestion.async_deltatable_upsert:
+            features.append("deltatables.async_upsert")
+        # Needs somewhere to record the job, so it is only usable with jobs on.
+        if settings.ingestion.browser_trigger:
+            features.append("ingestion.browser_trigger")
+
+    return {
+        "api_version": get_version(),
+        "features": features,
+        # The constants the request models enforce, never a setting: a limit
+        # reported here that the endpoint does not apply sizes clients wrong.
+        "limits": {
+            "max_files_per_batch": MAX_FILES_PER_BATCH,
+            "max_ids_per_delete_batch": MAX_IDS_PER_DELETE_BATCH,
+        },
     }
 
 
@@ -717,6 +1045,9 @@ async def screenshot_react_dual(
         ScreenshotResult dict with `light_screenshot` / `dark_screenshot`
         paths (host-visible via the bind-mounted screenshots dir).
     """
+    if not settings.performance.screenshots_enabled:
+        raise HTTPException(status_code=503, detail="Screenshots are disabled on this instance")
+
     import asyncio
 
     from depictio.api.celery_app import generate_dashboard_screenshot_dual
@@ -745,8 +1076,16 @@ async def screenshot_react_dual(
     # The API container has no chromium — Playwright lives only in the Celery
     # worker image. Enqueue the screenshot task and await its result on a
     # threadpool so the event loop isn't blocked.
+    # Keyword arguments, not positional: the task signature carries a `force`
+    # flag between `user_id` and `open_settings`, so the positional form was
+    # passing `open_settings` as `force` and `filename_prefix` as
+    # `open_settings` — both query parameters of this endpoint went nowhere
+    # near the argument they name.
     task = generate_dashboard_screenshot_dual.delay(
-        dashboard_id, user_id or "", open_settings, filename_prefix
+        dashboard_id,
+        user_id=user_id or "",
+        open_settings=open_settings,
+        filename_prefix=filename_prefix,
     )
     try:
         result = await asyncio.to_thread(task.get, timeout=180)
@@ -805,3 +1144,64 @@ async def infrastructure_diagnostics(current_user=Depends(get_current_user)):
     except Exception as e:
         logger.error(f"❌ Infrastructure diagnostics failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Diagnostics failed: {str(e)}")
+
+
+# ── Release check (admin) ─────────────────────────────────────────────────────
+# Whether to look for newer Depictio releases, and what the last look found.
+# DEPICTIO_VERSION_CHECK_ENABLED, when set, wins and locks the toggle (409).
+# See services/version_check.py.
+
+
+class VersionCheckToggle(BaseModel):
+    enabled: bool
+
+
+_VERSION_CHECK_LOCKED = "Version check is set by DEPICTIO_VERSION_CHECK_ENABLED."
+
+
+@utils_endpoint_router.get("/version-check")
+async def get_version_check(current_user=Depends(get_current_user)):
+    """Release-check state for the admin panel."""
+    _require_admin(current_user)
+    from depictio.api.v1.services.version_check import admin_view
+
+    return admin_view()
+
+
+@utils_endpoint_router.put("/version-check")
+async def put_version_check(body: VersionCheckToggle, current_user=Depends(get_current_user)):
+    """Switch the release check on or off at runtime. 409 when the env sets it."""
+    _require_admin(current_user)
+    from depictio.api.v1.services.version_check import admin_view, locked_by_env, set_override
+
+    if locked_by_env():
+        raise HTTPException(status_code=409, detail=_VERSION_CHECK_LOCKED)
+    set_override(body.enabled)
+    logger.info(
+        f"Version check {'enabled' if body.enabled else 'disabled'} "
+        f"by {getattr(current_user, 'email', '?')}"
+    )
+    return admin_view()
+
+
+@utils_endpoint_router.delete("/version-check")
+async def delete_version_check(current_user=Depends(get_current_user)):
+    """Drop the admin's choice so the default (on) applies again. 409 when env-locked."""
+    _require_admin(current_user)
+    from depictio.api.v1.services.version_check import admin_view, locked_by_env, set_override
+
+    if locked_by_env():
+        raise HTTPException(status_code=409, detail=_VERSION_CHECK_LOCKED)
+    set_override(None)
+    return admin_view()
+
+
+@utils_endpoint_router.post("/version-check/run")
+async def run_version_check_now(current_user=Depends(get_current_user)):
+    """Check GitHub now ("Check now"), ignoring the interval. 409 when disabled."""
+    _require_admin(current_user)
+    from depictio.api.v1.services.version_check import is_enabled, run_version_check
+
+    if not is_enabled():
+        raise HTTPException(status_code=409, detail="Version check is disabled.")
+    return await run_version_check(force=True)

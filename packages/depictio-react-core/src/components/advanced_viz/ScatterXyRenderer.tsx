@@ -1,0 +1,932 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
+import Plot from './LegendAwarePlot';
+
+import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
+import type { PlotGraphHandlers } from '../annotations/usePlotAnnotationLayer';
+import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
+import type { PlotEventHandlers } from '../../annotations/plotDecorate';
+
+import {
+  AdvancedVizKind,
+  fetchAdvancedVizData,
+  InteractiveFilter,
+  StoredMetadata,
+} from '../../api';
+import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
+import {
+  advancedVizSelectionColumn,
+  advancedVizSelectionFilter,
+  extractScatterSelection,
+  filtersExcludingOwn,
+  hasOwnSelection,
+} from '../../selection';
+import AdvancedVizFrame from './AdvancedVizFrame';
+import {
+  VizControlGroup,
+  VizFullRow,
+  VizNumberInput,
+  VizSegmented,
+  VizSelect,
+  VizSlider,
+  VizSwitch,
+} from './controls/VizControls';
+import { looksContinuous } from './colourScales';
+import { densityHeatmap } from './densityBins';
+import {
+  applyDataTheme,
+  applyLayoutTheme,
+  plotlyAxisOverrides,
+  plotlyThemeColors,
+  plotlyThemeFragment,
+} from './plotlyTheme';
+import { usePersistedVizControl } from './usePersistedVizControl';
+import { highlightPredicate, ReferenceHighlight, ReferenceLine } from './scatterReference';
+import { useGestureGuardedSelection, useSelectionRevision } from './selectionGesture';
+import { splitFigureByGroups } from './groupSplit';
+import type { GroupRenderState } from '../../selectionGroups';
+import { useReportGroupColouring } from '../../groupReach';
+
+type LegendPos = 'right' | 'bottom' | 'none';
+
+/** Mirrors `ScatterXyConfig` in
+ *  depictio/models/components/advanced_viz/configs.py. Every key read here has
+ *  a field there — `test_advanced_viz_config_alignment` enforces it. */
+interface ScatterXyConfig {
+  x_col: string;
+  y_col: string;
+  label_col?: string | null;
+  color_col?: string | null;
+  size_col?: string | null;
+  log_x?: boolean;
+  log_y?: boolean;
+  x_title?: string | null;
+  y_title?: string | null;
+  reference_line?: ReferenceLine;
+  reference_value?: number | null;
+  min_size?: number;
+  max_size?: number;
+  marker_size?: number;
+  opacity?: number;
+  marker_outline?: boolean;
+  top_n_labels?: number;
+  color_scale?: string;
+  legend_pos?: LegendPos;
+  selection_enabled?: boolean;
+  selection_column?: string | null;
+  density?: boolean;
+  density_threshold?: number;
+  density_bins?: number;
+  quadrants?: Quadrants | null;
+}
+
+/** `{x, y, labels?}`, validated on the model side; `labels` is ordered
+ *  top-left, top-right, bottom-left, bottom-right. */
+interface Quadrants {
+  x: number;
+  y: number;
+  labels?: string[] | null;
+}
+
+interface Props {
+  metadata: StoredMetadata & { viz_kind?: string; config?: ScatterXyConfig };
+  filters: InteractiveFilter[];
+  refreshTick?: number;
+  onFilterChange?: (filter: InteractiveFilter) => void;
+  /** Dashboard-wide analysis grouping, applied to the finished figure. */
+  groupRender?: GroupRenderState;
+}
+
+// Sent so the server applies this kind's reduction policy: `KIND_SAMPLING_POLICY`
+// carries `scatter_xy: "hash"`, because a uniform subset of a cloud is a
+// lower-resolution cloud and no axis here has a distinguished tail to keep.
+const SCATTER_XY_VIZ_KIND: AdvancedVizKind = 'scatter_xy';
+
+const PLOT_STYLE = { width: '100%', height: '100%' };
+
+// Two configs: a component that cannot emit a selection has no use for the
+// box/lasso buttons. Scroll-zoom stays off in both, because capturing the wheel
+// breaks page scrolling whenever the pointer crosses the tile.
+const PLOT_CONFIG_PLAIN = {
+  displaylogo: false,
+  responsive: true,
+  displayModeBar: true,
+  modeBarButtonsToRemove: ['select2d', 'lasso2d', 'autoScale2d'],
+  scrollZoom: false,
+};
+const PLOT_CONFIG_SELECT = {
+  displaylogo: false,
+  responsive: true,
+  displayModeBar: true,
+  modeBarButtonsToRemove: ['autoScale2d'],
+  scrollZoom: false,
+};
+
+// Only the scales that are actually present in the bundled plotly.js build.
+// Plasma, Inferno, Magma and Spectral are named in other renderers and silently
+// fall back to the default there; this list is deliberately the verified subset.
+const COLOUR_SCALES = ['Viridis', 'Cividis', 'RdBu', 'Blackbody'] as const;
+
+// 0: the tile never leaves the point view on its own. An author who wants the
+// automatic switch names the row count (`density_threshold`).
+const DEFAULT_DENSITY_THRESHOLD = 0;
+const DEFAULT_DENSITY_BINS = 60;
+// Opacity kept by the points on the side of the guide not being looked at.
+const DIMMED_OPACITY = 0.2;
+
+const PALETTE = TAB10_PALETTE;
+
+const num = (v: unknown): number | null => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+// Memoised on the (already themed and annotated) figure and on each handler,
+// so a render that changes neither never reaches `Plotly.react`. The
+// selection handlers arrive gesture-guarded from the renderer (see
+// selectionGesture), so annotate mode can detach them as a pair.
+const ScatterXyPlot = React.memo<
+  {
+    data: unknown[];
+    layout: Record<string, unknown>;
+    plotConfig: Record<string, unknown>;
+  } & PlotEventHandlers &
+    PlotGraphHandlers
+>(({ data, layout, plotConfig, ...handlers }) => (
+  <Plot
+    data={data as any}
+    layout={layout as any}
+    useResizeHandler
+    style={PLOT_STYLE}
+    config={plotConfig as any}
+    {...handlers}
+  />
+));
+ScatterXyPlot.displayName = 'ScatterXyPlot';
+
+/**
+ * Numeric against numeric: the plainest kind in the registry, and the one the
+ * templates reach for most.
+ *
+ * Twenty-eight figures across ten nf-core templates draw a scatter in code
+ * mode, and none of them does it for the shape. They do it for a marker size
+ * column, a `custom_data` selection key, a reference diagonal or a log axis, so
+ * those four are what this renderer exists to make declarable.
+ */
+const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange, groupRender }) => {
+  const { colorScheme } = useMantineColorScheme();
+  const theme = useMantineTheme();
+  const palette = resolveCategoricalPalette(theme, PALETTE);
+  const config = (metadata.config || {}) as ScatterXyConfig;
+  const isDark = colorScheme === 'dark';
+  const themeColors = plotlyThemeColors(isDark, theme);
+  // A category of `color_col` wears the dashboard's colour for it.
+  const pinnedColours = usePinnedCategoryColors(config.color_col);
+  // Quadrant labels are furniture, so they sit a step back from the body text
+  // colour without dropping under the contrast the scheme's background gives.
+  const quadrantLabelColor = theme.colors.gray[isDark ? 6 : 7];
+
+  // Tier-2 controls. Defaults agree with ScatterXyConfig's own, so an
+  // unconfigured component and a configured one draw the same cloud.
+  const [logX, setLogX] = usePersistedVizControl<boolean>(metadata, 'log_x', false);
+  const [logY, setLogY] = usePersistedVizControl<boolean>(metadata, 'log_y', false);
+  const [opacity, setOpacity] = usePersistedVizControl<number>(metadata, 'opacity', 0.8);
+  const [maxSize, setMaxSize] = usePersistedVizControl<number>(metadata, 'max_size', 22);
+  const [minSize, setMinSize] = usePersistedVizControl<number>(metadata, 'min_size', 4);
+  const [markerSize, setMarkerSize] = usePersistedVizControl<number>(metadata, 'marker_size', 7);
+  const [outline, setOutline] = usePersistedVizControl<boolean>(metadata, 'marker_outline', true);
+  const [topN, setTopN] = usePersistedVizControl<number>(metadata, 'top_n_labels', 0);
+  const [colourScale, setColourScale] = usePersistedVizControl<string>(
+    metadata,
+    'color_scale',
+    'Viridis',
+  );
+  const [refLine, setRefLine] = usePersistedVizControl<ReferenceLine>(
+    metadata,
+    'reference_line',
+    'none',
+  );
+  // The value a horizontal or vertical guide sits at. Persisted with the line
+  // itself: a guide the reader cannot place is a guide they cannot use.
+  const [refValue, setRefValue] = usePersistedVizControl<number | null>(
+    metadata,
+    'reference_value',
+    null,
+  );
+  // The side of the guide the reader is asked to look at; the other side is
+  // dimmed, as the Manhattan plot does around its score threshold.
+  const [refHighlight, setRefHighlight] = usePersistedVizControl<ReferenceHighlight>(
+    metadata,
+    'reference_highlight',
+    'none',
+  );
+  const [legendPos, setLegendPos] = usePersistedVizControl<LegendPos>(
+    metadata,
+    'legend_pos',
+    'right',
+  );
+  const [density, setDensity] = usePersistedVizControl<boolean>(metadata, 'density', false);
+  // Past `density_threshold` rows a marker cloud is a solid blob, so the tile
+  // switches itself. That is a data-derived decision, not an authored one, so
+  // it stays out of the persisted config; a reader's own pick overrides both.
+  const [densityOverride, setDensityOverride] = useState<boolean | null>(null);
+
+  // ---- Selection as a cross-filter ---------------------------------------
+  // Resolved through selection.ts (named column, else the label column), so the
+  // chrome's capability marker and this gate cannot disagree. A host with no
+  // onFilterChange is read-only and advertises nothing.
+  const selectionColumn = onFilterChange ? advancedVizSelectionColumn(metadata) : undefined;
+  const selectionEnabled = Boolean(selectionColumn);
+
+  const requiredCols = useMemo(() => {
+    const cols = [config.x_col, config.y_col].filter(Boolean) as string[];
+    for (const c of [config.label_col, config.color_col, config.size_col, selectionColumn]) {
+      if (c && !cols.includes(c)) cols.push(c);
+    }
+    return cols;
+  }, [config.x_col, config.y_col, config.label_col, config.color_col, config.size_col, selectionColumn]);
+
+  // This component must not narrow itself by its own selection: a box select
+  // would redraw the cloud as only the points it caught, and the user could
+  // never widen it again. Every other component still narrows.
+  const filtersForFetch = useMemo(
+    () => filtersExcludingOwn(filters, metadata.index, 'scatter_selection'),
+    [filters, metadata.index],
+  );
+  const selectionRevision = useSelectionRevision(
+    hasOwnSelection(filters, metadata.index, 'scatter_selection'),
+  );
+
+  const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [estimated, setEstimated] = useState(false);
+
+  useEffect(() => {
+    if (!metadata.wf_id || !metadata.dc_id || requiredCols.length < 2) {
+      setError('Scatter: missing data binding');
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetchAdvancedVizData({
+      wfId: metadata.wf_id,
+      dcId: metadata.dc_id,
+      columns: requiredCols,
+      filters: filtersForFetch,
+      vizKind: SCATTER_XY_VIZ_KIND,
+      roles: { x: config.x_col, y: config.y_col },
+    })
+      .then((res) => {
+        if (cancelled) return;
+        setRows(res.rows);
+        setEstimated(Boolean(res.sampling?.degraded));
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    metadata.wf_id,
+    metadata.dc_id,
+    JSON.stringify(requiredCols),
+    JSON.stringify(filtersForFetch),
+    refreshTick,
+  ]);
+
+  const points = useMemo(() => {
+    if (!rows) return null;
+    const xs = (rows[config.x_col] || []) as unknown[];
+    const ys = (rows[config.y_col] || []) as unknown[];
+    const labels = config.label_col ? ((rows[config.label_col] || []) as unknown[]) : null;
+    const colours = config.color_col ? ((rows[config.color_col] || []) as unknown[]) : null;
+    const sizes = config.size_col ? ((rows[config.size_col] || []) as unknown[]) : null;
+    const keys = selectionColumn ? ((rows[selectionColumn] || []) as unknown[]) : null;
+
+    const out: {
+      x: number;
+      y: number;
+      label: string;
+      colour: unknown;
+      size: number | null;
+      key: string;
+    }[] = [];
+    const n = Math.min(xs.length, ys.length);
+    for (let i = 0; i < n; i++) {
+      const x = num(xs[i]);
+      const y = num(ys[i]);
+      if (x === null || y === null) continue;
+      const label = labels ? String(labels[i] ?? '') : '';
+      out.push({
+        x,
+        y,
+        label,
+        colour: colours ? colours[i] : null,
+        size: sizes ? num(sizes[i]) : null,
+        key: keys ? String(keys[i] ?? '') : label,
+      });
+    }
+    return out;
+  }, [rows, config.x_col, config.y_col, config.label_col, config.color_col, config.size_col, selectionColumn]);
+
+  const numericColour = useMemo(
+    () => Boolean(config.color_col && points && looksContinuous(points.map((p) => p.colour))),
+    [config.color_col, points],
+  );
+
+  const densityThreshold = config.density_threshold ?? DEFAULT_DENSITY_THRESHOLD;
+  const densityBins = config.density_bins ?? DEFAULT_DENSITY_BINS;
+  const densityView =
+    densityOverride ??
+    (density || (densityThreshold > 0 && (points?.length ?? 0) > densityThreshold));
+  // A box select over a binned density catches no points, and every
+  // `Plotly.react` would then report an empty selection and clear whatever the
+  // reader had filtered on. Selection is a point-view capability.
+  const selectionActive = selectionEnabled && !densityView;
+
+  const figure = useMemo(() => {
+    if (!points) return null;
+    if (points.length === 0) return null;
+
+    const xTitle = config.x_title || config.x_col;
+    const yTitle = config.y_title || config.y_col;
+
+    // Plotly scales marker area, not diameter, so the tunable pair has to be
+    // turned into one `sizeref`. Points at the smallest bound value keep
+    // `minSize` via `sizemin`, which is what stops a long tail of invisible
+    // dots when the size column spans orders of magnitude.
+    const sizeVals = points.map((p) => p.size).filter((s): s is number => s !== null && s > 0);
+    const sizeMax = sizeVals.length ? Math.max(...sizeVals) : 0;
+    const sizeref = sizeMax > 0 ? (2 * sizeMax) / (maxSize * maxSize) : undefined;
+
+    // Highlighting one side of the guide dims the other to a fifth of its
+    // opacity, per point, so colour-by and size stay readable through it.
+    const highlighted = densityView ? null : highlightPredicate(refLine, refValue, refHighlight);
+    const pointOpacity = (pts: typeof points): number | number[] =>
+      highlighted ? pts.map((p) => (highlighted(p) ? opacity : opacity * DIMMED_OPACITY)) : opacity;
+    const highlightedCount = highlighted ? points.filter(highlighted).length : null;
+
+    const markerCommon = {
+      opacity,
+      line: outline
+        ? { width: 1, color: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(70,70,70,0.55)' }
+        : { width: 0 },
+      ...(sizeref !== undefined
+        ? { sizemode: 'area' as const, sizeref, sizemin: minSize }
+        : {}),
+    };
+
+    const hover = (p: { label: string }) =>
+      p.label ? `<b>${p.label}</b><br>` : '';
+    const hoverTail = `${xTitle}: %{x}<br>${yTitle}: %{y}<extra></extra>`;
+
+    const data: Record<string, unknown>[] = [];
+
+    if (densityView) {
+      // One counted cell per `density_bins` x `density_bins` grid square
+      // instead of one marker per row. The cells are counted here and handed
+      // to a `heatmap` with explicit edges: `histogram2d` binning on a log
+      // axis crashed the tab (see `densityHeatmap`).
+      const grid = densityHeatmap(
+        points.map((p) => p.x),
+        points.map((p) => p.y),
+        { logX, logY, bins: densityBins },
+      );
+      if (grid) {
+        data.push({
+          type: 'heatmap' as const,
+          x: grid.xEdges,
+          y: grid.yEdges,
+          z: grid.z,
+          colorscale: colourScale,
+          colorbar: { thickness: 10, len: 0.75, title: { text: 'count', side: 'right' } },
+          hovertemplate: `${xTitle}: %{x}<br>${yTitle}: %{y}<br>count: %{z}<extra></extra>`,
+          showlegend: false,
+          name: yTitle,
+        });
+      }
+    } else if (config.color_col && numericColour) {
+      // `customdata` is one array per point: slot 0 is the selection key.
+      // `extractScatterSelection` and `splitFigureByGroups` both index slot 0,
+      // and a bare string there reads as its first character.
+      // One trace, colour as a continuous scale with a colorbar.
+      data.push({
+        type: 'scattergl' as const,
+        mode: 'markers' as const,
+        x: points.map((p) => p.x),
+        y: points.map((p) => p.y),
+        text: points.map((p) => p.label),
+        customdata: points.map((p) => [p.key]),
+        marker: {
+          ...markerCommon,
+          opacity: pointOpacity(points),
+          size: sizeref !== undefined ? points.map((p) => p.size ?? 0) : markerSize,
+          color: points.map((p) => num(p.colour) ?? 0),
+          colorscale: colourScale,
+          showscale: true,
+          colorbar: { thickness: 10, len: 0.75, title: { text: config.color_col, side: 'right' } },
+        },
+        hovertemplate: `%{text}<br>${config.color_col}: %{marker.color}<br>${hoverTail}`,
+        showlegend: false,
+        name: yTitle,
+      });
+    } else if (config.color_col) {
+      // One trace per category, so the legend doubles as a category filter.
+      const groups = new Map<string, typeof points>();
+      for (const p of points) {
+        const k = String(p.colour ?? '');
+        const bucket = groups.get(k);
+        if (bucket) bucket.push(p);
+        else groups.set(k, [p]);
+      }
+      const names = Array.from(groups.keys()).sort();
+      const colourMap = stableColorMap(names, palette, pinnedColours);
+      for (const name of names) {
+        const group = groups.get(name) as typeof points;
+        data.push({
+          type: 'scattergl' as const,
+          mode: 'markers' as const,
+          name: name || '(blank)',
+          x: group.map((p) => p.x),
+          y: group.map((p) => p.y),
+          text: group.map((p) => p.label),
+          customdata: group.map((p) => [p.key]),
+          marker: {
+            ...markerCommon,
+            opacity: pointOpacity(group),
+            color: colourMap.get(name),
+            size: sizeref !== undefined ? group.map((p) => p.size ?? 0) : markerSize,
+          },
+          hovertemplate: `%{text}<br>${config.color_col}: ${name || '(blank)'}<br>${hoverTail}`,
+        });
+      }
+    } else {
+      data.push({
+        type: 'scattergl' as const,
+        mode: 'markers' as const,
+        name: yTitle,
+        x: points.map((p) => p.x),
+        y: points.map((p) => p.y),
+        text: points.map((p) => p.label),
+        customdata: points.map((p) => [p.key]),
+        marker: {
+          ...markerCommon,
+          opacity: pointOpacity(points),
+          color: palette[0],
+          size: sizeref !== undefined ? points.map((p) => p.size ?? 0) : markerSize,
+        },
+        hovertemplate: `%{text}<br>${hoverTail}`,
+        showlegend: false,
+      });
+    }
+
+    // Plotly 2 places annotations on a log axis in log10 units, while trace
+    // data on that same axis is passed untransformed. A raw value there lands
+    // at 10^value. Shapes are the exception: they take data units on every
+    // axis type (`shapes/helpers.js`, `rangeToShapePosition`), so a log10
+    // value handed to a shape is read as a raw one, and the diagonal once
+    // stretched the axes down to 10^-64. Non-positive values have no place on
+    // a log axis, so they drop out rather than becoming -Infinity.
+    const axisCoord = (v: number, log: boolean): number | null =>
+      !log ? v : v > 0 ? Math.log10(v) : null;
+    const shapeCoord = (v: number, log: boolean): number | null => (!log || v > 0 ? v : null);
+
+    // Labels for the most notable points. Ranked by the size column when one is
+    // bound, because that is what the reader is being asked to look at;
+    // otherwise by distance from the y origin, which is the volcano convention.
+    // With a highlighted side, only that side is ranked, so the labels sit on
+    // the points that kept their colour.
+    const annotations: Record<string, unknown>[] = [];
+    if (topN > 0 && config.label_col && !densityView) {
+      const ranked = (highlighted ? points.filter(highlighted) : [...points]).sort((a, b) =>
+        sizeMax > 0 ? (b.size ?? 0) - (a.size ?? 0) : Math.abs(b.y) - Math.abs(a.y),
+      );
+      for (const p of ranked.slice(0, topN)) {
+        if (!p.label) continue;
+        const ax = axisCoord(p.x, logX);
+        const ay = axisCoord(p.y, logY);
+        if (ax === null || ay === null) continue;
+        annotations.push({
+          x: ax,
+          y: ay,
+          text: p.label,
+          showarrow: false,
+          yshift: 10,
+          font: { size: 10 },
+        });
+      }
+    }
+
+    // Guide lines. The diagonal is drawn in paper-free data coordinates over
+    // the shared range of both axes, so it stays the identity line under zoom.
+    const shapes: Record<string, unknown>[] = [];
+    const guide = { color: themeColors.zeroLineColor, width: 1, dash: 'dash' as const };
+    if (refLine === 'diagonal') {
+      // One shared range drives both ends, so under either log axis the line
+      // can only span the points whose coordinates are both drawable.
+      const spanning = logX || logY ? points.filter((p) => p.x > 0 && p.y > 0) : points;
+      if (spanning.length > 0) {
+        const lo = Math.min(...spanning.map((p) => Math.min(p.x, p.y)));
+        const hi = Math.max(...spanning.map((p) => Math.max(p.x, p.y)));
+        shapes.push({
+          type: 'line',
+          x0: shapeCoord(lo, logX),
+          y0: shapeCoord(lo, logY),
+          x1: shapeCoord(hi, logX),
+          y1: shapeCoord(hi, logY),
+          line: guide,
+        });
+      }
+    } else if (refLine === 'horizontal' && refValue != null) {
+      const v = shapeCoord(refValue, logY);
+      if (v !== null) {
+        shapes.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: v, y1: v, line: guide });
+      }
+    } else if (refLine === 'vertical' && refValue != null) {
+      const v = shapeCoord(refValue, logX);
+      if (v !== null) {
+        shapes.push({ type: 'line', yref: 'paper', y0: 0, y1: 1, x0: v, x1: v, line: guide });
+      }
+    }
+
+    // Quadrants: the two cuts that turn the plane into the four named regions
+    // a reader is actually looking for (MIMAG completeness vs contamination is
+    // the canonical case). Same muted guide style as the reference lines, and
+    // the labels sit in the corners of the plotting area rather than on the
+    // lines, so they never land on top of a point cluster.
+    const quadrants = config.quadrants ?? null;
+    if (quadrants) {
+      const qx = axisCoord(Number(quadrants.x), logX);
+      const qy = axisCoord(Number(quadrants.y), logY);
+      if (qx !== null && Number.isFinite(qx)) {
+        shapes.push({ type: 'line', yref: 'paper', y0: 0, y1: 1, x0: qx, x1: qx, line: guide });
+      }
+      if (qy !== null && Number.isFinite(qy)) {
+        shapes.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: qy, y1: qy, line: guide });
+      }
+      const labels = Array.isArray(quadrants.labels) ? quadrants.labels : null;
+      if (labels) {
+        const corners = [
+          { x: 0.02, y: 0.98, xanchor: 'left', yanchor: 'top' },
+          { x: 0.98, y: 0.98, xanchor: 'right', yanchor: 'top' },
+          { x: 0.02, y: 0.02, xanchor: 'left', yanchor: 'bottom' },
+          { x: 0.98, y: 0.02, xanchor: 'right', yanchor: 'bottom' },
+        ];
+        corners.forEach((corner, i) => {
+          const text = labels[i];
+          if (!text) return;
+          annotations.push({
+            ...corner,
+            xref: 'paper',
+            yref: 'paper',
+            text,
+            showarrow: false,
+            font: { size: 10, color: quadrantLabelColor },
+          });
+        });
+      }
+    }
+
+    const layout: Record<string, unknown> = {
+      ...plotlyThemeFragment(isDark, theme),
+      margin: { l: 60, r: 16, t: 12, b: 52 },
+      xaxis: {
+        ...plotlyAxisOverrides(isDark, theme),
+        title: { text: xTitle, standoff: 8 },
+        type: logX ? ('log' as const) : ('linear' as const),
+        zeroline: false,
+      },
+      yaxis: {
+        ...plotlyAxisOverrides(isDark, theme),
+        title: { text: yTitle, standoff: 8 },
+        type: logY ? ('log' as const) : ('linear' as const),
+        zeroline: false,
+      },
+      shapes,
+      annotations,
+      showlegend: legendPos !== 'none' && data.length > 1,
+      legend:
+        legendPos === 'bottom'
+          ? { orientation: 'h' as const, x: 0, y: -0.18, yanchor: 'top' as const }
+          : { orientation: 'v' as const, x: 1.02, y: 1, font: { size: 10 } },
+      hovermode: 'closest' as const,
+      dragmode: selectionActive ? ('select' as const) : ('zoom' as const),
+      // Selected points are keyed apart from the zoom: an outside clear
+      // (group saved, filter removed) undims the plot and keeps the view.
+      selectionrevision: `sel-${selectionRevision}`,
+      autosize: true,
+    };
+
+    return { data, layout, highlightedCount };
+  }, [
+    points,
+    numericColour,
+    config.x_col,
+    config.y_col,
+    config.label_col,
+    config.color_col,
+    config.x_title,
+    config.y_title,
+    refValue,
+    config.quadrants,
+    logX,
+    logY,
+    opacity,
+    minSize,
+    maxSize,
+    markerSize,
+    outline,
+    topN,
+    colourScale,
+    refLine,
+    legendPos,
+    densityView,
+    densityBins,
+    selectionActive,
+    selectionRevision,
+    refHighlight,
+    isDark,
+    theme,
+    palette,
+    pinnedColours,
+    quadrantLabelColor,
+    themeColors.zeroLineColor,
+  ]);
+
+  // Box select, click and deselect all land on the same
+  // `(index, 'scatter_selection')` entry, so the last gesture replaces the
+  // previous one and a deselect clears it.
+  const emitSelection = useCallback(
+    (values: string[]) => {
+      if (!onFilterChange || !selectionColumn) return;
+      onFilterChange(advancedVizSelectionFilter(metadata, selectionColumn, values));
+    },
+    [onFilterChange, selectionColumn, metadata],
+  );
+  const handleSelected = useCallback(
+    (event: any) => emitSelection(extractScatterSelection(event, 0)),
+    [emitSelection],
+  );
+  const handleClick = useCallback(
+    (event: any) => emitSelection(extractScatterSelection(event, 0)),
+    [emitSelection],
+  );
+  const handleDeselect = useCallback(() => emitSelection([]), [emitSelection]);
+  // Only a gesture may empty the selection (see selectionGesture). Guarded
+  // here rather than inside the plot so annotate mode detaches both halves.
+  const guardedSelection = useGestureGuardedSelection(selectionActive ? handleSelected : undefined);
+
+  const highlightedCount = figure?.highlightedCount ?? null;
+  const counts = useMemo(
+    () =>
+      points
+        ? {
+            points: points.length,
+            ...(highlightedCount != null ? { highlighted: highlightedCount } : {}),
+          }
+        : undefined,
+    [points, highlightedCount],
+  );
+
+  // Encoding tier: what the cloud is (points or a density), how the axes are
+  // scaled and which reference it is read against. Sizes, opacity, labels and
+  // the legend are paint on the same cloud.
+  const primaryControls = (
+    <>
+      <VizControlGroup title="Display">
+        <VizSegmented
+          aria-label="Cloud"
+          value={densityView ? 'density' : 'points'}
+          onChange={(v) => {
+            const next = v === 'density';
+            setDensityOverride(next);
+            setDensity(next);
+          }}
+          data={[
+            { value: 'points', label: 'Points' },
+            { value: 'density', label: 'Density' },
+          ]}
+        />
+        <VizSwitch
+          checked={logX}
+          onChange={(e) => setLogX(e.currentTarget.checked)}
+          label="Log x"
+        />
+        <VizSwitch
+          checked={logY}
+          onChange={(e) => setLogY(e.currentTarget.checked)}
+          label="Log y"
+        />
+      </VizControlGroup>
+      <VizControlGroup title="Reference">
+        <VizSelect
+          label="Reference line"
+          value={refLine}
+          onChange={(v) => setRefLine((v as ReferenceLine) || 'none')}
+          data={[
+            { value: 'none', label: 'None' },
+            { value: 'diagonal', label: 'Identity diagonal' },
+            { value: 'horizontal', label: 'Horizontal at reference value' },
+            { value: 'vertical', label: 'Vertical at reference value' },
+          ]}
+          allowDeselect={false}
+        />
+        {refLine === 'horizontal' || refLine === 'vertical' ? (
+          <VizNumberInput
+            label="Reference value"
+            placeholder={refLine === 'horizontal' ? 'y =' : 'x ='}
+            value={refValue ?? ''}
+            onChange={(v) => setRefValue(v === '' || v === null ? null : Number(v))}
+            decimalScale={6}
+          />
+        ) : null}
+        {refLine !== 'none' && !densityView ? (
+          <VizSegmented
+            label="Highlight"
+            value={refHighlight}
+            onChange={(v) => setRefHighlight(v as ReferenceHighlight)}
+            data={[
+              { value: 'above', label: 'Above' },
+              { value: 'below', label: 'Below' },
+              { value: 'none', label: 'Both' },
+            ]}
+          />
+        ) : null}
+      </VizControlGroup>
+    </>
+  );
+
+  const controls = (
+    <>
+      <VizControlGroup title="Markers">
+        {config.size_col ? (
+          <>
+            <VizNumberInput
+              label="Min size"
+              value={minSize}
+              disabled={densityView}
+              onChange={(v) => setMinSize(Math.max(1, Number(v) || 4))}
+              min={1}
+              max={40}
+            />
+            <VizNumberInput
+              label="Max size"
+              value={maxSize}
+              disabled={densityView}
+              onChange={(v) => setMaxSize(Math.max(2, Number(v) || 22))}
+              min={2}
+              max={80}
+            />
+          </>
+        ) : (
+          <VizNumberInput
+            label="Marker size"
+            value={markerSize}
+            disabled={densityView}
+            onChange={(v) => setMarkerSize(Math.max(1, Number(v) || 7))}
+            min={1}
+            max={40}
+          />
+        )}
+        <VizSlider
+          label="Opacity"
+          value={opacity}
+          onChangeEnd={setOpacity}
+          min={0.05}
+          max={1}
+          step={0.05}
+          thumbLabel={(v) => v.toFixed(2)}
+        />
+        <VizSwitch
+          checked={outline}
+          disabled={densityView}
+          onChange={(e) => setOutline(e.currentTarget.checked)}
+          label="Marker outline"
+        />
+      </VizControlGroup>
+      {config.label_col ? (
+        <VizControlGroup title="Labels">
+          <VizNumberInput
+            label="Top-N labels"
+            value={topN}
+            disabled={densityView}
+            onChange={(v) => setTopN(Math.max(0, Number(v) || 0))}
+            min={0}
+            max={50}
+          />
+          <VizFullRow>
+            <Text size="xs" c="dimmed">
+              {config.size_col ? 'Largest by the size column' : 'Furthest from zero on y'}
+            </Text>
+          </VizFullRow>
+        </VizControlGroup>
+      ) : null}
+      <VizControlGroup title="Colour & legend">
+        {(config.color_col && numericColour) || densityView ? (
+          <VizSelect
+            label="Colourscale"
+            value={colourScale}
+            onChange={(v) => v && setColourScale(v)}
+            data={COLOUR_SCALES as unknown as string[]}
+            allowDeselect={false}
+          />
+        ) : null}
+        <VizSelect
+          label="Legend"
+          value={legendPos}
+          onChange={(v) => setLegendPos((v as LegendPos) || 'right')}
+          data={[
+            { value: 'right', label: 'Right' },
+            { value: 'bottom', label: 'Bottom' },
+            { value: 'none', label: 'Hidden' },
+          ]}
+          allowDeselect={false}
+        />
+      </VizControlGroup>
+    </>
+  );
+
+  // Recolour by the dashboard's analysis groups. Slot 0 of `customdata` is
+  // the point's key (the label column), which is what a lasso on this tile
+  // captures — so the groups a user builds here are the ones it reads back.
+  // `splitFigureByGroups` returns the figure untouched when nothing matches.
+  const groupedFigure = useMemo(
+    () =>
+      figure
+        ? splitFigureByGroups(figure, {
+            groupRender,
+            identitySlot: 0,
+            facetable: false,
+            showLegend: true,
+          })
+        : figure,
+    [figure, groupRender],
+  );
+  // Whether any point matched, for the dispatch's "not grouped" badge.
+  useReportGroupColouring(groupRender, figure, groupedFigure);
+
+  const plotData = useMemo(
+    () => (groupedFigure ? applyDataTheme(groupedFigure.data, isDark, theme) : null),
+    [groupedFigure, isDark, theme],
+  );
+  const plotLayout = useMemo(
+    () => (groupedFigure ? applyLayoutTheme(groupedFigure.layout as any, isDark, theme) : null),
+    [groupedFigure, isDark, theme],
+  );
+  // Chart annotations. `customdata` holds each point's key: the selection
+  // column's value when the component selects, else the label column's.
+  // Without either, marked points are stored as coordinates.
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: supportsAdvancedVizAnnotation(metadata),
+    data: plotData,
+    layout: plotLayout,
+    pointIdIndex: 0,
+    pointIdColumn: selectionColumn ?? (config.label_col || undefined),
+  });
+
+  return (
+    <AdvancedVizFrame
+      estimated={estimated}
+      title={metadata.title || 'Scatter'}
+      subtitle={(metadata as any).description || (metadata as any).subtitle}
+      counts={counts}
+      primaryControls={primaryControls}
+      controls={controls}
+      loading={loading}
+      error={error}
+      emptyMessage={points && points.length === 0 ? 'No points' : undefined}
+      dataRows={rows ?? undefined}
+      dataColumns={requiredCols}
+      badges={annotations.badges}
+    >
+      {groupedFigure ? (
+        <>
+          <ScatterXyPlot
+            data={annotations.data}
+            layout={annotations.layout}
+            plotConfig={selectionActive ? PLOT_CONFIG_SELECT : PLOT_CONFIG_PLAIN}
+            {...annotations.plotProps({
+              onSelecting: guardedSelection.onSelecting,
+              onSelected: guardedSelection.onSelected,
+              onClick: selectionActive ? handleClick : undefined,
+              onDeselect: selectionActive ? handleDeselect : undefined,
+            })}
+          />
+          {annotations.toolbar}
+        </>
+      ) : null}
+    </AdvancedVizFrame>
+  );
+};
+
+export default ScatterXyRenderer;

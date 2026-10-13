@@ -56,12 +56,42 @@ groups_collection = db[settings.mongodb.collections.groups_collection]
 deltatables_collection = db[settings.mongodb.collections.deltatables_collection]
 jbrowse_collection = db[settings.mongodb.collections.jbrowse_collection]
 dashboards_collection = db[settings.mongodb.collections.dashboards_collection]
+dashboard_versions_collection = db[settings.mongodb.collections.dashboard_versions_collection]
+dashboard_version_counters_collection = db[
+    settings.mongodb.collections.dashboard_version_counters_collection
+]
 initialization_collection = db[settings.mongodb.collections.initialization_collection]
 projects_collection = db[settings.mongodb.collections.projects_collection]
 multiqc_collection = db[settings.mongodb.collections.multiqc_collection]
 multiqc_prerender_collection = db[settings.mongodb.collections.multiqc_prerender_collection]
 task_events_collection = db[settings.mongodb.collections.task_events_collection]
 ingestion_runs_collection = db[settings.mongodb.collections.ingestion_runs_collection]
+project_storage_collection = db[settings.mongodb.collections.project_storage_collection]
 app_logs_collection = db[settings.mongodb.collections.app_logs_collection]
+instance_settings_collection = db[settings.mongodb.collections.instance_settings_collection]
+branding_assets_collection = db[settings.mongodb.collections.branding_assets_collection]
+user_avatars_collection = db[settings.mongodb.collections.user_avatars_collection]
 telemetry_collection = db[settings.mongodb.collections.telemetry_collection]
+comment_threads_collection = db[settings.mongodb.collections.comment_threads_collection]
+cli_agents_collection = db[settings.mongodb.collections.cli_agents_collection]
+jobs_collection = db[settings.mongodb.collections.jobs_collection]
 test_collection = db[settings.mongodb.collections.test_collection]
+
+
+def ensure_project_storage_indexes(collection=None) -> None:
+    """Unique index on ``project_id`` for per-project storage configs. Idempotent.
+
+    Writes upsert on ``project_id``, so the index is a guard against a racing
+    double-insert, not a lookup optimisation. Runs from ``db_init.initialize_db``
+    on a fresh deployment and again from the first storage write in a process,
+    so instances upgraded past the first boot pick it up too. Never raises:
+    an index failure must not block a boot or a credentials write.
+
+    ``collection`` lets callers (and tests) target a patched collection instead
+    of the module-level one.
+    """
+    target = project_storage_collection if collection is None else collection
+    try:
+        target.create_index("project_id", unique=True, name="project_id_unique")
+    except Exception as exc:
+        logger.warning(f"Could not ensure unique project_id index on project storage: {exc}")

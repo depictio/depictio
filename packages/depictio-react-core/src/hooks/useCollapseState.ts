@@ -16,7 +16,8 @@ export interface CollapseState {
   setAll: (keys: string[], collapsed: boolean) => void;
 }
 
-function readCollapsed(storageKey: string): string[] | null {
+function readCollapsed(storageKey: string | null): string[] | null {
+  if (storageKey === null) return null;
   try {
     const raw = localStorage.getItem(storageKey);
     if (raw == null) return null;
@@ -27,7 +28,8 @@ function readCollapsed(storageKey: string): string[] | null {
   }
 }
 
-function writeCollapsed(storageKey: string, keys: Set<string>): void {
+function writeCollapsed(storageKey: string | null, keys: Set<string>): void {
+  if (storageKey === null) return;
   try {
     localStorage.setItem(storageKey, JSON.stringify([...keys]));
   } catch {
@@ -37,12 +39,15 @@ function writeCollapsed(storageKey: string, keys: Set<string>): void {
 
 /**
  * @param storageKey - localStorage key, typically suffixed with the dashboard id.
+ *   `null` keeps the state in memory only: a copy of a dashboard's sections
+ *   drawn elsewhere (the Guide) folds on its own, leaving the reader's stored
+ *   choice for the dashboard as it was.
  * @param initiallyCollapsed - keys collapsed when nothing is stored yet, e.g.
  *   sections a dashboard author declared `collapsed: true`. Consulted only on
  *   first visit and on a dashboard switch, so it never overrides a user's choice.
  */
 export function useCollapseState(
-  storageKey: string,
+  storageKey: string | null,
   initiallyCollapsed: string[] = [],
 ): CollapseState {
   // Kept current rather than frozen: the seed is read only when localStorage

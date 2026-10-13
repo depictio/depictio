@@ -28,10 +28,11 @@ import React, {
   useMemo,
 } from 'react';
 import {
-  AppShell,
+  ActionIcon,
+  Anchor,
+  Badge,
   Button,
   Center,
-  Drawer,
   Group,
   Text,
   Loader,
@@ -39,16 +40,20 @@ import {
   Paper,
   Stack,
   Title,
+  Tooltip,
 } from '@mantine/core';
 import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
+import { useContentScaleStyle } from './hooks/useUiScalePref';
+import TabLinkProvider from './chrome/TabLinkProvider';
+import { setContentWidthScope, useContentMaxWidth } from './hooks/useContentWidthPref';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
 import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
 import { useCurrentUser } from './hooks/useCurrentUser';
 import { isDashboardOwner } from './lib/dashboardOwnership';
-import FilterPanelResizer, { FILTER_PANEL_RESIZER_WIDTH } from './components/FilterPanelResizer';
+import { FILTER_PANEL_RESIZER_WIDTH } from './components/FilterPanelResizer';
 import Inspector from './chrome/inspector/Inspector';
 import { useInspectorChrome } from './chrome/inspector/useInspectorChrome';
 import InspectorProviders from './chrome/inspector/InspectorProviders';
@@ -60,9 +65,18 @@ import {
   fetchDashboard,
   fetchAllDashboards,
   bulkComputeCards,
+  hasLiveValues,
+  canCopyToTab,
+  canHighlight,
+  copyComponentToTab,
   createTab,
   deleteTab,
+  groupTabs,
+  highlightOnTab,
   reorderTabs,
+  tabDisplayName,
+  tabLinkKey,
+  tabGroupNames,
   updateTab,
   DashboardGrid,
   FilterPanel,
@@ -75,33 +89,97 @@ import {
   useRealtimeJournal,
   batchIdsFromPayload,
   authFetch,
+  uploadDashboardLogo,
+  updateDashboardAppearance,
   useMapPanel,
+  useCrossTabComponents,
+  PersistentSectionsHost,
   MapPanelControl,
   MapPanelDock,
   MapPanelSurface,
   FILTER_PANEL_RAIL_WIDTH,
   countActiveFilters,
+  readEditorFilters,
+  writeEditorFilters,
+  useSelectionGroups,
+  useCategoricalColumns,
+  useColorByColumnRender,
+  resolveGroupRender,
+  SelectionGroupsPanel,
+  SaveGroupContext,
+  BrandScope,
+  buildGuideModel,
+  resolveGuideSettings,
+  CategoryColorsContext,
+  barSectionNames,
+  filtersInScope,
+  hasSectionBar,
+  isBarMember,
+  isBarSection,
+  isStripSection,
+  mergeFilterScopes,
+  planScopedRequests,
+  sectionFilterScopes,
+  AdvancedVizConfigDraftProvider,
+  AdvancedVizPlacementDefaultProvider,
+  DataVersionProvider,
+  dataVersionBody,
+  dataPinBody,
+  fetchDashboardVersion,
+  isCurrentDataOnlyType,
+  isHttpStatus,
+  DATA_VERSION_GONE_EVENT,
 } from 'depictio-react-core';
 import type {
+  DataVersionGoneDetail,
+  DataVersionPins,
   DashboardData,
   DashboardPermissions,
   DashboardSummary,
+  BrandTheme,
+  FilterScopes,
   FilterSectionSpec,
+  PersistentSection,
   InteractiveFilter,
   StoredMetadata,
   RealtimeMode,
   ActiveHighlight,
   RealtimeJournalEntry,
+  GroupRenderState,
+  ControlsPlacement,
 } from 'depictio-react-core';
 
 import GridItemEditOverlay from './components/GridItemEditOverlay';
+import SectionModal from './components/sections/SectionModal';
+import GroupingHeaderControl, {
+  ANALYSIS_PANEL_WIDTH_PX,
+} from './components/GroupingHeaderControl';
 import SectionsModal from './components/sections/SectionsModal';
 import { applySectionOp, groupWith, sectionsFor } from './components/sections/sectionMutations';
-import type { SectionOp } from './components/sections/sectionMutations';
-import { Header, Sidebar, SettingsDrawer, TabModal } from './chrome';
-import type { TabModalSubmitPayload } from './chrome';
+import type { SectionKind, SectionOp } from './components/sections/sectionMutations';
+import { Sidebar, RunParametersHost, SettingsDrawer, TabIntro, TabModal } from './chrome';
+import type { HeaderAction } from './chrome/Header';
+import ShellHost from './chrome/shell/ShellHost';
+import type { FilterPanelOptions } from './chrome/shell/types';
+import type { TabDefaults, TabModalSubmitPayload } from './chrome';
+import { useChromeVariant } from './chrome/variants';
+import { useTabGroupActions } from './chrome/useTabGroupActions';
+import ComponentVersionModal from './versions/ComponentVersionModal';
+import DataVersionPanel from './versions/DataVersionPanel';
+import VersionHistoryPanel, { type RestoreOutcome } from './versions/VersionHistoryPanel';
+import { useVersionHistory } from './versions/useVersionHistory';
+import DataVersionBanner from './versions/DataVersionBanner';
+import type { PinnedLabel } from './versions/dataVersionStatus';
+import { useDataVersionStatus } from './versions/useDataVersionStatus';
+import { collectDataCollections } from './versions/useDatasetHistories';
 import NotesFooter from './components/NotesFooter';
+import { dashboardHref } from './dashboards/lib/dashboardLinks';
 import './chrome/chrome.css';
+import { usePageTitle } from './branding';
+import { DashboardGuide, useGuideRoute } from './guide';
+import { DashboardSpotlight } from './spotlight';
+import type { GuideAuthorSettings, SettingsSectionKey } from './chrome/SettingsDrawer';
+import { focusComponent } from './lib/focusComponent';
 
 const API_BASE = '/depictio/api/v1';
 const SAVE_DEBOUNCE_MS = 500;
@@ -158,12 +236,49 @@ async function saveDashboard(
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
+/**
+ * The "…" a section header carries in the editor.
+ *
+ * One mark for "this section's settings" wherever a section is drawn — the
+ * grid, the filter panel, and a section fanned out from another tab, which
+ * differ only in where the click leads and in what the tooltip says.
+ */
+const SectionActionButton: React.FC<{
+  label: string;
+  ariaLabel?: string;
+  onActivate: () => void;
+}> = ({ label, ariaLabel = 'Edit section', onActivate }) => (
+  <Tooltip label={label} withArrow multiline w={240}>
+    <ActionIcon
+      size="sm"
+      variant="subtle"
+      color="gray"
+      aria-label={ariaLabel}
+      data-testid="section-edit-actions"
+      onClick={(e) => {
+        e.stopPropagation();
+        onActivate();
+      }}
+    >
+      <Icon icon="mdi:dots-vertical" width={16} />
+    </ActionIcon>
+  </Tooltip>
+);
+
 const EditorApp: React.FC = () => {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [allDashboards, setAllDashboards] = useState<DashboardSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState<InteractiveFilter[]>([]);
+  // Seed synchronously from the per-tab store so a builder round-trip (add or
+  // edit a component — a full page navigation) comes back with the filters
+  // still active and every tile's FIRST fetch already filtered (#196). An
+  // effect-time hydrate would let the grid fetch once unfiltered first, which
+  // is exactly the bug this fixes.
+  const [filters, setFilters] = useState<InteractiveFilter[]>(() => {
+    const id = extractDashboardId();
+    return id ? readEditorFilters(id) : [];
+  });
   const [cardValues, setCardValues] = useState<Record<string, unknown>>({});
   const [cardSecondaryValues, setCardSecondaryValues] = useState<
     Record<string, Record<string, unknown>>
@@ -171,10 +286,34 @@ const EditorApp: React.FC = () => {
   const [cardsLoading, setCardsLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
-  // Persist across tab/page navigations (matches App.tsx + Dash app).
-  const [desktopOpened, toggleDesktop] = useSidebarOpen();
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  const [searchOpened, { open: openSearch, close: closeSearch }] = useDisclosure(false);
+  // The section the settings open on when something asks for one (the Guide's
+  // "Open Your view"); unset, they open on the one last visited.
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionKey | undefined>();
+  const openSettingsAt = useCallback(
+    (section?: SettingsSectionKey) => {
+      setSettingsSection(section);
+      openSettings();
+    },
+    [openSettings],
+  );
+  const contentScaleStyle = useContentScaleStyle();
+  const contentMaxWidth = useContentMaxWidth();
+  // Bumped after a plot_theme save lands so figure components refetch and pick
+  // up the new dashboard-level template/colorway (the server reads plot_theme
+  // from the DB at render time, so the request body doesn't change).
+  const [plotThemeTick, setPlotThemeTick] = useState(0);
   const [sectionsOpened, { open: openSections, close: closeSections }] = useDisclosure(false);
+  /** The one add/edit dialog. `fromManager` is what sends the user back to the
+   *  Sections manager on close — the manager closes while this is open rather
+   *  than stacking two dialogs. */
+  const [sectionModal, setSectionModal] = useState<{
+    open: boolean;
+    kind: SectionKind;
+    target: FilterSectionSpec | null;
+    fromManager: boolean;
+  }>({ open: false, kind: 'grid', target: null, fromManager: false });
   const { user: currentUser, loading: userLoading, inspectorEnabled } = useCurrentUser();
   // `control` is null while the flag is off, so no provider value reaches the
   // component chrome and no inspect action is rendered anywhere.
@@ -188,9 +327,41 @@ const EditorApp: React.FC = () => {
     mode: 'create' | 'edit';
     target: DashboardSummary | null;
     submitting: boolean;
+    /** Create mode: the Group the new tab is prefilled with. */
+    group?: string | null;
   }>({ open: false, mode: 'create', target: null, submitting: false });
 
   const dashboardId = extractDashboardId();
+
+  // Saved selection groups — same hook and same storage key as the viewer, so
+  // groups made in one mode are visible in the other. Groups stay out of the
+  // `filters` state and are composed in only where data is fetched. Scoped to
+  // the dashboard FAMILY (parent id) so groups carry across tabs — see App.tsx.
+  const groupingScopeId = useMemo(() => {
+    if (!dashboard) return undefined;
+    const parent = dashboard.parent_dashboard_id as string | null | undefined;
+    const id = parent || dashboard.dashboard_id || dashboardId;
+    return id ? String(id) : undefined;
+  }, [dashboard, dashboardId]);
+  const groupsApi = useSelectionGroups(groupingScopeId);
+  const combinedFilters = useMemo(
+    () =>
+      groupsApi.groupFilters.length > 0 ? [...filters, ...groupsApi.groupFilters] : filters,
+    [filters, groupsApi.groupFilters],
+  );
+  // Authors see the panel as viewers will. Cross-tab (floating) filter
+  // persistence is deliberately viewer-only: an editing session's filter state
+  // is scratch across dashboards, and carrying it between tabs would be
+  // surprising here. Same-dashboard persistence within this browser tab is a
+  // different matter — see editorFilters.ts, which keeps filters alive across
+  // the builder round-trip.
+  const crossTab = useCrossTabComponents(dashboardId ?? '');
+
+  // Same family scoping as the viewer — see App.tsx `panelScopeId`.
+  const panelScopeId = crossTab.familyId ?? dashboardId;
+
+  // Tab sidebar: same per-family key as the viewer, so both agree.
+  const [desktopOpened, toggleDesktop] = useSidebarOpen(panelScopeId);
 
   // Left filter panel chrome — same hooks and same storage keys as the viewer,
   // so collapsing or resizing in one mode carries over to the other.
@@ -200,12 +371,12 @@ const EditorApp: React.FC = () => {
     layoutRef: filterPanelLayoutRef,
     beginResize: beginFilterPanelResize,
     nudge: nudgeFilterPanelWidth,
-  } = useFilterPanelWidth(dashboardId);
+  } = useFilterPanelWidth(panelScopeId);
   // The swing spans both variable tracks: collapsing takes the panel down to
   // the rail *and* the drag handle down to nothing. The grid gaps don't move,
   // so they cancel out.
   const [filterPanelOpened, toggleFilterPanel] = useFilterPanelOpen(
-    dashboardId,
+    panelScopeId,
     filterPanelWidth + FILTER_PANEL_RESIZER_WIDTH - FILTER_PANEL_RAIL_WIDTH,
   );
   const isNarrow = useMediaQuery('(max-width: 48em)', false, { getInitialValueInEffect: false });
@@ -217,8 +388,137 @@ const EditorApp: React.FC = () => {
     if (!isNarrow) closeFilterDrawer();
   }, [isNarrow, closeFilterDrawer]);
 
+  // The family's version list: one instance for the whole editor. The tile
+  // menu's History entry, the component history modal and the settings'
+  // History and Data version sections all read it, so it is loaded on mount
+  // (the tile entry hides itself on a dashboard with no versions rather than
+  // opening onto an empty pane) and reloaded after every write that can record
+  // or change a version.
+  const [historyComponent, setHistoryComponent] = useState<StoredMetadata | null>(null);
+  const versionHistory = useVersionHistory(dashboardId, Boolean(dashboardId));
+  const {
+    versions: familyVersions,
+    loading: versionsLoading,
+    reload: reloadVersions,
+  } = versionHistory;
+  // Every save records a version or folds into the newest one, so the list
+  // follows the save status rather than each of the dozen call sites. Tab
+  // writes go through `refreshTabList`, restores through `handleRestored`.
+  useEffect(() => {
+    if (saveStatus === 'saved') void reloadVersions();
+  }, [saveStatus, reloadVersions]);
+
   const bulkCtrl = useRef<AbortController | null>(null);
+
+  // Data time travel: view-state only, never persisted, cleared by a reload.
+  // The viewer only ever pins a `?version=` preview; choosing data is here.
+  const [dataPins, setDataPins] = useState<DataVersionPins>({});
+  // The stored version whose data stamps drive the view: its id and its name
+  // for the banner. Which collections it reaches is the server's to say
+  // (`useDataVersionStatus` below).
+  const [asOf, setAsOf] = useState<{ versionId: string; label: string } | null>(null);
+  const asOfVersionId = asOf?.versionId ?? null;
+  const asOfRef = useRef<string | null>(null);
+  asOfRef.current = asOfVersionId;
+  const versionBody = useMemo(
+    () => dataVersionBody({ asOfVersionId, pins: dataPins }),
+    [asOfVersionId, dataPins],
+  );
+  const versionKey = JSON.stringify(versionBody);
+  const timeTravelling = Object.keys(versionBody).length > 0;
+  // Every pin the editor holds, named, keyed by collection id: two collections
+  // may share a tag. A `null` version is a collection kept on its latest data
+  // under a version's data.
+  const pinnedLabels = useMemo<PinnedLabel[]>(() => {
+    const byId = new Map(
+      collectDataCollections(dashboard?.stored_metadata).map((c) => [c.dcId, c.label]),
+    );
+    return Object.entries(dataPins)
+      .filter(([, v]) => typeof v === 'number' || (v === null && asOfVersionId))
+      .map(([dcId, version]) => ({
+        dcId,
+        label: byId.get(dcId) ?? dcId,
+        version: typeof version === 'number' ? version : null,
+      }));
+  }, [dataPins, dashboard?.stored_metadata, asOfVersionId]);
+  const clearDataVersions = useCallback(() => {
+    setDataPins({});
+    setAsOf(null);
+  }, []);
+  const handleAsOfChange = useCallback((versionId: string, label: string) => {
+    setAsOf({ versionId, label });
+    // A version's stamps replace per-collection pins rather than mixing
+    // with pins chosen against another baseline.
+    setDataPins({});
+  }, []);
+  /** The version behind "Data version" is gone (deleted, or pruned by a later
+   *  save): drop it, once, and say so, rather than leave every render failing
+   *  under a banner that names it. */
+  const dropStaleDataVersion = useCallback(
+    (versionId: string) => {
+      if (asOfRef.current !== versionId) return;
+      asOfRef.current = null;
+      clearDataVersions();
+      notifications.show({
+        color: 'yellow',
+        title: 'Data version no longer available',
+        message: 'The version whose data you were viewing no longer exists. Showing current data.',
+      });
+    },
+    [clearDataVersions],
+  );
+  // Every render path raises this on a stale `as_of_version` (see `api.ts`).
+  useEffect(() => {
+    const onGone = (event: Event) => {
+      const id = (event as CustomEvent<DataVersionGoneDetail>).detail?.asOfVersionId;
+      if (id) dropStaleDataVersion(id);
+    };
+    window.addEventListener(DATA_VERSION_GONE_EVENT, onGone);
+    return () => window.removeEventListener(DATA_VERSION_GONE_EVENT, onGone);
+  }, [dropStaleDataVersion]);
+  // The commit the version recorded per collection, for the picker's "this
+  // version's data" option. A 404 is the version gone.
+  const [asOfStamps, setAsOfStamps] = useState<Record<string, number | undefined>>({});
+  useEffect(() => {
+    setAsOfStamps({});
+    if (!asOfVersionId) return;
+    let cancelled = false;
+    fetchDashboardVersion(asOfVersionId)
+      .then((detail) => {
+        if (cancelled) return;
+        const stamps: Record<string, number | undefined> = {};
+        for (const stamp of detail.data_collections || []) {
+          stamps[String(stamp.dc_id)] =
+            stamp.version_kind === 'delta' && typeof stamp.delta_version === 'number'
+              ? stamp.delta_version
+              : undefined;
+        }
+        setAsOfStamps(stamps);
+      })
+      .catch((err) => {
+        if (!cancelled && isHttpStatus(err, 404)) dropStaleDataVersion(asOfVersionId);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [asOfVersionId, dropStaleDataVersion]);
+  // What the banner says about each collection. Rechecked when the version
+  // list reloads, since a save can prune the version in use.
+  const dataVersionStatus = useDataVersionStatus(
+    dashboardId,
+    timeTravelling ? dataPinBody({ asOfVersionId, pins: dataPins }) : null,
+    familyVersions,
+  );
+  const currentDataOnlyCount = useMemo(
+    () =>
+      (dashboard?.stored_metadata || []).filter((m) => isCurrentDataOnlyType(m.component_type))
+        .length,
+    [dashboard?.stored_metadata],
+  );
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Set once the editor is navigating away from a tab that no longer exists;
+  // every save is refused from then on (see `scheduleSave`).
+  const leavingRef = useRef(false);
   // Latest dashboard ref so the debounced save uses fresh state. We update
   // it synchronously alongside setDashboard via `applyDashboard` — relying on
   // a post-render useEffect lets react-grid-layout's onLayoutChange fire with
@@ -228,6 +528,56 @@ const EditorApp: React.FC = () => {
     dashboardRef.current = d;
     setDashboard(d);
   }, []);
+
+  // Has the user done anything since the document last came from the server?
+  // react-grid-layout reports the layout it settles on as soon as it mounts:
+  // a stored layout compacted, `box-` ids bared, filter heights normalised.
+  // Saving that would write a change nobody made, and every write records a
+  // dashboard version, so opening an imported dashboard (or restoring one)
+  // would add a version by itself. Layout reports persist only once this is set.
+  const userActedRef = useRef(false);
+  useEffect(() => {
+    const arm = () => {
+      userActedRef.current = true;
+    };
+    window.addEventListener('pointerdown', arm, true);
+    window.addEventListener('keydown', arm, true);
+    return () => {
+      window.removeEventListener('pointerdown', arm, true);
+      window.removeEventListener('keydown', arm, true);
+    };
+  }, []);
+  /** Replace the document with the server's copy: the settled-layout report
+   *  that follows describes no edit, so it must not be saved. */
+  const applyServerDashboard = useCallback(
+    (d: DashboardData) => {
+      userActedRef.current = false;
+      applyDashboard(d);
+    },
+    [applyDashboard],
+  );
+
+  /** Open component history for one tile (grid or filter panel).
+   *
+   * The overlay knows only the component id, since that is what the grid keys
+   * on; the modal needs the whole stored metadata to render the component as
+   * it is *now* for the compare view. Resolved here rather than passed down,
+   * so the grid does not have to carry the dashboard document.
+   */
+  const handleOpenComponentHistory = useCallback(
+    (componentId: string) => {
+      const found = (dashboardRef.current?.stored_metadata || []).find(
+        (m) => String(m.index) === String(componentId),
+      );
+      if (found) setHistoryComponent(found);
+    },
+    [],
+  );
+
+  // Withheld on a dashboard with no recorded versions, which hides the menu
+  // item: an action that can only open an empty pane is worse than none.
+  const openComponentHistory =
+    familyVersions.length > 0 ? handleOpenComponentHistory : undefined;
 
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
 
@@ -245,13 +595,7 @@ const EditorApp: React.FC = () => {
   }, [userLoading, dashboard, dashboardId, isOwner]);
 
   // Keep the browser tab title in sync with the dashboard name.
-  useEffect(() => {
-    if (dashboard?.title) {
-      document.title = `Depictio — ${dashboard.title}`;
-    } else if (dashboardId) {
-      document.title = `Depictio — ${dashboardId}`;
-    }
-  }, [dashboard?.title, dashboardId]);
+  usePageTitle(dashboard?.title || dashboardId);
 
   // Fetch dashboard + tab list
   useEffect(() => {
@@ -262,8 +606,17 @@ const EditorApp: React.FC = () => {
     }
     Promise.all([fetchDashboard(dashboardId), fetchAllDashboards()])
       .then(([dash, all]) => {
-        applyDashboard(dash);
+        applyServerDashboard(dash);
         setAllDashboards(all);
+        // Drop seeded filters whose emitting component no longer exists (it
+        // was deleted while the user was in the builder) — a ghost filter
+        // would keep narrowing the grid with nothing on screen to release it.
+        // Floating-map selections are exempt: a floating component lives on
+        // another tab's stored_metadata, so an unknown index is expected there.
+        const known = new Set((dash.stored_metadata || []).map((m) => m.index));
+        setFilters((prev) =>
+          prev.filter((f) => known.has(f.index) || f.source === 'map_selection'),
+        );
       })
       .catch((err) => {
         setError(`Failed to load dashboard: ${err.message || err}`);
@@ -271,13 +624,37 @@ const EditorApp: React.FC = () => {
       .finally(() => setLoading(false));
   }, [dashboardId]);
 
-  // Bulk-compute card values when filters change (mirrors App.tsx)
+  // Section-bar scopes, as the viewer builds them (App.tsx): which filters
+  // reach only their own section's components.
+  const filterScopes = useMemo(
+    () =>
+      mergeFilterScopes(
+        sectionFilterScopes(dashboard?.stored_metadata, dashboard?.grid_sections),
+        ...crossTab.persistentSections
+          .filter(
+            (s) =>
+              s.kind === 'grid' && s.owner_dashboard_id !== dashboardId && hasSectionBar(s.spec),
+          )
+          .map((s) =>
+            sectionFilterScopes(
+              s.components.map((c) => c.metadata),
+              [s.spec],
+              s.owner_dashboard_id,
+            ),
+          ),
+      ),
+    [dashboard?.stored_metadata, dashboard?.grid_sections, crossTab.persistentSections, dashboardId],
+  );
+
+  // Bulk-compute card values when filters change (mirrors App.tsx, one request
+  // per distinct filter set so a section bar narrows its own cards only).
   useEffect(() => {
     if (!dashboard || !dashboardId) return;
-    const cardIds = (dashboard.stored_metadata || [])
-      .filter((m) => m.component_type === 'card')
-      .map((m) => m.index);
-    if (cardIds.length === 0) return;
+    // Text tiles with live values (`{{name}}`, `{{param:KEY}}`) ride along.
+    const cards = (dashboard.stored_metadata || [])
+      .filter((m) => m.component_type === 'card' || hasLiveValues(m))
+      .map((m) => ({ id: m.index, scope: typeof m.section === 'string' ? m.section : null }));
+    if (cards.length === 0) return;
 
     const timer = setTimeout(() => {
       setCardsLoading(true);
@@ -286,20 +663,61 @@ const EditorApp: React.FC = () => {
       // snapping to ``…``. See App.tsx for the matching change.
       if (bulkCtrl.current) bulkCtrl.current.abort();
       bulkCtrl.current = new AbortController();
-      bulkComputeCards(dashboardId, filters, cardIds)
-        .then((res) => {
-          setCardValues(res.values);
-          setCardSecondaryValues(res.secondary_values || {});
+      const signal = bulkCtrl.current.signal;
+      Promise.all(
+        planScopedRequests(cards, combinedFilters, filterScopes).map((req) =>
+          bulkComputeCards(
+            dashboardId,
+            req.filters,
+            req.ids,
+            groupsApi.bulkOptions,
+            // See App.tsx: prevents a slow superseded compare-on response from
+            // overwriting a newer one.
+            signal,
+            // Cards follow the data pins like every other renderer.
+            versionBody,
+          ),
+        ),
+      )
+        .then((responses) => {
+          const values: Record<string, unknown> = {};
+          const secondary: Record<string, Record<string, unknown>> = {};
+          for (const res of responses) {
+            Object.assign(values, res.values);
+            Object.assign(secondary, res.secondary_values || {});
+          }
+          setCardValues(values);
+          setCardSecondaryValues(secondary);
         })
         .catch((err) => {
           if (err?.name !== 'AbortError') {
             console.warn('[EditorApp] bulk-compute failed:', err);
           }
         })
-        .finally(() => setCardsLoading(false));
+        .finally(() => {
+          if (!signal.aborted) setCardsLoading(false);
+        });
     }, 250);
     return () => clearTimeout(timer);
-  }, [dashboard, dashboardId, stableFilterKey(filters)]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    dashboard,
+    dashboardId,
+    stableFilterKey(combinedFilters),
+    filterScopes,
+    // Undefined while compare is off, so group edits don't refire the fetch.
+    JSON.stringify(groupsApi.bulkOptions ?? null),
+    versionKey,
+  ]);
+
+  // Mirror the live filters into the per-tab store so they survive the
+  // builder's full-page round-trip (see editorFilters.ts). Writing on every
+  // change (rather than at the navigation sites) keeps the add-component and
+  // GridItemEditOverlay free of filter plumbing; clearing all filters removes
+  // the entry, so "Reset" leaves nothing behind.
+  useEffect(() => {
+    if (dashboardId) writeEditorFilters(dashboardId, filters);
+  }, [dashboardId, stableFilterKey(filters)]);
 
   const handleFilterChange = useCallback(
     (update: InteractiveFilter) => {
@@ -309,11 +727,89 @@ const EditorApp: React.FC = () => {
     [dashboard],
   );
 
-  // Authors see the panel as viewers will. Cross-tab filter persistence is
-  // deliberately viewer-only: an editing session's filter state is scratch, and
-  // carrying it between tabs would be surprising here.
+  // In-place "save selection as group" on components with a live selection
+  // (mirrors App.tsx).
+  // Analysis mode, tracked separately from whether the header panel is open.
+  // Mantine dismisses a Popover on mousedown outside it, and that mousedown is
+  // the one that starts a lasso — so tying the mode to `analysisOpen` would
+  // erase every capability marker exactly when the user acts on one. Opening
+  // the panel arms the mode; only the button (or a second click on it) ends it.
+  // `armed` is persisted with the groups (a tab switch is a full page
+  // navigation, so local state would drop the mode on every tab the groups
+  // survive into); `open` stays local, since restoring an open popover on
+  // arrival would be worse than closing it.
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+  const { analysisArmed, setAnalysisArmed } = groupsApi;
+  const handleAnalysisOpenChange = useCallback(
+    (next: boolean) => {
+      setAnalysisOpen(next);
+      if (next) setAnalysisArmed(true);
+    },
+    [setAnalysisArmed],
+  );
+  const handleAnalysisToggle = useCallback(() => {
+    const next = !analysisOpen;
+    setAnalysisOpen(next);
+    setAnalysisArmed(next);
+  }, [analysisOpen, setAnalysisArmed]);
+
+  const saveGroupApi = useMemo(
+    () => ({
+      groups: groupsApi.groups,
+      createGroup: groupsApi.createGroupFromFilter,
+      clearSelection: handleFilterChange,
+      // "Engaged" spans both ways into analysis: the panel being open (the user
+      // is looking for where to act) and a grouping mode being on (the
+      // dashboard is already repainted by one). Outside those, capable
+      // components stay unmarked so ordinary viewing is unchanged.
+      analysisEngaged: analysisArmed || groupsApi.colorBy.kind !== 'none',
+    }),
+    [
+      groupsApi.groups,
+      groupsApi.createGroupFromFilter,
+      handleFilterChange,
+      analysisArmed,
+      groupsApi.colorBy.kind,
+    ],
+  );
+
+
+  // Persistent sections owned by *sibling* tabs. They render here exactly as
+  // the viewer draws them — read-only, on their own surfaces — so an author
+  // laying out this tab sees the space they take. Everything editable stays
+  // keyed on this dashboard's own `stored_metadata`: a foreign member must
+  // never reach the layout merges that write `left_panel_layout_data` /
+  // `right_panel_layout_data`, nor the ⋮ menus that delete or re-section a
+  // component this document does not own.
+  const foreignPersistentSections = useMemo(
+    () => crossTab.persistentSections.filter((s) => s.owner_dashboard_id !== dashboardId),
+    [crossTab.persistentSections, dashboardId],
+  );
+  const foreignFilterSections = useMemo(
+    () => foreignPersistentSections.filter((s) => s.kind === 'filter'),
+    [foreignPersistentSections],
+  );
+  const foreignGridSections = useMemo(
+    () => foreignPersistentSections.filter((s) => s.kind === 'grid'),
+    [foreignPersistentSections],
+  );
+  const topGridSections = useMemo(
+    () => foreignGridSections.filter((s) => s.spec.pin !== 'bottom'),
+    [foreignGridSections],
+  );
+  const bottomGridSections = useMemo(
+    () => foreignGridSections.filter((s) => s.spec.pin === 'bottom'),
+    [foreignGridSections],
+  );
+
+  // The viewer's fan-out, previewed: read-only surfaces of their own, so a
+  // foreign `pin: top` section is visible while laying this tab out without
+  // ever entering its editable grid. Rendered through the grid's
+  // `beforeSections` slot so it sits after this tab's own unsectioned
+  // components (title / intro text), exactly as the viewer draws it.
   const mapPanel = useMapPanel({
-    dashboardId: dashboardId ?? '',
+    components: crossTab.floating,
+    familyId: crossTab.familyId,
     filters,
     onFilterChange: handleFilterChange,
   });
@@ -321,7 +817,9 @@ const EditorApp: React.FC = () => {
   /** Debounced save: schedule a POST 500ms after the last layout mutation. */
   const scheduleSave = useCallback(
     (next: DashboardData) => {
-      if (!dashboardId) return;
+      // Leaving a tab a restore deleted: `/save` upserts, so any save from
+      // here on would bring the tab back from the stale state on screen.
+      if (!dashboardId || leavingRef.current) return;
       applyDashboard(next);
       setSaveStatus('saving');
       if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -365,28 +863,177 @@ const EditorApp: React.FC = () => {
     [handleSectionOp],
   );
 
+  /** Layout entries for components this document actually holds.
+   *
+   *  The read-only rendering already keeps fanned-out members out of the
+   *  editable grids, but that rule is spread across a section flag and a merge
+   *  skip. This is the boundary where it has to hold no matter what: an entry
+   *  keyed on another tab's component would be an orphan in this dashboard's
+   *  layout, and the components it belongs to would still live over there. */
+  const ownLayoutOnly = useCallback((layout: Layout[], cur: DashboardData) => {
+    const own = new Set((cur.stored_metadata ?? []).map((m) => m.index));
+    return layout.filter((item) => own.has(stripBoxPrefix(String(item.i))));
+  }, []);
+
+  /** Per-figure font-size multiplier, stored on the component's
+   *  stored_metadata entry so the viewer renders the same emphasis. Goes
+   *  through the debounced save like layout nudges — stepping A− / A+
+   *  repeatedly produces one POST. */
+  const handleComponentFontScale = useCallback(
+    (componentId: string, scale: number) => {
+      const cur = dashboardRef.current;
+      if (!cur) return;
+      const next = {
+        ...cur,
+        stored_metadata: (cur.stored_metadata || []).map((m) =>
+          m.index === componentId ? { ...m, font_scale: scale === 1 ? undefined : scale } : m,
+        ),
+      };
+      scheduleSave(next);
+    },
+    [scheduleSave],
+  );
+
+  /** Sizing intent, stored beside the font scale and for the same reason: the
+   *  grid reads it off `stored_metadata`, and react-grid-layout would drop it
+   *  from a layout item on the first drag. `fixed` is written when the user
+   *  resizes a tile by hand, the height they chose then outranks anything the
+   *  content asks for, and `auto` by the tile's "Reset to auto height". The
+   *  height itself rides the same debounced save as any layout nudge. */
+  const handleComponentFit = useCallback(
+    (componentId: string, fit: 'auto' | 'fixed') => {
+      const cur = dashboardRef.current;
+      if (!cur) return;
+      const current = (cur.stored_metadata || []).find((m) => m.index === componentId);
+      if (current?.fit === fit) return;
+      const next = {
+        ...cur,
+        stored_metadata: (cur.stored_metadata || []).map((m) =>
+          m.index === componentId ? { ...m, fit } : m,
+        ),
+      };
+      scheduleSave(next);
+    },
+    [scheduleSave],
+  );
+  const handleTileFixed = useCallback(
+    (componentId: string) => handleComponentFit(componentId, 'fixed'),
+    [handleComponentFit],
+  );
+  const handleResetFit = useCallback(
+    (componentId: string) => handleComponentFit(componentId, 'auto'),
+    [handleComponentFit],
+  );
+
+  /**
+   * Advanced-viz config write-back: a Tier-2 control the author touched while
+   * editing (a threshold, a rank, where the controls are pinned) is merged into
+   * that component's stored config and saved with the same debounce as a layout
+   * nudge. The viewer mounts no sink, so a reader's changes stay local, which
+   * is the whole rule `AdvancedVizConfigDraft` encodes: only a surface that can
+   * persist the result provides one.
+   */
+  const handleVizConfigDraft = useCallback(
+    (componentId: string, patch: Record<string, unknown>) => {
+      const cur = dashboardRef.current;
+      if (!cur || !componentId) return;
+      const next = {
+        ...cur,
+        stored_metadata: (cur.stored_metadata || []).map((m) =>
+          m.index === componentId
+            ? { ...m, config: { ...((m.config as Record<string, unknown>) || {}), ...patch } }
+            : m,
+        ),
+      };
+      scheduleSave(next);
+    },
+    [scheduleSave],
+  );
+
+  /** Dashboard-level brand theme (#397). Goes through the targeted
+   *  `PATCH /dashboards/appearance` rather than the full-document save: an
+   *  appearance edit and an in-flight layout save would otherwise be
+   *  last-writer-wins against each other. Not debounced either — the server
+   *  resolves the theme from the DB at figure-render time, so figures can only
+   *  refetch once the write has landed. */
+  const handleBrandThemeChange = useCallback(
+    (theme: BrandTheme | null) => {
+      const cur = dashboardRef.current;
+      if (!cur || !dashboardId) return;
+      applyDashboard({ ...cur, brand_theme: theme });
+      setSaveStatus('saving');
+      updateDashboardAppearance(dashboardId, theme)
+        .then(() => {
+          setSaveStatus('saved');
+          setPlotThemeTick((t) => t + 1);
+        })
+        .catch((err) => {
+          console.error('[EditorApp] brand theme save failed:', err);
+          setSaveStatus('error');
+        });
+    },
+    [dashboardId, applyDashboard],
+  );
+
+  /** Dashboard logo upload. The upload endpoint stamps the URL onto the
+   *  dashboard's brand theme itself (file write + field update in one
+   *  ownership-checked call), so on success only the local state needs it.
+   *  Errors propagate to the drawer, which displays them. */
+  const handleUploadLogo = useCallback(
+    async (file: File) => {
+      const cur = dashboardRef.current;
+      if (!cur || !dashboardId) return;
+      setSaveStatus('saving');
+      try {
+        const logoUrl = await uploadDashboardLogo(dashboardId, file);
+        // Re-read the ref: another action (appearance, layout…) may have
+        // advanced the dashboard while the upload was in flight — merging
+        // into the pre-await snapshot would silently revert it.
+        const latest = dashboardRef.current ?? cur;
+        applyDashboard({
+          ...latest,
+          brand_theme: {
+            ...(latest.brand_theme ?? {}),
+            logo_url: logoUrl,
+            logo_mode: 'custom',
+          },
+        });
+        setSaveStatus('saved');
+      } catch (err) {
+        setSaveStatus('error');
+        throw err;
+      }
+    },
+    [dashboardId, applyDashboard],
+  );
+
   const handleLeftLayoutChange = useCallback(
     (newLayout: Layout[]) => {
       const cur = dashboardRef.current;
       if (!cur) return;
+      // Not before the user has acted: see `userActedRef`.
+      if (!userActedRef.current) return;
+      const next = ownLayoutOnly(newLayout, cur);
       // Skip no-op writes during the initial mount where react-grid-layout
       // emits the layout it was just given.
       const prev = cur.left_panel_layout_data;
-      if (layoutsEqual(prev, newLayout)) return;
-      scheduleSave({ ...cur, left_panel_layout_data: newLayout });
+      if (layoutsEqual(prev, next)) return;
+      scheduleSave({ ...cur, left_panel_layout_data: next });
     },
-    [scheduleSave],
+    [scheduleSave, ownLayoutOnly],
   );
 
   const handleRightLayoutChange = useCallback(
     (newLayout: Layout[]) => {
       const cur = dashboardRef.current;
       if (!cur) return;
+      if (!userActedRef.current) return;
+      const next = ownLayoutOnly(newLayout, cur);
       const prev = cur.right_panel_layout_data;
-      if (layoutsEqual(prev, newLayout)) return;
-      scheduleSave({ ...cur, right_panel_layout_data: newLayout });
+      if (layoutsEqual(prev, next)) return;
+      scheduleSave({ ...cur, right_panel_layout_data: next });
     },
-    [scheduleSave],
+    [scheduleSave, ownLayoutOnly],
   );
 
   /** Delete: strip from stored_metadata + both layouts, save, then refetch. */
@@ -423,6 +1070,125 @@ const EditorApp: React.FC = () => {
         setSaveStatus('saved');
       } catch (err) {
         console.error('[EditorApp] delete failed:', err);
+        setSaveStatus('error');
+      }
+    },
+    [dashboardId, applyDashboard],
+  );
+
+  /**
+   * Persist the dashboard-level funnel-filtering default (issue #939). Same
+   * save-now pattern as delete: apply optimistically, POST the full document.
+   */
+  const handleToggleFunnelFiltering = useCallback(
+    async (enabled: boolean) => {
+      if (!dashboardId) return;
+      const cur = dashboardRef.current;
+      if (!cur) return;
+      const next = { ...cur, funnel_filtering: enabled };
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      applyDashboard(next);
+      setSaveStatus('saving');
+      try {
+        await saveDashboard(dashboardId, next);
+        setSaveStatus('saved');
+      } catch (err) {
+        console.error('[EditorApp] funnel toggle save failed:', err);
+        setSaveStatus('error');
+      }
+    },
+    [dashboardId, applyDashboard],
+  );
+
+  // The width preference is per tab, opening at the author's
+  // `content_width_default` until the reader picks one, as in the viewer.
+  useEffect(() => {
+    setContentWidthScope(dashboardId ?? null, dashboard?.content_width_default);
+  }, [dashboardId, dashboard?.content_width_default]);
+
+  /**
+   * The tab's display defaults from the settings drawer: page width, filter
+   * panel and tab header. Dashboard-level settings like funnel filtering, so
+   * the same save-now path: apply optimistically, POST the full document.
+   * The brand theme's targeted PATCH takes a brand theme and nothing else.
+   */
+  const handleTabDefaultsChange = useCallback(
+    async (patch: TabDefaults) => {
+      if (!dashboardId) return;
+      const cur = dashboardRef.current;
+      if (!cur) return;
+      const next = { ...cur, ...patch };
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      applyDashboard(next);
+      setSaveStatus('saving');
+      try {
+        await saveDashboard(dashboardId, next);
+        setSaveStatus('saved');
+      } catch (err) {
+        console.error('[EditorApp] tab defaults save failed:', err);
+        setSaveStatus('error');
+      }
+    },
+    [dashboardId, applyDashboard],
+  );
+
+  /**
+   * Persist the dashboard-wide default placement of advanced-viz controls.
+   * Same save-now pattern as the funnel toggle; a tile that states its own
+   * `controls_placement` is unaffected, which is what makes this a default
+   * rather than an override.
+   */
+  const handleAdvancedVizControls = useCallback(
+    async (placement: ControlsPlacement) => {
+      if (!dashboardId) return;
+      const cur = dashboardRef.current;
+      if (!cur) return;
+      const next = { ...cur, advanced_viz_controls: placement };
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      applyDashboard(next);
+      setSaveStatus('saving');
+      try {
+        await saveDashboard(dashboardId, next);
+        setSaveStatus('saved');
+      } catch (err) {
+        console.error('[EditorApp] controls placement save failed:', err);
+        setSaveStatus('error');
+      }
+    },
+    [dashboardId, applyDashboard],
+  );
+
+  /**
+   * Persist the dashboard-wide autofit switch. Same save-now pattern: the
+   * whole grid re-lays out on the answer, so it should not sit in a debounce
+   * behind an unrelated layout nudge.
+   */
+  const handleToggleAutofit = useCallback(
+    async (enabled: boolean) => {
+      if (!dashboardId) return;
+      const cur = dashboardRef.current;
+      if (!cur) return;
+      const next = { ...cur, autofit: enabled };
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      applyDashboard(next);
+      setSaveStatus('saving');
+      try {
+        await saveDashboard(dashboardId, next);
+        setSaveStatus('saved');
+      } catch (err) {
+        console.error('[EditorApp] autofit toggle save failed:', err);
         setSaveStatus('error');
       }
     },
@@ -532,25 +1298,12 @@ const EditorApp: React.FC = () => {
         setSaveStatus('saved');
         // Scroll the freshly placed component into view + brief highlight pulse
         // so the user can see where it landed (otherwise auto-placed items at
-        // the bottom are easy to miss).
-        const flashNewComponent = () => {
-          const inner = document.querySelector(
-            `[data-component-id="${newId}"]`,
-          ) as HTMLElement | null;
-          // The .react-grid-item ancestor is the absolutely-positioned cell,
-          // so we scroll/highlight that — not the inner content wrapper.
-          const el = (inner?.closest('.react-grid-item') as HTMLElement | null) || inner;
-          if (!el) return;
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          el.classList.add('depictio-duplicate-flash');
-          window.setTimeout(
-            () => el.classList.remove('depictio-duplicate-flash'),
-            1500,
-          );
-        };
-        // Wait two frames so react-grid-layout has positioned the new item.
+        // the bottom are easy to miss). Deferred two frames so
+        // react-grid-layout has positioned the new item.
         requestAnimationFrame(() =>
-          requestAnimationFrame(flashNewComponent),
+          requestAnimationFrame(() => {
+            focusComponent(newId, { defer: false });
+          }),
         );
         notifications.show({
           color: 'teal',
@@ -615,16 +1368,158 @@ const EditorApp: React.FC = () => {
     () => interactiveComponents.filter((m) => m.placement === 'top'),
     [interactiveComponents],
   );
-  const leftComponents = useMemo(
-    () => interactiveComponents.filter((m) => m.placement !== 'top'),
-    [interactiveComponents],
+  // Grid sections with a filter bar (App.tsx draws the same split): their
+  // interactive components render in the grid, not in the filter panel.
+  const barNames = useMemo(
+    () => barSectionNames(dashboard?.grid_sections as FilterSectionSpec[] | undefined),
+    [dashboard?.grid_sections],
   );
+  const barComponents = useMemo(
+    () => interactiveComponents.filter((m) => isBarMember(m, barNames)),
+    [interactiveComponents, barNames],
+  );
+  const leftComponents = useMemo(() => {
+    const own = interactiveComponents.filter(
+      (m) => m.placement !== 'top' && !isBarMember(m, barNames),
+    );
+    const seen = new Set(own.map((m) => m.index));
+    // Controls fanned out from a sibling tab's persistent filter section, same
+    // as the viewer does: their renderers fetch options by dc_id/column, not by
+    // dashboard id. `readOnlyPanelSections` below keeps them out of the panel's
+    // editable grid.
+    const foreign = foreignFilterSections
+      .flatMap((s) => s.components.map((c) => c.metadata))
+      .filter((m) => !seen.has(m.index) && m.placement !== 'top');
+    return foreign.length ? [...own, ...foreign] : own;
+  }, [interactiveComponents, foreignFilterSections, barNames]);
+  // Section chrome for the panel — own specs plus the foreign persistent ones,
+  // own winning a name clash. Distinct from the `filterSections` memo below,
+  // which feeds the ⋮ "Move to section" menus and must stay own-only: a
+  // component cannot move into a section another tab owns.
+  const panelFilterSections = useMemo(() => {
+    const own = dashboard?.filter_sections ?? [];
+    const names = new Set(own.map((s) => s.name));
+    const foreign = foreignFilterSections.map((s) => s.spec).filter((s) => !names.has(s.name));
+    return foreign.length ? [...own, ...foreign] : own;
+  }, [dashboard?.filter_sections, foreignFilterSections]);
+  // Same exclusion as `panelFilterSections`, and it has to be: a section is
+  // read-only because a sibling tab owns it, and an own section that happens to
+  // share the name is a different section. Without this, declaring a section
+  // named like a sibling's persistent one would freeze this tab's own filters —
+  // no drag, no per-component menu — and drop them from every later
+  // `left_panel_layout_data` write, since the merge skips read-only sections.
+  /** Component ids this dashboard document holds, as opposed to the ones fanned
+   *  out from sibling tabs. */
+  const ownComponentIndices = useMemo(
+    () => new Set((dashboard?.stored_metadata ?? []).map((m) => m.index)),
+    [dashboard?.stored_metadata],
+  );
+  const readOnlyPanelSections = useMemo(() => {
+    const ownNames = new Set((dashboard?.filter_sections ?? []).map((s) => s.name));
+    return foreignFilterSections
+      .map((s) => s.spec.name)
+      .filter((name) => !ownNames.has(name));
+  }, [dashboard?.filter_sections, foreignFilterSections]);
+  /** Open the add/edit dialog on one section, by name.
+   *
+   *  A section a component names but the dashboard never declared has no spec
+   *  to patch — `update` maps over the declared list and would be a no-op — so
+   *  it is materialised first, exactly as opening the manager does. */
+  const openSectionEditor = useCallback(
+    (kind: SectionKind, sectionName: string) => {
+      const cur = dashboardRef.current;
+      const declared = cur
+        ? sectionsFor(cur, kind).find((s) => s.name === sectionName)
+        : undefined;
+      if (!declared) handleSectionOp({ op: 'materialize', kind });
+      setSectionModal({
+        open: true,
+        kind,
+        target: declared ?? { name: sectionName },
+        fromManager: false,
+      });
+    },
+    [handleSectionOp],
+  );
+  // A section is edited from where it is seen: its header carries the same "…"
+  // a component's chrome does. Named sections only — the unsectioned bucket has
+  // no header to host it.
+  const renderGridSectionAction = (sectionName: string | null) => {
+    if (sectionName === null) return null;
+    const action = (
+      <SectionActionButton
+        label={`Edit “${sectionName}”`}
+        onActivate={() => openSectionEditor('grid', sectionName)}
+      />
+    );
+    // A persistent section this tab owns but excludes: the viewer leaves it
+    // out here, the editor keeps it so it can still be edited. Marked, so the
+    // author doesn't wonder why readers of this tab never see it.
+    const spec = ((dashboard?.grid_sections as FilterSectionSpec[] | undefined) || []).find(
+      (s) => s.name === sectionName,
+    );
+    const here = activeTab ? tabLinkKey(tabDisplayName(activeTab)) : '';
+    const hiddenHere = Boolean(
+      here && spec?.persistent && spec.exclude_tabs?.some((t) => tabLinkKey(t) === here),
+    );
+    if (!hiddenHere) return action;
+    return (
+      <Group gap={6} wrap="nowrap">
+        <Tooltip
+          label="Excluded from this tab: readers see it on the dashboard's other tabs only. Shown here so it can be edited."
+          withArrow
+          multiline
+          w={260}
+        >
+          <Badge size="sm" variant="light" color="gray" leftSection={<Icon icon="mdi:eye-off-outline" width={12} />}>
+            Hidden on this tab
+          </Badge>
+        </Tooltip>
+        {action}
+      </Group>
+    );
+  };
+  // Filter names and dc_ids are resolved against the family, not just this
+  // tab: a fanned-out control has no entry in this dashboard's metadata, so
+  // the active-filter summary would fall back to the raw column name.
+  const summaryMetadata = useMemo(() => {
+    const own = dashboard?.stored_metadata || [];
+    const seen = new Set(own.map((m) => m.index));
+    const extras = foreignPersistentSections
+      .flatMap((s) => s.components.map((c) => c.metadata))
+      .filter((m) => !seen.has(m.index));
+    return extras.length ? [...own, ...extras] : own;
+  }, [dashboard, foreignPersistentSections]);
   // Sections offered by the filter controls' ⋮ menus. Keyed on the spec list
   // rather than the whole dashboard so a card value or layout nudge doesn't
   // re-render every overlay.
   const filterSections = useMemo(
     () => dashboard?.filter_sections ?? [],
     [dashboard?.filter_sections],
+  );
+  // A filter can also move into a filter bar — a grid section shown as a
+  // strip, or a section of tiles with a bar of its own — and a tile cannot
+  // join a strip, so the two menus split the bars between them. A bar wins a
+  // name clash with a filter section: a component naming that section is
+  // drawn in the bar (see `isBarMember`).
+  const stripSpecs = useMemo(
+    () =>
+      ((dashboard?.grid_sections as FilterSectionSpec[] | undefined) ?? [])
+        .filter(isBarSection)
+        .map((s) => (s.icon ? s : { ...s, icon: 'mdi:tune-variant' })),
+    [dashboard?.grid_sections],
+  );
+  const filterMoveSections = useMemo(() => {
+    if (stripSpecs.length === 0) return filterSections;
+    const bars = new Set(stripSpecs.map((s) => s.name));
+    return [...filterSections.filter((s) => !bars.has(s.name)), ...stripSpecs];
+  }, [filterSections, stripSpecs]);
+  const tileMoveSections = useMemo(
+    () =>
+      ((dashboard?.grid_sections as FilterSectionSpec[] | undefined) ?? []).filter(
+        (s) => !isStripSection(s),
+      ),
+    [dashboard?.grid_sections],
   );
   // How many controls move together, per component. Precomputed once instead of
   // per overlay so the callback below can depend on this rather than on the
@@ -641,7 +1536,11 @@ const EditorApp: React.FC = () => {
   // Per-filter edit / duplicate / delete menu. FilterPanel injects it into
   // each control's chrome, including controls nested inside a group card.
   const renderFilterItemOverlay = useCallback(
-    (component: StoredMetadata) => (
+    (component: StoredMetadata) =>
+      // A control fanned out from a sibling tab can share a bucket with this
+      // tab's own filters when both sections carry the same name. It is not in
+      // this document, so none of these actions could reach it.
+      !ownComponentIndices.has(component.index) ? null : (
       <GridItemEditOverlay
         dashboardId={dashboardId!}
         componentId={component.index}
@@ -649,19 +1548,25 @@ const EditorApp: React.FC = () => {
         onDelete={handleDeleteComponent}
         onDuplicate={handleDuplicateComponent}
         componentType={component.component_type}
-        sections={filterSections}
+        sections={filterMoveSections}
         currentSection={component.section ?? null}
         onMoveToSection={handleMoveToSection}
         groupSize={filterGroupSizes.get(component.index) ?? 1}
+        // Filters need history as much as charts do: a dropdown that became a
+        // segmented control keeps its title and column, so its history is the
+        // only place the change is visible at all.
+        onOpenHistory={openComponentHistory}
       />
     ),
     [
       dashboardId,
       handleDeleteComponent,
       handleDuplicateComponent,
-      filterSections,
+      filterMoveSections,
       handleMoveToSection,
       filterGroupSizes,
+      ownComponentIndices,
+      openComponentHistory,
     ],
   );
 
@@ -709,12 +1614,205 @@ const EditorApp: React.FC = () => {
     () => tabSiblings.find((d) => d.dashboard_id === dashboardId) || null,
     [tabSiblings, dashboardId],
   );
+  // The family's existing groups, offered when a tab is created or edited.
+  const tabGroupOptions = useMemo(() => tabGroupNames(tabSiblings), [tabSiblings]);
+  // The names `exclude_tabs` matches against, offered by the section form.
+  const tabNames = useMemo(() => tabSiblings.map(tabDisplayName), [tabSiblings]);
+  // Where a component's "Copy to tab…" can send it: every other tab.
+  const copyTargets = useMemo(
+    () => tabSiblings.filter((d) => d.dashboard_id !== dashboardId),
+    [tabSiblings, dashboardId],
+  );
+
+  /**
+   * Copy to tab: add a copy of the component to a sibling tab's document and
+   * save that tab. The target is fetched fresh rather than taken from any
+   * cache, and saved through the same `/save` this tab uses; this tab's own
+   * document is not touched, so a pending layout save here is unaffected.
+   */
+  const handleCopyToTab = useCallback(
+    async (componentId: string, targetId: string) => {
+      const cur = dashboardRef.current;
+      const source = cur?.stored_metadata?.find((m) => m.index === componentId);
+      const targetTab = tabSiblings.find((d) => d.dashboard_id === targetId);
+      if (!cur || !source || !targetTab) return;
+      const targetName = tabDisplayName(targetTab);
+      const newId =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : fallbackUuid();
+      try {
+        const target = await fetchDashboard(targetId);
+        const { dashboard: next, component } = copyComponentToTab({
+          source,
+          sourceLayoutData: cur.right_panel_layout_data,
+          target,
+          newId,
+        });
+        await saveDashboard(targetId, next);
+        notifications.show({
+          color: 'teal',
+          title: `Copied to “${targetName}”`,
+          message: (
+            <Stack gap={2}>
+              <Text size="sm">
+                {component.section
+                  ? `At the bottom of its “${component.section}” section there.`
+                  : next.grid_sections?.length
+                    ? // Unsectioned tiles are drawn above a tab's sections.
+                      'Above that tab’s sections, in none of them: “Move to section” there files it.'
+                    : 'At the bottom of that tab.'}
+              </Text>
+              <Anchor href={dashboardHref(targetId, 'edit')} size="sm" fw={600}>
+                Open “{targetName}”
+              </Anchor>
+            </Stack>
+          ),
+          autoClose: 6000,
+        });
+      } catch (err) {
+        console.error('[EditorApp] copy to tab failed:', err);
+        notifications.show({
+          color: 'red',
+          title: `Copy to “${targetName}” failed`,
+          message: err instanceof Error ? err.message : String(err),
+          autoClose: 5000,
+        });
+      }
+    },
+    [tabSiblings],
+  );
+
+  /**
+   * Highlight on: add a highlight of the figure to another tab, a reference
+   * that renders the figure from this tab rather than a copy of it. Fetched
+   * and saved like a copy; this tab's document is not touched.
+   */
+  const handleHighlightOnTab = useCallback(
+    async (componentId: string, targetId: string) => {
+      const cur = dashboardRef.current;
+      const source = cur?.stored_metadata?.find((m) => m.index === componentId);
+      const targetTab = tabSiblings.find((d) => d.dashboard_id === targetId);
+      const sourceTab = tabSiblings.find((d) => d.dashboard_id === dashboardId);
+      if (!cur || !source || !targetTab || !dashboardId) return;
+      const targetName = tabDisplayName(targetTab);
+      const newId =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : fallbackUuid();
+      try {
+        const target = await fetchDashboard(targetId);
+        const { dashboard: next } = highlightOnTab({
+          source,
+          sourceComponents: cur.stored_metadata,
+          sourceDashboardId: dashboardId,
+          sourceTabName: sourceTab ? tabDisplayName(sourceTab) : cur.title ?? '',
+          sourceLayoutData: cur.right_panel_layout_data,
+          target,
+          newId,
+        });
+        await saveDashboard(targetId, next);
+        notifications.show({
+          color: 'teal',
+          title: `Highlighted on “${targetName}”`,
+          message: (
+            <Stack gap={2}>
+              <Text size="sm">
+                {next.grid_sections?.length
+                  ? 'Above that tab’s sections: “Move to section” there files it, its menu’s Edit sets its title and style.'
+                  : 'At the bottom of that tab. Its menu’s Edit sets its title and style.'}
+              </Text>
+              <Anchor href={dashboardHref(targetId, 'edit')} size="sm" fw={600}>
+                Open “{targetName}”
+              </Anchor>
+            </Stack>
+          ),
+          autoClose: 6000,
+        });
+      } catch (err) {
+        console.error('[EditorApp] highlight on tab failed:', err);
+        notifications.show({
+          color: 'red',
+          title: `Highlight on “${targetName}” failed`,
+          message: err instanceof Error ? err.message : String(err),
+          autoClose: 5000,
+        });
+      }
+    },
+    [tabSiblings, dashboardId],
+  );
   const parentTab = useMemo(
     () => tabSiblings.find((d) => !d.parent_dashboard_id) || null,
     [tabSiblings],
   );
+  // The reader's chrome style (Glass or Classic, see chrome/variants).
+  useChromeVariant();
 
-  const handleResetAllFilters = useCallback(() => setFilters([]), []);
+  const handleResetAllFilters = useCallback(() => {
+    setFilters([]);
+    // Mirrors App.tsx: group filters narrow the dashboard too.
+    groupsApi.deactivateAllGroupFilters();
+  }, [groupsApi.deactivateAllGroupFilters]);
+  // A bar's "Reset" (App.tsx): its own controls' values go, nothing else.
+  const handleResetFilterIndices = useCallback((indices: string[]) => {
+    const drop = new Set(indices);
+    setFilters((prev) => prev.filter((f) => !(drop.has(f.index) && f.source === undefined)));
+  }, []);
+  // The tab-wide filters, for what sits in no section (the maps).
+  const tabFilters = useMemo(
+    () => filtersInScope(combinedFilters, filterScopes, null),
+    [combinedFilters, filterScopes],
+  );
+
+  // Filter-active groups as removable active-filter summary rows.
+  const groupSummaryRows = groupsApi.summaryRows;
+  // Global "Color by" column discovery + stable palette (mirrors App.tsx).
+  const colorByColumns = useCategoricalColumns(dashboard?.stored_metadata);
+  const colorByColumnRender = useColorByColumnRender(groupsApi.colorBy, colorByColumns);
+  // Memoised for the grid's per-item render memo (mirrors App.tsx).
+  const groupRender = useMemo(
+    () =>
+      resolveGroupRender(
+        groupsApi.colorBy,
+        groupsApi.renderGroups,
+        colorByColumnRender,
+        groupsApi.displayMode,
+        groupsApi.showOther,
+      ),
+    [
+      groupsApi.colorBy,
+      groupsApi.renderGroups,
+      colorByColumnRender,
+      groupsApi.displayMode,
+      groupsApi.showOther,
+    ],
+  );
+
+  // The Grouping panel's body, mounted in the header popover (mirrors App.tsx).
+  const groupsSection = (
+    <SelectionGroupsPanel
+      filters={filters}
+      components={dashboard?.stored_metadata ?? []}
+      groups={groupsApi.groups}
+      colorBy={groupsApi.colorBy}
+      colorByColumns={colorByColumns}
+      compareInCards={groupsApi.compareInCards}
+      onCreateGroup={groupsApi.createGroupFromFilter}
+      onClearSelection={handleFilterChange}
+      onUpdateGroup={groupsApi.updateGroup}
+      onDeleteGroup={groupsApi.deleteGroup}
+      onToggleGroupFilter={groupsApi.toggleGroupFilter}
+      onColorByChange={groupsApi.setColorBy}
+      onCompareInCardsChange={groupsApi.setCompareInCards}
+      displayMode={groupsApi.displayMode}
+      onDisplayModeChange={groupsApi.setDisplayMode}
+      showOther={groupsApi.showOther}
+      onShowOtherChange={groupsApi.setShowOther}
+      showOverall={groupsApi.showOverall}
+      onShowOverallChange={groupsApi.setShowOverall}
+      onResetAnalysis={groupsApi.resetAnalysis}
+    />
+  );
 
   // ---- Realtime: WebSocket subscription mirrors App.tsx ---------------------
   const [realtimeMode, setRealtimeMode] = useState<RealtimeMode>(() => {
@@ -827,24 +1925,36 @@ const EditorApp: React.FC = () => {
   }, [dashboardId]);
 
   /** Refetch the global dashboard list so tab edits show up in the sidebar
-   *  without a full page reload. */
+   *  without a full page reload. Called after every tab write (edit, delete,
+   *  reorder, regroup), each of which also records a version of the family on
+   *  the server, so the version list follows along. */
   const refreshTabList = useCallback(async () => {
+    void reloadVersions();
     try {
       const all = await fetchAllDashboards();
       setAllDashboards(all);
     } catch (err) {
       console.warn('[EditorApp] refresh tab list failed:', err);
     }
-  }, []);
+  }, [reloadVersions]);
 
-  const openCreateTabModal = useCallback(() => {
+  const openCreateTabModal = useCallback((group?: string | null) => {
     setTabModalState({
       open: true,
       mode: 'create',
       target: null,
       submitting: false,
+      group: group ?? null,
     });
   }, []);
+
+  // Tab groups: the sidebar's group menus, "+ New group" and a tab's "Move to
+  // group". Persisted as tab patches + a reorder, then the list refreshes.
+  const tabGroupActions = useTabGroupActions({
+    tabs: tabSiblings,
+    refresh: refreshTabList,
+    openCreateTab: openCreateTabModal,
+  });
 
   const openEditTabModal = useCallback((tab: DashboardSummary) => {
     setTabModalState({
@@ -878,6 +1988,7 @@ const EditorApp: React.FC = () => {
             title: payload.title,
             tab_icon: payload.tab_icon,
             tab_icon_color: payload.tab_icon_color,
+            tab_group: payload.tab_group,
           });
           notifications.show({
             color: 'teal',
@@ -984,23 +2095,27 @@ const EditorApp: React.FC = () => {
   const handleMoveTab = useCallback(
     async (tab: DashboardSummary, direction: 'up' | 'down') => {
       // Build the new ordering by swapping `tab` with its neighbor in the
-      // child-only list. The main tab keeps tab_order=0 and isn't part of
-      // the reorder payload.
-      const children = (
-        tabSiblings.length
-          ? tabSiblings
-          : allDashboards.filter(
-              (d) => d.parent_dashboard_id === tab.parent_dashboard_id,
-            )
-      ).filter((t) => t.parent_dashboard_id);
-      const idx = children.findIndex((c) => c.dashboard_id === tab.dashboard_id);
-      if (idx === -1) return;
+      // child-only list, as the sidebar shows it: grouped, so the neighbor is
+      // the one above or below in the same group, and a move renumbers the
+      // whole list in that order (which also gathers a group an author had
+      // interleaved). The main tab keeps tab_order=0 and isn't part of the
+      // reorder payload.
+      const family = tabSiblings.length
+        ? tabSiblings
+        : allDashboards.filter((d) => d.parent_dashboard_id === tab.parent_dashboard_id);
+      const sections = groupTabs(family).map((section) =>
+        section.tabs.filter((t) => t.parent_dashboard_id),
+      );
+      const section = sections.find((ts) =>
+        ts.some((c) => c.dashboard_id === tab.dashboard_id),
+      );
+      if (!section) return;
+      const idx = section.findIndex((c) => c.dashboard_id === tab.dashboard_id);
       const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-      if (swapIdx < 0 || swapIdx >= children.length) return;
+      if (swapIdx < 0 || swapIdx >= section.length) return;
 
-      const reordered = [...children];
-      [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
-      const tabOrders = reordered.map((c, i) => ({
+      [section[idx], section[swapIdx]] = [section[swapIdx], section[idx]];
+      const tabOrders = sections.flat().map((c, i) => ({
         dashboard_id: c.dashboard_id,
         tab_order: i + 1,
       }));
@@ -1022,12 +2137,10 @@ const EditorApp: React.FC = () => {
     [tabSiblings, allDashboards, refreshTabList],
   );
 
-  /** Closing the manager flushes the debounce: the next thing a user does after
-   *  reorganising sections is often "Edit" or "Add component", both of which
-   *  navigate away with `window.location.assign` and would drop a pending
-   *  save. */
-  const handleCloseSections = useCallback(() => {
-    closeSections();
+  /** Closing a sections dialog flushes the debounce: the next thing a user does
+   *  after touching sections is often "Edit" or "Add", both of which navigate
+   *  away with `window.location.assign` and would drop a pending save. */
+  const flushSectionSave = useCallback(() => {
     if (!dashboardId) return;
     const cur = dashboardRef.current;
     if (!cur) return;
@@ -1042,7 +2155,183 @@ const EditorApp: React.FC = () => {
         console.error('[EditorApp] section save failed:', err);
         setSaveStatus('error');
       });
-  }, [closeSections, dashboardId]);
+  }, [dashboardId]);
+
+  const handleCloseSections = useCallback(() => {
+    closeSections();
+    flushSectionSave();
+  }, [closeSections, flushSectionSave]);
+
+  /** Cancel and save both land here. Returning to the manager when that is
+   *  where the dialog came from is what makes editing several sections in a
+   *  row bearable. */
+  const handleCloseSectionModal = useCallback(() => {
+    // Outside the updater: React re-invokes those in dev, and this one opens a
+    // dialog.
+    if (sectionModal.fromManager) openSections();
+    setSectionModal((prev) => ({ ...prev, open: false }));
+    flushSectionSave();
+  }, [sectionModal.fromManager, openSections, flushSectionSave]);
+
+  /** "Manage all sections", the other direction of the same swap. */
+  const handleManageAllSections = useCallback(() => {
+    setSectionModal((prev) => ({ ...prev, open: false, fromManager: false }));
+    openSections();
+    flushSectionSave();
+  }, [openSections, flushSectionSave]);
+
+  const handleManagerAdd = useCallback(
+    (kind: SectionKind) => {
+      closeSections();
+      setSectionModal({ open: true, kind, target: null, fromManager: true });
+    },
+    [closeSections],
+  );
+  const handleManagerEdit = useCallback(
+    (kind: SectionKind, spec: FilterSectionSpec) => {
+      closeSections();
+      setSectionModal({ open: true, kind, target: spec, fromManager: true });
+    },
+    [closeSections],
+  );
+  /** The header's Add menu: a new grid section, the common case. */
+  const handleAddSection = useCallback(
+    () => setSectionModal({ open: true, kind: 'grid', target: null, fromManager: false }),
+    [],
+  );
+
+  /** A persistent section can only be changed where it is declared. Rather
+   *  than leave it inert on every other tab, its header carries a jump to the
+   *  tab that owns it. Flushes first: the navigation is a full page load and
+   *  would drop a pending layout save. */
+  const goToOwnerTab = (ownerDashboardId: string) => {
+    flushSectionSave();
+    window.location.assign(`/dashboard-edit/${ownerDashboardId}`);
+  };
+  const renderPersistentSectionAction = (section: PersistentSection) => (
+    <SectionActionButton
+      label={`Owned by ${
+        section.owner_tab_title ? `“${section.owner_tab_title}”` : 'another tab'
+      } — open that tab to edit it`}
+      ariaLabel="Edit on the owning tab"
+      onActivate={() => goToOwnerTab(section.owner_dashboard_id)}
+    />
+  );
+  // The viewer's fan-out, previewed: read-only surfaces of their own, so a
+  // foreign section is visible while laying this tab out without ever entering
+  // its editable grid. Handed to the grid as `beforeSections` so it lands after
+  // this tab's own unsectioned components. Declared here, below the section
+  // action renderer and `groupRender`: it reads both.
+  const topSectionsHost =
+    topGridSections.length > 0 ? (
+      <div>
+        <PersistentSectionsHost
+          sections={topGridSections}
+          familyId={crossTab.familyId}
+          slot="top"
+          filters={filters}
+          filterScopes={filterScopes}
+          onResetBarFilters={handleResetFilterIndices}
+          onFilterChange={handleFilterChange}
+          groupRender={groupRender}
+          bulkOptions={groupsApi.bulkOptions}
+          renderSectionActions={renderPersistentSectionAction}
+          autofit={dashboard?.autofit !== false}
+        />
+      </div>
+    ) : null;
+
+  // The panel's list also holds the persistent sections a sibling tab owns.
+  // Those get the jump instead of this tab's editor: the modal only knows this
+  // dashboard's own specs. The grid needs no such branch — its foreign sections
+  // render in `PersistentSectionsHost`, which takes its own action.
+  const foreignFilterSectionsByName = new Map(
+    foreignFilterSections.map((s) => [s.spec.name, s] as const),
+  );
+  const renderPanelSectionAction = (sectionName: string | null) => {
+    if (sectionName === null) return null;
+    const foreign = foreignFilterSectionsByName.get(sectionName);
+    if (foreign) return renderPersistentSectionAction(foreign);
+    return (
+      <SectionActionButton
+        label={`Edit “${sectionName}”`}
+        onActivate={() => openSectionEditor('filter', sectionName)}
+      />
+    );
+  };
+
+  /**
+   * Reload the family after a restore landed on the server.
+   *
+   * Cancels the pending debounced save first. Without that, a drag from just
+   * before the restore fires ~500 ms later and POSTs the *pre-restore* state
+   * back over the freshly restored document — the dashboard visibly reverts a
+   * moment after the success notification, which reads as "restore did not
+   * work". The layout listeners also fire on remount with the new layout,
+   * which `layoutsEqual` then correctly treats as a no-op.
+   *
+   * A restore can delete the tab being edited (a version that predates it).
+   * Staying would leave its grid on screen, and the next drag would `/save`
+   * it back into existence from the stale state, so the editor leaves for the
+   * family's main tab instead: when the version is known not to hold the tab,
+   * or when the refetch answers 404. Any other refetch failure is shown, not
+   * swallowed: the editor would otherwise sit on the pre-restore state.
+   *
+   * Also reloads the version list, which now starts with the `restore` row
+   * (and the pre-restore state it captured first): the settings stay open on
+   * History and show it, and the tile menu's History entry sees it too. And
+   * the cross-tab components, since a restore can change the parent's
+   * persistent sections and floating maps as well.
+   */
+  const handleRestored = useCallback(
+    (outcome?: RestoreOutcome) => {
+      if (!dashboardId) return;
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      setSaveStatus('idle');
+      const familyMainId =
+        outcome?.familyId ||
+        (dashboardRef.current?.parent_dashboard_id as string | null | undefined) ||
+        crossTab.familyId ||
+        dashboardId;
+      const leave = () => {
+        leavingRef.current = true;
+        if (saveTimer.current) {
+          clearTimeout(saveTimer.current);
+          saveTimer.current = null;
+        }
+        window.location.assign(dashboardHref(String(familyMainId), 'edit'));
+      };
+      const removed =
+        outcome?.removesCurrentTab ||
+        Boolean(outcome?.result.deleted_tab_ids?.includes(dashboardId));
+      if (removed && String(familyMainId) !== dashboardId) {
+        leave();
+        return;
+      }
+      // A restore can rename, recreate or delete tabs, so the sidebar and the
+      // header breadcrumb need the family again, not just this tab. This also
+      // reloads the version list.
+      void refreshTabList();
+      crossTab.reload();
+      fetchDashboard(dashboardId)
+        .then(applyServerDashboard)
+        .catch((err) => {
+          if (isHttpStatus(err, 404) && String(familyMainId) !== dashboardId) {
+            leave();
+            return;
+          }
+          notifications.show({
+            color: 'red',
+            title: 'Could not reload the restored dashboard',
+            message: `${err instanceof Error ? err.message : String(err)}. Reload the page before editing.`,
+          });
+        });
+    },
+    [dashboardId, applyServerDashboard, refreshTabList, crossTab],
+  );
 
   /** Force-save: cancel any pending debounce and POST current state now.
    *  Mirrors depictio/dash/layouts/save.py:save_dashboard_minimal — uses
@@ -1093,291 +2382,540 @@ const EditorApp: React.FC = () => {
     }
   }, [dashboardId]);
 
-  return (
-    <>
-    <InspectorProviders control={inspectorControl}>
-    <AppShell
-      header={{ height: 50 }}
-      navbar={{
-        width: 250,
-        breakpoint: 'sm',
-        collapsed: { mobile: !mobileOpened, desktop: !desktopOpened },
-      }}
-      padding={0}
-      transitionDuration={300}
-      aside={inspectorAside}
-      transitionTimingFunction="ease"
-    >
-      <AppShell.Header data-tour-id="header-title">
-        <Header
-          dashboardId={dashboardId}
-          dashboard={dashboard}
-          activeTab={activeTab}
-          parentTab={parentTab}
-          mobileOpened={mobileOpened}
-          desktopOpened={desktopOpened}
-          onToggleMobile={toggleMobile}
-          onToggleDesktop={toggleDesktop}
-          onOpenSettings={openSettings}
-          onOpenFilters={isNarrow && leftComponents.length > 0 ? openFilterDrawer : undefined}
-          filterCount={countActiveFilters(filters)}
-          cardsLoading={cardsLoading}
-          mode="edit"
-          onAddComponent={handleAddComponent}
-          onOpenSections={openSections}
-          onSave={handleForceSave}
-          isOwner={isOwner}
-          rightExtras={
-            <>
-              <MapPanelControl panel={mapPanel} />
-              {realtimeEnabled && (
-                <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
-                  <RealtimeIndicator
-                    status={realtime.status}
-                    mode={realtimeMode}
-                    paused={realtimePaused}
-                    pendingUpdate={realtime.pendingUpdate}
-                    onModeChange={persistRealtimeMode}
-                    onPausedChange={setRealtimePaused}
-                    onAcknowledgePending={() => {
-                      realtime.acknowledgePending();
-                      triggerRealtimeRefresh();
-                    }}
-                    journal={journal}
-                    onClearJournal={clearJournal}
-                    onHighlightBatch={handleHighlightBatch}
-                    onClearHighlight={handleClearHighlight}
-                    activeHighlightKey={activeHighlight?.batchKey}
-                  />
-                </span>
-              )}
-            </>
-          }
-        />
-      </AppShell.Header>
+  // ---- Guide --------------------------------------------------------------
+  // The same page the viewer offers, plus the author's switch for it. Both
+  // settings live on the main tab, for the whole family.
+  const guideSettings = useMemo(
+    () => resolveGuideSettings(dashboard, tabSiblings),
+    [dashboard, tabSiblings],
+  );
+  const guide = useGuideRoute(Boolean(dashboard) && !loading && !error && guideSettings.enabled);
+  const editorComponents = useMemo(
+    () => [...cardComponents, ...otherComponents],
+    [cardComponents, otherComponents],
+  );
+  const guideModel = useMemo(
+    () =>
+      guide.open && dashboard
+        ? buildGuideModel({
+            tabs: tabSiblings,
+            currentId: dashboardId,
+            components: editorComponents,
+            gridSections: dashboard.grid_sections as FilterSectionSpec[] | undefined,
+            fannedOutSections: foreignGridSections,
+            panelComponents: leftComponents,
+            panelSections: panelFilterSections,
+            floating: crossTab.floating,
+            // The header's own condition for the Analysis button.
+            analysisAvailable: Boolean(dashboard),
+            inspector: Boolean(inspectorControl),
+            mode: 'edit',
+            // The tile menu offers History only once a version exists.
+            hasVersions: familyVersions.length > 0,
+          })
+        : null,
+    [
+      guide.open,
+      familyVersions.length,
+      dashboard,
+      tabSiblings,
+      dashboardId,
+      editorComponents,
+      foreignGridSections,
+      leftComponents,
+      panelFilterSections,
+      crossTab.floating,
+      inspectorControl,
+    ],
+  );
+  const openGuideFromSidebar = useCallback(() => {
+    guide.openGuide();
+    if (isNarrow && mobileOpened) toggleMobile();
+  }, [guide, isNarrow, mobileOpened, toggleMobile]);
+  const closeGuideFromSidebar = useCallback(() => {
+    guide.closeGuide();
+    if (isNarrow && mobileOpened) toggleMobile();
+  }, [guide, isNarrow, mobileOpened, toggleMobile]);
+  useEffect(() => {
+    if (guide.open) setAnalysisOpen(false);
+  }, [guide.open]);
+  // Before the dashboard search lands on something of this tab: as in the
+  // viewer, the Guide and a phone's tab list cover the canvas, and a filter
+  // lives in a drawer on a phone.
+  const uncoverForSearch = useCallback(
+    (index: string | null) => {
+      if (guide.open) guide.closeGuide();
+      if (isNarrow && mobileOpened) toggleMobile();
+      if (index && isNarrow && leftComponents.some((m) => m.index === index)) openFilterDrawer();
+    },
+    [guide, isNarrow, mobileOpened, toggleMobile, leftComponents, openFilterDrawer],
+  );
+  /** Before the search leaves for another tab, which is a full page load: save
+   *  what the debounce still holds, and wait for it, or a layout change made a
+   *  moment ago leaves with the page. A failed save keeps the author here. */
+  const saveBeforeLeaving = useCallback(async (): Promise<boolean> => {
+    if (!dashboardId || !saveTimer.current) return true;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = null;
+    const cur = dashboardRef.current;
+    if (!cur) return true;
+    setSaveStatus('saving');
+    try {
+      await saveDashboard(dashboardId, cur);
+      setSaveStatus('saved');
+      return true;
+    } catch (err) {
+      console.error('[EditorApp] save before leaving the tab failed:', err);
+      setSaveStatus('error');
+      notifications.show({
+        color: 'red',
+        title: "Couldn't save this tab",
+        message: 'Your last change is not saved yet, so you are still on this tab.',
+      });
+      return false;
+    }
+  }, [dashboardId]);
 
-      <AppShell.Navbar p="md" data-tour-id="sidebar">
-        <Sidebar
-          tabs={tabSiblings}
-          activeId={dashboardId}
-          mode="edit"
-          onAddTab={openCreateTabModal}
-          onEditTab={openEditTabModal}
-          onDeleteTab={handleDeleteTab}
-          onMoveTab={handleMoveTab}
-        />
-      </AppShell.Navbar>
+  /**
+   * The Guide's author settings, from the settings' Guide section. They are
+   * the main tab's: there, the full-document save every tab default takes;
+   * from a child tab, the targeted tab patch on the main tab, shown at once in
+   * the family list the Guide reads them from and refetched if it fails.
+   */
+  const handleGuideSettingsChange = useCallback(
+    async (patch: Partial<GuideAuthorSettings>) => {
+      if (!dashboardId) return;
+      const cur = dashboardRef.current;
+      if (!cur) return;
+      const parentId =
+        typeof cur.parent_dashboard_id === 'string' ? cur.parent_dashboard_id : null;
+      const mainId = parentId || dashboardId;
+      setAllDashboards((prev) =>
+        prev.map((d) => (d.dashboard_id === mainId ? { ...d, ...patch } : d)),
+      );
+      setSaveStatus('saving');
+      if (!parentId) {
+        const next = { ...cur, ...patch };
+        if (saveTimer.current) {
+          clearTimeout(saveTimer.current);
+          saveTimer.current = null;
+        }
+        applyDashboard(next);
+        try {
+          await saveDashboard(dashboardId, next);
+          setSaveStatus('saved');
+        } catch (err) {
+          console.error('[EditorApp] guide settings save failed:', err);
+          setSaveStatus('error');
+        }
+        return;
+      }
+      try {
+        await updateTab(mainId, patch);
+        setSaveStatus('saved');
+      } catch (err) {
+        console.error('[EditorApp] guide settings save failed:', err);
+        setSaveStatus('error');
+        notifications.show({
+          color: 'red',
+          title: "Couldn't save the Guide settings",
+          message: err instanceof Error ? err.message : String(err),
+        });
+        void refreshTabList();
+      }
+    },
+    [dashboardId, applyDashboard, refreshTabList],
+  );
 
-      <AppShell.Main style={{ height: 'calc(100vh - 50px)' }}>
-        {loading && (
-          <Group p="lg">
-            <Loader size="sm" />
-            <Text>Loading dashboard…</Text>
-          </Group>
-        )}
-        {error && (
-          <Text c="red" p="lg">
-            {error}
-          </Text>
-        )}
-        {dashboard && !loading && !error && (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              height: '100%',
-              width: '100%',
-              overflow: 'hidden',
+  // The page's regions, handed to the active chrome style's Shell (see
+  // chrome/shell/types.ts), which decides where each one goes.
+  const ready = Boolean(dashboard) && !loading && !error;
+  const headerActions: HeaderAction[] = [];
+  if (dashboard) {
+    headerActions.push({
+      id: 'analysis',
+      group: 'read',
+      node: (
+        <GroupingHeaderControl
+          groupCount={groupsApi.groups.length}
+          colorBy={groupsApi.colorBy}
+          opened={analysisOpen}
+          onOpenedChange={handleAnalysisOpenChange}
+          armed={analysisArmed}
+          onToggle={handleAnalysisToggle}
+          pushesContent={!isNarrow}
+        >
+          {groupsSection}
+        </GroupingHeaderControl>
+      ),
+    });
+  }
+  if (realtimeEnabled) {
+    headerActions.push({
+      id: 'realtime',
+      group: 'read',
+      node: (
+        <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
+          <RealtimeIndicator
+            status={realtime.status}
+            mode={realtimeMode}
+            paused={realtimePaused}
+            pendingUpdate={realtime.pendingUpdate}
+            onModeChange={persistRealtimeMode}
+            onPausedChange={setRealtimePaused}
+            onAcknowledgePending={() => {
+              realtime.acknowledgePending();
+              triggerRealtimeRefresh();
             }}
-          >
-          <div
-            ref={filterPanelLayoutRef}
-            // Cast for the custom property — see the same note in App.tsx.
-            style={{
-              // Written directly by a drag, so the panel edge doesn't wait on a
-              // render — see the same note in App.tsx.
-              [FILTER_PANEL_WIDTH_VAR]: `${
-                filterPanelOpened ? filterPanelWidth : FILTER_PANEL_RAIL_WIDTH
-              }px`,
-              display: 'grid',
-              // Panel | drag handle | content, the same three tracks the viewer
-              // uses. The track count stays at three whatever the panel's
-              // state, because `grid-template-columns` only animates between
-              // templates with matching track counts.
-              gridTemplateColumns: isNarrow
-                ? '1fr'
-                : `var(${FILTER_PANEL_WIDTH_VAR}) ` +
-                  `${filterPanelOpened ? FILTER_PANEL_RESIZER_WIDTH : 0}px 1fr`,
-              // Off while dragging — see the same note in App.tsx.
-              transition: filterPanelResizing
-                ? 'none'
-                : 'grid-template-columns 300ms ease',
-              flex: 1,
-              minHeight: 0,
-              width: '100%',
-              gap: 4,
-              overflow: 'hidden',
-            } as React.CSSProperties}
-          >
-            {!isNarrow && (
-              <Box
-                px={4}
-                py={4}
-                style={{
-                  // The panel scrolls its own filter list, so this wrapper must
-                  // not scroll too — otherwise the docked map would scroll away
-                  // with the filters instead of staying pinned.
-                  height: '100%',
-                  minWidth: 0,
-                  overflow: 'hidden',
-                }}
-              >
-                <FilterPanel
-                  components={leftComponents}
-                  allMetadata={dashboard.stored_metadata}
-                  filters={filters}
-                  onFilterChange={handleFilterChange}
-                  onResetAllFilters={handleResetAllFilters}
-                  layoutData={dashboard.left_panel_layout_data}
-                  filterSections={dashboard.filter_sections}
-                  dashboardId={dashboardId}
-                  // No refreshTick: the editor threads no realtime refresh
-                  // counter into any of its grids, so the left panel matches
-                  // RightComponentGrid rather than inventing state here.
-                  editMode
-                  renderItemOverlay={renderFilterItemOverlay}
-                  onLayoutChange={handleLeftLayoutChange}
-                  collapsed={!filterPanelOpened}
-                  onToggleCollapsed={toggleFilterPanel}
-                  footer={
-                    <MapPanelDock
-                      panel={mapPanel}
-                      filters={filters}
-                      onFilterChange={handleFilterChange}
-                      renderEditActions={renderMapPanelEditActions}
-                    />
-                  }
-                />
-              </Box>
-            )}
-            {!isNarrow && (
-              <FilterPanelResizer
-                onPointerDown={beginFilterPanelResize}
-                onNudge={nudgeFilterPanelWidth}
-                collapsed={!filterPanelOpened}
-              />
-            )}
-            <Box
-              px={4}
-              py={4}
-              data-tour-id="editor-grid"
-              style={{
-                height: '100%',
-                minWidth: 0,
-                overflowY: 'auto',
-                overflowX: 'hidden',
-              }}
-            >
-              <RightComponentGrid
-                dashboardId={dashboardId!}
-                cardComponents={cardComponents}
-                otherComponents={otherComponents}
-                layoutData={dashboard.right_panel_layout_data}
-                gridSections={dashboard.grid_sections}
-                filters={filters}
-                onFilterChange={handleFilterChange}
-                cardValues={cardValues}
-                cardSecondaryValues={cardSecondaryValues}
-                cardsLoading={cardsLoading}
-                onLayoutChange={handleRightLayoutChange}
-                onDeleteComponent={handleDeleteComponent}
-                onDuplicateComponent={handleDuplicateComponent}
-                onAddComponent={handleAddComponent}
-                activeHighlight={activeHighlight}
-                onMoveToSection={handleMoveToSection}
-              />
-            </Box>
-          </div>
-          {/* Mirrors the viewer's footer strip so `placement: 'top'` controls
-              sit where they will actually render, instead of appearing in the
-              left column only while editing. */}
-          {topComponents.length > 0 && (
-            <Box
-              px="md"
-              py={6}
-              style={{
-                flexShrink: 0,
-                width: '100%',
-                borderTop: '1px solid var(--mantine-color-default-border)',
-                background: 'var(--mantine-color-body)',
-              }}
-            >
-              <TopPanel
-                components={topComponents}
-                filters={filters}
-                onFilterChange={handleFilterChange}
-              />
-            </Box>
-          )}
-          </div>
-        )}
-        {/* Narrow screens: the panel the grid no longer has room for. Not in
-            `editMode` — drag-reordering needs a stable panel width to lay its
-            grid out against, and a transient drawer on a phone is neither the
-            place nor the input device for authoring. */}
-        {dashboard && isNarrow && (
-          <Drawer
-            opened={filterDrawerOpened}
-            onClose={closeFilterDrawer}
-            position="left"
-            size="min(320px, 85vw)"
-            title="Filters"
-          >
-            <FilterPanel
-              components={leftComponents}
-              allMetadata={dashboard.stored_metadata}
+            journal={journal}
+            onClearJournal={clearJournal}
+            onHighlightBatch={handleHighlightBatch}
+            onClearHighlight={handleClearHighlight}
+            activeHighlightKey={activeHighlight?.batchKey}
+          />
+        </span>
+      ),
+    });
+  }
+  const guideEntry =
+      guideSettings.enabled && dashboard
+        ? {
+            open: guide.open,
+            href: guide.href,
+            onOpen: openGuideFromSidebar,
+            onClose: closeGuideFromSidebar,
+          }
+        : undefined;
+  // Docked: the authoring column (drag, overlays, section menus). Elsewhere
+  // (the phone drawer, a layout's popover): the reading form — drag-reordering
+  // needs a stable panel width to lay its grid out against.
+  const filterPanel = (opts?: FilterPanelOptions) =>
+    !dashboard ? null : opts?.docked ? (
+      <FilterPanel
+        components={leftComponents}
+        allMetadata={summaryMetadata}
+        filters={filters}
+        onFilterChange={handleFilterChange}
+        onResetAllFilters={handleResetAllFilters}
+        layoutData={dashboard.left_panel_layout_data}
+        filterSections={panelFilterSections}
+        readOnlySections={readOnlyPanelSections}
+        renderSectionActions={renderPanelSectionAction}
+        dashboardId={dashboardId}
+        stateScopeId={panelScopeId}
+        headerActions={<MapPanelControl panel={mapPanel} />}
+        // No refreshTick: the editor threads no realtime refresh
+        // counter into any of its grids, so the left panel matches
+        // RightComponentGrid rather than inventing state here.
+        editMode
+        renderItemOverlay={renderFilterItemOverlay}
+        onLayoutChange={handleLeftLayoutChange}
+        collapsed={!filterPanelOpened}
+        onToggleCollapsed={toggleFilterPanel}
+        groupSummaryRows={groupSummaryRows}
+        footer={
+          <MapPanelDock
+            panel={mapPanel}
+            // Docked maps render data: include group filters (the
+            // tab's; a section bar's stay with its section).
+            filters={tabFilters}
+            onFilterChange={handleFilterChange}
+            renderEditActions={renderMapPanelEditActions}
+          />
+        }
+      />
+    ) : (
+      <FilterPanel
+        components={leftComponents}
+        allMetadata={summaryMetadata}
+        filters={filters}
+        onFilterChange={handleFilterChange}
+        onResetAllFilters={handleResetAllFilters}
+        layoutData={dashboard.left_panel_layout_data}
+        filterSections={panelFilterSections}
+        dashboardId={dashboardId}
+        groupSummaryRows={groupSummaryRows}
+        stateScopeId={panelScopeId}
+        headerActions={<MapPanelControl panel={mapPanel} />}
+      />
+    );
+  const boot = (
+    <>
+      {/* Louder here than in the viewer by consequence: this surface saves,
+          and a chart edited against data you did not realise was historical
+          is the mistake worth preventing. Saving still writes only layout
+          and component config — never data — but the point is that you know
+          what you were looking at. */}
+      {timeTravelling && (
+        <DataVersionBanner
+          pinned={pinnedLabels}
+          asOfLabel={asOf?.label}
+          collections={dataVersionStatus.collections}
+          statusError={dataVersionStatus.error}
+          currentDataOnly={currentDataOnlyCount}
+          onClear={clearDataVersions}
+        />
+      )}
+      {loading && (
+        <Group p="lg">
+          <Loader size="sm" />
+          <Text>Loading dashboard…</Text>
+        </Group>
+      )}
+      {error && (
+        <Text c="red" p="lg">
+          {error}
+        </Text>
+      )}
+    </>
+  );
+  const canvas =
+    ready && dashboard ? (
+      <Box
+        data-tour-id="editor-grid"
+        data-testid="dashboard-content"
+        // Under the Guide: kept mounted for when it closes; the filter
+        // panel stays beside it (see App.tsx).
+        aria-hidden={guide.open || undefined}
+        style={{
+          visibility: guide.open ? 'hidden' : undefined,
+          // The same page width as the viewer, so the author lays the
+          // tab out at the width its readers get. Padding goes here
+          // rather than as `px`/`py` props: Mantine writes those as
+          // paddingLeft/Right, which beat this paddingInline.
+          padding: 4,
+          ...(contentMaxWidth !== null
+            ? {
+                paddingInline: `max(4px, calc((100% - ${contentMaxWidth}px) / 2))`,
+                transition: 'padding 200ms ease',
+              }
+            : null),
+          height: '100%',
+          minWidth: 0,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          // Content font-size preference — scales the dashboard tiles
+          // below, never the surrounding chrome (header, sidebar, panel).
+          ...contentScaleStyle,
+        }}
+      >
+        {/* Same placement as the viewer: the tab's description leads
+            the canvas, ahead of any foreign pinned section. */}
+        <TabIntro dashboard={dashboard} activeTab={activeTab} />
+        <RightComponentGrid
+          beforeSections={topSectionsHost}
+          dashboardId={dashboardId!}
+          cardComponents={cardComponents}
+          otherComponents={otherComponents}
+          barComponents={barComponents}
+          layoutData={dashboard.right_panel_layout_data}
+          gridSections={dashboard.grid_sections}
+          tileMoveSections={tileMoveSections}
+          filters={combinedFilters}
+          controlFilters={filters}
+          filterScopes={filterScopes}
+          onResetFilters={handleResetFilterIndices}
+          renderStripItemOverlay={renderFilterItemOverlay}
+          groupRender={groupRender}
+          onFilterChange={handleFilterChange}
+          cardValues={cardValues}
+          cardSecondaryValues={cardSecondaryValues}
+          cardsLoading={cardsLoading}
+          onLayoutChange={handleRightLayoutChange}
+          onDeleteComponent={handleDeleteComponent}
+          onDuplicateComponent={handleDuplicateComponent}
+          copyTargets={copyTargets}
+          onCopyToTab={handleCopyToTab}
+          onHighlightOnTab={handleHighlightOnTab}
+          onAddComponent={handleAddComponent}
+          activeHighlight={activeHighlight}
+          onMoveToSection={handleMoveToSection}
+          renderSectionActions={renderGridSectionAction}
+          onComponentFontScale={handleComponentFontScale}
+          onTileFixed={handleTileFixed}
+          onResetFit={handleResetFit}
+          autofit={dashboard?.autofit !== false}
+          refreshTick={plotThemeTick}
+          onOpenComponentHistory={openComponentHistory}
+        />
+        {bottomGridSections.length > 0 && (
+          <div>
+            <PersistentSectionsHost
+              sections={bottomGridSections}
+              familyId={crossTab.familyId}
+              slot="bottom"
               filters={filters}
+              filterScopes={filterScopes}
+              onResetBarFilters={handleResetFilterIndices}
               onFilterChange={handleFilterChange}
-              onResetAllFilters={handleResetAllFilters}
-              layoutData={dashboard.left_panel_layout_data}
-              filterSections={dashboard.filter_sections}
-              dashboardId={dashboardId}
+              groupRender={groupRender}
+              bulkOptions={groupsApi.bulkOptions}
+              renderSectionActions={renderPersistentSectionAction}
+              autofit={dashboard?.autofit !== false}
             />
-          </Drawer>
+          </div>
         )}
+      </Box>
+    ) : null;
+  // Mirrors the viewer's footer strip so `placement: 'top'` controls sit where
+  // they will actually render, instead of appearing in the left column only
+  // while editing.
+  const topStrip =
+    ready && topComponents.length > 0 ? (
+      <Box
+        px="md"
+        py={6}
+        style={{
+          flexShrink: 0,
+          width: '100%',
+          borderTop: '1px solid var(--mantine-color-default-border)',
+          background: 'var(--mantine-color-body)',
+        }}
+      >
+        <Box style={contentScaleStyle}>
+          <TopPanel
+            components={topComponents}
+            filters={filters}
+            onFilterChange={handleFilterChange}
+          />
+        </Box>
+      </Box>
+    ) : null;
+  const overlays = (
+    <>
+      {/* Fixed furniture above the Guide's layer, hidden with the canvas. */}
+      <div style={guide.open ? { visibility: 'hidden' } : undefined}>
         {dashboard && dashboardId && !inspectorEnabled && (
           <NotesFooter
             dashboardId={dashboardId}
             initialContent={(dashboard.notes_content as string) ?? ''}
             permissions={dashboard.permissions as DashboardPermissions | undefined}
+            // A notes save records a version too, outside `saveStatus`.
+            onSaved={reloadVersions}
           />
         )}
         {dashboard && dashboardId && (
           <MapPanelSurface
             panel={mapPanel}
-            filters={filters}
+            // Floating maps render data: include group filters (the tab's).
+            filters={tabFilters}
             onFilterChange={handleFilterChange}
             renderEditActions={renderMapPanelEditActions}
           />
         )}
-      </AppShell.Main>
-
-      {inspectorEnabled && (
-        <AppShell.Aside p={0}>
-          <Inspector dashboard={dashboard} dashboardId={dashboardId} />
-        </AppShell.Aside>
+      </div>
+      {guide.open && guideModel && dashboard && dashboardId && (
+        <DashboardGuide
+          model={guideModel}
+          dashboardId={dashboardId}
+          dashboard={dashboard}
+          components={editorComponents}
+          tabs={tabSiblings}
+          persistentSections={crossTab.persistentSections}
+          dashboardName={parentTab?.title || dashboard.title || 'Dashboard'}
+          tabName={guideModel.tabs.current?.label ?? dashboard.title ?? 'the tab'}
+          intro={guideSettings.intro}
+          mode="edit"
+          onClose={guide.closeGuide}
+          onOpenYourView={() => openSettingsAt('view')}
+        />
       )}
-
+    </>
+  );
+  const outside = (
+    <>
       <SettingsDrawer
         opened={settingsOpened}
         onClose={closeSettings}
         dashboard={dashboard}
+        onToggleFunnelFiltering={handleToggleFunnelFiltering}
+        onChangeAdvancedVizControls={handleAdvancedVizControls}
+        onToggleAutofit={handleToggleAutofit}
+        onChangeBrandTheme={handleBrandThemeChange}
+        onUploadLogo={handleUploadLogo}
+        onChangeTabDefaults={handleTabDefaultsChange}
+        guide={{
+          // Read whether or not the Guide is on: the switch is how it comes
+          // back.
+          settings: { show_guide: guideSettings.enabled, guide_intro: guideSettings.intro },
+          onChange: handleGuideSettingsChange,
+        }}
+        // Version history and data time travel are edit-mode only: all of it
+        // writes or re-points the dashboard at data it was not saved with.
+        // Anyone who can edit sees both; deleting a version is owner-only, as
+        // on the server. The bodies are built here rather than in the
+        // settings, so the viewer never imports them.
+        historyPanel={
+          dashboardId ? (
+            <VersionHistoryPanel
+              dashboardId={dashboardId}
+              history={versionHistory}
+              canDelete={isOwner}
+              dataVersionId={asOfVersionId}
+              onRestored={handleRestored}
+            />
+          ) : undefined
+        }
+        dataVersionPanel={
+          dashboardId ? (
+            // Re-pointing at older data only changes what is *displayed* (a
+            // save writes layout and component config, never data), and the
+            // banner over the grid says so while it lasts.
+            <DataVersionPanel
+              metadata={dashboard?.stored_metadata}
+              history={versionHistory}
+              pins={dataPins}
+              pinnedLabels={pinnedLabels}
+              onPinsChange={setDataPins}
+              asOfVersionId={asOfVersionId}
+              asOfLabel={asOf?.label ?? null}
+              asOfStamps={asOfStamps}
+              onAsOfChange={handleAsOfChange}
+              onClear={clearDataVersions}
+              onDone={closeSettings}
+            />
+          ) : undefined
+        }
+        initialSection={settingsSection}
+      />
+      {/* Opens on a dashboard's `params:` links. */}
+      <RunParametersHost dashboard={dashboard} />
+      {/* Cmd/Ctrl+K and the header's magnifier: search every tab, landing in
+          the editor of the tab a result is on. */}
+      <DashboardSpotlight
+        opened={searchOpened}
+        onOpen={openSearch}
+        onClose={closeSearch}
+        tabs={tabSiblings}
+        currentId={dashboardId}
+        dashboard={dashboard}
+        mode="edit"
+        ready={Boolean(dashboard) && !loading && !error}
+        onBeforeFocus={uncoverForSearch}
+        onBeforeLeave={saveBeforeLeaving}
+      />
+
+      {tabGroupActions.modals}
+
+      <ComponentVersionModal
+        opened={historyComponent !== null}
+        onClose={() => setHistoryComponent(null)}
+        metadata={historyComponent}
+        dashboardId={dashboardId}
+        versions={familyVersions}
+        loadingVersions={versionsLoading}
+        // Restoring one component writes, so it is offered only here and only
+        // to someone who could edit the dashboard anyway.
+        canRestore={isOwner}
+        onRestored={handleRestored}
       />
 
       <TabModal
         opened={tabModalState.open}
         mode={tabModalState.mode}
         tab={tabModalState.target}
+        groupOptions={tabGroupOptions}
+        initialGroup={tabModalState.group}
         onClose={closeTabModal}
         onSubmit={handleTabModalSubmit}
         submitting={tabModalState.submitting}
@@ -1388,9 +2926,137 @@ const EditorApp: React.FC = () => {
         onClose={handleCloseSections}
         dashboard={dashboard}
         onOp={handleSectionOp}
+        onAdd={handleManagerAdd}
+        onEdit={handleManagerEdit}
       />
-    </AppShell>
+
+      <SectionModal
+        opened={sectionModal.open}
+        target={sectionModal.target}
+        kind={sectionModal.kind}
+        dashboard={dashboard}
+        onOp={handleSectionOp}
+        onClose={handleCloseSectionModal}
+        onManageAll={handleManageAllSections}
+        tabNames={tabNames}
+        currentTabName={activeTab ? tabDisplayName(activeTab) : undefined}
+      />
+    </>
+  );
+
+  return (
+    <>
+    {/* Renderers read their pin from here, as in the viewer's preview. */}
+    <DataVersionProvider asOfVersionId={asOfVersionId} pins={dataPins} dashboardId={dashboardId}>
+    <InspectorProviders control={inspectorControl}>
+    {/* Tier-2 viz controls an author touches here are written back onto the
+        component's config; the dashboard-wide default decides where every
+        advanced-viz tile draws them unless the tile states its own. */}
+    <AdvancedVizConfigDraftProvider value={handleVizConfigDraft}>
+    <AdvancedVizPlacementDefaultProvider value={dashboard?.advanced_viz_controls}>
+    <SaveGroupContext.Provider value={saveGroupApi}>
+    {/* Same scoping as the viewer, so an editor sees the override they are
+        editing without it escaping into the rest of the app. */}
+    <BrandScope theme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme}>
+    {/* The viewer's `category_colors` scope, so a filter bar's chips take the
+        colours readers will see. */}
+    <CategoryColorsContext.Provider value={dashboard}>
+    {/* Tab links in text resolve here too, so the canvas shows them as the
+        viewer does rather than as plain text. */}
+    <TabLinkProvider tabs={tabSiblings} mode="edit">
+    <ShellHost
+      mode="edit"
+      isNarrow={Boolean(isNarrow)}
+      ready={ready}
+      headerProps={{
+        dashboardId,
+        dashboard,
+        activeTab,
+        parentTab,
+        mobileOpened,
+        desktopOpened,
+        onToggleMobile: toggleMobile,
+        onToggleDesktop: toggleDesktop,
+        onOpenSettings: () => openSettingsAt(),
+        onOpenFilters: isNarrow && leftComponents.length > 0 ? openFilterDrawer : undefined,
+        filterCount: countActiveFilters(filters) + groupSummaryRows.length,
+        onOpenSearch: dashboard ? openSearch : undefined,
+        cardsLoading,
+        mode: 'edit',
+        onAddComponent: handleAddComponent,
+        onAddSection: handleAddSection,
+        onSave: handleForceSave,
+        isOwner,
+        extraActions: headerActions,
+      }}
+      nav={{
+        node: (
+        <Sidebar
+          tabs={tabSiblings}
+          activeId={dashboardId}
+          mode="edit"
+          onAddTab={() => openCreateTabModal()}
+          onEditTab={openEditTabModal}
+          onDeleteTab={handleDeleteTab}
+          onMoveTab={handleMoveTab}
+          onRenameGroup={tabGroupActions.onRenameGroup}
+          onMoveGroup={tabGroupActions.onMoveGroup}
+          onAddTabToGroup={tabGroupActions.onAddTabToGroup}
+          onUngroup={tabGroupActions.onUngroup}
+          onNewGroup={tabGroupActions.onNewGroup}
+          onMoveTabToGroup={tabGroupActions.onMoveTabToGroup}
+          brandTheme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme}
+          guide={guideEntry}
+        />
+        ),
+        tabs: tabSiblings,
+        activeId: dashboardId,
+        guide: guideEntry,
+        mobileOpened,
+        desktopOpened,
+        toggleMobile,
+        toggleDesktop,
+      }}
+      boot={boot}
+      canvas={canvas}
+      topStrip={topStrip}
+      filters={{
+        members: leftComponents,
+        values: filters,
+        onChange: handleFilterChange,
+        reset: handleResetAllFilters,
+        count: countActiveFilters(filters) + groupSummaryRows.length,
+        panel: filterPanel,
+        docked: {
+          opened: filterPanelOpened,
+          toggle: toggleFilterPanel,
+          width: filterPanelWidth,
+          widthVar: FILTER_PANEL_WIDTH_VAR,
+          layoutRef: filterPanelLayoutRef,
+          resizing: filterPanelResizing,
+          beginResize: beginFilterPanelResize,
+          nudge: nudgeFilterPanelWidth,
+        },
+        drawer: { opened: filterDrawerOpened, open: openFilterDrawer, close: closeFilterDrawer },
+      }}
+      overlays={overlays}
+      outside={outside}
+      inspector={{
+        enabled: inspectorEnabled,
+        node: <Inspector dashboard={dashboard} dashboardId={dashboardId} onNotesSaved={reloadVersions} />,
+        aside: inspectorAside,
+      }}
+      analysis={{ open: analysisOpen, widthPx: ANALYSIS_PANEL_WIDTH_PX }}
+      guideOpen={guide.open}
+    />
+    </TabLinkProvider>
+    </CategoryColorsContext.Provider>
+    </BrandScope>
+    </SaveGroupContext.Provider>
+    </AdvancedVizPlacementDefaultProvider>
+    </AdvancedVizConfigDraftProvider>
     </InspectorProviders>
+    </DataVersionProvider>
     </>
   );
 };
@@ -1402,12 +3068,27 @@ export default EditorApp;
 // ---------------------------------------------------------------------------
 
 interface RightComponentGridProps {
+  /** Forwarded to `DashboardGrid.beforeSections` (and shown above the empty
+   *  state) — the foreign `pin: top` persistent sections. */
+  beforeSections?: React.ReactNode;
   dashboardId: string;
   cardComponents: StoredMetadata[];
   otherComponents: StoredMetadata[];
+  /** Interactive components drawn in a filter bar (a grid section with
+   *  `display: 'strip'` or `filter_bar`). They take no grid cell. */
+  barComponents: StoredMetadata[];
   layoutData: unknown;
   gridSections?: FilterSectionSpec[];
+  /** The grid sections a tile can move into: every section but the bars. */
+  tileMoveSections: FilterSectionSpec[];
   filters: InteractiveFilter[];
+  /** The filter state the bars' controls show, without the group filters. */
+  controlFilters: InteractiveFilter[];
+  /** Section-bar scopes (`filterScope.ts`), and a bar's "Reset". */
+  filterScopes: FilterScopes;
+  onResetFilters: (indices: string[]) => void;
+  /** The ⋮ menu of each filter in a bar — the filter panel's own. */
+  renderStripItemOverlay: (metadata: StoredMetadata) => React.ReactNode;
   onFilterChange: (filter: InteractiveFilter) => void;
   cardValues: Record<string, unknown>;
   cardSecondaryValues: Record<string, Record<string, unknown>>;
@@ -1415,11 +3096,32 @@ interface RightComponentGridProps {
   onLayoutChange: (newLayout: Layout[]) => void;
   onDeleteComponent: (componentId: string) => void;
   onDuplicateComponent: (componentId: string) => void;
+  /** Sibling tabs a component can be copied to, and the copy itself. */
+  copyTargets: DashboardSummary[];
+  onCopyToTab: (componentId: string, targetDashboardId: string) => void;
+  /** Adds a highlight of a figure to another tab (same targets as a copy). */
+  onHighlightOnTab: (componentId: string, targetDashboardId: string) => void;
   onAddComponent: () => void;
   activeHighlight?: ActiveHighlight | null;
+  groupRender?: GroupRenderState;
   /** Fired by each cell's "Move to section" action. The names on offer are
    *  derived from `gridSections`, which this component already receives. */
   onMoveToSection: (componentId: string, section: string | null) => void;
+  /** Per-section header action — the "…" that opens that section's settings. */
+  renderSectionActions?: (sectionName: string | null) => React.ReactNode;
+
+  /** Fired by a figure cell's font-size control with the new multiplier. */
+  onComponentFontScale: (componentId: string, scale: number) => void;
+  /** Fired when a tile's height is dragged: that tile leaves autofit. */
+  onTileFixed: (componentId: string) => void;
+  /** Fired by a tile's "Reset to auto height": it rejoins autofit. */
+  onResetFit: (componentId: string) => void;
+  /** The dashboard's autofit switch, forwarded to the grid. */
+  autofit?: boolean;
+  /** Bumped when the dashboard plot theme changes, so figures refetch. */
+  refreshTick?: number;
+  /** Absent when the dashboard has no versions, which hides the menu item. */
+  onOpenComponentHistory?: (componentId: string) => void;
 }
 
 /**
@@ -1431,12 +3133,19 @@ interface RightComponentGridProps {
  * per-cell edit menu.
  */
 const RightComponentGrid: React.FC<RightComponentGridProps> = ({
+  beforeSections,
   dashboardId,
   cardComponents,
   otherComponents,
+  barComponents,
   layoutData,
   gridSections,
+  tileMoveSections,
   filters,
+  controlFilters,
+  filterScopes,
+  onResetFilters,
+  renderStripItemOverlay,
   onFilterChange,
   cardValues,
   cardSecondaryValues,
@@ -1444,17 +3153,30 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   onLayoutChange,
   onDeleteComponent,
   onDuplicateComponent,
+  copyTargets,
+  onCopyToTab,
+  onHighlightOnTab,
   onAddComponent,
   activeHighlight,
+  groupRender,
   onMoveToSection,
+  renderSectionActions,
+  onComponentFontScale,
+  onTileFixed,
+  onResetFit,
+  autofit,
+  refreshTick,
+  onOpenComponentHistory,
 }) => {
   const allComponents = useMemo(
-    () => [...cardComponents, ...otherComponents],
-    [cardComponents, otherComponents],
+    () => [...cardComponents, ...otherComponents, ...barComponents],
+    [cardComponents, otherComponents, barComponents],
   );
 
   if (allComponents.length === 0) {
     return (
+      <>
+      {beforeSections}
       <Center style={{ height: '100%', minHeight: 320 }}>
         <Stack align="center" gap="md" maw={400}>
           <Box
@@ -1487,6 +3209,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
           </Button>
         </Stack>
       </Center>
+      </>
     );
   }
 
@@ -1496,16 +3219,26 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
       metadataList={allComponents}
       layoutData={layoutData}
       gridSections={gridSections}
+      beforeSections={beforeSections}
       filters={filters}
+      controlFilters={controlFilters}
+      filterScopes={filterScopes}
+      onResetFilters={onResetFilters}
       onFilterChange={onFilterChange}
       cardValues={cardValues}
       cardSecondaryValues={cardSecondaryValues}
       cardValuesLoading={cardsLoading}
       activeHighlight={activeHighlight}
+      groupRender={groupRender}
+      refreshTick={refreshTick}
       isDraggable={true}
       isResizable={true}
       editMode={true}
+      renderSectionActions={renderSectionActions}
       onLayoutChange={onLayoutChange}
+      renderStripItemOverlay={renderStripItemOverlay}
+      autofit={autofit}
+      onTileFixed={onTileFixed}
       renderItemOverlay={(componentId, metadata) => (
         <GridItemEditOverlay
           dashboardId={dashboardId}
@@ -1514,9 +3247,18 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
           onDelete={onDeleteComponent}
           onDuplicate={onDuplicateComponent}
           componentType={metadata.component_type}
-          sections={gridSections}
+          sections={tileMoveSections}
           currentSection={metadata.section ?? null}
           onMoveToSection={onMoveToSection}
+          fontScale={typeof metadata.font_scale === 'number' ? metadata.font_scale : undefined}
+          onFontScale={onComponentFontScale}
+          copyTargets={canCopyToTab(metadata) ? copyTargets : undefined}
+          onCopyToTab={onCopyToTab}
+          highlightTargets={canHighlight(metadata) ? copyTargets : undefined}
+          onHighlightOnTab={onHighlightOnTab}
+          fit={metadata.fit === 'auto' || metadata.fit === 'fixed' ? metadata.fit : undefined}
+          onResetFit={autofit === false ? undefined : onResetFit}
+          onOpenHistory={onOpenComponentHistory}
         />
       )}
     />

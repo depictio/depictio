@@ -1,0 +1,17 @@
+id: bismark_top_variable_windows
+name: Most variable methylation windows
+mode: exploratory/variable-windows
+description: >-
+  The 150 windows whose methylation moves most across the cohort, wide (windows
+  x libraries). The region-level equivalent of a top-variable-gene heatmap: a
+  correlation matrix says the libraries differ, this says where. A ranking, not
+  a test; significance is the group comparison's job.
+find:
+  path_glob: "**/*.bedGraph.gz"
+recipe: bismark/top_variable_windows.py
+fixture: top_variable_windows.tsv
+renders_as:
+  - { id: variable_windows_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: window_id} }
+  - { component: card, column: window_variance, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: window_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: chromosome, top_n_count: 3 }
+  - { component: table }

@@ -21,6 +21,11 @@ export interface MapPanelState {
    *  bottom-right anchor". Only meaningful while floating. */
   x: number | null;
   y: number | null;
+  /** Free-dragged card size in pixels (corner resize). `null` means "use the
+   *  `cardSize` preset". Only meaningful while floating; the compact/expanded
+   *  toggle clears it, so the presets stay reachable. */
+  cardWidth: number | null;
+  cardHeight: number | null;
   /** Dock height in pixels, as dragged. `null` means "use the default". Only
    *  meaningful while docked. */
   dockHeight: number | null;
@@ -74,6 +79,8 @@ function axesFromStored(
 const DEFAULT_VIEW: Omit<MapPanelState, 'mode' | 'cardSize'> = {
   x: null,
   y: null,
+  cardWidth: null,
+  cardHeight: null,
   dockHeight: null,
   dockCollapsed: false,
   legendHidden: false,
@@ -92,6 +99,8 @@ function readState(familyId: string | null): MapPanelState | null {
       ...DEFAULT_VIEW,
       x: typeof parsed.x === 'number' ? parsed.x : null,
       y: typeof parsed.y === 'number' ? parsed.y : null,
+      cardWidth: typeof parsed.cardWidth === 'number' ? parsed.cardWidth : null,
+      cardHeight: typeof parsed.cardHeight === 'number' ? parsed.cardHeight : null,
       dockHeight: typeof parsed.dockHeight === 'number' ? parsed.dockHeight : null,
       dockCollapsed: parsed.dockCollapsed === true,
       legendHidden: parsed.legendHidden === true,
@@ -167,10 +176,17 @@ export function useMapPanelState(
 
   const setMode = useCallback((mode: MapPanelMode) => update({ mode }), [update]);
   const setCardSize = useCallback(
-    (cardSize: MapPanelCardSize) => update({ cardSize }),
+    // Choosing a preset clears any free-dragged size — otherwise the toggle
+    // would appear dead while a custom size overrides both presets.
+    (cardSize: MapPanelCardSize) => update({ cardSize, cardWidth: null, cardHeight: null }),
     [update],
   );
   const setPosition = useCallback((x: number, y: number) => update({ x, y }), [update]);
+  /** Committed corner-resize size in pixels; `null` restores the preset. */
+  const setCardDims = useCallback(
+    (cardWidth: number | null, cardHeight: number | null) => update({ cardWidth, cardHeight }),
+    [update],
+  );
   const setDockHeight = useCallback(
     (dockHeight: number | null) => update({ dockHeight }),
     [update],
@@ -188,6 +204,7 @@ export function useMapPanelState(
     state,
     setMode,
     setCardSize,
+    setCardDims,
     setPosition,
     setDockHeight,
     setDockCollapsed,

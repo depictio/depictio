@@ -18,7 +18,7 @@ pipeline-agnostic (see `docs/design/bioinformatics-catalog.md`).
 - Wire `compose_run_dir()` into the real ingestion/scan path so it actually
   builds/proposes a dashboard (today it's a CLI preview only).
 - `refresh-index`: the vendored `_index/{nf_core_modules,edam_terms}.txt` are
-  **seeds**; run `depictio catalog refresh-index` (needs network) to make them
+  **seeds**; run `depictio dev catalog refresh-index` (needs network) to make them
   authoritative so existence checks catch typos.
 
 ## Module-granular debt (v3)
@@ -56,7 +56,7 @@ pipeline-agnostic (see `docs/design/bioinformatics-catalog.md`).
   to its YAML), pipeline-agnostic, committed with the catalog — each module is a
   self-contained unit (identity + outputs + fixtures).
   `catalog validate` grounds renders against them (Level-3); they also feed
-  `preview`. A dedicated `catalog-ci` workflow + `depictio catalog validate` run
+  `preview`. A dedicated `catalog-ci` workflow + `depictio dev catalog validate` run
   on every catalog/recipe change.
 - **`catalog preview <output>`** — **separate PR (owned by maintainer)**: load
   the `fixture` → build the component (advanced_viz / figure / card) → render the
@@ -70,11 +70,18 @@ advanced-viz tiles that bind a **tool output** (ivar variants → manhattan/
 lollipop; qiime2 ancombc → volcano/da_barplot; qiime2 taxonomy →
 stacked_taxonomy). The remaining tiles stay explicit (`viz_kind` + config); to
 push more onto `use:`:
-- **No catalog module for `sankey` / `embedding` / `upset_plot` / `phylogenetic`.**
-  These are **dashboard figure-builders chained on derived `*_canonical` DCs**,
-  not tool outputs — adding catalog modules for them is **dubious** (would blur
-  the catalog = tool-output-adapter boundary). Decide deliberately before doing
-  it; default is to leave them explicit.
+- **Decided: derived `*_canonical` DCs are in, compositions are out.** The
+  question used to be whether a reshape chained on another DC is still a tool
+  output. It is, as long as it stays about one tool's own numbers: the ordination,
+  the abundance matrix and its clustered form, the MA plot, the distance matrix,
+  the per-ASV taxonomy table and the mutation matrix all became catalog outputs,
+  because without them the picker was silently missing most of what a run
+  actually holds.
+  What stays out, and should: `upset_canonical` (both pipelines) and
+  `variant_feature_matrix_canonical` — these compose *across* samples/sets and
+  answer a dashboard's question, not a module's. `sankey_canonical` sits on that
+  line and is still explicit. Adding one is a deliberate call each time, not a
+  sweep: the test `test_compositions_stay_out_of_the_catalog` pins the exclusions.
 - **Strict config models are narrower than the seeds.** Some tiles fall back to
   a stored dict because the authoring config (`extra="forbid"`) rejects rich
   display fields the seeds use — e.g. `RarefactionConfig` lacks `metric_options`,

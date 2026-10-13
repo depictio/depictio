@@ -1,52 +1,21 @@
 import React from 'react';
 import { Anchor, Avatar, Badge, Box, Group, Stack, Text, Tooltip } from '@mantine/core';
 
-import type { ProjectListEntry } from 'depictio-react-core';
+import type { ParsedTemplate, ProjectListEntry } from 'depictio-react-core';
+import { parseTemplateOrigin } from 'depictio-react-core';
 
-export interface ParsedTemplate {
-  /** Original full identifier, e.g. `nf-core/viralrecon/3.0.0` */
-  full: string;
-  /** First slash-separated segment, e.g. `nf-core` */
-  source: string;
-  /** Middle segment if present, e.g. `viralrecon` */
-  repo: string;
-  /** Trailing segment if it looks like a semver, otherwise empty */
-  version: string;
-}
+/** Template identifiers are parsed and matched in `depictio-react-core`
+ *  (`templateFilter.ts`), where both listings' filters can share the rules and
+ *  a unit test can hold them still. Re-exported here so the components that
+ *  already reach for this module keep their import path. */
+export type { ParsedTemplate };
+export { parseTemplateOrigin };
 
-/** Parse `template_origin.template_id` (e.g. `nf-core/viralrecon/3.0.0`) into
- *  source/repo/version. Backwards-compatible with `template_origin` passed as
- *  a plain string and with shorter ids that omit the version segment. Returns
- *  null when the project wasn't created from a template. */
+/** Parse a project's `template_origin` (e.g. `nf-core/viralrecon/3.0.0`) into
+ *  source/repo/version. Returns null when the project wasn't created from a
+ *  template. */
 export function parseTemplate(project: ProjectListEntry): ParsedTemplate | null {
   return parseTemplateOrigin(project.template_origin);
-}
-
-/** Same as `parseTemplate` but accepts the raw `template_origin` value
- *  directly — for callers that already have it on hand (dashboard list
- *  cards, settings drawer) and don't want to fabricate a fake
- *  `ProjectListEntry` to call it. */
-export function parseTemplateOrigin(origin: unknown): ParsedTemplate | null {
-  let raw: string | null = null;
-  if (typeof origin === 'string') {
-    raw = origin.trim();
-  } else if (
-    origin &&
-    typeof origin === 'object' &&
-    typeof (origin as { template_id?: unknown }).template_id === 'string'
-  ) {
-    raw = ((origin as { template_id: string }).template_id || '').trim();
-  }
-  if (!raw) return null;
-  const parts = raw.split('/').map((s) => s.trim()).filter(Boolean);
-  const looksVersion = (s: string) => /^v?\d/.test(s);
-  let version = '';
-  if (parts.length >= 2 && looksVersion(parts[parts.length - 1])) {
-    version = parts.pop() || '';
-  }
-  const source = parts[0] || raw;
-  const repo = parts[1] || '';
-  return { full: raw, source, repo, version };
 }
 
 /** Build the depictio-docs page URL for a parsed template. Pattern:
@@ -116,6 +85,66 @@ function sourceMeta(source: string): SourceMeta {
   );
 }
 
+/** A template source's brand mark on its own — no version pill, no link.
+ *  For headers that already name the template in text (the run-parameters
+ *  modal), where the full chip would repeat what the title says. */
+export const TemplateSourceLogo: React.FC<{ source: string; size?: number }> = ({
+  source,
+  size = 22,
+}) => {
+  const meta = sourceMeta(source);
+  const Logo = meta.Logo;
+  return Logo ? (
+    <Box
+      w={size}
+      h={size}
+      style={{
+        borderRadius: '50%',
+        overflow: 'hidden',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+      }}
+    >
+      <Logo size={size} />
+    </Box>
+  ) : (
+    <Avatar
+      size={size}
+      radius="xl"
+      color={meta.color}
+      variant="filled"
+      style={{ fontSize: Math.round(size * 0.45), fontWeight: 700 }}
+    >
+      {meta.initials}
+    </Avatar>
+  );
+};
+
+/** Workflow engines with a known mark, keyed by the engine name the server
+ *  reports (`nextflow`, `snakemake`, `galaxy`). */
+const ENGINES: Record<string, { label: string; logo?: string }> = {
+  nextflow: { label: 'Nextflow', logo: 'nextflow.png' },
+  snakemake: { label: 'Snakemake', logo: 'snakemake.svg' },
+  galaxy: { label: 'Galaxy', logo: 'galaxy.png' },
+  cwl: { label: 'CWL' },
+};
+
+/** An engine as written for a reader: `Nextflow` for `nextflow`. */
+export function engineLabel(engine: string): string {
+  return ENGINES[engine.toLowerCase()]?.label ?? engine;
+}
+
+/** A workflow engine's mark, or nothing when the engine has none. */
+export const WorkflowEngineLogo: React.FC<{ engine: string; size?: number }> = ({
+  engine,
+  size = 16,
+}) => {
+  const logo = ENGINES[engine.toLowerCase()]?.logo;
+  return logo ? <BrandImg src={LOGO(logo)} alt={engineLabel(engine)} size={size} /> : null;
+};
+
 /** Shared chip that renders a template's brand mark (or letter fallback) +
  *  version pill, wrapped in an anchor pointing to the depictio-docs page for
  *  that template. The Anchor stops click propagation so opening the link
@@ -124,9 +153,11 @@ export const TemplateChip: React.FC<{
   parsed: ParsedTemplate;
   /** Verbose mode renders the source/repo text alongside the chip. */
   verbose?: boolean;
-}> = ({ parsed, verbose }) => {
+  /** Quiet rendering for the Glass listings: the brand mark, then the
+   *  pipeline and its version as muted monospace text, no version badge. */
+  plain?: boolean;
+}> = ({ parsed, verbose, plain }) => {
   const meta = sourceMeta(parsed.source);
-  const Logo = meta.Logo;
   const docsUrl = templateDocsUrl(parsed);
   const tooltipLabel = (
     <Stack gap={2}>
@@ -142,33 +173,20 @@ export const TemplateChip: React.FC<{
     </Stack>
   );
 
-  const chip = (
+  const version = parsed.version ? `v${parsed.version.replace(/^v/i, '')}` : '';
+  const plainChip = (
+    <Group gap={6} wrap="nowrap" className="dc-template" style={{ minWidth: 0 }}>
+      <TemplateSourceLogo source={parsed.source} size={18} />
+      <span className="dc-template-text">
+        {verbose ? (parsed.repo ? `${parsed.source}/${parsed.repo}` : parsed.source) : parsed.repo || parsed.source}
+        {version && <span className="dc-template-version"> {version}</span>}
+      </span>
+    </Group>
+  );
+
+  const chip = plain ? plainChip : (
     <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
-      {Logo ? (
-        <Box
-          w={22}
-          h={22}
-          style={{
-            borderRadius: '50%',
-            overflow: 'hidden',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Logo size={22} />
-        </Box>
-      ) : (
-        <Avatar
-          size={22}
-          radius="xl"
-          color={meta.color}
-          variant="filled"
-          style={{ fontSize: 10, fontWeight: 700 }}
-        >
-          {meta.initials}
-        </Avatar>
-      )}
+      <TemplateSourceLogo source={parsed.source} size={22} />
       {parsed.version && (
         <Badge
           color={meta.color}

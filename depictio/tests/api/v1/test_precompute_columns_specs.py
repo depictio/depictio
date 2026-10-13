@@ -156,6 +156,10 @@ def _assert_specs_equivalent(new: list[dict], ref: list[dict]) -> None:
     the lazy implementation returns null and skips the key. Both read as
     "no value" downstream, and NaN is turned into null on serialisation anyway
     (``sanitize_for_json``).
+
+    ``unique_values`` is allowlisted as a known extra: it is a deliberate
+    addition (categorical columns only, see ``test_unique_values_*``) that the
+    pandas reference never computed, not accidental drift from the rewrite.
     """
     assert [c["name"] for c in new] == [c["name"] for c in ref]
     for got, want in zip(new, ref):
@@ -173,9 +177,8 @@ def _assert_specs_equivalent(new: list[dict], ref: list[dict]) -> None:
                 )
             else:
                 assert actual == expected, f"{want['name']}.{method}"
-        assert set(got["specs"]) <= set(want["specs"]), (
-            f"{want['name']}: unexpected extra specs {set(got['specs']) - set(want['specs'])}"
-        )
+        extra = set(got["specs"]) - set(want["specs"]) - {"unique_values"}
+        assert not extra, f"{want['name']}: unexpected extra specs {extra}"
 
 
 # --------------------------------------------------------------------------
@@ -372,6 +375,23 @@ def test_pangolin_lineages_shape_does_not_raise() -> None:
     by_name = {s["name"]: s for s in specs}
     assert by_name["lineage"]["specs"]["mode"] in ("B.1.1.7", "Unassigned")
     assert by_name["qc_status"]["specs"]["mode"] in ("pass", "fail")
+
+
+def test_unique_values_recorded_for_categorical() -> None:
+    """Categorical columns carry a frequency-ordered ``unique_values`` sample so
+    the card-builder preview shows real names instead of "Bucket N" labels."""
+    df = pl.DataFrame({"variety": ["Setosa", "Setosa", "Versicolor", "Virginica"]})
+    [spec] = precompute_columns_specs(df, _AGG_FUNCTIONS, _dc_data())
+    uv = spec["specs"]["unique_values"]
+    assert uv[0] == "Setosa"  # most frequent first
+    assert set(uv) == {"Setosa", "Versicolor", "Virginica"}
+
+
+def test_unique_values_capped() -> None:
+    """High-cardinality columns only keep a capped sample to keep specs compact."""
+    df = pl.DataFrame({"id": [f"v{i}" for i in range(50)]})
+    [spec] = precompute_columns_specs(df, _AGG_FUNCTIONS, _dc_data())
+    assert len(spec["specs"]["unique_values"]) == 20
 
 
 # --------------------------------------------------------------------------

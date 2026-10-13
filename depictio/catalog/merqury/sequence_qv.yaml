@@ -1,0 +1,21 @@
+id: merqury_sequence_qv
+name: Per-sequence QV
+mode: sequence-qv
+description: >-
+  Merqury's QV for every contig or scaffold of every assembly. Errors are rarely
+  spread evenly: a handful of short, low-QV sequences often carry most of an
+  assembly's error k-mers, and they are the ones to inspect, polish or drop.
+  Sequences with no error k-mer have no finite QV and are flagged error-free.
+find:
+  path_glob: "**/merqury/*.*.qv"
+recipe: merqury/sequence_qv.py
+fixture: sequence_qv.tsv
+renders_as:
+  - { id: sequence_qv_scatter, component: advanced_viz, kind: scatter_xy,
+      roles: {x: total_kmers, y: qv, label: sequence, color: assembly_id} }
+  - { component: figure, visu_type: histogram, dict_kwargs: {x: qv, color: assembly_id, title: Per-sequence QV distribution} }
+  - { component: card, column: sequence, aggregation: count,
+      secondary_layout: donut, breakdown_col: error_free }
+  - { component: card, column: asm_only_kmers, aggregation: sum,
+      secondary_layout: top_n, breakdown_col: assembly_id, top_n_count: 4 }
+  - { component: table }

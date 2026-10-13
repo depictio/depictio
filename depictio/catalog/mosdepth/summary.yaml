@@ -1,0 +1,23 @@
+id: mosdepth_summary
+name: Per-contig coverage summary
+mode: summary
+description: >-
+  mosdepth's own headline table, one row per contig with its length, the
+  bases of sequence that landed on it and the mean, minimum and maximum
+  depth. When mosdepth runs against a target file it reports every contig
+  twice, once genome-wide and once over the targets only; the recipe splits
+  that into a `scope` column (genome or region) instead of mixing two very
+  different depths on one axis. Sample and alignment stage come from the file
+  name, one pass is kept per sample, and only the primary contigs and the run
+  total are kept, which drops the thousands of ALT, decoy and HLA rows a
+  GRCh38 run lists.
+find:
+  path_glob: "**/*.mosdepth.summary.txt"
+recipe: mosdepth/summary.py
+fixture: summary.tsv
+renders_as:
+  - { component: figure, visu_type: bar, dict_kwargs: {x: chrom, y: mean_depth, color: sample, barmode: group} }
+  # Mean depth per contig is read for its spread as much as its centre: the
+  # Tukey strip shows the under-covered contigs the bar chart flattens.
+  - { component: card, column: mean_depth, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

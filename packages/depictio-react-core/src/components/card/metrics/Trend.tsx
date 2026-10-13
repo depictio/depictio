@@ -1,7 +1,7 @@
 import React from 'react';
 import { Group, Stack } from '@mantine/core';
 
-import { compactNumber, hexWithAlpha, percent } from './format';
+import { compactNumber, formatNumber, hexWithAlpha, percent } from './format';
 import { METRIC, MetricCaption, MetricStrip, TooltipDivider, TooltipStat } from './tokens';
 import type { TrendPayload } from './types';
 
@@ -27,7 +27,10 @@ const TOOLTIP_POINTS = 6;
 const TrendMetric: React.FC<{
   payload: TrendPayload;
   color?: string | null;
-}> = ({ payload, color }) => {
+  /** The card's `format`: each bucket holds the card's own aggregation. */
+  format?: string;
+}> = ({ payload, color, format }) => {
+  const num = (v: number) => (format ? formatNumber(v, format) : compactNumber(v));
   const points = payload.points || [];
   if (points.length < 2) return null;
 
@@ -73,7 +76,7 @@ const TrendMetric: React.FC<{
         <TooltipStat
           key={`${p.label}-${i}`}
           label={p.label}
-          value={compactNumber(p.value)}
+          value={num(p.value)}
         />
       ))}
       {points.length > TOOLTIP_POINTS ? (
@@ -88,7 +91,7 @@ const TrendMetric: React.FC<{
         value={
           payload.change === null
             ? 'n/a (first bucket is zero)'
-            : `${compactNumber(payload.first)} → ${compactNumber(payload.last)} (${changeText})`
+            : `${num(payload.first)} → ${num(payload.last)} (${changeText})`
         }
         strong
       />
@@ -121,7 +124,7 @@ const TrendMetric: React.FC<{
       <Group gap={4} wrap="nowrap" justify="space-between">
         <MetricCaption>{points[0].label}</MetricCaption>
         <MetricCaption strong>
-          {compactNumber(payload.first)} → {compactNumber(payload.last)} {changeText}
+          {num(payload.first)} → {num(payload.last)} {changeText}
         </MetricCaption>
       </Group>
     </MetricStrip>

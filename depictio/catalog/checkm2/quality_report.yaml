@@ -1,0 +1,42 @@
+id: checkm2_quality_report
+name: Bin completeness and contamination
+mode: quality-report
+description: >-
+  How much of a genome each bin holds and how much of it belongs to something
+  else. Completeness against contamination is the plot metagenome binning is
+  read on: the top-left corner holds the bins worth naming, the right-hand side
+  holds chimeras, and the spread between binners on the same assembly says which
+  binner to trust for this sample.
+find:
+  path_glob: "**/*_checkm2_report.tsv"
+  path_glob_alt:
+    # CheckM2's own output name, kept when a pipeline publishes the run
+    # directory instead of the renamed copy.
+    - "**/CheckM2/**/quality_report.tsv"
+    - "**/checkm2/**/quality_report.tsv"
+recipe: checkm2/quality_report.py
+fixture: quality_report.tsv
+renders_as:
+  # The canonical MAG plot. Size by genome_size so a complete-looking 300 kb bin
+  # cannot pass for a complete-looking 3 Mb one.
+  - { id: completeness_contamination, component: advanced_viz, kind: scatter_xy,
+      roles: {x: completeness, y: contamination, label: bin_id, color: binner, size: genome_size} }
+  # Assembly statistics behind the verdict: a bin with a good score and a tiny
+  # N50 is a collection of fragments that happen to carry the right genes.
+  - { id: n50_completeness, component: advanced_viz, kind: scatter_xy,
+      roles: {x: contig_n50, y: completeness, label: bin_id, color: assembler, size: genome_size} }
+  - { component: figure, visu_type: histogram, dict_kwargs: {x: completeness, color: binner, title: Completeness distribution per binner} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: binner, y: quality_score, color: assembler, title: Bin quality score by binner and assembler} }
+  - { id: tier_donut, component: card, column: bin_id, aggregation: nunique,
+      secondary_layout: donut, breakdown_col: quality_tier }
+  - { component: card, column: completeness, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: contamination, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: quality_score, aggregation: max,
+      secondary_layout: top_n, breakdown_col: binner, top_n_count: 5 }
+  - { component: card, column: genome_size, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: coding_density, aggregation: average,
+      aggregations: [box_plot_stats], secondary_layout: histogram }
+  - { component: table }

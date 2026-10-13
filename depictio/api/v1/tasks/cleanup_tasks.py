@@ -5,9 +5,12 @@ This module contains background tasks for cleaning up expired data.
 """
 
 import asyncio
+import os
+from datetime import datetime, timedelta, timezone
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.db import initialization_collection
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _cleanup_expired_temporary_users,
     _purge_expired_tokens,
@@ -15,6 +18,8 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import cleanup_orphaned_s3_files
 from depictio.api.v1.services.analytics_service import AnalyticsService
 from depictio.models.models.users import UserBeanie
+
+WORKER_ID = os.getpid()
 
 
 def _calculate_interval(
@@ -118,6 +123,78 @@ async def periodic_cleanup_analytics_data(
         await asyncio.sleep(interval_in_seconds)
 
 
+#: How often the S3 cleanup re-checks whether reference seeding is done, and how
+#: long it waits for it at most.
+_SEEDING_POLL_SECONDS = 10
+_SEEDING_MAX_WAIT_SECONDS = 3600
+
+#: ``initialization_collection`` document holding the last S3 cleanup run, which
+#: is what lets one worker per cycle run it.
+S3_CLEANUP_STATE_ID = "s3_orphan_cleanup_state"
+_NEVER_RAN = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
+async def _wait_for_reference_seeding() -> None:
+    """Return once boot-time reference seeding has finished or failed.
+
+    Seeding writes each table to S3 before registering it in MongoDB, so a cleanup
+    pass that lands during seeding sees tables being created with no document yet
+    and deletes them. ``process_all_reference_datasets`` sets one of two flags on
+    the metadata document when it is done; with no document, nothing is seeded.
+
+    Gives up after ``_SEEDING_MAX_WAIT_SECONDS``: a processing thread that died
+    without setting either flag must not switch the cleanup off for good, and the
+    age check in ``cleanup_orphaned_s3_files`` still keeps fresh tables.
+    """
+    waited = 0
+    while waited < _SEEDING_MAX_WAIT_SECONDS:
+        doc = initialization_collection.find_one(
+            {"_id": "reference_datasets_metadata"},
+            {"background_processing_complete": 1, "background_processing_failed": 1},
+        )
+        if (
+            doc is None
+            or doc.get("background_processing_complete")
+            or doc.get("background_processing_failed")
+        ):
+            return
+        await asyncio.sleep(_SEEDING_POLL_SECONDS)
+        waited += _SEEDING_POLL_SECONDS
+    logger.warning(
+        f"S3 cleanup task: reference seeding still running after {_SEEDING_MAX_WAIT_SECONDS}s, "
+        "starting anyway"
+    )
+
+
+def _claim_s3_cleanup_cycle(interval_seconds: int) -> bool:
+    """Claim this cycle's S3 cleanup across every API worker.
+
+    Each worker runs the loop, so without a claim a deployment with N workers runs
+    N passes per interval. Same pattern as ``claim_auto_backup_slot``: the last run
+    time lives in MongoDB and the claim is one conditional update, which only the
+    first worker to find the cycle due can match.
+    """
+    now = datetime.now(timezone.utc)
+    try:
+        initialization_collection.update_one(
+            {"_id": S3_CLEANUP_STATE_ID},
+            {"$setOnInsert": {"last_run_at": _NEVER_RAN}},
+            upsert=True,
+        )
+        claimed = initialization_collection.find_one_and_update(
+            {
+                "_id": S3_CLEANUP_STATE_ID,
+                "last_run_at": {"$lte": now - timedelta(seconds=interval_seconds)},
+            },
+            {"$set": {"last_run_at": now, "worker_id": WORKER_ID}},
+        )
+    except Exception as exc:
+        # Skipping a cycle is the safe failure: the next one retries.
+        logger.warning(f"S3 cleanup task: could not claim this cycle: {exc}")
+        return False
+    return claimed is not None
+
+
 async def periodic_cleanup_orphaned_s3_files(
     interval_hours: int | None = None,
     interval_minutes: int | None = None,
@@ -142,21 +219,16 @@ async def periodic_cleanup_orphaned_s3_files(
     # Running cleanup immediately can block worker readiness and cause Gunicorn to kill workers
     logger.info("S3 cleanup task: Waiting 30s before first run to allow worker startup")
     await asyncio.sleep(30)
+    await _wait_for_reference_seeding()
 
     while True:
         try:
-            # Run the cleanup
-            # Use force=True when mongodb.wipe is enabled (development/testing mode)
-            # This allows cleanup when DB was intentionally wiped but S3 wasn't
-            force_cleanup = settings.mongodb.wipe
-            if force_cleanup:
-                pass
-            cleanup_results = await cleanup_orphaned_s3_files(dry_run=False, force=force_cleanup)
-
-            if cleanup_results["deleted_count"] > 0:
-                pass
-            else:
-                pass
+            if _claim_s3_cleanup_cycle(interval_in_seconds):
+                # Not forced, even under a MongoDB wipe: wipe_database already ran
+                # the wipe-time pass before seeding, so from here on an "everything
+                # looks orphaned" listing means something is wrong, and the safety
+                # check should stop it.
+                await cleanup_orphaned_s3_files(dry_run=False)
         except Exception as e:
             logger.error(f"Error during periodic S3 cleanup: {e}")
 

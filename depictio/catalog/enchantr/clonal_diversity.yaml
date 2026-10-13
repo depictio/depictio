@@ -1,0 +1,24 @@
+id: enchantr_clonal_diversity
+name: Clonal diversity profile
+mode: repertoire-analysis/diversity
+description: >-
+  alakazam Hill diversity profile per sample: the bootstrapped diversity d at
+  every order q from richness to inverse Simpson, with its confidence band and
+  the matching evenness.
+find: { path_glob: "**/repertoire_analysis_report/tables/clonal_diversity.tsv" }
+recipe: enchantr/clonal_diversity.py
+fixture: clonal_diversity.tsv
+renders_as:
+  # A diversity profile is a curve per sample over an ordered x: the same shape
+  # a rarefaction curve has, so the rarefaction renderer draws it directly.
+  - id: diversity_profile
+    component: advanced_viz
+    kind: rarefaction
+    roles: { sample_id: sample_id, depth: q, metric: d }
+  # Narrowed to one q, the same rows are one Hill number per sample with its
+  # bootstrap confidence interval.
+  - id: diversity_ci_bars
+    component: advanced_viz
+    kind: metric_ci_bars
+    roles: { label: sample_id, value: d, lower: d_lower, upper: d_upper }
+  - { component: table }

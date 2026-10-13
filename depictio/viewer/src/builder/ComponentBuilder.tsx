@@ -15,6 +15,7 @@ import ImageBuilder from './image/ImageBuilder';
 import MapBuilder from './map/MapBuilder';
 import TextBuilder from './text/TextBuilder';
 import AdvancedVizBuilder from './advanced_viz/AdvancedVizBuilder';
+import HighlightBuilder from './highlight/HighlightBuilder';
 
 const ComponentBuilder: React.FC = () => {
   const componentType = useBuilderStore((s) => s.componentType);
@@ -38,6 +39,8 @@ const ComponentBuilder: React.FC = () => {
       return <TextBuilder />;
     case 'advanced_viz':
       return <AdvancedVizBuilder />;
+    case 'highlight':
+      return <HighlightBuilder />;
     default:
       return (
         <Alert color="yellow" title="Unknown component type">

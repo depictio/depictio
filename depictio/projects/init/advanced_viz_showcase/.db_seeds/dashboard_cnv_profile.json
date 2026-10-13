@@ -1,0 +1,361 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d7d"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d7d"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "cnv-text",
+      "component_type": "text",
+      "title": "Allele-specific copy number",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Copy number",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Top to bottom: nMajor (red) and nMinor (green) per called segment, the log2 ratio of each 20 kb bin under segments coloured gain, neutral or loss, and the B-allele frequency with mirrored segment bands. On chr3 log2 stays flat while nMinor drops to 0 and the BAF splits, a copy-neutral LOH only the allele-specific tracks show. Scroll to zoom, shift-drag to brush a region, switch sample or view in the header; inputs come from nf-core/sarek (ASCAT, Control-FREEC, CNVkit), and the hg38 gene lane is only an orientation aid on this synthetic genome.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "cnv-track",
+      "component_type": "advanced_viz",
+      "title": "Copy-number profile, ASCAT layout",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "cnv_profile_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d8d"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "A synthetic somatic copy-number profile: 20 000 bins over 5 chromosomes for 2 tumour samples, with the called segments in the same table",
+        "data_collection_tag": "cnv_profile_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d8d"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "TUMOUR_A over 5 chromosomes: allele-specific copy number, log2 ratio and mirrored BAF on one zoomable genome axis. The header switches sample, stacks both samples, or returns to the Plotly profile.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Copy number",
+      "viz_kind": "cnv_profile",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "cnv_profile",
+        "sample_col": "sample",
+        "chrom_col": "chrom",
+        "start_col": "start",
+        "end_col": "end",
+        "log2_col": "log2",
+        "baf_col": "baf",
+        "copy_number_col": "copy_number",
+        "segment_col": "segment",
+        "label_col": "label",
+        "sample": "TUMOUR_A",
+        "chrom": null,
+        "y_range": 3.0,
+        "show_baf": true,
+        "point_size": 3,
+        "gain_threshold": 0.3,
+        "loss_threshold": -0.3,
+        "max_bins": 50000,
+        "view": "locus",
+        "views": null,
+        "minor_copy_number_col": "minor_copy_number",
+        "annotation": "hg38",
+        "facet_by_sample": false
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "cnv-f-sample",
+      "component_type": "interactive",
+      "title": "Sample",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "cnv_profile_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d8d"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "A synthetic somatic copy-number profile: 20 000 bins over 5 chromosomes for 2 tumour samples, with the called segments in the same table",
+        "data_collection_tag": "cnv_profile_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d8d"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Profile scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Profile filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "custom_color": "#FA5252",
+      "icon_name": "mdi:test-tube",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "cnv-f-chrom",
+      "component_type": "interactive",
+      "title": "Chromosome",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "cnv_profile_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d8d"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "A synthetic somatic copy-number profile: 20 000 bins over 5 chromosomes for 2 tumour samples, with the called segments in the same table",
+        "data_collection_tag": "cnv_profile_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d8d"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Profile scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "chrom",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Profile filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "custom_color": "#E64980",
+      "icon_name": "mdi:dna",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "cnv-f-copy-number",
+      "component_type": "interactive",
+      "title": "Copy number",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "cnv_profile_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d8d"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "A synthetic somatic copy-number profile: 20 000 bins over 5 chromosomes for 2 tumour samples, with the called segments in the same table",
+        "data_collection_tag": "cnv_profile_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d8d"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Profile scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "copy_number",
+      "column_type": "int64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Profile filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "custom_color": "#FD7E14",
+      "icon_name": "mdi:numeric",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-cnv-f-sample",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-cnv-f-chrom",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-cnv-f-copy-number",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-cnv-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-cnv-track",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 12,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Copy number",
+  "subtitle": "Allele-specific copy number of a synthetic tumour in the ASCAT layout: nMajor and nMinor per segment, the log2 ratio of 20 000 bins with the calls over them, and the mirrored B-allele frequency that exposes the copy-neutral LOH the log2 track cannot see.",
+  "icon": "mdi:chart-timeline-variant",
+  "icon_color": "red",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 41,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-timeline-variant",
+  "tab_icon_color": "red",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Profile scope",
+      "icon": "mdi:filter-variant",
+      "color": "red",
+      "description": "Restricts which sample, which chromosomes and which row type the profile is built from",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Copy number",
+      "icon": "mdi:dna",
+      "color": "red",
+      "description": "Bin-level evidence, the segments called over it, and the allele fractions underneath",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

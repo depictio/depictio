@@ -195,7 +195,11 @@ const FixturePreviewPanel: React.FC<{ fixture: FixturePreview }> = ({ fixture })
 );
 
 const CatalogPreviewApp: React.FC = () => {
+  // Optional on `window` because the offline shim is shared with the component
+  // embed bundle, which sets `__DEPICTIO_EMBED__` instead. In the catalog-preview
+  // bundle main.tsx always assigns it before mounting.
   const g = window.__CATALOG_PREVIEW__;
+  if (!g) throw new Error('catalog preview: no payload on window.__CATALOG_PREVIEW__');
   const out = g.output as unknown as OutputInfo;
   const fixture = (g as unknown as { fixturePreview?: FixturePreview }).fixturePreview;
   const renders = g.renders as StoredMetadata[];

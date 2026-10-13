@@ -1,0 +1,20 @@
+id: openms_comet_psms
+name: Comet search yield per raw file
+mode: search/comet-psms
+description: >-
+  One row per raw file: spectra searched, target and decoy PSMs, PSMs accepted
+  at 1% and 5% target-decoy FDR on the raw Comet Xcorr, the identification rate,
+  median target and decoy Xcorr, and the median precursor mass error. The
+  search's own yield, before rescoring.
+find: { path_glob: "**/*_pin.tsv" }
+recipe: openms/comet_psms.py
+fixture: comet_psms.tsv
+renders_as:
+  - { component: card, column: psms_1pct_fdr, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: identification_rate, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: median_mass_error_ppm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - id: target_decoy_separation
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: median_xcorr_decoy, y: median_xcorr_target, label: run_id, size: spectra_searched }
+  - { component: table, row_selection_enabled: true, row_selection_column: run_id }

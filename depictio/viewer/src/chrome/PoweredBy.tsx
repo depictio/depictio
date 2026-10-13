@@ -1,25 +1,38 @@
 import React from 'react';
 import { Anchor, Group, Text } from '@mantine/core';
 
-import { useColorScheme } from '../hooks/useColorScheme';
+import DepictioLogo from './DepictioLogo';
+import { useBrandLogoMode } from './useBrandLogoMode';
 
 /**
  * "Powered by Depictio" badge — themed Depictio logo + label, linking to docs.
- * Visual parity with `_create_powered_by_section()` in
- * `depictio/dash/layouts/header.py`.
+ *
+ * Shown only when the depictio wordmark is no longer on screen, i.e. when the
+ * brand in scope resolves to a logo of its own (`custom`) or to no logo at all
+ * (`none`). On a stock deployment the wordmark is already in the app rail and
+ * on the login card, so a badge repeating it is noise; once an operator puts
+ * their own mark there, the attribution is the only thing left saying what the
+ * app is.
+ *
+ * The rule is decided here rather than at each mount site so every surface
+ * inherits it. Inside a dashboard `BrandScope` provides the dashboard theme
+ * merged over the instance one, so a dashboard with its own logo counts too.
  */
 interface PoweredByProps {
-  /** When true, renders the right-border + right-padding seen in the Dash header. */
+  /** When true, renders the right-border + right-padding seen in the header. */
   withRightBorder?: boolean;
+  /** Shown under depictio's own brand too: for a surface that gives its left
+   *  to something else (the Glass dashboard bar leads with the dashboard's
+   *  title and keeps only the rose there). */
+  always?: boolean;
 }
 
-const PoweredBy: React.FC<PoweredByProps> = ({ withRightBorder = false }) => {
-  const { colorScheme } = useColorScheme();
+const PoweredBy: React.FC<PoweredByProps> = ({ withRightBorder = false, always = false }) => {
+  const logoMode = useBrandLogoMode();
 
-  // Both `logo_black.svg` and `logo_white.svg` are byte-identical (a base64-
-  // embedded PNG inside an SVG wrapper), so swapping `src` does nothing.
-  // Apply a CSS filter on dark mode to invert the embedded raster while
-  // preserving brand hues — the standard treatment for single-asset wordmarks.
+  // `'inherit'` is exactly when BrandLogo shows the depictio wordmark.
+  if (logoMode === 'inherit' && !always) return null;
+
   const groupStyle: React.CSSProperties = withRightBorder
     ? {
         marginRight: 15,
@@ -34,22 +47,14 @@ const PoweredBy: React.FC<PoweredByProps> = ({ withRightBorder = false }) => {
       target="_blank"
       rel="noopener noreferrer"
       underline="never"
+      data-testid="powered-by"
       style={{ color: 'inherit' }}
     >
       <Group gap={5} align="center" wrap="nowrap" style={groupStyle}>
         <Text size="xs" c="dimmed" fw={700}>
           Powered by
         </Text>
-        <img
-          src="/dashboard/logos/logo_black.svg"
-          alt="Depictio"
-          style={{
-            height: 20,
-            width: 'auto',
-            display: 'block',
-            filter: colorScheme === 'dark' ? 'invert(1) hue-rotate(180deg)' : undefined,
-          }}
-        />
+        <DepictioLogo height={20} />
       </Group>
     </Anchor>
   );

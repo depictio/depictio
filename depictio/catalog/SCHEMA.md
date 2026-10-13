@@ -1,9 +1,20 @@
 # Catalog schema reference
 
-Machine-readable contract: **`catalog.schema.json`** (regenerate with
-`depictio catalog schema -o depictio/catalog/catalog.schema.json`). The
-`# yaml-language-server: $schema=` header gives editors live validation +
-autocomplete. This page is the human companion.
+Machine-readable contract: three generated JSON Schemas, one per file shape —
+a folder splits an entry in two, so `module.yaml` and `<output>.yaml` each need
+their own (the whole-entry schema requires `outputs` and forbids extras, so it
+red-underlines both halves):
+
+| File | Schema | Regenerate with |
+|---|---|---|
+| flat single-file entry | `catalog.schema.json` | `depictio dev catalog schema -o depictio/catalog/catalog.schema.json` |
+| `module.yaml` | `module.schema.json` | `depictio dev catalog schema --model module -o depictio/catalog/module.schema.json` |
+| `<output>.yaml` | `output.schema.json` | `depictio dev catalog schema --model output -o depictio/catalog/output.schema.json` |
+
+Put the matching `# yaml-language-server: $schema=../<file>` header at the top
+for live validation + autocomplete in the editor (Tool Studio writes it for
+you). All three are pinned to the models by a test. This page is the human
+companion.
 
 Legend: **MUST** = required · **CAN** = optional (default shown). Unknown keys
 are rejected (`extra="forbid"`).
@@ -30,30 +41,33 @@ Both use the same fields; a folder just splits the outputs into files.
 |---|---|---|---|
 | `id` | **MUST** | str | e.g. `ivar`, `qiime2`. |
 | `name` | **MUST** | str | Display name. |
-| `description` | CAN | str | |
-| `homepage` | CAN | str | |
+| `description` | **MUST** | str | One or two sentences, shown on the catalog card. |
+| `homepage` | **MUST** | str | Tool site or source repository. |
 | `nf_core_url` | CAN | str | Full nf-core module URL (per-output for multi-module tools like QIIME 2). |
-| `biotools_url` | CAN | str | Full `https://bio.tools/<id>` URL. |
+| `source_url` | CAN | str | Where a non-nf-core definition was read from (a Snakemake wrapper dir, a Galaxy tool XML). Format-checked as http(s) only — there is no registry to check it against. |
+| `biotools_url` | **MUST** (may be `null`) | str \| null | Full `https://bio.tools/<id>` URL; `null` when bio.tools has no entry. |
 | `edam_topics` | CAN | list[str] | Full EDAM URLs. |
+| `stage` | CAN | one of `qc`, `alignment`, `quantification`, `peaks`, `variants`, `fusions`, `taxonomy`, `annotation`, `immune`, `differential`, `benchmarking`, `other` | Where the tool's outputs sit in a pipeline. A dashboard composed from the catalog (`depictio template compose`) opens one tab per stage present, in this order. Unset reads as `other`; an output can override it. |
 | `outputs` | **MUST** (flat file) | list[Output] | In a folder, these are the sibling files. |
 
-**Keep `module.yaml` lightweight.** For an nf-core-backed tool, declare only
-`id`, `name` and `nf_core_url` — the rest of the identity (`homepage`,
-`biotools_url`, `edam_topics`, `description`) already lives in the module's
-nf-core `meta.yml` and is derived from it, so don't duplicate it. Add an identity
-field here **only** to *override* a stale `meta.yml` (e.g. MultiQC `homepage`) or
-when the tool has **no** single nf-core module to derive from (QIIME 2 — identity
-declared in full, `nf_core_url` set per-output). The `nf_core_url` pointer is what
-existence-checking validates; the derived fields are trusted until a future
-`sync-identity` reconciles them against `meta.yml`.
+**Identity is declared, not derived.** The payload reads a tool's identity from
+`module.yaml` alone; nothing fetches the nf-core `meta.yml`. Copy the fields from
+it: `homepage` falls back to `tool_dev_url`, then `documentation`, when
+`meta.yml` leaves it empty, and `biotools_url` comes from the `biotools:`
+identifier (`null` when there is none). `catalog validate` rejects a module with
+no `description` or `homepage`; the `nf_core_url` pointer is what
+existence-checking validates against the vendored nf-core index.
 
 ## `outputs[]` — Output
 
 | Field | MUST/CAN | Type | Notes |
 |---|---|---|---|
 | `id` | **MUST** | str | Globally-unique. |
+| `name` | **MUST** | str | Short display label, e.g. `Amplicon coverage`. What a picker or gallery lists — `description` is the full sentence behind it and is too long to scan. Optional on the model so a third-party catalog can omit it; every bundled output declares one, and must be unique within its tool. |
 | `find` | **MUST** | Find | How to recognise the raw file. |
+| `origin_tool` | CAN | str | The tool that actually produced the numbers, when the catalog tool aggregates other tools' output. Set on MultiQC sections (`Cutadapt`, `FastQC`, …) so a picker can show "Adapter trimming (Cutadapt)"; left unset when the tool is the producer, and when the section is pipeline-generated custom content. Declared rather than derived: MultiQC persists anchors, and the report's own module names are decorated by the pipeline. |
 | `mode` | CAN | str | Running mode / subcommand. |
+| `stage` | CAN | same vocabulary as the tool's `stage` | Overrides the tool's stage for this output, e.g. a MultiQC section carrying STAR's numbers is `alignment`, not MultiQC's `qc`. |
 | `description` | CAN | str | |
 | `recipe` | CAN | str | Reshape that **owns the output columns**. Module-owned (preferred): `<module>/<name>.py`, co-located in this catalog folder, e.g. `qiime2/ancombc.py`. Pipeline-keyed legacy still resolves (`nf-core/<pipeline>/<name>.py`) for pipeline-version-specific reshapes. |
 | `columns` | CAN* | dict[str,str] | Bindable columns (polars dtype names). **MUST be set iff there is no recipe and a render binds columns; MUST be absent if `recipe` is set.** |
@@ -67,27 +81,59 @@ existence-checking validates; the derived fields are trusted until a future
 |---|---|---|
 | `filename` | str | Glob on the basename, e.g. `*.pangolin.csv`. |
 | `path_glob` | str | Glob on the path under the run root, `**`-aware. |
+| `path_glob_alt` | list[str] | Extra path globs tried after `path_glob` (which it requires) for layouts the canonical glob cannot reach. The path matcher reads `**` as a single segment, so a nested report dir such as `multiqc/star_salmon/multiqc_report_data/` needs its own literal-depth entry. |
 
 ### Render — one render target
 
 | Field | MUST/CAN | Type | Notes |
 |---|---|---|---|
-| `component` | **MUST** | real `ComponentType` (`advanced_viz`/`figure`/`card`/`table`/`text`/`jbrowse`/`image`/`map`) + `multiqc` | The dashboard component. |
+| `component` | **MUST** | real `ComponentType` (`advanced_viz`/`figure`/`card`/`table`/`interactive`/`text`/`jbrowse`/`image`/`map`) + `multiqc` | The dashboard component. |
 | `kind` | cond. | AdvancedVizKind | **Required iff** `component=advanced_viz`; forbidden otherwise. Role names MUST be valid for the kind. |
-| `roles` | cond. | dict[role,column] | `advanced_viz` binding (role → column). |
+| `roles` | cond. | dict[role, column \| column list] | `advanced_viz` binding. One column per role, except the ordered lists a few kinds bind: `sankey.steps` (≥2, required — nothing downstream can infer them), `sunburst.ranks`, and ComplexHeatmap's `value_columns` / `row_annotation_cols`. `embedding.compute_method` names a reduction (`pca`/`umap`/…), not a column, so it is not grounded. Every role a kind declares is accepted, required and optional alike. |
 | `visu_type` | cond. | `box`/`scatter`/`bar`/`histogram`/`line`/`heatmap` | `figure` **UI mode** (plotly express). |
 | `dict_kwargs` | CAN | dict[str,str] | `figure` UI mode: plotly-express kwargs (`x`,`y`,`color`,`facet_col`…); column-valued ones are grounded. |
 | `code` | cond. | str | `figure` **code mode**: inline Python that sets `fig` (depictio `code_content`). A figure needs `visu_type` **or** `code`. |
 | `column` + `aggregation` | cond. | str / `AggregationFunction` | `card`: the metric column + **hero** aggregation. |
 | `aggregations` | CAN | list[`AggregationFunction`] | `card`: **secondary** aggregations → a **multi-metric** card (e.g. `[median, min, max, std_dev]`). |
-| `secondary_layout` | CAN | `vertical`/`compact`/`box_plot`/`top_n`/`coverage`/`concentration` | `card`: how the secondary strip renders. `box_plot` = a **Tukey** box-and-whisker; `top_n`/`concentration` use `breakdown_col`(+`top_n_count`); `coverage` uses `coverage_max`. |
-| `breakdown_col` / `top_n_count` / `coverage_max` | CAN | str / int(1-5) / float | `card`: params for the `top_n`/`concentration`/`coverage` layouts. |
+| `secondary_layout` | CAN | one of `vertical`, `compact`, `grid`, `box_plot`, `histogram`, `threshold`, `completeness`, `uniqueness`, `attrition`, `trend`, `coverage`, `gauge`, `top_n`, `concentration`, `composition`, `donut` | `card`: how the secondary strip renders. Set on **every** bundled card — a bare hero number says nothing about spread or composition. The list is taken from `CardLiteComponent`, not respelled, so the two cannot drift. `vertical`/`compact`/`grid` and `box_plot` are driven by `aggregations` (a `box_plot` card **must** declare `aggregations: [box_plot_stats]` — the server keys the computation off that list); `top_n`/`concentration`/`composition`/`donut` need `breakdown_col` (+`top_n_count`); `coverage`/`gauge` need `coverage_max`; `threshold` needs `threshold_value`; `trend` needs `trend_col`; `attrition` needs `attrition_cols`; `histogram`/`completeness`/`uniqueness` need nothing further. |
+| `breakdown_col` / `top_n_count` / `coverage_max` | CAN | str / int(1-5) / float | `card`: params for the categorical and progress layouts (see above). |
+| `threshold_value` / `threshold_direction` / `threshold_warn` | CAN | float / `min`\|`max` / float | `card`: the QC cut-off for `secondary_layout: threshold`. `min` = at-least (higher is better). |
+| `attrition_cols` / `trend_col` | CAN | list[str] / str | `card`: the ordered stages for `attrition`, the ordered axis for `trend`. |
 | `filter_expr` | CAN | str | `card`: optional polars pre-filter before aggregation. |
+| `headline` | CAN | bool | `card`: one of the run's key metrics. A composed dashboard puts headline cards in its Overview, the way MultiQC's General Statistics picks a few columns per tool. One or two per tool. |
+| `interactive_type` + `column_name` | cond. | `InteractiveType` / str | `interactive`: the widget (`Select`, `MultiSelect`, `SegmentedControl`, `Slider`, `RangeSlider`, `DateRangePicker`, `Timeline`, `Switch`) and the column it filters on. Both required — they are what depictio's interactive component needs to exist. |
+| `columns` | CAN | list[str] | `table`: the columns to display. Omit for all of them. |
+| `page_size` / `sortable` / `filterable` | CAN | int(1-500) / bool / bool | `table`: display options. |
+| `row_selection_enabled` / `row_selection_column` | CAN | bool / str | `table`: let row selection filter the rest of the dashboard, and which column it emits. |
 | `section` | CAN | str | e.g. the MultiQC section name. |
+| `priority` | CAN | int ≥ 0 | Any component: ordering when a dashboard is composed from the catalog, lower first within its output. Renders without one keep their declared order, after those with one. |
 
-Figure/card/roles fields are **component-scoped** (validated): `roles`/`kind`
-only for `advanced_viz`, `visu_type`/`dict_kwargs`/`code` only for `figure`,
-`column`/`aggregation` only for `card`.
+### `secondary_layout` and its companion field
+
+`validate` rejects a layout whose companion field is missing, so pick the row
+and set what it asks for.
+
+| Layout | Requires | Notes |
+|---|---|---|
+| `vertical`, `compact`, `grid` | — | plain multi-metric strips |
+| `box_plot` | — | a **Tukey** box-and-whisker over `aggregations` |
+| `histogram`, `completeness`, `uniqueness` | — | derived from the card's own column |
+| `top_n`, `concentration`, `composition`, `donut` | `breakdown_col` | `top_n` also takes `top_n_count` (1-5) |
+| `coverage`, `gauge` | `coverage_max` | the denominator |
+| `threshold` | `threshold_value` | + optional `threshold_direction` / `threshold_warn` |
+| `attrition` | `attrition_cols` | stages after the card's own column |
+| `trend` | `trend_col` | ordered axis for the sparkline |
+
+Every field is **component-scoped** (validated): `roles`/`kind` only for
+`advanced_viz`, `visu_type`/`dict_kwargs`/`code` only for `figure`,
+`column`/`aggregation` and the card companions only for `card`,
+`interactive_type`/`column_name` only for `interactive`, and the display
+options only for `table`.
+
+A `table` render needs none of its options — `{component: table}` still means
+"every column, defaults". An `interactive` render needs both of its fields:
+`InteractiveLiteComponent` cannot be instantiated without them, which is why
+the catalog held no interactive renders until it could express them.
 
 `AdvancedVizKind`: volcano, embedding, manhattan, stacked_taxonomy,
 phylogenetic, rarefaction, da_barplot, enrichment, complex_heatmap, upset_plot,
@@ -97,15 +143,21 @@ ma, dot_plot, lollipop, qq, sunburst, oncoplot, coverage_track, sankey.
 
 ## The schema-ownership rule (no duplication)
 
-- **Recipe present** → the recipe (`EXPECTED_SCHEMA`) owns the output columns;
+- **Recipe present** → the recipe (`OUTPUT_SCHEMA`) owns the output columns;
   the YAML must **not** declare `columns`. `roles` are grounded against the
-  recipe by `depictio catalog validate`.
+  recipe by `depictio dev catalog validate`.
 - **No recipe** → the raw file is bindable; declare its `columns` in the YAML,
   and `roles` bind to them.
 - Non-tabular / role-less renders (`table`, `multiqc_plot`, `figure`) need
   neither a recipe nor `columns`.
+- **Which collection an output binds to follows the same split.** The picker
+  offers a recipe output only on the collection that recipe produced, and a
+  recipe-free output only on the collection that scanned the file `find`
+  describes (`_match_dc_to_catalog`). An output cannot be offered on the raw
+  file its recipe eats: the renders are authored against the recipe's schema, so
+  a renaming recipe would bind columns the raw file does not have.
 
-Use `depictio catalog columns <recipe>` to see a recipe's output column names
+Use `depictio dev catalog columns <recipe>` to see a recipe's output column names
 while writing `roles`.
 
 ## Two validation tiers
@@ -120,7 +172,7 @@ while writing `roles`.
 - `biotools_url` → format only (the bio.tools registry is too large to vendor).
 - `nf_core_url` module + `edam_*` term → **existence** against vendored indices
   in `_index/` (`nf_core_modules.txt`, `edam_terms.txt`), checked offline in CI.
-  Regenerate them with `depictio catalog refresh-index` (needs network; run by a
+  Regenerate them with `depictio dev catalog refresh-index` (needs network; run by a
   maintainer). A missing/empty index is skipped, so seeding stays non-breaking.
 
 ## What `validate` checks (the CI guarantee)
@@ -129,7 +181,7 @@ while writing `roles`.
 2. `kind` valid for `advanced_viz`; role names valid for the `kind`.
 3. Each render's bound columns (`roles`/`dict_kwargs`/`card.column`) are
    **grounded** against the real data shape — the `fixture` (most complete) if
-   set, else the recipe's `EXPECTED_SCHEMA`, else the declared `columns`.
+   set, else the recipe's `OUTPUT_SCHEMA`, else the declared `columns`.
 4. Every referenced `recipe` resolves; every `fixture` reads.
 5. Every `nf_core_url` module + `edam_*` term **exists** in the vendored index.
 

@@ -27,6 +27,7 @@ class LinkConfig(BaseModel):
     - pattern: Template substitution (e.g., "{sample}.bam" -> "S1.bam")
     - regex: Match target values using regex pattern
     - wildcard: Glob-style matching (e.g., "S1*" matches "S1_R1.bam")
+    - region: Rename a genomic region onto the target's own coordinate columns
 
     Example:
         LinkConfig(
@@ -34,11 +35,32 @@ class LinkConfig(BaseModel):
             mappings={"S1": ["S1_R1", "S1_R2"], "S2": ["S2_R1"]},
             target_field="sample_name"
         )
+
+    The ``region`` resolver is the one that reads no data at all. A genomic
+    region travels the dashboard as two ordinary filters, a chromosome
+    multi-select and a position range (``genomeRegionFilters`` in
+    ``packages/depictio-react-core/src/selection.ts``), and a chromosome name
+    and a base-pair coordinate mean the same thing in every collection of the
+    same assembly. Only the column *names* differ, which is what ``columns``
+    carries:
+
+        LinkConfig(
+            resolver="region",
+            columns={"chrom": "chromosome", "pos": "position"},
+        )
     """
 
-    resolver: Literal["direct", "sample_mapping", "pattern", "regex", "wildcard"] = Field(
+    resolver: Literal["direct", "sample_mapping", "pattern", "regex", "wildcard", "region"] = Field(
         default="direct",
         description="Resolution strategy for mapping source values to target identifiers",
+    )
+
+    columns: dict[str, str] | None = Field(
+        default=None,
+        description="Role to target-column mapping for the 'region' resolver: "
+        "'chrom' names the target's chromosome column and 'pos' its coordinate "
+        "column. Ignored by every other resolver, which map values rather than "
+        "column names.",
     )
 
     mappings: dict[str, list[str]] | None = Field(
@@ -74,6 +96,24 @@ class LinkConfig(BaseModel):
         if v is not None and "{sample}" not in v:
             raise ValueError("Pattern must contain {sample} placeholder")
         return v
+
+    @model_validator(mode="after")
+    def validate_region_columns(self) -> "LinkConfig":
+        """A region link is nothing but its target columns, so it must name them.
+
+        Caught here rather than at resolution time: a region link missing a
+        column would silently rewrite nothing, which reads on the dashboard as
+        a tile that ignores the brush.
+        """
+        if self.resolver != "region":
+            return self
+        columns = self.columns or {}
+        missing = [role for role in ("chrom", "pos") if not columns.get(role)]
+        if missing:
+            raise ValueError(
+                f"resolver 'region' needs link_config.columns for {', '.join(missing)}"
+            )
+        return self
 
 
 class DCLink(BaseModel):
@@ -235,6 +275,27 @@ class LinkResolutionRequest(BaseModel):
         description="Target data collection ID to resolve values for",
     )
 
+    reverse: bool = Field(
+        default=False,
+        description=(
+            "Walk the link against its declared direction. The link is looked up as "
+            "target_dc_id -> source_dc_id, source_column is read on the link's target, "
+            "and the resolved values name the link's source_column. Only links using "
+            "the 'direct' resolver can be walked this way; any other answers 404."
+        ),
+    )
+
+    range_filter: bool = Field(
+        default=False,
+        description=(
+            "filter_values is the [low, high] pair of a RangeSlider or DateRangePicker on "
+            "source_column, to be read as an inclusive range rather than a set of two "
+            "values. The rows inside the range are translated to the link's join column "
+            "before resolving, so a position or q-value slider reaches the linked "
+            "collection as the ids it selects, not as two ids that do not exist."
+        ),
+    )
+
     model_config = ConfigDict(extra="forbid")
 
 
@@ -334,3 +395,111 @@ class LinkUpdateRequest(BaseModel):
     enabled: bool | None = Field(default=None)
 
     model_config = ConfigDict(extra="forbid")
+
+
+class LinkMappingPreviewRow(BaseModel):
+    """One source value's resolution outcome, for the mapping-inspection UI."""
+
+    source_value: str = Field(..., description="Distinct value from the source DC's link column")
+    matched: bool = Field(..., description="Whether the value resolved through the link")
+    via: str = Field(
+        ...,
+        description="How it matched: exact | variant | base | source-suffix | "
+        "passthrough, or the resolver name for non-sample_mapping resolvers",
+    )
+    resolved: list[str] = Field(
+        default_factory=list,
+        description="Target identifiers this value resolves to",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class LinkMappingPreviewResponse(BaseModel):
+    """Full sample ↔ link mapping table for one DC link.
+
+    Backs the debug/inspection view: every distinct source value with its
+    resolution outcome, plus the target-side names no source value reaches
+    (orphans) so mismatches are visible from both directions.
+    """
+
+    link_id: str = Field(...)
+    resolver: str = Field(...)
+    source_dc_id: str = Field(...)
+    source_column: str = Field(...)
+    target_dc_id: str = Field(...)
+    target_type: str = Field(...)
+    case_sensitive: bool = Field(...)
+    mappings_source: Literal["link_config", "multiqc_live", "none"] = Field(
+        ...,
+        description="Where the effective mappings came from: frozen on the link, "
+        "fetched live from MultiQC reports, or absent",
+    )
+    source_values_total: int = Field(..., description="Distinct source values in the DC")
+    truncated: bool = Field(
+        default=False,
+        description="True when rows were capped by the request limit",
+    )
+    matched_count: int = Field(default=0)
+    unmapped_count: int = Field(default=0)
+    rows: list[LinkMappingPreviewRow] = Field(default_factory=list)
+    orphan_targets: list[str] = Field(
+        default_factory=list,
+        description="Target-side sample names not reached by any listed source value",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+def resolve_link_tag_refs(project: dict) -> dict:
+    """Resolve ``tag:<dc_tag>`` link placeholders against the project's own DCs.
+
+    Template-shipped links reference data collections by tag; the CLI's sync
+    step rewrites them to real DC ids after instantiation. But sync is
+    optional (``--skip-sync``, or a 409 short-circuit), and a project whose
+    links still carry ``tag:`` placeholders (or an empty id next to a set tag)
+    would silently resolve zero link paths — every cross-DC filter fan-out
+    no-ops. Normalising at read time makes link resolution independent of
+    whether that CLI step ever ran.
+
+    Mutates ``project['links']`` in place and returns the project for
+    convenience. Unknown tags are left untouched (the link then simply never
+    matches, as before).
+    """
+    links = project.get("links") or []
+    if not links:
+        return project
+
+    def _unresolved(link: dict) -> bool:
+        for id_field, tag_field in (
+            ("source_dc_id", "source_dc_tag"),
+            ("target_dc_id", "target_dc_tag"),
+        ):
+            raw = str(link.get(id_field) or "")
+            if raw.startswith("tag:") or (not raw and link.get(tag_field)):
+                return True
+        return False
+
+    if not any(_unresolved(link) for link in links if isinstance(link, dict)):
+        return project
+
+    tag_to_id: dict[str, str] = {}
+    for wf in project.get("workflows") or []:
+        for dc in wf.get("data_collections") or []:
+            tag = dc.get("data_collection_tag")
+            dc_id = dc.get("_id") or dc.get("id")
+            if tag and dc_id:
+                tag_to_id[str(tag)] = str(dc_id)
+
+    for link in links:
+        if not isinstance(link, dict):
+            continue
+        for id_field, tag_field in (
+            ("source_dc_id", "source_dc_tag"),
+            ("target_dc_id", "target_dc_tag"),
+        ):
+            raw = str(link.get(id_field) or "")
+            tag = link.get(tag_field) or (raw[4:] if raw.startswith("tag:") else None)
+            if (not raw or raw.startswith("tag:")) and tag and tag in tag_to_id:
+                link[id_field] = tag_to_id[tag]
+    return project

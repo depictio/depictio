@@ -1,0 +1,33 @@
+id: hicpro_pair_stats
+name: Valid-pair funnel
+mode: stats
+description: >-
+  HiC-Pro's own mapping, pairing, restriction-fragment and contact statistics
+  pivoted into one row per sample, so the valid-pair funnel and its rates are
+  filterable numbers instead of a MultiQC image.
+find:
+  path_glob: "**/*_allValidPairs.mergestat"
+  path_glob_alt:
+    - "**/*.mpairstat"
+    - "**/*.mRSstat"
+    - "**/*.mmapstat"
+recipe: hicpro/pair_stats.py
+fixture: pair_stats.tsv
+renders_as:
+  # The whole funnel as one card: hero = pairs sequenced, strip = every stage
+  # that survives, down to the long-range cis contacts a Hi-C run is built for.
+  - component: card
+    column: total_pairs
+    aggregation: sum
+    secondary_layout: attrition
+    attrition_cols: [reported_pairs, valid_pairs, valid_pairs_rmdup, cis_pairs, cis_long_range]
+  - { component: card, column: valid_pair_rate, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
+  - { component: card, column: cis_ratio, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
+  - { component: card, column: long_range_ratio, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
+  - { component: card, column: duplicate_rate, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: low_qual_rate, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: valid_pairs_rmdup, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: cis_long_range, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: trans_ratio, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: valid_pair_rate, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

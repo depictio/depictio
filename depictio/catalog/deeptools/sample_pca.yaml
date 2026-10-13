@@ -1,0 +1,15 @@
+id: deeptools_sample_pca
+name: Sample PCA
+mode: exploratory/pca
+description: >-
+  Where each library sits on the first components of a PCA over the genome-wide
+  bin counts, with the share of variance each component explains. Replicates of
+  one target cluster; a library that lands with the controls did not enrich.
+find:
+  path_glob: "**/*.plotPCA.tab"
+recipe: deeptools/sample_pca.py
+fixture: sample_pca.tsv
+renders_as:
+  - { id: pca_embedding, component: advanced_viz, kind: embedding, roles: {sample_id: sample, dim_1: pc1, dim_2: pc2, dim_3: pc3} }
+  - { component: figure, visu_type: scatter, dict_kwargs: {x: pc1, y: pc2, color: sample, title: Sample PCA over genome-wide bin counts} }
+  - { component: table }

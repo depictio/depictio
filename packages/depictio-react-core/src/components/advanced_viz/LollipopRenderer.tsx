@@ -1,15 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Group,
-  NumberInput,
-  Select,
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import AdvancedVizPlot from './AdvancedVizPlot';
+import {
+  VizControlGroup,
+  VizFullRow,
+  VizNumberInput,
+  VizSelect,
+  VizSwitch,
+} from './controls/VizControls';
 
 import {
   fetchAdvancedVizData,
@@ -17,8 +15,11 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { stableColorMap, TAB10_PALETTE } from '../../colors';
+import { brandColorway, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
+import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
 import {
   applyDataTheme,
   applyLayoutTheme,
@@ -26,12 +27,30 @@ import {
   plotlyThemeColors,
   plotlyThemeFragment,
 } from './plotlyTheme';
+import { usePersistedVizControl } from './usePersistedVizControl';
+import { splitFigureByGroups } from './groupSplit';
+import type { GroupRenderState } from '../../selectionGroups';
+import { useReportGroupColouring } from '../../groupReach';
+import { demandForItems } from './contentDemand';
+
+/** Room one gene's subplot needs: the stems have to stand clear of the domain
+ *  track under them, and a squashed lane turns the stem heights (the effect
+ *  channel) into noise. */
+const GENE_TRACK_PX = 150;
+/** The shared position axis and its title below the last track, plus the top
+ *  margin. */
+const LOLLIPOP_CHROME_PX = 70;
 
 interface LollipopConfig {
   feature_id_col: string;
   position_col: string;
   category_col: string;
   effect_col?: string | null;
+  /** Names each stem. `feature_id_col` is the lane, not the mark, so a panel
+   *  keyed on a contrast or a chromosome has no other way to say which gene a
+   *  stem belongs to. Unset keeps the position-number labels and the lane-name
+   *  hover this renderer has always drawn. */
+  label_col?: string | null;
   max_subplot_genes?: number;
 }
 
@@ -39,6 +58,10 @@ interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: LollipopConfig };
   filters: InteractiveFilter[];
   refreshTick?: number;
+  /** Dashboard-wide analysis grouping, recoloured into the built figure.
+   *  Colour only: this plot is keyed per feature, so panels would repeat the
+   *  same marks. See `splitFigureByGroups`. */
+  groupRender?: GroupRenderState;
 }
 
 type GeneSort = 'name' | 'count' | 'effect';
@@ -51,32 +74,43 @@ const TAB20_PALETTE = [
   '#17becf', '#9edae5',
 ] as const;
 
-const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
+const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, groupRender }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
   const config = (metadata.config || {}) as LollipopConfig;
   const maxSubplotGenes = config.max_subplot_genes ?? 6;
 
-  const [pointSize, setPointSize] = useState<number>(8);
-  const [stemWidth, setStemWidth] = useState<number>(1.2);
-  const [scalePointsByEffect, setScalePointsByEffect] = useState<boolean>(true);
-  const [showStems, setShowStems] = useState<boolean>(true);
-  const [markerOutline, setMarkerOutline] = useState<boolean>(false);
-  const [palette, setPalette] = useState<'tab10' | 'tab20'>('tab10');
-  const [geneSort, setGeneSort] = useState<GeneSort>('count');
-  const [topNLabels, setTopNLabels] = useState<number>(0);
-
-  const requiredCols = useMemo(
-    () =>
-      [
-        config.feature_id_col,
-        config.position_col,
-        config.category_col,
-        ...(config.effect_col ? [config.effect_col] : []),
-      ].filter(Boolean) as string[],
-    [config],
+  const [pointSize, setPointSize] = usePersistedVizControl(metadata, 'point_size', 8);
+  const [stemWidth, setStemWidth] = usePersistedVizControl(metadata, 'stem_width', 1.2);
+  const [scalePointsByEffect, setScalePointsByEffect] = usePersistedVizControl(metadata, 'scale_points_by_effect', true);
+  const [showStems, setShowStems] = usePersistedVizControl(metadata, 'show_stems', true);
+  const [markerOutline, setMarkerOutline] = usePersistedVizControl(metadata, 'marker_outline', false);
+  // The instance (or dashboard) brand colorway, when there is one. It
+  // becomes an option here and the default, so a branded deployment's
+  // figures match its chrome without the viewer having to pick.
+  const brandPalette = brandColorway(theme);
+  const [palette, setPalette] = usePersistedVizControl<'brand' | 'tab10' | 'tab20'>(
+    metadata,
+    'palette',
+    brandPalette ? 'brand' : 'tab10',
   );
+  const [geneSort, setGeneSort] = usePersistedVizControl<GeneSort>(metadata, 'gene_sort', 'count');
+  const [topNLabels, setTopNLabels] = usePersistedVizControl(metadata, 'top_n_labels', 0);
+
+  const requiredCols = useMemo(() => {
+    const cols = [
+      config.feature_id_col,
+      config.position_col,
+      config.category_col,
+      ...(config.effect_col ? [config.effect_col] : []),
+    ].filter(Boolean) as string[];
+    // Appended rather than spread in, so a label bound to a column that is
+    // already a role does not send it twice, and so the `< 3` binding guard
+    // below still counts the three required roles and nothing else.
+    if (config.label_col && !cols.includes(config.label_col)) cols.push(config.label_col);
+    return cols;
+  }, [config]);
 
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -132,6 +166,8 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
       cancelled = true;
     };
   }, [metadata.dc_id, config.category_col]);
+  // A category wears the dashboard's colour for it.
+  const categoryPinned = usePinnedCategoryColors(config.category_col);
 
   const { genesInData, useSinglePicker } = useMemo(() => {
     if (!rows) return { genesInData: [] as string[], useSinglePicker: false };
@@ -174,6 +210,7 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
     const pv = (rows[config.position_col] || []) as number[];
     const cv = (rows[config.category_col] || []) as (string | number)[];
     const ev = config.effect_col ? ((rows[config.effect_col] || []) as number[]) : null;
+    const lv = config.label_col ? ((rows[config.label_col] || []) as (string | number)[]) : null;
 
     const genesToShow = useSinglePicker
       ? selectedGene
@@ -183,10 +220,14 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
     if (genesToShow.length === 0) return null;
 
     const categories = Array.from(new Set(cv.map(String))).sort();
-    const paletteArr = palette === 'tab10' ? TAB10_PALETTE : TAB20_PALETTE;
+    const paletteArr =
+      palette === 'brand' ? (brandPalette ?? TAB10_PALETTE)
+      : palette === 'tab10' ? TAB10_PALETTE
+      : TAB20_PALETTE;
     const colourSource = stableColorMap(
       categoryUniverse ?? categories,
       paletteArr as readonly string[],
+      categoryPinned,
     );
 
     // Marker sizes from raw effect values when scaling is enabled. Range 5..14 px.
@@ -282,13 +323,22 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
           y: heights,
           xaxis: 'x',
           yaxis: yref,
-          customdata: idx.map((i) => [
-            String(gv[i] ?? ''),
-            String(cv[i] ?? ''),
-            ev ? ev[i] ?? null : null,
-          ]),
+          customdata: idx.map((i) => {
+            const row: (string | number | null)[] = [
+              String(gv[i] ?? ''),
+              String(cv[i] ?? ''),
+              ev ? ev[i] ?? null : null,
+            ];
+            // Slot 3 only exists when a label is bound, so an unlabelled panel
+            // serialises byte-for-byte what it always did.
+            if (lv) row.push(String(lv[i] ?? ''));
+            return row;
+          }),
           hovertemplate:
-            `<b>%{customdata[0]}</b>:%{x}<br>${config.category_col}: %{customdata[1]}` +
+            (lv
+              ? `<b>%{customdata[3]}</b><br>%{customdata[0]}:%{x}`
+              : `<b>%{customdata[0]}</b>:%{x}`) +
+            `<br>${config.category_col}: %{customdata[1]}` +
             (ev ? `<br>${config.effect_col}: %{customdata[2]}` : '') +
             `<extra></extra>`,
           marker: {
@@ -318,7 +368,9 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
             mode: 'text' as const,
             x: ranked.map((r) => pv[r.i]),
             y: ranked.map((r) => Math.max(0, Number(ev[r.i]) || 0)),
-            text: ranked.map((r) => String(pv[r.i])),
+            // The stem's name when one is bound; the bare coordinate otherwise,
+            // which is all an unlabelled panel has ever had to show.
+            text: ranked.map((r) => (lv ? String(lv[r.i] ?? '') : String(pv[r.i]))),
             textposition: 'top center' as const,
             textfont: { size: 9, color: isDark ? '#fff' : '#222' },
             xaxis: 'x',
@@ -332,6 +384,8 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
 
     const { textColor } = plotlyThemeColors(isDark, theme);
     return {
+      // Subplot lanes on screen, one per gene. Feeds the content demand.
+      genesDrawn: genesToShow.length,
       data,
       layout: {
         ...plotlyThemeFragment(isDark, theme),
@@ -363,6 +417,7 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
     genesInData,
     useSinglePicker,
     categoryUniverse,
+    categoryPinned,
     colorScheme,
     theme,
     pointSize,
@@ -374,12 +429,13 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
     topNLabels,
   ]);
 
-  const controls = useMemo(
+  // Encoding tier: which gene is on screen and how the genes are ordered. The
+  // rest is marker paint.
+  const primaryControls = useMemo(
     () => (
-      <Stack gap="xs">
+      <>
         {useSinglePicker ? (
-          <Select
-            size="xs"
+          <VizSelect
             label="Gene"
             value={selectedGene}
             onChange={setSelectedGene}
@@ -387,8 +443,7 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
             searchable
           />
         ) : null}
-        <Select
-          size="xs"
+        <VizSelect
           label="Sort genes"
           value={geneSort}
           onChange={(v) => v && setGeneSort(v as GeneSort)}
@@ -399,17 +454,23 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
           ]}
           allowDeselect={false}
         />
-        <Group gap="xs" grow>
-          <NumberInput
-            size="xs"
+      </>
+    ),
+    [useSinglePicker, selectedGene, genesInData, geneSort],
+  );
+
+  const controls = useMemo(
+    () => (
+      <>
+        <VizControlGroup title="Markers">
+          <VizNumberInput
             label="Point size"
             value={pointSize}
             onChange={(v) => setPointSize(Math.max(2, Math.min(20, Number(v) || 8)))}
             min={2}
             max={20}
           />
-          <NumberInput
-            size="xs"
+          <VizNumberInput
             label="Stem width"
             value={stemWidth}
             onChange={(v) => setStemWidth(Math.max(0.5, Math.min(6, Number(v) || 1.2)))}
@@ -418,69 +479,55 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
             step={0.2}
             decimalScale={1}
           />
-        </Group>
-        <Select
-          size="xs"
-          label="Palette"
-          value={palette}
-          onChange={(v) => v && setPalette(v as 'tab10' | 'tab20')}
-          data={[
-            { value: 'tab10', label: 'tab10 (10 colours)' },
-            { value: 'tab20', label: 'tab20 (20 colours)' },
-          ]}
-          allowDeselect={false}
-        />
-        <NumberInput
-          size="xs"
-          label="Label top-N positions"
-          description="Per gene, 0 = off"
-          value={topNLabels}
-          onChange={(v) => setTopNLabels(Math.max(0, Math.min(20, Number(v) || 0)))}
-          min={0}
-          max={20}
-          disabled={!config.effect_col}
-        />
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Scale
-          </Text>
-          <Switch
-          size="xs"
-          checked={scalePointsByEffect}
-          onChange={(e) => setScalePointsByEffect(e.currentTarget.checked)}
-          label="Scale points by |effect|"
-          disabled={!config.effect_col}
-        />
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Show
-          </Text>
-          <Switch
-          size="xs"
-          checked={showStems}
-          onChange={(e) => setShowStems(e.currentTarget.checked)}
-          label="Show stems"
-        />
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Markers
-          </Text>
-          <Switch
-          size="xs"
-          checked={markerOutline}
-          onChange={(e) => setMarkerOutline(e.currentTarget.checked)}
-          label="Marker outline"
-        />
-        </Stack>
-      </Stack>
+          <VizSwitch
+            checked={scalePointsByEffect}
+            onChange={(e) => setScalePointsByEffect(e.currentTarget.checked)}
+            label="Scale points by |effect|"
+            disabled={!config.effect_col}
+          />
+          <VizSwitch
+            checked={showStems}
+            onChange={(e) => setShowStems(e.currentTarget.checked)}
+            label="Show stems"
+          />
+          <VizSwitch
+            checked={markerOutline}
+            onChange={(e) => setMarkerOutline(e.currentTarget.checked)}
+            label="Marker outline"
+          />
+        </VizControlGroup>
+        <VizControlGroup title="Colour">
+          <VizSelect
+            label="Palette"
+            value={palette}
+            onChange={(v) => v && setPalette(v as 'brand' | 'tab10' | 'tab20')}
+            data={[
+              ...(brandPalette ? [{ value: 'brand', label: 'Brand colours' }] : []),
+              { value: 'tab10', label: 'tab10 (10 colours)' },
+              { value: 'tab20', label: 'tab20 (20 colours)' },
+            ]}
+            allowDeselect={false}
+          />
+        </VizControlGroup>
+        <VizControlGroup title="Labels">
+          <VizNumberInput
+            label="Label top-N"
+            value={topNLabels}
+            onChange={(v) => setTopNLabels(Math.max(0, Math.min(20, Number(v) || 0)))}
+            min={0}
+            max={20}
+            disabled={!config.effect_col}
+          />
+          <VizFullRow>
+            <Text size="xs" c="dimmed">
+              Positions per gene, 0 = off
+            </Text>
+          </VizFullRow>
+        </VizControlGroup>
+      </>
     ),
     [
-      useSinglePicker,
-      selectedGene,
-      genesInData,
-      geneSort,
+      brandPalette,
       pointSize,
       stemWidth,
       palette,
@@ -492,26 +539,83 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
     ],
   );
 
+  // Recolour by the dashboard's analysis groups. The join is on values, and
+  // `splitFigureByGroups` returns the figure untouched when no point matches,
+  // so a group built from sample ids leaves a per-feature plot alone. Slot 0 of
+  // `customdata` is the feature id.
+  const groupedFigure = useMemo(
+    () =>
+      figure
+        ? splitFigureByGroups(figure, {
+            groupRender,
+            identitySlot: 0,
+            facetable: false,
+            showLegend: true,
+          })
+        : figure,
+    [figure, groupRender],
+  );
+  // Whether any point matched, for the dispatch's "not grouped" badge.
+  useReportGroupColouring(groupRender, figure, groupedFigure);
+
+  // One stacked subplot per gene on screen. The single-gene picker mode draws
+  // one lane whatever the collection holds, which the count already says.
+  const genesDrawn = figure?.genesDrawn ?? 0;
+  const contentDemand = useMemo(
+    () => demandForItems(genesDrawn, GENE_TRACK_PX, LOLLIPOP_CHROME_PX),
+    [genesDrawn],
+  );
+
+  const singleGene = useSinglePicker ? selectedGene != null : genesInData.length === 1;
+  // Themed once per figure so the annotation layer can memoise on them.
+  const plotData = useMemo(
+    () => (groupedFigure ? applyDataTheme(groupedFigure.data, isDark, theme) : null),
+    [groupedFigure, isDark, theme],
+  );
+  const plotLayout = useMemo(
+    () => (groupedFigure ? applyLayoutTheme(groupedFigure.layout as any, isDark, theme) : null),
+    [groupedFigure, isDark, theme],
+  );
+  // Chart annotations, on a single gene only: several genes stack one y
+  // axis per gene under the same component. Slot 3 of `customdata` is the
+  // label when one is bound, which is what marked points are keyed on;
+  // without a label they are stored as coordinates.
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: supportsAdvancedVizAnnotation(metadata) && singleGene,
+    data: plotData,
+    layout: plotLayout,
+    pointIdIndex: 3,
+    pointIdColumn: config.label_col || undefined,
+  });
+
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Lollipop plot'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
+      contentDemand={contentDemand}
       loading={loading}
       error={error}
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
+      badges={annotations.badges}
       estimated={estimated}
     >
-      {figure ? (
-        <AdvancedVizPlot
-          data={applyDataTheme(figure.data, isDark, theme) as any}
-          layout={applyLayoutTheme(figure.layout as any, isDark, theme) as any}
-          useResizeHandler
-          style={{ width: '100%', height: '100%' }}
-          config={{ displaylogo: false, responsive: true } as any}
-        />
+      {groupedFigure ? (
+        <>
+          <AdvancedVizPlot
+            data={annotations.data as any}
+            layout={annotations.layout as any}
+            useResizeHandler
+            style={{ width: '100%', height: '100%' }}
+            config={{ displaylogo: false, responsive: true } as any}
+            {...annotations.plotProps()}
+          />
+          {annotations.toolbar}
+        </>
       ) : null}
     </AdvancedVizFrame>
   );

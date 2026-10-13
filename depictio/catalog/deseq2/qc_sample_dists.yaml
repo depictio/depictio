@@ -1,0 +1,20 @@
+id: deseq2_qc_sample_dists
+name: DESeq2 QC sample distances
+mode: qc/distance
+description: >-
+  The square sample-by-sample Euclidean distance matrix nf-core's own
+  deseq2_qc.r clusters its QC dendrogram on, read from the file the pipeline
+  publishes. Symmetric with a zero diagonal, so a clustered heatmap over it
+  reproduces the dendrogram the report draws.
+find:
+  path_glob: "**/*sample.dists.txt"
+  path_glob_alt: # MultiQC custom-content flavour written by chipseq and atacseq
+    - "**/*sample.dists_mqc.tsv"
+recipe: deseq2/qc_sample_dists.py
+fixture: qc_sample_dists.tsv
+renders_as:
+  - id: qc_distance_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    roles: { index: sample }
+  - { component: table }

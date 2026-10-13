@@ -1,0 +1,25 @@
+id: ribowaltz_library_summary
+name: Ribo-seq library quality
+mode: riboseq/summary
+description: >-
+  One row per Ribo-seq library: P-sites assigned, share of CDS P-sites in frame
+  0 and its margin over the other frames, P-site share per region and the CDS
+  enrichment over the length expectation, modal footprint length and its spread.
+find: { path_glob: "**/*.ribowaltz.frames.tsv" }
+recipe: ribowaltz/library_summary.py
+fixture: library_summary.tsv
+renders_as:
+  - id: phasing_plane
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: cds_pct, y: frame0_cds_pct, label: sample, size: psites }
+  - id: library_record
+    component: advanced_viz
+    kind: record_card
+    roles: { id: sample }
+  - { component: card, column: frame0_cds_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: frame_bias, aggregation: min, secondary_layout: threshold, threshold_value: 20, threshold_direction: min, threshold_warn: 10 }
+  - { component: card, column: cds_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: psites, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: modal_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

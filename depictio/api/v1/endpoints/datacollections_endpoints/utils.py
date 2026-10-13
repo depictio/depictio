@@ -11,6 +11,7 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import projects_collection, tokens_collection
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
+from depictio.models.s3_access import ProjectS3Config
 
 
 def generate_join_dict(workflow: dict, project: dict | None = None) -> dict[str, dict[str, dict]]:
@@ -416,18 +417,18 @@ async def _cleanup_s3_delta_table(data_collection_id: str) -> None:
         import boto3
         from botocore.exceptions import ClientError
 
-        # Initialize S3 client for MinIO
+        # Initialize S3 client for the configured store
         s3_client = boto3.client(
             "s3",
-            endpoint_url=settings.minio.endpoint_url,
-            aws_access_key_id=settings.minio.aws_access_key_id,
-            aws_secret_access_key=settings.minio.aws_secret_access_key,
+            endpoint_url=settings.s3.endpoint_url,
+            aws_access_key_id=settings.s3.aws_access_key_id,
+            aws_secret_access_key=settings.s3.aws_secret_access_key,
             region_name="us-east-1",
         )
 
         # Delta table is stored with data_collection_id as the key
         delta_table_prefix = data_collection_id
-        bucket_name = settings.minio.bucket
+        bucket_name = settings.s3.bucket
 
         # Delete all objects in the Delta table directory
         logger.info(f"Deleting Delta table for data collection: {data_collection_id}")
@@ -554,6 +555,195 @@ def _user_can_edit_project(project_dict: dict, user_id: ObjectId, is_admin: bool
     return False
 
 
+def _editable_project_and_token(project_id: str, current_user) -> tuple[ObjectId, dict]:
+    """The project's id and the user's full token document, for a create-DC flow.
+
+    400 for a malformed id, 404 for an unknown project, 403 without edit
+    permission, 401 when the user has no stored token: the CLI helpers call
+    back into the API with it.
+    """
+    try:
+        project_oid = ObjectId(project_id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid project_id: {exc}")
+
+    project_dict = projects_collection.find_one({"_id": project_oid})
+    if not project_dict:
+        raise HTTPException(status_code=404, detail="Project not found.")
+
+    if not _user_can_edit_project(
+        project_dict, current_user.id, getattr(current_user, "is_admin", False)
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have edit permission on this project.",
+        )
+
+    # Any active token for this user will do (the dash flow does the same).
+    full_token = tokens_collection.find_one({"user_id": current_user.id})
+    if not full_token:
+        raise HTTPException(status_code=401, detail="No API token on file for this user.")
+    return project_oid, full_token
+
+
+def _build_table_workflow(
+    *,
+    name: str,
+    description: str,
+    data_type: str,
+    file_format: str,
+    polars_kwargs: dict,
+    lat_column: str | None,
+    lon_column: str | None,
+    scan,
+    location: str,
+):
+    """Construct a single-DC Workflow wrapping a table DC read through ``scan``.
+
+    ``lat_column`` and ``lon_column`` together make it a coordinates table.
+    Returns ``(workflow, data_collection)``.
+    """
+    from depictio.models.models.data_collections import DataCollection, DataCollectionConfig
+    from depictio.models.models.data_collections_types.table import DCTableConfig
+    from depictio.models.models.data_collections_types.table_coordinates import (
+        DCTableCoordinatesConfig,
+    )
+    from depictio.models.models.workflows import (
+        Workflow,
+        WorkflowConfig,
+        WorkflowDataLocation,
+        WorkflowEngine,
+    )
+
+    if lat_column and lon_column:
+        dc_table_config: DCTableConfig = DCTableCoordinatesConfig(
+            format=file_format,
+            polars_kwargs=polars_kwargs,
+            keep_columns=[],
+            columns_description={},
+            lat_column=lat_column,
+            lon_column=lon_column,
+        )
+    else:
+        dc_table_config = DCTableConfig(
+            format=file_format,
+            polars_kwargs=polars_kwargs,
+            keep_columns=[],
+            columns_description={},
+        )
+    dc_config = DataCollectionConfig(
+        type=data_type,
+        metatype="metadata",
+        scan=scan,
+        dc_specific_properties=dc_table_config,
+    )
+    data_collection = DataCollection(
+        data_collection_tag=name.strip(),
+        description=description or "",
+        config=dc_config,
+    )
+
+    # Basic projects can have many DCs in unique workflows; advanced
+    # projects have a real upstream pipeline so we still wrap in one
+    # workflow per DC for parity with the existing Dash code path.
+    timestamp_ms = int(time.time() * 1000)
+    workflow_tag = f"{name.strip()}_workflow_{timestamp_ms}"
+    workflow = Workflow(
+        name=workflow_tag,
+        workflow_tag=workflow_tag,
+        engine=WorkflowEngine(name="python", version="3.12"),
+        config=WorkflowConfig(),
+        data_location=WorkflowDataLocation(structure="flat", locations=[location]),
+        data_collections=[data_collection],
+    )
+    return workflow, data_collection
+
+
+def _push_workflow_and_ingest(
+    *,
+    project_oid: ObjectId,
+    workflow,
+    data_collection,
+    name: str,
+    current_user,
+    full_token: dict,
+    remote_storage_options: ProjectS3Config | None = None,
+) -> dict:
+    """Shared tail of the create-DC flows: atomically $push the workflow onto
+    the project, then run scan + process via the CLI helpers, rolling the
+    $push back on any failure.
+
+    ``remote_storage_options`` carries the project's own storage settings
+    for remote s3:// sources; None means the project has none, and such a
+    source is then read only if it is public or on the instance's
+    ``credentialed_s3_buckets`` list (never with the instance credentials).
+    Uploads never set it: their source is a local temp file.
+
+    Synchronous on purpose (see `_create_dc_from_upload`): the CLI helpers use
+    a sync httpx client back into this same FastAPI process. Callers must
+    dispatch via `asyncio.to_thread`.
+    """
+    from depictio.cli.cli.utils.helpers import process_data_collection_helper
+
+    # Atomically append the new workflow onto the project document.
+    push_result = projects_collection.update_one(
+        {"_id": project_oid},
+        {"$push": {"workflows": workflow.mongo()}},
+    )
+    if push_result.modified_count == 0:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to attach workflow to project (no document modified).",
+        )
+
+    # From here on, any error must roll back the $push: otherwise a
+    # failed scan/process leaves a ghost workflow in the project doc
+    # with no delta table behind it.
+    try:
+        cli_config = _cli_config_with_token(current_user, full_token, remote_storage_options)
+
+        scan_result = process_data_collection_helper(
+            CLI_config=cli_config,
+            wf=workflow,
+            dc_id=str(data_collection.id),
+            mode="scan",
+        )
+        if (scan_result or {}).get("result") != "success":
+            raise HTTPException(
+                status_code=500,
+                detail=f"Scan failed: {(scan_result or {}).get('message', 'unknown error')}",
+            )
+
+        process_result = process_data_collection_helper(
+            CLI_config=cli_config,
+            wf=workflow,
+            dc_id=str(data_collection.id),
+            mode="process",
+            command_parameters={"overwrite": True},
+        )
+        if (process_result or {}).get("result") != "success":
+            raise HTTPException(
+                status_code=500,
+                detail=f"Processing failed: {(process_result or {}).get('message', 'unknown error')}",
+            )
+    except Exception:
+        projects_collection.update_one(
+            {"_id": project_oid},
+            {"$pull": {"workflows": {"_id": ObjectId(str(workflow.id))}}},
+        )
+        # Re-raised as is: a refused or failed remote read (RemoteURLRejected,
+        # RemoteFetchFailed, S3AccessError) reaches its handler in
+        # depictio/api/main.py, which answers 400, 422 or 502 with a code.
+        raise
+
+    return {
+        "success": True,
+        "message": f"Data collection '{name.strip()}' created.",
+        "data_collection_id": str(data_collection.id),
+        "workflow_id": str(workflow.id),
+    }
+
+
 def _create_dc_from_upload(
     *,
     project_id: str,
@@ -588,50 +778,11 @@ def _create_dc_from_upload(
     if not name or not name.strip():
         raise HTTPException(status_code=400, detail="Data collection name is required.")
 
-    # Localised imports — keep API import-time cheap and avoid pulling the
-    # CLI graph until someone actually uploads.
-    from depictio.cli.cli.utils.helpers import process_data_collection_helper
-    from depictio.models.models.cli import CLIConfig, UserBaseCLIConfig
-    from depictio.models.models.data_collections import (
-        DataCollection,
-        DataCollectionConfig,
-        Scan,
-        ScanSingle,
-    )
-    from depictio.models.models.data_collections_types.table import DCTableConfig
-    from depictio.models.models.data_collections_types.table_coordinates import (
-        DCTableCoordinatesConfig,
-    )
-    from depictio.models.models.workflows import (
-        Workflow,
-        WorkflowConfig,
-        WorkflowDataLocation,
-        WorkflowEngine,
-    )
+    # Localised imports: keep API import-time cheap and avoid pulling the
+    # model graph until someone actually uploads.
+    from depictio.models.models.data_collections import Scan, ScanSingle
 
-    try:
-        project_oid = ObjectId(project_id)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid project_id: {exc}")
-
-    project_dict = projects_collection.find_one({"_id": project_oid})
-    if not project_dict:
-        raise HTTPException(status_code=404, detail="Project not found.")
-
-    if not _user_can_edit_project(
-        project_dict, current_user.id, getattr(current_user, "is_admin", False)
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="You don't have edit permission on this project.",
-        )
-
-    # The CLI helpers expect the user's full token document (they call back
-    # into the API with it). Grab any active token for this user — the dash
-    # flow does the same thing.
-    full_token = tokens_collection.find_one({"user_id": current_user.id})
-    if not full_token:
-        raise HTTPException(status_code=401, detail="No API token on file for this user.")
+    project_oid, full_token = _editable_project_and_token(project_id, current_user)
 
     temp_dir = tempfile.mkdtemp(prefix="depictio_upload_")
     try:
@@ -643,118 +794,115 @@ def _create_dc_from_upload(
         polars_kwargs = _build_polars_kwargs(
             file_format, separator, custom_separator, compression, has_header
         )
-
         if lat_column and lon_column:
             _validate_coord_columns_in_file(
                 temp_file_path, file_format, polars_kwargs, lat_column, lon_column
             )
-            dc_table_config: DCTableConfig = DCTableCoordinatesConfig(
-                format=file_format,
-                polars_kwargs=polars_kwargs,
-                keep_columns=[],
-                columns_description={},
-                lat_column=lat_column,
-                lon_column=lon_column,
-            )
-        else:
-            dc_table_config = DCTableConfig(
-                format=file_format,
-                polars_kwargs=polars_kwargs,
-                keep_columns=[],
-                columns_description={},
-            )
-        scan_config = Scan(mode="single", scan_parameters=ScanSingle(filename=temp_file_path))
-        dc_config = DataCollectionConfig(
-            type=data_type,
-            metatype="metadata",
-            scan=scan_config,
-            dc_specific_properties=dc_table_config,
-        )
-        data_collection = DataCollection(
-            data_collection_tag=name.strip(),
-            description=description or "",
-            config=dc_config,
+
+        workflow, data_collection = _build_table_workflow(
+            name=name,
+            description=description,
+            data_type=data_type,
+            file_format=file_format,
+            polars_kwargs=polars_kwargs,
+            lat_column=lat_column,
+            lon_column=lon_column,
+            scan=Scan(mode="single", scan_parameters=ScanSingle(filename=temp_file_path)),
+            location=temp_dir,
         )
 
-        # Basic projects can have many DCs in unique workflows; advanced
-        # projects have a real upstream pipeline so we still wrap in one
-        # workflow per DC for parity with the existing Dash code path.
-        timestamp_ms = int(time.time() * 1000)
-        workflow_tag = f"{name.strip()}_workflow_{timestamp_ms}"
-        workflow = Workflow(
-            name=workflow_tag,
-            workflow_tag=workflow_tag,
-            engine=WorkflowEngine(name="python", version="3.12"),
-            config=WorkflowConfig(),
-            data_location=WorkflowDataLocation(structure="flat", locations=[temp_dir]),
-            data_collections=[data_collection],
+        return _push_workflow_and_ingest(
+            project_oid=project_oid,
+            workflow=workflow,
+            data_collection=data_collection,
+            name=name,
+            current_user=current_user,
+            full_token=full_token,
         )
-
-        # Atomically append the new workflow onto the project document.
-        push_result = projects_collection.update_one(
-            {"_id": project_oid},
-            {"$push": {"workflows": workflow.mongo()}},
-        )
-        if push_result.modified_count == 0:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to attach workflow to project (no document modified).",
-            )
-
-        # From here on, any error must roll back the $push — otherwise a
-        # failed scan/process leaves a ghost workflow in the project doc
-        # with no delta table behind it.
-        try:
-            cli_config = CLIConfig(
-                user=UserBaseCLIConfig(
-                    id=current_user.id,
-                    email=current_user.email,
-                    is_admin=getattr(current_user, "is_admin", False),
-                    token=full_token,
-                ),
-                api_base_url=settings.fastapi.url,
-                s3_storage=settings.minio,
-            )
-
-            scan_result = process_data_collection_helper(
-                CLI_config=cli_config,
-                wf=workflow,
-                dc_id=str(data_collection.id),
-                mode="scan",
-            )
-            if (scan_result or {}).get("result") != "success":
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Scan failed: {(scan_result or {}).get('message', 'unknown error')}",
-                )
-
-            process_result = process_data_collection_helper(
-                CLI_config=cli_config,
-                wf=workflow,
-                dc_id=str(data_collection.id),
-                mode="process",
-                command_parameters={"overwrite": True},
-            )
-            if (process_result or {}).get("result") != "success":
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Processing failed: {(process_result or {}).get('message', 'unknown error')}",
-                )
-        except Exception:
-            projects_collection.update_one(
-                {"_id": project_oid},
-                {"$pull": {"workflows": {"_id": ObjectId(str(workflow.id))}}},
-            )
-            raise
-
-        return {
-            "success": True,
-            "message": f"Data collection '{name.strip()}' created.",
-            "data_collection_id": str(data_collection.id),
-            "workflow_id": str(workflow.id),
-        }
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def _create_dc_from_url(
+    *,
+    project_id: str,
+    name: str,
+    description: str,
+    data_type: str,
+    file_format: str,
+    separator: str,
+    custom_separator: str | None,
+    compression: str,
+    has_header: bool,
+    url: str,
+    current_user,
+    lat_column: str | None = None,
+    lon_column: str | None = None,
+) -> dict:
+    """Create a data collection whose source is a single remote s3:// or https:// URL.
+
+    Mirrors `_create_dc_from_upload` but with no temp file and no size cap:
+    the scan stage registers the URL as the file location and the process
+    stage reads it remotely (RFC remote-data-manifests, phase 1).
+
+    Synchronous on purpose: the CLI helpers called downstream use a sync httpx
+    client back into this same FastAPI process, so running this on the event
+    loop would deadlock. Callers must dispatch via `asyncio.to_thread`.
+    """
+    from depictio.api.v1.remote_fetch import RemoteURLRejected, validate_remote_url
+
+    if not name or not name.strip():
+        raise HTTPException(status_code=400, detail="Data collection name is required.")
+    try:
+        validate_remote_url(url)
+    except RemoteURLRejected as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    # Localised imports: keep API import-time cheap and avoid pulling the
+    # model graph until someone actually creates a URL-backed DC.
+    from depictio.models.models.data_collections import Scan, ScanURL
+
+    project_oid, full_token = _editable_project_and_token(project_id, current_user)
+
+    # The project's own storage settings, the only credentials a private
+    # s3:// URL is read with on the server. Resolved before the workflow $push
+    # so an unusable config fails cleanly with nothing to roll back.
+    from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
+        ProjectStorageUnusable,
+        project_storage_for,
+    )
+
+    try:
+        remote_storage_options = project_storage_for(project_oid)
+    except ProjectStorageUnusable as exc:
+        logger.error(f"Project storage unusable for create_from_url: {exc}")
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+    # Lat/lon column validation needs a local path; phase 1 defers it to
+    # process time.
+    workflow, data_collection = _build_table_workflow(
+        name=name,
+        description=description,
+        data_type=data_type,
+        file_format=file_format,
+        polars_kwargs=_build_polars_kwargs(
+            file_format, separator, custom_separator, compression, has_header
+        ),
+        lat_column=lat_column,
+        lon_column=lon_column,
+        scan=Scan(mode="url", scan_parameters=ScanURL(url=url)),
+        location=url,
+    )
+
+    return _push_workflow_and_ingest(
+        project_oid=project_oid,
+        workflow=workflow,
+        data_collection=data_collection,
+        name=name,
+        current_user=current_user,
+        full_token=full_token,
+        remote_storage_options=remote_storage_options,
+    )
 
 
 # =============================================================================
@@ -922,17 +1070,17 @@ async def _ensure_user_cli_token(current_user) -> None:
     await _add_token(token_data)
 
 
-def _build_cli_config_for_user(current_user):
-    """Build a CLIConfig for in-process processor calls.
+def _cli_config_with_token(
+    current_user, full_token: dict, remote_storage_options: ProjectS3Config | None = None
+):
+    """A CLIConfig for in-process processor calls, signed with ``full_token``.
 
-    The CLI helpers expect a stored token doc (they call back into the API
-    over httpx). Mirrors the table-DC flow at ``_create_dc_from_upload``.
+    ``remote_storage_options`` carries a project's own storage settings for
+    remote s3:// sources (see ``project_storage_for``); the instance S3
+    config stays the Delta write target either way, and is never used to
+    read a user-supplied location on the server.
     """
     from depictio.models.models.cli import CLIConfig, UserBaseCLIConfig
-
-    full_token = tokens_collection.find_one({"user_id": current_user.id})
-    if not full_token:
-        raise HTTPException(status_code=401, detail="No API token on file for this user.")
 
     return CLIConfig(
         user=UserBaseCLIConfig(
@@ -942,8 +1090,22 @@ def _build_cli_config_for_user(current_user):
             token=full_token,
         ),
         api_base_url=settings.fastapi.url,
-        s3_storage=settings.minio,
+        s3_storage=settings.s3,
+        remote_storage_options=remote_storage_options,
     )
+
+
+def _build_cli_config_for_user(current_user, remote_storage_options: ProjectS3Config | None = None):
+    """Build a CLIConfig for in-process processor calls, with the user's stored token.
+
+    The CLI helpers expect a stored token doc (they call back into the API
+    over httpx); 401 when the user has none. See ``_cli_config_with_token``
+    for ``remote_storage_options``.
+    """
+    full_token = tokens_collection.find_one({"user_id": current_user.id})
+    if not full_token:
+        raise HTTPException(status_code=401, detail="No API token on file for this user.")
+    return _cli_config_with_token(current_user, full_token, remote_storage_options)
 
 
 def _check_multiqc_uniformity_from_uploads(

@@ -1,0 +1,148 @@
+# Contact map: one tab of the advanced-visualisation showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+#
+# The tab opens on a chromosome rather than a window on purpose. The peak
+# track's `default_region: chr8` emits a chromosome filter with no range; a
+# range-less filter does not flip the matrix to a triangle by itself, so
+# `display: triangle` is pinned here. The whole-collection path draws the
+# coarsest partition (40 kb) over the locus, and the first zoom re-reads the
+# zoomed window through the server at the resolution that fits it. The locus
+# section tab opens on a window instead, so the two tabs show both entry points.
+# The navigator opens zoomed on chr8 as well and zooms itself when the reader
+# types a locus or brushes, so the brush is drawn on the region it publishes.
+# The region reaches the matrix through the project's region link
+# (locus_peaks_demo -> contact_map_demo), and the tile recognises it because
+# both collections name the first-bin columns chrom / start.
+title: 'Chromatin contacts (Hi-C)'
+subtitle: 'A multi-resolution Hi-C contact matrix over the MYC, HOXA and IGF2 loci, drawn as a triangle that re-reads a finer resolution as you zoom.'
+icon: 'mdi:grid'
+icon_color: 'grape'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8d77'
+is_main_tab: false
+tab_order: 35
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:grid'
+tab_icon_color: 'grape'
+
+filter_sections:
+  - name: 'Matrix scope'
+    icon: 'mdi:filter-variant'
+    color: 'grape'
+    description: 'Restricts the chromosome the matrix is read from and the peak classes drawn above it'
+
+grid_sections:
+  - name: 'Contact matrix'
+    icon: 'mdi:chart-box-outline'
+    color: 'grape'
+    description: 'A locus navigator above the contact triangle it moves'
+
+components:
+  - tag: text-contact-map
+    index: cmap-text
+    component_type: text
+    title: 'Chromatin contacts'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Contact matrix'
+    body: >
+      A Hi-C matrix drawn as a triangle: x is the position on chr8, y the distance between
+      the two bins, so a TAD reads as a triangle and a loop as a dot at its apex. The
+      collection holds 10, 20 and 40 kb pixels; the tab opens on the 40 kb level for the
+      whole locus, and a zoom (drag on the matrix, or type MYC in the navigator's locus
+      field) re-reads that window at 10 kb. Resolution pins a level, Display flips
+      to the square matrix. Input: the mcool of nf-core/hic, one partition per resolution.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: viz-contact-map-peaks
+    index: 'cmap-peaks'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'locus_peaks_demo'
+    title: 'Locus navigator'
+    description: 'CTCF peaks along chr8, coloured by where they sit. Type a locus or a gene symbol in the header, or brush an interval, to move this track and the matrix below.'
+    section: 'Contact matrix'
+    viz_kind: 'genome_view'
+    config:
+      viz_kind: "genome_view"
+      controls_placement: "header"
+      chr_col: "chrom"
+      pos_col: "start"
+      end_col: "end"
+      score_col: "score"
+      feature_col: "peak_id"
+      category_col: "peak_class"
+      mark: "bar"
+      score_title: "CTCF -log10(q)"
+      assembly: "hg38"
+      default_region: "chr8"
+      region_filter_enabled: true
+    layout: { x: 0, y: 2, w: 8, h: 3 }
+
+  - tag: viz-contact-map
+    index: 'cmap-matrix'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'contact_map_demo'
+    title: 'Contact triangle'
+    description: 'Contacts on the region above, at the resolution that fits the visible span. Zoom to re-read a window at a finer level; the echo line names the level drawn.'
+    section: 'Contact matrix'
+    viz_kind: 'contact_map'
+    config:
+      viz_kind: "contact_map"
+      controls_placement: "header"
+      chrom1_col: "chrom"
+      start1_col: "start"
+      end1_col: "end"
+      chrom2_col: "chrom2"
+      start2_col: "start2"
+      end2_col: "end2"
+      count_col: "count"
+      resolution_col: "resolution"
+      display: "triangle"
+      log_scale: true
+      colour_scale: "Viridis"
+      balance: false
+      max_bins: 500
+    layout: { x: 0, y: 5, w: 8, h: 8 }
+
+  - tag: filter-contact-map-chrom
+    index: cmap-f-chrom
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'contact_map_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'chrom'
+    column_type: 'object'
+    title: 'Chromosome'
+    placement: left
+    section: 'Matrix scope'
+    group: 'Matrix filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:dna'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-contact-map-peak-class
+    index: cmap-f-peak-class
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'locus_peaks_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'peak_class'
+    column_type: 'object'
+    title: 'CTCF peak class'
+    placement: left
+    section: 'Matrix scope'
+    group: 'Matrix filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:shape-outline'
+    layout: { x: 0, y: 3, w: 1, h: 3 }

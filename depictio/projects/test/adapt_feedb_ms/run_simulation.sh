@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run an SVLT virtual-microscopy simulation against a Depictio instance.
 # Each acquisition tick, the svltx-depictio extension (hooked onto
-# session_phenobase.write) exports the PhenoBase table to MinIO as a Delta
+# session_phenobase.write) exports the PhenoBase table to S3 as a Delta
 # table, then POSTs to depictio so connected dashboards refresh.
 #
 # Requires the `svltx-depictio` package installed in $SVLT_ENV and the
@@ -15,11 +15,11 @@
 # (Or skip the CLI config and just `export SVLT_API_TOKEN=<token>` yourself.)
 #
 # Every value below can be overridden by exporting the matching env var first;
-# defaults target a stock local Depictio (FastAPI :8058, MinIO :9000, MinIO
+# defaults target a stock local Depictio (FastAPI :8058, S3 :9000, S3
 # creds minio/minio123).
 #
 # Worktree/dev convenience: if this script lives inside a depictio checkout, it
-# also auto-discovers the instance's ports + MinIO creds (.env.instance), and
+# also auto-discovers the instance's ports + S3 creds (.env.instance), and
 # falls back to the checkout's admin token (depictio/.depictio/admin_config.yaml)
 # when no CLI config is present — all by searching upward from the script's own
 # directory. Run it anywhere else and those files simply aren't found; the CLI
@@ -54,8 +54,9 @@ find_up() {
 }
 
 # --- Instance config (optional) ---------------------------------------------
-# In a worktree, .env.instance provides MINIO_PORT / FASTAPI_PORT /
-# DEPICTIO_MINIO_ROOT_USER / DEPICTIO_MINIO_ROOT_PASSWORD. Absent elsewhere —
+# In a worktree, .env.instance provides S3_PORT / FASTAPI_PORT /
+# DEPICTIO_S3_ROOT_USER / DEPICTIO_S3_ROOT_PASSWORD (an older one carries the
+# legacy MINIO_PORT / DEPICTIO_MINIO_ROOT_* names instead). Absent elsewhere —
 # fall back to stock defaults or the SVLT_* overrides below.
 ENV_INSTANCE="${ENV_INSTANCE:-$(find_up .env.instance || true)}"
 if [[ -n "$ENV_INSTANCE" && -f "$ENV_INSTANCE" ]]; then
@@ -63,7 +64,7 @@ if [[ -n "$ENV_INSTANCE" && -f "$ENV_INSTANCE" ]]; then
     source "$ENV_INSTANCE"
 fi
 
-MINIO_PORT="${MINIO_PORT:-9000}"
+S3_PORT="${S3_PORT:-${MINIO_PORT:-9000}}"
 FASTAPI_PORT="${FASTAPI_PORT:-8058}"
 
 DC_ID="${SVLT_DC_ID:-750a1b2c3d4e5f6a7b8c9d10}"
@@ -77,10 +78,10 @@ SVLT_SCRIPT="${SVLT_SCRIPT:-$EXP_ROOT/proj0039-exp0002-simulate-experiment.py}"
 # SVLT_EXTRA_ARGS="--delay 1 --port 6221".
 SVLT_EXTRA_ARGS="${SVLT_EXTRA_ARGS:-}"
 
-# --- S3 sync -> this instance's MinIO ---------------------------------------
-export SVLT_S3_ENDPOINT="${SVLT_S3_ENDPOINT:-http://localhost:${MINIO_PORT}}"
-export SVLT_S3_KEY="${SVLT_S3_KEY:-${DEPICTIO_MINIO_ROOT_USER:-minio}}"
-export SVLT_S3_SECRET="${SVLT_S3_SECRET:-${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}}"
+# --- S3 sync -> this instance's S3 store ------------------------------------
+export SVLT_S3_ENDPOINT="${SVLT_S3_ENDPOINT:-http://localhost:${S3_PORT}}"
+export SVLT_S3_KEY="${SVLT_S3_KEY:-${DEPICTIO_S3_ROOT_USER:-${DEPICTIO_MINIO_ROOT_USER:-minio}}}"
+export SVLT_S3_SECRET="${SVLT_S3_SECRET:-${DEPICTIO_S3_ROOT_PASSWORD:-${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}}}"
 export SVLT_S3_BUCKET="${SVLT_S3_BUCKET:-depictio-bucket}"
 export SVLT_DC_ID="$DC_ID"
 # This simulator uses PhenoBase.write() directly, so svlt's own sync_to_bucket

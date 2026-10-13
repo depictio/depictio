@@ -1,0 +1,640 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8cc4"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8cc4"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "ref-env-intro",
+      "component_type": "text",
+      "title": "",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": null,
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": null,
+      "order": 1,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "**These CTD values are synthetic.** They are shaped to be plausible for a January campaign and to separate the four habitats, so that the environmental filters on the left have something to act on. They demonstrate environmental filtering and are not for analysis.",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null
+    },
+    {
+      "index": "ref-env-temperature",
+      "component_type": "card",
+      "title": "Temperature (\u00b0C)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Median temperature over the samples in view.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sonde readings",
+      "aggregation": "median",
+      "column_name": "ctd_temperature_c",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": [
+        "box_plot_stats"
+      ],
+      "filter_expr": null,
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:thermometer",
+      "icon_color": "orange",
+      "caption": "median, with its spread",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-env-conductivity",
+      "component_type": "card",
+      "title": "Conductivity (\u00b5S/cm)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Median conductivity over the samples in view.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sonde readings",
+      "aggregation": "median",
+      "column_name": "ctd_conductivity_us_cm",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "histogram",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:flash",
+      "icon_color": "cyan",
+      "caption": "median, with its distribution",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-env-do",
+      "component_type": "card",
+      "title": "Dissolved O\u2082 (mg/L)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Median dissolved o\u2082 over the samples in view.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sonde readings",
+      "aggregation": "median",
+      "column_name": "ctd_do_mg_l",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": [
+        "box_plot_stats"
+      ],
+      "filter_expr": null,
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:water-percent",
+      "icon_color": "blue",
+      "caption": "median, with its spread",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-env-nitrate",
+      "component_type": "card",
+      "title": "Nitrate (mg/L)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Median nitrate over the samples in view.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sonde readings",
+      "aggregation": "median",
+      "column_name": "ctd_nitrate_mg_l",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "histogram",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:molecule",
+      "icon_color": "grape",
+      "caption": "median, with its distribution",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "fdbccbcc-7676-47bf-92e5-28c9e0c35941",
+      "component_type": "figure",
+      "title": "Temperature \u00d7 conductivity",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Profiles",
+      "visu_type": "scatter",
+      "dict_kwargs": {},
+      "mode": "code",
+      "code_content": "grp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('habitat') or {}\nfig = px.scatter(\n    df.to_pandas(),\n    x='ctd_temperature_c', y='ctd_conductivity_us_cm', color=grp_col,\n    color_discrete_map=colors, hover_name='city', custom_data=['sample'],\n)\nfig.update_traces(marker={'size': 14})\nfig.update_layout(\n    xaxis_title='Temperature (\u00b0C)', yaxis_title='Conductivity (\u00b5S/cm)',\n    legend_title_text=None if depictio_group_by else 'Habitat', margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": true,
+      "selection_column": "sample",
+      "font_scale": null,
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-env-box-do",
+      "component_type": "figure",
+      "title": "Dissolved oxygen",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Profiles",
+      "visu_type": "scatter",
+      "dict_kwargs": {},
+      "mode": "code",
+      "code_content": "grp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('habitat') or {}\nfig = px.box(\n    df.to_pandas(),\n    x=grp_col, y='ctd_do_mg_l', color=grp_col,\n    color_discrete_map=colors, points='all',\n)\nfig.update_layout(\n    xaxis_title=None, yaxis_title='Dissolved O\u2082 (mg/L)', showlegend=False,\n    margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "font_scale": null,
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "0c0b3fed-1467-4019-ba96-c58ec3ce9d97",
+      "component_type": "figure",
+      "title": "Nitrate \u00d7 dissolved carbon",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Profiles",
+      "visu_type": "scatter",
+      "dict_kwargs": {},
+      "mode": "code",
+      "code_content": "grp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('habitat') or {}\nfig = px.scatter(\n    df.to_pandas(),\n    x='ctd_nitrate_mg_l', y='ctd_doc_mg_l', color=grp_col,\n    size='ctd_turbidity_ntu', color_discrete_map=colors, hover_name='city', size_max=26,\n    custom_data=['sample'],\n)\nfig.update_layout(\n    xaxis_title='Nitrate (mg/L)', yaxis_title='Dissolved organic carbon (mg/L)',\n    legend_title_text=None if depictio_group_by else 'Habitat', margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": true,
+      "selection_column": "sample",
+      "font_scale": null,
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-env-diversity",
+      "component_type": "figure",
+      "title": "Shannon diversity",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "alpha_diversity_multi_canonical",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cda"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample multi-metric alpha-diversity (Shannon/Observed/Faith PD/Evenness)",
+        "data_collection_tag": "alpha_diversity_multi_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cda"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Diversity under the current environment",
+      "visu_type": "scatter",
+      "dict_kwargs": {},
+      "mode": "code",
+      "code_content": "grp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('habitat') or {}\nfig = px.box(\n    df.to_pandas(),\n    x=grp_col, y='shannon', color=grp_col,\n    color_discrete_map=colors, points='all',\n)\nfig.update_layout(\n    xaxis_title=None, yaxis_title='Shannon index', showlegend=False,\n    margin={'t': 24, 'l': 64, 'r': 16, 'b': 48},\n)\n",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "font_scale": null,
+      "wf_tag": "nextflow/ampliseq"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [],
+  "right_panel_layout_data": [
+    {
+      "i": "box-ref-env-intro",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ref-env-temperature",
+      "x": 0,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-ref-env-conductivity",
+      "x": 2,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-ref-env-do",
+      "x": 4,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-ref-env-nitrate",
+      "x": 6,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-fdbccbcc-7676-47bf-92e5-28c9e0c35941",
+      "x": 0,
+      "y": 0,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ref-env-box-do",
+      "x": 4,
+      "y": 0,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-0c0b3fed-1467-4019-ba96-c58ec3ce9d97",
+      "x": 0,
+      "y": 5,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ref-env-diversity",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "filter_sections": [],
+  "grid_sections": [
+    {
+      "name": "Sonde readings",
+      "icon": "mdi:waves",
+      "color": "cyan",
+      "description": "Synthetic readings, shaped to separate the four habitats",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Profiles",
+      "icon": "mdi:chart-scatter-plot",
+      "color": "cyan",
+      "description": "Temperature against conductivity separates the habitats almost alone",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Diversity under the current environment",
+      "icon": "mdi:chart-bell-curve",
+      "color": "orange",
+      "description": "Shannon per sample; the sonde filters on the left narrow it too",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "category_colors": null,
+  "funnel_filtering": true,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true,
+  "brand_theme": null,
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Environment (CTD)",
+  "subtitle": "How do the habitats differ chemically, and does diversity follow?",
+  "icon": "/assets/images/workflows/nf-core.png",
+  "icon_color": "green",
+  "icon_variant": "filled",
+  "workflow_system": "nf-core",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": false,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-08-29 00:00:00",
+  "creation_time": "2026-10-08 12:18:48",
+  "screenshot_ts": "",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "tab_order": 9,
+  "main_tab_name": null,
+  "tab_icon": "mdi:waves",
+  "tab_icon_color": "cyan",
+  "tab_group": "Data & QC",
+  "parent_dashboard_title": null,
+  "project_realtime": null,
+  "inherited_brand_theme": null,
+  "inherited_category_colors": null,
+  "source_key": null
+}

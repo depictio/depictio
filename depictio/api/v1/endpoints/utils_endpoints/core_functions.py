@@ -1,6 +1,8 @@
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from botocore.exceptions import ClientError
+from bson import ObjectId
 from fastapi import HTTPException
 from mypy_boto3_s3.client import S3Client
 from pydantic import BaseModel
@@ -74,9 +76,11 @@ def create_s3_bucket(s3_client: S3Client, bucket_name: str) -> BucketResponse:
         return BucketResponse(message="Bucket created successfully", bucket_name=bucket_name)
     except ClientError as e:
         error_code = e.response.get("Error", {}).get("Code")
-        # BucketAlreadyOwnedByYou means we already own this bucket - treat as success
-        # This can happen in race conditions during initialization with multiple workers
-        if error_code == "BucketAlreadyOwnedByYou":
+        # BucketAlreadyOwnedByYou / BucketAlreadyExists mean the bucket is already
+        # there - treat as success. Happens in race conditions during initialization
+        # with multiple workers, and on every boot with the bundled SeaweedFS
+        # (S3_BUCKET pre-creates the bucket at container start).
+        if error_code in ("BucketAlreadyOwnedByYou", "BucketAlreadyExists"):
             logger.info(f"Bucket '{bucket_name}' already exists and is owned by us")
             return BucketResponse(message="Bucket already exists", bucket_name=bucket_name)
         logger.error(f"Failed to create bucket '{bucket_name}': {error_code}")
@@ -88,7 +92,7 @@ def create_s3_bucket(s3_client: S3Client, bucket_name: str) -> BucketResponse:
 
 def create_bucket(current_user: UserBeanie) -> BucketResponse:
     """
-    Create a bucket in the MinIO server if it doesn't exist.
+    Create the configured bucket in the S3 store if it doesn't exist.
 
     Args:
         current_user: The user requesting bucket creation, must be an admin
@@ -103,14 +107,47 @@ def create_bucket(current_user: UserBeanie) -> BucketResponse:
         logger.warning(f"Unauthorized bucket creation attempt by user: {current_user.email}")
         raise HTTPException(status_code=403, detail="User is not an admin")
 
-    bucket_name = settings.minio.bucket
+    bucket_name = settings.s3.bucket
 
     if check_bucket_exists(s3_client, bucket_name):
         return BucketResponse(message="Bucket already exists", bucket_name=bucket_name)
     return create_s3_bucket(s3_client, bucket_name)
 
 
-async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -> dict[str, Any]:
+#: A prefix written this recently is never treated as orphaned. Every Delta write
+#: lands on S3 before its ``deltatables`` document exists (the CLI writes the
+#: table, then registers it), so a prefix with no document may just as well be a
+#: table being created right now: reference seeding at boot, a CLI ingest, a
+#: refresh. Deleting it then leaves a collection that is registered with no table,
+#: or never registered at all. An hour is far longer than any write-then-register
+#: gap, and a real orphan only waits one more cleanup cycle.
+ORPHAN_MIN_AGE_SECONDS = 3600
+
+
+def _registered_dc_ids() -> set[str]:
+    """Data collection ids MongoDB knows, from deltatables and MultiQC reports."""
+    registered: set[str] = set()
+    for collection in (deltatables_collection, multiqc_collection):
+        for doc in collection.find({}, {"data_collection_id": 1}):
+            if "data_collection_id" in doc:
+                registered.add(str(doc["data_collection_id"]))
+    return registered
+
+
+def _is_registered(dc_id: str) -> bool:
+    """Whether MongoDB knows ``dc_id`` now. Ids are stored as ObjectId or as string."""
+    query = {"data_collection_id": {"$in": [ObjectId(dc_id), dc_id]}}
+    return any(
+        collection.find_one(query, {"_id": 1}) is not None
+        for collection in (deltatables_collection, multiqc_collection)
+    )
+
+
+async def cleanup_orphaned_s3_files(
+    dry_run: bool = True,
+    force: bool = False,
+    min_age_seconds: int = ORPHAN_MIN_AGE_SECONDS,
+) -> dict[str, Any]:
     """
     Clean up S3 files from data collections that no longer exist in MongoDB.
 
@@ -125,37 +162,29 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
         dry_run: If True, only report what would be deleted without actually deleting
         force: If True, bypass safety check when all prefixes appear orphaned
                (useful when DB was legitimately cleaned but S3 wasn't)
+        min_age_seconds: Keep an unregistered prefix whose newest object is younger
+               than this (see ``ORPHAN_MIN_AGE_SECONDS``). 0 deletes whatever its
+               age, which is only safe when nothing can be writing.
 
     Returns:
         Dict with cleanup results including:
         - deleted_count: Number of files/objects deleted
         - total_size_bytes: Total size of deleted files in bytes
-        - orphaned_prefixes: List of data collection IDs that were orphaned
-        - orphaned_prefixes_count: Count of orphaned data collection prefixes
+        - orphaned_prefixes: List of data collection IDs that were deleted
+        - orphaned_prefixes_count: Count of deleted data collection prefixes
+        - recent_prefixes: Unregistered prefixes kept because they were written recently
         - dry_run: Whether this was a dry run
     """
 
-    bucket_name = settings.minio.bucket
+    bucket_name = settings.s3.bucket
     deleted_count = 0
     total_size_bytes = 0
     orphaned_prefixes = []
 
     try:
-        valid_dc_ids = set()
-
-        # Collect data collection IDs from deltatables
-        cursor = deltatables_collection.find({}, {"data_collection_id": 1})
-        for doc in cursor:
-            if "data_collection_id" in doc:
-                valid_dc_ids.add(str(doc["data_collection_id"]))
-
-        # Collect data collection IDs from multiqc
-        cursor = multiqc_collection.find({}, {"data_collection_id": 1})
-        for doc in cursor:
-            if "data_collection_id" in doc:
-                valid_dc_ids.add(str(doc["data_collection_id"]))
-
-        # List all top-level prefixes in S3 bucket (data collection IDs)
+        # List all top-level prefixes in S3 bucket (data collection IDs). S3 is
+        # listed before MongoDB is read, so a table registered in between counts
+        # as registered rather than orphaned.
         paginator = s3_client.get_paginator("list_objects_v2")
         pages = paginator.paginate(Bucket=bucket_name, Delimiter="/")
 
@@ -169,8 +198,10 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
                     if len(prefix) == 24 and all(c in "0123456789abcdef" for c in prefix.lower()):
                         s3_prefixes.add(prefix)
 
+        valid_dc_ids = _registered_dc_ids()
+
         # Find orphaned prefixes (in S3 but not in MongoDB)
-        orphaned_prefixes = list(s3_prefixes - valid_dc_ids)
+        orphaned_prefixes = sorted(s3_prefixes - valid_dc_ids)
 
         # Safety check: if all prefixes are orphaned, something might be wrong
         if len(s3_prefixes) > 0 and len(orphaned_prefixes) == len(s3_prefixes) and not force:
@@ -195,61 +226,67 @@ async def cleanup_orphaned_s3_files(dry_run: bool = True, force: bool = False) -
             )
 
         # Delete files under orphaned prefixes
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=min_age_seconds)
+        deleted_prefixes: list[str] = []
+        recent_prefixes: list[str] = []
         for dc_id in orphaned_prefixes:
             prefix = f"{dc_id}/"
 
             # List all objects under this prefix
-            objects_to_delete = []
-            pages = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
+            objects = [
+                obj
+                for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix)
+                for obj in page.get("Contents", [])
+            ]
+            if not objects:
+                continue
 
-            for page in pages:
-                if "Contents" in page:
-                    for obj in page["Contents"]:
-                        objects_to_delete.append({"Key": obj["Key"]})
-                        total_size_bytes += obj.get("Size", 0)
-                        deleted_count += 1
+            written_at = [obj["LastModified"] for obj in objects if obj.get("LastModified")]
+            if min_age_seconds > 0 and written_at and max(written_at) > cutoff:
+                recent_prefixes.append(dc_id)
+                continue
+            # A write that finished since MongoDB was read is no orphan either.
+            if _is_registered(dc_id):
+                continue
 
-            if objects_to_delete:
-                if not dry_run:
-                    # Delete objects in batches of 1000 (S3 limit)
-                    batch_size = 1000
-                    for i in range(0, len(objects_to_delete), batch_size):
-                        batch = objects_to_delete[i : i + batch_size]
-                        response = s3_client.delete_objects(
-                            Bucket=bucket_name, Delete={"Objects": batch}
-                        )
+            deleted_prefixes.append(dc_id)
+            deleted_count += len(objects)
+            total_size_bytes += sum(obj.get("Size", 0) for obj in objects)
 
-                        len(response.get("Deleted", []))
-                        errors = response.get("Errors", [])
+            if not dry_run:
+                # Delete objects in batches of 1000 (S3 limit)
+                batch_size = 1000
+                for i in range(0, len(objects), batch_size):
+                    batch = [{"Key": obj["Key"]} for obj in objects[i : i + batch_size]]
+                    response = s3_client.delete_objects(
+                        Bucket=bucket_name, Delete={"Objects": batch}
+                    )
+                    errors = response.get("Errors", [])
+                    if errors:
+                        logger.error(f"Errors deleting objects: {errors}")
 
-                        if errors:
-                            logger.error(f"Errors deleting objects: {errors}")
-                        else:
-                            pass
-                else:
-                    pass
-
-        # Log cleanup summary
-        if orphaned_prefixes:
+        if recent_prefixes:
             logger.info(
-                f"Cleaned up {len(orphaned_prefixes)} orphaned S3 prefixes: "
-                f"{', '.join(orphaned_prefixes[:5])}"
-                + ("..." if len(orphaned_prefixes) > 5 else "")
+                f"Kept {len(recent_prefixes)} unregistered S3 prefixes written in the last "
+                f"{min_age_seconds}s: {', '.join(recent_prefixes[:5])}"
+                + ("..." if len(recent_prefixes) > 5 else "")
             )
 
-        result = {
+        # Log cleanup summary
+        if deleted_prefixes:
+            logger.info(
+                f"Cleaned up {len(deleted_prefixes)} orphaned S3 prefixes: "
+                f"{', '.join(deleted_prefixes[:5])}" + ("..." if len(deleted_prefixes) > 5 else "")
+            )
+
+        return {
             "deleted_count": deleted_count,
             "total_size_bytes": total_size_bytes,
-            "orphaned_prefixes": orphaned_prefixes,
-            "orphaned_prefixes_count": len(orphaned_prefixes),
+            "orphaned_prefixes": deleted_prefixes,
+            "orphaned_prefixes_count": len(deleted_prefixes),
+            "recent_prefixes": recent_prefixes,
             "dry_run": dry_run,
         }
-
-        if dry_run:
-            pass
-        else:
-            pass
-        return result
 
     except Exception as e:
         logger.error(f"Error during S3 cleanup: {e}")

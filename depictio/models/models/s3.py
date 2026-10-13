@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
 
@@ -6,7 +6,9 @@ from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
 class PolarsStorageOptions(BaseModel):
     endpoint_url: str
     aws_access_key_id: str
-    aws_secret_access_key: str
+    # A plain str, as deltalake, polars and boto3 take it, but out of the repr, which is
+    # what a log line holding these options prints (`depictio -vv`).
+    aws_secret_access_key: str = Field(repr=False)
     use_ssl: str = "false"
     signature_version: str = "s3v4"
     region: str = "us-east-1"

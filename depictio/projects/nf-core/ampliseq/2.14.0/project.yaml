@@ -112,6 +112,10 @@ workflows:
             polars_kwargs:
               separator: "\t"
               try_parse_dates: true
+            # Geo capability, orthogonal to metatype: this stays a Metadata
+            # table AND can power Map components (builder listing + prefill).
+            lat_column: "latitude"
+            lon_column: "longitude"
             columns_description:
               "sample": "Sample identifier (SRR accession)"
               "name": "Sample name"

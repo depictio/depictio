@@ -1,0 +1,79 @@
+CONTRASTSHEET_CHECK:
+  python: 3.9.5
+CUSTOM_DUMPSOFTWAREVERSIONS:
+  python: 3.12.0
+  yaml: 6.0.1
+CUSTOM_GETCHROMSIZES:
+  getchromsizes: 1.16.1
+DEXSEQ_ANNOTATION:
+  htseq: 2.0.2
+DEXSEQ_COUNT:
+  htseq: 2.0.2
+DEXSEQ_DTU:
+  bioconductor-dexseq: 1.36.0
+  r-base: 4.0.3
+DEXSEQ_EXON:
+  bioconductor-dexseq: 1.36.0
+  r-base: 4.0.3
+DRIMSEQ_FILTER:
+  bioconductor-drimseq: 1.18.0
+  r-base: 4.0.3
+FASTQC:
+  fastqc: 0.12.1
+GFFREAD_TX2GENE:
+  gffread: 0.12.1
+GTF_2_GFF3:
+  gffread: 0.12.7
+GTF_GENE_FILTER:
+  python: 3.9.5
+MAKE_TRANSCRIPTS_FASTA:
+  rsem: 1.3.1
+  star: 2.7.10a
+MISO_INDEX:
+  misopy: 0.5.4
+  python: ''
+MISO_RUN:
+  misopy: 0.5.4
+MISO_SASHIMI:
+  misopy: 0.5.4
+  python: ''
+MISO_SETTINGS:
+  parsimonious: 0.10.0
+RMATS_POST:
+  rmats: 4.1.2
+SALMON_INDEX:
+  salmon: 1.10.1
+SALMON_QUANT_SALMON:
+  salmon: 1.10.1
+SALMON_QUANT_STAR:
+  salmon: 1.10.1
+SAMPLESHEET_CHECK:
+  python: 3.9.5
+SAMTOOLS_FLAGSTAT:
+  samtools: '1.17'
+SAMTOOLS_IDXSTATS:
+  samtools: '1.17'
+SAMTOOLS_INDEX:
+  samtools: '1.17'
+SAMTOOLS_SORT:
+  samtools: '1.17'
+SAMTOOLS_STATS:
+  samtools: '1.17'
+STAGER:
+  bioconductor-stager: 1.12.0
+  r-base: 4.0.3
+STAR_ALIGN_IGENOMES:
+  gawk: 5.1.0
+  samtools: '1.10'
+  star: 2.6.1d
+SUBREAD_FEATURECOUNTS:
+  subread: 2.0.1
+TRIMGALORE:
+  cutadapt: '3.4'
+  trimgalore: 0.6.7
+TXIMPORT:
+  bioconductor-tximeta: 1.8.0
+  r-base: 4.0.3
+Workflow:
+  Nextflow: 24.04.2
+  nf-core/rnasplice: 1.0.4

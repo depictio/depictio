@@ -1,0 +1,14 @@
+# MACS2: multi-output tool, so it gets a folder. The depictio glue
+# (find / recipe / renders_as) lives in the sibling output YAMLs.
+#
+# The outputs are pipeline-agnostic. `macs2_peaks` reads the caller's own
+# narrowPeak files; the consensus and peak-QC outputs read the merged tables
+# the nf-core ChIP-family pipelines (chipseq, atacseq, cutandrun) write next to
+# them, matched on file name rather than on a pipeline path.
+id: macs2
+name: MACS2
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/macs2/callpeak
+biotools_url: https://bio.tools/macs # from nf-core meta.yml identifier
+description: Model-based analysis of ChIP-seq data, for peak calling.
+homepage: https://github.com/macs3-project/MACS
+stage: peaks

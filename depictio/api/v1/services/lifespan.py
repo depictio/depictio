@@ -5,21 +5,22 @@ Coordinates startup and shutdown tasks including initialization,
 background processing, and cleanup.
 """
 
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import cast
 
 import pymongo
 from beanie import init_beanie
 from fastapi import FastAPI
-from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo.asynchronous.database import AsyncDatabase
+from pymongo import AsyncMongoClient
 
 from depictio.api.v1.configs.config import MONGODB_URL, settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.db_init import wipe_database
 from depictio.api.v1.initialization import run_initialization
 from depictio.api.v1.services.background_tasks import delayed_process_data_collections
+from depictio.api.v1.services.branding import migrate_legacy_logo_files
 from depictio.api.v1.services.events import event_service
 from depictio.api.v1.services.initialization import (
     check_and_set_initialization,
@@ -32,10 +33,12 @@ from depictio.api.v1.services.yaml_sync import (
     start_yaml_sync_services,
     stop_yaml_sync_services,
 )
+from depictio.api.v1.tasks.backup_tasks import start_backup_tasks
 from depictio.api.v1.tasks.cleanup_tasks import start_cleanup_tasks
 from depictio.api.v1.utils import clean_screenshots
 from depictio.models.models.analytics import UserActivity, UserSession
 from depictio.models.models.dashboard_filter_state import DashboardFilterStateBeanie
+from depictio.models.models.google_oauth import OAuthStateBeanie
 from depictio.models.models.projects import ProjectBeanie
 from depictio.models.models.users import (
     GroupBeanie,
@@ -47,15 +50,18 @@ from depictio.models.models.users import (
 WORKER_ID = os.getpid()
 
 
-async def init_motor_beanie() -> None:
-    """Initialize Motor (async MongoDB client) and Beanie ODM.
+async def init_pymongo_beanie() -> AsyncMongoClient:
+    """Initialize the async MongoDB client (pymongo) and Beanie ODM.
+
+    Returns the client so the caller closes it on shutdown: an unclosed
+    AsyncMongoClient leaves its monitor tasks on the event loop.
 
     Connection pool sizing:
     - maxPoolSize: 25 per worker (4 workers = ~100 total connections)
     - minPoolSize: 5 per worker (maintains 20 baseline connections)
     - Prevents connection exhaustion under load in K8s environment
     """
-    client = AsyncIOMotorClient(
+    client: AsyncMongoClient = AsyncMongoClient(
         MONGODB_URL,
         maxPoolSize=25,  # Limit per worker to prevent exhaustion
         minPoolSize=5,  # Maintain baseline connections
@@ -63,52 +69,61 @@ async def init_motor_beanie() -> None:
         waitQueueTimeoutMS=5000,  # Fail fast if pool exhausted
     )
     await init_beanie(
-        database=cast(AsyncDatabase, client[settings.mongodb.db_name]),
+        database=client[settings.mongodb.db_name],
         document_models=[
             TokenBeanie,
             GroupBeanie,
             UserBeanie,
             MagicLinkTicketBeanie,
+            OAuthStateBeanie,
             ProjectBeanie,
             UserSession,
             UserActivity,
             DashboardFilterStateBeanie,
         ],
     )
+    return client
 
 
-async def handle_initialization() -> bool:
+async def handle_initialization() -> tuple[bool, AsyncMongoClient]:
     """
     Handle application initialization with worker coordination.
 
+    The init lock is taken before Beanie starts, because Beanie creates its
+    indexes as it initialises and the lock winner empties the database under a
+    wipe. An index created before that is lost with it, and a worker still
+    creating one fails with DatabaseDropPending (seen on EMBL dev, where that
+    worker then hung instead of exiting). So the winner wipes before its own
+    Beanie start, and every other worker waits for the whole initialization
+    before it starts Beanie.
+
     Returns:
-        True if this worker performed initialization, False otherwise
+        Whether this worker performed initialization, and the client to close on
+        shutdown
     """
     # Check if this worker should perform initialization
     should_initialize = await check_and_set_initialization()
 
-    # Only the winning worker clears stale markers during wipe
-    if should_initialize and settings.mongodb.wipe:
-        logger.info(f"Worker {WORKER_ID}: Clearing initialization markers for wipe")
-        from depictio.api.v1.db import initialization_collection
-
-        initialization_collection.delete_many({"_id": {"$ne": "init_lock"}})
-
-    if should_initialize:
-        logger.info(f"Worker {WORKER_ID}: Running initialization...")
-        try:
-            await run_initialization()
-            await mark_initialization_complete()
-            await clean_screenshots()
-            logger.info(f"Worker {WORKER_ID}: Initialization completed successfully")
-        except Exception as e:
-            logger.error(f"Worker {WORKER_ID}: Initialization failed: {e}")
-            await cleanup_failed_initialization()
-            raise
-    else:
+    if not should_initialize:
         await wait_for_initialization_complete()
+        return False, await init_pymongo_beanie()
 
-    return should_initialize
+    logger.info(f"Worker {WORKER_ID}: Running initialization...")
+    try:
+        if settings.mongodb.wipe:
+            await wipe_database()
+
+        mongo_client = await init_pymongo_beanie()
+        await run_initialization()
+        await mark_initialization_complete()
+        await clean_screenshots()
+        logger.info(f"Worker {WORKER_ID}: Initialization completed successfully")
+    except Exception as e:
+        logger.error(f"Worker {WORKER_ID}: Initialization failed: {e}")
+        await cleanup_failed_initialization()
+        raise
+
+    return True, mongo_client
 
 
 def start_background_services(should_initialize: bool):
@@ -131,6 +146,11 @@ def start_background_services(should_initialize: bool):
     # Start cleanup tasks on every worker
     logger.info(f"Worker {WORKER_ID}: Starting cleanup tasks")
     start_cleanup_tasks()
+
+    # Scheduled backups. Started on every worker even when the schedule is off,
+    # so enabling it from the admin UI takes effect without a restart; the due
+    # time is claimed in MongoDB, so only one worker takes each backup.
+    start_backup_tasks()
 
     return background_task
 
@@ -213,25 +233,83 @@ async def stop_event_services() -> None:
         await event_service.stop()
 
 
+def start_core_indexes(should_initialize: bool) -> None:
+    """Create indexes on the always-in-use collections. Never fails boot.
+
+    Kept out of ``start_monitoring_storage`` on purpose: that one returns early
+    when monitoring is disabled, and these indexes are not tied to any feature
+    flag — their absence just means collection scans.
+    """
+    if not should_initialize:
+        return
+    try:
+        from depictio.api.v1.core_indexes import ensure_core_indexes
+
+        ensure_core_indexes()
+        logger.info(f"Worker {WORKER_ID}: Core indexes ready")
+    except Exception as exc:
+        logger.warning(f"Worker {WORKER_ID}: Core index setup failed: {exc}")
+
+
+def start_dashboard_version_storage(should_initialize: bool) -> None:
+    """Create the dashboard version-ledger indexes. Never fails boot."""
+    if not (settings.dashboard_versions.enabled and should_initialize):
+        return
+    try:
+        from depictio.api.v1.endpoints.dashboards_endpoints.version_store import (
+            ensure_dashboard_version_storage,
+        )
+
+        ensure_dashboard_version_storage()
+        logger.info(f"Worker {WORKER_ID}: Dashboard version storage ready")
+    except Exception as exc:
+        logger.warning(f"Worker {WORKER_ID}: Dashboard version storage setup failed: {exc}")
+
+
 def start_monitoring_storage(should_initialize: bool) -> None:
-    """Set up the monitoring ledger.
+    """Set up the monitoring ledger and the job store.
 
     Index + capped-collection creation runs only on the initializing worker (no
     need for N workers to race), but the app-log handler attaches in every API
     worker so each process's logs are captured. Never fails boot.
+
+    Monitoring and jobs share this hook but not their enable flags — a
+    deployment can reasonably want job offloading without the admin ledger, or
+    the reverse — so each is guarded separately.
     """
-    if not settings.monitoring.enabled:
+    if settings.monitoring.enabled:
+        try:
+            from depictio.api.v1.monitoring.log_handler import install_app_log_handler
+            from depictio.api.v1.monitoring.store import ensure_monitoring_storage
+
+            if should_initialize:
+                ensure_monitoring_storage()
+            install_app_log_handler(source="api")
+            logger.info(f"Worker {WORKER_ID}: Monitoring storage ready")
+        except Exception as exc:
+            logger.warning(f"Worker {WORKER_ID}: Monitoring storage setup failed: {exc}")
+
+    if settings.jobs.enabled:
+        try:
+            from depictio.api.v1.jobs.store import ensure_jobs_storage
+
+            if should_initialize:
+                ensure_jobs_storage()
+            logger.info(f"Worker {WORKER_ID}: Jobs storage ready")
+        except Exception as exc:
+            logger.warning(f"Worker {WORKER_ID}: Jobs storage setup failed: {exc}")
+
+
+def start_comment_indexes(should_initialize: bool) -> None:
+    """Create the comment-thread indexes on the initializing worker. Never fails boot."""
+    if not should_initialize:
         return
     try:
-        from depictio.api.v1.monitoring.log_handler import install_app_log_handler
-        from depictio.api.v1.monitoring.store import ensure_monitoring_storage
+        from depictio.api.v1.endpoints.comments_endpoints.indexes import ensure_comment_indexes
 
-        if should_initialize:
-            ensure_monitoring_storage()
-        install_app_log_handler(source="api")
-        logger.info(f"Worker {WORKER_ID}: Monitoring storage ready")
+        ensure_comment_indexes()
     except Exception as exc:
-        logger.warning(f"Worker {WORKER_ID}: Monitoring storage setup failed: {exc}")
+        logger.warning(f"Worker {WORKER_ID}: Comment index setup failed: {exc}")
 
 
 def start_installation_telemetry() -> None:
@@ -249,6 +327,29 @@ def start_installation_telemetry() -> None:
         start_telemetry()
     except Exception as exc:
         logger.warning(f"Worker {WORKER_ID}: Telemetry startup failed: {exc}")
+
+
+def start_version_check() -> asyncio.Task | None:
+    """Start the release-check loop. Never fails boot.
+
+    Like telemetry it ignores ``should_initialize`` and runs in every worker, with
+    a MongoDB claim deciding which one asks GitHub (see
+    ``services/version_check.py``). Returns the task so the lifespan can keep a
+    reference (the event loop holds tasks weakly) and cancel it on shutdown.
+
+    Not started at all when the operator forced the check off, which is also how
+    the test suite keeps real network checks out (see ``tests/conftest.py``). With
+    the variable unset the loop starts and re-reads the admin's choice each tick.
+    """
+    if settings.version_check.enabled is False:
+        return None
+    try:
+        from depictio.api.v1.services.version_check import periodic_version_check
+
+        return asyncio.create_task(periodic_version_check())
+    except Exception as exc:
+        logger.warning(f"Worker {WORKER_ID}: Version check startup failed: {exc}")
+        return None
 
 
 def start_multiqc_prewarm(should_initialize: bool) -> None:
@@ -336,17 +437,27 @@ async def lifespan(_app: FastAPI):
     - Real-time event services
     """
     # Startup
-    await init_motor_beanie()
-    should_initialize = await handle_initialization()
+    should_initialize, mongo_client = await handle_initialization()
+    # Deliberately outside the `should_initialize` branch: an already-initialised
+    # deployment never re-runs initialization, and it is exactly the deployment
+    # whose logos are still on the filesystem. No-op once they have moved.
+    migrate_legacy_logo_files()
     background_task = start_background_services(should_initialize)
     start_yaml_services(should_initialize)
     await start_event_services(should_initialize)
+    start_core_indexes(should_initialize)
+    start_dashboard_version_storage(should_initialize)
     start_monitoring_storage(should_initialize)
+    start_comment_indexes(should_initialize)
     start_multiqc_prewarm(should_initialize)
     start_installation_telemetry()
+    version_check_task = start_version_check()
 
     yield
 
     # Shutdown
+    if version_check_task:
+        version_check_task.cancel()
     await stop_event_services()
     stop_background_services(background_task, should_initialize)
+    await mongo_client.close()

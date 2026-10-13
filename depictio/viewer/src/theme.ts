@@ -1,20 +1,16 @@
-import { createTheme, MantineColorsTuple } from '@mantine/core';
-
 /**
- * Depictio Mantine theme. Mirrors the Dash `MantineProvider` config in
- * depictio/dash/layouts/shared_app_shell.py:create_app_shell so the viewer
- * renders with identical tokens to the Dash app.
+ * Depictio Mantine theme.
  *
- * TODO: if Depictio's Dash app customizes colors via an env-driven config,
- * read the same source here.
+ * The implementation lives in `depictio-react-core/brandTheme` so every entry
+ * point that mounts its own `MantineProvider` — the main SPA, the standalone
+ * catalog-preview bundle, the dev harnesses — builds the same theme from the
+ * same brand definition. This module is a thin re-export kept in place so the
+ * existing `from './theme'` imports keep working.
  */
-export const depictioTheme = createTheme({
-  fontFamily:
-    '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif',
-  fontFamilyMonospace: 'Menlo, Monaco, Consolas, "Courier New", monospace',
-  defaultRadius: 'md',
-  primaryColor: 'blue',
-  // Headings use the normal sans stack — the Virgil hand-drawn font is opt-in
-  // per-place (e.g. AuthCard's "Welcome to Depictio") via inline style, not the
-  // global default.
-});
+
+export {
+  brandCssVariablesResolver,
+  buildDepictioTheme,
+  depictioTheme,
+} from 'depictio-react-core';
+export type { BrandTheme, DepictioThemeOptions } from 'depictio-react-core';

@@ -1,0 +1,242 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d63"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d63"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "cm-text",
+      "component_type": "text",
+      "title": "Benchmark error profile",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Error profile",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "One row per caller, one column per outcome against the truth set: true positives, false positives, false negatives. The shade is normalised per caller so a caller with many more calls stays comparable, and the label is the raw count. Switch the normalisation in the tile header to compare callers per outcome instead. Counts as nf-core/variantbenchmarking reports them.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "cm-matrix",
+      "component_type": "advanced_viz",
+      "title": "Outcome counts per caller",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "benchmark_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d60"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic per-caller benchmark summary (precision/recall/F1 + counts + CIs)",
+        "data_collection_tag": "benchmark_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d60"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "True positive, false positive and false negative counts per caller, shaded per caller.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Error profile",
+      "viz_kind": "confusion_matrix",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "confusion_matrix",
+        "label_col": "tool",
+        "tp_col": "tp",
+        "fp_col": "fp",
+        "fn_col": "fn",
+        "tn_col": null,
+        "normalize": false,
+        "normalize_mode": "per_caller",
+        "colorscale": "Blues"
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "cm-f-tool",
+      "component_type": "interactive",
+      "title": "Caller",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "benchmark_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d60"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic per-caller benchmark summary (precision/recall/F1 + counts + CIs)",
+        "data_collection_tag": "benchmark_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d60"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "Caller scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "tool",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Caller filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-cm-f-tool",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-cm-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-cm-matrix",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Benchmark error profile",
+  "subtitle": "True positives, false positives and false negatives per caller",
+  "icon": "mdi:alert-outline",
+  "icon_color": "blue",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 26,
+  "main_tab_name": null,
+  "tab_icon": "mdi:alert-outline",
+  "tab_icon_color": "blue",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Caller scope",
+      "icon": "mdi:filter-variant",
+      "color": "blue",
+      "description": "Restricts which callers are drawn",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Error profile",
+      "icon": "mdi:alert-outline",
+      "color": "blue",
+      "description": "Where each caller gains and loses calls against the truth set",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

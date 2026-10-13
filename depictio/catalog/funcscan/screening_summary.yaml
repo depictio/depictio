@@ -1,0 +1,94 @@
+id: funcscan_screening_summary
+name: Screening hub
+mode: screening/summary
+description: >-
+  One row per sample with the headline count of every nf-core/funcscan screen
+  that produced a result: resistance-gene hits and distinct genes, antimicrobial
+  peptide candidates and how many reach high confidence, biosynthetic gene
+  cluster regions and product classes, CAZyme genes and families. The four
+  screens share no table of their own, so this is the collection every sample
+  filter and every cross-screen comparison hangs off.
+# The hub is derived from whichever screens ran, so any one of the four
+# aggregated reports is enough to recognise the run.
+find:
+  path_glob: "**/hamronization_summarize/*combined_report.tsv"
+  path_glob_alt:
+    - "**/hamronization/*combined_report.tsv"
+    - "**/ampcombi2/Ampcombi_summary.tsv"
+    - "**/combgc/combgc_complete_summary.tsv"
+    - "**/cazyme_annotation/*/*_overview.tsv"
+recipe: funcscan/screening_summary.py
+fixture: screening_summary.tsv
+renders_as:
+  # Resistome load against carbohydrate-degradation capacity: the two screens
+  # that scale with assembly size, so a sample far off the cloud is either
+  # unusually resistant or unusually poorly assembled. Size is the BGC count
+  # and the lasso emits the sample the rest of the dashboard filters on. The
+  # colour channel is left to the tile: every string column here is the sample
+  # itself, so a colour role would only repeat the label, while a numeric
+  # `color_col` on the tile carries the third screen.
+  - id: screen_scatter
+    component: advanced_viz
+    kind: scatter_xy
+    roles: {x: arg_hits, y: cazymes, label: sample, size: bgc_regions}
+  # The four screens differ by two orders of magnitude, so the bars need a log
+  # axis; a sample missing a colour returned nothing for that screen.
+  - id: screen_composition
+    component: figure
+    code: |
+      # The colour channel belongs to the screen here, so the dashboard's
+      # analysis groups take the facet axis instead: one band of samples per
+      # group. Spread into the reshape below too, or the unpivot would drop the
+      # annotation column before the facet could read it.
+      index_cols = ["sample"] + [c for c in depictio_group_by if c != "sample"]
+      grp_col = depictio_group_by[0] if depictio_group_by else None
+
+      # wide -> long so each screen becomes its own bar colour
+      df_modified = df.unpivot(
+          index=index_cols,
+          on=["arg_hits", "amp_candidates", "bgc_regions", "cazymes"],
+          variable_name="screen",
+          value_name="findings",
+      ).filter(pl.col("findings") > 0)
+
+      labels = {
+          "arg_hits": "ARG hits",
+          "amp_candidates": "AMP candidates",
+          "bgc_regions": "BGC regions",
+          "cazymes": "CAZymes",
+      }
+      df_modified = df_modified.with_columns(
+          pl.col("screen").replace_strict(labels, default=pl.col("screen")).alias("screen")
+      )
+
+      fig = px.bar(
+          df_modified.to_pandas(),
+          x="sample",
+          y="findings",
+          color="screen",
+          barmode="group",
+          log_y=True,
+          facet_col=grp_col,
+          category_orders={"screen": list(labels.values())},
+      )
+      fig.update_layout(
+          yaxis_title="Findings (log scale)",
+          legend_title_text="Screen",
+          margin={"t": 24, "l": 56, "r": 16, "b": 80},
+      )
+      if grp_col:
+          # Each panel keeps only its own samples, and its title is the group
+          # name rather than the annotation column's name and an equals sign.
+          fig.update_xaxes(matches=None, showticklabels=True, title_text="")
+          fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
+      else:
+          fig.update_layout(xaxis_title="Sample")
+  - { component: card, column: arg_hits, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 4 }
+  - { component: card, column: arg_genes, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 4 }
+  - { component: card, column: amp_candidates, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: amp_high_confidence, aggregation: sum, secondary_layout: composition, breakdown_col: sample, top_n_count: 4 }
+  - { component: card, column: bgc_regions, aggregation: sum, secondary_layout: donut, breakdown_col: sample, top_n_count: 4 }
+  - { component: card, column: bgc_classes, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 4 }
+  - { component: card, column: cazymes, aggregation: average, secondary_layout: gauge, coverage_max: 1500.0 }
+  - { component: card, column: cazyme_families, aggregation: average, secondary_layout: histogram }
+  - { component: table, row_selection_enabled: true, row_selection_column: sample }

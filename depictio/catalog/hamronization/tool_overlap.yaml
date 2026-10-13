@@ -1,0 +1,15 @@
+id: hamronization_tool_overlap
+name: Tool concordance
+mode: arg/concordance
+description: >-
+  Contig by screening-tool membership matrix, one 0/1 column per ARG tool.
+  Concordance is scored on the contig because every tool has its own gene
+  vocabulary while the contig id is shared.
+find:
+  path_glob: "**/hamronization_summarize/*combined_report.tsv"
+  path_glob_alt: ["**/hamronization/*combined_report.tsv"]
+recipe: hamronization/tool_overlap.py
+fixture: tool_overlap.tsv
+renders_as:
+  - { id: arg_upset, component: advanced_viz, kind: upset_plot }
+  - { component: table }

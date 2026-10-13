@@ -1,0 +1,39 @@
+id: gtdbtk_summary
+name: Bin taxonomy
+mode: summary
+description: >-
+  Which organism each recovered bin is, placed against the Genome Taxonomy
+  Database. The lineage is split into one column per rank, so a phylum becomes
+  a filter that reaches every other tile and the deepest rank a bin reached
+  becomes a readable number instead of a string to squint at.
+find:
+  path_glob: "**/classify/*.summary.tsv"
+  path_glob_alt:
+    - "**/gtdbtk*.bac*.summary.tsv"
+    - "**/gtdbtk*.ar*.summary.tsv"
+    - "**/*.bac*.summary.tsv"
+    - "**/*.ar*.summary.tsv"
+recipe: gtdbtk/summary.py
+fixture: summary.tsv
+renders_as:
+  - { id: lineage_sunburst, component: advanced_viz, kind: sunburst,
+      roles: {ranks: [domain, phylum, class_name, order, family, genus], abundance: bin_count} }
+  - { id: assembler_binner_phylum, component: advanced_viz, kind: sankey,
+      roles: {steps: [assembler, binner, phylum]} }
+  - { id: ani_vs_alignment, component: advanced_viz, kind: scatter_xy,
+      roles: {x: closest_ani, y: closest_af, label: bin_id, color: phylum} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: phylum, y: bin_count, color: binner, title: Bins recovered per phylum} }
+  - { component: card, column: bin_id, aggregation: nunique,
+      secondary_layout: top_n, breakdown_col: phylum, top_n_count: 5 }
+  - { component: card, column: species, aggregation: nunique,
+      secondary_layout: top_n, breakdown_col: genus, top_n_count: 5 }
+  - { component: card, column: bin_id, aggregation: nunique,
+      secondary_layout: donut, breakdown_col: rank_assigned }
+  - { component: card, column: closest_ani, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  # closest_af and not msa_percent: GTDB-Tk fills msa_percent only on the
+  # pplacer path, and a run classified through ANI screening leaves it empty
+  # for every bin, which makes a card over it a column of blanks.
+  - { component: card, column: closest_af, aggregation: average,
+      aggregations: [box_plot_stats], secondary_layout: histogram }
+  - { component: table }

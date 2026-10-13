@@ -1,0 +1,7 @@
+Sample_Name	Library_ID	Lane	Colour_Chemistry	SeqType	Organism	Strandedness	UDG_Treatment	R1	R2	BAM
+COD076	COD076E1bL1	8	4	PE	Gadus_morhua	double	none	s3://nf-core-awsmegatests/eager/ENA_Data_Fish/ERR1943600_1.fastq.gz	s3://nf-core-awsmegatests/eager/ENA_Data_Fish/ERR1943600_2.fastq.gz	NA
+COD076	COD076E1bL1	6	4	PE	Gadus_morhua	double	none	s3://nf-core-awsmegatests/eager/ENA_Data_Fish/ERR1943601_1.fastq.gz	s3://nf-core-awsmegatests/eager/ENA_Data_Fish/ERR1943601_2.fastq.gz	NA
+COD076	COD076E1bL1	1	4	PE	Gadus_morhua	double	none	s3://nf-core-awsmegatests/eager/ENA_Data_Fish/ERR1943602_1.fastq.gz	s3://nf-core-awsmegatests/eager/ENA_Data_Fish/ERR1943602_2.fastq.gz	NA
+COD092	COD092E1bL1i69	6	4	PE	Gadus_morhua	double	none	s3://nf-core-awsmegatests/eager/ENA_Data_Fish/ERR1943607_1.fastq.gz	s3://nf-core-awsmegatests/eager/ENA_Data_Fish/ERR1943607_2.fastq.gz	NA
+COD092	COD092E1bL1i69	7	4	PE	Gadus_morhua	double	none	s3://nf-core-awsmegatests/eager/ENA_Data_Fish/ERR1943608_1.fastq.gz	s3://nf-core-awsmegatests/eager/ENA_Data_Fish/ERR1943608_2.fastq.gz	NA
+COD092	COD092E1bL1i69	8	4	PE	Gadus_morhua	double	none	s3://nf-core-awsmegatests/eager/ENA_Data_Fish/ERR1943609_1.fastq.gz	s3://nf-core-awsmegatests/eager/ENA_Data_Fish/ERR1943609_2.fastq.gz	NA

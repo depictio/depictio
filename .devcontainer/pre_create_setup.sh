@@ -79,8 +79,8 @@ if [ ! -f docker-compose/.env ]; then
 # Auto-generated default configuration for Codespaces/new setups
 DEPICTIO_CONTEXT=server
 DEPICTIO_LOGGING_VERBOSITY_LEVEL=DEBUG
-DEPICTIO_MINIO_ROOT_USER=minio
-DEPICTIO_MINIO_ROOT_PASSWORD=minio123
+DEPICTIO_S3_ROOT_USER=minio
+DEPICTIO_S3_ROOT_PASSWORD=minio123
 DEPICTIO_MONGODB_WIPE=false
 DEV_MODE=true
 DEPICTIO_PLAYWRIGHT_DEV_MODE=false
@@ -96,7 +96,7 @@ echo ""
 echo "📁 Creating instance-specific data directories..."
 DATA_BASE_DIR="data/${COMPOSE_PROJECT_NAME}"
 
-mkdir -p "${DATA_BASE_DIR}"/{depictioDB,minio_data,redis,cache,prof_files}
+mkdir -p "${DATA_BASE_DIR}"/{depictioDB,seaweedfs_data,redis,cache,prof_files}
 chmod -R 775 "${DATA_BASE_DIR}"
 
 echo "   Created: ${DATA_BASE_DIR}"
@@ -153,5 +153,5 @@ echo "🌐 Your services will be available at:"
 echo "   MongoDB:      localhost:${MONGO_PORT}"
 echo "   FastAPI:      localhost:${FASTAPI_PORT}"
 echo "   Viewer:       localhost:${VIEWER_DEV_PORT}"
-echo "   MinIO Console: localhost:${MINIO_CONSOLE_PORT}"
+echo "   S3 admin UI (SeaweedFS): localhost:${S3_CONSOLE_PORT}"
 echo ""

@@ -1,0 +1,5 @@
+label	caller	truth_set	stats_type	precision	recall	f1
+sampleA	manta	HG002	Event	0.62	0.41	0.494
+sampleA	manta	HG002	Base	0.48	0.37	0.418
+sampleB	delly	HG002	Event	0.43	0.29	0.346
+sampleB	delly	HG002	Base	0.21	0.18	0.194

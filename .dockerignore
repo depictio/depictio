@@ -5,6 +5,11 @@
 # Dockerfile_depictio_uv.dockerfile. Excluding it from the docker context
 # prevents a stale host bundle from clobbering the freshly-built one.
 depictio/viewer/dist/
+# Same for the single-file catalog-preview bundle: Dockerfile.api builds it in
+# its catalog-preview-builder stage, so a host build must not ride along in the
+# `COPY depictio ./depictio/` layer.
+depictio/viewer/dist-catalog-preview/
+depictio/viewer/dist-embed/
 
 # -----------------------------
 # Exclude Legacy Directories
@@ -15,6 +20,8 @@ depictio-example-data/
 jbrowse2_sessions/
 jbrowse-watcher-plugin/
 minio_data/
+seaweedfs_data/
+seaweedfs_backup_data/
 
 # -----------------------------
 # Exclude Common Development Directories
@@ -73,7 +80,11 @@ __pycache__/
 # -----------------------------
 # Exclude Node.js Dependencies (if applicable)
 # -----------------------------
-node_modules/
+# Root and nested (packages/*, depictio/viewer): a dockerignore pattern without
+# `**` only matches at the context root, so the host pnpm symlink farms were
+# copied over the image's own install and dangled whenever the host and the
+# image used different pnpm majors.
+**/node_modules/
 
 # -----------------------------
 # Exclude Temporary Files and OS Files

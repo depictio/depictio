@@ -119,7 +119,7 @@ def main() -> int:
         ("nested command", ["config", "show", "--help"], "config show"),
         (
             "command with a secret path",
-            ["config", "show", "--CLI-config-path", CANARIES[0]],
+            ["config", "show", "--server", CANARIES[0]],
             "config show",
         ),
         (

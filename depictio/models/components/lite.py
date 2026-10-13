@@ -16,6 +16,7 @@ Index vs Tag:
     Users write `tag` in YAML, system manages `index` as UUID internally.
 """
 
+import re
 import uuid
 from typing import Any, Literal
 
@@ -35,6 +36,29 @@ from depictio.models.components.constants import (
     TOP_PANEL_INTERACTIVE_TYPES,
     VISU_TYPES,
 )
+from depictio.models.components.types import CardVariant, FigureStyle
+
+#: Namespace for deriving a component's `index` from its YAML `tag`.
+#: Fixed forever: changing it silently renames every tagged component, which
+#: severs each one from its own version history.
+_COMPONENT_TAG_NAMESPACE = uuid.UUID("b3f1a7c4-6d2e-4f88-9a05-1c7e2b9d4e60")
+
+
+def index_from_tag(tag: str | None, scope: str | None = None) -> str:
+    """Stable component id for a tag, or a fresh random one when untagged.
+
+    ``scope`` namespaces the id within a tab family: a main tab passes none, so
+    its ids are its tags' alone, and a child tab passes its title (see
+    ``DashboardDataLite.tag_scope``). Without it, a tag reused on two tabs of one
+    family (iris's overview and petal tabs share eight) named one component
+    twice, and restoring one of them from history overwrote the other.
+    """
+    tag = (tag or "").strip()
+    if not tag:
+        return str(uuid.uuid4())
+    scope = (scope or "").strip()
+    name = f"{scope}\n{tag}" if scope else tag
+    return str(uuid.uuid5(_COMPONENT_TAG_NAMESPACE, name))
 
 
 class BaseLiteComponent(BaseModel):
@@ -80,6 +104,15 @@ class BaseLiteComponent(BaseModel):
         "section's icon and default collapse state via the dashboard-level "
         "`filter_sections` (left panel) or `grid_sections` (main grid) list.",
     )
+    fit: Literal["auto", "fixed"] | None = Field(
+        default=None,
+        description="Whether the tile's height follows its content ('auto') or stays at the "
+        "height the layout gives it ('fixed'). Written in YAML inside the layout block, as "
+        "`layout: {x, y, w, h, fit: fixed}`. Unset means the per-type default: content-fitted "
+        "for text, card, table and advanced_viz, fixed for figure and multiqc, whose aspect "
+        "ratio is an authoring decision. The editor writes 'fixed' when a reader resizes a "
+        "tile by hand, so a height set on purpose is never argued with.",
+    )
 
     # Data source references (human-readable tags)
     workflow_tag: str = Field(default="", description="Workflow tag (e.g., 'python/iris_workflow')")
@@ -89,9 +122,27 @@ class BaseLiteComponent(BaseModel):
 
     @model_validator(mode="after")
     def ensure_index(self) -> "BaseLiteComponent":
-        """Auto-generate index UUID if not provided."""
+        """Give the component an id, derived from its tag when it has one.
+
+        A random id per parse means the *same* component, imported twice, is
+        two unrelated components. Nothing looks wrong at first — the dashboard
+        renders fine — but every feature that follows a component through time
+        matches on `index` across snapshots: version history, "restore just
+        this one", comparing a chart against its former self. With fresh ids
+        none of them can match, and the component-history modal reports "this
+        component did not exist in that version" for a component that plainly
+        did.
+
+        UUID5 puts that identity in the one place the author already controls.
+        The tag is the name they gave it, so two YAMLs describing the same
+        dashboard now agree on ids as well as on names.
+
+        Untagged components stay random: with nothing stable to derive from, a
+        shared constant would be worse than uniqueness, since every untagged
+        component would then collide with every other.
+        """
         if not self.index:
-            self.index = str(uuid.uuid4())
+            self.index = index_from_tag(self.tag)
         return self
 
 
@@ -135,6 +186,57 @@ class FigureLiteComponent(BaseLiteComponent):
         default=None, description="Column to extract from selected points"
     )
 
+    # Per-figure font emphasis (rendered client-side by FigureRenderer)
+    font_scale: float | None = Field(
+        default=None,
+        gt=0,
+        description="Font-size multiplier applied to the whole figure layout font "
+        "(axis labels, ticks, legend). Unset/1 = default size.",
+    )
+
+    # Showcase look (see FigureStyle) and the card header that goes with it.
+    figure_style: FigureStyle | None = Field(
+        default=None,
+        description="How the figure is drawn. Unset takes the style of the grid section "
+        "the figure sits in (`figure_style`), else `default`. `minimal`: the landing-page "
+        "look -- the title in the card header beside an icon badge with the subtitle "
+        "inline, a transparent plot with faint dashed grid lines and no axis lines, small "
+        "grey ticks, the legend in one line under the plot, large markers without "
+        "outlines, tight margins, and the toolbar only on hover. Grouped bars get a "
+        "coloured underline per group.",
+    )
+    subtitle: str | None = Field(
+        default=None,
+        description="A few words after the title in the card header, dimmed "
+        '("relative abundance per sample", "Bray-Curtis"). Drawn by the `minimal` style.',
+    )
+    icon_name: str | None = Field(
+        default=None,
+        description="Iconify id of the badge before the title in the card header "
+        "(`minimal` style), e.g. `mdi:chart-scatter-plot`.",
+    )
+    icon_color: str | None = Field(
+        default=None,
+        description="Colour of the header badge: a Mantine palette name or a CSS colour. "
+        "Unset uses the brand's primary colour.",
+    )
+    hide_legend: bool | None = Field(
+        default=None,
+        description="Draw the figure without its legend, for a tile too small for one. "
+        "Unset keeps the legend the figure has.",
+    )
+    caption: str | None = Field(
+        default=None,
+        description="A line or two under the plot saying how to read it (what a mark is, "
+        "what a filter does to it), in any style.",
+    )
+    link: str | None = Field(
+        default=None,
+        description="The tab this figure summarises, as `tab:<name>`: a landing page's "
+        "figure drawn from an analysis tab's data links back to it, as an icon at the end "
+        "of the card header (`minimal` style) or in the tile's actions.",
+    )
+
     @model_validator(mode="after")
     def validate_figure_constraints(self) -> "FigureLiteComponent":
         """Validate figure-specific cross-field constraints."""
@@ -154,6 +256,17 @@ class FigureLiteComponent(BaseLiteComponent):
             raise ValueError("selection_column is required when selection_enabled=True")
 
         return self
+
+
+# The number formats a card's `format` and a text tile's live value share. The
+# viewer prints both with one function (`formatNumber`, card/metrics/format.ts).
+VALUE_FORMAT = re.compile(r"^(percent|integer|si|decimals:[0-6])$")
+
+
+def validate_value_format(value: object) -> None:
+    """Refuse a `format` outside the shared vocabulary (unset passes)."""
+    if value is not None and not (isinstance(value, str) and VALUE_FORMAT.match(value)):
+        raise ValueError(f"format '{value}' is not one of: percent, integer, si, decimals:N (0-6)")
 
 
 class CardLiteComponent(BaseLiteComponent):
@@ -222,6 +335,57 @@ class CardLiteComponent(BaseLiteComponent):
     title_color: str | None = Field(default=None, description="Title text color")
     title_font_size: str | None = Field(default=None, description="Title font size")
     value_font_size: str | None = Field(default=None, description="Value font size")
+    caption: str | None = Field(
+        default=None,
+        description="One line under the value, in place of the aggregation label "
+        '("(Nunique) · Top 3 = 100%"), which moves to a tooltip on the header. For a '
+        "headline number whose method a reader does not need at first glance.",
+    )
+    icon_style: Literal["watermark", "badge"] | None = Field(
+        default=None,
+        description="`watermark` (default): large faint icon revealed on hover. `badge`: "
+        "small icon on a tint of `icon_color`, always shown beside the title — for a "
+        "row of headline numbers whose icons tie each card to a tab.",
+    )
+    variant: CardVariant | None = Field(
+        default=None,
+        description="How the card is drawn. Unset takes the style of the grid section "
+        "the card sits in (`card_variant`), else `default`: coloured title and value "
+        "over the aggregation label. `headline`: a key-figure card for a landing page. "
+        "The value is drawn large, the icon sits faint on the right at all times, a "
+        "coverage strip shrinks to its bar and a composition strip to its bar and "
+        "legend line (the rest stays in the tooltip). `compact`: a low card, title and "
+        "value on one line when the card is wide enough, no strip beyond a slim bar -- "
+        "for a strip of many small numbers. `minimal`: headline type with no frame, "
+        "shadow or background -- for figures sitting on a tinted section or in prose. "
+        "`accent`: headline type with a rail of the card's colour down its left edge and "
+        "the full strip kept -- to single out a few cards on an analysis tab. `split`: a "
+        "stat tile, the icon in a tinted block on the left and the figure beside it.",
+    )
+    decimals: int | None = Field(
+        default=None,
+        ge=0,
+        le=6,
+        description="Decimal places for a fractional value (default: up to 4, trailing "
+        "zeros dropped). `2` shows a median Shannon of 7.0831 as 7.08. For a percentage "
+        "or an SI suffix, use `format` instead.",
+    )
+    format: str | None = Field(
+        default=None,
+        description="How the value prints. `percent` for a 0-1 fraction (0.41 shows as "
+        "41%, 0.047 as 4.7%), `integer` (12,346), `si` (214k, 3.7M) or `decimals:N` "
+        "(N from 0 to 6). The strip below follows it for numbers of the same column: box "
+        "plot labels, threshold cut-off, histogram axis, trend buckets, a median or max in "
+        "a stat list. Counts (rows passing, `count`, `nunique`) stay whole numbers, with an "
+        "SI suffix under `si`. Set either `format` or `decimals`, not both. Unset: as "
+        "`decimals` says, else magnitude-aware rounding.",
+    )
+    link: str | None = Field(
+        default=None,
+        description="Where clicking the card goes: `tab:<name>` for a sibling tab (by its "
+        "displayed name, resolved per instance like a text tile's tab links), or a URL. "
+        "A key figure on a landing page opens the tab that explains it.",
+    )
 
     # Multi-metric layout style.
     #   - ``vertical`` (default): stacked secondary aggregations under the hero
@@ -357,9 +521,10 @@ class CardLiteComponent(BaseLiteComponent):
     threshold_warn: float | None = Field(
         default=None,
         description=(
-            "Optional softer cut-off between pass and fail. Ignored unless it "
-            "lies on the failing side of ``threshold_value``, where a warn band "
-            "is the only place it is meaningful."
+            "Optional softer cut-off between pass and fail. Must lie on the "
+            "failing side of ``threshold_value`` (below it for ``min``, above it "
+            "for ``max``), the only place a warn band is meaningful; anything "
+            "else is rejected at validation."
         ),
     )
     attrition_cols: list[str] = Field(
@@ -369,6 +534,15 @@ class CardLiteComponent(BaseLiteComponent):
             "the card's own column (which is the first stage). The order is the "
             "pipeline's order and is the content of the chart — the stages are "
             "never sorted by value."
+        ),
+    )
+    follow_region_filter: bool = Field(
+        default=False,
+        description=(
+            "Let a locus navigator's genome region (its brush or ``default_region``) "
+            "narrow this card. Off by default: a region is a place to look, so a "
+            "card keeps summarising the whole collection while the tracks follow "
+            "the locus."
         ),
     )
 
@@ -410,6 +584,81 @@ class CardLiteComponent(BaseLiteComponent):
         return self
 
     @model_validator(mode="after")
+    def normalize_box_plot_stats_layout(self) -> "CardLiteComponent":
+        """Pair ``box_plot_stats`` with the one layout that can draw it.
+
+        ``box_plot_stats`` is a compound aggregation (a 10-field dict); only
+        ``secondary_layout: box_plot`` renders it. Declared alone under a
+        stat-list layout it used to surface as the literal label — so when it
+        is the only secondary aggregation, the layout is auto-corrected to
+        ``box_plot``. Mixed with scalar aggregations the layout is left alone
+        (the renderer drops the dict row from the list).
+        """
+        if self.aggregations == ["box_plot_stats"] and self.secondary_layout in (
+            "vertical",
+            "compact",
+            "grid",
+        ):
+            self.secondary_layout = "box_plot"
+        return self
+
+    @model_validator(mode="after")
+    def validate_threshold_warn_side(self) -> "CardLiteComponent":
+        """Reject a ``threshold_warn`` on the passing side of ``threshold_value``.
+
+        The server used to drop such a warn band silently, so a template author
+        saw a strip with no warn segment and no reason why.
+        """
+        if self.threshold_warn is None:
+            return self
+        if self.threshold_value is None:
+            raise ValueError(
+                "threshold_warn requires threshold_value: the warn band sits between "
+                "the threshold_value cut-off and threshold_warn."
+            )
+        higher_is_better = self.threshold_direction == "min"
+        if higher_is_better and not self.threshold_warn < self.threshold_value:
+            raise ValueError(
+                f"threshold_warn ({self.threshold_warn}) must be below threshold_value "
+                f"({self.threshold_value}) when threshold_direction is 'min' (higher is "
+                "better): the warn band lies on the failing side of the cut-off. Use "
+                "threshold_direction: max if lower values pass."
+            )
+        if not higher_is_better and not self.threshold_warn > self.threshold_value:
+            raise ValueError(
+                f"threshold_warn ({self.threshold_warn}) must be above threshold_value "
+                f"({self.threshold_value}) when threshold_direction is 'max' (lower is "
+                "better): the warn band lies on the failing side of the cut-off. Use "
+                "threshold_direction: min if higher values pass."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_format(self) -> "CardLiteComponent":
+        """Check `format` against the shared vocabulary, and against `decimals`.
+
+        Both are read where a template writes them too, inside the `display`
+        block, which the model otherwise keeps as an unvalidated extra.
+        """
+        display = (self.model_extra or {}).get("display")
+        nested: dict[str, Any] = display if isinstance(display, dict) else {}
+        fmt = self.format if self.format is not None else nested.get("format")
+        decimals = self.decimals if self.decimals is not None else nested.get("decimals")
+        validate_value_format(fmt)
+        if fmt is not None and decimals is not None:
+            raise ValueError(
+                f"set either format ('{fmt}') or decimals ({decimals}), not both: "
+                "`format: decimals:N` is the same as `decimals: N`, and the other formats "
+                "set their own precision"
+            )
+        if fmt == "percent" and self.aggregation in ("count", "nunique"):
+            raise ValueError(
+                f"format 'percent' reads a 0-1 fraction, and a '{self.aggregation}' card "
+                "counts rows; use `integer` or `si`"
+            )
+        return self
+
+    @model_validator(mode="after")
     def validate_filter_expr_safety(self) -> "CardLiteComponent":
         """Validate filter_expr is safe if provided."""
         if self.filter_expr is not None:
@@ -417,6 +666,25 @@ class CardLiteComponent(BaseLiteComponent):
 
             validate_filter_expr(self.filter_expr)
         return self
+
+    @model_validator(mode="after")
+    def validate_no_category_aggregation(self) -> "CardLiteComponent":
+        """`top` / `top_share` name a category, which a card has nowhere to show.
+
+        They exist for a text tile's live values (``TextValueSpec``); checked here
+        too because, without a ``column_type``, nothing else would stop them.
+        """
+        for agg in [self.aggregation, *(self.aggregations or [])]:
+            if agg in TEXT_ONLY_AGGREGATIONS:
+                raise ValueError(
+                    f"aggregation '{agg}' is only available to a text tile's `values`, "
+                    "not to a card"
+                )
+        return self
+
+
+# Controls whose initial state is a ``[low, high]`` pair.
+_RANGE_DEFAULT_TYPES: tuple[str, ...] = ("RangeSlider", "DateRangePicker", "DatePicker")
 
 
 class InteractiveLiteComponent(BaseLiteComponent):
@@ -497,11 +765,52 @@ class InteractiveLiteComponent(BaseLiteComponent):
         "ungrouped components, hidden for components inside a 'group' for higher "
         "compaction. Set explicitly to True/False to override.",
     )
+    show_mark_labels: bool | None = Field(
+        default=None,
+        description="Slider / RangeSlider only: whether the tick marks carry their value "
+        "labels. Omitted (or True) labels every tick, as before; False keeps the ticks "
+        "and drops the labels. Has no effect when 'show_marks' hides the ticks.",
+    )
+    show_histogram: bool | None = Field(
+        default=None,
+        description="RangeSlider only: draw the column's histogram above the slider so the "
+        "reader sees the distribution they are thresholding. Omitted means off.",
+    )
+
+    slider_mode: Literal["gte", "gt", "lte", "lt", "eq", "ne"] | None = Field(
+        default=None,
+        description="Slider only: comparison with the value; gte (threshold) by default",
+    )
+
+    # Initial state, applied on first load (and on "Reset all").
+    default_value: Any | None = Field(
+        default=None,
+        description="Value the filter starts with. Select / MultiSelect: one value or a "
+        "list of values; SegmentedControl: one value; Slider: a number; Checkbox / "
+        "Switch: a boolean. RangeSlider and DateRangePicker use ``default_range``.",
+    )
+    default_range: list[Any] | None = Field(
+        default=None,
+        description="Initial ``[low, high]`` for RangeSlider (numbers) or DateRangePicker "
+        "(ISO dates).",
+    )
 
     # Styling (optional)
     title_size: str | None = Field(default=None, description="Title size")
     custom_color: str | None = Field(default=None, description="Custom accent color")
     icon_name: str | None = Field(default=None, description="Iconify icon name")
+
+    # Filter bar (a grid section with `display: strip`). Ignored elsewhere.
+    strip_label: str | None = Field(
+        default=None,
+        description="Short label shown in a filter bar instead of the title "
+        "(e.g. 'Habitat' for 'Sampling habitat'). Unset uses the title.",
+    )
+    strip_icon: bool | None = Field(
+        default=None,
+        description="Whether a filter bar draws the icon badge before the label. "
+        "Unset means shown.",
+    )
 
     @field_validator("column_type")
     @classmethod
@@ -510,6 +819,55 @@ class InteractiveLiteComponent(BaseLiteComponent):
             valid = ", ".join(COLUMN_TYPES)
             raise ValueError(f"Invalid column_type '{v}'. Valid values: {valid}")
         return v
+
+    @model_validator(mode="after")
+    def validate_defaults(self) -> "InteractiveLiteComponent":
+        """Check that a declared default fits the control it is declared on.
+
+        Without this a misplaced default (``default_value`` on a RangeSlider)
+        was accepted by ``extra="allow"`` and never applied.
+        """
+        kind = self.interactive_component_type
+        if self.default_range is not None:
+            if kind not in _RANGE_DEFAULT_TYPES:
+                raise ValueError(
+                    f"default_range is only valid for {', '.join(_RANGE_DEFAULT_TYPES)}; "
+                    f"use default_value for a {kind}."
+                )
+            if len(self.default_range) != 2:
+                raise ValueError(f"default_range must be [low, high], got {self.default_range!r}.")
+            low, high = self.default_range
+            if kind == "RangeSlider":
+                if not all(
+                    isinstance(v, int | float) and not isinstance(v, bool) for v in (low, high)
+                ):
+                    raise ValueError(
+                        f"RangeSlider default_range must be numbers, got {self.default_range!r}."
+                    )
+                if low > high:
+                    raise ValueError(f"default_range low ({low}) is above high ({high}).")
+        if self.default_value is not None and kind in _RANGE_DEFAULT_TYPES:
+            raise ValueError(f"{kind} takes default_range: [low, high], not default_value.")
+        if self.default_value is not None and kind == "Slider":
+            if isinstance(self.default_value, bool) or not isinstance(
+                self.default_value, int | float
+            ):
+                raise ValueError(
+                    f"Slider default_value must be a number, got {self.default_value!r}."
+                )
+        if isinstance(self.default_value, list) and kind != "MultiSelect" and kind != "Select":
+            raise ValueError(
+                f"A list default_value is only valid for Select / MultiSelect, not {kind}."
+            )
+        return self
+
+    def default_state_payload(self) -> dict[str, Any] | None:
+        """The ``default_state`` a stored component carries for these defaults."""
+        if self.default_range is not None:
+            return {"default_range": list(self.default_range)}
+        if self.default_value is not None:
+            return {"default_value": self.default_value}
+        return None
 
     @model_validator(mode="after")
     def validate_interactive_type_for_column_type(self) -> "InteractiveLiteComponent":
@@ -573,6 +931,99 @@ class InteractiveLiteComponent(BaseLiteComponent):
         return self
 
 
+# ---------------------------------------------------------------------------
+# Live values in a text tile
+# ---------------------------------------------------------------------------
+
+# Aggregations that name a category rather than reduce to a number. A text
+# value can print one in a sentence; a card has no place for it.
+TEXT_ONLY_AGGREGATIONS: tuple[str, ...] = ("top", "top_share")
+
+# Every card aggregation that reduces to one scalar, plus the category ones.
+# `box_plot_stats` is a ten-field payload, nothing a sentence can print.
+TEXT_VALUE_AGGREGATIONS: tuple[str, ...] = (
+    *sorted(
+        {agg for aggs in AGGREGATION_COMPATIBILITY.values() for agg in aggs} - {"box_plot_stats"}
+    ),
+    *TEXT_ONLY_AGGREGATIONS,
+)
+
+# The two placeholder forms, as the viewer reads them (textValues.ts): the
+# content between `{{` and `}}`, with no space anywhere.
+TEXT_VALUE_NAME = re.compile(r"^[a-z][a-z0-9_]{0,11}$")
+TEXT_PARAM_PLACEHOLDER = re.compile(r"^param:[A-Za-z0-9_.-]+$")
+# Anything between double braces is meant as a placeholder. The viewer prints
+# one of neither form as is, braces included, so validation refuses it.
+TEXT_PLACEHOLDER = re.compile(r"\{\{([^{}]*)\}\}")
+
+
+def text_placeholders(*texts: str | None) -> list[str]:
+    """The contents of every ``{{...}}`` in ``texts``, in order."""
+    return [m.group(1) for text in texts if text for m in TEXT_PLACEHOLDER.finditer(text)]
+
+
+class TextValueSpec(BaseModel):
+    """One live value a text tile prints, computed like a card.
+
+    Example YAML (under a text tile's ``values``):
+        top: {dc: taxonomy_rel_abundance, column: Phylum, aggregation: top, weight: rel_abundance}
+        shannon: {dc: alpha_diversity, column: shannon, aggregation: median, format: "decimals:2"}
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    dc: str = Field(..., min_length=1, description="data_collection_tag the value is computed on")
+    column: str = Field(..., min_length=1, description="Column to aggregate")
+    aggregation: str = Field(
+        ...,
+        description="A card aggregation (count, nunique, sum, average, median, min, max, ...), "
+        "or `top` (the category with the largest summed `weight`, row count without one) or "
+        "`top_share` (that category's share of the total, a fraction).",
+    )
+    weight: str | None = Field(
+        default=None, description="Column summed per category by `top` / `top_share` only"
+    )
+    filter_expr: str | None = Field(
+        default=None,
+        description="Polars filter expression applied before aggregating, as on a card",
+    )
+    format: str | None = Field(
+        default=None,
+        description="`percent`, `integer`, `si` or `decimals:N` (N from 0 to 6). Unset: "
+        "numbers as a card prints them, text as is.",
+    )
+
+    @model_validator(mode="after")
+    def validate_value(self) -> "TextValueSpec":
+        if self.aggregation not in TEXT_VALUE_AGGREGATIONS:
+            raise ValueError(
+                f"aggregation '{self.aggregation}' is not one of: "
+                f"{', '.join(TEXT_VALUE_AGGREGATIONS)}"
+            )
+        if self.weight is not None and self.aggregation not in TEXT_ONLY_AGGREGATIONS:
+            raise ValueError(
+                f"`weight` only applies to {' / '.join(TEXT_ONLY_AGGREGATIONS)}, "
+                f"not to '{self.aggregation}'"
+            )
+        validate_value_format(self.format)
+        if self.filter_expr is not None:
+            from depictio.models.components.filter_expr import validate_filter_expr
+
+            validate_filter_expr(self.filter_expr)
+        return self
+
+
+class TextValueRuntimeSpec(TextValueSpec):
+    """A stored live value: the YAML spec plus the ids its `dc` resolved to at import.
+
+    `None` when the tag did not resolve; the value then computes to null. Never
+    written back to YAML.
+    """
+
+    dc_id: str | None = Field(default=None, description="Resolved data collection id")
+    wf_id: str | None = Field(default=None, description="Workflow holding that collection")
+
+
 class TextLiteComponent(BaseLiteComponent):
     """Lite text component for narrative section headers + body paragraphs.
 
@@ -590,11 +1041,30 @@ class TextLiteComponent(BaseLiteComponent):
           body: |
             Shannon, observed features, and Faith's PD measure
             within-sample richness and evenness.
+
+    Live values: ``{{name}}`` in the title or body prints a value declared
+    under ``values`` (see ``TextValueSpec``), computed with the dashboard's
+    filters as a card is; ``{{param:KEY}}`` prints one of the run's pipeline
+    parameters and needs no declaration.
+
+        - component_type: text
+          values:
+            shannon: {dc: alpha_diversity, column: shannon, aggregation: median}
+          body: |
+            - Median Shannon diversity: **{{shannon}}**
+            - Classified with {{param:dada_ref_taxonomy}}
     """
 
     component_type: Literal["text"] = "text"
 
     order: int = Field(default=1, ge=1, le=6, description="Heading level (H1–H6; clamped 1..6)")
+    # Overrides the base "sm" default: a text tile without a title_size keeps
+    # the size its heading level gives it.
+    title_size: str | None = Field(
+        default=None,
+        description="Visual size of the heading (xs/sm/md/lg/xl); the level (order) "
+        "stays the document structure",
+    )
     alignment: Literal["left", "center", "right"] = Field(
         default="left", description="Horizontal alignment of the title and body"
     )
@@ -607,11 +1077,163 @@ class TextLiteComponent(BaseLiteComponent):
         default="center",
         description="Vertical placement of the text block within its tile",
     )
+    # Ahead of the body that prints them, which is also where an export writes them.
+    values: dict[str, TextValueSpec] | None = Field(
+        default=None,
+        description="Live values the title and body print as `{{name}}`, keyed by name "
+        "(lower case, digits and `_`, at most 12 characters).",
+    )
+
     body: str = Field(default="", description="Optional paragraph below the heading")
+    # A tile on a landing page is a card of its own (a finding, a fact box);
+    # one in a tab's flow is prose between figures. `surface` says which.
+    surface: Literal["none", "card", "tinted"] = Field(
+        default="none",
+        description="`none`: bare prose. `card`: framed like a card; with `accent`, a "
+        "coloured rule on top. `tinted`: on a tint of `accent` (grey without one).",
+    )
+    accent: str | None = Field(
+        default=None,
+        description="Mantine palette name, CSS colour, or `tab:<Tab name>` to borrow a "
+        "sibling tab's colour. Colours the `card` rule or the `tinted` ground, and a "
+        "body's leading `#` heading, which then reads as a headline figure.",
+    )
+    logo: str | None = Field(
+        default=None,
+        description="Image drawn in place of the title, e.g. a pipeline's wordmark "
+        "(`/assets/images/workflows/ampliseq.png`). The title stays as its alt text.",
+    )
+    logo_dark: str | None = Field(
+        default=None,
+        description="The logo for a dark page. Unset, a dark page draws the title as "
+        "text: a wordmark in dark ink would vanish on it.",
+    )
+
+    @field_validator("logo", "logo_dark")
+    @classmethod
+    def _logo_is_an_image(cls, v: str | None) -> str | None:
+        if v and not re.match(r"^(/|https://)\S+\.(png|svg|jpe?g|webp)$", v, re.IGNORECASE):
+            raise ValueError(
+                f"logo {v!r} must be an image path (/assets/...) or an https URL "
+                "ending in .png, .svg, .jpg or .webp"
+            )
+        return v
 
     # Text tiles don't bind to a data source — keep these optional/empty.
     workflow_tag: str = Field(default="", description="Unused for text components")
     data_collection_tag: str = Field(default="", description="Unused for text components")
+
+    @model_validator(mode="after")
+    def validate_values(self) -> "TextLiteComponent":
+        """Every placeholder names something, and every value is printed."""
+        declared = set(self.values or {})
+        bad_names = sorted(n for n in declared if not TEXT_VALUE_NAME.match(n))
+        if bad_names:
+            raise ValueError(
+                f"value name(s) {bad_names} must match {TEXT_VALUE_NAME.pattern} "
+                "(lower case, digits and `_`, at most 12 characters)"
+            )
+        used: set[str] = set()
+        for content in text_placeholders(self.title, self.body):
+            if TEXT_PARAM_PLACEHOLDER.match(content):
+                continue
+            if not TEXT_VALUE_NAME.match(content):
+                raise ValueError(
+                    f"{{{{{content}}}}} is not a placeholder the viewer prints: write "
+                    "{{name}} (a declared value) or {{param:KEY}} (a run parameter, KEY "
+                    "of letters, digits, `_`, `.`, `-`), with no space inside the braces"
+                )
+            if content not in declared:
+                raise ValueError(
+                    f"{{{{{content}}}}} is not a declared value: declare it under `values`, "
+                    "or use {{param:KEY}} for a run parameter"
+                )
+            used.add(content)
+        unused = sorted(declared - used)
+        if unused:
+            raise ValueError(f"value(s) {unused} are declared but not used in the title or body")
+        return self
+
+
+class HighlightLiteComponent(BaseLiteComponent):
+    """A figure from another tab of the dashboard, shown again on this one.
+
+    A landing page's showcase tiles are figures that live on the tab that
+    explains them. A highlight shows one of them without copying it: the
+    figure is drawn from its own definition on its own tab, so an edit there
+    shows here too, and this tile only says how to draw it (style, header,
+    legend). Filters apply to it as to any figure on this tab, and its header
+    links to the tab it comes from.
+
+    The source can be a figure or an advanced visualisation. A figure is
+    restyled (`figure_style`, `minimal` unless set); an advanced
+    visualisation is drawn as it is on its tab.
+
+    Example YAML:
+        - component_type: highlight
+          title: Faith PD per locality
+          subtitle: at the deepest rarefaction depth
+          source_tab: Alpha Diversity
+          source_component: trec-fig-alpha-plateau
+          icon_name: mdi:chart-scatter-plot
+          layout: {x: 0, y: 0, w: 6, h: 7}
+    """
+
+    component_type: Literal["highlight"] = "highlight"
+
+    source_tab: str | None = Field(
+        default=None,
+        description="The tab the figure lives on, by the name its sidebar entry shows "
+        "(the parent tab also answers to the dashboard title). Survives an export to "
+        "another instance, where tab ids change.",
+    )
+    source_dashboard_id: str | None = Field(
+        default=None,
+        description="The tab's dashboard id, which the editor writes. Tried before "
+        "`source_tab`, which takes over when the id is unknown (after a re-import).",
+    )
+    source_component: str = Field(
+        ...,
+        description="The figure on that tab: its `index`, else its title (case and "
+        "spacing ignored). Template figures have a readable index; a figure made in "
+        "the editor is best named by its title, since its index is a UUID that a "
+        "re-import replaces.",
+    )
+    figure_style: FigureStyle | None = Field(
+        default=None,
+        description="Style the figure is drawn in here. Unset: `minimal`, whatever the "
+        "source tab draws it in.",
+    )
+    subtitle: str | None = Field(
+        default=None, description="Dimmed words after the title; unset takes the source's."
+    )
+    icon_name: str | None = Field(
+        default=None, description="Iconify id of the header badge; unset takes the source's."
+    )
+    icon_color: str | None = Field(
+        default=None,
+        description="Mantine palette name or CSS colour of the badge; unset takes the "
+        "source's, else the brand's primary.",
+    )
+    hide_legend: bool | None = Field(
+        default=None, description="Draw the figure without its legend here."
+    )
+    caption: str | None = Field(
+        default=None, description="Lines under the plot; unset takes the source's."
+    )
+
+    # The figure is bound to its data on its own tab; the highlight is not.
+    workflow_tag: str = Field(default="", description="Unused for highlights")
+    data_collection_tag: str = Field(default="", description="Unused for highlights")
+
+    @model_validator(mode="after")
+    def validate_source(self) -> "HighlightLiteComponent":
+        """A highlight needs a tab to look on and a figure to look for."""
+        if not (self.source_tab or "").strip() and not (self.source_dashboard_id or "").strip():
+            raise ValueError("a highlight needs `source_tab` (or `source_dashboard_id`)")
+        if not self.source_component.strip():
+            raise ValueError("a highlight needs `source_component`")
+        return self
 
 
 class TableLiteComponent(BaseLiteComponent):
@@ -910,6 +1532,7 @@ LiteComponent = (
     | InteractiveLiteComponent
     | TableLiteComponent
     | TextLiteComponent
+    | HighlightLiteComponent
     | ImageLiteComponent
     | MultiQCLiteComponent
     | MapLiteComponent

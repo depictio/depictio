@@ -1,16 +1,21 @@
 import io
 import json
 import zipfile
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import quote
 
 import httpx
 import typer
 from pydantic import validate_call
+from rich.markup import escape
 
 from depictio.cli.cli.utils.common import (
     generate_api_headers,
     get_http_client,
     load_depictio_config,
 )
+from depictio.cli.cli.utils.http_retry import request_with_retry
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
 from depictio.models.models.base import BaseModel, PyObjectId
@@ -24,6 +29,10 @@ from depictio.models.utils import convert_model_to_dict
 def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
     """
     Login to the Depictio API using the CLI configuration.
+
+    The result holds ``success`` and ``status_code``, the HTTP status the server
+    answered: a failure is the token's only for a 401 or a 403, or a 200 whose verdict
+    is no. See report_login_failure.
     """
     loaded_config = load_depictio_config(yaml_config_path=yaml_config_path)
     # Build headers from the MODEL (not the dumped dict) so validate_call's
@@ -33,9 +42,12 @@ def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
     # secret — the server only reads ``user.token`` from this payload, so the
     # masked value is fine (and keeps the secret out of logs and transit).
     depictio_CLI_config = loaded_config.model_dump(mode="json")
-    # DEBUG, not INFO: the dump still contains the live access token at
-    # user.token.access_token — keep it out of default-level logs.
-    logger.debug(f"Depictio CLI configuration loaded: {depictio_CLI_config}")
+    # Not the dump itself: it holds the live access token, and verbose logs of a
+    # pipeline run are archived.
+    logger.debug(
+        f"Depictio CLI configuration loaded: {loaded_config.api_base_url}, "
+        f"user {loaded_config.user.email}"
+    )
     rich_print_checked_statement("Checking server accessibility...", "info")
 
     # Connect to depictio API. Generous timeout because this is the CLI's
@@ -45,9 +57,10 @@ def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
     # than httpx's 5 s default. 120 s is well past any reasonable
     # cold-path; the call still returns as soon as the server responds.
     # 30 s wasn't enough in CI minikube/compose environments where the
-    # first Beanie query pays the full motor + driver init cost.
+    # first Beanie query pays the full async-driver init cost.
+    url = f"{depictio_CLI_config['api_base_url']}/depictio/api/v1/cli/validate_cli_config"
     response = get_http_client().post(
-        f"{depictio_CLI_config['api_base_url']}/depictio/api/v1/cli/validate_cli_config",
+        url,
         json=depictio_CLI_config,
         # /validate_cli_config now requires a bearer token (was unauthenticated);
         # the same token already lives in the posted config body.
@@ -62,26 +75,35 @@ def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
         if response_data.get("success"):
             return {
                 "success": True,
+                "status_code": response.status_code,
                 "CLI_config": depictio_CLI_config,
                 "is_admin": response_data.get("is_admin", False),
                 "user_id": response_data.get("user_id"),
                 "email": response_data.get("email"),
             }
         else:
-            logger.error(
+            logger.debug(
                 f"Depictio CLI configuration was not validated by the server: {response.text}"
             )
             rich_print_checked_statement(
-                f"Depictio CLI configuration was not validated by the server: {response.text}",
+                "Depictio CLI configuration was not validated by the server: "
+                f"{escape(response.text)}",
                 "error",
             )
-            return {"success": False}
+            return {"success": False, "status_code": response.status_code}
     else:
-        logger.error(f"Depictio CLI configuration is invalid: {response.text}")
-        rich_print_checked_statement(
-            f"Depictio CLI configuration is invalid: {response.text}", "error"
-        )
-        return {"success": False}
+        logger.debug(f"The server answered HTTP {response.status_code}: {response.text}")
+        if response.status_code in (401, 403, 422):
+            rich_print_checked_statement(
+                f"Depictio CLI configuration is invalid: {escape(response.text)}", "error"
+            )
+        else:
+            # Not a verdict on the configuration: a viewer host's 404 page, a proxy's
+            # 502 page. Their HTML stays in the debug log.
+            rich_print_checked_statement(
+                f"The server answered HTTP {response.status_code} to {escape(url)}", "error"
+            )
+        return {"success": False, "status_code": response.status_code}
 
 
 @validate_call
@@ -143,8 +165,11 @@ def api_get_project_from_name(project_name: str, CLI_config: CLIConfig):
     Get a project from the server using the project ID.
     """
     # First check if the project exists on the server DB for existing IDs and if the same metadata hash is used
+    # Quoted: a '#' or '?' in the name would otherwise end the path, so the project a
+    # run created under that name could never be found again.
     response = get_http_client().get(
-        f"{CLI_config.api_base_url}/depictio/api/v1/projects/get/from_name/{project_name}",
+        f"{CLI_config.api_base_url}/depictio/api/v1/projects/get/from_name/"
+        f"{quote(project_name, safe='')}",
         # params={"project_name": project_name},
         headers=generate_api_headers(CLI_config),
         timeout=60.0,  # cold-start safety net (httpx default of 5 s is too aggressive)
@@ -201,17 +226,44 @@ def api_update_project(project_config: dict, CLI_config: CLIConfig):
     return response
 
 
+def _project_write_outcome(response: httpx.Response) -> tuple[bool, str | None]:
+    """Normalise a /projects/create|update response into ``(succeeded, detail)``.
+
+    ``/projects/create`` answers **HTTP 200 with a failure body** for the cases
+    that matter to an automated trigger - ``409`` when the name is taken and
+    ``403`` in public/demo mode - so the transport status alone silently reports
+    a project that was never written. Read the body when there is one.
+    """
+    if response.status_code != 200:
+        return False, response.text
+    try:
+        body = response.json()
+    except ValueError:
+        return True, None
+    if isinstance(body, dict) and body.get("success") is False:
+        return False, body.get("message") or response.text
+    return True, None
+
+
 @validate_call
 def api_sync_project_config_to_server(
     CLI_config: CLIConfig, ProjectConfig: dict, update: bool = False
-):
+) -> dict:
     """
     Sync the pipeline configuration to the server.
+
+    Returns a verdict dict ``{"action": "created" | "updated" | "exists"}``.
+    ``"exists"`` means the project is already on the server and ``update`` was not
+    requested: that is a *decision for the caller*, not an error, which is why it
+    is returned rather than raised. It used to ``raise typer.Exit(code=0)``, and
+    since ``typer.Exit`` subclasses ``RuntimeError`` the caller's ``except
+    Exception`` swallowed it and reported an empty "sync failed" with exit code 1 -
+    exactly the path a second automated trigger takes.
     """
     rich_print_checked_statement("Syncing pipeline configuration to server...", "info")
 
     # Check if the project exists on the server
-    logger.info(f"Project configuration: {ProjectConfig}")
+    logger.debug(f"Project configuration: {ProjectConfig}")
     project_config = ProjectConfig
 
     # First try to find project by ID (for updates to existing projects with new names)
@@ -236,22 +288,14 @@ def api_sync_project_config_to_server(
             f"Checked project by name '{ProjectConfig['name']}': status {response.status_code}"
         )
 
-    logger.info(f"Project configuration: {project_config}")
-
     if response.status_code == 200:
         rich_print_checked_statement("Project configuration found on server", "info")
-        logger.info(f"Project configuration found on server: {response.json()}")
+        logger.debug(f"Project configuration found on server: {response.json()}")
 
-        # If update flag is False, exit
+        # Already on the server and no update requested: hand the decision back.
         if not update:
-            logger.error(
-                "Project configuration already exists on server, use --update flag to update."
-            )
-            rich_print_checked_statement(
-                "Project configuration already exists on server, use --update flag to update.",
-                "error",
-            )
-            raise typer.Exit(code=0)
+            logger.info("Project already exists on server and no update was requested.")
+            return {"action": "exists"}
 
         # If update flag is True, update the project on the server
         rich_print_checked_statement(
@@ -259,15 +303,16 @@ def api_sync_project_config_to_server(
         )
         logger.debug(f"Updating project configuration on server: {project_config}")
         response = api_update_project(project_config, CLI_config)
-        if response.status_code == 200:
-            rich_print_checked_statement("Project updated on server", "success")
-            logger.info(f"Project updated on server: {response.json()}")
-        else:
+        succeeded, detail = _project_write_outcome(response)
+        if not succeeded:
+            logger.debug(f"Failed to update project on server: {detail}")
             rich_print_checked_statement(
-                f"Failed to update project on server: {response.text}", "error"
+                f"Failed to update project on server: {escape(str(detail))}", "error"
             )
-            logger.error(f"Failed to update project on server: {response.text}")
             raise typer.Exit(code=1)
+        rich_print_checked_statement("Project updated on server", "success")
+        logger.info("Project updated on server")
+        return {"action": "updated"}
 
     elif response.status_code == 404:
         logger.info("Project configuration not found on server.")
@@ -276,15 +321,24 @@ def api_sync_project_config_to_server(
         )
         # Create the project on the server
         response = api_create_project(project_config, CLI_config)
-        if response.status_code == 200:
-            logger.info(f"Project created on server: {response.json()}")
-            rich_print_checked_statement("Project created on server", "success")
-        else:
-            logger.error(f"Failed to create project on server: {response.text}")
+        succeeded, detail = _project_write_outcome(response)
+        if not succeeded:
+            logger.debug(f"Failed to create project on server: {detail}")
             rich_print_checked_statement(
-                f"Failed to create project on server: {response.text}", "error"
+                f"Failed to create project on server: {escape(str(detail))}", "error"
             )
             raise typer.Exit(code=1)
+        logger.info("Project created on server")
+        rich_print_checked_statement("Project created on server", "success")
+        return {"action": "created"}
+
+    else:
+        rich_print_checked_statement(
+            f"Could not look up project on server (HTTP {response.status_code}): "
+            f"{escape(response.text)}",
+            "error",
+        )
+        raise typer.Exit(code=1)
 
 
 @validate_call
@@ -314,11 +368,15 @@ def api_create_files(
 
     logger.debug(f"Payload: {payload}")
 
-    response = get_http_client().post(
+    # Safe to retry: /files/upsert_batch is a true upsert keyed on file_location,
+    # so a replayed batch converges to the same registry state.
+    response = request_with_retry(
+        "POST",
         url,
         json=payload,
         headers=generate_api_headers(CLI_config),
         timeout=120.0,  # 2 minutes timeout for file batch operations
+        idempotent=True,
     )
     return response
 
@@ -336,15 +394,176 @@ def api_get_files_by_dc_id(dc_id: str, CLI_config: CLIConfig) -> httpx.Response:
         httpx.Response: The response from the server.
     """
     logger.info(f"Getting files for data collection ID: {dc_id}")
-    logger.debug(f"CLI Config: {CLI_config}")
+    # The URL only: the config and the headers carry the access token.
     logger.info(f"{CLI_config.api_base_url}/depictio/api/v1/files/list/{dc_id}")
-    logger.info(generate_api_headers(CLI_config))
-    response = get_http_client().get(
+    response = request_with_retry(
+        "GET",
         f"{CLI_config.api_base_url}/depictio/api/v1/files/list/{dc_id}",
         headers=generate_api_headers(CLI_config),
         timeout=60.0,  # Increase timeout to 60 seconds
+        idempotent=True,
     )
     return response
+
+
+def api_create_files_chunked(
+    files: list[File],
+    CLI_config: CLIConfig,
+    *,
+    update: bool = False,
+    chunk_size: int = 1000,
+    concurrency: int = 4,
+) -> list[httpx.Response]:
+    """Register files in bounded, concurrent batches.
+
+    The single unbounded POST this replaces sent every file of a data collection
+    in one JSON body against a 120 s timeout — a live failure mode on large
+    runs, not a theoretical one. ``/files/upsert_batch`` keys on
+    ``file_location``, so chunks are order-independent and each one is
+    individually retryable.
+
+    Returns every response so the caller can inspect failures; it does not
+    raise on a non-2xx, matching ``api_create_files``.
+    """
+    if not files:
+        return []
+
+    chunks = [files[i : i + chunk_size] for i in range(0, len(files), chunk_size)]
+    if len(chunks) == 1 or concurrency <= 1:
+        return [
+            api_create_files(files=chunk, CLI_config=CLI_config, update=update) for chunk in chunks
+        ]
+
+    logger.info(
+        f"Uploading {len(files)} files in {len(chunks)} chunk(s), concurrency={concurrency}"
+    )
+    responses: list[httpx.Response] = []
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        futures = [
+            executor.submit(api_create_files, files=chunk, CLI_config=CLI_config, update=update)
+            for chunk in chunks
+        ]
+        for future in as_completed(futures):
+            responses.append(future.result())
+    return responses
+
+
+def _delete_concurrently(
+    ids: list[str],
+    delete_one: Callable[[str, CLIConfig], httpx.Response],
+    CLI_config: CLIConfig,
+    *,
+    concurrency: int = 4,
+) -> int:
+    """Fan out per-id deletes and count the successes.
+
+    The fallback for a server without /files/delete_batch and /runs/delete_batch:
+    cleanup there is one round-trip per id, which on a large project meant
+    thousands of sequential requests.
+    """
+    if not ids:
+        return 0
+
+    def deleted_one(item: str) -> bool:
+        try:
+            return delete_one(item, CLI_config).status_code < 400
+        except httpx.HTTPError as exc:
+            # Cleanup is best-effort: a stale id that cannot be removed must
+            # not abort a scan that otherwise succeeded.
+            logger.warning(f"Delete failed during cleanup: {exc}")
+            return False
+
+    if concurrency <= 1 or len(ids) == 1:
+        return sum(deleted_one(item) for item in ids)
+
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        return sum(executor.map(deleted_one, ids))
+
+
+def _delete_batch_or_fallback(
+    ids: list[str],
+    *,
+    endpoint: str,
+    payload_key: str,
+    delete_one: Callable[[str, CLIConfig], httpx.Response],
+    CLI_config: CLIConfig,
+    concurrency: int,
+    chunk_size: int = 5000,
+) -> int:
+    """Delete via the batch endpoint, falling back to ``delete_one`` per id when
+    unavailable.
+
+    A 404 means the server predates /…/delete_batch. Falling back keeps a new
+    CLI working against an older API instead of silently leaving stale records
+    behind, which is the failure mode that matters here — cleanup that quietly
+    does nothing looks identical to cleanup that had nothing to do.
+    """
+    if not ids:
+        return 0
+
+    url = f"{CLI_config.api_base_url}/depictio/api/v1/{endpoint}"
+    deleted = 0
+    failed = 0
+    for start in range(0, len(ids), chunk_size):
+        chunk = ids[start : start + chunk_size]
+        try:
+            response = request_with_retry(
+                "POST",
+                url,
+                json={payload_key: chunk},
+                headers=generate_api_headers(CLI_config),
+                timeout=120.0,
+                idempotent=True,
+            )
+        except httpx.HTTPError as exc:
+            # Only what is left: the chunks before this one are already deleted,
+            # and counted.
+            logger.warning(f"Batch delete failed ({exc}); falling back to per-id deletes.")
+            deleted += _delete_concurrently(
+                ids[start:], delete_one, CLI_config, concurrency=concurrency
+            )
+            break
+
+        if response.status_code == 404:
+            logger.info("Server has no batch delete endpoint; falling back to per-id deletes.")
+            deleted += _delete_concurrently(
+                ids[start:], delete_one, CLI_config, concurrency=concurrency
+            )
+            break
+        if response.status_code >= 400:
+            # The chunk's ids stay; the summary below says how many.
+            logger.warning(f"Batch delete returned {response.status_code}: {response.text}")
+            failed += len(chunk)
+            continue
+        deleted += response.json().get("deleted", 0)
+
+    if failed:
+        logger.warning(f"{failed} of {len(ids)} id(s) could not be deleted via {endpoint}.")
+    return deleted
+
+
+def api_delete_files(file_ids: list[str], CLI_config: CLIConfig, *, concurrency: int = 4) -> int:
+    """Remove files, preferring one batch request over N round-trips."""
+    return _delete_batch_or_fallback(
+        file_ids,
+        endpoint="files/delete_batch",
+        payload_key="file_ids",
+        delete_one=api_delete_file,
+        CLI_config=CLI_config,
+        concurrency=concurrency,
+    )
+
+
+def api_delete_runs(run_ids: list[str], CLI_config: CLIConfig, *, concurrency: int = 4) -> int:
+    """Remove runs, preferring one batch request over N round-trips."""
+    return _delete_batch_or_fallback(
+        run_ids,
+        endpoint="runs/delete_batch",
+        payload_key="run_ids",
+        delete_one=api_delete_run,
+        CLI_config=CLI_config,
+        concurrency=concurrency,
+    )
 
 
 # Optionally, if you also need to push runs, you could create a similar function:
@@ -365,7 +584,9 @@ def api_get_runs_by_wf_id(wf_id: str, CLI_config: CLIConfig) -> httpx.Response:
     logger.info(f"Getting runs for workflow ID: {wf_id}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/runs/list/{wf_id}"
-    response = get_http_client().get(url, headers=generate_api_headers(CLI_config), timeout=60.0)
+    response = request_with_retry(
+        "GET", url, headers=generate_api_headers(CLI_config), timeout=60.0, idempotent=True
+    )
     return response
 
 
@@ -399,18 +620,21 @@ def api_upsert_runs_batch(
     logger.debug(f"Payload runs upsert batch: {payload}")
     url = f"{CLI_config.api_base_url}/depictio/api/v1/runs/upsert_batch"
 
-    response = get_http_client().post(
+    # Safe to retry: /runs/upsert_batch is a true upsert keyed on run_tag.
+    response = request_with_retry(
+        "POST",
         url,
         json=payload,
         headers=generate_api_headers(CLI_config),
         timeout=120.0,  # 2 minutes timeout for runs batch operations
+        idempotent=True,
     )
     return response
 
 
 def api_monitoring_ingestion_start(
     CLI_config: CLIConfig,
-    command: str = "run",
+    command: str = "ingest",
     project_id: str | None = None,
     project_name: str | None = None,
     cli_version: str | None = None,
@@ -418,6 +642,8 @@ def api_monitoring_ingestion_start(
     cli_config_path: str | None = None,
     project_config_path: str | None = None,
     data_root: str | None = None,
+    trigger: str | None = None,
+    trigger_reason: str | None = None,
 ) -> str | None:
     """Open a server-side ingestion-run record. Best-effort.
 
@@ -435,6 +661,8 @@ def api_monitoring_ingestion_start(
             "cli_config_path": cli_config_path,
             "project_config_path": project_config_path,
             "data_root": data_root,
+            "trigger": trigger,
+            "trigger_reason": trigger_reason,
         }
         response = get_http_client().post(
             url, json=payload, headers=generate_api_headers(CLI_config), timeout=30.0
@@ -447,6 +675,114 @@ def api_monitoring_ingestion_start(
     return None
 
 
+def api_monitoring_ingestion_step(
+    CLI_config: CLIConfig,
+    run_id: str,
+    step: dict,
+    current_step: str | None = None,
+    counters: dict | None = None,
+    progress: dict | None = None,
+) -> bool:
+    """Report one step of an in-flight run. Best-effort; never raises.
+
+    Returns False when the server does not accept step updates (older API), so
+    a caller can stop trying instead of retrying for the whole run.
+
+    Note the server answers 200 with ``{"throttled": true}`` rather than 429
+    when a run exceeds its update rate. A dropped progress ping is not an error
+    and must not trigger a client retry, so that still counts as success here.
+    """
+    try:
+        url = f"{CLI_config.api_base_url}/depictio/api/v1/monitoring/ingestion/{run_id}/step"
+        payload: dict = {"step": step}
+        if current_step is not None:
+            payload["current_step"] = current_step
+        if counters:
+            payload["counters"] = counters
+        if progress:
+            payload["progress"] = progress
+        response = get_http_client().post(
+            url, json=payload, headers=generate_api_headers(CLI_config), timeout=10.0
+        )
+        if response.status_code == 200:
+            return True
+        if response.status_code in (404, 422):
+            # 404: monitoring disabled or endpoint absent. 422: this server's
+            # IngestionStep is extra="forbid" and predates a field we send.
+            # Both are permanent for this run — tell the caller to give up.
+            logger.debug(f"Monitoring step updates unavailable (HTTP {response.status_code})")
+            return False
+        logger.debug(f"Monitoring step update skipped (HTTP {response.status_code})")
+    except Exception as exc:
+        logger.debug(f"Monitoring step update failed (non-fatal): {exc}")
+    return True
+
+
+def api_agent_heartbeat(CLI_config: CLIConfig, agent: dict) -> bool:
+    """Report that a long-running CLI agent is alive. Best-effort; never raises.
+
+    Returns False when the server does not support agents (404 on an older API)
+    so the caller can stop trying and log once, rather than warning on every
+    beat for the lifetime of the process.
+    """
+    try:
+        url = f"{CLI_config.api_base_url}/depictio/api/v1/monitoring/agents/heartbeat"
+        response = get_http_client().post(
+            url, json=agent, headers=generate_api_headers(CLI_config), timeout=15.0
+        )
+        if response.status_code == 404:
+            return False
+        if response.status_code >= 400:
+            logger.debug(f"Agent heartbeat rejected (HTTP {response.status_code})")
+        return True
+    except Exception as exc:
+        logger.debug(f"Agent heartbeat failed (non-fatal): {exc}")
+        return True
+
+
+def api_agent_claim_trigger(CLI_config: CLIConfig, agent_id: str) -> bool | None:
+    """Claim a "Run now" pressed in the web UI. Best-effort; never raises.
+
+    ``True`` means a run was requested and is now this process's to perform —
+    the server cleared it atomically, so it will not be handed out twice.
+
+    ``None`` means the server has no such route (an older API), so the caller
+    can stop polling instead of issuing a doomed request every few seconds for
+    the lifetime of the watcher. An unknown agent is not a 404 here; it answers
+    "nothing pending", which is why the two cases can be told apart.
+
+    Any other failure returns ``False``: a watcher that cannot reach the server
+    should keep watching on its own triggers, not stop.
+    """
+    try:
+        url = f"{CLI_config.api_base_url}/depictio/api/v1/monitoring/agents/{agent_id}/claim"
+        response = get_http_client().post(
+            url, headers=generate_api_headers(CLI_config), timeout=10.0
+        )
+        if response.status_code == 404:
+            return None
+        if response.status_code >= 400:
+            logger.debug(f"Trigger claim rejected (HTTP {response.status_code})")
+            return False
+        return bool(response.json().get("run_requested"))
+    except Exception as exc:
+        logger.debug(f"Trigger claim failed (non-fatal): {exc}")
+        return False
+
+
+def api_agent_deregister(CLI_config: CLIConfig, agent_id: str) -> None:
+    """Remove an agent on clean shutdown. Best-effort; never raises.
+
+    Without this the agent lingers until its TTL expires, which reads as "still
+    running" for minutes after a deliberate stop.
+    """
+    try:
+        url = f"{CLI_config.api_base_url}/depictio/api/v1/monitoring/agents/{agent_id}"
+        get_http_client().delete(url, headers=generate_api_headers(CLI_config), timeout=10.0)
+    except Exception as exc:
+        logger.debug(f"Agent deregistration failed (non-fatal): {exc}")
+
+
 def api_monitoring_ingestion_finish(
     CLI_config: CLIConfig,
     run_id: str,
@@ -455,8 +791,13 @@ def api_monitoring_ingestion_finish(
     error: str | None = None,
     project_id: str | None = None,
     data_collections: list[dict] | None = None,
+    timeout: float = 30.0,
 ) -> None:
-    """Close a server-side ingestion-run record. Best-effort; never raises."""
+    """Close a server-side ingestion-run record. Best-effort; never raises.
+
+    ``timeout`` is shortened on error exits so an unreachable server cannot hold
+    up a Ctrl-C or a failed run for long.
+    """
     if not run_id:
         return
     try:
@@ -468,9 +809,19 @@ def api_monitoring_ingestion_finish(
             "project_id": project_id,
             "data_collections": data_collections or [],
         }
-        get_http_client().post(
-            url, json=payload, headers=generate_api_headers(CLI_config), timeout=30.0
-        )
+        headers = generate_api_headers(CLI_config)
+        try:
+            get_http_client().post(url, json=payload, headers=headers, timeout=timeout)
+        except httpx.TransportError as exc:
+            # A timeout is not retried: that would double the wait the short
+            # ``timeout`` of an error exit is there to cap.
+            if isinstance(exc, httpx.TimeoutException):
+                raise
+            # After a server error the server may drop the pooled keep-alive connection,
+            # and this call is often the next one to use it: retried once on a
+            # connection of its own, or the run stays recorded as running forever.
+            logger.debug(f"Monitoring ingestion finish retried after: {exc}")
+            httpx.post(url, json=payload, headers=headers, timeout=timeout)
     except Exception as exc:
         logger.debug(f"Monitoring ingestion finish failed (non-fatal): {exc}")
 
@@ -490,7 +841,10 @@ def api_delete_run(run_id: str, CLI_config: CLIConfig) -> httpx.Response:
     logger.info(f"Deleting run with ID: {run_id}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/runs/delete/{run_id}"
-    response = get_http_client().delete(url, headers=generate_api_headers(CLI_config), timeout=60.0)
+    # Deleting by id is idempotent: a replay simply finds nothing left to delete.
+    response = request_with_retry(
+        "DELETE", url, headers=generate_api_headers(CLI_config), timeout=60.0, idempotent=True
+    )
     return response
 
 
@@ -528,7 +882,10 @@ def api_delete_file(file_id: str, CLI_config: CLIConfig) -> httpx.Response:
     logger.info(f"Deleting file with ID: {file_id}")
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/files/delete/{file_id}"
-    response = get_http_client().delete(url, headers=generate_api_headers(CLI_config), timeout=60.0)
+    # Deleting by id is idempotent: a replay simply finds nothing left to delete.
+    response = request_with_retry(
+        "DELETE", url, headers=generate_api_headers(CLI_config), timeout=60.0, idempotent=True
+    )
     return response
 
 
@@ -539,6 +896,8 @@ def api_upsert_deltatable(
     CLI_config: CLIConfig,
     update: bool = False,
     deltatable_size_bytes: int | None = None,
+    delta_provenance: dict | None = None,
+    async_mode: bool = False,
 ) -> httpx.Response:
     """
     Create or update a Delta Table on the server using a bulk upsert.
@@ -547,6 +906,16 @@ def api_upsert_deltatable(
         deltaTable (UpsertDeltaTableAggregated): Delta Table to send.
         CLI_config (CLIConfig): Configuration object containing API base URL and credentials.
         deltatable_size_bytes (int, optional): Size of the deltatable in bytes to store in flexible_metadata.
+        delta_provenance (dict, optional): Commit facts observed after the write —
+            delta_version, delta_commit_timestamp, write_mode, row/file counts,
+            run_tags, ingestion_run_id, trigger. Sent only when present, so an
+            older server (which ignores unknown fields) and an older CLI (which
+            sends none) both keep working.
+        async_mode (bool): Ask the server to offload the expensive half of the
+            upsert and answer with a ``job_id``. A request, not a guarantee —
+            the server decides. A response without ``job_id`` means the work is
+            already complete, which is also exactly what an older server
+            returns, so no version negotiation is needed.
 
     Returns:
         httpx.Response: The response from the server.
@@ -559,28 +928,43 @@ def api_upsert_deltatable(
         "update": update,
     }
 
+    if async_mode:
+        payload["async_mode"] = True
+
     # Add deltatable size to payload if provided
     if deltatable_size_bytes is not None:
         payload["deltatable_size_bytes"] = deltatable_size_bytes
+
+    if delta_provenance:
+        payload.update({k: v for k, v in delta_provenance.items() if v is not None})
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/deltatables/upsert"
 
     logger.debug(f"Payload: {payload}")
 
     try:
-        response = get_http_client().post(
+        # NOT idempotent. This endpoint *appends* an Aggregation and derives the
+        # next version from aggregation[-1].aggregation_version + 1, so replaying
+        # it creates a duplicate entry and a phantom version bump — and
+        # aggregation_version salts the API's dataframe cache keys, so the damage
+        # surfaces later as silently invalidated caches rather than as an error.
+        # Only failures that provably never reached the server are retried.
+        response = request_with_retry(
+            "POST",
             url,
             json=payload,
             headers=generate_api_headers(CLI_config),
             timeout=300.0,  # 5 minutes timeout for large deltatable processing
+            idempotent=False,
         )
         return response
-    except httpx.TimeoutException:
-        logger.error(
-            f"Deltatable upsert timed out after 300 seconds for data collection {data_collection_id}"
-        )
-        # Re-raise the exception to be handled by the caller
-        raise
+    except httpx.TimeoutException as exc:
+        # The caller reports the exception: said here what timed out, which httpx's own
+        # "timed out" does not.
+        raise httpx.TimeoutException(
+            f"Deltatable upsert timed out after 300 seconds for data collection "
+            f"{data_collection_id}"
+        ) from exc
 
 
 @validate_call
@@ -688,19 +1072,19 @@ def api_create_backup(
         if response.status_code == 200:
             return response.json()
         else:
-            logger.error(f"Backup creation failed: {response.text}")
+            logger.debug(f"Backup creation failed: {response.text}")
             return {
                 "success": False,
                 "message": f"API request failed with status {response.status_code}: {response.text}",
             }
     except httpx.TimeoutException:
-        logger.error("Backup creation timed out")
+        logger.debug("Backup creation timed out")
         return {
             "success": False,
             "message": "Request timed out. The backup operation may still be running on the server.",
         }
     except Exception as e:
-        logger.error(f"Backup creation failed: {e}")
+        logger.debug(f"Backup creation failed: {e}")
         return {
             "success": False,
             "message": f"Request failed: {str(e)}",
@@ -732,7 +1116,7 @@ def api_list_backups(CLI_config: CLIConfig) -> dict:
         if response.status_code == 200:
             return response.json()
         else:
-            logger.error(f"Failed to list backups: {response.text}")
+            logger.debug(f"Failed to list backups: {response.text}")
             return {
                 "success": False,
                 "message": f"API request failed with status {response.status_code}: {response.text}",
@@ -773,7 +1157,7 @@ def api_validate_backup(CLI_config: CLIConfig, backup_id: str) -> dict:
         if response.status_code == 200:
             return response.json()
         else:
-            logger.error(f"Backup validation failed: {response.text}")
+            logger.debug(f"Backup validation failed: {response.text}")
             return {
                 "success": False,
                 "message": f"API request failed with status {response.status_code}: {response.text}",
@@ -784,7 +1168,12 @@ def api_validate_backup(CLI_config: CLIConfig, backup_id: str) -> dict:
 
 @validate_call
 def api_restore_backup(
-    CLI_config: CLIConfig, backup_id: str, dry_run: bool = True, collections: list | None = None
+    CLI_config: CLIConfig,
+    backup_id: str,
+    dry_run: bool = True,
+    collections: list | None = None,
+    allow_unverified: bool = False,
+    skip_validation: bool = False,
 ) -> dict:
     """
     Restore from a backup on the server.
@@ -794,6 +1183,8 @@ def api_restore_backup(
         backup_id (str): ID of the backup to restore from.
         dry_run (bool): If True, only simulate the restore without actually changing data.
         collections (list): List of collection names to restore. If None, restore all collections.
+        allow_unverified (bool): Allow restoring a legacy backup without a checksum sidecar.
+        skip_validation (bool): Skip the server-side Pydantic validation gate before restore.
 
     Returns:
         dict: Response containing restore operation results.
@@ -804,6 +1195,12 @@ def api_restore_backup(
     payload = {"backup_id": backup_id, "dry_run": dry_run}
     if collections:
         payload["collections"] = collections
+    # Only sent when set, so the CLI stays compatible with older servers that
+    # reject unknown fields.
+    if allow_unverified:
+        payload["allow_unverified"] = True
+    if skip_validation:
+        payload["skip_validation"] = True
 
     try:
         response = get_http_client().post(
@@ -822,7 +1219,7 @@ def api_restore_backup(
             logger.debug(f"Restore result: {result}")
             return result
         else:
-            logger.error(
+            logger.debug(
                 f"Backup restore failed: status={response.status_code}, response={response.text}"
             )
             return {
@@ -969,8 +1366,8 @@ def api_create_multiqc_report(multiqc_report: dict, CLI_config: "CLIConfig"):
     url = f"{CLI_config.api_base_url}/depictio/api/v1/multiqc/reports"
     headers = generate_api_headers(CLI_config)
 
+    # Not the headers: they carry the access token.
     logger.debug(f"POST URL: {url}")
-    logger.debug(f"Headers: {headers}")
     logger.debug(
         f"Payload keys: {list(multiqc_report.keys()) if isinstance(multiqc_report, dict) else 'not a dict'}"
     )
@@ -984,11 +1381,11 @@ def api_create_multiqc_report(multiqc_report: dict, CLI_config: "CLIConfig"):
         )
         logger.debug(f"HTTP response received: {response.status_code}")
         return response
-    except httpx.TimeoutException:
-        logger.error("API request timed out after 30 seconds")
-        raise
+    except httpx.TimeoutException as exc:
+        # The caller reports the exception: said here how long it waited.
+        raise httpx.TimeoutException("the API did not answer within 30 seconds") from exc
     except httpx.RequestError as e:
-        logger.error(f"HTTP request failed: {e}")
+        logger.debug(f"HTTP request failed: {e}")
         raise
 
 
@@ -1012,8 +1409,8 @@ def api_update_multiqc_report(report_id: str, multiqc_report: dict, CLI_config: 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/multiqc/reports/{report_id}"
     headers = generate_api_headers(CLI_config)
 
+    # Not the headers: they carry the access token.
     logger.debug(f"PUT URL: {url}")
-    logger.debug(f"Headers: {headers}")
     logger.debug(
         f"Payload keys: {list(multiqc_report.keys()) if isinstance(multiqc_report, dict) else 'not a dict'}"
     )
@@ -1027,11 +1424,11 @@ def api_update_multiqc_report(report_id: str, multiqc_report: dict, CLI_config: 
         )
         logger.debug(f"HTTP response received: {response.status_code}")
         return response
-    except httpx.TimeoutException:
-        logger.error("API request timed out after 30 seconds")
-        raise
+    except httpx.TimeoutException as exc:
+        # The caller reports the exception: said here how long it waited.
+        raise httpx.TimeoutException("the API did not answer within 30 seconds") from exc
     except httpx.RequestError as e:
-        logger.error(f"HTTP request failed: {e}")
+        logger.debug(f"HTTP request failed: {e}")
         raise
 
 
@@ -1052,7 +1449,7 @@ def _post_migrate_endpoint(
         if response.status_code == 200:
             return response.json()
         else:
-            logger.error(f"{operation} failed: {response.text}")
+            logger.debug(f"{operation} failed: {response.text}")
             return {
                 "success": False,
                 "message": f"API request failed with status {response.status_code}: {response.text}",
@@ -1089,7 +1486,7 @@ def api_export_project(
             timeout=600.0,
         )
         if response.status_code != 200:
-            logger.error(f"Export failed: {response.text}")
+            logger.debug(f"Export failed: {response.text}")
             return {
                 "success": False,
                 "message": f"API request failed with status {response.status_code}: {response.text}",

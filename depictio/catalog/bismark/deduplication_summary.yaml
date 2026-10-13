@@ -1,0 +1,18 @@
+id: bismark_deduplication_summary
+name: Deduplication summary
+mode: deduplication
+description: >-
+  Per-sample Bismark PCR-duplicate removal: alignments examined, duplicates
+  removed and the leftover count carried into methylation extraction. A
+  duplication rate far above the run's median is the usual sign of a library
+  that was oversequenced relative to its complexity.
+find:
+  path_glob: "**/*.deduplication_report.txt"
+recipe: bismark/deduplication_summary.py
+fixture: deduplication_summary.tsv
+renders_as:
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: pct_duplication, color: sample, title: PCR duplication rate per sample} }
+  - { component: card, column: pct_duplication, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: pct_duplication, aggregation: max, secondary_layout: threshold, threshold_value: 20.0, threshold_direction: max, threshold_warn: 10.0 }
+  - { component: card, column: leftover_sequences, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: table }

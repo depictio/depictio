@@ -1,0 +1,13 @@
+assembly_id	copy_class	rank	class_order	solid_kmers	percent	error_cutoff
+test_hifi_flye_assembly	Absent	Copy number	0	627943	0.5774525366334934	4
+test_hifi_flye_assembly	1 copy	Copy number	1	103715295	95.3759500232363	4
+test_hifi_flye_assembly	2 copies	Copy number	2	2775353	2.552197619693787	4
+test_hifi_flye_assembly	3 copies	Copy number	3	684732	0.6296753531994547	4
+test_hifi_flye_assembly	4 copies	Copy number	4	282052	0.25937329162447875	4
+test_hifi_flye_assembly	More than 4	Copy number	5	658281	0.6053511756124882	4
+test_hifi_flye_links	Absent	Copy number	0	627943	0.5774525366334934	4
+test_hifi_flye_links	1 copy	Copy number	1	103715295	95.3759500232363	4
+test_hifi_flye_links	2 copies	Copy number	2	2775353	2.552197619693787	4
+test_hifi_flye_links	3 copies	Copy number	3	684732	0.6296753531994547	4
+test_hifi_flye_links	4 copies	Copy number	4	282052	0.25937329162447875	4
+test_hifi_flye_links	More than 4	Copy number	5	658281	0.6053511756124882	4

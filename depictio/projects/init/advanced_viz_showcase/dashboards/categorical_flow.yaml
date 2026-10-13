@@ -1,0 +1,127 @@
+# Lineage assignment flow: one tab of the advanced-visualisation showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'Lineage assignment flow'
+subtitle: 'SARS-CoV-2 samples flowing from QC status to Pangolin lineage to Nextclade clade'
+icon: 'mdi:chart-sankey'
+icon_color: 'violet'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8d47'
+is_main_tab: false
+tab_order: 23
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:virus'
+tab_icon_color: 'violet'
+
+# Left-panel filter section. Deliberately not `persistent`: the 23 tabs of
+# this family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Call scope'
+    icon: 'mdi:filter-variant'
+    color: 'violet'
+    description: 'Restricts which samples enter the flow'
+
+grid_sections:
+  - name: 'Categorical flow'
+    icon: 'mdi:relation-many-to-many'
+    color: 'violet'
+    description: 'How samples move between three categorical calls'
+
+components:
+  - tag: text-categorical_flow
+    index: flow-text
+    component_type: text
+    title: 'Categorical flow'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Categorical flow'
+    body: >
+      Each band is a set of SARS-CoV-2 samples sharing the same QC status, Pangolin lineage
+      and Nextclade clade, its width the sample count. It answers what three bar charts
+      cannot, such as whether the samples failing QC are the ones left unassigned. The steps
+      and the sort order are in the tile header. Input: the QC, Pangolin and Nextclade reports
+      of nf-core/viralrecon.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: viz-categorical_flow
+    index: 'flow-sankey'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'categorical_flow_demo'
+    title: 'Categorical flow'
+    description: 'Sankey across qc_status, lineage and clade, aggregated on the server. Steps and sort order sit in the tile header.'
+    section: 'Categorical flow'
+    viz_kind: 'sankey'
+    config:
+      viz_kind: "sankey"
+      step_cols: ["qc_status", "lineage", "clade"]
+      value_col: null
+      sort_mode: "total_flow"
+      color_mode: "source"
+      link_opacity: 0.5
+      min_link_value: 0.0
+      show_node_labels: true
+      controls_placement: "header"
+    layout: { x: 0, y: 2, w: 8, h: 9 }
+
+  - tag: filter-categorical_flow-qc
+    index: flow-f-qc
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'categorical_flow_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'qc_status'
+    column_type: 'object'
+    title: 'QC status'
+    placement: left
+    section: 'Call scope'
+    group: 'Call filters'
+    display:
+      title_size: md
+      custom_color: '#2E7D32'
+      icon_name: 'mdi:check-circle'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-categorical_flow-lineage
+    index: flow-f-lineage
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'categorical_flow_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'lineage'
+    column_type: 'object'
+    title: 'Lineage'
+    placement: left
+    section: 'Call scope'
+    group: 'Call filters'
+    display:
+      title_size: md
+      custom_color: '#7B1FA2'
+      icon_name: 'mdi:virus'
+    layout: { x: 0, y: 3, w: 1, h: 3 }
+
+  - tag: filter-categorical_flow-clade
+    index: flow-f-clade
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'categorical_flow_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'clade'
+    column_type: 'object'
+    title: 'Clade'
+    placement: left
+    section: 'Call scope'
+    group: 'Call filters'
+    display:
+      title_size: md
+      custom_color: '#3F51B5'
+      icon_name: 'mdi:family-tree'
+    layout: { x: 0, y: 6, w: 1, h: 3 }

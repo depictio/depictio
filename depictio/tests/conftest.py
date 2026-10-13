@@ -2,7 +2,7 @@
 
 Sets safe defaults for the security-hardening env vars introduced in PR1
 so existing tests that import ``depictio.api.v1.configs.config`` keep
-working without each test having to wire ``DEPICTIO_MINIO_ROOT_PASSWORD``
+working without each test having to wire ``DEPICTIO_S3_ROOT_PASSWORD``
 and ``DEPICTIO_BOOTSTRAP_*`` itself.
 
 Production deployments set these via their .env / Helm Secret; tests
@@ -20,12 +20,34 @@ _PYTEST_DEFAULTS = {
     "DEPICTIO_CONTEXT": "server",
     # 32-char dev-only password — passes the >=16 length check and isn't on
     # the well-known weak list. Never reuse outside the test suite.
-    "DEPICTIO_MINIO_ROOT_PASSWORD": "pytest_minio_password_aaaaaaaaaa",
+    "DEPICTIO_S3_ROOT_PASSWORD": "pytest_s3_password_aaaaaaaaaaaaa",
     "DEPICTIO_BOOTSTRAP_ADMIN_EMAIL": "admin@example.com",
     "DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD": "pytest_admin_password_aaaaaaaaaa",
     "DEPICTIO_BOOTSTRAP_SEED_TEST_USER": "true",
     "DEPICTIO_BOOTSTRAP_TEST_USER_PASSWORD": "test_pwd",
+    # Forced off so a test that boots the app lifespan never starts the release
+    # check, which would call api.github.com. Tests of the check itself patch
+    # `settings.version_check.enabled`.
+    "DEPICTIO_VERSION_CHECK_ENABLED": "false",
 }
 
 for _k, _v in _PYTEST_DEFAULTS.items():
     os.environ.setdefault(_k, _v)
+
+
+# beanie >= 2.1 passes list_collection_names(nameOnly=True, authorizedCollections=True)
+# during init_beanie; mongomock 4.3.0 / mongomock-motor 0.0.36 accept neither kwarg.
+# Both are no-ops against a mock (privilege filtering and a projection hint), so drop
+# them before delegating. Remove once mongomock supports the kwargs upstream.
+import mongomock.database  # noqa: E402
+
+_orig_list_collection_names = mongomock.database.Database.list_collection_names
+
+
+def _list_collection_names_shim(self, filter=None, session=None, **kwargs):
+    kwargs.pop("nameOnly", None)
+    kwargs.pop("authorizedCollections", None)
+    return _orig_list_collection_names(self, filter=filter, session=session, **kwargs)
+
+
+mongomock.database.Database.list_collection_names = _list_collection_names_shim

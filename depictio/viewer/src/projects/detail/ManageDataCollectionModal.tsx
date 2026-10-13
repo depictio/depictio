@@ -19,16 +19,7 @@ import {
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
 
-import {
-  appendMultiQCFiles,
-  appendTableFiles,
-  clearMultiQCDC,
-  clearTableDC,
-  fetchMultiQCByDataCollection,
-  replaceMultiQCFiles,
-  replaceTableFiles,
-  type MultiQCReportSummary,
-} from 'depictio-react-core';
+import { appendMultiQCFiles, appendTableFiles, clearMultiQCDC, clearTableDC, fetchMultiQCByDataCollection, replaceMultiQCFiles, replaceTableFiles, type MultiQCReportSummary, useBrandAccents } from 'depictio-react-core';
 
 import { UnstyledDropZone } from '../../components/UnstyledDropZone';
 import { useFolderDropzone } from '../../hooks/useFolderDropzone';
@@ -82,6 +73,7 @@ const ManageDataCollectionModal: React.FC<ManageDataCollectionModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const accent = useBrandAccents();
   const [tab, setTab] = useState<Tab>('modify');
   const [replaceAll, setReplaceAll] = useState(false);
   const [confirmName, setConfirmName] = useState('');
@@ -266,9 +258,9 @@ const ManageDataCollectionModal: React.FC<ManageDataCollectionModalProps> = ({
           <Icon
             icon="mdi:database-cog"
             width={32}
-            color="var(--mantine-color-teal-6)"
+            color={`var(--mantine-color-${accent.secondary}-6)`}
           />
-          <Title order={3} c="teal" m={0}>
+          <Title order={3} c={accent.secondary} m={0}>
             Manage Data Collection
           </Title>
         </Group>

@@ -1,0 +1,353 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d7c"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d7c"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "ts-text",
+      "component_type": "text",
+      "title": "Isoforms of one gene",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Transcript structure",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "One gene, one lane per isoform: exons are blocks, the coding part is drawn taller, the line between blocks is the intron and its chevrons give the strand. DPX1 opens with a skipped exon, an alternative first exon, an alternative 3' end, a retained intron and a novel isoform; the gene picker is in the header. Compare the Gene clusters tab, which draws whole genes as arrows along a contig. Input: bambu or StringTie GTF from nf-core/nanoseq or rnaseq, joined to per-transcript counts.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ts-track",
+      "component_type": "advanced_viz",
+      "title": "Isoform structures",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "transcript_structure_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d9c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Eight isoforms across two genes: exon skipping, an alternative first exon, an alternative 3' end, a retained intron and one novel transcript",
+        "data_collection_tag": "transcript_structure_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d9c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Isoforms of the gene picked in the header. Lane colour is the novelty class, lane order and the bar on the right are the per-transcript expression. Colour scale and lane budget are in the settings.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Transcript structure",
+      "viz_kind": "transcript_structure",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "transcript_structure",
+        "transcript_id_col": "transcript_id",
+        "gene_id_col": "gene_id",
+        "chrom_col": "chrom",
+        "start_col": "start",
+        "end_col": "end",
+        "feature_col": "feature",
+        "strand_col": "strand",
+        "sample_col": "sample",
+        "gene_name_col": "gene_name",
+        "transcript_class_col": "transcript_class",
+        "expression_col": "expression",
+        "gene": "DPX1",
+        "max_transcripts": 30,
+        "exon_feature": "exon",
+        "cds_feature": "CDS",
+        "colour_by": "transcript_class",
+        "colour_scale": "Viridis"
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ts-f-gene",
+      "component_type": "interactive",
+      "title": "Gene",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "transcript_structure_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d9c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Eight isoforms across two genes: exon skipping, an alternative first exon, an alternative 3' end, a retained intron and one novel transcript",
+        "data_collection_tag": "transcript_structure_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d9c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Isoform scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "gene_name",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Isoform filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "icon_name": "mdi:dna",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ts-f-class",
+      "component_type": "interactive",
+      "title": "Novelty class",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "transcript_structure_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d9c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Eight isoforms across two genes: exon skipping, an alternative first exon, an alternative 3' end, a retained intron and one novel transcript",
+        "data_collection_tag": "transcript_structure_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d9c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Isoform scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "transcript_class",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Isoform filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "icon_name": "mdi:shape-outline",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ts-f-feature",
+      "component_type": "interactive",
+      "title": "Block type",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "transcript_structure_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d9c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Eight isoforms across two genes: exon skipping, an alternative first exon, an alternative 3' end, a retained intron and one novel transcript",
+        "data_collection_tag": "transcript_structure_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d9c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Isoform scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "feature",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Isoform filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "icon_name": "mdi:swap-vertical",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-ts-f-gene",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-ts-f-class",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-ts-f-feature",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-ts-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ts-track",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Isoforms of one gene",
+  "subtitle": "Isoforms of one gene stacked on a base-pair axis: exons as blocks, coding parts taller, introns as lines with strand chevrons, novel transcripts told apart from annotated ones. Splicing, not gene order.",
+  "icon": "mdi:chart-timeline-variant",
+  "icon_color": "grape",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 39,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-timeline-variant",
+  "tab_icon_color": "grape",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Isoform scope",
+      "icon": "mdi:filter-variant",
+      "color": "grape",
+      "description": "Restricts which genes, novelty classes and block types are drawn",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Transcript structure",
+      "icon": "mdi:chart-timeline-variant",
+      "color": "grape",
+      "description": "Isoforms of one gene, one lane per transcript",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

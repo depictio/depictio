@@ -1,0 +1,13 @@
+id: cellranger_mapping_breakdown
+name: Read mapping region breakdown
+mode: count/mapping_breakdown
+description: >-
+  Confidently-mapped reads split into exonic, intronic and intergenic
+  regions, plus the antisense and unmapped shares, for a stacked bar.
+find:
+  path_glob: "**/metrics_summary.csv"
+recipe: cellranger/mapping_breakdown.py
+fixture: mapping_breakdown.tsv
+renders_as:
+  - { id: mapping_stacked_bar, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: fraction, color: region, title: Read mapping breakdown} }
+  - { component: table }

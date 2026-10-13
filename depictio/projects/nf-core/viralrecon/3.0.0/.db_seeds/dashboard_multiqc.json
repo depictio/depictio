@@ -1,12 +1,12 @@
 {
   "_id": {
-    "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
+    "$oid": "746b0f3c1e4a2d7f8e5b9cc6"
   },
   "description": null,
   "flexible_metadata": null,
   "hash": null,
   "dashboard_id": {
-    "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
+    "$oid": "746b0f3c1e4a2d7f8e5b9cc6"
   },
   "version": 1,
   "tmp_children_data": [],
@@ -14,60 +14,55 @@
   "stored_children_data": [],
   "stored_metadata": [
     {
-      "index": "891298a9-91dc-47da-91a7-ffe49549a74c",
+      "index": "mqc-intro",
       "component_type": "text",
-      "title": "MultiQC Pipeline QC Overview",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "summary_metrics",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
+      "title": "",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": null,
       "dc_id": null,
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
-        "data_collection_tag": "summary_metrics",
-        "dc_specific_properties": null,
-        "_id": null
-      },
+      "dc_config": {},
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T21:27:36.984606",
-      "title_size": "sm",
+      "last_updated": "2026-08-29T00:00:00.000000",
       "title_align": "left",
-      "order": 3,
+      "section": null,
+      "order": 1,
       "alignment": "left",
-      "body": "Per-sample QC metrics aggregated from every stage of the nf-core/viralrecon pipeline. Start here to triage which samples to drill into. The tiles are grouped into **Read QC** (fastp + Kraken2), **Alignment & Coverage** (bowtie2 + mosdepth), **Variants & Assembly** (iVar / snpEff / bcftools / QUAST), then **FastQC** sanity checks at the bottom.",
-      "wf_tag": "nextflow/viralrecon"
+      "vertical_alignment": "center",
+      "body": "[MultiQC](https://multiqc.info) gathers the report of every step: read trimming, alignment, coverage, variant calling and assembly. Start with the general statistics and the samples that failed mapping, then open the details step by step.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null
     },
     {
       "index": "mqc-sample-filter",
       "component_type": "interactive",
       "title": "Sample ID",
       "workflow_tag": "viralrecon",
-      "data_collection_tag": "summary_metrics",
+      "data_collection_tag": "multiqc_data",
       "wf_id": {
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c10"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
-        "data_collection_tag": "summary_metrics",
+        "description": "MultiQC report data with QC metrics from all pipeline tools",
+        "data_collection_tag": "multiqc_data",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c10"
         }
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T21:27:36.984640",
-      "title_size": "md",
+      "last_updated": "2026-08-29T00:00:00.000000",
       "title_align": "left",
+      "section": "MultiQC report",
       "interactive_component_type": "MultiSelect",
       "column_name": "sample",
       "column_type": "object",
@@ -78,55 +73,16 @@
       "group": null,
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#45B8AC",
-      "icon_name": "mdi:flask",
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "teal",
+      "icon_name": "mdi:flask-outline",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "mqc-lineage-filter",
-      "component_type": "interactive",
-      "title": "Lineage",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "summary_metrics",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c11"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
-        "data_collection_tag": "summary_metrics",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c11"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-05-20T21:27:36.984680",
-      "title_size": "md",
-      "title_align": "left",
-      "interactive_component_type": "MultiSelect",
-      "column_name": "lineage",
-      "column_type": "object",
-      "value": null,
-      "default_state": null,
-      "filter_expr": null,
-      "placement": "left",
-      "group": null,
-      "timescale": null,
-      "show_marks": null,
-      "custom_color": "#E74C3C",
-      "icon_name": "mdi:virus",
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "05c68041-76a3-46c2-ac3d-bc90d283d9a3",
+      "index": "mqc-general-stats",
       "component_type": "multiqc",
-      "title": "MultiQC general statistics",
+      "title": "",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "multiqc_data",
       "wf_id": {
@@ -147,18 +103,26 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T21:27:36.984689",
-      "description": "Per-sample KPIs across the full pipeline. The QC triage entry point.",
-      "title_size": "h3",
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
       "title_align": "left",
+      "use": "multiqc/general_stats",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_general_stats",
+        "use": "multiqc/general_stats",
+        "description": "The one table every MultiQC report has: one row per sample, one column per headline metric each module contributed. Not a module's own output, which is why it names no producing tool \u2014 MultiQC assembles it from all of them."
+      },
+      "section": "QC overview",
       "selected_module": "general_stats",
       "selected_plot": "general_stats",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "fd469b5b-6b43-46fa-a97e-282ca203faf9",
+      "index": "mqc-fail-mapped",
       "component_type": "multiqc",
-      "title": "fastp - filtered reads",
+      "title": "",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "multiqc_data",
       "wf_id": {
@@ -179,18 +143,58 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T21:27:36.984694",
-      "description": "Reads retained vs filtered before alignment.",
-      "title_size": "h3",
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
       "title_align": "left",
+      "section": "QC overview",
+      "selected_module": "fail_mapped_samples",
+      "selected_plot": "fail_mapped_samples-section",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "mqc-fastp-filtered",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data with QC metrics from all pipeline tools",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/fastp",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastp",
+        "use": "multiqc/fastp",
+        "description": "Read pre-processing QC (quality/adapter filtering, insert size, GC/N content) \u2014 fastp, via MultiQC."
+      },
+      "section": "QC overview",
       "selected_module": "fastp",
       "selected_plot": "Filtered Reads",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "4c6c14ee-a2bc-4cf4-abb0-d417f9c4ccc7",
+      "index": "mqc-bowtie2",
       "component_type": "multiqc",
-      "title": "Kraken2 - top taxa",
+      "title": "",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "multiqc_data",
       "wf_id": {
@@ -211,50 +215,26 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T21:27:36.984699",
-      "description": "Off-target reads = contamination / low viral load.",
-      "title_size": "h3",
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
       "title_align": "left",
-      "selected_module": "kraken",
-      "selected_plot": "Top taxa",
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "f66738de-ddb1-4032-841f-c7a28d4b3ee5",
-      "component_type": "multiqc",
-      "title": "bowtie2 - paired-end alignment",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "multiqc_data",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      "use": "multiqc/bowtie2",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_bowtie2",
+        "use": "multiqc/bowtie2",
+        "description": "Read-alignment summary against the reference (paired-end alignment rates) \u2014 Bowtie2, via MultiQC."
       },
-      "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c10"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "MultiQC report data with QC metrics from all pipeline tools",
-        "data_collection_tag": "multiqc_data",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c10"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-05-20T21:27:36.984703",
-      "description": "Uniquely / multi-mapped / unmapped read fractions.",
-      "title_size": "h3",
-      "title_align": "left",
+      "section": "QC overview",
       "selected_module": "bowtie2",
       "selected_plot": "Paired-end alignments",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "3f9fcc72-8cfa-46aa-a0a0-36f3ffd5f475",
+      "index": "mqc-mosdepth-cumulative",
       "component_type": "multiqc",
-      "title": "mosdepth - cumulative coverage",
+      "title": "",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "multiqc_data",
       "wf_id": {
@@ -275,18 +255,26 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T21:27:36.984706",
-      "description": "Genome fraction covered at >= X depth, per sample.",
-      "title_size": "h3",
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
       "title_align": "left",
+      "use": "multiqc/mosdepth",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_mosdepth",
+        "use": "multiqc/mosdepth",
+        "description": "Coverage-depth distribution and per-contig coverage \u2014 mosdepth, surfaced via MultiQC."
+      },
+      "section": "QC overview",
       "selected_module": "mosdepth",
       "selected_plot": "Cumulative coverage distribution",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "0bc62719-9ca1-4599-912a-c9b67d6126c5",
+      "index": "mqc-fastqc-quality",
       "component_type": "multiqc",
-      "title": "iVar - variant counts",
+      "title": "",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "multiqc_data",
       "wf_id": {
@@ -307,146 +295,26 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T21:27:36.984710",
-      "description": "Raw iVar variant calls per sample.",
-      "title_size": "h3",
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
       "title_align": "left",
-      "selected_module": "ivar_variants",
-      "selected_plot": "ivar_variants-section",
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "6baf098c-63d8-484f-b1ff-1a565feb6d00",
-      "component_type": "multiqc",
-      "title": "snpEff - effects by impact",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "multiqc_data",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
       },
-      "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c10"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "MultiQC report data with QC metrics from all pipeline tools",
-        "data_collection_tag": "multiqc_data",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c10"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-05-20T21:27:36.984713",
-      "description": "HIGH / MODERATE / LOW / MODIFIER per sample.",
-      "title_size": "h3",
-      "title_align": "left",
-      "selected_module": "snpeff",
-      "selected_plot": "Variant Effects by Impact",
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "86dfe188-d75c-48b5-8885-98e052c12032",
-      "component_type": "multiqc",
-      "title": "bcftools - substitution types",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "multiqc_data",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c10"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "MultiQC report data with QC metrics from all pipeline tools",
-        "data_collection_tag": "multiqc_data",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c10"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-05-20T21:27:36.984717",
-      "description": "Transitions vs transversions per sample.",
-      "title_size": "h3",
-      "title_align": "left",
-      "selected_module": "bcftools",
-      "selected_plot": "Variant Substitution Types",
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "7b238820-af80-468e-ab98-37b07feac407",
-      "component_type": "multiqc",
-      "title": "QUAST - number of contigs",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "multiqc_data",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c10"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "MultiQC report data with QC metrics from all pipeline tools",
-        "data_collection_tag": "multiqc_data",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c10"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-05-20T21:27:36.984720",
-      "description": "Assembly contiguity per sample.",
-      "title_size": "h3",
-      "title_align": "left",
-      "selected_module": "quast_variants",
-      "selected_plot": "Number of Contigs",
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "dc03abc8-5ff5-412b-bf78-50c18dc1d238",
-      "component_type": "multiqc",
-      "title": "FastQC - sequence quality histograms",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "multiqc_data",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c10"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "MultiQC report data with QC metrics from all pipeline tools",
-        "data_collection_tag": "multiqc_data",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c10"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-05-20T21:27:36.984724",
-      "description": "Per-position mean quality across all samples - primary read-QC signal.",
-      "title_size": "h3",
-      "title_align": "left",
+      "section": "Read & alignment details",
       "selected_module": "fastqc",
       "selected_plot": "Sequence Quality Histograms",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "5498abc5-0bfe-405c-8a55-86120fc171c0",
+      "index": "mqc-fastqc-status",
       "component_type": "multiqc",
-      "title": "FastQC - status checks",
+      "title": "",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "multiqc_data",
       "wf_id": {
@@ -467,12 +335,460 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T21:27:36.984729",
-      "description": "Pass/Warn/Fail status per FastQC module per sample. Red columns flag systematic library / sequencing issues.",
-      "title_size": "h3",
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
       "title_align": "left",
+      "use": "multiqc/fastqc",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_fastqc",
+        "use": "multiqc/fastqc",
+        "description": "Raw-read sequencing QC (per-base quality, GC content, duplication, adapter content) \u2014 FastQC plots aggregated by MultiQC."
+      },
+      "section": "Read & alignment details",
       "selected_module": "fastqc",
       "selected_plot": "Status Checks",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "mqc-kraken",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data with QC metrics from all pipeline tools",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/kraken",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_kraken",
+        "use": "multiqc/kraken",
+        "description": "Taxonomic read classification (top species/clades) \u2014 Kraken2, surfaced via MultiQC."
+      },
+      "section": "Read & alignment details",
+      "selected_module": "kraken",
+      "selected_plot": "Top taxa",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "mqc-samtools-flagstat",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data with QC metrics from all pipeline tools",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/samtools",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_samtools",
+        "use": "multiqc/samtools",
+        "description": "Alignment flagstat summaries (mapped %, properly paired) \u2014 samtools, via MultiQC."
+      },
+      "section": "Read & alignment details",
+      "selected_module": "samtools_ivar",
+      "selected_plot": "Flagstat",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "mqc-mosdepth-contig",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data with QC metrics from all pipeline tools",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/mosdepth",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_mosdepth",
+        "use": "multiqc/mosdepth",
+        "description": "Coverage-depth distribution and per-contig coverage \u2014 mosdepth, surfaced via MultiQC."
+      },
+      "section": "Read & alignment details",
+      "selected_module": "mosdepth",
+      "selected_plot": "Average coverage per contig",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "mqc-cutadapt",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data with QC metrics from all pipeline tools",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/cutadapt",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_cutadapt",
+        "use": "multiqc/cutadapt",
+        "description": "Adapter/primer trimming summary (filtered reads, trimmed sequence lengths) \u2014 Cutadapt, surfaced via MultiQC."
+      },
+      "section": "Read & alignment details",
+      "selected_module": "cutadapt",
+      "selected_plot": "Filtered Reads",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "mqc-ivar",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data with QC metrics from all pipeline tools",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/ivar",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_ivar",
+        "use": "multiqc/ivar",
+        "description": "Amplicon primer-trimming and variant section metrics \u2014 iVar, surfaced via MultiQC."
+      },
+      "section": "Variant & assembly details",
+      "selected_module": "ivar_variants",
+      "selected_plot": "ivar_variants-section",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "mqc-snpeff-impact",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data with QC metrics from all pipeline tools",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/snpeff",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_snpeff",
+        "use": "multiqc/snpeff",
+        "description": "Variant functional-effect annotation summary (impact, class, region) \u2014 SnpEff, via MultiQC."
+      },
+      "section": "Variant & assembly details",
+      "selected_module": "snpeff",
+      "selected_plot": "Variant Effects by Impact",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "mqc-snpeff-region",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data with QC metrics from all pipeline tools",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/snpeff",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_snpeff",
+        "use": "multiqc/snpeff",
+        "description": "Variant functional-effect annotation summary (impact, class, region) \u2014 SnpEff, via MultiQC."
+      },
+      "section": "Variant & assembly details",
+      "selected_module": "snpeff",
+      "selected_plot": "Variants by Genomic Region",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "mqc-bcftools",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data with QC metrics from all pipeline tools",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/bcftools",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_bcftools",
+        "use": "multiqc/bcftools",
+        "description": "Variant-call statistics (substitution types, indel lengths, variant-quality counts) \u2014 bcftools stats, via MultiQC."
+      },
+      "section": "Variant & assembly details",
+      "selected_module": "bcftools",
+      "selected_plot": "Variant Substitution Types",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "mqc-quast",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data with QC metrics from all pipeline tools",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/quast",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_quast",
+        "use": "multiqc/quast",
+        "description": "Genome-assembly quality metrics (contig counts, lengths) \u2014 QUAST, surfaced via MultiQC."
+      },
+      "section": "Variant & assembly details",
+      "selected_module": "quast_variants",
+      "selected_plot": "Number of Contigs",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "mqc-summary-assembly",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data with QC metrics from all pipeline tools",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/summary_metrics",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_summary_metrics",
+        "use": "multiqc/summary_metrics",
+        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
+      },
+      "section": "Variant & assembly details",
+      "selected_module": "summary_assembly_metrics",
+      "selected_plot": "summary_assembly_metrics-section",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "mqc-summary-variants",
+      "component_type": "multiqc",
+      "title": "",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "multiqc_data",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "MultiQC report data with QC metrics from all pipeline tools",
+        "data_collection_tag": "multiqc_data",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c10"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/summary_metrics",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_summary_metrics",
+        "use": "multiqc/summary_metrics",
+        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
+      },
+      "section": "Variant & assembly details",
+      "selected_module": "summary_variants_metrics",
+      "selected_plot": "summary_variants_metrics-section",
       "wf_tag": "nextflow/viralrecon"
     }
   ],
@@ -481,23 +797,15 @@
     {
       "i": "box-mqc-sample-filter",
       "x": 0,
-      "y": 2,
+      "y": 0,
       "w": 1,
-      "h": 2,
-      "static": false
-    },
-    {
-      "i": "box-mqc-lineage-filter",
-      "x": 0,
-      "y": 4,
-      "w": 1,
-      "h": 2,
+      "h": 3,
       "static": false
     }
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-891298a9-91dc-47da-91a7-ffe49549a74c",
+      "i": "box-mqc-intro",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -512,9 +820,9 @@
       ]
     },
     {
-      "i": "box-05c68041-76a3-46c2-ac3d-bc90d283d9a3",
+      "i": "box-mqc-general-stats",
       "x": 0,
-      "y": 1,
+      "y": 0,
       "w": 8,
       "h": 4,
       "static": false,
@@ -527,9 +835,9 @@
       ]
     },
     {
-      "i": "box-fd469b5b-6b43-46fa-a97e-282ca203faf9",
+      "i": "box-mqc-fail-mapped",
       "x": 0,
-      "y": 5,
+      "y": 4,
       "w": 4,
       "h": 4,
       "static": false,
@@ -542,9 +850,9 @@
       ]
     },
     {
-      "i": "box-4c6c14ee-a2bc-4cf4-abb0-d417f9c4ccc7",
+      "i": "box-mqc-fastp-filtered",
       "x": 4,
-      "y": 5,
+      "y": 4,
       "w": 4,
       "h": 4,
       "static": false,
@@ -557,9 +865,9 @@
       ]
     },
     {
-      "i": "box-f66738de-ddb1-4032-841f-c7a28d4b3ee5",
+      "i": "box-mqc-bowtie2",
       "x": 0,
-      "y": 9,
+      "y": 8,
       "w": 4,
       "h": 4,
       "static": false,
@@ -572,9 +880,9 @@
       ]
     },
     {
-      "i": "box-3f9fcc72-8cfa-46aa-a0a0-36f3ffd5f475",
+      "i": "box-mqc-mosdepth-cumulative",
       "x": 4,
-      "y": 9,
+      "y": 8,
       "w": 4,
       "h": 4,
       "static": false,
@@ -587,9 +895,9 @@
       ]
     },
     {
-      "i": "box-0bc62719-9ca1-4599-912a-c9b67d6126c5",
+      "i": "box-mqc-fastqc-quality",
       "x": 0,
-      "y": 13,
+      "y": 0,
       "w": 4,
       "h": 4,
       "static": false,
@@ -602,9 +910,9 @@
       ]
     },
     {
-      "i": "box-6baf098c-63d8-484f-b1ff-1a565feb6d00",
+      "i": "box-mqc-fastqc-status",
       "x": 4,
-      "y": 13,
+      "y": 0,
       "w": 4,
       "h": 4,
       "static": false,
@@ -617,9 +925,9 @@
       ]
     },
     {
-      "i": "box-86dfe188-d75c-48b5-8885-98e052c12032",
+      "i": "box-mqc-kraken",
       "x": 0,
-      "y": 17,
+      "y": 4,
       "w": 4,
       "h": 4,
       "static": false,
@@ -632,9 +940,9 @@
       ]
     },
     {
-      "i": "box-7b238820-af80-468e-ab98-37b07feac407",
+      "i": "box-mqc-samtools-flagstat",
       "x": 4,
-      "y": 17,
+      "y": 4,
       "w": 4,
       "h": 4,
       "static": false,
@@ -647,26 +955,131 @@
       ]
     },
     {
-      "i": "box-dc03abc8-5ff5-412b-bf78-50c18dc1d238",
+      "i": "box-mqc-mosdepth-contig",
       "x": 0,
-      "y": 21,
+      "y": 8,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-mqc-cutadapt",
+      "x": 4,
+      "y": 8,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-mqc-ivar",
+      "x": 0,
+      "y": 0,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-mqc-snpeff-impact",
+      "x": 4,
+      "y": 0,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-mqc-snpeff-region",
+      "x": 0,
+      "y": 4,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-mqc-bcftools",
+      "x": 4,
+      "y": 4,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-mqc-quast",
+      "x": 0,
+      "y": 8,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-mqc-summary-assembly",
+      "x": 4,
+      "y": 8,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-mqc-summary-variants",
+      "x": 0,
+      "y": 12,
       "w": 8,
-      "h": 5,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-5498abc5-0bfe-405c-8a55-86120fc171c0",
-      "x": 0,
-      "y": 26,
-      "w": 8,
-      "h": 5,
+      "h": 4,
       "static": false,
       "resizeHandles": [
         "se",
@@ -677,6 +1090,84 @@
       ]
     }
   ],
+  "filter_sections": [
+    {
+      "name": "MultiQC report",
+      "icon": "mdi:file-document-outline",
+      "color": "orange",
+      "description": "Samples as the MultiQC report names them",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "QC overview",
+      "icon": "mdi:chart-box-outline",
+      "color": "orange",
+      "description": "Per-sample statistics, failed samples, trimming, alignment and coverage",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Read & alignment details",
+      "icon": "mdi:file-document-outline",
+      "color": "gray",
+      "description": "FastQC, Kraken 2, Cutadapt and samtools, panel by panel",
+      "collapsed": true,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Variant & assembly details",
+      "icon": "mdi:dna",
+      "color": "gray",
+      "description": "iVar, snpEff, bcftools, QUAST and the pipeline's summary tables",
+      "collapsed": true,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "category_colors": null,
+  "funnel_filtering": true,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true,
+  "brand_theme": null,
   "buttons_data": {
     "unified_edit_mode": true,
     "add_components_button": {
@@ -686,8 +1177,8 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "nf-core/viralrecon",
-  "subtitle": "MultiQC Analysis - Sequencing, Alignment & Variant Calling QC",
+  "title": "MultiQC",
+  "subtitle": "Did reads trim, align and cover the genome in every sample?",
   "icon": "/assets/images/workflows/nf-core.png",
   "icon_color": "green",
   "icon_variant": "filled",
@@ -712,17 +1203,25 @@
     "editors": [],
     "viewers": []
   },
-  "is_public": false,
-  "last_saved_ts": "2026-05-20 21:27:37",
+  "is_public": true,
+  "last_saved_ts": "2026-08-29 00:00:00",
+  "creation_time": "2026-10-08 21:52:39",
+  "screenshot_ts": "",
   "project_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
   },
-  "is_main_tab": true,
-  "parent_dashboard_id": null,
-  "tab_order": 0,
-  "main_tab_name": "MultiQC",
-  "tab_icon": "/assets/images/logos/multiqc.png",
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
+  },
+  "tab_order": 1,
+  "main_tab_name": null,
+  "tab_icon": "/assets/images/logos/multiqc_icon_color.svg",
   "tab_icon_color": "orange",
+  "tab_group": "Data & QC",
   "parent_dashboard_title": null,
-  "project_realtime": null
+  "project_realtime": null,
+  "inherited_brand_theme": null,
+  "inherited_category_colors": null,
+  "source_key": "nf-core/viralrecon:dashboards/base.yaml#MultiQC"
 }

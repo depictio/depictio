@@ -1,0 +1,252 @@
+# EMBL Internal Dev Environment - dev.depictio.embl.org (values-embl-internal-dev.yaml)
+# Google OAuth (EMBL staff only, no public/demo mode). Mirrors
+# values-embl-internal-prod.yaml with dev hostnames/namespace, including
+# 3-replica Percona PSMDB HA mongo.
+#
+# Namespace: datasci-depictio-internal-dev
+#   (Tenant: datasci-depictio-internal, 64 CPU / 128 GiB, shared with -prod)
+#
+# IMPORTANT: DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI below must be registered
+# as an authorized redirect URI on the Google Cloud OAuth client (same client
+# ID as prod, per values-embl-secrets.yaml) — this file cannot do that part,
+# only the Google Cloud Console can. Until it's added there, login on this
+# environment will fail with redirect_uri_mismatch even though everything
+# else in this file is correct.
+
+# EMBL ops-k1 uses a custom cluster DNS domain (not cluster.local) — required
+# for the viewer nginx → backend proxy FQDN to resolve.
+clusterDomain: "ops-k1.embl.de"
+
+## Storage
+storageClass: basic-csi
+persistence:
+  mongo:
+    size: 1Gi
+    accessMode: ReadWriteOnce
+  s3:
+    size: 1Gi
+    accessMode: ReadWriteOnce
+  screenshots:
+    size: 100Mi
+    accessMode: ReadWriteMany
+  keys:
+    size: 1Mi
+    accessMode: ReadWriteMany
+  config:
+    size: 10Mi
+    accessMode: ReadWriteMany
+  uploads:
+    size: 5Gi
+    accessMode: ReadWriteMany
+
+## Init Container Resources
+initContainerResources:
+  requests:
+    memory: "64Mi"
+    cpu: "10m"
+  limits:
+    memory: "128Mi"
+    cpu: "100m"
+
+# Viewer (nginx SPA) — stateless and tiny, so run 2 replicas for HA + a
+# zero-downtime rolling deploy. Mirrors values-embl-internal-prod.yaml.
+viewer:
+  replicas: 2
+  strategy: "RollingUpdate"
+
+# Protect the multi-replica workloads during node drains / cluster upgrades.
+# backend, viewer AND celery all run >1 replica once this file's changes
+# apply, so all three get a PDB (the template only emits one for components
+# with >1 replica — see values.yaml).
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Celery worker — same HA bump as prod.
+celery:
+  replicas: 2
+
+## SecurityContext
+backend:
+  replicas: 2  # Multiple replicas for high availability with anti-affinity
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+  resources:
+    requests:
+      memory: "2Gi"     # Balanced for multiple replicas
+      cpu: "500m"       # Balanced CPU allocation
+    limits:
+      memory: "4Gi"     # Reasonable limit for multiple replicas
+      cpu: "2"          # Balanced CPU limit
+
+  env:
+    # Anonymous user configuration
+    DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
+    DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
+
+    # Performance - Balanced workers for multiple replicas
+    DEPICTIO_FASTAPI_WORKERS: "4"
+
+    # Analytics Configuration
+    DEPICTIO_ANALYTICS_ENABLED: "true"
+    DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
+
+    # Google OAuth Configuration
+    DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED: "true"
+
+    # Celery Configuration - Disabled for now
+    # DEPICTIO_CELERY_ENABLED: "false"
+
+# Client ID/secret come from values-embl-secrets.yaml's top-level `auth:` map
+# (same OAuth app across environments — deep-merged with this block). The
+# redirect URI is env-specific though, so it's set here, not in secrets — it
+# must match the ingress host below or Google rejects the callback. NOTE:
+# read from top-level .Values.auth, NOT backend.env (templates/configmaps.yaml:57).
+auth:
+  # Must be /auth/google/callback, not bare /auth — see values-embl-internal-prod.yaml
+  DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI: "https://dev.depictio.embl.org/auth/google/callback"
+
+mongo:
+  useOperator: true     # Use Percona PSMDB Operator for HA replica set
+  replicas: 3           # 3-member replica set managed by the operator
+  auth:
+    enabled: true
+    username: depictio
+    # password must be set in values-embl-secrets.yaml (never commit)
+    password: ""
+  image:
+    repository: percona/percona-server-mongodb
+    tag: "6.0.9-7"
+    pullPolicy: Always
+  clusterServiceDNSSuffix: "svc.ops-k1.embl.de"
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1"
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    fsGroup: 999
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+
+# Redis configuration (required for EMBL Capsule admission controller)
+redis:
+  enabled: true
+  image:
+    pullPolicy: Always  # EMBL infrastructure requires Always policy
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+
+# External S3 service configuration
+s3:
+  enabled: false  # Using external EMBL S3 service instead of the bundled S3 store
+  # NOTE: S3 credentials are defined in values-embl-secrets.yaml
+  # This file should be loaded separately and not committed to version control
+
+  # Security context override for PodSecurity "restricted" policy compliance
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+
+  # External S3 environment configuration (placeholder values)
+  # These will be overridden by values-embl-secrets.yaml
+  env:
+    DEPICTIO_S3_PUBLIC_URL: "https://s3.embl.de"
+    DEPICTIO_S3_ROOT_USER: "placeholder-user"
+    DEPICTIO_S3_ROOT_PASSWORD: "placeholder-password"
+    DEPICTIO_S3_BUCKET: "depictio-bucket"
+    DEPICTIO_S3_SERVICE_PORT: "9000"
+
+## Ingress
+ingress:
+  enabled: true
+  ingressClassName: "internal-users"
+
+  # EMBL specific annotations
+  annotations:
+    cert-manager.io/cluster-issuer: harica-issuer
+
+  hosts:
+    - host: "dev.depictio.embl.org"
+      paths:
+        - path: /
+          pathType: Prefix
+          service:
+            name: depictio-viewer
+            portName: http
+    - host: "dev.api.depictio.embl.org"
+      paths:
+        - path: /
+          pathType: Prefix
+          service:
+            name: depictio-backend
+            portName: http
+
+  # TLS configuration
+  # Note: distinct secretName from prod's depictio-tls — separate namespace
+  # so it wouldn't collide either way, but kept distinct for clarity.
+  tls:
+    - hosts:
+        - "dev.depictio.embl.org"
+        - "dev.api.depictio.embl.org"
+      secretName: dev-depictio-tls  # Will be created by cert-manager with harica-issuer
+
+global:
+  domain: "depictio.embl.org"  # Global domain for all services
+
+  # URL pattern configuration for EMBL deployment
+  # Using "custom" pattern to match explicit ingress hosts
+  # This ensures ConfigMap public URLs match the ingress routing
+  urlPattern:
+    type: "custom"
+    templates:
+      api: "dev.api.depictio.embl.org"
+      frontend: "dev.depictio.embl.org"
+
+
+# Example deployment command:
+# IMPORTANT: You must also load the secrets file (values-embl-secrets.yaml)
+# helm upgrade --install devinternal ./helm-charts/depictio \
+#   -f ./helm-charts/depictio/values.yaml \
+#   -f ./helm-charts/depictio/values-embl-internal-dev.yaml \
+#   -f ./helm-charts/depictio/values-embl-secrets.yaml \
+#   -n datasci-depictio-internal-dev

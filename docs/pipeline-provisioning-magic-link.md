@@ -16,7 +16,7 @@ Unset key → provisioning endpoints return `503` (feature off).
 
 ```bash
 export DEPICTIO_AUTH_PROVISIONING_API_KEY=<secret>
-depictio-cli run --template <id> --data-root /data/alice --user alice@lab.org
+depictio-cli ingest /data/alice --template <id> --user alice@lab.org
 # → prints: https://INSTANCE/auth/magic#ticket=...&next=/dashboard-beta/<id>
 ```
 

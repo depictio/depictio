@@ -1,0 +1,145 @@
+# Megatest manifest for nf-core/atacseq 2.1.2 (read by scripts/nfcore_megatest.py).
+#
+# The tables-only subset of a run that the template recipes and MultiQC need.
+# Keys are fnmatch globs relative to run_root and are mirrored 1:1 below the
+# destination, which becomes the template DATA_ROOT.
+#
+# NO USABLE S3 MEGATEST. The 2.1.2 and 2.1.1 release prefixes in the megatest
+# bucket each hold a single 12 GB object (see
+# depictio/projects/nf-core/MEGATEST_STATUS.md), so `results_sha` stays blank
+# and `fetch` has nothing to mirror. This template was validated on EMBL HPC
+# runs instead (scripts/nfcore_validation_hpc.py, keys `atacseq2-*`): `test`
+# (bwa), `test_controls`, `test` again with `--aligner bowtie2`, `chromap` and
+# `star`, and the megatest profile `test_full` (bwa). The keys below describe
+# that `test_full` run and each one matches its files, so a future S3 run can
+# be pinned without rewriting them.
+#
+# LAYOUT. atacseq 2.x publishes per aligner and merge level:
+# `bwa/merged_library/` (mLb) and `bwa/merged_replicate/` (mRp). Only the
+# merged-library level is fetched: the recipes match on file name, so pulling
+# both would concatenate two levels of the same analysis into one table. MACS2
+# output sits under `macs2/broad_peak/` (the pipeline default) and MultiQC under
+# `multiqc/broad_peak/`.
+#
+# NOT FETCHED. There is no `pipeline_info/params.json` to fetch. preseq is off
+# by default in 2.x (`--skip_preseq`), so no `preseq/*.lc_extrap.txt` key is
+# listed. DESeq2 differential accessibility was removed in 2.0: only the QC of
+# the consensus counts (PCA, sample distances) remains, fetched both as the
+# plain tables the template reads and as the custom content MultiQC reads.
+#
+# MULTIQC. The release runs MultiQC 1.13, which writes no parquet
+# (`multiqc/broad_peak/multiqc_data/multiqc_data.json` only), so the manifest
+# fetches the raw MultiQC inputs and the parquet Depictio reads is produced
+# afterwards by
+#
+#   python -m depictio.dev_scripts.multiqc_reprocess --src <dest> --dest <dest>
+#
+# which writes <dest>/multiqc/multiqc_data/multiqc.parquet + REPROCESSED.json.
+pipeline: atacseq
+version: "2.1.2"
+# No S3 megatest to pin (see above); validation used EMBL HPC runs.
+results_sha: null
+run_root: ""
+multiqc:
+  version: "1.13"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: true
+keys:
+  # Validated samplesheet (the hub) and the software versions.
+  - pipeline_info/samplesheet.valid.csv
+  - pipeline_info/software_versions.yml
+  # Provenance of the original MultiQC 1.13 report (version banner, module list).
+  # The reprocess tool skips every multiqc*/ directory when it re-parses inputs.
+  - multiqc/broad_peak/multiqc_data/multiqc.log
+  - multiqc/broad_peak/multiqc_data/multiqc_data.json
+  # --- raw MultiQC inputs (re-parsed by MultiQC 1.35) ---------------------
+  # FastQC (raw + trimmed) and Trim Galore / cutadapt reports.
+  - fastqc/zips/*_fastqc.zip
+  - trimgalore/fastqc/zips/*_fastqc.zip
+  - trimgalore/logs/*_trimming_report.txt
+  # Picard CollectMultipleMetrics and MarkDuplicates, text metrics only. The
+  # MarkDuplicates reports also feed picard_markduplicates_metrics.
+  - bwa/merged_library/picard_metrics/*.CollectMultipleMetrics.*_metrics
+  - bwa/merged_library/picard_metrics/*.MarkDuplicates.metrics.txt
+  # samtools stats on the merged-library BAMs at both filtering levels:
+  # mkD is duplicate-marked but unfiltered, clN is the filtered set the peak
+  # caller sees.
+  - bwa/merged_library/samtools_stats/*.mLb.mkD.sorted.bam.flagstat
+  - bwa/merged_library/samtools_stats/*.mLb.mkD.sorted.bam.idxstats
+  - bwa/merged_library/samtools_stats/*.mLb.mkD.sorted.bam.stats
+  - bwa/merged_library/samtools_stats/*.mLb.clN.sorted.bam.flagstat
+  - bwa/merged_library/samtools_stats/*.mLb.clN.sorted.bam.idxstats
+  - bwa/merged_library/samtools_stats/*.mLb.clN.sorted.bam.stats
+  # deepTools plotFingerprint (quality metrics + raw counts) and plotProfile.
+  - bwa/merged_library/deeptools/plotfingerprint/*.plotFingerprint.qcmetrics.txt
+  - bwa/merged_library/deeptools/plotfingerprint/*.plotFingerprint.raw.txt
+  - bwa/merged_library/deeptools/plotprofile/*.plotProfile.tab
+  # --- ataqv: the ATAC-specific QC, read by the ataqv/* recipes -------------
+  - bwa/merged_library/ataqv/broad_peak/*.ataqv.json
+  # --- MACS2 broad peaks, merged-library level -----------------------------
+  # Peak calls, the MACS2 xls and the HOMER annotation of the per-sample peaks.
+  - bwa/merged_library/macs2/broad_peak/*.mLb.clN_peaks.broadPeak
+  - bwa/merged_library/macs2/broad_peak/*.mLb.clN_peaks.xls
+  - bwa/merged_library/macs2/broad_peak/*.mLb.clN_peaks.annotatePeaks.txt
+  # Peak QC: FRiP / peak count / annotation custom content and the summaries.
+  - bwa/merged_library/macs2/broad_peak/qc/*_mqc.tsv
+  - bwa/merged_library/macs2/broad_peak/qc/*.summary.txt
+  # Consensus peaks: boolean matrix (UpSet + signal heatmap), intersect counts,
+  # featureCounts summary (MultiQC featurecounts module).
+  - bwa/merged_library/macs2/broad_peak/consensus/consensus_peaks.mLb.clN.boolean.txt
+  - bwa/merged_library/macs2/broad_peak/consensus/consensus_peaks.mLb.clN.boolean.intersect.txt
+  - bwa/merged_library/macs2/broad_peak/consensus/consensus_peaks.mLb.clN.featureCounts.txt.summary
+  # DESeq2 QC of the consensus counts: the custom content MultiQC picks up,
+  # and the plain tables deseq2_qc_pca and deseq2_qc_sample_dists read.
+  - bwa/merged_library/macs2/broad_peak/consensus/deseq2/*_mqc.tsv
+  - bwa/merged_library/macs2/broad_peak/consensus/deseq2/*.pca.vals.txt
+  - bwa/merged_library/macs2/broad_peak/consensus/deseq2/*.sample.dists.txt
+prefix_keys: []
+# Values of the validated runs (test, test_controls, test_full): none may appear
+# in a dashboard title, description, body, caption or value filter.
+forbidden_terms:
+  - GM12878
+  - FAST
+  - OMNI
+  - STD
+  - SPT5
+  - SPT5_INPUT
+  - OSMOTIC
+  - OSMOTIC_STRESS
+  - hg19
+  - R64-1-1
+  - GM12878_FAST_REP1
+  - GM12878_FAST_REP2
+  - GM12878_OMNI_REP1
+  - GM12878_OMNI_REP2
+  - GM12878_STD_REP1
+  - GM12878_STD_REP2
+  - SPT5_T0_REP1
+  - SPT5_T0_REP2
+  - SPT5_T15_REP1
+  - SPT5_T15_REP2
+  - SPT5_INPUT_REP1
+  - SPT5_INPUT_REP2
+  - OSMOTIC_STRESS_T0_PE_REP1
+  - OSMOTIC_STRESS_T0_PE_REP2
+  - OSMOTIC_STRESS_T15_PE_REP1
+  - OSMOTIC_STRESS_T100_SE_REP1
+  - OSMOTIC_STRESS_T100_SE_REP2
+  - OSMOTIC_STRESS_T150_SE_REP1
+  - protocol
+  - protocols
+renames: {}
+post_fetch_help: |
+  === Reprocess MultiQC (the run wrote MultiQC 1.13, Depictio reads >= 1.31 parquet) ===
+
+  python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest} --dry-run
+  python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest}
+  # -> {dest}/multiqc/multiqc_data/multiqc.parquet + REPROCESSED.json
+
+  === Quick test commands ===
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli ingest --template nf-core/atacseq/2.1.2 --data-root {dest} --var GENOME=hg19 --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli ingest --template nf-core/atacseq/2.1.2 --data-root {dest} --var GENOME=hg19

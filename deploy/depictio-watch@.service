@@ -1,0 +1,129 @@
+# Depictio ingestion watcher — systemd template unit.
+#
+# One instance per project: the unit is parameterised by %i, which names an
+# environment file under /etc/depictio. Nothing here is specific to a project.
+#
+#   sudo cp deploy/depictio-watch@.service /etc/systemd/system/
+#   sudo systemctl edit depictio-watch@.service   # set User=, see below
+#   sudo install -d /etc/depictio
+#   sudo editor /etc/depictio/myproject.env      # see the variables below
+#   sudo systemctl enable --now depictio-watch@myproject
+#   journalctl -u depictio-watch@myproject -f
+#
+# User= below is a placeholder. Set it once, for every instance, to the account
+# that can read CLI.yaml, the project YAML and the data root, either here or in
+# a drop-in (`systemctl edit depictio-watch@.service`):
+#
+#   [Service]
+#   User=alice
+#
+# Required in /etc/depictio/%i.env:
+#   DEPICTIO_CLI_CONFIG        path to CLI.yaml
+#   DEPICTIO_PROJECT_CONFIG    path to the project's YAML
+#   DEPICTIO_CLI_BIN           absolute path to the `depictio` executable. systemd
+#                              does not read a login shell's PATH, so a venv or
+#                              conda install is not found by name: give e.g.
+#                              /opt/depictio/.venv/bin/depictio or
+#                              /opt/conda/envs/depictio/bin/depictio.
+#                              Default: /usr/local/bin/depictio.
+#
+# Optional (defaults shown):
+#   DEPICTIO_WATCH_MODE=incremental        incremental | full
+#   DEPICTIO_WATCH_WRITE_MODE=overwrite    overwrite | replace-runs
+#   DEPICTIO_WATCH_INCREMENTAL_WRITE=0     1 rewrites only the runs that changed
+#                                          (needs WRITE_MODE=replace-runs)
+#   DEPICTIO_WATCH_BACKEND=auto            auto | native | polling | both
+#   DEPICTIO_WATCH_INTERVAL=300            poll period, seconds
+#   DEPICTIO_WATCH_DEBOUNCE=30             quiet period before a cycle, seconds
+#   DEPICTIO_WATCH_SETTLE=5                file-stability window, seconds
+#   DEPICTIO_INGEST_JOB_TIMEOUT_SECONDS=3600
+#                                          longest wait on a server-side job,
+#                                          seconds (0: no limit)
+#
+# State (the scan cache and the per-project lock) lives in
+# /var/lib/depictio-watch, which systemd creates for User= (StateDirectory=
+# below). A manual `depictio ingest` of the same project waits its turn only if
+# it uses the same directory:
+#
+#   DEPICTIO_CLI_STATE_DIR=/var/lib/depictio-watch depictio ingest ...
+#
+# Pair incremental mode with replace-runs. On overwrite, every new file
+# rewrites the entire Delta table — the watcher warns about this at startup.
+
+[Unit]
+Description=Depictio ingestion watcher (%i)
+Documentation=https://github.com/depictio/depictio/blob/main/docs/automated-ingestion.md
+After=network-online.target
+Wants=network-online.target
+
+# The watcher already backs off internally on API failures (30s → 15min), so
+# systemd restarts only need to cover a hard crash, or a lock held by an ingest
+# that has finished since.
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+Type=simple
+# Placeholder: the account the watcher runs as. See the header.
+User=depictio
+EnvironmentFile=/etc/depictio/%i.env
+
+# Defaults, overridable from the environment file above. systemd applies
+# Environment= before EnvironmentFile=, so the file wins.
+Environment=DEPICTIO_WATCH_MODE=incremental
+Environment=DEPICTIO_WATCH_WRITE_MODE=overwrite
+Environment=DEPICTIO_WATCH_INCREMENTAL_WRITE=0
+Environment=DEPICTIO_WATCH_BACKEND=auto
+Environment=DEPICTIO_WATCH_INTERVAL=300
+Environment=DEPICTIO_WATCH_DEBOUNCE=30
+Environment=DEPICTIO_WATCH_SETTLE=5
+Environment=DEPICTIO_CLI_BIN=/usr/local/bin/depictio
+
+# One state directory shared by every instance. The lock inside it is per
+# project and per server, so two instances of one project still exclude each
+# other. Not %h/.depictio: in a system unit %h is /root, whatever User= says.
+StateDirectory=depictio-watch
+Environment=DEPICTIO_CLI_STATE_DIR=%S/depictio-watch
+
+ExecStart=/bin/sh -c 'exec "$DEPICTIO_CLI_BIN" watch \
+  --server "$DEPICTIO_CLI_CONFIG" \
+  --project-config-path "$DEPICTIO_PROJECT_CONFIG" \
+  --mode "$DEPICTIO_WATCH_MODE" \
+  --write-mode "$DEPICTIO_WATCH_WRITE_MODE" \
+  $([ "$DEPICTIO_WATCH_INCREMENTAL_WRITE" = 1 ] && echo --incremental-write) \
+  --backend "$DEPICTIO_WATCH_BACKEND" \
+  --interval "$DEPICTIO_WATCH_INTERVAL" \
+  --debounce "$DEPICTIO_WATCH_DEBOUNCE" \
+  --settle "$DEPICTIO_WATCH_SETTLE"'
+
+# SIGTERM is the clean-stop path: the watcher stops accepting triggers,
+# finishes the cycle in flight, flushes its monitoring and exits 0. The
+# generous timeout exists so a long ingestion is not killed mid-write —
+# lower it only if you would rather lose a cycle than wait.
+KillSignal=SIGTERM
+TimeoutStopSec=900
+
+Restart=on-failure
+RestartSec=30
+# 73: the lock file cannot be created, so the state directory is not writable.
+# A restart cannot fix that: the unit stops, and the journal says why.
+RestartPreventExitStatus=73
+
+# Hardening. The watcher reads a data root and talks to an HTTP API; it needs
+# no privileges and writes only to its state directory, which StateDirectory=
+# keeps writable under ProtectSystem=strict and ProtectHome=read-only.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=depictio-watch-%i
+
+[Install]
+WantedBy=multi-user.target

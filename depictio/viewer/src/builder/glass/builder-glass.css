@@ -1,0 +1,654 @@
+/* The component builder in the Glass language.
+ *
+ * The shell is `GlassPage` without the sidebar, so the top bar, trail, page
+ * head, canvas and every Mantine control (outlined inputs, pill buttons, cards,
+ * tabs, tables, accordions, badges) come from pages.css through its `gp-*`
+ * classes. What is here has no counterpart on the management pages: the one
+ * column layout and its step bar, the stepper, the type tiles, the start
+ * screen, and the tools catalog browser.
+ *
+ * Every rule hangs off `.bgl-shell`, which only the Glass builder renders, and
+ * off the Glass tokens (--gl-*, --gp-*) the pages already define, so Classic is
+ * untouched and nothing here names a colour. A few rules use !important: the
+ * catalog's panes carry inline borders, radii and fills (written for the
+ * Classic look), and a class cannot outrank an inline style otherwise. */
+
+/* ================================================================= shell */
+
+:root[data-chrome='glass'] .bgl-shell {
+  /* What the floating top bar and the step bar take from the window, for the
+   * preview that sticks inside the canvas (shared/StickyPreview). */
+  --bld-chrome-h: calc(var(--gp-top-h) + 18px);
+  grid-template-rows: var(--gp-top-h) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+}
+:root[data-chrome='glass'] .bgl-shell[data-foot] {
+  --bld-chrome-h: calc(var(--gp-top-h) + 18px + 78px);
+}
+:root[data-chrome='glass'] .bgl-shell .gp-main {
+  grid-column: 1;
+  padding: 8px 20px 40px;
+}
+:root[data-chrome='glass'] .bgl-shell[data-foot] .gp-main {
+  padding-bottom: 24px;
+}
+:root[data-chrome='glass'] .bgl-shell .gp-top > .mantine-Button-root {
+  flex: none;
+}
+:root[data-chrome='glass'] .bgl-head-icon {
+  --gp-tint: var(--bgl-head-tint, var(--depictio-brand-tertiary));
+}
+:root[data-chrome='glass'] .bgl-head-icon img {
+  display: block;
+}
+:root[data-chrome='glass'] .bgl-shell .gp-head {
+  padding-bottom: 16px;
+}
+
+/* The catalog browser fills the window: the page head, then a split panel that
+ * takes what is left and scrolls inside its own panes. */
+:root[data-chrome='glass'] .bgl-shell[data-fill] .gp-main {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 12px;
+}
+:root[data-chrome='glass'] .bgl-shell[data-fill] .gp-page {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+:root[data-chrome='glass'] .bgl-shell[data-fill] .gp-head {
+  flex: none;
+  min-height: 0;
+  padding-bottom: 14px;
+}
+:root[data-chrome='glass'] .bgl-catalog {
+  flex: 1;
+  min-height: 0;
+}
+/* The split panel takes the room the head leaves. */
+:root[data-chrome='glass'] .bgl-catalog > .bgl-cat {
+  flex: 1 1 0;
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+/* ------------------------------------------------------------ step bar */
+
+:root[data-chrome='glass'] .bgl-foot {
+  grid-row: 3;
+  grid-column: 1;
+  position: relative;
+  z-index: 30;
+  margin: 0 10px 10px;
+  padding: 10px 16px;
+  border-radius: 22px;
+  background: var(--gl-glass-strong);
+  border: 1px solid var(--gl-rim);
+  box-shadow: var(--gl-float-shadow);
+  -webkit-backdrop-filter: var(--gl-float-filter);
+  backdrop-filter: var(--gl-float-filter);
+}
+:root[data-chrome='glass'] .bgl-foot-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  max-width: 1480px;
+  margin: 0 auto;
+}
+:root[data-chrome='glass'] .bgl-foot-step {
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--gl-fg);
+  font-variant-numeric: tabular-nums;
+}
+:root[data-chrome='glass'] .bgl-foot-name {
+  font-weight: 550;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .bgl-foot-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ------------------------------------------------------------- stepper */
+
+/* The steps are one paper strip; the step's own content sits on the canvas
+ * under it. The current step is an accent well, the ones done a filled accent. */
+:root[data-chrome='glass'] .bgl-shell .bgl-stepper {
+  --stepper-outline-color: var(--gl-hair);
+  --stepper-outline-thickness: 2px;
+}
+:root[data-chrome='glass'] .bgl-shell .mantine-Stepper-steps {
+  padding: 12px 22px;
+  border-radius: 20px;
+  background: var(--gl-glass-strong);
+  border: 1px solid var(--gl-rim);
+  box-shadow: var(--gl-float-shadow);
+  -webkit-backdrop-filter: var(--gl-float-filter);
+  backdrop-filter: var(--gl-float-filter);
+}
+:root[data-chrome='glass'] .bgl-shell .mantine-Stepper-stepIcon {
+  border: 1px solid var(--gl-hair);
+  background: var(--gl-well);
+  color: var(--gl-muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+:root[data-chrome='glass'] .bgl-shell .mantine-Stepper-stepIcon[data-progress] {
+  border-color: color-mix(in srgb, var(--gl-accent) 45%, transparent);
+  background: var(--gl-accent-soft);
+  color: var(--gl-accent-fg);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--gl-accent) 12%, transparent);
+}
+:root[data-chrome='glass'] .bgl-shell .mantine-Stepper-stepIcon[data-completed] {
+  border-color: transparent;
+  background: var(--gl-accent);
+  color: var(--mantine-color-white);
+}
+:root[data-chrome='glass'] .bgl-shell .mantine-Stepper-step[data-allow-click] .mantine-Stepper-stepIcon:hover {
+  border-color: color-mix(in srgb, var(--gl-accent) 45%, transparent);
+}
+:root[data-chrome='glass'] .bgl-shell .mantine-Stepper-stepLabel {
+  font-size: 14.5px !important;
+  font-weight: 650 !important;
+  line-height: 1.25;
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'] .bgl-shell .mantine-Stepper-stepDescription {
+  margin-top: 3px;
+  font-size: 12.5px !important;
+  line-height: 1.35;
+  color: var(--gl-muted) !important;
+}
+:root[data-chrome='glass'] .bgl-shell .mantine-Stepper-separator {
+  height: 2px;
+  margin-inline: 18px;
+  border-radius: 2px;
+  background: var(--gl-hair);
+}
+:root[data-chrome='glass'] .bgl-shell .mantine-Stepper-separator[data-active] {
+  background: var(--gl-accent);
+}
+:root[data-chrome='glass'] .bgl-shell .mantine-Stepper-content {
+  padding-top: 18px;
+}
+
+/* -------------------------------------------------- component type tiles */
+
+:root[data-chrome='glass'] .bgl-type-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+  max-width: 940px;
+  margin: 20px auto 8px;
+}
+@media (min-width: 64em) {
+  :root[data-chrome='glass'] .bgl-tile[data-col2] {
+    grid-column: 2;
+  }
+}
+@media (max-width: 63.99em) {
+  :root[data-chrome='glass'] .bgl-type-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 35.99em) {
+  :root[data-chrome='glass'] .bgl-type-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A tile: a paper card, quiet until hovered (a deeper shadow and a small
+ * lift), the accent ring when it is the type already chosen. */
+:root[data-chrome='glass'] :is(.bgl-tile, .bgl-source) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  font: inherit;
+  text-align: center;
+  color: var(--gl-fg);
+  cursor: pointer;
+  border: 1px solid var(--gl-rim);
+  background: var(--gp-card-bg);
+  box-shadow: var(--gp-card-shadow);
+  outline: none;
+  transition:
+    box-shadow 220ms ease,
+    background-color 150ms ease,
+    translate 260ms var(--gl-spring);
+}
+:root[data-chrome='glass'] :is(.bgl-tile, .bgl-source):hover {
+  box-shadow: var(--gp-card-shadow-hover);
+  translate: 0 -2px;
+}
+:root[data-chrome='glass'] :is(.bgl-tile, .bgl-source):active {
+  translate: 0 0;
+}
+:root[data-chrome='glass'] :is(.bgl-tile, .bgl-source):focus-visible {
+  box-shadow:
+    0 0 0 2px var(--gl-ring),
+    var(--gp-card-shadow);
+}
+:root[data-chrome='glass'] .bgl-tile {
+  padding: 22px 18px 20px;
+  border-radius: 20px;
+}
+:root[data-chrome='glass'] .bgl-tile[data-selected] {
+  background: color-mix(in srgb, var(--gl-accent-soft) 70%, var(--gp-card-bg));
+  box-shadow:
+    0 0 0 1.5px var(--gl-accent),
+    0 14px 32px -20px var(--gl-shade-b);
+}
+:root[data-chrome='glass'] .bgl-tile[aria-disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+:root[data-chrome='glass'] .bgl-tile[aria-disabled]:hover {
+  box-shadow: var(--gp-card-shadow);
+  translate: 0 0;
+}
+:root[data-chrome='glass'] .bgl-tile-label {
+  margin-top: 6px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+:root[data-chrome='glass'] .bgl-tile-desc {
+  max-width: 28ch;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--gl-muted);
+}
+
+/* The glyph well: the type's hue as a wash, its glyph in the matching ink. */
+:root[data-chrome='glass'] :is(.bgl-tile-icon, .bgl-source-icon) {
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: light-dark(
+    color-mix(in oklab, var(--bgl-tint) 82%, var(--mantine-color-black)),
+    color-mix(in oklab, var(--bgl-tint) 70%, var(--mantine-color-white))
+  );
+  background: color-mix(in srgb, var(--bgl-tint) 13%, var(--gl-surface));
+  box-shadow:
+    inset 0 1px 0 var(--gl-rim),
+    0 0 0 1px var(--gl-hair),
+    0 6px 16px -10px var(--gl-shade-b);
+}
+:root[data-chrome='glass'] .bgl-tile-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+}
+/* A brand mark carries its own colours: a neutral well, not a tinted one. */
+:root[data-chrome='glass'] .bgl-tile-icon[data-brand] {
+  background: color-mix(in srgb, var(--gl-fg) 6%, var(--gl-surface));
+}
+
+/* ------------------------------------------------------- the start screen */
+
+:root[data-chrome='glass'] .bgl-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  padding: clamp(8px, 5vh, 56px) 0 24px;
+}
+:root[data-chrome='glass'] .bgl-choice-hero {
+  text-align: center;
+}
+:root[data-chrome='glass'] .bgl-choice-title {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 750;
+  line-height: 1.15;
+  letter-spacing: -0.022em;
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'] .bgl-choice-lead {
+  max-width: 56ch;
+  margin: 8px auto 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .bgl-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  width: 100%;
+  max-width: 880px;
+}
+:root[data-chrome='glass'] .bgl-choice-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 60ch;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-align: center;
+  color: var(--gl-faint);
+}
+:root[data-chrome='glass'] .bgl-choice-note svg {
+  flex: none;
+}
+:root[data-chrome='glass'] .bgl-source {
+  gap: 12px;
+  min-height: 290px;
+  padding: 32px 28px 26px;
+  border-radius: 24px;
+}
+:root[data-chrome='glass'] .bgl-source:hover {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--bgl-tint) 38%, transparent),
+    0 2px 4px var(--gl-shade-a),
+    0 22px 44px -22px var(--gl-shade-b);
+}
+:root[data-chrome='glass'] .bgl-source-icon {
+  width: 96px;
+  height: 96px;
+  border-radius: 28px;
+}
+:root[data-chrome='glass'] .bgl-source-icon img {
+  width: 62px;
+  height: 62px;
+  object-fit: contain;
+}
+:root[data-chrome='glass'] .bgl-source-title {
+  margin-top: 4px;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+:root[data-chrome='glass'] .bgl-source-desc {
+  flex: 1;
+  max-width: 34ch;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .bgl-source-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px 5px 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: light-dark(
+    color-mix(in oklab, var(--bgl-tint) 82%, var(--mantine-color-black)),
+    color-mix(in oklab, var(--bgl-tint) 70%, var(--mantine-color-white))
+  );
+  background: color-mix(in srgb, var(--bgl-tint) 13%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bgl-tint) 22%, transparent);
+}
+:root[data-chrome='glass'] .bgl-source-pill svg {
+  transition: translate 220ms var(--gl-spring);
+}
+:root[data-chrome='glass'] .bgl-source:hover .bgl-source-pill svg {
+  translate: 3px 0;
+}
+@media (max-width: 47.99em) {
+  :root[data-chrome='glass'] .bgl-choice-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  :root[data-chrome='glass'] .bgl-source {
+    min-height: 0;
+  }
+}
+
+/* ------------------------------------------- data source and design steps */
+
+/* "Selected component": a pill in the chosen type's hue. */
+:root[data-chrome='glass'] .bgl-selected {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 2px 0 4px;
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'] .bgl-selected-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 13px 0 10px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: light-dark(
+    color-mix(in oklab, var(--bgl-tint) 78%, var(--mantine-color-black)),
+    color-mix(in oklab, var(--bgl-tint) 52%, var(--mantine-color-white))
+  );
+  background: color-mix(in srgb, var(--bgl-tint) 13%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bgl-tint) 24%, transparent);
+}
+/* The figure builder's own preview frame and the advanced-viz kind tiles carry
+ * inline Classic borders and a light selected fill. */
+:root[data-chrome='glass'] .bgl-shell .bgl-preview-box {
+  border: 1px solid var(--gl-rim) !important;
+  border-radius: var(--gp-radius) !important;
+  background: var(--gp-card-bg);
+  box-shadow: var(--gp-card-shadow);
+}
+:root[data-chrome='glass'] .bgl-shell .bgl-kind-tile {
+  transition:
+    box-shadow 220ms ease,
+    background-color 150ms ease;
+}
+:root[data-chrome='glass'] .bgl-shell .bgl-kind-tile:hover {
+  box-shadow: var(--gp-card-shadow-hover);
+}
+:root[data-chrome='glass'] .bgl-shell .bgl-kind-tile[data-selected] {
+  border-color: var(--gl-accent) !important;
+  background: var(--gl-accent-soft) !important;
+  transform: none !important;
+}
+
+/* The select's list: paper rows, opened from a field on this page. */
+:root[data-chrome='glass'][data-gp-page='builder'] :is(.mantine-Select-dropdown, .mantine-MultiSelect-dropdown, .mantine-Autocomplete-dropdown).mantine-Popover-dropdown {
+  padding: 6px;
+  border: 1px solid var(--gl-rim);
+  border-radius: 16px;
+  box-shadow: var(--gl-float-shadow);
+}
+:root[data-chrome='glass'][data-gp-page='builder'] :is(.mantine-Select-option, .mantine-MultiSelect-option, .mantine-Autocomplete-option) {
+  border-radius: 10px;
+  font-size: 13.5px;
+}
+
+/* ============================================================== catalog */
+
+/* Two floating panes instead of one bordered box: the list and the preview. */
+:root[data-chrome='glass'] .bgl-shell .bgl-cat {
+  gap: 14px !important;
+  align-items: stretch !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  overflow: visible !important;
+}
+:root[data-chrome='glass'] .bgl-shell :is(.bgl-cat-side, .bgl-cat-main) {
+  border: 1px solid var(--gl-rim) !important;
+  border-radius: var(--gp-radius-lg);
+  background: var(--gp-card-bg);
+  box-shadow: var(--gp-card-shadow);
+  overflow: hidden;
+}
+:root[data-chrome='glass'] .bgl-shell :is(.bgl-cat-side, .bgl-cat-main) {
+  height: auto !important;
+  align-self: stretch;
+}
+:root[data-chrome='glass'] .bgl-shell .bgl-cat-side {
+  width: 340px !important;
+  min-width: 300px;
+}
+:root[data-chrome='glass'] .bgl-shell .bgl-cat-side > .mantine-ScrollArea-root {
+  min-height: 0;
+}
+:root[data-chrome='glass'] .bgl-shell :is(.bgl-cat-search, .bgl-cat-bar, .bgl-cat-tabs, .bgl-cat-source) {
+  border-color: var(--gl-hair) !important;
+}
+:root[data-chrome='glass'] .bgl-shell .bgl-cat-search {
+  padding: 14px 14px 10px !important;
+}
+:root[data-chrome='glass'] .bgl-shell .bgl-cat-search .mantine-Button-root {
+  height: 26px;
+}
+
+/* The tool list: a tool is a quiet header, its outputs rounded rows; the one
+ * open in the preview is lit with the accent. */
+:root[data-chrome='glass'] .bgl-shell .bgl-cat-side .mantine-Accordion-item {
+  border-bottom: 0 !important;
+}
+:root[data-chrome='glass'] .bgl-shell .bgl-cat-side .mantine-Accordion-control {
+  width: calc(100% - 12px);
+  margin: 4px 6px 2px;
+  padding-block: 8px !important;
+  border-radius: 12px;
+}
+:root[data-chrome='glass'] .bgl-shell .bgl-cat-row {
+  width: calc(100% - 12px) !important;
+  margin: 1px 6px;
+  padding-inline: 12px !important;
+  border-radius: 11px;
+  border-left: 0 !important;
+  transition: background-color 120ms ease;
+}
+:root[data-chrome='glass'] .bgl-shell .bgl-cat-row:hover {
+  background: var(--gl-well) !important;
+}
+:root[data-chrome='glass'] .bgl-shell .bgl-cat-row[data-selected] {
+  background: var(--gl-accent-soft) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gl-accent) 26%, transparent);
+}
+:root[data-chrome='glass'] .bgl-shell .bgl-cat-row[data-selected] .mantine-Text-root {
+  color: var(--gl-accent-fg);
+}
+:root[data-chrome='glass'] .bgl-shell .bgl-cat-row:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--gl-ring);
+}
+
+/* The preview pane: identity and the two ways to take it, the render switcher,
+ * the frame on a soft well, the source data. */
+:root[data-chrome='glass'] .bgl-shell .bgl-cat-bar {
+  padding-block: 12px !important;
+}
+:root[data-chrome='glass'] .bgl-shell .bgl-cat-tabs {
+  padding-block: 8px !important;
+  gap: 6px !important;
+}
+:root[data-chrome='glass'] .bgl-shell .bgl-cat-tabs .mantine-Button-root {
+  height: 30px;
+}
+:root[data-chrome='glass'] .bgl-shell .bgl-cat-view {
+  background: var(--gl-well) !important;
+}
+:root[data-chrome='glass'] .bgl-shell .bgl-cat-frame {
+  border-radius: 16px !important;
+  border-color: var(--gl-hair) !important;
+  box-shadow:
+    0 0 0 1px var(--gl-hair),
+    0 14px 30px -20px var(--gl-shade-b) !important;
+}
+
+/* States with nothing to list. */
+:root[data-chrome='glass'] .bgl-shell .bgl-cat-empty {
+  padding: 44px 36px !important;
+  border: 1px solid var(--gl-rim) !important;
+  border-radius: 24px !important;
+  background: var(--gp-card-bg);
+  box-shadow: var(--gp-card-shadow);
+}
+:root[data-chrome='glass'] .bgl-shell .bgl-cat-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 22px;
+  background: var(--gl-well);
+}
+
+/* The facets, in a popover opened from the list. */
+:root[data-chrome='glass'][data-gp-page='builder'] .mantine-Popover-dropdown .mantine-Chip-label {
+  height: 26px;
+  border-radius: 999px !important;
+  border-color: var(--gp-input-line);
+  font-size: 12px;
+}
+:root[data-chrome='glass'][data-gp-page='builder'] .mantine-Popover-dropdown .mantine-Chip-label[data-checked] {
+  border-color: color-mix(in srgb, var(--gl-accent) 45%, transparent);
+  background: var(--gl-accent-soft);
+  color: var(--gl-accent-fg);
+}
+
+/* ================================================================ phone */
+
+@media (max-width: 47.99em) {
+  :root[data-chrome='glass'] .bgl-shell .gp-main {
+    padding: 12px 12px 24px;
+  }
+  :root[data-chrome='glass'] .bgl-shell[data-foot] .gp-main {
+    padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+  }
+  :root[data-chrome='glass'] .bgl-shell[data-fill] .gp-main {
+    padding-bottom: 12px;
+  }
+  :root[data-chrome='glass'] .bgl-foot {
+    position: fixed;
+    inset-inline: 8px;
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    z-index: 40;
+    margin: 0;
+    padding: 8px 12px;
+  }
+  :root[data-chrome='glass'] .bgl-foot-name {
+    display: none;
+  }
+  :root[data-chrome='glass'] .bgl-shell .mantine-Stepper-steps {
+    padding: 10px 12px;
+  }
+  :root[data-chrome='glass'] .bgl-shell .mantine-Stepper-stepDescription {
+    display: none;
+  }
+  :root[data-chrome='glass'] .bgl-shell .mantine-Stepper-separator {
+    margin-inline: 8px;
+  }
+  :root[data-chrome='glass'] .bgl-shell .bgl-cat {
+    flex-direction: column !important;
+    overflow-y: auto !important;
+  }
+  :root[data-chrome='glass'] .bgl-shell .bgl-cat-side {
+    width: 100% !important;
+    max-width: none !important;
+    height: 340px !important;
+    flex: none !important;
+  }
+  :root[data-chrome='glass'] .bgl-shell .bgl-cat-main {
+    flex: none !important;
+    width: 100%;
+    height: auto !important;
+    min-height: 520px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-chrome='glass'] :is(.bgl-tile, .bgl-source, .bgl-source-pill svg, .bgl-cat-row, .bgl-kind-tile) {
+    transition: none !important;
+  }
+}

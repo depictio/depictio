@@ -1,0 +1,538 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8dc0"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8dc0"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "locus-text",
+      "component_type": "text",
+      "title": "Regulatory locus",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "One region, three collections",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Three collections on one region around MYC: CTCF peaks with the hg38 genes, the Hi-C contact triangle, and CTCF and H3K27ac ChIP depth. Type a locus or a gene in the navigator header, or brush its axis, and the navigator and every track below move to that region; the matrix re-reads it at the resolution that fits. This is the layout nf-core/hic, chipseq and cutandrun outputs combine into once their peaks, coverage and mcool are ingested.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "locus-navigator",
+      "component_type": "advanced_viz",
+      "title": "Locus navigator",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "locus_peaks_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dc1"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "CTCF peaks over the three contact-map loci: every TAD boundary, every loop anchor and a few internal sites",
+        "data_collection_tag": "locus_peaks_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dc1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "CTCF peaks on the current region. The locus field in the header (a region or a gene symbol) and a brush on this axis move this tile and every tile below.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "One region, three collections",
+      "viz_kind": "genome_view",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "genome_view",
+        "source": "table",
+        "chr_col": "chrom",
+        "pos_col": "start",
+        "score_col": "score",
+        "feature_col": "peak_id",
+        "end_col": "end",
+        "sample_col": null,
+        "category_col": "peak_class",
+        "mark": "bar",
+        "facet_by_sample": false,
+        "max_facets": 8,
+        "annotation": "none",
+        "assembly": "hg38",
+        "score_title": "CTCF -log10(q)",
+        "score_threshold": null,
+        "point_size": 5,
+        "opacity": 0.85,
+        "region_filter_enabled": true,
+        "follow_region_filter": false,
+        "default_region": "chr8:127,400,000-128,100,000",
+        "selection_enabled": false,
+        "selection_column": null,
+        "file_info_fields": null,
+        "file_category_field": null,
+        "file_categories": null,
+        "file_add_chr_prefix": false,
+        "file_window_size": null,
+        "file_max_lanes": 8,
+        "file_tabix_columns": null,
+        "file_bam_view": "coverage"
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "locus-peaks",
+      "component_type": "advanced_viz",
+      "title": "CTCF peaks and genes",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "locus_peaks_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dc1"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "CTCF peaks over the three contact-map loci: every TAD boundary, every loop anchor and a few internal sites",
+        "data_collection_tag": "locus_peaks_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dc1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The region itself: CTCF peaks coloured by where they sit (TAD boundary, loop anchor, internal) over the hg38 gene lane.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "One region, three collections",
+      "viz_kind": "genome_view",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "genome_view",
+        "source": "table",
+        "chr_col": "chrom",
+        "pos_col": "start",
+        "score_col": "score",
+        "feature_col": "peak_id",
+        "end_col": "end",
+        "sample_col": null,
+        "category_col": "peak_class",
+        "mark": "bar",
+        "facet_by_sample": false,
+        "max_facets": 8,
+        "annotation": "hg38",
+        "assembly": "hg38",
+        "score_title": "CTCF -log10(q)",
+        "score_threshold": null,
+        "point_size": 5,
+        "opacity": 0.85,
+        "region_filter_enabled": false,
+        "follow_region_filter": true,
+        "default_region": null,
+        "selection_enabled": false,
+        "selection_column": null,
+        "file_info_fields": null,
+        "file_category_field": null,
+        "file_categories": null,
+        "file_add_chr_prefix": false,
+        "file_window_size": null,
+        "file_max_lanes": 8,
+        "file_tabix_columns": null,
+        "file_bam_view": "coverage"
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "locus-contacts",
+      "component_type": "advanced_viz",
+      "title": "Contact triangle",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "contact_map_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d88"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Hi-C contact matrix over three GRCh38 loci (HOXA, MYC, IGF2 and KCNQ1) at 10, 20 and 40 kb, one partition per resolution",
+        "data_collection_tag": "contact_map_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d88"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Hi-C contacts on the same region, x aligned with the peaks above. TADs are the triangles, the MYC loop the dot at the apex between its two anchors.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "One region, three collections",
+      "viz_kind": "contact_map",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "contact_map",
+        "chrom1_col": "chrom",
+        "start1_col": "start",
+        "chrom2_col": "chrom2",
+        "start2_col": "start2",
+        "count_col": "count",
+        "end1_col": "end",
+        "end2_col": "end2",
+        "sample_col": null,
+        "resolution_col": "resolution",
+        "chrom": null,
+        "log_scale": true,
+        "colour_scale": "Viridis",
+        "balance": false,
+        "display": "triangle",
+        "max_separation_bins": 0,
+        "max_bins": 500
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "locus-coverage",
+      "component_type": "advanced_viz",
+      "title": "ChIP-seq depth",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "locus_coverage_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dc2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "CTCF and H3K27ac ChIP-seq depth in 2 kb bins over the three contact-map loci",
+        "data_collection_tag": "locus_coverage_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dc2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "CTCF depth peaks sharply on the sites above; H3K27ac spreads over the active promoters. One lane per track, clamped to the region.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "One region, three collections",
+      "viz_kind": "coverage_track",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "coverage_track",
+        "chromosome_col": "chrom",
+        "position_col": "start",
+        "value_col": "coverage",
+        "end_col": "end",
+        "sample_col": "sample",
+        "category_col": null,
+        "y_scale": "linear",
+        "smoothing_window": 0,
+        "color_by": "sample",
+        "show_annotation_lane": false,
+        "annotation_id": null,
+        "chromosomes_filter": null,
+        "samples_filter": null,
+        "view_mode": "facet",
+        "show_individuals": true,
+        "mark": "line",
+        "facet_by_sample": false,
+        "locus_annotation": "none",
+        "locus_assembly": null,
+        "view": "track",
+        "views": [
+          "track"
+        ]
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "locus-f-peak-class",
+      "component_type": "interactive",
+      "title": "CTCF peak class",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "locus_peaks_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dc1"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "CTCF peaks over the three contact-map loci: every TAD boundary, every loop anchor and a few internal sites",
+        "data_collection_tag": "locus_peaks_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dc1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Track scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "peak_class",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Track filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "icon_name": "mdi:shape-outline",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "locus-f-sample",
+      "component_type": "interactive",
+      "title": "ChIP track",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "locus_coverage_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dc2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "CTCF and H3K27ac ChIP-seq depth in 2 kb bins over the three contact-map loci",
+        "data_collection_tag": "locus_coverage_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dc2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Track scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Track filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "icon_name": "mdi:flask",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-locus-f-peak-class",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-locus-f-sample",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-locus-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-locus-navigator",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 3,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-locus-peaks",
+      "x": 0,
+      "y": 5,
+      "w": 8,
+      "h": 3,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-locus-contacts",
+      "x": 0,
+      "y": 8,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-locus-coverage",
+      "x": 0,
+      "y": 14,
+      "w": 8,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Regulatory locus",
+  "subtitle": "The MYC neighbourhood on one axis: CTCF peaks and genes, the Hi-C contact triangle and two ChIP-seq tracks, all following one region.",
+  "icon": "tabler:dna-2",
+  "icon_color": "teal",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 43,
+  "main_tab_name": null,
+  "tab_icon": "tabler:dna-2",
+  "tab_icon_color": "teal",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Track scope",
+      "icon": "mdi:filter-variant",
+      "color": "teal",
+      "description": "Restricts the peak classes and the ChIP tracks drawn on the region",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "One region, three collections",
+      "icon": "mdi:dna",
+      "color": "teal",
+      "description": "Peaks, contacts and coverage stacked on one genomic axis",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

@@ -29,6 +29,7 @@ Design rules:
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -101,6 +102,10 @@ _STYLE_PASSTHROUGH = frozenset(
         "color_continuous_scale", "range_color", "category_orders", "log_x", "log_y",
         "range_x", "range_y", "barmode", "boxmode", "violinmode",
         "height", "width", "opacity", "nbins", "nbinsx", "nbinsy", "text_auto",
+        # Panel wrap count only — the data reduction is per facet_col category
+        # either way. Refusing it would kick every Split-mode figure off the
+        # scan aggregation onto a full-frame load.
+        "facet_col_wrap",
     }
 )  # fmt: skip
 
@@ -210,6 +215,17 @@ def plan_aggregation(visu_type: str, dict_kwargs: dict) -> AggPlan | None:
         logger.debug(f"plan_aggregation: {visu} not planned — faceting needs the px path")
         return None
 
+    # A density grid is binned here, in linear space, while px hands the raw
+    # values to Plotly, which bins in the axis's own coordinates — log-spaced
+    # bins on a log axis. Same kwarg, different edges, so this one goes back to
+    # px rather than drawing a grid that disagrees with the axis under it.
+    # `histogram` handles its own log binning below; `box` bins nothing.
+    if visu in ("density_heatmap", "density_contour") and (
+        style.get("log_x") or style.get("log_y")
+    ):
+        logger.debug(f"plan_aggregation: {visu} not planned — log axes need px's binning")
+        return None
+
     # Required roles per type.
     if visu in ("box", "violin") and not plan.y:
         return None
@@ -228,6 +244,7 @@ def build_aggregated_figure(
     plan: AggPlan,
     theme: str = "light",
     render_stats: dict | None = None,
+    template_override: str | None = None,
 ) -> go.Figure | None:
     """Execute ``plan`` against ``scan`` and return the figure.
 
@@ -235,11 +252,14 @@ def build_aggregated_figure(
     at the data (missing column, cardinality blow-up); the caller then falls back
     to the px path. Never raises for data reasons — a fallback is always better
     than a failed render.
+
+    ``template_override`` pins an explicit Plotly template (component- or
+    dashboard-level choice); left ``None`` the figure follows the UI theme.
     """
     from depictio.api.v1.services.figure.mantine_templates import ensure_mantine_templates
 
     ensure_mantine_templates()
-    template = get_theme_template(theme)
+    template = template_override or get_theme_template(theme)
 
     try:
         available = set(scan.collect_schema().names())
@@ -272,6 +292,7 @@ def build_aggregated_figure(
     if plan.mode == "reduce":
         # px applies the template itself; the graph_objects paths must do it here.
         fig.update_layout(template=template, title=plan.style.get("title"))
+        _apply_axis_style(fig, plan)
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
@@ -296,6 +317,52 @@ def build_aggregated_figure(
 # --------------------------------------------------------------------------- #
 # Exact reductions → graph_objects
 # --------------------------------------------------------------------------- #
+
+
+def _apply_axis_style(fig: go.Figure, plan: AggPlan) -> None:
+    """Apply the style kwargs that shape the axes rather than the marks.
+
+    px consumes `log_x` / `log_y` / `range_x` / `range_y` / `height` / `width`
+    itself, so the two px-backed modes get them for free. The graph_objects
+    builders assemble their own figure, and these kwargs sat in `plan.style`
+    read by nobody: a histogram asking for a log x axis was accepted, planned,
+    and drawn linear, with nothing in the logs to say so.
+
+    A range on a log axis is given in log10 units, the same asymmetry that
+    catches shapes and annotations — trace data on that axis stays untransformed.
+    A non-positive endpoint has no log to take, so such a range is dropped whole
+    rather than half-applied.
+    """
+    log_x = bool(plan.style.get("log_x"))
+    log_y = bool(plan.style.get("log_y"))
+    if log_x:
+        fig.update_xaxes(type="log")
+    if log_y:
+        fig.update_yaxes(type="log")
+
+    def _range(value: Any, log: bool) -> list[float] | None:
+        if not isinstance(value, (list, tuple)) or len(value) != 2:
+            return None
+        try:
+            lo, hi = float(value[0]), float(value[1])
+        except (TypeError, ValueError):
+            return None
+        if not log:
+            return [lo, hi]
+        if lo <= 0 or hi <= 0:
+            return None
+        return [math.log10(lo), math.log10(hi)]
+
+    x_range = _range(plan.style.get("range_x"), log_x)
+    if x_range:
+        fig.update_xaxes(range=x_range)
+    y_range = _range(plan.style.get("range_y"), log_y)
+    if y_range:
+        fig.update_yaxes(range=y_range)
+
+    size = {k: plan.style[k] for k in ("height", "width") if plan.style.get(k)}
+    if size:
+        fig.update_layout(**size)
 
 
 def _build_reduce(scan: pl.LazyFrame, plan: AggPlan, render_stats: dict | None) -> go.Figure | None:
@@ -338,7 +405,15 @@ def _trace_colors(plan: AggPlan, names: list[str]) -> list[str | None]:
     mapping = _as_json(plan.style.get("color_discrete_map")) or {}
     sequence = _as_json(plan.style.get("color_discrete_sequence"))
     if not isinstance(sequence, list) or not sequence:
-        sequence = list(px.colors.qualitative.Plotly)
+        from depictio.api.v1.services.branding import resolve_effective_brand_theme
+
+        # A branded instance re-tints the mantine templates' colorway, which
+        # the px path picks up implicitly — mirror it here so graph_objects
+        # builders don't fall back to Plotly's default palette on those
+        # deployments. Resolved theme = env defaults + admin overrides, with a
+        # colorway derived from the brand palette when none was set explicitly.
+        plots = resolve_effective_brand_theme().plots
+        sequence = (plots.colorway if plots else None) or list(px.colors.qualitative.Plotly)
     if not isinstance(mapping, dict):
         mapping = {}
     return [mapping.get(name) or sequence[i % len(sequence)] for i, name in enumerate(names)]
@@ -597,14 +672,26 @@ def _build_histogram(
 
     Emitted as ``go.Bar`` with zero gap rather than ``go.Histogram`` — the latter
     would want the raw values again, defeating the purpose.
+
+    ``log_x`` bins the log of the value rather than the value. Plotly bins in the
+    axis's own coordinates, so that is what px would have produced; equal-width
+    linear bins under a log axis would instead pile the whole distribution into
+    the first bar and stretch the rest into slivers, which is the shape a log
+    axis is asked for to avoid. Values at or below zero have no log and drop out,
+    as they do in px.
     """
     x = plan.x
     assert x is not None
     nbins = int(plan.style.get("nbins") or plan.style.get("nbinsx") or _DEFAULT_NBINS)
     nbins = max(1, min(nbins, 1000))
+    log_x = bool(plan.style.get("log_x"))
+
+    if log_x:
+        scan = scan.filter(pl.col(x) > 0)
+    binned = pl.col(x).log10() if log_x else pl.col(x)
 
     bounds = scan.select(
-        pl.col(x).min().alias("lo"), pl.col(x).max().alias("hi"), pl.len().alias("n")
+        binned.min().alias("lo"), binned.max().alias("hi"), pl.len().alias("n")
     ).collect()
     lo, hi, total = bounds["lo"][0], bounds["hi"][0], bounds["n"][0]
     if lo is None or hi is None or total == 0:
@@ -617,7 +704,7 @@ def _build_histogram(
     keys = ["_bin"] + ([plan.color] if plan.color else [])
     counts = (
         scan.with_columns(
-            ((pl.col(x) - lo) / width).floor().cast(pl.Int64).clip(0, nbins - 1).alias("_bin")
+            ((binned - lo) / width).floor().cast(pl.Int64).clip(0, nbins - 1).alias("_bin")
         )
         .group_by(keys)
         .agg(pl.len().alias("_count"))
@@ -638,6 +725,10 @@ def _build_histogram(
     # bars either side would sit adjacent — reading as a continuous distribution
     # where there is actually a gap. Reindex so every bin is present, count 0.
     centres = [lo + (b + 0.5) * width for b in range(nbins)]
+    if log_x:
+        # Trace data on a log axis is passed untransformed — Plotly takes the
+        # log itself — so the bin centres go back to linear here.
+        centres = [10**c for c in centres]
     names = [str(k[0]) if isinstance(k, tuple) else str(k) for k in groups]
     colors = _trace_colors(plan, names)
     # px puts `opacity` on the trace, which is the whole point of `barmode:
@@ -653,7 +744,11 @@ def _build_histogram(
                 x=centres,
                 y=dense,
                 name=name if plan.color else (x or ""),
-                width=width,
+                # Bar width is read in the axis's coordinates, so a constant
+                # linear width is wrong on a log axis. The centres are evenly
+                # spaced there, so with `bargap=0` Plotly's own autosizing
+                # arrives at exactly the bin pitch.
+                width=None if log_x else width,
                 marker_color=color,
                 opacity=opacity,
             )
@@ -811,6 +906,131 @@ def _build_subsample(
         render_stats["sampled"] = sampled
         render_stats["total_rows"] = total
     return fig
+
+
+# --------------------------------------------------------------------------
+# Content demand
+# --------------------------------------------------------------------------
+
+# Grid geometry, mirrored from packages/depictio-react-core/src/components/
+# autofit.ts: a span of n rows offers 104n - 4 px.
+_GRID_ROW_PX = 100
+_GRID_ROW_GAP_PX = 4
+# What a categorical figure spends before its first category: title, axis
+# labels, tick labels, margins.
+_DEMAND_CHROME_PX = 110
+# Room one category is worth. A bar thinner than this reads as a rule rather
+# than a bar; much thicker and two categories fill a screen.
+_DEMAND_PER_CATEGORY_PX = 44
+# Facet strip title, once per row of panels beyond the first.
+_DEMAND_FACET_TITLE_PX = 24
+# A vertical legend's entry, and its title. Four groups split by eleven phyla
+# are four bars beside an eleven-line legend: the legend sets the height.
+_DEMAND_PER_LEGEND_ENTRY_PX = 20
+_DEMAND_LEGEND_TITLE_PX = 24
+# Counting stops here: past it the answer is "taller than any tile", which the
+# clamp settles anyway, and the loop is walking raw trace values.
+_DEMAND_MAX_CATEGORIES = 64
+# The visu types whose category count is a statement about height. A scatter or
+# a line says nothing: ten thousand points want the same box as ten.
+_DEMAND_VISU_TYPES = frozenset({"bar", "box", "violin"})
+
+
+def _categorical_values(fig_dict: dict[str, Any]) -> int:
+    """How many distinct categories the figure plots, across every trace."""
+    seen: set[str] = set()
+    for trace in fig_dict.get("data") or []:
+        if not isinstance(trace, dict):
+            continue
+        # A horizontal bar/box puts its categories on y; everything else on x.
+        values = trace.get("y" if trace.get("orientation") == "h" else "x")
+        if not isinstance(values, (list, tuple)):
+            continue
+        for value in values:
+            if value is None:
+                continue
+            seen.add(str(value))
+            if len(seen) >= _DEMAND_MAX_CATEGORIES:
+                return len(seen)
+    return len(seen)
+
+
+def _vertical_legend_entries(fig_dict: dict[str, Any]) -> int:
+    """How many lines the figure's legend takes, when it is a column.
+
+    Zero for a hidden or horizontal legend: a horizontal one wraps across the
+    width and says little about the height. Entries are counted as Plotly
+    draws them, one per named trace shown in the legend.
+    """
+    layout = fig_dict.get("layout")
+    layout = layout if isinstance(layout, dict) else {}
+    legend = layout.get("legend")
+    hidden = layout.get("showlegend") is False
+    horizontal = isinstance(legend, dict) and legend.get("orientation") == "h"
+    if hidden or horizontal:
+        return 0
+    names = {
+        str(trace["name"])
+        for trace in fig_dict.get("data") or []
+        if isinstance(trace, dict) and trace.get("showlegend") is not False and trace.get("name")
+    }
+    # Plotly hides the legend of a single trace unless asked to show it.
+    return len(names) if len(names) > 1 else 0
+
+
+def _facet_rows(fig_dict: dict[str, Any]) -> int:
+    """How many rows of panels the figure lays out.
+
+    Read off the y axes' domains rather than the plan: px stacks `facet_row`
+    panels vertically and puts `facet_col` panels side by side, so the number
+    of distinct vertical bands is exactly the number of heights to add up.
+    """
+    bands: set[tuple[float, float]] = set()
+    layout = fig_dict.get("layout")
+    if not isinstance(layout, dict):
+        return 1
+    for key, axis in layout.items():
+        if not key.startswith("yaxis") or not isinstance(axis, dict):
+            continue
+        domain = axis.get("domain")
+        if isinstance(domain, (list, tuple)) and len(domain) == 2:
+            try:
+                bands.add((round(float(domain[0]), 3), round(float(domain[1]), 3)))
+            except (TypeError, ValueError):
+                continue
+    return max(1, len(bands))
+
+
+def figure_content_demand(visu_type: str, fig_dict: Any) -> dict[str, int] | None:
+    """The grid rows this figure's content needs, or None if it has no opinion.
+
+    A categorical figure's height is its category count: two bars want two
+    rows, not the five the author guessed when the data had twenty. Computed
+    here because only the builder knows the count, a Plotly figure fills
+    whatever box the client gives it, so the client can only measure the box
+    back.
+
+    Returns None for every other visu type, and for a figure that turned out
+    to have no categorical axis at all (a code-mode figure declaring
+    ``bar``, a bar of one aggregate). The client treats None as "no demand"
+    and leaves the tile at its stored height.
+    """
+    if visu_type not in _DEMAND_VISU_TYPES or not isinstance(fig_dict, dict):
+        return None
+    categories = _categorical_values(fig_dict)
+    if categories <= 0:
+        return None
+    facets = _facet_rows(fig_dict)
+    per_facet = categories * _DEMAND_PER_CATEGORY_PX
+    height = _DEMAND_CHROME_PX + facets * per_facet
+    if facets > 1:
+        height += facets * _DEMAND_FACET_TITLE_PX
+    entries = _vertical_legend_entries(fig_dict)
+    if entries:
+        legend = _DEMAND_LEGEND_TITLE_PX + entries * _DEMAND_PER_LEGEND_ENTRY_PX
+        height = max(height, _DEMAND_CHROME_PX + legend)
+    rows = math.ceil((height + _GRID_ROW_GAP_PX) / (_GRID_ROW_PX + _GRID_ROW_GAP_PX))
+    return {"rows": max(1, rows)}
 
 
 def _px_kwargs(plan: AggPlan, template: str) -> dict[str, Any]:

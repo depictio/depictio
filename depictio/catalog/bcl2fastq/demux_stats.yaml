@@ -1,0 +1,22 @@
+id: bcl2fastq_demux_stats
+name: Reads per library and lane
+description: >-
+  How the reads of each lane were shared between the libraries of the sample
+  sheet and the Undetermined reads no index matched, with the yield, base
+  quality and index-match purity of each library, from bcl2fastq Stats.json.
+find:
+  path_glob: "**/Stats/Stats.json"
+recipe: bcl2fastq/demux_stats.py
+fixture: demux_stats.tsv
+renders_as:
+  - { id: lane_composition, component: advanced_viz, kind: stacked_taxonomy,
+      roles: {sample_id: lane_label, taxon: sample, rank: level, abundance: pct_of_lane} }
+  - { id: lane_sunburst, component: advanced_viz, kind: sunburst,
+      roles: {abundance: reads, ranks: [lane_label, sample]} }
+  - { id: library_index_purity, component: advanced_viz, kind: scatter_xy,
+      roles: {x: reads, y: pct_perfect_index, label: sample, color: lane_label} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: pct_of_lane, color: lane_label, title: Share of the lane per library} }
+  - { component: card, column: reads, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: pct_of_lane, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: pct_q30, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

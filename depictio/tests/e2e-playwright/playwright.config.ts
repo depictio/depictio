@@ -15,8 +15,10 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: IS_CI,
   retries: IS_CI ? 2 : 0,
-  // Limit local workers to 2 to avoid bursting the login rate-limiter.
-  workers: IS_CI ? 2 : 2,
+  // Two, to avoid bursting the login rate-limiter. Raising it means measuring
+  // first: the backend runs a single uvicorn worker and shares the runner with
+  // mongo, redis, minio and celery, so more browsers is not more throughput.
+  workers: Number(process.env.PLAYWRIGHT_WORKERS ?? 2),
   timeout: 60_000,
   expect: { timeout: 10_000 },
 
@@ -45,6 +47,43 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+      // admin/backup-restore does a real destructive restore (wipe + reinsert
+      // every collection, including deltatables) against the shared stack.
+      // It runs in its own project below, gated to start only once every
+      // other spec here has finished — otherwise its restore can silently
+      // drop a data collection another spec is still relying on mid-run.
+      testIgnore: [
+        /admin\/backup-restore\.spec\.ts$/,
+        /catalog\/catalog-modules-on-dashboard\.spec\.ts$/,
+      ],
+    },
+    {
+      // The catalog walk: adding every render the catalog offers through the
+      // real picker, cut into chunks that run one after the other (see CHUNKS
+      // in the spec). It gets its own project for two reasons that the shared
+      // settings get wrong.
+      //
+      // retries: a deterministic walk cannot pass on a second attempt, so the
+      // suite-wide 2 retries only ever tripled an already long failure — three
+      // attempts, two of them guaranteed to fail the same way. One is affordable
+      // because it re-walks a single chunk, not the whole shard, and it still
+      // buys tolerance for a genuinely flaky render.
+      //
+      // video: a 55-minute 1080p screencast, encoded next to a full docker
+      // stack on a 4-vCPU runner, that nobody opens. Every failure is already a
+      // labelled line in the walk's own report.
+      name: "chromium-catalog-walk",
+      use: { ...devices["Desktop Chrome"], video: "off" },
+      testMatch: /catalog\/catalog-modules-on-dashboard\.spec\.ts$/,
+      retries: 1,
+    },
+    {
+      name: "chromium-destructive",
+      use: { ...devices["Desktop Chrome"] },
+      testMatch: /admin\/backup-restore\.spec\.ts$/,
+      // Both of the above, not just the first: the restore wipes every
+      // collection, so it must not start while the walk is still adding to one.
+      dependencies: ["chromium", "chromium-catalog-walk"],
     },
     // Uncomment to add cross-browser coverage:
     // { name: "firefox",  use: { ...devices["Desktop Firefox"] } },

@@ -1,0 +1,7 @@
+sample_id	Habitat	Kingdom	Phylum	Class	Order	Family	Genus	abundance
+SRR10070130	Riverwater	Bacteria	Proteobacteria	Gammaproteobacteria	Chromatiales	Chromatiaceae	Unclassified	0.00037728137330419884
+SRR10070130	Riverwater	Bacteria	Unclassified	Unclassified	Unclassified	Unclassified	Unclassified	0.02343860531652335
+SRR10070130	Riverwater	Bacteria	Proteobacteria	Unclassified	Unclassified	Unclassified	Unclassified	0.015106974989388962
+SRR10070130	Riverwater	Bacteria	Proteobacteria	Alphaproteobacteria	Rhodospirillales	Acetobacteraceae	Acidiphilium	0.0007545627466083977
+SRR10070130	Riverwater	Bacteria	Bacteroidetes	Chitinophagia	Chitinophagales	Chitinophagaceae	Unclassified	0.0003458412588621823
+SRR10070130	Riverwater	Bacteria	Proteobacteria	Betaproteobacteria	Burkholderiales	Burkholderiaceae	Unclassified	0.001273324634901671

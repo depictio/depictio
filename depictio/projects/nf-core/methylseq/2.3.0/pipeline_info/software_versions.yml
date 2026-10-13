@@ -1,0 +1,19 @@
+BISMARK_ALIGN:
+  bismark: 0.24.0
+CUSTOM_DUMPSOFTWAREVERSIONS:
+  python: 3.10.6
+  yaml: '6.0'
+FASTQC:
+  fastqc: 0.11.9
+PRESEQ_LCEXTRAP:
+  preseq: 3.1.1
+QUALIMAP_BAMQC:
+  qualimap: 2.2.2-dev
+SAMPLESHEET_CHECK:
+  python: 3.8.3
+TRIMGALORE:
+  cutadapt: '3.4'
+  trimgalore: 0.6.7
+Workflow:
+  Nextflow: 22.10.4
+  nf-core/methylseq: 2.3.0

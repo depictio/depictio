@@ -13,7 +13,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 
-import { exportProjectZip } from 'depictio-react-core';
+import { exportProjectZip, useBrandAccents } from 'depictio-react-core';
 import type { ProjectListEntry } from 'depictio-react-core';
 
 import { parseTemplate, TemplateChip, type ParsedTemplate } from './template';
@@ -83,6 +83,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
   onEdit,
   onDelete,
 }) => {
+  const accent = useBrandAccents();
   const projectId = (project._id ?? project.id) as string;
   const isAdvanced = project.project_type === 'advanced';
   const isPublic = Boolean(project.is_public);
@@ -219,7 +220,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
                 <Group gap="sm" wrap="wrap">
                   <Button
                     variant="light"
-                    color="blue"
+                    color={accent.primary}
                     size="sm"
                     leftSection={<Icon icon="mdi:pencil" width={16} />}
                     disabled={!canMutate}
@@ -229,7 +230,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
                   </Button>
                   <Button
                     variant="light"
-                    color="teal"
+                    color={accent.secondary}
                     size="sm"
                     leftSection={<Icon icon="mdi:export" width={16} />}
                     onClick={handleExport}

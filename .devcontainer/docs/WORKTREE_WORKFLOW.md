@@ -7,7 +7,7 @@ This document explains how to use git worktrees with Depictio's multi-instance d
 Each git worktree (branch) gets its own:
 - **Unique container names**: `depictio-{branch-name}-mongo`, etc.
 - **Unique ports**: Automatically assigned based on branch type
-- **Isolated data**: Separate databases, MinIO storage, Redis data
+- **Isolated data**: Separate databases, S3 (SeaweedFS) storage, Redis data
 - **Independent VS Code window**: Full development environment per branch
 
 ## Quick Start
@@ -48,12 +48,12 @@ Each instance gets unique external ports:
 **Main Branch** (offset: 0):
 - FastAPI: `http://localhost:8000`
 - Dash: `http://localhost:5000`
-- MinIO Console: `http://localhost:9001`
+- S3 admin UI: `http://localhost:9001`
 
 **Feature Branch** (offset: varies, e.g., 42):
 - FastAPI: `http://localhost:8042`
 - Dash: `http://localhost:5042`
-- MinIO Console: `http://localhost:9043`
+- S3 admin UI: `http://localhost:9043`
 
 Check the post-create output in each devcontainer terminal for exact ports.
 
@@ -68,7 +68,7 @@ MongoDB:    27000
 Redis:      6000
 FastAPI:    8000
 Dash:       5000
-MinIO:      9000
+S3 API:     9000
 Console:    9001
 ```
 
@@ -80,7 +80,7 @@ MongoDB:    27042
 Redis:      6042
 FastAPI:    8042
 Dash:       5042
-MinIO:      9042
+S3 API:     9042
 Console:    9043
 ```
 
@@ -111,13 +111,13 @@ depictio/
 ├── data/
 │   ├── depictio-main/
 │   │   ├── depictioDB/          # MongoDB data for main
-│   │   ├── minio_data/          # MinIO storage for main
+│   │   ├── seaweedfs_data/      # S3 (SeaweedFS) storage for main
 │   │   ├── redis/               # Redis data for main
 │   │   └── cache/               # App cache for main
 │   │
 │   ├── depictio-feat-figure-component/
 │   │   ├── depictioDB/          # Separate MongoDB data
-│   │   ├── minio_data/          # Separate MinIO storage
+│   │   ├── seaweedfs_data/      # Separate S3 storage
 │   │   └── ...
 │   │
 │   └── depictio-feat-auth-refactor/
@@ -197,8 +197,8 @@ MONGO_PORT=27042
 REDIS_PORT=6042
 FASTAPI_PORT=8042
 DASH_PORT=5042
-MINIO_PORT=9042
-MINIO_CONSOLE_PORT=9043
+S3_PORT=9042
+S3_CONSOLE_PORT=9043
 
 # Data directory
 DATA_DIR=data/depictio-feat-figure-component
@@ -221,14 +221,14 @@ mongo-depictio-main
 redis-depictio-main
 depictio-backend-depictio-main
 depictio-frontend-depictio-main
-minio-depictio-main
+s3-depictio-main
 
 # Feature branch
 mongo-depictio-feat-figure-component
 redis-depictio-feat-figure-component
 depictio-backend-depictio-feat-figure-component
 depictio-frontend-depictio-feat-figure-component
-minio-depictio-feat-figure-component
+s3-depictio-feat-figure-component
 ```
 
 ## Managing Worktrees
@@ -275,6 +275,25 @@ docker compose -f docker-compose.dev.yaml \
 # Or stop specific containers
 docker stop depictio-backend-depictio-feat-figure-component
 ```
+
+### `service "minio" has neither an image nor a build context specified`
+
+The bundled object store's compose service was renamed from `minio` to `s3`.
+A `docker-compose.override.yaml` generated before that rename still has a
+`minio:` entry. Regenerate it, and remove the old container that still holds
+the S3 host ports:
+
+```bash
+source .devcontainer/scripts/allocate-ports.sh
+docker compose -f docker-compose.dev.yaml -f docker-compose.override.yaml \
+    --env-file .env.instance up -d --remove-orphans
+```
+
+Existing `.env.instance` / `docker-compose/.env` files keep working: the legacy
+`MINIO_PORT`, `MINIO_CONSOLE_PORT` and `DEPICTIO_MINIO_*` names are still read
+when the new `S3_PORT`, `S3_CONSOLE_PORT` and `DEPICTIO_S3_*` ones are unset.
+The `s3` service also answers on the `minio` hostname, so `http://minio:9000`
+in existing CLI configs keeps resolving.
 
 ### Instance Configuration Not Found
 
@@ -382,7 +401,7 @@ docker compose -f docker-compose.dev.yaml \
 - `.devcontainer/scripts/allocate-ports.sh` - Port allocation logic
 - `.devcontainer/pre_create_setup.sh` - Instance initialization
 - `.devcontainer/post_create_setup.sh` - Service readiness checks
-- `docker-compose.dev.yaml` - Service definitions with dynamic ports (MinIO bundled)
+- `docker-compose.dev.yaml` - Service definitions with dynamic ports (SeaweedFS S3 bundled)
 - `.devcontainer/docker-compose.devcontainer.yaml` - DevContainer service
 - `.env.instance` - Generated instance configuration
 - `.env` - Combined environment for Docker Compose

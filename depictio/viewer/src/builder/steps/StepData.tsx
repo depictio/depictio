@@ -30,7 +30,9 @@ import {
   fetchDataCollectionConfig,
 } from 'depictio-react-core';
 import type { WorkflowEntry } from 'depictio-react-core';
+import { useGlassPages } from '../../chrome/variants/glass/pages';
 import { useBuilderStore } from '../store/useBuilderStore';
+import MultiQCLogo from '../shared/MultiQCLogo';
 import type { ColumnSpec } from '../store/useBuilderStore';
 import { getComponentTypeMeta } from '../componentTypes';
 import DataCollectionInfoCard from '../data/DataCollectionInfoCard';
@@ -57,6 +59,7 @@ const StepData: React.FC = () => {
   const setWorkflow = useBuilderStore((s) => s.setWorkflow);
   const setDataCollection = useBuilderStore((s) => s.setDataCollection);
   const setCols = useBuilderStore((s) => s.setCols);
+  const glass = useGlassPages();
 
   const [workflows, setWorkflows] = useState<WorkflowEntry[]>([]);
   const [projectJoins, setProjectJoins] = useState<ProjectJoin[]>([]);
@@ -99,7 +102,11 @@ const StepData: React.FC = () => {
         // canonical viz schemas (volcano / embedding / manhattan / stacked
         // taxonomy). Compatibility is enforced column-by-column inside
         // AdvancedVizBuilder, not at the DC-type level.
-        return ['table'];
+        //
+        // Plus phylogeny DCs: the phylogenetic kind is bound to its Newick
+        // tree, which has no table, and with tables only a tree could not be
+        // built here at all, only written in YAML.
+        return ['table', 'phylogeny'];
       default:
         return null;
     }
@@ -439,7 +446,28 @@ const StepData: React.FC = () => {
         </Text>
       </Stack>
 
-      {componentMeta && (
+      {componentMeta && glass && (
+        // A tinted pill in the type's own hue, like the tile it was picked from.
+        <div className="bgl-selected" data-testid="builder-selected-component">
+          <Text component="span" fw={650} size="sm">
+            Selected component
+          </Text>
+          <span
+            className="bgl-selected-pill"
+            style={{
+              ['--bgl-tint' as string]: componentMeta.badgeBg ?? componentMeta.iconBg,
+            } as React.CSSProperties}
+          >
+            {componentMeta.type === 'multiqc' ? (
+              <MultiQCLogo size={16} alt="" />
+            ) : (
+              <Icon icon={componentMeta.icon} width={16} color="currentColor" />
+            )}
+            {componentMeta.label}
+          </span>
+        </div>
+      )}
+      {componentMeta && !glass && (
         <Group gap="sm" align="center" mt="xs" mb="xs">
           <Text fw={700} size="md">
             Selected Component:
@@ -448,9 +476,15 @@ const StepData: React.FC = () => {
             size="lg"
             variant="filled"
             color="blue"
-            style={{ background: componentMeta.iconBg }}
+            style={{ background: componentMeta.badgeBg ?? componentMeta.iconBg }}
             leftSection={
-              componentMeta.type === 'multiqc' ? null : (
+              componentMeta.type === 'multiqc' ? (
+                <img
+                  src="/dashboard/logos/multiqc_icon_white.svg"
+                  alt=""
+                  style={{ width: 14, height: 14, objectFit: 'contain' }}
+                />
+              ) : (
                 <Icon icon={componentMeta.icon} width={14} color="white" />
               )
             }

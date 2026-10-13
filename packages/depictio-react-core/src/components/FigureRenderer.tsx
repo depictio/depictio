@@ -1,20 +1,26 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Paper,
-  Text,
-  Stack,
-  Badge,
-  Group,
-  useMantineColorScheme,
-} from '@mantine/core';
+import { Paper, Text, Stack, Badge, Group, useMantineColorScheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
-// Vite resolve.alias in depictio/viewer/vite.config.ts rewrites bare
-// `plotly.js` to `plotly.js/dist/plotly`, so this import grabs the prebuilt
-// browser UMD bundle that react-plotly.js itself uses internally — no
-// `buffer/` source walk, no extra bundle weight, single Plotly instance.
-import Plotly from 'plotly.js';
 
-import { renderFigure, InteractiveFilter, StoredMetadata, FigureResponse } from '../api';
+import {
+  renderFigure,
+  InteractiveFilter,
+  StoredMetadata,
+  FigureResponse,
+  FigureStyleRequest,
+  RenderFigureOptions,
+} from '../api';
+import {
+  GROUP_DECLINED_REASONS,
+  groupBadgeLabel,
+  groupBadgeReasons,
+  summarizeGroupStatus,
+} from '../groupStatus';
+import { useReportGroupReach } from '../groupReach';
+import GroupStatusBadge from './GroupStatusBadge';
+import type { GroupRenderState } from '../selectionGroups';
+import { useDataVersionRequest } from '../dataVersions';
+import { renderDefinitionKey } from '../renderKey';
 import { enqueueFetch, isStaleFetch } from '../fetchQueue';
 import { extractScatterSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
@@ -23,10 +29,21 @@ import { useTransientFlag } from '../hooks/useTransientFlag';
 import { ActiveHighlight } from '../highlight';
 import { asNumberArray, extractCustomdataIds } from '../plotlyData';
 import { adaptGlTraces, PlotlyTrace, useWebglSlot } from '../webglBudget';
+import { useUiScale } from '../uiScale';
+import { applyChromePlotly } from '../chrome/plotlyPatch';
+import { useChromeStyle } from '../chrome/chromeStyle';
+import { useContentDemand } from './autofit';
+import { usePlotlyFollowsBox } from './usePlotlyFollowsBox';
 import RefetchOverlay from './RefetchOverlay';
 import ComponentSkeleton from './ComponentSkeleton';
 import { useReportLoadStatus } from './DashboardLoadingProvider';
 import { LoadAllState } from './chrome/LoadAllButton';
+import { CARD_FRAME } from './cardFrame';
+import FigureHeader from './FigureHeader';
+import { figurePlotConfig, resolveFigureStyle } from './figureStyle';
+import type { TabLinkTarget } from './tabLinks';
+import { stripOverlayPoints, supportsAnnotation } from '../annotations/layer';
+import { clearDrawnSelection, usePlotAnnotationLayer } from './annotations/usePlotAnnotationLayer';
 
 interface FigureRendererProps {
   dashboardId: string;
@@ -43,6 +60,17 @@ interface FigureRendererProps {
   /** Reports the sample/full state so the chrome can render a "load all points"
    *  action icon. ``null`` when the figure isn't downsampled. */
   onLoadAllState?: (state: LoadAllState | null) => void;
+  /** Selection groups to color the figure by. Folded into the render request;
+   *  the server annotates rows and colors traces by group membership. */
+  groupRender?: GroupRenderState;
+  /** Render another component's figure in this tile: a highlight showing a
+   *  figure that lives on another tab. Everything else (load status, the
+   *  selection this tile emits) stays keyed on `metadata.index`. */
+  renderSource?: { dashboardId: string; componentId: string };
+  /** Style the server draws the plot in, over the figure's own. */
+  styleRequest?: FigureStyleRequest;
+  /** The tab the figure comes from, linked from a showcase header. */
+  sourceLink?: TabLinkTarget | null;
 }
 
 /**
@@ -65,6 +93,10 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   refreshTick,
   activeHighlight,
   onLoadAllState,
+  groupRender,
+  renderSource,
+  styleRequest,
+  sourceLink,
 }) => {
   const [figure, setFigure] = useState<{ data?: unknown[]; layout?: Record<string, unknown> } | null>(null);
   const [renderMeta, setRenderMeta] = useState<FigureResponse['metadata'] | null>(null);
@@ -74,8 +106,32 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { colorScheme } = useMantineColorScheme();
+  // Data time travel: `body` merges into the request, `key` goes in the fetch
+  // effect's deps so a pin change actually refetches instead of relabelling
+  // stale data.
+  const {
+    body: versionBody,
+    key: versionKey,
+    definitionVersionId,
+  } = useDataVersionRequest();
+  // `metadata.index` is identity and never moves, so a component whose
+  // *definition* was swapped underneath a mounted renderer (a restore, an
+  // in-place edit) would keep showing the old chart until a page reload.
+  const definitionKey = renderDefinitionKey(metadata, definitionVersionId);
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
+  const chromeStyle = useChromeStyle();
+  const uiScale = useUiScale();
+  // Per-figure font-size multiplier on top of the dashboard-wide preference.
+  const componentFontScale =
+    typeof metadata.font_scale === 'number' && metadata.font_scale > 0 ? metadata.font_scale : 1;
+  const effectiveFontScale = uiScale * componentFontScale;
   const [containerRef, inView] = useInView<HTMLDivElement>('200px');
+  // `minimal`: the showcase look. The server restyles the plot; the viewer
+  // draws the card around it — header with badge and subtitle, card frame,
+  // toolbar on hover only.
+  const showcase = resolveFigureStyle(metadata.figure_style) === 'minimal';
+  const renderDashboardId = renderSource?.dashboardId ?? dashboardId;
+  const renderComponentId = renderSource?.componentId ?? metadata.index;
 
   // Cross-filtering only fires meaningful events on scatter-like traces —
   // histograms / bars / pies aggregate input rows into bins, so Plotly's
@@ -101,6 +157,11 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   // a lasso shrinks the chart to the selected points and the user can't lasso
   // again. Strip our own ``scatter_selection`` entry before fetching. Other
   // components still see it in their filters[] and narrow accordingly.
+  //
+  // Deliberately NOT stripped: a `group_filter` derived from a selection that
+  // was saved on this very figure. Once saved, a group is an ordinary
+  // dashboard filter (the live selection slot has been freed), so it narrows
+  // its source figure like everything else — see selectionGroups.ts.
   const filtersForFetch = useMemo(
     () =>
       filters.filter(
@@ -127,15 +188,32 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     setError(null);
     // Queued so a dense dashboard doesn't fire every figure's render at once;
     // the vertical position is the priority, so the top of the page paints first.
+    const options: RenderFigureOptions | undefined =
+      groupRender || styleRequest
+        ? {
+            ...(groupRender
+              ? {
+                  groups: groupRender.groups,
+                  colorByGroup: groupRender.colorByGroup,
+                  colorByColumn: groupRender.colorByColumn,
+                  display: groupRender.display,
+                  showOther: groupRender.showOther,
+                }
+              : {}),
+            ...(styleRequest ? { style: styleRequest } : {}),
+          }
+        : undefined;
     enqueueFetch(
       () =>
         renderFigure(
-          dashboardId,
-          metadata.index,
+          renderDashboardId,
+          renderComponentId,
           filtersForFetch,
           theme,
           fullLoad,
           ctrl.signal,
+          options,
+          versionBody,
         ),
       metadata.layout?.y ?? 0,
     )
@@ -163,7 +241,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       ctrl.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, inView, refreshTick, fullLoad]);
+  }, [renderDashboardId, renderComponentId, JSON.stringify(filtersForFetch), theme, inView, refreshTick, fullLoad, JSON.stringify(groupRender ?? null), JSON.stringify(styleRequest ?? null), versionKey, definitionKey]);
 
   // First-paint loader vs refetch overlay: only show the big "Rendering…"
   // block until we have something to show; subsequent fetches keep the
@@ -171,6 +249,17 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   const isInitialLoad = figure === null;
   const showInitialLoader = (!inView || (isInitialLoad && loading));
   const showRefetchOverlay = !isInitialLoad && loading;
+
+  // What this figure's content says it needs, in grid rows. Server-side,
+  // because a Plotly figure fills whatever box it is given: nothing in the DOM
+  // says two bars are two bars, only the builder that counted the categories
+  // does. Absent for the visu types where the count says nothing about the
+  // height a reader wants (scatter, line), and ignored altogether unless the
+  // component opts in with `layout: {fit: auto}`, figures default to `fixed`.
+  useContentDemand(metadata.index, renderMeta?.content_demand ?? null);
+  // That demand resizes the tile without resizing the window.
+  const plotBoxRef = useRef<HTMLDivElement | null>(null);
+  usePlotlyFollowsBox(plotBoxRef, figure !== null);
 
   // Report load status to the dashboard registry. Off-screen → pending (null);
   // once we have a figure it stays "ready" through any refetch overlay.
@@ -198,14 +287,14 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
 
   const handleSelected = (event: any) => {
     if (!selectionEnabled || !selectionColumn) return;
-    const values = extractScatterSelection(event, selectionColumnIndex);
+    const values = extractScatterSelection(stripOverlayPoints(event), selectionColumnIndex);
     emitSelection(values);
   };
 
   const handleClick = (event: any) => {
     if (!selectionEnabled || !selectionColumn) return;
     // Treat single-point click as a one-element selection — Dash does the same.
-    const values = extractScatterSelection(event, selectionColumnIndex);
+    const values = extractScatterSelection(stripOverlayPoints(event), selectionColumnIndex);
     emitSelection(values);
   };
 
@@ -213,15 +302,6 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     if (!selectionEnabled) return;
     emitSelection([]);
   };
-
-  // Plotly graph div captured on init/update so we can imperatively clear the
-  // visual lasso/box selection when the user clicks the chrome reset button.
-  // react-plotly.js is a controlled wrapper for `data` + `layout`, but the
-  // drawn selection lives in Plotly's internal UI state (`layout.selections`
-  // and per-trace `selectedpoints`) which isn't reflected back into our props.
-  // Forcing those to null via `relayout` / `restyle` is the documented escape
-  // hatch.
-  const gdRef = useRef<HTMLElement | null>(null);
 
   const hasOwnSelection = useMemo(() => {
     return filters.some(
@@ -245,35 +325,12 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     prevHadOwnSelection.current = hasOwnSelection;
     if (!wasActive || hasOwnSelection) return;
 
-    const gd = gdRef.current;
-    if (!gd) return;
-
-    // Plotly methods accept a string selector or HTMLElement. The Plot's gd
-    // is the chart container; relayout({selections: null}) wipes drawn
-    // selection shapes (lasso/box outline) and restyle({selectedpoints:
-    // null}) restores the un-dimmed look on every trace. Wrapped in
-    // try/catch because the gd may have unmounted between scheduling and
-    // running, and Plotly raises on a detached div.
-    try {
-      // Casts: @types/plotly.js wants Plotly types on gd but the wrapper
-      // exposes a regular HTMLElement that Plotly accepts at runtime; and
-      // `selections` / `selectedpoints` aren't in the typed layout/style
-      // surface but Plotly accepts them as a known clear-state idiom.
-      const target = gd as unknown as Parameters<typeof Plotly.relayout>[0];
-      Plotly.relayout(target, { selections: null } as Partial<Plotly.Layout>).catch(() => {});
-      const data = (gd as unknown as { data?: unknown[] }).data;
-      const traceCount = Array.isArray(data) ? data.length : 0;
-      if (traceCount > 0) {
-        const indices = Array.from({ length: traceCount }, (_, i) => i);
-        Plotly.restyle(
-          target,
-          { selectedpoints: [null] } as Partial<Plotly.PlotData>,
-          indices,
-        ).catch(() => {});
-      }
-    } catch {
-      // best-effort: gd may have unmounted between schedule and run
-    }
+    // relayout({selections: null}) wipes drawn selection shapes (lasso/box
+    // outline) and restyle({selectedpoints: null}) restores the un-dimmed
+    // look on every trace. The graph div is the annotation layer's, which
+    // tracks it through `plotProps`.
+    clearDrawnSelection(annotations.gdRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasOwnSelection]);
 
   // ── New-item highlight pipeline ───────────────────────────────────────────
@@ -381,18 +438,35 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     return overlayTrace ? [...base, overlayTrace] : base;
   }, [figure, overlayTrace, glGranted]);
 
-  const layout = useMemo<Record<string, unknown>>(() => {
+  const baseLayout = useMemo<Record<string, unknown>>(() => {
+    // The chrome style's Plotly patch (fonts, backgrounds, grid) lands over the
+    // server template, under everything this renderer decides below.
+    const srcLayout = applyChromePlotly(
+      (figure?.layout as Record<string, unknown>) || {},
+      theme,
+      chromeStyle,
+    );
     const base: Record<string, unknown> = {
-      ...((figure?.layout as Record<string, unknown>) || {}),
+      ...srcLayout,
       autosize: true,
       margin: {
         l: 50,
         r: 20,
         t: 30,
         b: 50,
-        ...((figure?.layout?.margin as Record<string, unknown>) || {}),
+        ...((srcLayout.margin as Record<string, unknown>) || {}),
       },
     };
+    if (effectiveFontScale !== 1) {
+      // The mantine templates set font family only, so server figures land at
+      // Plotly's default 12px base. Scale it with the dashboard-wide font
+      // preference times this figure's own `font_scale` (labels, ticks and
+      // legend all inherit layout.font); per-figure size overrides (if any)
+      // are preserved by scaling whatever base the server sent.
+      const serverFont = (srcLayout.font as Record<string, unknown>) || {};
+      const serverSize = typeof serverFont.size === 'number' ? serverFont.size : 12;
+      base.font = { ...serverFont, size: serverSize * effectiveFontScale };
+    }
     if (selectionEnabled && !base.dragmode) {
       const mode =
         typeof metadata.selection_mode === 'string' ? metadata.selection_mode : 'lasso';
@@ -407,7 +481,27 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     // changes don't bump refreshTick, so zoom/pan still survive those.
     base.uirevision = `tick-${refreshTick ?? 0}`;
     return base;
-  }, [figure, selectionEnabled, metadata.selection_mode, refreshTick]);
+    // uirevision above stays tied to refreshTick only: entering or leaving
+    // annotate mode, or adding an annotation, must not reset the user's zoom.
+  }, [figure, selectionEnabled, metadata.selection_mode, refreshTick, effectiveFontScale, theme, chromeStyle]);
+
+  // ── Annotation layer ──────────────────────────────────────────────────────
+  // Datawrapper-style annotations (ranges, reference lines, marked points,
+  // arrow notes) are drawn client-side on top of the server figure, and in
+  // annotate mode Plotly gestures draw new ones instead of filtering. Marked
+  // points match on the raw server traces (before the GL fallback and the
+  // new-items halo).
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: supportsAnnotation(metadata),
+    data: figureData,
+    layout: baseLayout,
+    sourceData: figure?.data,
+    pointIdIndex: selectionColumnIndex,
+    pointIdColumn: selectionColumn,
+  });
+
+  const missingPointsBadges = annotations.badges;
 
   // "N of M points" indicator. Passive/informational — the full-load toggle
   // itself lives in the component chrome (see the onLoadAllState effect below),
@@ -434,6 +528,44 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     return null;
   }, [renderMeta, fullLoad]);
 
+  // "Grouped" / "by <column>" tag: the server confirmed it colored this figure
+  // by the user's selection groups or by the global Color-by column (it may
+  // decline, e.g. when the column isn't in this figure's data collection).
+  // Explicit because both modes temporarily override the figure's own `color`
+  // mapping.
+  //
+  // A group that could not reach this frame gets a badge too. Silence was the
+  // old behaviour and it is indistinguishable from a tile that ignores
+  // grouping altogether: the reader has no way to tell "these ids aren't this
+  // component's" from "this is broken". The dimmed variant says which groups
+  // missed and why, on hover. So does a figure that every group reached but
+  // that still drew none of them: a code figure that never spreads the groups,
+  // or a chart type the override cannot repaint.
+  const groupStatus = summarizeGroupStatus(renderMeta?.group_status);
+  const groupColored = Boolean(renderMeta?.group_colored);
+  let groupedBadgeLabel: string | null = groupBadgeLabel(groupColored, groupStatus);
+  if (!groupedBadgeLabel && renderMeta?.column_colored) {
+    groupedBadgeLabel = `by ${renderMeta.column_colored}`;
+  }
+  const groupedBadge = groupedBadgeLabel ? (
+    <GroupStatusBadge
+      label={groupedBadgeLabel}
+      colored={groupColored || Boolean(renderMeta?.column_colored)}
+      faulted={groupStatus?.faulted}
+      reasons={groupBadgeReasons(
+        groupColored,
+        groupStatus,
+        metadata.mode === 'code' ? GROUP_DECLINED_REASONS.code : GROUP_DECLINED_REASONS.ui,
+      )}
+    />
+  ) : null;
+  // Pooled for the Analysis panel, only while groups are asked for and the
+  // server has answered for them. A column override is a different question.
+  useReportGroupReach(
+    metadata.index,
+    groupRender?.colorByGroup && groupStatus ? groupColored : null,
+  );
+
   // Publish the sample/full state so the chrome can render the "load all points"
   // action icon in the same cluster as reset / fullscreen. Bidirectional: the
   // toggle flips back to the sampled view once fully loaded.
@@ -454,29 +586,63 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     );
   }, [onLoadAllState, renderMeta, fullLoad, loading]);
 
+  const subtitle = typeof metadata.subtitle === 'string' ? metadata.subtitle.trim() : '';
+  const iconName = typeof metadata.icon_name === 'string' ? metadata.icon_name : '';
+  const iconColor = typeof metadata.icon_color === 'string' ? metadata.icon_color : '';
+  const caption = typeof metadata.caption === 'string' ? metadata.caption.trim() : '';
+  const showcaseHeader =
+    showcase && Boolean(metadata.title || subtitle || iconName || reductionBadge || groupedBadge || sourceLink);
+
   return (
     <Paper
       ref={containerRef}
-      p="sm"
-      withBorder
+      p={showcase ? 'md' : 'sm'}
+      withBorder={!showcase}
       radius="md"
+      className="dc-tile dc-tile--figure"
+      data-showcase={showcase || undefined}
       style={{
         flex: 1,
         minHeight: 0,
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
+        // The metric cards' frame, so a showcase figure sits in a row of
+        // headline cards as one more of them.
+        ...(showcase ? CARD_FRAME : {}),
       }}
     >
-      {(metadata.title || reductionBadge) && (
-        <Group gap="xs" mb="xs" wrap="nowrap">
-          {metadata.title && (
-            <Text fw={600} size="sm">
-              {metadata.title}
-            </Text>
-          )}
-          {reductionBadge}
-        </Group>
+      {showcaseHeader ? (
+        <FigureHeader
+          title={metadata.title}
+          subtitle={subtitle}
+          icon={iconName || undefined}
+          iconColor={iconColor || undefined}
+          source={sourceLink}
+          badges={
+            reductionBadge || groupedBadge || missingPointsBadges.length > 0 ? (
+              <>
+                {reductionBadge}
+                {groupedBadge}
+                {missingPointsBadges}
+              </>
+            ) : undefined
+          }
+        />
+      ) : (
+        !showcase &&
+        (metadata.title || reductionBadge || groupedBadge || missingPointsBadges.length > 0) && (
+          <Group gap="xs" mb="xs" wrap="nowrap">
+            {metadata.title && (
+              <Text fw={600} size="sm">
+                {metadata.title}
+              </Text>
+            )}
+            {reductionBadge}
+            {groupedBadge}
+            {missingPointsBadges}
+          </Group>
+        )
       )}
       {showInitialLoader && <ComponentSkeleton variant="block" />}
       {error && isInitialLoad && (
@@ -485,26 +651,37 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
         </Stack>
       )}
       {figure && (
-        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+        <div ref={plotBoxRef} style={{ flex: 1, minHeight: 0, position: 'relative' }}>
           <Plot
-            data={figureData as any[]}
-            layout={layout}
+            data={annotations.data as any[]}
+            layout={annotations.layout}
             revision={refreshTick ?? 0}
-            config={{ displaylogo: false, responsive: true }}
+            config={figurePlotConfig(showcase ? 'minimal' : 'default')}
             style={{ width: '100%', height: '100%' }}
             useResizeHandler
-            onInitialized={(_fig, gd) => {
-              gdRef.current = gd as HTMLElement;
-            }}
-            onUpdate={(_fig, gd) => {
-              gdRef.current = gd as HTMLElement;
-            }}
-            onSelected={selectionEnabled ? handleSelected : undefined}
-            onClick={selectionEnabled ? handleClick : undefined}
-            onDeselect={selectionEnabled ? handleDeselect : undefined}
+            // In annotate mode the selection handlers are detached: gestures
+            // draw annotations and never filter the dashboard.
+            {...annotations.plotProps({
+              onSelected: selectionEnabled ? handleSelected : undefined,
+              onClick: selectionEnabled ? handleClick : undefined,
+              onDeselect: selectionEnabled ? handleDeselect : undefined,
+            })}
           />
+          {annotations.toolbar}
           <RefetchOverlay visible={showRefetchOverlay} />
         </div>
+      )}
+      {caption && (
+        // How to read the plot, under it: what a mark is, what a filter does.
+        <Text
+          size="xs"
+          c="dimmed"
+          mt={6}
+          style={{ lineHeight: 1.45, flex: 'none', whiteSpace: 'pre-line' }}
+          data-testid="figure-caption"
+        >
+          {caption}
+        </Text>
       )}
     </Paper>
   );

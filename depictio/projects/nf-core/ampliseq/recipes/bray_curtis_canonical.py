@@ -16,15 +16,25 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="rel_abundance", dc_ref="taxonomy_rel_abundance"),
+    RecipeSource(
+        ref="rel_abundance",
+        dc_ref="taxonomy_rel_abundance",
+        input_schema={
+            "sample": pl.Utf8,
+            "taxonomy": pl.Utf8,
+            "rel_abundance": pl.Float64,
+        },
+    ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
 }
-# Per-sample distance columns are dynamic — validated via OPTIONAL_SCHEMA = {}.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+# Per-sample distance columns are dynamic — validated via OPTIONAL_OUTPUT_SCHEMA = {}.
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:

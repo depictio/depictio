@@ -18,6 +18,7 @@ import httpx
 from depictio.api.v1.configs.config import API_BASE_URL
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.deltatables_utils import LINK_NO_MATCH
+from depictio.models.models.links import resolve_link_tag_refs
 
 # Cache for link resolution results
 _link_resolution_cache: Dict[str, Dict[str, Any]] = {}
@@ -78,11 +79,123 @@ def _link_target_column(link: dict, resolved: dict | None = None) -> str | None:
     )
 
 
+# Marks a path hop that walks its link against the declared direction. A private
+# key on a copy of the link dict: it never reaches the API or the database.
+_REVERSED = "_depictio_reversed"
+
+# The filter source a genome region travels under, written by the genome_view
+# brush and by any sidebar control bound to the same two columns. Mirrors
+# ``genomeRegionFilters`` in packages/depictio-react-core/src/selection.ts.
+GENOME_SELECTION_SOURCE = "genome_selection"
+
+# Which half of the region pair a filter is, by its component type. The pair is
+# emitted as a unit, so the component type identifies the role without the link
+# having to name the source-side coordinate column.
+_REGION_ROLE_BY_COMPONENT = {
+    "MultiSelect": "chrom",
+    "Select": "chrom",
+    "RangeSlider": "pos",
+    "Slider": "pos",
+}
+
+
+# Interactive components whose value is a [low, high] pair, not a value set.
+_RANGE_COMPONENTS = frozenset({"RangeSlider", "DateRangePicker"})
+
+
+def _is_range_filter(source_filter: dict) -> bool:
+    """True for a slider filter: its two values are a span, not two members."""
+    meta = source_filter.get("metadata") or {}
+    component = str(
+        meta.get("interactive_component_type")
+        or source_filter.get("interactive_component_type")
+        or ""
+    )
+    value = source_filter.get("value")
+    return component in _RANGE_COMPONENTS and isinstance(value, list) and len(value) == 2
+
+
+def _is_region_link(link: dict) -> bool:
+    """True for a link that renames a genomic region rather than resolving values."""
+    return (link.get("link_config") or {}).get("resolver") == "region"
+
+
+# The position half of a region pair carries the chromosome half's index with
+# this suffix (``genomePosFilterIndex``), which is how the two are paired back
+# up when one collection publishes more than one region.
+_GENOME_POS_INDEX_SUFFIX = "::pos"
+
+
+def _region_halves(source_filters: list, source_column: str) -> tuple[dict | None, dict | None]:
+    """The (chromosome, position) filters of one region pair on one DC.
+
+    ``source_column`` names the chromosome column the link follows, so a
+    collection carrying two coordinate bindings (a junction table and its
+    coverage, say) can be linked once per binding. Left empty, the first
+    region pair found wins.
+
+    The position half is matched by index rather than by column, because that
+    is what ties it to *its* chromosome: the brush writes it as the chromosome
+    filter's index plus ``::pos``.
+    """
+    chrom_half: dict | None = None
+    positions: dict[str, dict] = {}
+    for f in source_filters:
+        if not isinstance(f, dict) or f.get("source") != GENOME_SELECTION_SOURCE:
+            continue
+        if f.get("value") in (None, [], "", False):
+            continue
+        meta = f.get("metadata") or {}
+        component = str(
+            meta.get("interactive_component_type") or f.get("interactive_component_type") or ""
+        )
+        role = _REGION_ROLE_BY_COMPONENT.get(component)
+        if role == "pos":
+            positions[str(f.get("index", ""))] = f
+        elif role == "chrom" and chrom_half is None:
+            column = str(meta.get("column_name") or f.get("column_name") or "")
+            if not source_column or column == source_column:
+                chrom_half = f
+    if chrom_half is None:
+        return None, None
+    chrom_index = str(chrom_half.get("index", ""))
+    pos_half = positions.get(f"{chrom_index}{_GENOME_POS_INDEX_SUFFIX}")
+    if pos_half is None and len(positions) == 1:
+        # A sidebar RangeSlider is not indexed off the chromosome control, so
+        # an unambiguous single range still pairs with the chromosome.
+        pos_half = next(iter(positions.values()))
+    return chrom_half, pos_half
+
+
+def _is_reversed(hop: dict) -> bool:
+    return bool(hop.get(_REVERSED))
+
+
+def _hop_ends(hop: dict) -> tuple[str, str]:
+    """``(from_dc, to_dc)`` for a path hop, in the direction it is walked."""
+    source = str(hop.get("source_dc_id", ""))
+    target = str(hop.get("target_dc_id", ""))
+    return (target, source) if _is_reversed(hop) else (source, target)
+
+
+def _hop_target_column(hop: dict, resolved: dict | None = None) -> str | None:
+    """The column a hop's resolved values name on the DC the hop arrives at.
+
+    Walked forwards, that is ``_link_target_column``. Walked backwards, the
+    values arrive on the link's *source*, whose join column is ``source_column``
+    by definition; ``target_field`` names the other end and must not be used.
+    """
+    if _is_reversed(hop):
+        return hop.get("source_column")
+    return _link_target_column(hop, resolved)
+
+
 def _link_paths(
     project_links: list[dict],
     origin_dc: str,
     target_dc_id: str,
     max_hops: int = MAX_LINK_HOPS,
+    allow_reverse: bool = False,
 ) -> list[list[dict]]:
     """Every enabled link path from ``origin_dc`` to ``target_dc_id``.
 
@@ -94,15 +207,37 @@ def _link_paths(
     Breadth-first so the shortest path to a target is found first, and a DC is
     never revisited within a path (cycles in the link graph are legal to declare
     and would otherwise loop forever).
+
+    ``allow_reverse`` also lets a path walk a ``direct`` link from its target
+    back to its source, as a hop marked reversed (see ``_hop_ends``). A direct
+    link joins equal values, so it answers the question in both directions; the
+    other resolvers rename or expand values one way and have no inverse. Only
+    selection groups ask for this: in a star-shaped project a group drawn on one
+    leaf otherwise reaches none of its siblings. Dashboard filters keep the
+    declared direction.
+
+    Returned shortest first; at equal length, paths with fewer reversed hops
+    come first, so a declared route always wins over an inferred one.
     """
     if origin_dc == target_dc_id:
         return []
 
-    by_source: dict[str, list[dict]] = {}
-    for link in project_links:
-        if not link.get("enabled", True):
-            continue
-        by_source.setdefault(str(link.get("source_dc_id", "")), []).append(link)
+    edges: dict[str, list[dict]] = {}
+    # Region links are not value routes: they rename a chromosome and a
+    # coordinate column and resolve nothing, so walking one through
+    # ``resolve_link_values`` would scan a coordinate column for values that
+    # need no translation. ``region_link_filters`` handles them instead.
+    enabled = [
+        link for link in project_links if link.get("enabled", True) and not _is_region_link(link)
+    ]
+    for link in enabled:
+        edges.setdefault(str(link.get("source_dc_id", "")), []).append(link)
+    if allow_reverse:
+        for link in enabled:
+            if (link.get("link_config") or {}).get("resolver", "direct") != "direct":
+                continue
+            reversed_hop = {**link, _REVERSED: True}
+            edges.setdefault(str(link.get("target_dc_id", "")), []).append(reversed_hop)
 
     paths: list[list[dict]] = []
     # (current DC, path taken, DCs already on that path)
@@ -111,14 +246,16 @@ def _link_paths(
         dc, path, seen = queue.pop(0)
         if len(path) >= max_hops:
             continue
-        for link in by_source.get(dc, []):
-            nxt = str(link.get("target_dc_id", ""))
+        for hop in edges.get(dc, []):
+            _, nxt = _hop_ends(hop)
             if not nxt or nxt in seen:
                 continue
             if nxt == target_dc_id:
-                paths.append(path + [link])
+                paths.append(path + [hop])
             else:
-                queue.append((nxt, path + [link], seen | {nxt}))
+                queue.append((nxt, path + [hop], seen | {nxt}))
+    # Stable, so a forward-only graph keeps its breadth-first order exactly.
+    paths.sort(key=lambda p: (len(p), sum(_is_reversed(hop) for hop in p)))
     return paths
 
 
@@ -129,8 +266,13 @@ def _walk_link_path(
     origin_values: list,
     access_token: str,
     component_type: str,
+    range_filter: bool = False,
 ) -> tuple[str | None, list]:
     """Resolve a filter along a chain of links, hop by hop.
+
+    ``range_filter`` applies to the first hop only: the origin values are the
+    slider's ``[low, high]``, every later hop receives the discrete join values
+    the previous one resolved.
 
     Each hop translates the values it receives into the next DC's join column;
     that output becomes the next hop's input.
@@ -148,11 +290,14 @@ def _walk_link_path(
 
     A failed resolution does not return at all — ``resolve_link_values`` raises
     ``LinkResolutionError`` so a timeout can never masquerade as "no filter".
+
+    A hop marked reversed (see ``_link_paths``) walks its link from target to
+    source: the resolver is asked with ``reverse=True``, and the values it
+    returns name the link's ``source_column`` (see ``_hop_target_column``).
     """
     column, values = origin_column, origin_values
     for hop, link in enumerate(path):
-        source_dc = str(link.get("source_dc_id", ""))
-        next_dc = str(link.get("target_dc_id", ""))
+        source_dc, next_dc = _hop_ends(link)
         resolved = resolve_link_values(
             project_id=project_id,
             source_dc_id=source_dc,
@@ -160,8 +305,10 @@ def _walk_link_path(
             filter_values=values,
             target_dc_id=next_dc,
             token=access_token,
+            reverse=_is_reversed(link),
+            range_filter=range_filter and hop == 0,
         )
-        final_column = _link_target_column(path[-1])
+        final_column = _hop_target_column(path[-1])
         if resolved is None:
             # No link declared for this hop (404). Nothing to translate through.
             logger.info(
@@ -178,7 +325,7 @@ def _walk_link_path(
             )
             return final_column, []
         values = resolved["resolved_values"]
-        column = _link_target_column(link, resolved)
+        column = _hop_target_column(link, resolved)
         if not column:
             logger.warning(
                 f"[{component_type}] Skipping link {link.get('id')!r} at hop {hop + 1}: "
@@ -219,8 +366,18 @@ def resolve_link_values(
     target_dc_id: str,
     token: str | None,
     use_cache: bool = True,
+    reverse: bool = False,
+    range_filter: bool = False,
 ) -> Optional[Dict[str, Any]]:
-    """Resolve filtered values from source DC to target DC via link."""
+    """Resolve filtered values from source DC to target DC via link.
+
+    ``reverse`` asks for a ``direct`` link declared ``target_dc_id ->
+    source_dc_id`` to be walked backwards (see ``_link_paths``). The endpoint
+    answers 404 for any other resolver, which reads here as "no link".
+
+    ``range_filter`` says ``filter_values`` is a ``[low, high]`` pair to read as
+    a span on ``source_column`` (see ``LinkResolutionRequest.range_filter``).
+    """
     if not token:
         logger.warning("No token provided for link resolution")
         return None
@@ -234,8 +391,10 @@ def resolve_link_values(
     # pre-update resolution for its full 5-minute TTL and the affected rows were
     # simply absent from every linked component — with nothing to indicate it.
     versions = f"{_agg_hash(source_dc_id)}_{_agg_hash(target_dc_id)}"
+    direction = "rev" if reverse else "fwd"
+    shape = "range" if range_filter else "set"
     cache_key = (
-        f"link_{project_id}_{source_dc_id}_{target_dc_id}_{versions}_"
+        f"link_{project_id}_{source_dc_id}_{target_dc_id}_{direction}_{shape}_{versions}_"
         f"{hash(tuple(sorted(str(v) for v in filter_values)))}"
     )
 
@@ -251,6 +410,8 @@ def resolve_link_values(
         "source_column": source_column,
         "filter_values": filter_values,
         "target_dc_id": target_dc_id,
+        "reverse": reverse,
+        "range_filter": range_filter,
     }
 
     try:
@@ -392,6 +553,166 @@ def clear_link_resolution_cache():
     _link_resolution_cache.clear()
 
 
+def _project_links(project_metadata: dict | None) -> tuple[str, list[dict]]:
+    """``(project_id, declared links)`` out of a project-metadata envelope.
+
+    Resolves template-time ``tag:`` link placeholders on the way out (see
+    ``resolve_link_tag_refs``) so every caller walks a graph of real ids.
+    """
+    project_data = (project_metadata or {}).get("project", {}) or {}
+    resolve_link_tag_refs(project_data)
+    return str(project_data.get("_id", "")), list(project_data.get("links") or [])
+
+
+def resolve_values_via_links(
+    project_metadata: dict | None,
+    origin_dc_id: str,
+    origin_column: str,
+    values: list,
+    target_dc_id: str,
+    access_token: str | None,
+    component_type: str = "unknown",
+) -> tuple[str, list] | None:
+    """Translate one value set from one data collection onto another.
+
+    The single-translation entry point shared by the two cross-DC features.
+    Dashboard filters go through ``extend_filters_via_links``, which emits one
+    synthetic filter per declared route because a component can carry several
+    filters at once. A *selection group* needs exactly one answer — it annotates
+    one column — so here the SHORTEST declared route wins and the rest are not
+    walked: a second route naming a different target column has nothing to add,
+    and walking it would only cost another resolution.
+
+    Returns ``(target_column, target_values)``, or ``None`` when no usable route
+    exists. The two are not the same and must not be conflated (same rule as
+    ``_walk_link_path``): an empty ``target_values`` means the route resolved,
+    to nothing — the values are satisfiable on the origin but name no row here.
+
+    ``target_column`` is whatever ``_hop_target_column`` decides for the last
+    hop: forwards, the resolver's explicit column, else the link's
+    ``target_field``, else its ``source_column`` (the join column); backwards,
+    the link's ``source_column``. Never ``origin_column``: that names something
+    the target DC may not have, and a caller that used it would match nothing
+    or, worse, everything.
+
+    Raises ``LinkResolutionError`` when a hop could not be resolved at all.
+    """
+    if not (origin_dc_id and origin_column and values and target_dc_id and access_token):
+        return None
+    if origin_dc_id == target_dc_id:
+        return None
+
+    project_id, project_links = _project_links(project_metadata)
+    if not project_id or not project_links:
+        return None
+
+    # Unlike dashboard filters, groups may walk ``direct`` links backwards (see
+    # ``_link_paths``): projected that way, a group becomes the rows of the link's
+    # source that carry its values.
+    for path in _link_paths(project_links, origin_dc_id, target_dc_id, allow_reverse=True):
+        target_column, resolved_values = _walk_link_path(
+            path=path,
+            project_id=project_id,
+            origin_column=origin_column,
+            origin_values=list(values),
+            access_token=access_token,
+            component_type=component_type,
+        )
+        if target_column:
+            return target_column, resolved_values
+    return None
+
+
+def region_link_filters(
+    target_dc_id: str,
+    filters_by_dc: dict,
+    project_links: list[dict],
+    component_type: str = "unknown",
+) -> list:
+    """Rewrite genome-region filters onto a target DC's own coordinate columns.
+
+    A region is not a value set, it is a chromosome name and a base-pair
+    interval, and both mean the same thing in every collection of the same
+    assembly. So a ``region`` link needs no resolution and no data read: it
+    only says which columns carry the chromosome and the coordinate on the
+    target, and the two filters are re-emitted under those names.
+
+    This is what the hic Genome-architecture tab asks for in its own comment:
+    one brush on a genome_view narrowing the matrix, the insulation track and
+    the boundary calls, each of which is a separate collection with its own
+    column names.
+
+    One hop only, deliberately. A chain of renames is still the same region,
+    so a second hop would add nothing but a way for two links to disagree.
+
+    Returns the synthetic filters to apply, in the shape ``add_filter``
+    already understands (``MultiSelect`` on the chromosome, ``RangeSlider`` on
+    the coordinate).
+    """
+    out: list = []
+    region_links = [
+        link
+        for link in project_links
+        if link.get("enabled", True)
+        and _is_region_link(link)
+        and str(link.get("target_dc_id", "")) == str(target_dc_id)
+    ]
+    if not region_links:
+        return out
+
+    for link in region_links:
+        origin_dc = str(link.get("source_dc_id", ""))
+        if not origin_dc or origin_dc == str(target_dc_id):
+            continue
+        columns = (link.get("link_config") or {}).get("columns") or {}
+        chrom_col = columns.get("chrom")
+        pos_col = columns.get("pos")
+        if not chrom_col or not pos_col:
+            logger.warning(
+                f"[{component_type}] region link {link.get('id')} names no "
+                "chrom/pos columns on its target; skipped"
+            )
+            continue
+
+        source_column = str(link.get("source_column") or "")
+        chrom_half, pos_half = _region_halves(filters_by_dc.get(origin_dc, []) or [], source_column)
+        # The chromosome half is what makes a coordinate range mean anything:
+        # 12 000 000 to 13 000 000 on no named contig would narrow every contig
+        # of the target at once. So the pair travels together or not at all.
+        if not chrom_half:
+            continue
+        for role, source_filter, target_column in (
+            ("chrom", chrom_half, chrom_col),
+            ("pos", pos_half, pos_col),
+        ):
+            if not source_filter:
+                continue
+            meta = source_filter.get("metadata") or {}
+            component = str(
+                meta.get("interactive_component_type")
+                or source_filter.get("interactive_component_type")
+                or ""
+            )
+            out.append(
+                {
+                    "index": f"region_link_{link.get('id', '?')}_{role}",
+                    "value": source_filter.get("value"),
+                    "source": GENOME_SELECTION_SOURCE,
+                    "metadata": {
+                        "dc_id": str(target_dc_id),
+                        "column_name": target_column,
+                        "interactive_component_type": component,
+                    },
+                }
+            )
+    if out:
+        logger.debug(
+            f"[{component_type}] region links rewrote {len(out)} filter(s) onto "
+            f"{str(target_dc_id)[:8]}"
+        )
+    return out
+
+
 def extend_filters_via_links(
     target_dc_id: str,
     filters_by_dc: dict,
@@ -418,17 +739,27 @@ def extend_filters_via_links(
     """
     link_filters: list = []
 
-    if not project_metadata or not access_token:
-        logger.info(
-            f"[{component_type}] Link resolution skipped: "
-            f"project_metadata={project_metadata is not None}, "
-            f"access_token={access_token is not None}"
-        )
+    if not project_metadata:
+        logger.info(f"[{component_type}] Link resolution skipped: no project metadata")
         return link_filters
 
-    project_data = project_metadata.get("project", {})
-    project_id = str(project_data.get("_id", ""))
-    project_links = project_data.get("links", [])
+    # Region links first, and without the access-token guard: they rename two
+    # columns and read nothing, so there is no API call to authenticate.
+    _, all_links = _project_links(project_metadata)
+    link_filters.extend(
+        region_link_filters(
+            target_dc_id=target_dc_id,
+            filters_by_dc=filters_by_dc,
+            project_links=all_links,
+            component_type=component_type,
+        )
+    )
+
+    if not access_token:
+        logger.info(f"[{component_type}] Link resolution skipped: no access token")
+        return link_filters
+
+    project_id, project_links = _project_links(project_metadata)
 
     if not project_id or not project_links:
         return link_filters
@@ -472,6 +803,7 @@ def extend_filters_via_links(
                     origin_values=filter_values,
                     access_token=access_token,
                     component_type=component_type,
+                    range_filter=_is_range_filter(source_filter),
                 )
                 if not target_column:
                     continue  # unusable chain — not a result, so claim nothing

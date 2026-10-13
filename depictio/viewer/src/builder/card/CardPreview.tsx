@@ -18,19 +18,28 @@
  * split evenly at 33/33/34, so a perfectly good card looked broken in the
  * builder and then rendered completely different numbers once saved.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Center, Text } from '@mantine/core';
 import { DepictioCard } from 'depictio-components';
 import { useBuilderStore } from '../store/useBuilderStore';
+import { useBuilderPreviewFilters } from '../useBuilderPreviewFilters';
 import PreviewPanel from '../shared/PreviewPanel';
+import { useSectionCardVariant } from '../shared/useSectionCardVariant';
 import { autoCardTitle } from './cardTitle';
 import {
   SecondaryMetrics,
+  cardScopedFilters,
   fetchBreakdown,
+  fetchCardHeroValue,
   fetchCardMetric,
+  compactKeepsStrip,
+  formatTextValue,
   isBreakdownLayout,
   isNumericLayout,
+  resolveCardVariant,
+  stripIsMinimal,
   type BreakdownPayloadDTO,
+  type InteractiveFilter,
   type SecondaryLayout,
 } from 'depictio-react-core';
 
@@ -114,10 +123,12 @@ function useBreakdownPreview(
   aggregation: string | undefined,
   topNCount: number,
   enabled: boolean,
+  filters: InteractiveFilter[],
 ): { payload: BreakdownPayloadDTO | null; loading: boolean; error: string | null } {
   const [payload, setPayload] = useState<BreakdownPayloadDTO | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const filterKey = JSON.stringify(filters);
 
   useEffect(() => {
     if (!enabled || !dcId || !column || !breakdownCol) {
@@ -129,7 +140,15 @@ function useBreakdownPreview(
     const ctrl = new AbortController();
     setLoading(true);
     setError(null);
-    fetchBreakdown(dcId, column, breakdownCol, aggregation || 'count', topNCount, ctrl.signal)
+    fetchBreakdown(
+      dcId,
+      column,
+      breakdownCol,
+      aggregation || 'count',
+      topNCount,
+      ctrl.signal,
+      filters,
+    )
       .then((res) => {
         setPayload(res);
         setLoading(false);
@@ -141,7 +160,8 @@ function useBreakdownPreview(
         setLoading(false);
       });
     return () => ctrl.abort();
-  }, [enabled, dcId, column, breakdownCol, aggregation, topNCount]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, dcId, column, breakdownCol, aggregation, topNCount, filterKey]);
 
   return { payload, loading, error };
 }
@@ -159,15 +179,26 @@ function useNumericPreview(
   layout: SecondaryLayout,
   layoutConfig: Record<string, unknown>,
   enabled: boolean,
+  filters: InteractiveFilter[],
 ): { payload: Record<string, unknown> | null; loading: boolean; error: string | null } {
-  const [payload, setPayload] = useState<Record<string, unknown> | null>(null);
+  // The payload is kept WITH the layout it was fetched for. The caller labels
+  // whatever comes back as `__<current layout>__`, and a layout change renders
+  // once before this effect can run — so a payload held on its own is handed to
+  // the next layout's metric component for that render. That is not cosmetic:
+  // switching threshold → completeness gave CompletenessMetric a
+  // ThresholdPayload, which read `filled` off it and took the builder down.
+  const [fetched, setFetched] = useState<{
+    layout: SecondaryLayout;
+    payload: Record<string, unknown> | null;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const configKey = JSON.stringify(layoutConfig);
+  const filterKey = JSON.stringify(filters);
 
   useEffect(() => {
     if (!enabled || !dcId || !column) {
-      setPayload(null);
+      setFetched(null);
       setError(null);
       setLoading(false);
       return;
@@ -175,21 +206,71 @@ function useNumericPreview(
     const ctrl = new AbortController();
     setLoading(true);
     setError(null);
-    fetchCardMetric(dcId, layout, column, JSON.parse(configKey), ctrl.signal)
+    fetchCardMetric(dcId, layout, column, JSON.parse(configKey), ctrl.signal, filters)
       .then((res) => {
-        setPayload(res);
+        setFetched({ layout, payload: res });
         setLoading(false);
       })
       .catch((err: unknown) => {
         if ((err as { name?: string })?.name === 'AbortError') return;
-        setPayload(null);
+        setFetched({ layout, payload: null });
         setError(err instanceof Error ? err.message : String(err));
         setLoading(false);
       });
     return () => ctrl.abort();
-  }, [enabled, dcId, column, layout, configKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, dcId, column, layout, configKey, filterKey]);
 
-  return { payload, loading, error };
+  // Only the payload fetched for the CURRENT layout is visible to the caller;
+  // anything else is still in flight, and the caller shows its "Computing…"
+  // hint rather than mislabelling the previous layout's numbers.
+  const settled = fetched?.layout === layout;
+  return {
+    payload: settled ? fetched.payload : null,
+    loading: loading || !settled,
+    error,
+  };
+}
+
+/** The hero scalar under active dashboard filters.
+ *
+ *  With no filters this stays inert (``value: undefined``) and the component
+ *  keeps its zero-request static path — the precomputed ``col.specs`` value.
+ *  With filters active, the hero is recomputed server-side on the filtered
+ *  frame so it cannot contradict the (also filtered) secondary strip. */
+function useHeroValue(
+  dcId: string | null,
+  column: string | undefined,
+  aggregation: string | undefined,
+  filters: InteractiveFilter[],
+): { value: unknown; loading: boolean } {
+  const [value, setValue] = useState<unknown>(undefined);
+  const [loading, setLoading] = useState(false);
+  const filterKey = JSON.stringify(filters);
+
+  useEffect(() => {
+    if (filters.length === 0 || !dcId || !column || !aggregation) {
+      setValue(undefined);
+      setLoading(false);
+      return;
+    }
+    const ctrl = new AbortController();
+    setLoading(true);
+    fetchCardHeroValue(dcId, column, aggregation, filters, ctrl.signal)
+      .then((v) => {
+        setValue(v);
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        if ((err as { name?: string })?.name === 'AbortError') return;
+        setValue(undefined);
+        setLoading(false);
+      });
+    return () => ctrl.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dcId, column, aggregation, filterKey]);
+
+  return { value, loading };
 }
 
 const CardPreview: React.FC = () => {
@@ -208,13 +289,30 @@ const CardPreview: React.FC = () => {
     threshold_warn?: number | null;
     attrition_cols?: string[] | null;
     trend_col?: string | null;
+    follow_region_filter?: boolean;
     background_color?: string;
     title_color?: string;
     icon_name?: string;
     title_font_size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+    variant?: string | null;
+    caption?: string | null;
+    decimals?: number | null;
+    format?: string | null;
+    link?: string | null;
+    description?: string | null;
   };
   const cols = useBuilderStore((s) => s.cols);
   const dcId = useBuilderStore((s) => s.dcId);
+  // Same scope as the saved card: a locus navigator's region does not narrow
+  // a card unless it opts in with ``follow_region_filter``.
+  const allPreviewFilters = useBuilderPreviewFilters();
+  const followRegion = config.follow_region_filter === true;
+  const previewFilters = useMemo(
+    () => cardScopedFilters(allPreviewFilters, { follow_region_filter: followRegion }),
+    [allPreviewFilters, followRegion],
+  );
+  // Drawn the way the grid will: the card's own style, else its section's.
+  const sectionVariant = useSectionCardVariant();
 
   const layout: SecondaryLayout = config.secondary_layout ?? 'vertical';
   // Hooks must run unconditionally, so this sits above the early return for an
@@ -230,6 +328,7 @@ const CardPreview: React.FC = () => {
     config.aggregation,
     config.top_n_count ?? 3,
     isBreakdownLayout(layout),
+    previewFilters,
   );
 
   const {
@@ -249,6 +348,14 @@ const CardPreview: React.FC = () => {
       trend_col: config.trend_col ?? null,
     },
     isNumericLayout(layout),
+    previewFilters,
+  );
+
+  const { value: filteredHero } = useHeroValue(
+    dcId,
+    config.column_name,
+    config.aggregation,
+    previewFilters,
   );
 
   if (!config.column_name || !config.aggregation) {
@@ -262,8 +369,35 @@ const CardPreview: React.FC = () => {
   }
 
   const col = cols.find((c) => c.name === config.column_name);
-  const rawValue = col?.specs?.[config.aggregation as string];
-  const value = formatValue(rawValue);
+  // Static path: the precomputed spec describes the unfiltered collection.
+  // Under active dashboard filters the server-computed hero replaces it (kept
+  // as the placeholder while the fetch is in flight, so the value doesn't
+  // flash to "—" on every filter toggle).
+  const staticValue = col?.specs?.[config.aggregation as string];
+  const rawValue =
+    previewFilters.length > 0 && filteredHero !== undefined && filteredHero !== null
+      ? filteredHero
+      : staticValue;
+  // `format` wins over `decimals`, as on the saved card (`cardNumberFormat`).
+  const format = config.format?.trim() || undefined;
+  const decimals = !format && typeof config.decimals === 'number' ? config.decimals : undefined;
+  const valueFormat = format ?? (decimals !== undefined ? `decimals:${decimals}` : undefined);
+  const value = formatValue(rawValue, valueFormat);
+  const variant = resolveCardVariant(config.variant, sectionVariant);
+  // Same header text as the saved card (ComponentRenderer): a caption takes
+  // the aggregation label's line, and the label moves to the header tooltip
+  // beside the author's description.
+  const caption = config.caption?.trim() || '';
+  const description = config.description?.trim() || '';
+  const aggLabel = `(${config.aggregation.charAt(0).toUpperCase()}${config.aggregation.slice(1)})`;
+  const headerTooltip =
+    description || caption ? (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {description ? <span>{description}</span> : null}
+        {caption ? <span style={{ opacity: description ? 0.75 : 1 }}>{aggLabel}</span> : null}
+      </div>
+    ) : undefined;
+  const linkTarget = config.link?.trim() || '';
 
   const effectiveTitle =
     (config.title && config.title.trim()) ||
@@ -303,9 +437,11 @@ const CardPreview: React.FC = () => {
     }
   }
 
+  // Same rule as the saved card (ComponentRenderer): a compact card keeps only
+  // a single-bar strip.
   const showStrip =
-    stripRows.length > 0 ||
-    typeof coverageMax === 'number';
+    (variant !== 'compact' || compactKeepsStrip(layout)) &&
+    (stripRows.length > 0 || typeof coverageMax === 'number');
   // Only box_plot still estimates (quartiles aren't precomputed). The
   // categorical strips now show server-computed numbers, so claiming they are
   // estimates would be the inaccurate statement.
@@ -360,6 +496,9 @@ const CardPreview: React.FC = () => {
             title_color={config.title_color}
             title_font_size={config.title_font_size ?? 'md'}
             value_font_size="xl"
+            variant={variant}
+            aggregation_description={caption || aggLabel}
+            header_tooltip={headerTooltip}
             secondaryStrip={
               showStrip ? (
                 <SecondaryMetrics
@@ -367,6 +506,10 @@ const CardPreview: React.FC = () => {
                   layout={layout}
                   coverageValue={coverageValue}
                   coverageMax={coverageMax}
+                  minimal={stripIsMinimal(variant)}
+                  decimals={decimals}
+                  format={format}
+                  heroColumn={config.column_name}
                 />
               ) : undefined
             }
@@ -375,6 +518,12 @@ const CardPreview: React.FC = () => {
             <Text size="10" c="dimmed" ta="center" mt={2} style={{ fontSize: 10 }}>
               Preview values are estimated; the saved card recomputes from the
               live data.
+            </Text>
+          ) : null}
+          {linkTarget ? (
+            <Text size="10" c="dimmed" ta="center" mt={2} style={{ fontSize: 10 }}>
+              Clicking the card opens{' '}
+              {linkTarget.startsWith('tab:') ? `the “${linkTarget.slice(4)}” tab` : linkTarget}.
             </Text>
           ) : null}
           {breakdownHint || numericHint ? (
@@ -388,15 +537,11 @@ const CardPreview: React.FC = () => {
   );
 };
 
-function formatValue(v: unknown): string {
-  if (v == null) return '—';
-  if (typeof v === 'number') {
-    if (!Number.isFinite(v)) return '—';
-    if (Number.isInteger(v)) return v.toLocaleString('en-US');
-    return v.toLocaleString('en-US', { maximumFractionDigits: 2 });
-  }
-  if (typeof v === 'boolean') return v ? 'true' : 'false';
-  return String(v);
+/** The value as the saved card prints it: the same shared formatter (a text
+ *  tile's live values go through it too), in the card's `format`. */
+function formatValue(v: unknown, format?: string): string {
+  if (v == null || (typeof v === 'number' && !Number.isFinite(v))) return '—';
+  return formatTextValue(v, format);
 }
 
 export default CardPreview;

@@ -1,4 +1,5 @@
 id: qiime2_alpha_rarefaction
+name: Alpha rarefaction
 mode: alpha-rarefaction
 description: Alpha-rarefaction curve (sample × depth × iteration × metric).
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/diversityalphararefaction

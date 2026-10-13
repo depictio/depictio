@@ -33,6 +33,16 @@ export interface DepictioRangeSliderProps {
   restrict_to_marks?: boolean;
   /** When false, suppress tick marks for a denser look. Defaults to true. */
   show_marks?: boolean;
+  /** When false, keep the tick marks but drop their value labels. Defaults to
+   *  true; moot when `show_marks` is false. */
+  show_mark_labels?: boolean;
+  /** How a value is spelled on the drag tooltip and on any mark label this
+   *  component derives itself. Callers that already have a formatter should pass
+   *  it (the viewer's `RangeSliderRenderer` has `formatSliderValue`, the same
+   *  function `buildNumericScale` labelled its explicit marks with) so the
+   *  tooltip and the marks below it never disagree about a value. Defaults to
+   *  the equivalent local copy below. */
+  format_value?: (value: number) => string;
   /** Compact rendering: drop the outer Paper, tighten internal spacing, and
    *  shrink the title row. Used when this slider is embedded inside another
    *  Paper-bearing container (e.g. InteractiveGroupCard). */
@@ -65,6 +75,8 @@ const DepictioRangeSlider: React.FC<DepictioRangeSliderProps> = ({
   marks: explicitMarks,
   restrict_to_marks = false,
   show_marks = true,
+  show_mark_labels = true,
+  format_value,
   compact = false,
   bare = false,
   value,
@@ -91,6 +103,8 @@ const DepictioRangeSlider: React.FC<DepictioRangeSliderProps> = ({
     setLocal(next);
   }, []);
 
+  const format = format_value ?? formatSliderValue;
+
   const handleChangeEnd = useCallback(
     (next: [number, number]) => {
       // Drop filter if it equals the full unfiltered range.
@@ -114,14 +128,25 @@ const DepictioRangeSlider: React.FC<DepictioRangeSliderProps> = ({
         ? explicitMarks.map((m) => ({ value: m.value }))
         : undefined;
     }
-    if (explicitMarks) return explicitMarks;
+    if (explicitMarks) {
+      return show_mark_labels ? explicitMarks : explicitMarks.map((m) => ({ value: m.value }));
+    }
     const n = Math.max(2, marks_number);
     const stepSize = (safeMax - safeMin) / (n - 1);
     return Array.from({ length: n }, (_, i) => {
       const v = safeMin + stepSize * i;
-      return { value: v, label: formatMark(v) };
+      return show_mark_labels ? { value: v, label: format(v) } : { value: v };
     });
-  }, [safeMin, safeMax, marks_number, show_marks, explicitMarks, restrict_to_marks]);
+  }, [
+    safeMin,
+    safeMax,
+    marks_number,
+    show_marks,
+    show_mark_labels,
+    explicitMarks,
+    restrict_to_marks,
+    format,
+  ]);
 
   const displayTitle =
     title ||
@@ -148,7 +173,7 @@ const DepictioRangeSlider: React.FC<DepictioRangeSliderProps> = ({
   const stackGap = compact ? 2 : 6;
   // Mark labels hang below the track, so a compact slider showing them needs
   // the room it otherwise gives away.
-  const sliderMb = compact ? (show_marks ? 'sm' : 0) : 'xs';
+  const sliderMb = compact ? (show_marks && show_mark_labels ? 'sm' : 0) : 'xs';
   const slider = (
     <RangeSlider
       // Pulls the first and last mark labels inside the track. The rule lives in
@@ -163,6 +188,12 @@ const DepictioRangeSlider: React.FC<DepictioRangeSliderProps> = ({
       onChange={handleChange}
       onChangeEnd={handleChangeEnd}
       marks={marks}
+      // The tooltip that follows a thumb while it is dragged. Left unset,
+      // Mantine prints the raw number, and a continuous slider's step is
+      // (max - min) / 100, so a thumb lands on values like 0.30000000000000004
+      // and the tooltip shows every one of those digits. Routing it through the
+      // same formatter as the marks is what keeps the readout to three decimals.
+      label={format}
       restrictToMarks={restrict_to_marks}
       // On a restricted slider both thumbs may sit on the same mark — picking
       // one year out of three is a legitimate selection, and a minimum range
@@ -234,9 +265,26 @@ const DepictioRangeSlider: React.FC<DepictioRangeSliderProps> = ({
   );
 };
 
-function formatMark(v: number): string {
+/**
+ * Slider value as a reader would write it: an integer bare, a fraction with
+ * enough decimals to tell neighbouring stops apart and no more, capped at three
+ * whatever the magnitude.
+ *
+ * The canonical copy is `formatSliderValue` in depictio-react-core's
+ * `components/interactive/numericScale.ts`, which is what labels the explicit
+ * marks the viewer hands down. This package cannot import it: react-core depends
+ * on depictio-components and not the other way round, and the Dash bundle
+ * consumes this package on its own. So the copy lives here under the same name,
+ * same split as the `depictio-slider-marks` class above, and the two have to
+ * stay in step. A caller holding the canonical one should pass it as
+ * `format_value` and skip this entirely.
+ */
+export function formatSliderValue(v: number): string {
+  if (!Number.isFinite(v)) return String(v);
   if (Number.isInteger(v)) return String(v);
-  return v.toFixed(2).replace(/\.?0+$/, '');
+  const abs = Math.abs(v);
+  const decimals = abs >= 100 ? 1 : abs >= 1 ? 2 : 3;
+  return String(Number(v.toFixed(decimals)));
 }
 
 export default DepictioRangeSlider;

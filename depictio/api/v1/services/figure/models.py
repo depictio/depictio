@@ -188,6 +188,26 @@ CORE_PARAMETERS = [
 ]
 
 # Define common parameters shared across many visualizations
+# The Plotly templates a figure may be pinned to. `mantine_light` /
+# `mantine_dark` are Depictio's own, registered at startup and carrying the
+# brand theme; `none` means "no template at all", distinct from leaving the
+# parameter unset (which follows the UI colour scheme). Stated once so the
+# figure builder and the parameter-discovery fallbacks can't drift apart. The
+# branding form carries its own list in TypeScript, with different membership
+# and its own labels.
+PLOT_TEMPLATE_OPTIONS = [
+    "mantine_light",
+    "mantine_dark",
+    "plotly",
+    "plotly_white",
+    "plotly_dark",
+    "ggplot2",
+    "seaborn",
+    "simple_white",
+    "presentation",
+    "none",
+]
+
 COMMON_PARAMETERS = [
     ParameterDefinition(
         name="title",
@@ -202,16 +222,7 @@ COMMON_PARAMETERS = [
         category=ParameterCategory.COMMON,
         label="Template",
         description="Plotly template to use",
-        options=[
-            "mantine_light",
-            "mantine_dark",
-            "plotly",
-            "plotly_white",
-            "plotly_dark",
-            "ggplot2",
-            "seaborn",
-            "simple_white",
-        ],
+        options=list(PLOT_TEMPLATE_OPTIONS),
         default=None,
     ),
     ParameterDefinition(

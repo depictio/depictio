@@ -21,6 +21,24 @@
   display: flex;
   flex-direction: column;
 }
+/* "Current data" on a tile that cannot time-travel (CurrentDataBadge). Always
+ * visible, unlike the action row: it is the tile saying it is not the past.
+ * Bottom-left, clear of the action row and of a figure's title. Lifted like
+ * the action row, above Plotly's own layers. An empty span when the badge
+ * renders nothing. */
+.depictio-current-data-badge {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 1100;
+  display: inline-flex;
+}
+.depictio-current-data-badge:empty {
+  display: none;
+}
+/* Hover-only action row, top-right, above the renderer's own Paper. Everything
+ * a tile offers lives here, the catalog-origin flag included: a badge pinned
+ * top-left would sit exactly where a figure draws its title. */
 .depictio-component-actions {
   position: absolute;
   top: 12px;
@@ -38,47 +56,74 @@
   border-radius: var(--mantine-radius-sm);
   padding: 2px;
 }
-/* Soft pill background — fades in with the row on hover so the icons stay
- * legible over busy backgrounds. Promoted to always-visible when the row
- * is anchored by an active reset (`has-active-reset`) so the lone reset
- * icon doesn't float without a backdrop. */
+/* Backdrop behind the action row.
+ *
+ * Solid fill: the icons sit over plots and tables of every density, and
+ * anything translucent left them muddy against a busy one. The hairline border
+ * is what keeps this from reading as a smear of white dropped on the chart —
+ * it gives the row a defined edge, so it reads as a chip that belongs to the
+ * component. Both tokens are scheme-aware, so this is correct in dark mode too.
+ *
+ * `box-sizing` is spelled out because the border must sit inside the
+ * `inset: 0` box, or the backdrop grows 2px past the row it is backing.
+ *
+ * Visible on hover/focus only. The actions that stay on screen without hover
+ * (the analysis marker, the clear-selection action) are `light` ActionIcons
+ * with their own tint, so pinning the backdrop on for them only drew an empty
+ * chip around the invisible rest of the row. */
 .depictio-component-actions::before {
   content: '';
   position: absolute;
   inset: 0;
+  box-sizing: border-box;
   background: var(--mantine-color-body);
+  border: 1px solid var(--mantine-color-default-border);
   border-radius: inherit;
   opacity: 0;
   transition: opacity 0.15s ease;
   z-index: -1;
 }
 .depictio-component-chrome:hover .depictio-component-actions::before,
-.depictio-component-chrome:focus-within .depictio-component-actions::before,
-.depictio-component-actions.has-active-reset::before {
+.depictio-component-actions:has(:focus-visible)::before {
   opacity: 1;
 }
-/* Per-child opacity so the active-reset icon can stay visible while the
- * rest of the row remains hover-only. (Opacity on the row container would
- * collapse the whole subtree together.) */
+/* Per-child opacity so a single action (the analysis marker) can stay
+ * visible while the rest of the row remains hover-only. (Opacity on the row
+ * container would collapse the whole subtree together.)
+ *
+ * Keyboard focus reveals the row too, but only keyboard focus (`:focus-visible`)
+ * on one of its own actions: the row precedes the component in the DOM, so
+ * tabbing into a tile lands on its actions first and they appear. Focus
+ * elsewhere in the tile is not enough. Ticking a table row leaves AG Grid's
+ * checkbox focused, and that focus (and, once the page has seen a keystroke,
+ * its `:focus-visible` state) kept the whole row and its frame on screen next
+ * to the clear-selection action after the pointer had left the tile. A mouse
+ * click on an action does not match `:focus-visible` either, so the row does
+ * not stick after its popover closes. */
 .depictio-component-actions > * {
   opacity: 0;
   transition: opacity 0.15s ease;
   pointer-events: none;
 }
 .depictio-component-chrome:hover .depictio-component-actions > *,
-.depictio-component-chrome:focus-within .depictio-component-actions > * {
+.depictio-component-actions:has(:focus-visible) > * {
   opacity: 1;
   pointer-events: auto;
 }
-/* The reset icon stays visible without hover when its component is the
- * source of the dashboard's active filter — gives users a persistent
- * affordance to clear the filter from where it originated. Which components
- * get it is decided in ComponentChrome (`persistentReset`); interactive
- * controls are excluded, because this row floats and their frame has nothing
- * under the top-right corner to spare. */
-.depictio-component-actions > .depictio-active-reset {
+/* The clear-selection slot of a tile that is the source of an active
+ * selection (see `showClear` in ComponentChrome). Like the analysis marker it
+ * escapes the hover-only default, so at rest it is the one visible icon of the
+ * row, with no frame and the other slots hidden; on hover the row and its
+ * frame appear around it.
+ *
+ * The body-coloured underlay is only as large as the icon. The `light` tint on
+ * top is translucent, and over a dense plot or table it would otherwise read
+ * as a smudge. On hover it disappears into the row's own body-coloured frame. */
+.depictio-component-actions > .depictio-clear-selection {
   opacity: 1;
   pointer-events: auto;
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-body);
 }
 /* Filter-panel density — see `compact` in ComponentChrome.
  *
@@ -100,6 +145,24 @@
   width: 12px;
   height: 12px;
 }
+/* Cards anchor their actions bottom-right instead of top-right.
+ *
+ * A card is read top-down — title, then the number it exists to show, with its
+ * icon in the top-right corner. That is exactly where this row floats, so on a
+ * card it lands on the content instead of beside it. The bottom edge is the
+ * quiet part. Orientation is untouched: cards are already horizontal via
+ * `orientationFor`, and stay so.
+ *
+ * Declared after `.is-compact` on purpose — the two have equal specificity and
+ * both set `top`, so source order is what decides. */
+.depictio-component-actions.depictio-actions-bottom {
+  top: auto;
+  bottom: 12px;
+}
+.depictio-component-actions.depictio-actions-bottom.is-compact {
+  top: auto;
+  bottom: 2px;
+}
 
 /* Vertical stack for figure/multiqc/map — mirrors the Dash editor's
  * `button_configs[type].orientation == "vertical"` from layouts/edit.py. */
@@ -115,11 +178,9 @@
 /* Only the wrapped renderer fills the fullscreen viewport. The action row is
  * the chrome's other direct child and is absolutely positioned, so it must be
  * excluded: at `height: 100%` a horizontal row (Mantine Group centres on the
- * cross axis) drops its icons to the vertical middle of the screen, and the
- * hover pill — `::before { inset: 0 }` inside the row's z-index 1100 stacking
- * context — inflates into a full-height opaque panel painted over the content.
- * Vertical rows escape both effects because their cross axis is horizontal,
- * which is why this only ever showed up on the table/AG Grid chrome. */
+ * cross axis) drops its icons to the vertical middle of the screen. Vertical
+ * rows escape that because their cross axis is horizontal, which is why this
+ * only ever showed up on the table/AG Grid chrome. */
 .depictio-component-chrome.fullscreen-active > *:not(.depictio-component-actions) {
   height: 100%;
 }
@@ -154,4 +215,55 @@
  * Mantine popover covers it and the filter button appears to do nothing. */
 .ag-popup-child {
   z-index: 500;
+}
+
+/* Analysis mode: mark the components a selection can be saved from.
+ *
+ * The renderers already draw their own <Paper withBorder/>, so this uses
+ * `outline` rather than `border` — an outline is painted outside the box model
+ * and changes no layout, which matters because these components sit in a grid
+ * whose cells are sized to the pixel. Dashed to read as an invitation rather
+ * than as the solid border of an active state, and offset inwards so it hugs
+ * the Paper's own edge instead of bleeding into the grid gutter.
+ *
+ * `--depictio-grouping-color` is stamped on the element by ComponentChrome from
+ * `useGroupingColorVar`, so the hue is stated once — deliberately NOT the theme
+ * primary, which the Edit button beside the Analysis control already uses; on a
+ * branded instance it is the brand's tertiary instead. The `-filled` token
+ * behind it resolves per scheme, correct in light and dark. */
+.depictio-component-chrome.depictio-selection-capable > .mantine-Paper-root,
+.depictio-component-chrome.depictio-selection-capable > .depictio-fill {
+  outline: 2px dashed var(--depictio-grouping-color);
+  outline-offset: -2px;
+  border-radius: var(--mantine-radius-md);
+}
+/* The hint icon is the one action that must be legible without hover: it exists
+ * precisely to tell a user who is NOT yet interacting that this component is
+ * selectable, so fading it would defeat the point. Fully opaque — it is already
+ * rare (only while analysis is engaged, only on the four selectable component
+ * types), so it costs no clutter in ordinary viewing. Same escape from the
+ * hover-only default the other actions follow.
+ *
+ * Deliberately WITHOUT the row's backdrop pill: unlike the bare subtle
+ * ActionIcons of the rest of the row, this one is a Mantine
+ * `light` variant and carries its own tint, so the pill only showed up as a
+ * white box around it. The background stays transparent until hover. */
+.depictio-component-actions > .depictio-selection-hint {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* A component with comment threads keeps its comments icon (and its count
+ * badge) on screen without hover, like the selection hint above: the icon is a
+ * Mantine `light` ActionIcon carrying its own tint, so it needs no backdrop. */
+.depictio-component-actions > .depictio-comments-persistent {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Annotate mode is a state, not a hover affordance: its toggle stays visible
+ * while the figure is being annotated so the way out is always on screen. */
+.depictio-component-actions > .depictio-annotate-active {
+  opacity: 1;
+  pointer-events: auto;
 }

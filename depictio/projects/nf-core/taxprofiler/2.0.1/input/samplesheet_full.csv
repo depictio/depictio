@@ -1,0 +1,8 @@
+sample,run_accession,instrument_platform,fastq_1,fastq_2,fasta
+MOCK_001_Minion_R9,1,OXFORD_NANOPORE,s3://ngi-igenomes/test-data/taxprofiler/fastqs/ERR9765780.fastq.gz,,
+MOCK_002_Minion_R9,1,OXFORD_NANOPORE,s3://ngi-igenomes/test-data/taxprofiler/fastqs/ERR9765781.fastq.gz,,
+MOCK_003_Minion_R9,1,OXFORD_NANOPORE,s3://ngi-igenomes/test-data/taxprofiler/fastqs/ERR9765782.fastq.gz,,
+MOCK_001_Illumina_Hiseq_3000,1,ILLUMINA,s3://ngi-igenomes/test-data/taxprofiler/fastqs/ERR9765746_1.fastq.gz,s3://ngi-igenomes/test-data/taxprofiler/fastqs/ERR9765746_2.fastq.gz,
+MOCK_002_Illumina_Hiseq_3000,1,ILLUMINA,s3://ngi-igenomes/test-data/taxprofiler/fastqs/ERR9765747_1.fastq.gz,s3://ngi-igenomes/test-data/taxprofiler/fastqs/ERR9765747_2.fastq.gz,
+MOCK_003_Illumina_Hiseq_3000,1,ILLUMINA,s3://ngi-igenomes/test-data/taxprofiler/fastqs/ERR9765748_1.fastq.gz,s3://ngi-igenomes/test-data/taxprofiler/fastqs/ERR9765748_2.fastq.gz,
+MOCK_003_Illumina_Hiseq_3000,2,ILLUMINA,s3://ngi-igenomes/test-data/taxprofiler/fastqs/ERR9765749_1.fastq.gz,s3://ngi-igenomes/test-data/taxprofiler/fastqs/ERR9765749_2.fastq.gz,

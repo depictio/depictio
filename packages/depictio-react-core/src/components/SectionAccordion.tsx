@@ -1,9 +1,14 @@
 import React from 'react';
-import { Accordion, Group, Text } from '@mantine/core';
+import { Accordion, Box, Group, Text, Tooltip } from '@mantine/core';
+import { Icon } from '@iconify/react';
 
 import type { FilterSectionSpec } from '../api';
 import type { CollapseState } from '../hooks/useCollapseState';
-import SectionIcon, { sectionColorVar } from './SectionIcon';
+import SectionIcon, {
+  resolveSectionColor,
+  SectionColorContext,
+  sectionColorVar,
+} from './SectionIcon';
 import './sectionAccordion.css';
 
 /**
@@ -50,27 +55,53 @@ export const SectionAccordion: React.FC<{
 export const SectionAccordionItem: React.FC<{
   value: string;
   /**
-   * Mantine palette name from the section spec — tints the rail. Passed by the
-   * grid only: a coloured rail in the filter panel too would put two colour
-   * columns at the same heights on either side of the screen, which reads as
-   * one paired set even though the panel's sections and the grid's are separate
-   * lists. The panel's colour stays on the icon and the count badge, where it
-   * identifies a section without claiming a region.
+   * Mantine palette name from the section spec — tints the rail. Both the grid
+   * and the filter panel pass it: the coloured rail is what makes a section
+   * recognisably the same thing on either surface.
    */
   color?: string | null;
+  /**
+   * Interactive controls for the section — the editor's "…", typically.
+   *
+   * A sibling of `Accordion.Control`, never inside it: the control *is* a
+   * `<button>`, and a button inside a button is invalid DOM that React warns
+   * about and that swallows the inner click in some browsers. Non-interactive
+   * trimmings (a folded section's metrics, a count badge) belong in
+   * `SectionHeader`'s own slots instead.
+   */
+  actions?: React.ReactNode;
+  /** Exactly an `Accordion.Control` followed by an `Accordion.Panel`. */
   children: React.ReactNode;
-}> = ({ value, color, children }) => (
-  <Accordion.Item
-    value={value}
-    style={
-      color
-        ? ({ '--section-accent': sectionColorVar(color) } as React.CSSProperties)
-        : undefined
-    }
-  >
-    {children}
-  </Accordion.Item>
-);
+  /** `appearance: plain`: no frame, no chevron, a heading over its tiles. */
+  plain?: boolean;
+}> = ({ value, color, actions, children, plain = false }) => {
+  const [control, panel] = React.Children.toArray(children);
+  return (
+    <SectionColorContext.Provider value={color ?? null}>
+    <Accordion.Item
+      value={value}
+      className={plain ? 'is-plain' : undefined}
+      style={
+        color
+          ? ({ '--section-accent': sectionColorVar(color) } as React.CSSProperties)
+          : undefined
+      }
+    >
+      {actions ? (
+        <Box style={{ display: 'flex', alignItems: 'center' }}>
+          <Box style={{ flex: 1, minWidth: 0 }}>{control}</Box>
+          <Box pr="sm" style={{ flexShrink: 0 }}>
+            {actions}
+          </Box>
+        </Box>
+      ) : (
+        control
+      )}
+      {panel}
+    </Accordion.Item>
+    </SectionColorContext.Provider>
+  );
+};
 
 export const SectionHeader: React.FC<{
   spec?: FilterSectionSpec | null;
@@ -81,7 +112,30 @@ export const SectionHeader: React.FC<{
   badge?: React.ReactNode;
   /** Pushed to the far end of the row, e.g. a folded section's metrics. */
   trailing?: React.ReactNode;
-}> = ({ spec, name, badge, trailing }) => (
+}> = ({ spec, name, badge, trailing }) =>
+  spec?.appearance === 'plain' ? (
+    // A plain section is a heading, not a bar: a title at a page heading's
+    // size over its description, the icon a marker before the title. Sized to
+    // be found while scrolling — on a landing page these headings are its
+    // table of contents.
+    <div style={{ minWidth: 0 }}>
+      <Group gap={10} wrap="nowrap" align="center" style={{ minWidth: 0 }}>
+        {spec.icon ? <SectionIcon spec={spec} size={24} /> : null}
+        <Text fw={700} style={{ fontSize: 22, lineHeight: 1.25, letterSpacing: '-0.01em' }}>
+          {name}
+        </Text>
+        {badge}
+      </Group>
+      {spec.description ? (
+        <Text
+          c="dimmed"
+          style={{ fontSize: 15, lineHeight: 1.45, marginTop: 2, paddingLeft: spec.icon ? 34 : 0 }}
+        >
+          {spec.description}
+        </Text>
+      ) : null}
+    </div>
+  ) : (
   <Group justify="space-between" wrap="nowrap" gap="sm" pr="xs" style={{ minWidth: 0 }}>
     {/* The icon goes INSIDE the label, not in `Accordion.Control`'s `icon`
         prop: Mantine renders that prop's node after the label and gives it a
@@ -91,22 +145,55 @@ export const SectionHeader: React.FC<{
         heading is a section heading. The filter panel buys its room back on the
         header's height instead (see sectionAccordion.css). */}
     <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
-      <SectionIcon spec={spec ?? undefined} />
+      <SectionIcon
+        spec={spec?.icon ? { icon: spec.icon, color: resolveSectionColor(spec.color, name) } : undefined}
+      />
       {/* Title over subtitle: the header carries the narration that dashboards
           used to spend a full-width text component on. In the header rather
           than the body because a folded section is exactly when its description
           is the only thing left to explain it. */}
       <div style={{ minWidth: 0 }}>
         <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
-          <Text size="md" fw={600} truncate>
-            {name}
-          </Text>
+          {/* Tooltip carries the full text — both lines are `truncate`d and a
+              clipped name/description was otherwise unreadable, especially at
+              the filter panel's width. Always mounted rather than only when
+              clipped: measuring overflow needs a resize observer for marginal
+              gain, and an un-clipped tooltip merely repeats the line. */}
+          <Tooltip label={name} withArrow multiline w={260} openDelay={400}>
+            <Text size="md" fw={600} truncate>
+              {name}
+            </Text>
+          </Tooltip>
           {badge}
+          {/* Rendered here rather than by each caller so a persistent section
+              is marked the same in the grid, the filter panel and the
+              cross-tab host. A pin, not a text badge: the header is already
+              dense, and the tooltip carries the explanation. */}
+          {spec?.persistent && (
+            <Tooltip
+              label={`Pinned to every tab of this dashboard, ${
+                spec?.pin === 'bottom' ? 'after' : 'before'
+              } each tab's own sections; filter values set in it survive tab switches`}
+              withArrow
+              multiline
+              w={260}
+            >
+              <Icon
+                icon="mdi:pin"
+                width={14}
+                height={14}
+                color="var(--mantine-color-dimmed)"
+                style={{ flexShrink: 0, transform: 'rotate(30deg)' }}
+              />
+            </Tooltip>
+          )}
         </Group>
         {spec?.description && (
-          <Text size="sm" c="dimmed" truncate>
-            {spec.description}
-          </Text>
+          <Tooltip label={spec.description} withArrow multiline w={260} openDelay={400}>
+            <Text size="sm" c="dimmed" truncate>
+              {spec.description}
+            </Text>
+          </Tooltip>
         )}
       </div>
     </Group>

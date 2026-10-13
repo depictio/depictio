@@ -1,0 +1,13 @@
+id: qiime2_bray_curtis
+name: Sample distance matrix
+mode: diversity/beta
+description: >-
+  Sample by sample Bray-Curtis dissimilarity matrix computed from the
+  relative-abundance table.
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/diversitycore
+find: { path_glob: "**/qiime2/rel_abundance_tables/rel-table-*.tsv" }
+recipe: nf-core/ampliseq/bray_curtis_canonical.py
+fixture: bray_curtis.tsv
+renders_as:
+  - { id: distance_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: sample} }
+  - { component: table }

@@ -16,6 +16,31 @@ from plotly_complexheatmap.utils import categorical_colorscale, generate_colors
 _CATEGORICAL_SIZE = 0.025  # thin colour bar like ComplexHeatmap
 _NUMERIC_SIZE = 0.06  # bar/scatter need more room
 
+# Painted pixels a brick must keep AFTER the border gap has been taken out of
+# it. Plotly paints each brick at ``pitch - gap`` px between integer-rounded
+# boundaries, so the rule has to be about what survives, not about the pitch:
+# a 1 px gap on a 2.4 px pitch leaves 1.4 px, which rounds to a pinstripe of
+# background with a little colour in it, and on the shorter figure a responsive
+# consumer actually renders into (the gap is in pixels and does not scale with
+# the tile) it leaves nothing at all and the strip reads as blank. Sibling guard
+# to ``_MIN_ROW_LABEL_PITCH_PX`` in ``heatmap.py``: past this density the border
+# stops being a border and becomes the whole cell.
+_MIN_BRICK_PAINT_PX = 2.0
+
+
+def brick_gap(pitch_px: float | None, full: float) -> float:
+    """Border gap to draw at *pitch_px*, or ``0`` where the brick can't spare it.
+
+    *full* is the gap the caller wants at a comfortable density (1 px for the
+    annotation strips, 0.5 px for the matrix itself). *pitch_px* of ``None``
+    means the caller doesn't know the density — keep the full gap, which is the
+    pre-guard behaviour.
+    """
+    if pitch_px is not None and (pitch_px - full) < _MIN_BRICK_PAINT_PX:
+        return 0.0
+    return full
+
+
 # ---------------------------------------------------------------------------
 # Individual track types
 # ---------------------------------------------------------------------------
@@ -29,7 +54,20 @@ class AnnotationTrack:
     values: Any
     size: float = _CATEGORICAL_SIZE
 
-    def to_traces(self, axis: str, positions: NDArray[np.floating]) -> list[go.BaseTraceType]:
+    def to_traces(
+        self,
+        axis: str,
+        positions: NDArray[np.floating],
+        pitch_px: float | None = None,
+    ) -> list[go.BaseTraceType]:
+        """Traces for this track.
+
+        *pitch_px* is how many figure pixels one item (row for ``axis="y"``,
+        column for ``axis="x"``) is allotted in the cell this track lands in.
+        The caller knows it — ``ComplexHeatmap`` holds the figure size and the
+        grid fractions — so it is handed down rather than guessed here. ``None``
+        means "unknown", and every track must render as it did before the guard.
+        """
         raise NotImplementedError
 
     def legend_items(self) -> list[go.Scatter]:
@@ -58,13 +96,22 @@ class CategoricalTrack(AnnotationTrack):
         self._categories = cats
         self._cat_to_int = {c: i for i, c in enumerate(cats)}
 
-    def to_traces(self, axis: str, positions: NDArray[np.floating]) -> list[go.BaseTraceType]:
+    def to_traces(
+        self,
+        axis: str,
+        positions: NDArray[np.floating],
+        pitch_px: float | None = None,
+    ) -> list[go.BaseTraceType]:
         numeric = np.array([self._cat_to_int[v] for v in self.values])
         n = len(self._categories)
         cs = categorical_colorscale([self.colors[c] for c in self._categories], n)
 
-        # Border gap gives the black-outlined ComplexHeatmap look
-        border = {"xgap": 1, "ygap": 1}
+        # Border gap gives the black-outlined ComplexHeatmap look — but only
+        # while the brick is thick enough to survive losing a pixel to it. The
+        # gap is dropped on the stacking axis alone; the other axis spans the
+        # whole strip width/height and always has room.
+        gap = brick_gap(pitch_px, 1.0)
+        border = {"xgap": gap, "ygap": 1.0} if axis == "x" else {"xgap": 1.0, "ygap": gap}
 
         if axis == "x":
             z = numeric.reshape(1, -1)
@@ -124,7 +171,12 @@ class NumericBarTrack(AnnotationTrack):
     color: str = "#4C78A8"
     size: float = _NUMERIC_SIZE
 
-    def to_traces(self, axis: str, positions: NDArray[np.floating]) -> list[go.BaseTraceType]:
+    def to_traces(
+        self,
+        axis: str,
+        positions: NDArray[np.floating],
+        pitch_px: float | None = None,
+    ) -> list[go.BaseTraceType]:
         vals = np.asarray(self.values, dtype=float)
         if axis == "x":
             return [
@@ -162,7 +214,12 @@ class NumericScatterTrack(AnnotationTrack):
     marker_size: int = 5
     size: float = _NUMERIC_SIZE
 
-    def to_traces(self, axis: str, positions: NDArray[np.floating]) -> list[go.BaseTraceType]:
+    def to_traces(
+        self,
+        axis: str,
+        positions: NDArray[np.floating],
+        pitch_px: float | None = None,
+    ) -> list[go.BaseTraceType]:
         vals = np.asarray(self.values, dtype=float)
         common = {
             "mode": "markers",
@@ -216,7 +273,12 @@ class StackedBarTrack(AnnotationTrack):
         if self.colors is None:
             self.colors = generate_colors(n_stacks)
 
-    def to_traces(self, axis: str, positions: NDArray[np.floating]) -> list[go.BaseTraceType]:
+    def to_traces(
+        self,
+        axis: str,
+        positions: NDArray[np.floating],
+        pitch_px: float | None = None,
+    ) -> list[go.BaseTraceType]:
         arr = np.asarray(self.values, dtype=float)
         traces: list[go.BaseTraceType] = []
         assert self.colors is not None
@@ -286,7 +348,12 @@ class BoxTrack(AnnotationTrack):
     color: str = "#72B7B2"
     size: float = _BOX_SIZE
 
-    def to_traces(self, axis: str, positions: NDArray[np.floating]) -> list[go.BaseTraceType]:
+    def to_traces(
+        self,
+        axis: str,
+        positions: NDArray[np.floating],
+        pitch_px: float | None = None,
+    ) -> list[go.BaseTraceType]:
         arr = np.asarray(self.values, dtype=float)
         # One trace per row — explicit width constrains each box to one row height
         n = len(positions)
@@ -342,7 +409,12 @@ class ViolinTrack(AnnotationTrack):
     color: str = "#FF9DA7"
     size: float = _VIOLIN_SIZE
 
-    def to_traces(self, axis: str, positions: NDArray[np.floating]) -> list[go.BaseTraceType]:
+    def to_traces(
+        self,
+        axis: str,
+        positions: NDArray[np.floating],
+        pitch_px: float | None = None,
+    ) -> list[go.BaseTraceType]:
         arr = np.asarray(self.values, dtype=float)
         # One trace per row — explicit width constrains each violin to one row height
         n = len(positions)

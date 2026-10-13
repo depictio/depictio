@@ -1,0 +1,19 @@
+id: cellranger_cell_funnel
+name: Cell-calling funnel
+mode: analysis/cell_funnel
+description: >-
+  One row per sample with the four stages of barcode filtering as four
+  columns, in pipeline order: barcodes observed, cells called, cells
+  CellBender also kept, cells no MAD rule flagged. The retention chain that
+  is otherwise spread over four tiles in three sections.
+find:
+  path_glob: "**/raw_feature_bc_matrix/barcodes.tsv.gz"
+recipe: cellranger/cell_funnel.py
+fixture: cell_funnel.tsv
+renders_as:
+  - { id: cell_waterfall, component: card, column: barcodes_observed, aggregation: sum, secondary_layout: attrition, attrition_cols: [cells_called, cellbender_cells, cells_qc_pass] }
+  - { component: card, column: barcodes_observed, aggregation: sum, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: cells_called, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: pct_qc_pass, aggregation: average, secondary_layout: gauge, coverage_max: 100.0 }
+  - { component: card, column: pct_called, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

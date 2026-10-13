@@ -1,10 +1,18 @@
-import React, { lazy, Suspense, useRef } from 'react';
+import React, { lazy, Suspense, useContext, useMemo, useRef } from 'react';
+import { ActionIcon, Tooltip, useMantineTheme } from '@mantine/core';
+import { Icon } from '@iconify/react';
 import { DepictioCard } from 'depictio-components';
 import type { GridApi } from 'ag-grid-community';
 
-import { InteractiveFilter, StoredMetadata } from '../api';
+import { FigureStyleRequest, InteractiveFilter, StoredMetadata } from '../api';
+import { useAutofitHeight } from './autofit';
+import { compactKeepsStrip, resolveCardVariant, stripIsMinimal } from './cardVariant';
 import ImageRenderer from './ImageRenderer';
 import TextRenderer from './TextRenderer';
+import { useTabLinkResolver } from './tabLinks';
+import type { TabLinkTarget } from './tabLinks';
+import HighlightBlock from './HighlightBlock';
+import { describeAggregation } from './card/describe';
 import LazyMount, { CellPlaceholder } from './LazyMount';
 import MultiSelectRenderer from './interactive/MultiSelectRenderer';
 import RangeSliderRenderer from './interactive/RangeSliderRenderer';
@@ -13,15 +21,34 @@ import DatePickerRenderer from './interactive/DatePickerRenderer';
 import CheckboxSwitchRenderer from './interactive/CheckboxSwitchRenderer';
 import SegmentedControlRenderer from './interactive/SegmentedControlRenderer';
 import TimelineRenderer from './interactive/TimelineRenderer';
+import GroupCompareStrip, { type GroupComparePayload } from './card/GroupCompareStrip';
 import SecondaryMetrics, {
   NUMERIC_LAYOUTS,
+  breakdownHasShares,
   type SecondaryLayout,
 } from './card/SecondaryMetrics';
+import { cardNumberFormat, explicitCardFormat, formatNumber } from './card/metrics/format';
 import { wrapWithChrome } from './chrome';
+import { ChromeSourceProvider } from './chrome/ExportContext';
+import { resolveFigureStyle } from './figureStyle';
 import LoadAllButton, { LoadAllState } from './chrome/LoadAllButton';
+import { TILE_ACTION_STYLE } from './chrome/actionStyles';
+import SaveGroupAction, {
+  SaveGroupContext,
+  SelectionHintAction,
+  selectionCandidateFor,
+} from './chrome/SaveGroupAction';
 import MapDataButton from './map/MapDataButton';
-import { isMapSelectionEnabled } from '../selection';
+import { SectionColorContext } from './SectionIcon';
+import {
+  cardScopedFilters,
+  isMapSelectionEnabled,
+  isSourceFilterActive,
+  ownSelection,
+  supportsSelectionGrouping,
+} from '../selection';
 import { ActiveHighlight } from '../highlight';
+import type { GroupRenderState } from '../selectionGroups';
 
 // Heavy renderers are lazy-loaded so plotly / ag-grid / jbrowse resolve into
 // their own async chunks (see `manualChunks` in depictio/viewer/vite.config.ts)
@@ -56,6 +83,8 @@ interface ComponentRendererProps {
   refreshTick?: number;
   /** Batch currently highlighted; renderers glow its rows when the DC matches. */
   activeHighlight?: ActiveHighlight | null;
+  /** Selection groups to color figures by (figure components only). */
+  groupRender?: GroupRenderState;
   /** Extra action-icon nodes appended to the chrome row. Editor uses this to inject the per-cell "..." edit menu. */
   extraActions?: React.ReactNode;
   /** Show the drag handle (3×3 grip) on the chrome — typically only in editor mode. */
@@ -69,8 +98,22 @@ interface ComponentRendererProps {
 /**
  * Renders ONE component based on metadata.component_type, wrapped in a
  * `ComponentChrome` that adds metadata/fullscreen/download/reset action icons.
+ *
+ * Also tells that chrome where the component comes from (`ChromeSource`): the
+ * dashboard it is drawn against and the filters it is drawn with, which an
+ * action such as Export needs and `metadata` does not carry.
  */
-const ComponentRenderer: React.FC<ComponentRendererProps> = ({
+const ComponentRenderer: React.FC<ComponentRendererProps> = (props) => {
+  const { dashboardId, filters } = props;
+  const source = useMemo(() => ({ dashboardId, filters }), [dashboardId, filters]);
+  return (
+    <ChromeSourceProvider value={source}>
+      <ComponentRendererBody {...props} />
+    </ChromeSourceProvider>
+  );
+};
+
+const ComponentRendererBody: React.FC<ComponentRendererProps> = ({
   metadata,
   filters,
   onFilterChange,
@@ -80,10 +123,37 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   dashboardId,
   refreshTick,
   activeHighlight,
+  groupRender,
   extraActions,
   showDragHandle,
   compact,
 }) => {
+  // Two states of one chrome slot, scoped to the component types that can be a
+  // selection source and therefore receive `chromeExtras`: figure, table, map,
+  // image, and advanced_viz once its config opts in:
+  //
+  //   selection present → SaveGroupAction, the in-place "save as group" action
+  //   analysis engaged  → SelectionHintAction, marking "you can select here"
+  //
+  // Both render nothing when no app-level SaveGroupContext is mounted (project
+  // previews, catalog), which is also the signal that this host is interactive
+  // at all — those roots are the ones that pass `onFilterChange` down.
+  const saveGroupApi = useContext(SaveGroupContext);
+  const saveCandidate = selectionCandidateFor(filters, metadata.index);
+  const showSelectionHint =
+    !saveCandidate &&
+    Boolean(saveGroupApi?.analysisEngaged) &&
+    supportsSelectionGrouping(metadata, Boolean(saveGroupApi));
+  const chromeExtras =
+    saveCandidate || showSelectionHint ? (
+      <>
+        {saveCandidate ? <SaveGroupAction filter={saveCandidate} /> : <SelectionHintAction />}
+        {extraActions}
+      </>
+    ) : (
+      extraActions
+    );
+
   if (metadata.component_type === 'card') {
     return wrapWithChrome(
       'card',
@@ -94,7 +164,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         value={cardValue}
         secondaryValues={cardSecondaryValues}
         loading={cardLoading}
-        filterApplied={filters.length > 0}
+        filterApplied={cardScopedFilters(filters, metadata).length > 0}
       />,
       { extraActions, showDragHandle },
     );
@@ -198,9 +268,59 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         onFilterChange={onFilterChange}
         refreshTick={refreshTick}
         activeHighlight={activeHighlight}
-        extraActions={extraActions}
+        groupRender={groupRender}
+        extraActions={chromeExtras}
         showDragHandle={showDragHandle}
       />
+    );
+  }
+
+  if (metadata.component_type === 'highlight' && dashboardId) {
+    // Another tab's figure, looked up there and drawn here with this tab's
+    // filters. A figure goes through FigureBlock, rendered by the server from
+    // its own tab in the highlight's style; an advanced visualisation is drawn
+    // client-side in that style, its link to the source tab in the chrome.
+    return (
+      <HighlightBlock metadata={metadata} extraActions={extraActions} showDragHandle={showDragHandle}>
+        {({ metadata: shown, renderSource, styleRequest, sourceLink }) =>
+          shown.component_type === 'advanced_viz' ? (
+            <LazyMount>
+              <AdvancedVizDispatch
+                metadata={shown}
+                filters={filters}
+                refreshTick={refreshTick}
+                // The `minimal` header links the source tab itself; any other
+                // style keeps the link in the chrome.
+                extraActions={
+                  <>
+                    {sourceLink && resolveFigureStyle(shown.figure_style) !== 'minimal' && (
+                      <SourceTabAction link={sourceLink} />
+                    )}
+                    {extraActions}
+                  </>
+                }
+                sourceLink={sourceLink}
+                showDragHandle={showDragHandle}
+                groupRender={groupRender}
+              />
+            </LazyMount>
+          ) : (
+            <FigureBlock
+              dashboardId={dashboardId}
+              metadata={shown}
+              filters={filters}
+              refreshTick={refreshTick}
+              activeHighlight={activeHighlight}
+              groupRender={groupRender}
+              extraActions={extraActions}
+              showDragHandle={showDragHandle}
+              renderSource={renderSource}
+              styleRequest={styleRequest}
+              sourceLink={sourceLink}
+            />
+          )
+        }
+      </HighlightBlock>
     );
   }
 
@@ -213,7 +333,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         onFilterChange={onFilterChange}
         refreshTick={refreshTick}
         activeHighlight={activeHighlight}
-        extraActions={extraActions}
+        extraActions={chromeExtras}
         showDragHandle={showDragHandle}
       />
     );
@@ -243,54 +363,27 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         refreshTick={refreshTick}
         activeHighlight={activeHighlight}
       />,
-      { onResetFilter: onResetSelection, extraActions, showDragHandle, sourceFilterActive },
+      {
+        onResetFilter: onResetSelection,
+        extraActions: chromeExtras,
+        showDragHandle,
+        sourceFilterActive,
+        selectionCount: ownSelection(filters, metadata.index).count,
+      },
     );
   }
 
   if (metadata.component_type === 'map' && dashboardId) {
-    const selectionEnabled = isMapSelectionEnabled(metadata, !!onFilterChange);
-    const onResetSelection =
-      selectionEnabled && onFilterChange
-        ? () =>
-            onFilterChange({
-              index: metadata.index,
-              value: [],
-              source: 'map_selection',
-            })
-        : undefined;
-    const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'map_selection');
-    // Same "show underlying data" affordance advanced_viz has, riding the same
-    // `extraActions` slot — so `actionsFor('map')` needs no change.
-    const mapExtras = (
-      <>
-        {extraActions}
-        <MapDataButton
-          dashboardId={dashboardId}
-          metadata={metadata}
-          filters={filters}
-          onFilterChange={onFilterChange}
-        />
-      </>
-    );
-    return wrapWithChrome(
-      'map',
-      metadata,
-      undefined,
-      <Suspense fallback={<CellPlaceholder />}>
-        <MapRenderer
-          dashboardId={dashboardId}
-          metadata={metadata}
-          filters={filters}
-          onFilterChange={onFilterChange}
-          refreshTick={refreshTick}
-        />
-      </Suspense>,
-      {
-        onResetFilter: onResetSelection,
-        extraActions: mapExtras,
-        showDragHandle,
-        sourceFilterActive,
-      },
+    return (
+      <MapBlock
+        dashboardId={dashboardId}
+        metadata={metadata}
+        filters={filters}
+        onFilterChange={onFilterChange}
+        refreshTick={refreshTick}
+        extraActions={chromeExtras}
+        showDragHandle={showDragHandle}
+      />
     );
   }
 
@@ -317,11 +410,17 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   }
 
   if (metadata.component_type === 'text') {
+    // A text tile with live values is computed with the cards: its entry in
+    // the bulk-compute response is the map of its values, by name.
+    const liveValues =
+      cardValue && typeof cardValue === 'object' && !Array.isArray(cardValue)
+        ? (cardValue as Record<string, unknown>)
+        : null;
     return wrapWithChrome(
       'text',
       metadata,
       undefined,
-      <TextRenderer metadata={metadata} />,
+      <TextRenderer metadata={metadata} liveValues={liveValues} liveLoading={cardLoading} />,
       { extraActions, showDragHandle },
     );
   }
@@ -363,8 +462,17 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
           metadata={metadata}
           filters={filters}
           refreshTick={refreshTick}
-          extraActions={extraActions}
+          onFilterChange={onFilterChange}
+          // chromeExtras, not the raw extraActions: an embedding or a Manhattan
+          // that opts into selection is a selection source like any scatter, so
+          // its tile needs the same save-as-group action. Passing the raw slot
+          // left the group creatable only from the Analysis panel, with nothing
+          // on the tile to say the lasso had produced anything.
+          extraActions={chromeExtras}
           showDragHandle={showDragHandle}
+          // The same grouping state figures get. Renderers that plot one point
+          // per row apply it client-side (see `groupSplit`); the rest ignore it.
+          groupRender={groupRender}
         />
       </LazyMount>
     );
@@ -446,6 +554,85 @@ const TableBlock: React.FC<{
       extraActions: combinedExtras,
       showDragHandle,
       sourceFilterActive,
+      selectionCount: ownSelection(filters, metadata.index).count,
+    },
+  );
+};
+
+const MapBlock: React.FC<{
+  dashboardId: string;
+  metadata: StoredMetadata;
+  filters: InteractiveFilter[];
+  onFilterChange?: (filter: InteractiveFilter) => void;
+  refreshTick?: number;
+  extraActions?: React.ReactNode;
+  showDragHandle?: boolean;
+}> = ({
+  dashboardId,
+  metadata,
+  filters,
+  onFilterChange,
+  refreshTick,
+  extraActions,
+  showDragHandle,
+}) => {
+  // MapRenderer builds the display-settings popover, because it is the one
+  // that restyles the figure and reads the current values back off it, and
+  // publishes it up here for the chrome action row. Same hand-off as
+  // TableBlock's `onLoadAllState`, and the reason the popover import stays
+  // inside the lazy map chunk rather than landing in this eager module.
+  const [settingsNode, setSettingsNode] = React.useState<React.ReactNode>(null);
+  const selectionEnabled = isMapSelectionEnabled(metadata, !!onFilterChange);
+  const onResetSelection =
+    selectionEnabled && onFilterChange
+      ? () =>
+          onFilterChange({
+            index: metadata.index,
+            value: [],
+            source: 'map_selection',
+          })
+      : undefined;
+  const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'map_selection');
+  // Settings then "show underlying data", riding the same `extraActions` slot
+  // advanced_viz uses and in the same order, so `actionsFor('map')` needs no
+  // change. The explicit key is there because the settings action only appears
+  // once the figure lands: without it ComponentChrome's
+  // `React.Children.toArray` would re-key the data button by position and
+  // remount it at that moment. MapRenderer keys its own node for the same
+  // reason.
+  const mapExtras = (
+    <>
+      {extraActions}
+      {settingsNode}
+      <MapDataButton
+        key="map-data"
+        dashboardId={dashboardId}
+        metadata={metadata}
+        filters={filters}
+        onFilterChange={onFilterChange}
+      />
+    </>
+  );
+  return wrapWithChrome(
+    'map',
+    metadata,
+    undefined,
+    <Suspense fallback={<CellPlaceholder />}>
+      <MapRenderer
+        dashboardId={dashboardId}
+        metadata={metadata}
+        filters={filters}
+        onFilterChange={onFilterChange}
+        refreshTick={refreshTick}
+        onSettingsNode={setSettingsNode}
+      />
+    </Suspense>,
+    {
+      onResetFilter: onResetSelection,
+      extraActions: mapExtras,
+      showDragHandle,
+      sourceFilterActive,
+      selectionCount: ownSelection(filters, metadata.index).count,
     },
   );
 };
@@ -457,8 +644,13 @@ const FigureBlock: React.FC<{
   onFilterChange?: (filter: InteractiveFilter) => void;
   refreshTick?: number;
   activeHighlight?: ActiveHighlight | null;
+  groupRender?: GroupRenderState;
   extraActions?: React.ReactNode;
   showDragHandle?: boolean;
+  /** A highlight's figure: rendered from its own tab, in the given style. */
+  renderSource?: { dashboardId: string; componentId: string };
+  styleRequest?: FigureStyleRequest;
+  sourceLink?: TabLinkTarget | null;
 }> = ({
   dashboardId,
   metadata,
@@ -466,10 +658,25 @@ const FigureBlock: React.FC<{
   onFilterChange,
   refreshTick,
   activeHighlight,
+  groupRender,
   extraActions,
   showDragHandle,
+  renderSource,
+  styleRequest,
+  sourceLink,
 }) => {
   const [loadAllState, setLoadAllState] = React.useState<LoadAllState | null>(null);
+  // A figure that summarises another tab (`link: tab:<name>`) links to it the
+  // way a highlight links to the tab its figure comes from.
+  const resolveTab = useTabLinkResolver();
+  const ownLink =
+    typeof metadata.link === 'string' && metadata.link.startsWith('tab:')
+      ? (resolveTab?.(metadata.link.slice(4)) ?? null)
+      : null;
+  const headerLink = sourceLink ?? ownLink;
+  // Without the minimal header, the link sits in the tile's actions.
+  const actionLink =
+    !sourceLink && ownLink && resolveFigureStyle(metadata.figure_style) !== 'minimal' ? ownLink : null;
   // Only scatter / scatter_3d traces carry the per-row customdata we need for
   // meaningful cross-filter selection. Aggregated visus (histogram, box, bar,
   // pie, …) would emit per-bin envelopes — hide the reset affordance there so
@@ -489,9 +696,10 @@ const FigureBlock: React.FC<{
       : undefined;
   const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'scatter_selection');
   const combinedExtras =
-    loadAllState || extraActions ? (
+    loadAllState || actionLink || extraActions ? (
       <>
         {loadAllState && <LoadAllButton state={loadAllState} />}
+        {actionLink && <SourceTabAction link={actionLink} />}
         {extraActions}
       </>
     ) : undefined;
@@ -507,32 +715,50 @@ const FigureBlock: React.FC<{
         onFilterChange={onFilterChange}
         refreshTick={refreshTick}
         activeHighlight={activeHighlight}
+        groupRender={groupRender}
         onLoadAllState={setLoadAllState}
+        renderSource={renderSource}
+        styleRequest={styleRequest}
+        sourceLink={headerLink}
       />
     </Suspense>,
-    { onResetFilter: onResetSelection, extraActions: combinedExtras, showDragHandle, sourceFilterActive },
+    {
+      onResetFilter: onResetSelection,
+      extraActions: combinedExtras,
+      showDragHandle,
+      sourceFilterActive,
+      selectionCount: ownSelection(filters, metadata.index).count,
+    },
   );
 };
 
-/** A filter is "source-active" for this component when an entry exists with
- *  matching `index`, the expected `source` discriminator, and a non-empty
- *  value (avoid false-positives for filters that were emitted then cleared
- *  but kept in the array with `value: []`). */
-function isSourceFilterActive(
-  filters: InteractiveFilter[],
-  componentIndex: string,
-  expectedSource: InteractiveFilter['source'],
-): boolean {
-  for (const f of filters) {
-    if (f.index !== componentIndex) continue;
-    if (f.source !== expectedSource) continue;
-    const v = f.value;
-    if (v == null) continue;
-    if (Array.isArray(v) && v.length === 0) continue;
-    return true;
-  }
-  return false;
-}
+/** The chrome's link to the tab a highlighted visualisation comes from. A
+ *  highlighted figure carries the same link in its card header instead. */
+const SourceTabAction: React.FC<{ link: TabLinkTarget }> = ({ link }) => (
+  <Tooltip label={`Open in ${link.label}`} withArrow openDelay={300}>
+    <ActionIcon
+      component="a"
+      href={link.href}
+      variant="subtle"
+      size="sm"
+      aria-label={`Open in ${link.label}`}
+      data-testid="highlight-source-action"
+      data-tile-action="source"
+    >
+      <Icon icon={TILE_ACTION_STYLE.source.icon} width={15} />
+    </ActionIcon>
+  </Tooltip>
+);
+
+/**
+ * The card's frame, which the tile has to pay for on top of the content: 1.5px
+ * of border top and bottom. It is `content-box`, so the border falls outside
+ * the height the tile hands the card rather than inside it, and a card whose
+ * content fills its tile exactly still loses its frame to the grid cell's
+ * `overflow: hidden`. Three pixels of slack is what keeps that from happening,
+ * and it is far too little to cost a row on its own.
+ */
+const CARD_FRAME_PX = 3;
 
 const CardRenderer: React.FC<{
   metadata: StoredMetadata;
@@ -541,18 +767,22 @@ const CardRenderer: React.FC<{
   loading?: boolean;
   filterApplied: boolean;
 }> = ({ metadata, value, secondaryValues, loading, filterApplied }) => {
+  // The card's `format`, else its `decimals`: how the value (and each group's
+  // value under a group comparison) prints.
+  const valueFormat = cardNumberFormat(metadata);
+  // Only an explicit `format` reaches the strips that never followed
+  // `decimals`, so a `decimals` card keeps the strip it has always had.
+  const explicitFormat = explicitCardFormat(metadata.format);
   const displayValue =
-    loading && value == null
-      ? '…'
-      : value != null
-      ? formatValue(value)
-      : '—';
+    loading && value == null ? '…' : value != null ? formatValue(value, valueFormat) : '—';
 
   // Preserve the YAML-declared order; fall back to the keys returned by the
   // server. Drop the hero aggregation if it appears in the list (the API
-  // already strips it but defend in depth).
+  // already strips it but defend in depth), and drop synthetic `__…__`
+  // payload keys (`__breakdown__`, `__group_compare__`, …) — those are
+  // injected below by their own explicit handlers, never as stat rows.
   const aggregationOrder = (metadata.aggregations || Object.keys(secondaryValues || {})).filter(
-    (a) => a && a !== metadata.aggregation,
+    (a) => a && a !== metadata.aggregation && !a.startsWith('__'),
   );
   const orderedSecondary = aggregationOrder
     .map((a) => ({ name: a, value: secondaryValues?.[a] }))
@@ -569,6 +799,7 @@ const CardRenderer: React.FC<{
         top: { name: string; count: number; percent: number }[];
         top_share: number;
         unique_values: number;
+        breakdown_kind?: string;
       }
     | undefined;
   if (breakdown !== undefined) {
@@ -585,12 +816,54 @@ const CardRenderer: React.FC<{
     }
   }
 
+  // "Compare groups in cards": per-group hero values, rendered as its own
+  // strip — the comparison is runtime session state, not part of the card's
+  // authored config.
+  const groupCompare = secondaryValues?.['__group_compare__'] as
+    | GroupComparePayload
+    | undefined;
+  // When the server shipped per-group layout payloads (`layout` set), the
+  // strip REPLACES the aggregate secondary rendering: the ~110px strip budget
+  // of a default-height card fits one of the two, not both stacked.
+  const groupCompareRich = typeof groupCompare?.layout === 'string';
+
+  const coverageMax = typeof metadata.coverage_max === 'number' ? metadata.coverage_max : null;
+  // ``coverage`` and ``gauge`` don't rely on the secondary aggregations
+  // array — they read the card's hero ``value`` + the YAML-declared
+  // ``coverage_max``. So even with empty ``orderedSecondary`` we still render
+  // the metrics when those inputs are present.
+  const hasSecondaryContent =
+    orderedSecondary.length > 0 ||
+    ((metadata.secondary_layout === 'coverage' || metadata.secondary_layout === 'gauge') &&
+      coverageMax !== null);
+  // The grid has already folded the section's `card_variant` into `variant`
+  // (see DashboardGrid), so this only has to tell a known style from noise.
+  const variant = resolveCardVariant(metadata.variant);
+  // A compact card is one line of numbers: it keeps a strip only when the strip
+  // is a single bar. The rest of the breakdown is still one hover away in the
+  // header tooltip, and switching the card back to another style restores it.
+  const stripFitsVariant =
+    variant !== 'compact' || compactKeepsStrip(metadata.secondary_layout as string | undefined);
+  const showSecondaryMetrics = !groupCompareRich && hasSecondaryContent && stripFitsVariant;
+  // The compact one-line header (value beside the title) buys height for a
+  // group-comparison strip, which stacks a row per group and would otherwise
+  // not fit. A plain secondary view — a box plot, a donut, a top-N list — is a
+  // single strip that fits under the normal header, so it keeps the stacked
+  // hero: same title position, same value size as a bare card standing next to
+  // it. Using the compact header for both made neighbouring cards disagree on
+  // where the value sits and how big it is, and clipped the title to buy space
+  // nothing needed.
+  const compactHeader = groupCompareRich;
+
   // Aggregation description line — sits in the existing card slot just below
   // the hero value. We enrich it with breakdown info when available so the
   // "(Count)" line carries useful context (top-N share) without needing its
   // own dedicated row inside the secondary strip. Restructures vertical
   // density: instead of stacking ``(Count) / Top 3 cover 83% of N / bar 1 / …``
   // we get ``(Count · Top 3 = 83%) / bar 1 / …``.
+  const caption =
+    typeof metadata.caption === 'string' && metadata.caption.trim() ? metadata.caption.trim() : '';
+
   const aggDesc = (() => {
     if (!metadata.aggregation) return undefined;
     const base = `(${capitalize(metadata.aggregation)})`;
@@ -599,82 +872,169 @@ const CardRenderer: React.FC<{
       (layout === 'top_n' || layout === 'concentration') &&
       breakdown &&
       Array.isArray(breakdown.top) &&
-      breakdown.top.length > 0
+      breakdown.top.length > 0 &&
+      // A share of the total only exists under count / sum: "Top 3 = 83%"
+      // under a max or an average card would be a share of nothing.
+      breakdownHasShares(breakdown, metadata.column_name)
     ) {
       const share = Math.round((breakdown.top_share || 0) * 100);
       return `${base} · Top ${breakdown.top.length} = ${share}%`;
     }
     if (
       (layout === 'coverage' || layout === 'gauge') &&
-      typeof metadata.coverage_max === 'number' &&
-      typeof value === 'number' &&
-      metadata.coverage_max > 0
+      coverageMax !== null &&
+      coverageMax > 0 &&
+      typeof value === 'number'
     ) {
-      const pct = Math.round((value / (metadata.coverage_max as number)) * 100);
-      return `${base} · ${pct}% of ${metadata.coverage_max}`;
+      const pct = Math.round((value / coverageMax) * 100);
+      const max = explicitFormat ? formatNumber(coverageMax, explicitFormat) : coverageMax;
+      return `${base} · ${pct}% of ${max}`;
     }
     return base;
   })();
+
+  // The hover on the title: what the figure is (the author's description) and
+  // how it was computed — the line under the value says it as "(Median)", and
+  // when a caption takes that line the hover is the only place it is said.
+  const description =
+    typeof metadata.description === 'string' && metadata.description.trim()
+      ? metadata.description.trim()
+      : '';
+  const how = [
+    describeAggregation(metadata.aggregation, metadata.column_name),
+    // What the visible line adds after its " · ": a top-N share, a % of total.
+    aggDesc?.includes(' · ') ? aggDesc.slice(aggDesc.indexOf(' · ') + 3) : null,
+    filterApplied ? 'filters applied' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const howHidden = compactHeader || Boolean(caption);
+  const headerTooltip =
+    description || (howHidden && how) ? (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {description ? <span>{description}</span> : null}
+        {howHidden && how ? <span style={{ opacity: description ? 0.75 : 1 }}>{how}</span> : null}
+      </div>
+    ) : undefined;
+
+  // Cards size the grid to themselves, the way text tiles size it to their
+  // prose. The height an author picked is a guess made against the content the
+  // card had then, and a card that later gains a breakdown (a group-by, a top-N
+  // list, several rows where there was one number) needs rows nobody gave it.
+  // It has nowhere to put them: the card hides its overflow and centres what it
+  // holds, so content it cannot fit is cut off at the top AND the bottom.
+  // `contentRef` is the card's height-auto content box, so what we publish is
+  // the room the content needs, never the room the tile has.
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  useAutofitHeight(metadata.index, contentRef, [], (content) => content + CARD_FRAME_PX);
 
   // While the next bulk-compute is in flight we keep the previous value
   // visible (App.tsx no longer clears `cardValues`), but slightly dim the
   // card to signal "refreshing". 0.6 opacity is enough to read as stale
   // without flicker. Brief transitions smooth out the dim/restore swing.
   const dimming = loading && value != null;
-  return (
-    <div
-      style={{
-        opacity: dimming ? 0.6 : 1,
-        transition: 'opacity 120ms ease-out',
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
+  // `link`: a key figure opens the tab (or page) that explains it. A `tab:`
+  // target resolves like a text tile's tab links; unknown here (the editor
+  // preview, a tab this instance lacks) it stays a plain card.
+  const resolveTab = useTabLinkResolver();
+  const rawLink = typeof metadata.link === 'string' ? metadata.link.trim() : '';
+  const linkTarget = rawLink.startsWith('tab:') ? resolveTab?.(rawLink.slice(4)) ?? null : null;
+  const href = linkTarget
+    ? linkTarget.href
+    : /^(https?:\/\/|\/)/.test(rawLink)
+      ? rawLink
+      : null;
+  const external = Boolean(href && /^https?:\/\//.test(href));
+  // A card with no colour of its own takes its section's, so the cards of a
+  // section read as one group. Outside a section it stays neutral.
+  // A palette name, the card's or its section's, is resolved to the theme's
+  // hex, not a CSS variable: the secondary strip derives its tints from the
+  // colour's channels and falls back to teal on anything it cannot parse. Left
+  // as a name, `grape` is no CSS colour (the icon drew black) and `cyan` or
+  // `lime` drew the CSS keyword, not the theme's shade.
+  const sectionColor = useContext(SectionColorContext);
+  const theme = useMantineTheme();
+  const ownColor = metadata.icon_color as string | undefined;
+  const iconColor =
+    (ownColor ? (theme.colors[ownColor]?.[6] ?? ownColor) : undefined) ||
+    (sectionColor ? theme.colors[sectionColor]?.[6] : undefined);
+  const wrapperStyle: React.CSSProperties = {
+    opacity: dimming ? 0.6 : 1,
+    transition: 'opacity 120ms ease-out',
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+  };
+  const card = (
       <DepictioCard
+        contentRef={contentRef}
         title={metadata.title || inferCardTitle(metadata)}
         value={displayValue}
         icon_name={metadata.icon_name}
-        icon_color={metadata.icon_color}
+        icon_color={iconColor}
+        icon_style={metadata.icon_style === 'badge' ? 'badge' : 'watermark'}
+        variant={variant}
         title_color={metadata.title_color}
         background_color={metadata.background_color}
         title_font_size={metadata.title_font_size || 'md'}
         value_font_size={metadata.value_font_size || 'xl'}
-        aggregation_description={aggDesc}
+        // With a secondary view the header collapses to one line (value
+        // beside the title) and the aggregation description moves into a
+        // hover tooltip on that header — both rows yield their height to the
+        // strip below.
+        // An author's caption takes the description line; the aggregation it
+        // displaces is still one hover away on the header.
+        aggregation_description={compactHeader ? undefined : caption || aggDesc}
+        inline_header={compactHeader}
+        header_tooltip={headerTooltip}
         filter_applied={filterApplied}
         secondaryStrip={
-          // ``coverage`` and ``gauge`` don't rely on the secondary aggregations
-          // array — they read the card's hero ``value`` + the YAML-declared
-          // ``coverage_max``. So even with empty ``orderedSecondary`` we
-          // still render the strip when those inputs are present.
-          orderedSecondary.length > 0 ||
-          ((metadata.secondary_layout === 'coverage' ||
-            metadata.secondary_layout === 'gauge') &&
-            typeof metadata.coverage_max === 'number') ? (
-            <SecondaryMetrics
-              rows={orderedSecondary}
-              layout={
-                // Cast through the renderer's own exported union rather than
-                // respelling it here — an inline copy silently drops any layout
-                // added later, which is how a new one renders as `vertical`.
-                (metadata.secondary_layout as SecondaryLayout | undefined) || 'vertical'
-              }
-              color={
-                (metadata.icon_color as string | undefined) ||
-                (metadata.title_color as string | undefined) ||
-                null
-              }
-              coverageValue={typeof value === 'number' ? value : null}
-              coverageMax={
-                typeof metadata.coverage_max === 'number'
-                  ? (metadata.coverage_max as number)
-                  : null
-              }
-            />
+          showSecondaryMetrics || groupCompare !== undefined ? (
+            <>
+              {showSecondaryMetrics && (
+                <SecondaryMetrics
+                  rows={orderedSecondary}
+                  layout={
+                    // Cast through the renderer's own exported union rather than
+                    // respelling it here — an inline copy silently drops any layout
+                    // added later, which is how a new one renders as `vertical`.
+                    (metadata.secondary_layout as SecondaryLayout | undefined) || 'vertical'
+                  }
+                  color={iconColor || (metadata.title_color as string | undefined) || null}
+                  coverageValue={typeof value === 'number' ? value : null}
+                  coverageMax={coverageMax}
+                  minimal={stripIsMinimal(variant)}
+                  decimals={typeof metadata.decimals === 'number' ? metadata.decimals : undefined}
+                  format={explicitFormat}
+                  heroColumn={metadata.column_name}
+                />
+              )}
+              {groupCompare && (
+                <GroupCompareStrip
+                  payload={groupCompare}
+                  // Each group's value is the card's own aggregation.
+                  formatValue={(v) => formatValue(v, valueFormat)}
+                  coverageMax={coverageMax}
+                />
+              )}
+            </>
           ) : undefined
         }
       />
-    </div>
+  );
+  return href ? (
+    <a
+      href={href}
+      target={external ? '_blank' : undefined}
+      rel={external ? 'noopener noreferrer' : undefined}
+      className="depictio-card-link"
+      title={linkTarget ? `Open ${linkTarget.label}` : undefined}
+      style={{ ...wrapperStyle, color: 'inherit', textDecoration: 'none' }}
+    >
+      {card}
+    </a>
+  ) : (
+    <div style={wrapperStyle}>{card}</div>
   );
 };
 
@@ -691,11 +1051,12 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/** Exported alongside `inferCardTitle`, and for the same reason. */
-export function formatValue(v: unknown): string | number {
-  if (typeof v === 'number') {
-    if (!Number.isInteger(v)) return v.toFixed(4).replace(/\.?0+$/, '');
-    return v;
-  }
+/** Exported alongside `inferCardTitle`, and for the same reason. Numbers get
+ *  thousands separators and magnitude-aware rounding (`formatCardNumber`), or
+ *  the card's own format (`cardNumberFormat`: its `format`, else `decimals:N`
+ *  from its `decimals`, kept as written, 7.10 not 7.1, so a row of figures
+ *  lines up). */
+export function formatValue(v: unknown, format?: string): string | number {
+  if (typeof v === 'number') return formatNumber(v, format);
   return String(v);
 }

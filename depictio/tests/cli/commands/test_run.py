@@ -1,0 +1,191 @@
+"""Tests for the ``ingest`` command's early option-resolution branch.
+
+Only the guards that execute *before* any server, S3 or filesystem work are
+covered here: the ``--pipeline-id`` auto-resolution added for automated
+triggering, its precedence against ``--template`` / ``--project-config-path``,
+and the mutual-exclusivity check. That branch is pure argument handling, so
+these tests need no network and no mocking of the ingestion pipeline.
+"""
+
+import re
+
+import pytest
+import typer
+from typer.testing import CliRunner
+
+from depictio.cli.cli.commands.run import register_run_command
+
+# Manifests for templates that really ship in this repository
+# (depictio/projects/nf-core/<pipeline>/<version>/template.yaml).
+SHIPPED_MANIFESTS = [
+    "nf-core/ampliseq/2.16.0",
+    "nf-core/ampliseq/2.18.0",
+    "nf-core/viralrecon/3.0.0",
+    "nf-core/variantbenchmarking/1.4.0",
+]
+
+UNKNOWN_MANIFEST = "acme/not-a-real-pipeline/9.9.9"
+
+NO_TEMPLATE_MESSAGE = "No bundled depictio template"
+
+
+def normalize(output: str) -> str:
+    """Collapse Rich's line wrapping so message assertions are stable.
+
+    Rich hard-wraps console output at the (non-TTY) default width, which can
+    split an asserted phrase across two lines.
+    """
+    return re.sub(r"\s+", " ", output)
+
+
+@pytest.fixture
+def app():
+    """A minimal Typer app with only ``ingest`` and its hidden alias ``run``."""
+    app = typer.Typer()
+    register_run_command(app)
+    return app
+
+
+@pytest.fixture
+def runner():
+    return CliRunner()
+
+
+class TestNextflowManifestResolution:
+    """``--pipeline-id`` maps a pipeline identity onto a bundled template."""
+
+    def test_unknown_manifest_exits_with_guidance(self, app, runner):
+        """An unmatched manifest fails loudly instead of silently doing nothing."""
+        result = runner.invoke(app, ["ingest", "--pipeline-id", UNKNOWN_MANIFEST])
+
+        assert result.exit_code == 1
+        output = normalize(result.output)
+        assert NO_TEMPLATE_MESSAGE in output
+        assert UNKNOWN_MANIFEST in output
+        # The message must point at the manual escape hatches.
+        assert "--project-config-path" in output
+        assert "--template" in output
+
+    @pytest.mark.parametrize("manifest", SHIPPED_MANIFESTS)
+    def test_known_manifest_resolves_to_template(self, app, runner, manifest):
+        """A shipped manifest becomes template mode and falls through to the
+        next guard (``DATA_DIR``), proving resolution succeeded."""
+        result = runner.invoke(app, ["ingest", "--pipeline-id", manifest])
+
+        output = normalize(result.output)
+        assert NO_TEMPLATE_MESSAGE not in output
+        assert "--template needs DATA_DIR" in output
+        assert result.exit_code == 1
+
+    def test_explicit_project_config_path_wins_over_manifest(self, app, runner, tmp_path):
+        """--project-config-path short-circuits manifest resolution entirely.
+
+        The manifest is deliberately bogus: if it were resolved at all, the run
+        would abort with the "no bundled template" error.
+        """
+        project_config = tmp_path / "project.yaml"
+        project_config.write_text("name: irrelevant-under-dry-run\n")
+
+        result = runner.invoke(
+            app,
+            [
+                "ingest",
+                "--pipeline-id",
+                UNKNOWN_MANIFEST,
+                "--project-config-path",
+                str(project_config),
+                "--dry-run",
+                "--skip",
+                "server-check,s3-check",
+            ],
+        )
+
+        output = normalize(result.output)
+        assert NO_TEMPLATE_MESSAGE not in output
+        assert result.exit_code == 0
+
+    def test_explicit_template_wins_over_manifest(self, app, runner):
+        """--template short-circuits manifest resolution too."""
+        result = runner.invoke(
+            app,
+            [
+                "ingest",
+                "--pipeline-id",
+                UNKNOWN_MANIFEST,
+                "--template",
+                SHIPPED_MANIFESTS[0],
+            ],
+        )
+
+        output = normalize(result.output)
+        assert NO_TEMPLATE_MESSAGE not in output
+        # Stopped at the DATA_DIR guard, i.e. --template was used as-is.
+        assert "--template needs DATA_DIR" in output
+        assert result.exit_code == 1
+
+
+class TestMutuallyExclusiveOptions:
+    """``--template`` and ``--project-config-path`` describe two different modes."""
+
+    def test_template_with_project_config_path_is_rejected(self, app, runner, tmp_path):
+        project_config = tmp_path / "project.yaml"
+        project_config.write_text("name: irrelevant\n")
+
+        result = runner.invoke(
+            app,
+            [
+                "ingest",
+                "--template",
+                SHIPPED_MANIFESTS[0],
+                "--project-config-path",
+                str(project_config),
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "--template and --project-config-path are mutually exclusive" in normalize(
+            result.output
+        )
+
+
+class TestDashboardImportIsNotTemplateOnly:
+    """``--dashboard`` counts as a step whether or not a template is in play.
+
+    It used to be read only inside the template branch, so a pipeline Depictio
+    ships no template for could ask for a dashboard and be ignored without a
+    word: the run reported 7/7 success and left a project with data in it and
+    nothing to look at. The step count is the visible half of that bug.
+    """
+
+    def _run(self, app, runner, tmp_path, *extra):
+        project_config = tmp_path / "project.yaml"
+        project_config.write_text("name: irrelevant-under-dry-run\n")
+        return runner.invoke(
+            app,
+            [
+                "ingest",
+                "--project-config-path",
+                str(project_config),
+                "--dry-run",
+                "--skip",
+                "server-check,s3-check",
+                *extra,
+            ],
+        )
+
+    def test_a_project_config_alone_still_runs_seven_steps(self, app, runner, tmp_path):
+        result = self._run(app, runner, tmp_path)
+
+        assert result.exit_code == 0
+        assert "/7" in normalize(result.output)
+
+    def test_a_dashboard_adds_the_import_step(self, app, runner, tmp_path):
+        dashboard = tmp_path / "dashboard.yaml"
+        dashboard.write_text("title: irrelevant-under-dry-run\n")
+
+        result = self._run(app, runner, tmp_path, "--dashboard", str(dashboard))
+
+        assert result.exit_code == 0
+        output = normalize(result.output)
+        assert "/8" in output
+        assert "Importing dashboards" in output

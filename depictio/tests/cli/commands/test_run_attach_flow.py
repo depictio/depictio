@@ -1,0 +1,364 @@
+"""End-to-end flag contract for `depictio-cli ingest --attach-run`.
+
+Attaching a run to an existing project is a specific combination of the flags the
+pipeline already had, and getting any one of them wrong is silently destructive:
+
+* sync must UPDATE the project (otherwise nothing is written);
+* the scan must stay INCREMENTAL (a full rescan deletes runs missing from disk);
+* process must OVERWRITE (write_delta_table refuses to rewrite an existing table
+  otherwise, and the rebuild has to include the runs already ingested);
+* dashboards must NOT be re-imported over the ones the user has since edited.
+
+Every server call is mocked, so this runs offline and asserts the wiring only.
+"""
+
+from __future__ import annotations
+
+from unittest.mock import MagicMock, patch
+
+import pytest
+import typer
+from typer.testing import CliRunner
+
+from depictio.cli.cli.commands.run import register_run_command
+
+
+@pytest.fixture
+def app():
+    application = typer.Typer()
+    register_run_command(application)
+    return application
+
+
+@pytest.fixture
+def runner():
+    return CliRunner()
+
+
+@pytest.fixture
+def data_root(tmp_path):
+    root = tmp_path / "run_b"
+    root.mkdir()
+    return root
+
+
+@pytest.fixture
+def nextflow_run_dir(tmp_path):
+    """A run directory carrying the provenance nf-core writes on completion."""
+    root = tmp_path / "run_nf"
+    info = root / "pipeline_info"
+    info.mkdir(parents=True)
+    (info / "software_versions.yml").write_text(
+        "FASTQC:\n  fastqc: 0.12.1\n"
+        "CUTADAPT_BASIC:\n  cutadapt: 5.2\n"
+        "Workflow:\n"
+        "    nf-core/ampliseq: v2.16.0-g3d5c7e5\n"
+        "    Nextflow: 25.10.2\n"
+    )
+    return root
+
+
+def _invoke(app, runner, harness, extra_args):
+    with_patches = harness.patches()
+    for p in with_patches:
+        p.start()
+    try:
+        return runner.invoke(
+            app,
+            [
+                "ingest",
+                "--template",
+                "nf-core/ampliseq/2.16.0",
+                str(extra_args["data_root"]),
+                "--skip",
+                "server-check,s3-check",
+                *extra_args["flags"],
+            ],
+        )
+    finally:
+        for p in with_patches:
+            p.stop()
+
+
+class TestAttachRunFlags:
+    def test_attach_updates_scans_incrementally_and_overwrites_the_tables(
+        self, app, runner, data_root, make_harness
+    ):
+        harness = make_harness(data_root, remote_locations=["/data/run_a"])
+        result = _invoke(app, runner, harness, {"data_root": data_root, "flags": ["--attach-run"]})
+        assert result.exit_code == 0, result.output
+
+        # The project is updated, not created a second time.
+        assert harness.sync.call_args.kwargs["update"] is True
+        # The scan stays incremental: a full rescan would delete runs off disk.
+        assert harness.scan.call_args.kwargs["command_parameters"]["rescan_folders"] is False
+        # The delta tables are rebuilt, including the runs already ingested.
+        assert harness.process.call_args.kwargs["command_parameters"]["overwrite"] is True
+        # The template brings no dashboard here; with one, see TestDashboardsOnARefresh.
+        harness.import_dashboards.assert_not_called()
+        # And the new run really was appended after the existing one, and recorded
+        # as attached so that a refresh keeps it.
+        synced = harness.sync.call_args.kwargs["ProjectConfig"]["workflows"][0]["data_location"]
+        assert synced["locations"] == ["/data/run_a", str(data_root)]
+        assert synced["attached_locations"] == [str(data_root)]
+
+    def test_overwrite_alone_still_implies_a_full_rescan(
+        self, app, runner, data_root, make_harness
+    ):
+        """Only attach mode decouples the two; the normal --overwrite is unchanged."""
+        harness = make_harness(data_root, remote_locations=["/data/run_a"])
+        result = _invoke(
+            app,
+            runner,
+            harness,
+            {"data_root": data_root, "flags": ["--overwrite", "--update-config"]},
+        )
+        assert result.exit_code == 0, result.output
+        assert harness.scan.call_args.kwargs["command_parameters"]["rescan_folders"] is True
+
+    def test_update_config_alone_refreshes_the_project_in_place(
+        self, app, runner, data_root, make_harness
+    ):
+        """One flag to re-ingest: the configuration, then the tables over the existing ones."""
+        harness = make_harness(data_root, remote_locations=["/data/run_a"])
+        result = _invoke(
+            app, runner, harness, {"data_root": data_root, "flags": ["--update-config"]}
+        )
+        assert result.exit_code == 0, result.output
+        assert harness.sync.call_args.kwargs["update"] is True
+        assert harness.scan.call_args.kwargs["command_parameters"]["rescan_folders"] is True
+        assert harness.process.call_args.kwargs["command_parameters"]["overwrite"] is True
+
+    def test_attach_to_a_missing_project_stops_before_writing(
+        self, app, runner, data_root, make_harness
+    ):
+        harness = make_harness(data_root, remote_locations=[], project_found=False)
+        result = _invoke(app, runner, harness, {"data_root": data_root, "flags": ["--attach-run"]})
+        assert result.exit_code == 2
+        assert "no project named" in " ".join(result.output.split())
+        harness.sync.assert_not_called()
+        harness.scan.assert_not_called()
+
+    def test_without_attach_an_existing_project_is_reported_not_silently_skipped(
+        self, app, runner, data_root, make_harness
+    ):
+        """The regression: this used to exit 1 with an empty error message."""
+        harness = make_harness(data_root, remote_locations=["/data/run_a"])
+        harness.sync = MagicMock(return_value={"action": "exists"})
+        result = _invoke(app, runner, harness, {"data_root": data_root, "flags": []})
+        assert result.exit_code == 2
+        normalized = " ".join(result.output.split())
+        assert "already exists on this server" in normalized
+        assert "--update-config" in normalized
+        assert "--attach-run" in normalized
+        harness.scan.assert_not_called()
+
+
+class TestProvenanceStamping:
+    """The run's provenance must be read from the directory however the template
+    was chosen. It lives only there: no manifest string carries the engine
+    version or the tool list."""
+
+    def _resolved_workflow(self, app, runner, harness, root, flags):
+        with_patches = harness.patches()
+        for patch_ctx in with_patches:
+            patch_ctx.start()
+        try:
+            result = runner.invoke(
+                app,
+                [
+                    "ingest",
+                    str(root),
+                    "--skip",
+                    "server-check,s3-check",
+                    *flags,
+                ],
+            )
+        finally:
+            for patch_ctx in with_patches:
+                patch_ctx.stop()
+        return result
+
+    @pytest.fixture
+    def harness(self, nextflow_run_dir, make_harness):
+        harness = make_harness(nextflow_run_dir, remote_locations=[])
+        template_meta = MagicMock()
+        template_meta.template_id = "nf-core/ampliseq/2.16.0"
+        # A single workflow dict, so the stamping has somewhere to land.
+        harness.resolved_config = {
+            "name": harness.project.name,
+            "workflows": [{"name": "ampliseq", "config": {}}],
+        }
+        harness.resolve = MagicMock(
+            return_value=(harness.resolved_config, template_meta, {}, [], {})
+        )
+        return harness
+
+    @pytest.mark.parametrize(
+        "flags",
+        [
+            pytest.param(["--template", "nf-core/ampliseq/2.16.0"], id="explicit-template"),
+            pytest.param(["--pipeline-id", "nf-core/ampliseq/2.16.0"], id="pipeline-id"),
+            pytest.param([], id="auto-detected"),
+        ],
+    )
+    def test_provenance_is_stamped_however_the_template_was_chosen(
+        self, app, runner, harness, nextflow_run_dir, flags
+    ):
+        result = self._resolved_workflow(app, runner, harness, nextflow_run_dir, flags)
+        assert result.exit_code == 0, result.output
+
+        config = harness.resolved_config["workflows"][0]["config"]
+        assert config["engine_name"] == "nextflow"
+        # `v2.16.0-g3d5c7e5` normalised, git-describe suffix dropped.
+        assert config["pipeline_version"] == "2.16.0"
+        assert config["nextflow_version"] == "25.10.2"
+        assert config["tools_executed"] == ["cutadapt", "fastqc"]
+
+
+class TestTriggeredByStamp:
+    """`--triggered-by` records what invoked the ingestion, on every mode.
+
+    The value reaches the server through the synced project dict, so it has to
+    survive `convert_model_to_dict`. It is stamped at the single sync funnel
+    rather than per mode, and these tests pin that: an attach and an update are
+    exactly the paths a pipeline re-run takes, and a tag that only worked on
+    first creation would be missing from every project that ever ran twice.
+    """
+
+    def test_defaults_to_manual(self, app, runner, data_root, make_harness):
+        harness = make_harness(data_root, remote_locations=[])
+        result = _invoke(app, runner, harness, {"data_root": data_root, "flags": []})
+        assert result.exit_code == 0, result.output
+        assert harness.sync.call_args.kwargs["ProjectConfig"]["triggered_by"] == "manual"
+
+    def test_the_trigger_value_reaches_the_server(self, app, runner, data_root, make_harness):
+        harness = make_harness(data_root, remote_locations=[])
+        result = _invoke(
+            app,
+            runner,
+            harness,
+            {"data_root": data_root, "flags": ["--triggered-by", "nextflow"]},
+        )
+        assert result.exit_code == 0, result.output
+        assert harness.sync.call_args.kwargs["ProjectConfig"]["triggered_by"] == "nextflow"
+
+    def test_it_survives_an_attach(self, app, runner, data_root, make_harness):
+        harness = make_harness(data_root, remote_locations=["/data/run_a"])
+        result = _invoke(
+            app,
+            runner,
+            harness,
+            {"data_root": data_root, "flags": ["--attach-run", "--triggered-by", "nextflow"]},
+        )
+        assert result.exit_code == 0, result.output
+        assert harness.sync.call_args.kwargs["ProjectConfig"]["triggered_by"] == "nextflow"
+
+
+class TestServerCheckHonoursTheVerdict:
+    """A rejected CLI configuration must stop the run at step 1.
+
+    `api_login` reports rejection by returning {"success": False} rather than
+    raising, so the step's try/except is blind to it. Unchecked, an expired
+    token printed its own error and was immediately followed by "check passed",
+    and the run failed three steps later on a validation error that mentioned
+    nothing about authentication.
+    """
+
+    def test_a_rejected_config_fails_the_run(self, app, runner, data_root, make_harness):
+        harness = make_harness(data_root, remote_locations=[])
+        patches = harness.patches()
+        patches.append(
+            patch(
+                "depictio.cli.cli.commands.run.api_login",
+                MagicMock(return_value={"success": False}),
+            )
+        )
+        for p in patches:
+            p.start()
+        try:
+            result = runner.invoke(
+                app,
+                [
+                    "ingest",
+                    "--template",
+                    "nf-core/ampliseq/2.16.0",
+                    str(data_root),
+                    "--skip",
+                    "s3-check",
+                ],
+            )
+        finally:
+            for p in patches:
+                p.stop()
+
+        assert result.exit_code == 1, result.output
+        assert "Server accessibility check failed" in result.output
+        assert "expired" in result.output
+        # It stopped at step 1: nothing was synced, scanned or processed.
+        harness.sync.assert_not_called()
+        harness.scan.assert_not_called()
+
+    def test_another_answer_is_not_blamed_on_the_token(self, app, runner, data_root, make_harness):
+        """A viewer host's 404 or a proxy's 502: a new token would not fix it."""
+        harness = make_harness(data_root, remote_locations=[])
+        patches = harness.patches()
+        patches.append(
+            patch(
+                "depictio.cli.cli.commands.run.api_login",
+                MagicMock(return_value={"success": False, "status_code": 404}),
+            )
+        )
+        for p in patches:
+            p.start()
+        try:
+            result = runner.invoke(
+                app,
+                [
+                    "ingest",
+                    "--template",
+                    "nf-core/ampliseq/2.16.0",
+                    str(data_root),
+                    "--skip",
+                    "s3-check",
+                ],
+            )
+        finally:
+            for p in patches:
+                p.stop()
+
+        assert result.exit_code == 1, result.output
+        out = " ".join(result.output.split())
+        assert "Server accessibility check failed: the server answered HTTP 404" in out
+        assert "expired" not in out
+        harness.sync.assert_not_called()
+
+    def test_an_accepted_config_proceeds(self, app, runner, data_root, make_harness):
+        harness = make_harness(data_root, remote_locations=[])
+        patches = harness.patches()
+        patches.append(
+            patch(
+                "depictio.cli.cli.commands.run.api_login",
+                MagicMock(return_value={"success": True}),
+            )
+        )
+        for p in patches:
+            p.start()
+        try:
+            result = runner.invoke(
+                app,
+                [
+                    "ingest",
+                    "--template",
+                    "nf-core/ampliseq/2.16.0",
+                    str(data_root),
+                    "--skip",
+                    "s3-check",
+                ],
+            )
+        finally:
+            for p in patches:
+                p.stop()
+
+        assert result.exit_code == 0, result.output
+        harness.sync.assert_called_once()

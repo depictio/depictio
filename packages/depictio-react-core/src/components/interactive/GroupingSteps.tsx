@@ -1,0 +1,134 @@
+import React from 'react';
+import { Badge, Group, Stepper } from '@mantine/core';
+import { Icon } from '@iconify/react';
+
+import { useGroupingColor } from '../../selectionGroups';
+import GuideBullets from './GuideBullets';
+import { groupingActiveStep, selectionCapableSummary } from './groupingGuide';
+
+/**
+ * The guided path to a first group, shown in the Analysis panel while the
+ * dashboard has none.
+ *
+ * It replaces the one grey paragraph that used to stand here ("Lasso points on
+ * a chart with cross-filtering enabled…"): a single sentence had to carry
+ * where to act, how to act and what happens next, and named only the lasso —
+ * so users never learned that a rectangle drag, ticked table rows and a map
+ * polygon all feed the same thing.
+ *
+ * Three steps instead, with the one the user is on marked current (see
+ * `groupingActiveStep`). Step 1 quotes how many tiles on *this* dashboard can
+ * emit a selection, so the guide is about the dashboard in front of the user
+ * rather than about the feature in the abstract. Steps 2 and 3 are icon-led
+ * bullets, not sentences: the panel is read while acting on the dashboard.
+ */
+const GroupingSteps: React.FC<{
+  /** Tiles on this dashboard a selection can be saved from. */
+  selectableCount: number;
+  /** Whether a selection is live right now (the panel's `candidates`). */
+  hasSelection: boolean;
+}> = ({ selectableCount, hasSelection }) => {
+  const groupingColor = useGroupingColor();
+  const active = groupingActiveStep(selectableCount, hasSelection);
+  const blocked = selectableCount <= 0;
+
+  return (
+    <Stepper
+      className="dc-ap-steps"
+      active={active}
+      orientation="vertical"
+      size="sm"
+      iconSize={26}
+      color={groupingColor}
+      mt={8}
+      // The theme's own sizes, matching the panel's other labels: the guide is
+      // the first thing a new user reads here and 11px made it work to read.
+      //
+      // One type scale for every step: Mantine gives the description a
+      // line-height of 1, which the plain-text steps inherited while the lasso
+      // step's own <Text> did not, so the current step read larger than the
+      // others. Size and line-height are set once here instead.
+      styles={{
+        stepLabel: { fontSize: 14, fontWeight: 600, lineHeight: 1.35 },
+        stepDescription: { fontSize: 13, lineHeight: 1.45, marginTop: 2 },
+        stepBody: { marginLeft: 10 },
+      }}
+    >
+      <Stepper.Step
+        // Orange with the alert glyph when the dashboard has nothing to select
+        // on: the step is not "pending", it cannot be completed here at all,
+        // and its description says why.
+        color={blocked ? 'orange' : undefined}
+        className={blocked ? 'dc-ap-step--blocked' : undefined}
+        icon={
+          <Icon
+            icon={blocked ? 'mdi:alert-circle-outline' : 'mdi:select-group'}
+            width={15}
+            height={15}
+          />
+        }
+        label="Find a selectable tile"
+        description={selectionCapableSummary(selectableCount)}
+      />
+      <Stepper.Step
+        icon={<Icon icon="mdi:lasso" width={15} height={15} />}
+        label="Select points on it"
+        description={
+          <GuideBullets
+            items={[
+              {
+                icon: 'mdi:chart-scatter-plot',
+                label: 'Chart',
+                // Both drags are equally valid: the old copy said "lasso" and
+                // left box-select looking like it would be ignored.
+                text: (
+                  <Group gap={6} className="dc-ap-chips">
+                    <Badge
+                      component="span"
+                      className="dc-ap-chip"
+                      size="sm"
+                      variant="light"
+                      color={groupingColor}
+                      leftSection={<Icon icon="mdi:vector-square" width={13} height={13} />}
+                    >
+                      Box select
+                    </Badge>
+                    <Badge
+                      component="span"
+                      className="dc-ap-chip"
+                      size="sm"
+                      variant="light"
+                      color={groupingColor}
+                      leftSection={<Icon icon="mdi:lasso" width={13} height={13} />}
+                    >
+                      Lasso
+                    </Badge>
+                  </Group>
+                ),
+              },
+              { icon: 'mdi:table-check', label: 'Table', text: 'tick rows' },
+              { icon: 'mdi:vector-polygon', label: 'Map', text: 'draw a shape' },
+              { icon: 'mdi:image-multiple-outline', label: 'Gallery', text: 'click thumbnails' },
+            ]}
+          />
+        }
+      />
+      <Stepper.Step
+        icon={<Icon icon="mdi:tag-outline" width={15} height={15} />}
+        label="Name it and save"
+        description={
+          <GuideBullets
+            inline
+            items={[
+              { icon: 'mdi:tag-outline', label: 'Name' },
+              { icon: 'mdi:palette-outline', label: 'Color' },
+              { icon: 'mdi:content-save-outline', label: 'Save' },
+            ]}
+          />
+        }
+      />
+    </Stepper>
+  );
+};
+
+export default GroupingSteps;

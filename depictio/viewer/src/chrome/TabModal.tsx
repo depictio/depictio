@@ -1,17 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import {
   Anchor,
-  Button,
+  Autocomplete,
   Group,
   Modal,
   Select,
   Stack,
   TextInput,
-  Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { DashboardSummary } from 'depictio-react-core';
+
+import { SidebarModalActions, SidebarModalHeader } from './TabGroupModals';
 
 /** True for path-like icon values (asset URLs such as
  *  `/assets/images/icons/favicon.png`) rather than Iconify names. Mirrors the
@@ -52,6 +53,9 @@ export interface TabModalSubmitPayload {
   title: string;
   tab_icon?: string;
   tab_icon_color?: string;
+  /** Sidebar group; null when the field was left empty. Absent for the main
+   *  tab, which is never grouped. */
+  tab_group?: string | null;
   /** Only present when editing a main tab. */
   main_tab_name?: string;
 }
@@ -61,6 +65,11 @@ interface TabModalProps {
   mode: TabModalMode;
   /** Required in edit mode — pre-populates the form. Ignored in create mode. */
   tab?: DashboardSummary | null;
+  /** Groups the dashboard's tabs already use, offered as suggestions. */
+  groupOptions?: string[];
+  /** Create mode: the Group the new tab starts in (a group's "Add tab to this
+   *  group", or the New group dialog). */
+  initialGroup?: string | null;
   onClose: () => void;
   onSubmit: (payload: TabModalSubmitPayload) => Promise<void> | void;
   /** True while the parent's submit handler is in flight. Disables actions. */
@@ -73,6 +82,8 @@ interface TabModalProps {
  * Field set mirrors `depictio/dash/layouts/tab_modal.py` (lines 206-362):
  *   - Tab name (required)
  *   - Main tab name (only when editing a main tab)
+ *   - Group — sidebar category, picked from the family's or typed fresh
+ *     (not for the main tab, which is never grouped)
  *   - Icon — Iconify name (e.g. `mdi:chart-bar`); live preview to the right
  *   - Color — Mantine palette + "Auto"
  *
@@ -84,6 +95,8 @@ const TabModal: React.FC<TabModalProps> = ({
   opened,
   mode,
   tab,
+  groupOptions = [],
+  initialGroup = null,
   onClose,
   onSubmit,
   submitting = false,
@@ -94,6 +107,7 @@ const TabModal: React.FC<TabModalProps> = ({
   const [mainTabName, setMainTabName] = useState('');
   const [tabIcon, setTabIcon] = useState('');
   const [tabIconColor, setTabIconColor] = useState('');
+  const [tabGroup, setTabGroup] = useState('');
 
   // Reset / pre-populate fields whenever the modal opens (or the target tab
   // changes). We watch `opened` specifically so closing-then-reopening with
@@ -105,13 +119,15 @@ const TabModal: React.FC<TabModalProps> = ({
       setMainTabName(tab.main_tab_name || '');
       setTabIcon(tab.tab_icon || tab.icon || '');
       setTabIconColor(tab.tab_icon_color || tab.icon_color || '');
+      setTabGroup(tab.tab_group || '');
     } else {
       setTitle('');
       setMainTabName('');
       setTabIcon('');
       setTabIconColor('');
+      setTabGroup(initialGroup ?? '');
     }
-  }, [opened, mode, tab]);
+  }, [opened, mode, tab, initialGroup]);
 
   const handleSubmit = async () => {
     const trimmedTitle = title.trim();
@@ -124,6 +140,10 @@ const TabModal: React.FC<TabModalProps> = ({
     };
     if (isMainTab) {
       payload.main_tab_name = mainTabName.trim() || undefined;
+    } else {
+      // Null rather than undefined: emptying the field has to reach the
+      // server to take the tab out of its group.
+      payload.tab_group = tabGroup.trim() || null;
     }
     await onSubmit(payload);
   };
@@ -159,17 +179,10 @@ const TabModal: React.FC<TabModalProps> = ({
       <Stack gap="sm">
         {/* Header — consistent with the dashboard create/edit modals:
             centered orange icon + title. */}
-        <Group justify="center" gap="sm" mb="xs">
-          <Icon
-            icon={mode === 'create' ? 'mdi:tab-plus' : 'mdi:square-edit-outline'}
-            width={28}
-            height={28}
-            color="var(--mantine-color-orange-6)"
-          />
-          <Title order={3} c="orange" m={0}>
-            {mode === 'create' ? 'Add Tab' : 'Edit Tab'}
-          </Title>
-        </Group>
+        <SidebarModalHeader
+          icon={mode === 'create' ? 'mdi:tab-plus' : 'mdi:square-edit-outline'}
+          title={mode === 'create' ? 'Add Tab' : 'Edit Tab'}
+        />
 
         <TextInput
           label="Tab name"
@@ -187,6 +200,17 @@ const TabModal: React.FC<TabModalProps> = ({
             placeholder="MultiQC"
             value={mainTabName}
             onChange={(e) => setMainTabName(e.currentTarget.value)}
+          />
+        )}
+
+        {!isMainTab && (
+          <Autocomplete
+            label="Group"
+            description="Tabs in the same group are listed together under its name in the sidebar."
+            placeholder="None"
+            data={groupOptions}
+            value={tabGroup}
+            onChange={setTabGroup}
           />
         )}
 
@@ -237,32 +261,14 @@ const TabModal: React.FC<TabModalProps> = ({
           allowDeselect={false}
         />
 
-        <Group justify="flex-end" gap="md" mt="sm">
-          <Button
-            variant="outline"
-            color="gray"
-            radius="md"
-            onClick={onClose}
-            disabled={submitting}
-          >
-            Cancel
-          </Button>
-          <Button
-            color="orange"
-            radius="md"
-            leftSection={
-              <Icon
-                icon={mode === 'create' ? 'mdi:plus' : 'mdi:content-save'}
-                width={16}
-              />
-            }
-            onClick={handleSubmit}
-            loading={submitting}
-            disabled={!title.trim()}
-          >
-            {mode === 'create' ? 'Add Tab' : 'Save Changes'}
-          </Button>
-        </Group>
+        <SidebarModalActions
+          submitIcon={mode === 'create' ? 'mdi:plus' : 'mdi:content-save'}
+          submitLabel={mode === 'create' ? 'Add Tab' : 'Save Changes'}
+          submitting={submitting}
+          disabled={!title.trim()}
+          onCancel={onClose}
+          onSubmit={handleSubmit}
+        />
       </Stack>
     </Modal>
   );

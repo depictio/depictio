@@ -1,0 +1,18 @@
+id: mhcquant_length_distribution
+name: Peptide length distribution
+mode: immunopeptidomics/length
+description: >-
+  Distinct peptide sequences per length and sample, as counts and as the share
+  of the sample. The class I signature is a sharp 9-mer mode inside 8 to 12
+  residues; class II peptides spread over 13 to 25.
+find: { path_glob: "*.tsv" }
+recipe: mhcquant/length_distribution.py
+fixture: length_distribution.tsv
+renders_as:
+  - id: length_profile
+    component: advanced_viz
+    kind: profile
+    roles: { series: sample, x: length, y: fraction }
+  - { component: figure, visu_type: bar, dict_kwargs: { x: length_class, y: peptides, color: sample } }
+  - { component: interactive, interactive_type: MultiSelect, column_name: length_class }
+  - { component: table }

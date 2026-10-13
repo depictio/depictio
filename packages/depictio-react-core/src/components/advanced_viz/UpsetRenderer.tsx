@@ -1,16 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Badge,
-  MultiSelect,
-  NumberInput,
-  Select,
-  Stack,
-  Switch,
   Text,
   useMantineColorScheme,
   useMantineTheme,
 } from '@mantine/core';
-import Plot from 'react-plotly.js';
+import Plot from './LegendAwarePlot';
 
 import {
   dispatchUpset,
@@ -21,8 +16,53 @@ import {
   StoredMetadata,
   UpsetResult,
 } from '../../api';
+import { useCategoryColorSource } from '../../hooks/useCategoryColors';
+import {
+  advancedVizSelectionColumn,
+  advancedVizSelectionFilter,
+  filtersExcludingOwn,
+  selectionValuesFor,
+} from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import {
+  VizControlGroup,
+  VizFullRow,
+  VizMultiSelect,
+  VizNumberInput,
+  VizSelect,
+  VizSwitch,
+} from './controls/VizControls';
+import { namedColumns } from './namedColumns';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
+import {
+  colourUpsetSets,
+  inkUpsetForDark,
+  resolveUpsetSetColors,
+  upsetColumnSets,
+  upsetSetNames,
+  withUpsetSetLabelDots,
+} from './upsetFigure';
+import { emphasizeUpsetColumns, upsetHoverColumn, withUpsetHoverTargets } from './upsetHover';
+import {
+  selectedUpsetIntersection,
+  upsetColumnOf,
+  upsetIntersectionKey,
+  upsetIntersectionMembers,
+} from './upsetSelection';
+import { usePersistedVizControl } from './usePersistedVizControl';
+import { withRanksInOrder } from './phylo/view';
+import { demandForItems } from './contentDemand';
+
+/** Room one matrix row (one set) needs: the dot, its label and the gap that
+ *  keeps the connecting line readable. */
+const SET_ROW_PX = 26;
+/** The intersection-size bar panel above the matrix, which is the panel the
+ *  plot is actually read from and must not be squeezed. */
+const INTERSECTION_PANEL_PX = 220;
+/** The intersection labels along the bottom plus the figure's own margins. */
+const UPSET_CHROME_PX = 90;
+/** One annotation track, drawn as its own band under the matrix. */
+const ANNOTATION_TRACK_PX = 90;
 
 interface UpsetPlotConfig {
   /** Deprecated/unused: data comes from the component's resolved dc_id
@@ -30,6 +70,10 @@ interface UpsetPlotConfig {
   matrix_wf_id?: string;
   matrix_dc_id?: string;
   set_columns?: string[] | null;
+  /** Regex naming the set columns, for a matrix with one column per sample of
+   *  the run. The worker resolves it against the frame's binary columns;
+   *  mutually exclusive with set_columns. */
+  set_columns_pattern?: string | null;
   /** Optional per-set colour overrides (set name → hex). Forwarded to the
    *  plotly-upset library so set-size bars + dots + intersection bars use
    *  the project's domain palette (e.g. habitat → Set1). */
@@ -43,36 +87,44 @@ interface UpsetPlotConfig {
   /** Pre-select these columns as annotation tracks on first render. Users
    *  can still add/remove via the MultiSelect — this only seeds the default. */
   default_annotation_cols?: string[] | null;
+  /** The categorical column the sets are values of (e.g. `locality`): the
+   *  sets take its dashboard `category_colors`. Unset, that column is found
+   *  by value (see `resolveUpsetSetColors`). */
+  set_category_column?: string | null;
+  /** Clicking an intersection filters the dashboard to its rows, by the
+   *  values they hold in `selection_column` (see `advancedVizSelectionColumn`). */
+  selection_enabled?: boolean;
+  selection_column?: string | null;
 }
 
 interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: UpsetPlotConfig };
   filters: InteractiveFilter[];
   refreshTick?: number;
+  /** Receives the intersection selection. Its absence makes the plot
+   *  read-only (catalog, previews, split panels). */
+  onFilterChange?: (filter: InteractiveFilter) => void;
 }
 
-const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
+const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange }) => {
   const config = (metadata.config || {}) as UpsetPlotConfig;
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
 
-  const [sortBy, setSortBy] = useState<NonNullable<UpsetPlotConfig['sort_by']>>(
-    config.sort_by ?? 'cardinality',
-  );
-  const [sortOrder, setSortOrder] = useState<NonNullable<UpsetPlotConfig['sort_order']>>(
-    config.sort_order ?? 'descending',
-  );
-  const [minSize, setMinSize] = useState<number>(config.min_size ?? 1);
-  const [colorBy, setColorBy] = useState<NonNullable<UpsetPlotConfig['color_intersections_by']>>(
-    config.color_intersections_by ?? 'none',
-  );
-  const [showSetSizes, setShowSetSizes] = useState<boolean>(config.show_set_sizes ?? true);
-  const [showValues, setShowValues] = useState<boolean>(false);
+  type SortBy = NonNullable<UpsetPlotConfig['sort_by']>;
+  type SortOrder = NonNullable<UpsetPlotConfig['sort_order']>;
+  type ColorBy = NonNullable<UpsetPlotConfig['color_intersections_by']>;
+  const [sortBy, setSortBy] = usePersistedVizControl<SortBy>(metadata, 'sort_by', 'cardinality');
+  const [sortOrder, setSortOrder] = usePersistedVizControl<SortOrder>(metadata, 'sort_order', 'descending');
+  const [minSize, setMinSize] = usePersistedVizControl(metadata, 'min_size', 1);
+  const [colorBy, setColorBy] = usePersistedVizControl<ColorBy>(metadata, 'color_intersections_by', 'none');
+  const [showSetSizes, setShowSetSizes] = usePersistedVizControl(metadata, 'show_set_sizes', true);
+  const [showValues, setShowValues] = usePersistedVizControl(metadata, 'show_values', false);
   // Master toggle that gates both annotation switches. When OFF, the
   // dispatch sends false for both (regardless of granular state) so the
   // UpSet renders as a bare dot-matrix.
-  const [showAnnotations, setShowAnnotations] = useState<boolean>(true);
+  const [showAnnotations, setShowAnnotations] = usePersistedVizControl(metadata, 'show_annotations', true);
   const effectiveShowSetSizes = showAnnotations && showSetSizes;
   const effectiveShowValues = showAnnotations && showValues;
 
@@ -80,9 +132,7 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   // them through UpSetPlot.from_dataframe(annotations=...). Library
   // auto-detects numeric vs categorical and renders one extra track per
   // column. Gated by the master annotations switch.
-  const [annotationCols, setAnnotationCols] = useState<string[]>(
-    config.default_annotation_cols ?? [],
-  );
+  const [annotationCols, setAnnotationCols] = usePersistedVizControl<string[]>(metadata, 'default_annotation_cols', []);
   const [dcSchema, setDcSchema] = useState<Record<string, string> | null>(null);
 
   useEffect(() => {
@@ -100,18 +150,41 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
     };
   }, [metadata.dc_id]);
 
+  // The declared sets, or the columns a pattern names (the worker resolves it
+  // against the frame's binary columns).
+  const setColumns = useMemo(
+    () => namedColumns(config.set_columns, config.set_columns_pattern, dcSchema),
+    [config.set_columns, config.set_columns_pattern, dcSchema],
+  );
+
   // Non-set DC columns are candidate annotation tracks. Filter out set
   // columns (already used as the binary matrix) and obvious identifier
   // columns (the library would error on a high-cardinality string ID).
   const annotationOptions = useMemo(() => {
     if (!dcSchema) return [] as string[];
-    const setCols = new Set(config.set_columns ?? []);
-    return Object.keys(dcSchema).filter((c) => !setCols.has(c));
-  }, [dcSchema, config.set_columns]);
+    const setCols = new Set(setColumns);
+    return withRanksInOrder(Object.keys(dcSchema).filter((c) => !setCols.has(c)));
+  }, [dcSchema, setColumns]);
 
   const effectiveAnnotationCols = showAnnotations ? annotationCols : [];
 
+  // ---- Intersection selection as a cross-filter ---------------------------
+  // Resolved through selection.ts, so the chrome's capability marker and this
+  // gate cannot disagree. A host with no onFilterChange is read-only.
+  const selectionColumn = onFilterChange ? advancedVizSelectionColumn(metadata) : undefined;
+  // The UpSet must not narrow itself by its own selection: it would redraw as
+  // the one intersection picked, with nothing left to pick instead. Every
+  // other tile still narrows.
+  const filtersForFetch = useMemo(
+    () => filtersExcludingOwn(filters, metadata.index, 'scatter_selection'),
+    [filters, metadata.index],
+  );
+  const filtersKey = JSON.stringify(filtersForFetch);
+
   const [figure, setFigure] = useState<UpsetResult['figure'] | null>(null);
+  // One per figure received, as the plot's `uirevision` (see plotLayout).
+  const [figureRevision, setFigureRevision] = useState(0);
+  const [hoveredColumn, setHoveredColumn] = useState<number | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [computeStatus, setComputeStatus] = useState<string | null>(null);
@@ -136,6 +209,9 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
       wf_id: metadata.wf_id,
       dc_id: metadata.dc_id,
       set_columns: config.set_columns ?? null,
+      // Sent only when set: the cache key hashes the whole payload, so an
+      // always-present null would recompute every UpSet cached before it.
+      ...(config.set_columns_pattern ? { set_columns_pattern: config.set_columns_pattern } : {}),
       set_colors: config.set_colors ?? null,
       annotation_cols: effectiveAnnotationCols.length > 0 ? effectiveAnnotationCols : null,
       sort_by: sortBy,
@@ -145,13 +221,16 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
       show_set_sizes: effectiveShowSetSizes,
       show_values: effectiveShowValues,
       color_intersections_by: colorBy,
-      filter_metadata: filters,
+      filter_metadata: filtersForFetch,
     };
 
     let pollTimer: ReturnType<typeof setTimeout> | undefined;
     const accept = (result: UpsetResult) => {
       if (cancelled) return;
       setFigure(result.figure);
+      setFigureRevision((n) => n + 1);
+      // Column indices belong to the previous figure's intersection order.
+      setHoveredColumn(null);
       setRowCount(result.row_count);
       setComputeMs(result.compute_ms ?? null);
       setComputeStatus(null);
@@ -203,7 +282,7 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   }, [
     metadata.wf_id,
     metadata.dc_id,
-    JSON.stringify(filters),
+    filtersKey,
     refreshTick,
     sortBy,
     sortOrder,
@@ -214,14 +293,12 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
     showValues,
     JSON.stringify(effectiveAnnotationCols),
     JSON.stringify(config.set_columns),
+    config.set_columns_pattern,
     config.max_degree,
   ]);
 
   // Best-effort preview of the underlying binary table for the Show-data popover.
-  const previewCols = useMemo(
-    () => (config.set_columns ?? []).slice(0, 12),
-    [config.set_columns],
-  );
+  const previewCols = useMemo(() => setColumns.slice(0, 12), [setColumns]);
   useEffect(() => {
     if (!metadata.wf_id || !metadata.dc_id || previewCols.length < 1) return;
     let cancelled = false;
@@ -229,7 +306,7 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
       wfId: metadata.wf_id,
       dcId: metadata.dc_id,
       columns: previewCols,
-      filters,
+      filters: filtersForFetch,
       limitRows: 200,
       vizKind: 'upset_plot',
     })
@@ -242,116 +319,112 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
     return () => {
       cancelled = true;
     };
-  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(previewCols), JSON.stringify(filters), refreshTick]);
+  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(previewCols), filtersKey, refreshTick]);
 
   // Memo the controls JSX so its reference is stable — AdvancedVizFrame
   // publishes it via useEffect and a fresh inline JSX every render would
   // refire that effect into an infinite setState loop.
+  // Encoding tier: which intersections are drawn, in what order, and what
+  // their colour means. The annotation tracks and the count labels decorate
+  // whatever survives those four.
+  const primaryControls = useMemo(
+    () => (
+      <>
+        <VizControlGroup title="Intersections">
+          <VizSelect
+            label="Sort by"
+            value={sortBy}
+            onChange={(v) => v && setSortBy(v as typeof sortBy)}
+            data={[
+              { value: 'cardinality', label: 'Cardinality (set size)' },
+              { value: 'degree', label: 'Degree (# of sets)' },
+              { value: 'degree-cardinality', label: 'Degree → cardinality' },
+              { value: 'input', label: 'Input order' },
+            ]}
+          />
+          <VizSelect
+            label="Order"
+            value={sortOrder}
+            onChange={(v) => v && setSortOrder(v as typeof sortOrder)}
+            data={[
+              { value: 'descending', label: 'Descending' },
+              { value: 'ascending', label: 'Ascending' },
+            ]}
+          />
+          <VizNumberInput
+            label="Min intersection size"
+            value={minSize}
+            onChange={(v) => setMinSize(Math.max(0, Number(v) || 0))}
+            min={0}
+          />
+        </VizControlGroup>
+        <VizControlGroup title="Colour">
+          <VizSelect
+            label="Colour intersections by"
+            value={colorBy}
+            onChange={(v) => v && setColorBy(v as typeof colorBy)}
+            data={[
+              { value: 'none', label: 'Single colour' },
+              { value: 'set', label: 'Per set (degree-1 bars)' },
+              { value: 'degree', label: 'By degree' },
+            ]}
+          />
+        </VizControlGroup>
+      </>
+    ),
+    [sortBy, sortOrder, minSize, colorBy],
+  );
+
   const controls = useMemo(
     () => (
-      <Stack gap="xs">
-        <Select
-          size="xs"
-          label="Sort by"
-          value={sortBy}
-          onChange={(v) => v && setSortBy(v as typeof sortBy)}
-          data={[
-            { value: 'cardinality', label: 'Cardinality (set size)' },
-            { value: 'degree', label: 'Degree (# of sets)' },
-            { value: 'degree-cardinality', label: 'Degree → cardinality' },
-            { value: 'input', label: 'Input order' },
-          ]}
-        />
-        <Select
-          size="xs"
-          label="Order"
-          value={sortOrder}
-          onChange={(v) => v && setSortOrder(v as typeof sortOrder)}
-          data={[
-            { value: 'descending', label: 'Descending' },
-            { value: 'ascending', label: 'Ascending' },
-          ]}
-        />
-        <NumberInput
-          size="xs"
-          label="Min intersection size"
-          value={minSize}
-          onChange={(v) => setMinSize(Math.max(0, Number(v) || 0))}
-          min={0}
-        />
-        <Select
-          size="xs"
-          label="Colour intersections by"
-          value={colorBy}
-          onChange={(v) => v && setColorBy(v as typeof colorBy)}
-          data={[
-            { value: 'none', label: 'Single colour' },
-            { value: 'set', label: 'Per set (degree-1 bars)' },
-            { value: 'degree', label: 'By degree' },
-          ]}
-        />
-        <Text size="xs" c="dimmed" fw={500} mt={4}>
-          Annotations
-        </Text>
-        <Switch
-          size="xs"
-          checked={showAnnotations}
-          onChange={(e) => setShowAnnotations(e.currentTarget.checked)}
-          label="Show annotations"
-        />
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Show
-          </Text>
-          <Switch
-          size="xs"
-          checked={showSetSizes}
-          onChange={(e) => setShowSetSizes(e.currentTarget.checked)}
-          disabled={!showAnnotations}
-          label="Show set-size bars"
-        />
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Intersections
-          </Text>
-          <Switch
-          size="xs"
-          checked={showValues}
-          onChange={(e) => setShowValues(e.currentTarget.checked)}
-          disabled={!showAnnotations}
-          label="Intersection count labels"
-        />
-        </Stack>
-        <MultiSelect
-          size="xs"
-          label="Annotation tracks"
-          description="Per-intersection summary tracks above the bars"
-          placeholder={annotationOptions.length ? 'Pick columns…' : 'No annotation candidates'}
-          value={annotationCols}
-          onChange={setAnnotationCols}
-          data={annotationOptions}
-          disabled={!showAnnotations || annotationOptions.length === 0}
-          clearable
-          searchable
-        />
-        {computeStatus ? (
-          <Badge size="sm" color="grape" variant="light" radius="sm" fullWidth>
-            {computeStatus}
-          </Badge>
-        ) : null}
-        {computeMs != null && !computeStatus ? (
-          <Text size="xs" c="dimmed">
-            Built in {computeMs} ms ({rowCount ?? '?'} rows)
-          </Text>
-        ) : null}
-      </Stack>
+      <>
+        <VizControlGroup title="Annotations">
+          <VizSwitch
+            checked={showAnnotations}
+            onChange={(e) => setShowAnnotations(e.currentTarget.checked)}
+            label="Show annotations"
+          />
+          <VizSwitch
+            checked={showSetSizes}
+            onChange={(e) => setShowSetSizes(e.currentTarget.checked)}
+            disabled={!showAnnotations}
+            label="Show set-size bars"
+          />
+          <VizSwitch
+            checked={showValues}
+            onChange={(e) => setShowValues(e.currentTarget.checked)}
+            disabled={!showAnnotations}
+            label="Intersection count labels"
+          />
+          <VizMultiSelect
+            label="Annotation tracks"
+            description="Per-intersection summary tracks above the bars"
+            placeholder={annotationOptions.length ? 'Pick columns…' : 'No annotation candidates'}
+            value={annotationCols}
+            onChange={setAnnotationCols}
+            data={annotationOptions}
+            disabled={!showAnnotations || annotationOptions.length === 0}
+            clearable
+            searchable
+          />
+          {computeStatus ? (
+            <VizFullRow>
+              <Badge size="sm" color="grape" variant="light" radius="sm" fullWidth>
+                {computeStatus}
+              </Badge>
+            </VizFullRow>
+          ) : null}
+          {computeMs != null && !computeStatus ? (
+            <VizFullRow>
+              <Text size="xs" c="dimmed">
+                Built in {computeMs} ms ({rowCount ?? '?'} rows)
+              </Text>
+            </VizFullRow>
+          ) : null}
+        </VizControlGroup>
+      </>
     ),
     [
-      sortBy,
-      sortOrder,
-      minSize,
-      colorBy,
       showAnnotations,
       showSetSizes,
       showValues,
@@ -363,38 +436,198 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
     ],
   );
 
+  // ---- Reading the figure ---------------------------------------------------
+  const figureLayout = (figure?.layout ?? null) as Record<string, unknown> | null;
+  const figureData = (figure?.data ?? null) as Record<string, unknown>[] | null;
+  // The sets as drawn (a filter over their names narrows them), and the sets
+  // each intersection joins.
+  const setNames = useMemo(() => (figureLayout ? upsetSetNames(figureLayout) : []), [figureLayout]);
+  const setNamesKey = JSON.stringify(setNames);
+  const columnSets = useMemo(
+    () => (figureData && figureLayout ? upsetColumnSets(figureData, figureLayout) : new Map<number, string[]>()),
+    [figureData, figureLayout],
+  );
+
+  // ---- Set colours ------------------------------------------------------------
+  // The dashboard's category colours for the column the sets are values of,
+  // so a site is the same colour here as on every other tile. None found, the
+  // figure stays as the server drew it.
+  const categorySource = useCategoryColorSource();
+  const setColors = useMemo(
+    () =>
+      resolveUpsetSetColors(categorySource, setNames, {
+        column: config.set_category_column,
+        overrides: config.set_colors,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [categorySource, setNamesKey, config.set_category_column, JSON.stringify(config.set_colors)],
+  );
+
+  // ---- Intersection members ---------------------------------------------------
+  // The rows behind each intersection, read from the matrix under the same
+  // filters the figure was built from (see upsetSelection.ts). Only fetched
+  // when the component selects; null until known, or when the server had to
+  // sample the matrix, since a selection of some of an intersection's rows
+  // would be a wrong answer.
+  const [members, setMembers] = useState<Map<string, string[]> | null>(null);
+  useEffect(() => {
+    setMembers(null);
+    if (!selectionColumn || !metadata.wf_id || !metadata.dc_id || setNames.length === 0) return;
+    let cancelled = false;
+    fetchAdvancedVizData({
+      wfId: metadata.wf_id,
+      dcId: metadata.dc_id,
+      columns: [...setNames.filter((n) => n !== selectionColumn), selectionColumn],
+      filters: filtersForFetch,
+      vizKind: 'upset_plot',
+    })
+      .then((res) => {
+        if (cancelled || res.sampling?.degraded) return;
+        setMembers(upsetIntersectionMembers(res.rows, setNames, selectionColumn));
+      })
+      .catch(() => {
+        /* best-effort: without members the intersections are just not clickable */
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metadata.wf_id, metadata.dc_id, selectionColumn, setNamesKey, filtersKey, refreshTick]);
+
+  // ---- The selection ----------------------------------------------------------
+  // The dashboard's filter list is the record of what is selected: a Reset
+  // from the chrome or the filter panel clears it there, and the highlight
+  // goes with it. `picked` only says which intersection a standing selection
+  // came from.
+  const [picked, setPicked] = useState<string | null>(null);
+  const ownValues = selectionValuesFor(filters, metadata.index, 'scatter_selection');
+  const selectedKey = selectedUpsetIntersection(picked, ownValues, members);
+  const selectedColumn = upsetColumnOf(columnSets, selectedKey);
+
+  const handleClick = useCallback(
+    (event: { points?: Array<Record<string, unknown>> }) => {
+      if (!onFilterChange || !selectionColumn || !members) return;
+      const column = upsetHoverColumn(event.points?.[0] as any);
+      const sets = column == null ? undefined : columnSets.get(column);
+      if (!sets) return;
+      const key = upsetIntersectionKey(sets);
+      // Clicking the selected intersection again lets it go.
+      if (key === selectedKey) {
+        setPicked(null);
+        onFilterChange(advancedVizSelectionFilter(metadata, selectionColumn, []));
+        return;
+      }
+      const values = members.get(key) ?? [];
+      if (values.length === 0) return;
+      setPicked(key);
+      onFilterChange(advancedVizSelectionFilter(metadata, selectionColumn, values));
+    },
+    [onFilterChange, selectionColumn, members, columnSets, selectedKey, metadata],
+  );
+  const clickable = Boolean(selectionColumn && members);
+
+  // ---- Drawing ------------------------------------------------------------------
+  const themedData = useMemo(() => {
+    if (!figureData || !figureLayout) return null;
+    let data = applyDataTheme(figureData, isDark, theme) as Record<string, unknown>[];
+    if (isDark) {
+      data = inkUpsetForDark(data, figureLayout, {
+        ink: theme.colors.gray[4],
+        empty: theme.colors.dark[4],
+      });
+    }
+    return withUpsetHoverTargets(colourUpsetSets(data, figureLayout, setColors), figureLayout);
+  }, [figureData, figureLayout, isDark, theme, setColors]);
+  // Hovering an intersection dims everything outside it, as the UpSet Shiny
+  // app does. A selected one stays at full strength through the hover of
+  // another, so both read: what is selected, and what a click would select.
+  const plotData = useMemo(() => {
+    if (!themedData || !figureLayout) return themedData;
+    const kept = [selectedColumn, hoveredColumn].filter((c): c is number => c != null);
+    return kept.length ? emphasizeUpsetColumns(themedData, figureLayout, kept) : themedData;
+  }, [themedData, figureLayout, selectedColumn, hoveredColumn]);
+  // plotly-upset bakes its default width=900/height=700 into the figure
+  // layout; strip so the chart fills the panel responsively (same fix applied
+  // to ComplexHeatmap). applyLayoutTheme retints every axis / legend /
+  // annotation / colorbar baked by plotly-upset so dark/light flips reliably
+  // without depending on Plotly's template precedence. Every hover re-renders
+  // the plot, and a constant `uirevision` until the next figure is what keeps
+  // the reader's zoom and legend toggles through those re-renders.
+  const plotLayout = useMemo(
+    () =>
+      figureLayout
+        ? withUpsetSetLabelDots(
+            applyLayoutTheme(
+              {
+                ...figureLayout,
+                width: undefined,
+                height: undefined,
+                autosize: true,
+                uirevision: figureRevision,
+              },
+              isDark,
+              theme,
+            ) as Record<string, unknown>,
+            setColors,
+          )
+        : null,
+    [figureLayout, figureRevision, isDark, theme, setColors],
+  );
+
+  // A pointer over an intersection says it can be clicked. Plotly puts its
+  // drag cursor on the plot area through a class, so the hovered element's
+  // own style is what overrides it.
+  const handleHover = useCallback(
+    (e: { points: Array<Record<string, unknown>>; event?: MouseEvent }) => {
+      const column = upsetHoverColumn(e.points[0] as any);
+      setHoveredColumn(column);
+      const target = e.event?.target as HTMLElement | SVGElement | undefined;
+      if (clickable && target?.style) target.style.cursor = column == null ? '' : 'pointer';
+    },
+    [clickable],
+  );
+  const handleUnhover = useCallback((e: { event?: MouseEvent }) => {
+    setHoveredColumn(null);
+    const target = e.event?.target as HTMLElement | SVGElement | undefined;
+    if (target?.style) target.style.cursor = '';
+  }, []);
+
+  // One matrix row per set, under the intersection-bar panel and over any
+  // annotation tracks. Only once a figure exists: the set columns are known
+  // from the schema well before the worker has drawn anything, and a demand
+  // published then would size the tile for a plot that is not there yet.
+  const setsDrawn = figure ? setColumns.length : 0;
+  const annotationTracks = effectiveAnnotationCols.length;
+  const contentDemand = useMemo(
+    () =>
+      demandForItems(
+        setsDrawn,
+        SET_ROW_PX,
+        INTERSECTION_PANEL_PX + UPSET_CHROME_PX + annotationTracks * ANNOTATION_TRACK_PX,
+      ),
+    [setsDrawn, annotationTracks],
+  );
+
   return (
     <AdvancedVizFrame
       title={metadata.title || 'UpSet plot'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
+      contentDemand={contentDemand}
       loading={loading}
       error={error}
       emptyMessage={undefined}
       dataRows={dataRows ?? undefined}
       dataColumns={previewCols}
     >
-      {figure ? (
+      {plotData && plotLayout ? (
         <Plot
-          data={applyDataTheme(figure.data, isDark, theme) as any}
-          // plotly-upset bakes its default width=900/height=700 into the
-          // figure layout; strip so the chart fills the panel responsively
-          // (same fix applied to ComplexHeatmap). applyLayoutTheme retints
-          // every axis / legend / annotation / colorbar baked by plotly-upset
-          // so dark/light flips reliably without depending on Plotly's
-          // template precedence.
-          layout={
-            applyLayoutTheme(
-              {
-                ...(figure.layout as Record<string, unknown>),
-                width: undefined,
-                height: undefined,
-                autosize: true,
-              },
-              isDark,
-              theme,
-            ) as any
-          }
+          data={plotData as any}
+          layout={plotLayout as any}
+          onHover={handleHover as any}
+          onUnhover={handleUnhover as any}
+          onClick={clickable ? (handleClick as any) : undefined}
           useResizeHandler
           style={{ width: '100%', height: '100%' }}
           config={{ displaylogo: false, responsive: true } as any}

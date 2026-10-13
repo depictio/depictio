@@ -1,0 +1,31 @@
+id: rseqc_read_distribution
+name: Read distribution over the annotation
+mode: qc/read-distribution
+description: >-
+  Where each library's reads land on the annotation: coding exons, the two UTRs,
+  introns, the promoter and downstream rings, and everything intergenic. RSeQC
+  publishes the upstream and downstream bands nested inside each other, so the
+  recipe differences them into disjoint rings and adds the unassigned tags
+  explicitly, which makes the composition sum to one.
+find: { path_glob: "**/*.read_distribution.txt" }
+recipe: rseqc/read_distribution.py
+fixture: read_distribution.tsv
+renders_as:
+  # Two resolutions in one tile: the coarse region classes, or the individual
+  # RSeQC features, picked with the rank filter.
+  - id: distribution_composition
+    component: advanced_viz
+    kind: stacked_taxonomy
+    roles: { sample_id: sample_id, taxon: taxon, rank: rank, abundance: abundance }
+  # The frame carries both resolutions, so a card that SUMS tag_count would add
+  # the region-class rows to the feature rows they are made of and report twice
+  # the library. Counting distinct annotation names per class is rank-safe.
+  - {
+      component: card,
+      column: taxon,
+      aggregation: nunique,
+      secondary_layout: top_n,
+      breakdown_col: region_class,
+      top_n_count: 5,
+    }
+  - { component: table }

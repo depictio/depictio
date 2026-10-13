@@ -1,0 +1,15 @@
+id: mirtop_sample_matrix
+name: Samples by miRNAs expression matrix
+mode: mirna/expression
+description: >-
+  One row per sample and one CPM column per miRNA (the most expressed ones),
+  with the design columns as text. The wide shape the two-group comparison
+  tests column by column: pick two groups of samples, get a volcano of the
+  miRNAs that separate them.
+find:
+  path_glob: "**/mirtop/joined_samples_mirtop.tsv"
+recipe: mirtop/sample_matrix.py
+fixture: sample_matrix.tsv
+renders_as:
+  - { id: mirna_group_compare, component: advanced_viz, kind: group_compare, roles: {index: sample} }
+  - { component: table }

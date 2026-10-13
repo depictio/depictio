@@ -3,22 +3,30 @@
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.lineage import kingdom_phylum
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="barplot_csv",
         path="qiime2/barplot/level-2.csv",
         format="CSV",
+        input_schema={
+            "index": pl.Utf8,
+        },
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "taxonomy": pl.Utf8,
     "count": pl.Float64,
+    "Kingdom": pl.Utf8,
+    "Phylum": pl.Utf8,
 }
 # Metadata columns (e.g. habitat) are user-defined and passed through dynamically.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
@@ -59,6 +67,17 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     # Filter out zero/null counts
     df = df.filter(pl.col("count").is_not_null() & (pl.col("count") > 0))
 
+    # Split the lineage back into ranks. The barplot export carries the whole
+    # lineage in the column *name*, so the ranks only exist once it is melted —
+    # and a taxon-count chart is read by rank, not by lineage string. Mirrors
+    # nf-core/ampliseq/taxonomy_rel_abundance.py, which splits the same strings.
+    #
+    # Read from the tail, not by absolute position: the template points this
+    # recipe at whichever barplot level *is* Phylum for the run's reference
+    # database (level 2 for a 7-rank database, level 3 for an 8-rank one such as
+    # sbdi-gtdb), and the leaf of that lineage is the Phylum either way.
+    df = df.with_columns(kingdom_phylum(pl.col("taxonomy")))
+
     # Core columns first, then any metadata columns appended
-    core = ["sample", "taxonomy", "count"]
+    core = ["sample", "taxonomy", "count", "Kingdom", "Phylum"]
     return df.select(core + metadata_cols)

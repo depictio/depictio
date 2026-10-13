@@ -1,11 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Badge, CloseButton, Group, Stack, Text, useMantineColorScheme } from '@mantine/core';
 import { AgGridReact } from 'ag-grid-react';
-import type { ColDef, GridApi, SelectionChangedEvent } from 'ag-grid-community';
+import type {
+  ColDef,
+  GridApi,
+  PostProcessPopupParams,
+  SelectionChangedEvent,
+} from 'ag-grid-community';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 
 import { extractRowSelection } from '../../selection';
+import { useUiScale } from '../../uiScale';
+import { Z_LAYERS } from '../../zLayers';
+import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
 
 /**
  * The "underlying data" grid, shared by every show-data popover.
@@ -67,6 +75,18 @@ export interface DataGridBodyProps {
 const TIER_COLUMN = '__tier';
 const ROW_ID_COLUMN = '__rowIndex';
 
+/**
+ * Lifts a menu the grid opens (a column's filter, its operator list) over the
+ * popover the grid sits in. The menus are handed to the page (`popupParent`
+ * below), where AG Grid stacks them at z-index 5, meant for menus inside a
+ * grid: under the popover, at Mantine's 300, they opened behind the table, so
+ * a column's filter seemed to do nothing. They take the layer of whatever
+ * must clear what opened it.
+ */
+const raisePopup = ({ ePopup }: PostProcessPopupParams) => {
+  ePopup.style.zIndex = String(Z_LAYERS.tooltip);
+};
+
 /** Set equality — selection order carries no meaning. */
 function sameValues(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
@@ -84,6 +104,11 @@ const DataGridBody: React.FC<DataGridBodyProps> = ({
   onClose,
 }) => {
   const { colorScheme } = useMantineColorScheme();
+  const uiScale = useUiScale();
+  // A fullscreen tile shows its own subtree only (see
+  // `useFullscreenPortalTarget`): the table's popover is portaled into it,
+  // and its menus must be too, or they open where nothing is painted.
+  const fullscreenTarget = useFullscreenPortalTarget();
   const gridApiRef = useRef<GridApi | null>(null);
   const selectable = selection != null;
 
@@ -312,16 +337,19 @@ const DataGridBody: React.FC<DataGridBodyProps> = ({
             height,
             flex: height === '100%' ? 1 : undefined,
             minHeight: 0,
-            '--ag-font-size': '11px',
-            '--ag-row-height': '24px',
-            '--ag-header-height': '28px',
+            '--ag-font-size': `${Math.round(11 * uiScale)}px`,
+            '--ag-row-height': `${Math.round(24 * uiScale)}px`,
+            '--ag-header-height': `${Math.round(28 * uiScale)}px`,
             '--ag-cell-horizontal-padding': '6px',
             '--ag-grid-size': '4px',
-            '--ag-list-item-height': '20px',
+            '--ag-list-item-height': `${Math.round(20 * uiScale)}px`,
           } as React.CSSProperties
         }
       >
         <AgGridReact
+          // rowHeight/headerHeight are initial-only grid options — remount on
+          // font-scale change so the new metrics apply.
+          key={`scale-${uiScale}`}
           rowData={rowData}
           columnDefs={colDefs}
           // Stable row identity → AG Grid diffs rows instead of replacing
@@ -342,8 +370,8 @@ const DataGridBody: React.FC<DataGridBodyProps> = ({
           onSelectionChanged={selectable ? onSelectionChanged : undefined}
           animateRows={false}
           rowBuffer={25}
-          rowHeight={24}
-          headerHeight={28}
+          rowHeight={Math.round(24 * uiScale)}
+          headerHeight={Math.round(28 * uiScale)}
           pagination={paginated}
           paginationPageSize={100}
           paginationPageSizeSelector={[50, 100, 250, 500]}
@@ -351,8 +379,12 @@ const DataGridBody: React.FC<DataGridBodyProps> = ({
           // Render filter / column menus at document.body level so the
           // popover's overflow:auto doesn't clip them (without this the
           // "contains" operator menu had height 0 and appeared to flash
-          // open for a frame).
-          popupParent={typeof document !== 'undefined' ? document.body : undefined}
+          // open for a frame) — or in the fullscreen element, when there is
+          // one — lifted over the popover by `raisePopup`.
+          popupParent={
+            fullscreenTarget ?? (typeof document !== 'undefined' ? document.body : undefined)
+          }
+          postProcessPopup={raisePopup}
         />
       </div>
     </Stack>

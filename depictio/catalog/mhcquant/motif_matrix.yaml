@@ -1,0 +1,17 @@
+id: mhcquant_motif_matrix
+name: Positional amino-acid frequencies
+mode: immunopeptidomics/motif
+description: >-
+  Frequency of every standard amino acid at every position of the distinct
+  peptides of each well-supported length, per sample: the anchor positions of
+  the presenting MHC alleles stand out as columns dominated by a few residues.
+find: { path_glob: "*.tsv" }
+recipe: mhcquant/motif_matrix.py
+fixture: motif_matrix.tsv
+renders_as:
+  - id: motif_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    roles: { index: row_id, row_annotation_cols: [length_class] }
+  - { component: interactive, interactive_type: MultiSelect, column_name: length_class }
+  - { component: table }

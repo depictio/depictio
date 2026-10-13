@@ -7,7 +7,17 @@
  * recovery. Do not attach the bearer by hand — see its docstring for why.
  */
 
+import type { BrandTheme } from './brandTheme';
 import { enqueueFetch } from './fetchQueue';
+import type { GroupStatusEntry } from './groupStatus';
+import type { GroupingDisplay, GroupRenderDef } from './selectionGroups';
+import type {
+  Annotation,
+  AnnotationColor,
+  AnnotationKind,
+  AnnotationStyle,
+  Geometry,
+} from './annotations/types';
 
 const API_BASE = '/depictio/api/v1';
 
@@ -209,31 +219,191 @@ async function authFetch(url: string, init: RequestInit = {}): Promise<Response>
   return fetch(url, { ...init, headers: retryHeaders });
 }
 
+/** An HTTP failure that keeps its status code, so a caller can tell "the
+ *  server refused this" (asking again will not help) from a failure worth
+ *  retrying. The message is the one a plain `Error` carried before. */
+export class HttpStatusError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'HttpStatusError';
+    this.status = status;
+  }
+}
+
 /** Throw `Error("<prefix>: <status> <body-text>")` after reading the body as
  *  text. Used for the bulk of endpoints whose error envelope is irrelevant. */
 async function throwHttpError(res: Response, prefix: string): Promise<never> {
   const text = await res.text().catch(() => '');
-  throw new Error(`${prefix}: ${res.status} ${text}`.trimEnd());
+  throw new HttpStatusError(`${prefix}: ${res.status} ${text}`.trimEnd(), res.status);
+}
+
+/**
+ * An `HttpStatusError` that also keeps the server's `detail`.
+ *
+ * The message is what it always was, so callers that only show
+ * `err.message` see no difference. Callers that have to tell a missing
+ * resource from a broken one (a restore that removed the tab being edited, a
+ * data version deleted while in use) read `status` instead of parsing text.
+ * A subclass, so code that checks `instanceof HttpStatusError` (following a
+ * job, which stops on a refusal) still recognises these failures.
+ */
+export class HttpError extends HttpStatusError {
+  /** The server's `detail`, as text, when the body carried one. */
+  readonly detail: string | null;
+
+  constructor(message: string, status: number, detail: string | null = null) {
+    super(message, status);
+    this.name = 'HttpError';
+    this.detail = detail;
+  }
+}
+
+/** True for an `HttpError` with this status. */
+export function isHttpStatus(err: unknown, status: number): boolean {
+  return err instanceof HttpError && err.status === status;
+}
+
+/** The `detail` of an error body as text (see `detailMessage`), and the
+ *  machine-readable `code` it names; a top-level `code` wins over one inside
+ *  `detail`. */
+async function readErrorBody(
+  res: Response,
+): Promise<{ detail: string | null; code: string | null }> {
+  try {
+    const body = await res.json();
+    const detail = body?.detail;
+    let code: string | null = typeof detail?.code === 'string' ? detail.code : null;
+    if (typeof body?.code === 'string') code = body.code;
+    return { detail: detail == null ? null : detailMessage(detail), code };
+  } catch {
+    // ignore non-JSON error bodies
+    return { detail: null, code: null };
+  }
+}
+
+/** The `detail` of an error body as text, or null (see `readErrorBody`). */
+async function readErrorDetail(res: Response): Promise<string | null> {
+  return (await readErrorBody(res)).detail;
+}
+
+/** The error thrown for a FastAPI `{detail}` envelope. `message` is the
+ *  human-readable detail; `code` is the machine-readable reason when the
+ *  server sends one (`{detail, code}`, e.g. `template_not_detected` or
+ *  `s3_access_denied`), so a caller can tell one refusal from another without
+ *  matching on wording. */
+export class ApiDetailError extends HttpError {
+  readonly code: string | null;
+
+  constructor(message: string, status: number, code: string | null, detail: string | null = null) {
+    super(message, status, detail);
+    this.name = 'ApiDetailError';
+    this.code = code;
+  }
+}
+
+/** The server's machine-readable error code, or null when `err` carries none. */
+export function apiErrorCode(err: unknown): string | null {
+  return err instanceof ApiDetailError ? err.code : null;
+}
+
+/** The human text of a FastAPI `detail`: the string itself, else the
+ *  `message` or `detail` a structured one carries (e.g. a rejected-entries
+ *  report, or an `HTTPException(detail={detail, code})`), else the raw JSON. */
+function detailMessage(detail: unknown): string {
+  if (typeof detail === 'string') return detail;
+  const structured = detail as { message?: unknown; detail?: unknown } | null;
+  if (typeof structured?.message === 'string') return structured.message;
+  if (typeof structured?.detail === 'string') return structured.detail;
+  return JSON.stringify(detail);
 }
 
 /** Throw using FastAPI's `{detail}` envelope when present, otherwise fall back
- *  to `<fallback-or-prefix>: <status>`. Both single-string and JSON `detail`
- *  bodies are surfaced (the latter stringified). */
+ *  to `<prefix>: <status>`. Both single-string and JSON `detail` bodies are
+ *  surfaced (the latter reduced to its message, else stringified). The thrown
+ *  error is an `ApiDetailError`, carrying the status and any `code` the body
+ *  names. */
 async function throwHttpDetailError(
   res: Response,
   prefix: string,
 ): Promise<never> {
-  let message = `${prefix}: ${res.status}`;
-  try {
-    const body = await res.json();
-    if (body?.detail) {
-      message =
-        typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail);
-    }
-  } catch {
-    // ignore non-JSON error bodies
+  const { detail, code } = await readErrorBody(res);
+  throw new ApiDetailError(detail ?? `${prefix}: ${res.status}`, res.status, code, detail);
+}
+
+// ── Render errors that belong to data time travel ──────────────────────────
+
+/** Window event fired when a render names a data version (`as_of_version`)
+ *  that no longer exists. `detail.asOfVersionId` is the id the request sent,
+ *  so a listener can tell its own stale pin from someone else's. */
+export const DATA_VERSION_GONE_EVENT = 'depictio:data-version-gone';
+
+export interface DataVersionGoneDetail {
+  asOfVersionId: string | null;
+  message: string;
+}
+
+/** Shown on a tile whose stored version read a different data collection
+ *  than the live component does (HTTP 409 on a `definition_version` render). */
+export const DEFINITION_COLLECTION_CHANGED_MESSAGE =
+  'This component read a different data collection in that version, so it cannot be drawn from it.';
+
+/**
+ * Does this failure mean "the data version you asked for is gone"?
+ *
+ * The server answers a stale `as_of_version` with a 400 whose detail starts
+ * with "Version" and says it "no longer exists". Matched loosely, on purpose:
+ * the wording may gain an id or a code, and a miss here only means the
+ * editor keeps the stale pin until the user clears it.
+ */
+export function isStaleDataVersionDetail(status: number, detail: string | null): boolean {
+  if (status !== 400 || !detail) return false;
+  const text = detail.trim();
+  return /^version\b/i.test(text) && /no longer exists/i.test(text);
+}
+
+/** `isStaleDataVersionDetail` for an error thrown by a render call. */
+export function isStaleDataVersionError(err: unknown): boolean {
+  return err instanceof HttpError && isStaleDataVersionDetail(err.status, err.detail);
+}
+
+/**
+ * Throw for a failed render, keeping the two failures time travel can cause
+ * readable on the tile:
+ *
+ *   409  the version's definition read another collection: a sentence the
+ *        tile can show as is, rather than "Failed to render figure: 409";
+ *   400  the `as_of_version` was deleted: the server's own detail, and a
+ *        window event so the editor can drop the stale pin once for every
+ *        tile, rather than each tile failing on its own.
+ *
+ * Every other failure keeps its old message.
+ */
+async function throwRenderError(
+  res: Response,
+  prefix: string,
+  dataVersions?: Record<string, unknown>,
+): Promise<never> {
+  const detail = await readErrorDetail(res);
+  if (res.status === 409) {
+    throw new HttpError(DEFINITION_COLLECTION_CHANGED_MESSAGE, 409, detail);
   }
-  throw new Error(message);
+  if (isStaleDataVersionDetail(res.status, detail)) {
+    const asOf = dataVersions?.as_of_version;
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent<DataVersionGoneDetail>(DATA_VERSION_GONE_EVENT, {
+          detail: {
+            asOfVersionId: typeof asOf === 'string' ? asOf : null,
+            message: detail as string,
+          },
+        }),
+      );
+    }
+    throw new HttpError(detail as string, res.status, detail);
+  }
+  throw new HttpError(`${prefix}: ${res.status}`, res.status, detail);
 }
 
 /** 24-char hex id matching MongoDB ObjectId shape. Mirrors the format used by
@@ -244,12 +414,51 @@ function generateObjectId(): string {
     : Math.random().toString(16).slice(2).padEnd(24, '0').slice(0, 24);
 }
 
+/** Provenance stamped on a component that was added from the tools catalog. */
+export interface CatalogSource {
+  /** Catalog tool id, e.g. `ivar`. */
+  toolId?: string;
+  /** Human tool name, e.g. `iVar`. */
+  toolName?: string;
+  /** Catalog output id, e.g. `ivar_variants_long`. */
+  outputId?: string;
+  /** Output description shown in the picker. */
+  description?: string;
+  /** The `use: <tool>/<ref>` reference this component maps to (advanced_viz). */
+  use?: string;
+}
+
+/**
+ * One live value of a text tile (`values.<name>`): a column of a data
+ * collection aggregated like a card's, under the dashboard's filters.
+ */
+export interface TextValueSpec {
+  /** The data collection's tag. */
+  dc: string;
+  column: string;
+  /** A card aggregation, or `top` (the largest category) / `top_share` (its
+   *  share of the total, 0-1). */
+  aggregation: string;
+  /** `top` / `top_share` only: the column summed per category (rows when unset). */
+  weight?: string | null;
+  filter_expr?: string | null;
+  /** `percent` | `integer` | `si` | `decimals:N`; unset prints like a card. */
+  format?: string | null;
+  /** Resolved at import, never written to YAML. */
+  dc_id?: string | null;
+  wf_id?: string | null;
+}
+
 export interface StoredMetadata {
   index: string;
   component_type: string;
   wf_id?: string;
   dc_id?: string;
   project_id?: string;
+  /** Set when the component was added from the tools catalog — drives the
+   *  "from catalog" flag on the tile and the catalog section in the metadata
+   *  inspector. Preserved through edits via buildMetadata's `...existing` spread. */
+  catalog_source?: CatalogSource;
   // Card
   title?: string;
   value?: unknown;
@@ -258,17 +467,52 @@ export interface StoredMetadata {
   aggregation?: string;
   aggregations?: string[];
   filter_expr?: string;
+  /** Card: let a locus navigator's genome region narrow this card (off by
+   *  default, see `cardScopedFilters`). */
+  follow_region_filter?: boolean;
   title_color?: string;
   background_color?: string;
   title_font_size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   value_font_size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   icon_name?: string;
   icon_color?: string;
+  /** `badge`: icon on a tint, beside the title. Default: hover watermark. */
+  icon_style?: 'watermark' | 'badge';
+  /** Cards: one line under the value, replacing the aggregation label.
+   *  Figures: a line or two under the plot saying how to read it. */
+  caption?: string;
+  /** Click target: `tab:<name>` for a sibling tab, or a URL. */
+  link?: string;
+  /** Decimal places for a fractional card value. */
+  decimals?: number;
+  /** How the card is drawn (see `CardVariant` in components/cardVariant.ts).
+   *  Unset takes its grid section's `card_variant`. `headline`: large value,
+   *  resting icon mark, bar-only strip. `compact`: a low card, title and value
+   *  on one line. `minimal`: headline type with no frame or background.
+   *  `accent`: headline type on a coloured left rail, full strip. `split`: a
+   *  stat tile, icon block left and the figure beside it. Typed
+   *  as a string too: stored metadata is not validated on read, so a value the
+   *  viewer does not know has to be expected (and drawn as `default`). */
+  variant?: 'default' | 'headline' | 'compact' | 'minimal' | 'accent' | 'split' | (string & {});
   metric_theme?: string;
+  // Text
+  /** Frame of a text tile: bare prose, a card, or a tinted panel. */
+  surface?: 'none' | 'card' | 'tinted';
+  /** Palette name, CSS colour, or `tab:<name>` for that tab's colour. */
+  accent?: string;
+  /** Image drawn in place of the title (a pipeline's wordmark), and its
+   *  dark-page variant; see components/textLogo.ts. */
+  logo?: string | null;
+  logo_dark?: string | null;
+  /** Live values the title and body cite as `{{name}}`, computed with the
+   *  cards (see components/textValues.ts). */
+  values?: Record<string, TextValueSpec> | null;
   parent_index?: string;
   // Interactive
   interactive_component_type?: string;
   default_state?: { default_value?: unknown; default_range?: unknown; options?: unknown[] };
+  /** Slider only: comparison with the value (gte when absent). */
+  slider_mode?: string;
   /** Visual grouping — interactive components sharing the same `group` are
    *  rendered together inside one collapsible Mantine Paper. See
    *  MAX_INTERACTIVE_GROUP_SIZE in depictio/models/components/constants.py. */
@@ -294,6 +538,39 @@ export interface StoredMetadata {
    *  When omitted, the renderer defaults to visible for ungrouped components and
    *  hidden for components inside a group (compact mode). */
   show_marks?: boolean;
+  /** Slider / RangeSlider: whether the ticks carry their value labels. Unset
+   *  labels every tick; `false` keeps the ticks and drops the labels. Moot when
+   *  `show_marks` hides the ticks. */
+  show_mark_labels?: boolean;
+  /** Filter bar only (a grid section with `display: 'strip'`): the short label
+   *  shown instead of the title. */
+  strip_label?: string | null;
+  /** Filter bar only: whether the icon badge precedes the label. Unset = shown. */
+  strip_icon?: boolean | null;
+  /** RangeSlider only: draw the column's histogram above the slider. */
+  show_histogram?: boolean;
+  /** Per-component font-size multiplier (figures: scales the whole Plotly
+   *  layout font — axis labels, ticks, legend). Multiplies the dashboard-wide
+   *  content scale; 1/undefined = no override. */
+  font_scale?: number;
+  /** Figures: how the tile is drawn (see `FigureStyle` in
+   *  components/figureStyle.ts). Unset takes its grid section's
+   *  `figure_style`. `minimal`: the title in a card header with an icon badge
+   *  and an inline subtitle, the plot restyled server-side. */
+  figure_style?: 'default' | 'minimal' | (string & {});
+  /** Figures: a few dimmed words after the title in the `minimal` header. */
+  subtitle?: string;
+  /** Figures: draw without the legend. */
+  hide_legend?: boolean;
+  /** Advanced viz: where the viz controls sit (see
+   *  components/advanced_viz/controlsDock.ts). Unset: `auto`. */
+  controls_placement?: 'auto' | 'right' | 'top' | 'popover' | null;
+  /** Highlights (`component_type: 'highlight'`): the tab the figure shown
+   *  lives on, by name and by id, and the figure on it, by index or title.
+   *  See components/highlight.ts. */
+  source_tab?: string;
+  source_dashboard_id?: string;
+  source_component?: string;
   // Table
   /** Column allowlist for table components — when non-empty, only these
    *  columns are rendered (empty / undefined = show all columns). */
@@ -316,7 +593,41 @@ export interface FilterSectionSpec {
   color?: string | null;
   description?: string | null;
   collapsed?: boolean;
+  /** Render this section on every tab of the dashboard family: grid sections
+   *  appear read-only alongside each sibling tab's own content, filter sections'
+   *  controls join every tab's filter panel and their values survive tab
+   *  switches. No effect on single-tab dashboards. */
+  persistent?: boolean;
+  /** Which edge a persistent section sits at, on every tab of the family
+   *  including the one that owns it. Unset means 'top'. Ignored unless
+   *  `persistent` is set. */
+  pin?: 'top' | 'bottom' | null;
+  /** Tabs (displayed names) a persistent section is not shown on. */
+  exclude_tabs?: string[] | null;
+  /** `plain`: a light heading, always open, no frame (grid sections). */
+  appearance?: 'box' | 'plain' | null;
+  /** Grid sections: the style every card in the section is drawn in unless
+   *  the card sets its own `variant`. Unset leaves each card to its own. */
+  card_variant?: 'default' | 'headline' | 'compact' | 'minimal' | 'accent' | 'split' | null;
+  /** Grid sections: `strip` draws the section as a filter bar — the
+   *  interactive components naming it leave the filter panel and render as one
+   *  compact row. Unset (or `grid`) is one tile each on the grid. */
+  display?: 'grid' | 'strip' | null;
+  /** Grid sections of tiles: a filter bar of the section's own, under its
+   *  heading. The interactive components naming the section render there, and
+   *  their values narrow only this section's tiles (see `filterScope.ts`).
+   *  Ignored on a `display: 'strip'` section. */
+  filter_bar?: boolean | null;
+  /** How many filters a bar shows before its "More filters" toggle. Unset: 2
+   *  on a section's own bar, every filter on a `display: 'strip'` bar. */
+  visible_filters?: number | null;
+  /** Grid sections: the style every figure in the section is drawn in unless
+   *  the figure sets its own `figure_style`. */
+  figure_style?: 'default' | 'minimal' | null;
 }
+
+/** Column name → categorical value → CSS colour. See `categoryColors.ts`. */
+export type CategoryColors = Record<string, Record<string, string>>;
 
 export interface DashboardData {
   _id?: string;
@@ -330,6 +641,36 @@ export interface DashboardData {
   /** Ordering + icons for the left panel's filter sections. */
   filter_sections?: FilterSectionSpec[];
   grid_sections?: FilterSectionSpec[];
+  /** Fixed colours per categorical value (column → value → colour), so one
+   *  category reads the same in a filter bar, a figure and a card. Unset on
+   *  dashboards that pin none. Resolve through `categoryColor`. */
+  category_colors?: CategoryColors | null;
+  /** A child tab's main-tab `category_colors`, resolved by the server on read
+   *  and never saved back. The tab's own map is laid over it. */
+  inherited_category_colors?: CategoryColors | null;
+  /** Funnel filtering (issue #939): on by default, authors opt out per
+   *  dashboard. Absent on payloads cached before the field existed, which is
+   *  why every reader tests `!== false` rather than `Boolean(...)`. */
+  funnel_filtering?: boolean;
+  /** Initial left filter panel state before the viewer has toggled it. */
+  filter_panel_default?: 'open' | 'collapsed';
+  /** Page width the tab opens at before the viewer picks one. */
+  content_width_default?: 'full' | 'wide' | 'comfortable' | 'compact';
+  /** False: no tab name above the canvas (a tab that opens on its own title). */
+  show_tab_header?: boolean;
+  /** The Guide page: offered unless the main tab sets this to false. Only the
+   *  main tab's value counts (see `resolveGuideSettings`). */
+  show_guide?: boolean;
+  /** Author note (markdown) atop the Guide; the main tab's. */
+  guide_intro?: string;
+  /** Sidebar category of a child tab; null when ungrouped. */
+  tab_group?: string | null;
+  /** Per-dashboard brand override (#397): logo, palette, surfaces and figure
+   *  defaults. Unset fields inherit the instance branding. */
+  brand_theme?: BrandTheme | null;
+  /** A child tab without its own `brand_theme`: its main tab's, resolved by
+   *  the server on read and never saved back. */
+  inherited_brand_theme?: BrandTheme | null;
   /** Project-level realtime config — only when ``enabled === true`` should
    *  the viewer mount the WebSocket subscription / live-updates indicator. */
   project_realtime?: { enabled: boolean; debounce_ms: number };
@@ -337,13 +678,46 @@ export interface DashboardData {
    *  Persisted as HTML via the NotesFooter TipTap editor (see
    *  depictio/viewer/src/components/NotesFooter.tsx). */
   notes_content?: string;
+  /** Dashboard-wide default for where advanced viz tiles draw their controls
+   *  (`controls_placement` on a tile wins). Absent means `popover`. */
+  advanced_viz_controls?: 'popover' | 'rail' | 'header';
+  /** Content-aware tile heights (autofit v2). Absent means on. */
+  autofit?: boolean;
+  /** Present only when a past version was requested. Carries everything the
+   *  read-only banner needs, so previewing costs one request, not two. */
+  preview?: DashboardPreviewInfo;
   [key: string]: unknown;
 }
 
-/** Fetch dashboard including stored_metadata. Mirrors what the Dash viewer reads. */
-export async function fetchDashboard(dashboardId: string): Promise<DashboardData> {
-  const res = await authFetch(`${API_BASE}/dashboards/get/${dashboardId}`);
-  if (!res.ok) throw new Error(`Failed to fetch dashboard: ${res.status}`);
+export interface DashboardPreviewInfo {
+  version_id: string;
+  seq: number;
+  label?: string | null;
+  kind?: string | null;
+  pinned?: boolean;
+  created_at?: string | null;
+  author_email?: string | null;
+  /** How many of the version's data collections were stamped with each kind
+   *  of data version (same shape as `DashboardVersionSummary`). Lets the
+   *  banner say how much of the preview's data is pinned; absent from servers
+   *  that do not send it. */
+  data_version_kinds?: Record<string, number>;
+}
+
+/** Fetch dashboard including stored_metadata.
+ *
+ *  With `versionId`, the server overlays that version's *content* over the
+ *  live document. Permissions, visibility and the realtime config still come
+ *  from the live document, so a preview can never widen access. */
+export async function fetchDashboard(
+  dashboardId: string,
+  versionId?: string | null,
+): Promise<DashboardData> {
+  const qs = versionId ? `?version_id=${encodeURIComponent(versionId)}` : '';
+  const res = await authFetch(`${API_BASE}/dashboards/get/${dashboardId}${qs}`);
+  if (!res.ok) {
+    throw new HttpError(`Failed to fetch dashboard: ${res.status}`, res.status);
+  }
   return res.json();
 }
 
@@ -396,6 +770,69 @@ export async function fetchFloatingComponents(
   }
 }
 
+/** One section marked `persistent: true`, fanned out to the whole tab family.
+ *  Members carry their owning tab's `dashboard_id` (the floating-component
+ *  convention) so render calls target the owner while viewing a sibling.
+ *  Sections are keyed `(owner_dashboard_id, kind, name)` — two tabs declaring
+ *  a persistent section with the same name stay two sections. */
+export interface PersistentSection {
+  kind: 'grid' | 'filter';
+  owner_dashboard_id: string;
+  owner_tab_title?: string;
+  spec: FilterSectionSpec;
+  components: FloatingComponent[];
+  /** Owner tab's raw `right_panel_layout_data` entries for the grid members,
+   *  in the stored shape (`box-` prefixes and all). Empty for filter sections. */
+  layouts: unknown[];
+}
+
+export interface CrossTabComponentsResponse {
+  parent_dashboard_id: string | null;
+  floating: FloatingComponent[];
+  persistent_sections: PersistentSection[];
+}
+
+/**
+ * Fetch everything the current tab renders on behalf of its siblings — the
+ * family's floating maps plus its persistent sections — in one request.
+ * Supersedes `fetchFloatingComponents` for the viewer. Resolves empty rather
+ * than throwing, for the same reason as `fetchFloatingComponents`: the caller
+ * uses this result to validate filters hydrated from storage.
+ *
+ * With `versionId`, the sections and maps come back as they were in that
+ * stored version, so a `?version=` preview of a child tab does not draw the
+ * parent's sections as they are today.
+ */
+export async function fetchCrossTabComponents(
+  dashboardId: string,
+  versionId?: string | null,
+): Promise<CrossTabComponentsResponse> {
+  const empty: CrossTabComponentsResponse = {
+    parent_dashboard_id: null,
+    floating: [],
+    persistent_sections: [],
+  };
+  try {
+    const qs = versionId ? `?version_id=${encodeURIComponent(versionId)}` : '';
+    const res = await authFetch(
+      `${API_BASE}/dashboards/cross_tab_components/${dashboardId}${qs}`,
+    );
+    if (!res.ok) return empty;
+    const data = await res.json();
+    if (!Array.isArray(data?.floating)) return empty;
+    return {
+      parent_dashboard_id: data.parent_dashboard_id ?? null,
+      floating: data.floating,
+      persistent_sections: Array.isArray(data.persistent_sections)
+        ? data.persistent_sections
+        : [],
+    };
+  } catch (err) {
+    console.warn('[api] fetchCrossTabComponents failed:', err);
+    return empty;
+  }
+}
+
 /**
  * Fetch all dashboards including child tabs. Used to build the tab nav in
  * the sidebar — parent dashboard + its child tabs grouped together.
@@ -403,6 +840,8 @@ export async function fetchFloatingComponents(
 export interface DashboardSummary {
   dashboard_id: string;
   title?: string;
+  /** One line on what the tab shows; tab tiles fall back to it. */
+  subtitle?: string;
   parent_dashboard_id?: string | null;
   project_id?: string;
   /** Order within parent (0 = main tab). Mirrors the Dash sort key. */
@@ -412,8 +851,14 @@ export interface DashboardSummary {
   /** Tab-specific fields. Dash precedence: `tab_icon || icon`, `tab_icon_color || icon_color`. */
   tab_icon?: string;
   tab_icon_color?: string;
+  /** Sidebar category of a child tab; absent or null when ungrouped. */
+  tab_group?: string | null;
   icon?: string;
   icon_color?: string;
+  /** The Guide's settings, meaningful on the main tab's entry only. Absent
+   *  from servers that predate them, which reads as "Guide on, no intro". */
+  show_guide?: boolean;
+  guide_intro?: string;
 }
 
 export async function fetchAllDashboards(): Promise<DashboardSummary[]> {
@@ -477,7 +922,27 @@ export async function fetchBreakdown(
   aggregation = 'count',
   topNCount = 3,
   signal?: AbortSignal,
+  filters: InteractiveFilter[] = [],
 ): Promise<BreakdownPayloadDTO> {
+  // The POST variant computes the same payload under the dashboard's active
+  // filters (and bypasses the server-side breakdown cache); unfiltered
+  // callers keep the cached GET.
+  if (filters.length > 0) {
+    const res = await authFetch(`${API_BASE}/deltatables/breakdown/${dcId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        column,
+        breakdown_col: breakdownCol,
+        aggregation,
+        top_n_count: topNCount,
+        filters,
+      }),
+      signal,
+    });
+    if (!res.ok) throw new Error(`Failed to fetch breakdown: ${res.status}`);
+    return res.json();
+  }
   const params = new URLSearchParams({
     column,
     breakdown_col: breakdownCol,
@@ -489,6 +954,92 @@ export async function fetchBreakdown(
     { signal },
   );
   if (!res.ok) throw new Error(`Failed to fetch breakdown: ${res.status}`);
+  return res.json();
+}
+
+// =============================================================================
+// Funnel filtering (issue #939)
+// =============================================================================
+
+/** One interactive component's funnel result: which of its values still lead
+ *  to a non-empty result set under every OTHER active filter. */
+export interface FunnelTargetResult {
+  status: 'ok' | 'unrestricted' | 'unsupported' | 'error';
+  column?: string;
+  dc_id?: string;
+  values?: string[];
+  truncated?: boolean;
+}
+
+/** Distinct values of the funnel overview's stage column at one stage. */
+export interface FunnelColumnValues {
+  /** Every distinct non-null value, even past the server's list cap. */
+  count: number;
+  /** Sorted and stringified; shorter than `count` when `truncated`. */
+  values: string[];
+  truncated: boolean;
+}
+
+/** The column the funnel overview charts in "values of a column" mode. */
+export interface FunnelStageColumn {
+  dc_id: string;
+  column_name: string;
+}
+
+/** One stage of the funnel overview: the filter applied at this step and the
+ *  per-DC row counts after applying every filter up to and including it. */
+export interface FunnelStage {
+  index?: string;
+  label?: string | null;
+  column_name?: string | null;
+  dc_id?: string;
+  value?: unknown;
+  rows_by_dc: Record<string, number | null>;
+  /** Column mode only: the stage column's values after this stage (null when
+   *  the load failed). */
+  values?: FunnelColumnValues | null;
+}
+
+export interface FunnelValuesResponse {
+  targets: Record<string, FunnelTargetResult>;
+  stages: FunnelStage[] | null;
+  initial_rows_by_dc: Record<string, number | null> | null;
+  dc_labels: Record<string, string>;
+  filter_count: number;
+  /** The keys below are present only when the request sent a stage column.
+   *  "unsupported" means the stages are the plain per-DC row counts. */
+  stage_column_status?: 'ok' | 'unsupported';
+  /** The column actually charted, or null when it was refused. */
+  stage_column?: FunnelStageColumn | null;
+  initial_values?: FunnelColumnValues | null;
+  /** Every DC the overview can chart. Column mode narrows
+   *  `initial_rows_by_dc` to one DC, so this is where the full list lives. */
+  stage_dcs?: string[];
+}
+
+/** Compute funnel-filtering data: per-component available values under the
+ *  current filters minus each component's own selection, and (optionally) the
+ *  cumulative per-DC row counts backing the funnel overview. `stageColumn`
+ *  switches the overview to one column's distinct values per stage. */
+export async function fetchFunnelValues(
+  dashboardId: string,
+  filters: unknown[],
+  targetIndexes: string[],
+  includeStages = false,
+  signal?: AbortSignal,
+  stageColumn?: FunnelStageColumn | null,
+): Promise<FunnelValuesResponse> {
+  const res = await authFetch(`${API_BASE}/dashboards/funnel_values/${dashboardId}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      filters,
+      target_indexes: targetIndexes,
+      include_stages: includeStages,
+      ...(stageColumn ? { stage_column: stageColumn } : {}),
+    }),
+    signal,
+  });
+  if (!res.ok) throw new Error(`Failed to fetch funnel values: ${res.status}`);
   return res.json();
 }
 
@@ -508,15 +1059,39 @@ export async function fetchCardMetric(
   column: string,
   config: Record<string, unknown> = {},
   signal?: AbortSignal,
+  filters: InteractiveFilter[] = [],
 ): Promise<Record<string, unknown> | null> {
   const res = await authFetch(`${API_BASE}/deltatables/card_metric/${dcId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...config, layout, column }),
+    body: JSON.stringify({ ...config, layout, column, filters }),
     signal,
   });
   if (!res.ok) throw new Error(`Failed to fetch card metric: ${res.status}`);
   return res.json();
+}
+
+/** A card's hero scalar computed live under the dashboard's active filters.
+ *  Backs the builder preview when filters are carried in: the static
+ *  precomputed spec describes the unfiltered collection, so a filtered
+ *  preview needs the reduction evaluated on the filtered frame. Resolves to
+ *  ``null`` when the column/aggregation can't be computed. */
+export async function fetchCardHeroValue(
+  dcId: string,
+  column: string,
+  aggregation: string,
+  filters: InteractiveFilter[],
+  signal?: AbortSignal,
+): Promise<unknown> {
+  const res = await authFetch(`${API_BASE}/deltatables/card_metric/${dcId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ layout: 'hero', column, aggregation, filters }),
+    signal,
+  });
+  if (!res.ok) throw new Error(`Failed to fetch card hero value: ${res.status}`);
+  const payload = (await res.json()) as { value?: unknown } | null;
+  return payload?.value ?? null;
 }
 
 /** What a numeric slider needs to know about its column: the bounds, plus the
@@ -530,6 +1105,121 @@ export interface ColumnRange {
   dtype?: string | null;
   /** Distinct value count from the DC specs. */
   unique?: number | null;
+}
+
+/** The data pins a filter-option or status request carries: the subset of
+ *  `dataVersionBody` that says which data, without the definition. */
+export interface DataPinFields {
+  as_of_version?: string;
+  data_versions?: Record<string, number | null>;
+}
+
+export interface FilterOptionsRequest extends DataPinFields {
+  dc_id: string;
+  column: string;
+  kind: 'unique' | 'range';
+  filter_expr?: string | null;
+}
+
+/**
+ * A filter control's options read at a data version.
+ *
+ * The per-collection endpoints (`unique_values`, `specs`) only know the
+ * newest commit, so while a data version is active a select would offer
+ * values the pinned data does not hold and a slider would span today's
+ * bounds. This one resolves the pins against the dashboard's family, as the
+ * render endpoints do. Callers use it only while a version is active; live
+ * reads keep the cached per-collection endpoints.
+ */
+async function fetchFilterOptions(
+  dashboardId: string,
+  request: FilterOptionsRequest,
+): Promise<Record<string, unknown>> {
+  const res = await authFetch(`${API_BASE}/dashboards/filter_options/${dashboardId}`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) await throwRenderError(res, 'Failed to fetch filter options', { ...request });
+  return res.json();
+}
+
+/** `fetchUniqueValues` at a data version (see `fetchFilterOptions`). */
+export async function fetchUniqueValuesAt(
+  dashboardId: string,
+  dcId: string,
+  columnName: string,
+  pins: DataPinFields,
+  filterExpr?: string | null,
+): Promise<string[]> {
+  const body = await fetchFilterOptions(dashboardId, {
+    dc_id: dcId,
+    column: columnName,
+    kind: 'unique',
+    ...(filterExpr ? { filter_expr: filterExpr } : {}),
+    ...pins,
+  });
+  const values = body.values;
+  return Array.isArray(values) ? values.map(String) : [];
+}
+
+/** `fetchColumnRange` at a data version (see `fetchFilterOptions`). */
+export async function fetchColumnRangeAt(
+  dashboardId: string,
+  dcId: string,
+  columnName: string,
+  pins: DataPinFields,
+): Promise<ColumnRange> {
+  const body = await fetchFilterOptions(dashboardId, {
+    dc_id: dcId,
+    column: columnName,
+    kind: 'range',
+    ...pins,
+  });
+  return {
+    min: typeof body.min === 'number' ? body.min : null,
+    max: typeof body.max === 'number' ? body.max : null,
+    dtype: typeof body.dtype === 'string' ? body.dtype : null,
+    unique: typeof body.unique === 'number' ? body.unique : null,
+  };
+}
+
+/** How one collection is drawn under a set of data pins. */
+export type DataVersionCollectionState = 'pinned' | 'live' | 'not_versioned';
+
+export interface DataVersionCollectionStatus {
+  dc_id: string;
+  workflow_tag?: string | null;
+  data_collection_tag?: string | null;
+  dc_type?: string | null;
+  status: DataVersionCollectionState;
+  /** The commit read, for a pinned collection. */
+  delta_version?: number | null;
+  /** Why a collection is live or not versioned, in the server's words. */
+  reason?: string | null;
+}
+
+export interface DataVersionStatusResponse {
+  collections: DataVersionCollectionStatus[];
+}
+
+/**
+ * Which of the dashboard's collections the given pins actually reach.
+ *
+ * The banners state this rather than infer it: a version can pin one
+ * collection, leave another live on purpose, and have recorded nothing for a
+ * third, and only the server knows which is which.
+ */
+export async function fetchDataVersionStatus(
+  dashboardId: string,
+  pins: DataPinFields,
+): Promise<DataVersionStatusResponse> {
+  const res = await authFetch(`${API_BASE}/dashboards/data_version_status/${dashboardId}`, {
+    method: 'POST',
+    body: JSON.stringify(pins),
+  });
+  if (!res.ok) await throwRenderError(res, 'Failed to fetch data version status', { ...pins });
+  const body = (await res.json()) as Partial<DataVersionStatusResponse>;
+  return { collections: Array.isArray(body.collections) ? body.collections : [] };
 }
 
 /** Numeric range bounds for a column — backs RangeSlider min/max.
@@ -572,7 +1262,20 @@ export type InteractiveFilterSource =
   | 'scatter_selection'
   | 'table_selection'
   | 'map_selection'
-  | 'image_selection';
+  | 'image_selection'
+  | 'tree_selection'
+  /** A region brushed on a `genome_view` tile's genome axis. Unlike the other
+   *  sources it emits a *pair* of entries (a chromosome multi-select and a
+   *  position range) because the pipeline filters by column and a genomic
+   *  region is two columns. See `genomeRegionFilters` in `selection.ts`. */
+  | 'genome_selection'
+  /** A range brushed on one axis of a `parallel_coordinates` tile. Emits an
+   *  ordinary RangeSlider entry on that axis's column. */
+  | 'axis_selection'
+  /** Derived projection of saved selection groups (see `selectionGroups.ts`).
+   *  Never merged into the user's filter list — composed at the fetch
+   *  boundary only. */
+  | 'group_filter';
 
 /** Per-component computed data (current value under the given filter state).
  *  `metadata.dc_id` is required for cross-DC link resolution server-side; any
@@ -597,6 +1300,8 @@ export interface InteractiveFilter {
     interactive_component_type?: string;
     selection_column?: string;
     filter_expr?: string;
+    /** Slider comparison (gte, gt, lte, lt, eq, ne); the server defaults to gte. */
+    slider_mode?: string;
   };
 }
 
@@ -636,19 +1341,50 @@ export interface BulkComputeResponse {
   filter_count: number;
 }
 
+export interface BulkComputeOptions {
+  /** Selection groups to compare per card ("Compare groups in cards"). */
+  groups?: GroupRenderDef[];
+  compareGroups?: boolean;
+  /** False omits the "Other" bucket from the per-group comparison. */
+  showOther?: boolean;
+  /** False omits the "All rows" reference entry from the comparison. */
+  showOverall?: boolean;
+}
+
 export async function bulkComputeCards(
   dashboardId: string,
   filters: InteractiveFilter[],
   componentIds?: string[],
+  options?: BulkComputeOptions,
+  signal?: AbortSignal,
+  /** Data time travel: `as_of_version` / `data_versions` /
+   *  `definition_version`, from `dataVersionBody`. Last so existing callers
+   *  keep their positions. */
+  dataVersions?: Record<string, unknown>,
 ): Promise<BulkComputeResponse> {
+  // Group state rides in the body only when the comparison is actually on, so
+  // requests without the feature stay byte-identical.
+  const groupBody: Record<string, unknown> = {};
+  if (options?.compareGroups && options.groups && options.groups.length > 0) {
+    groupBody.groups = options.groups;
+    groupBody.compare_groups = true;
+    if (options.showOther === false) groupBody.include_other = false;
+    if (options.showOverall === false) groupBody.include_overall = false;
+  }
   const res = await authFetch(
     `${API_BASE}/dashboards/bulk_compute_cards/${dashboardId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, component_ids: componentIds }),
+      body: JSON.stringify({
+        filters,
+        component_ids: componentIds,
+        ...groupBody,
+        ...(dataVersions ?? {}),
+      }),
+      signal,
     },
   );
-  if (!res.ok) throw new Error(`Failed to bulk-compute cards: ${res.status}`);
+  if (!res.ok) await throwRenderError(res, 'Failed to bulk-compute cards', dataVersions);
   return res.json();
 }
 
@@ -667,7 +1403,47 @@ export interface FigureResponse {
     total_data_count?: number;
     /** True when every point was rendered (no cap applied / full_load). */
     full_data_loaded?: boolean;
+    /** True when the figure was colored by the caller's selection groups. */
+    group_colored?: boolean;
+    /** Per-group account of whether each saved group could reach this frame —
+     *  directly, through a declared link, or not at all. Answers a different
+     *  question from `group_colored`: a visu type can decline the override with
+     *  every group resolved. Present whenever group coloring was requested. */
+    group_status?: GroupStatusEntry[];
+    /** Column the figure was actually colored by (global "Color by" mode),
+     *  null/absent when the override didn't apply to this frame. */
+    column_colored?: string | null;
+    /** Grid rows this figure's content needs, one count the client cannot
+     *  make, since a Plotly figure fills whatever box it is given. Sent for the
+     *  categorical visu types (bar, box, violin) and absent everywhere else;
+     *  acted on only when the component's `fit` is `auto`. */
+    content_demand?: { rows: number };
   };
+}
+
+export interface RenderFigureOptions {
+  /** Selection groups to color/split the figure by (see `selectionGroups.ts`). */
+  groups?: GroupRenderDef[];
+  colorByGroup?: boolean;
+  /** Global "color by <real column>" override; the color map is the stable
+   *  palette computed client-side from the column's unfiltered universe. */
+  colorByColumn?: { columnName: string; colorMap?: Record<string, string> };
+  /** Overlay ("color", default) vs small-multiples ("facet") display. */
+  display?: GroupingDisplay;
+  /** Groups mode only: false drops ungrouped ("Other") rows from figures. */
+  showOther?: boolean;
+  /** Draw the figure in this style rather than its own (a highlight showing a
+   *  figure from another tab). Sent only when set. */
+  style?: FigureStyleRequest;
+}
+
+/** The `style` override of a render request; see `figure_style_payload` in
+ *  depictio/api/v1/services/figure/style_presets.py. */
+export interface FigureStyleRequest {
+  figure_style?: 'default' | 'minimal';
+  /** The card header shows the title, so the plot drops its own. */
+  header_title?: boolean;
+  hide_legend?: boolean;
 }
 
 export async function renderFigure(
@@ -677,16 +1453,43 @@ export async function renderFigure(
   theme: 'light' | 'dark' = 'light',
   fullLoad = false,
   signal?: AbortSignal,
+  options?: RenderFigureOptions,
+  /** Data time travel pins + definition version; see `bulkComputeCards`. */
+  dataVersions?: Record<string, unknown>,
 ): Promise<FigureResponse> {
+  // Grouping state rides in the body only when coloring is actually requested,
+  // so every request without the feature stays byte-identical to what it was
+  // before. Groups win over a column override (the endpoint enforces the same
+  // precedence).
+  let groupBody: Record<string, unknown> = {};
+  if (options?.colorByGroup && options.groups && options.groups.length > 0) {
+    groupBody = { groups: options.groups, color_by_group: true };
+    if (options.showOther === false) groupBody.include_other = false;
+  } else if (options?.colorByColumn) {
+    const { columnName, colorMap } = options.colorByColumn;
+    groupBody = {
+      color_by_column: { column_name: columnName, ...(colorMap ? { color_map: colorMap } : {}) },
+    };
+  }
+  if (Object.keys(groupBody).length > 0 && options?.display === 'facet') {
+    groupBody.grouping_display = 'facet';
+  }
+  if (options?.style) groupBody.style = options.style;
   const res = await authFetch(
     `${API_BASE}/dashboards/render_figure/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, theme, full_load: fullLoad }),
+      body: JSON.stringify({
+        filters,
+        theme,
+        full_load: fullLoad,
+        ...groupBody,
+        ...(dataVersions ?? {}),
+      }),
       signal,
     },
   );
-  if (!res.ok) throw new Error(`Failed to render figure: ${res.status}`);
+  if (!res.ok) await throwRenderError(res, 'Failed to render figure', dataVersions);
   return res.json();
 }
 
@@ -712,7 +1515,28 @@ export type AdvancedVizKind =
   | 'sunburst'
   | 'oncoplot'
   | 'coverage_track'
-  | 'sankey';
+  | 'sankey'
+  | 'pr_benchmark'
+  | 'roc_pr_curve'
+  | 'confusion_matrix'
+  | 'metric_ci_bars'
+  | 'profile'
+  | 'signal_matrix'
+  | 'fusion_structure'
+  | 'gene_arrow_track'
+  | 'gsea_running_score'
+  | 'sashimi'
+  | 'scatter_xy'
+  | 'contact_map'
+  | 'knee_plot'
+  | 'damage_profile'
+  | 'genome_view'
+  | 'group_compare'
+  | 'transcript_structure'
+  | 'cnv_profile'
+  | 'genome_chord'
+  | 'record_card'
+  | 'parallel_coordinates';
 
 /** Accepted dtypes for one role, plus whether the role is required. Sourced
  *  from the backend canonical schema so the builder never duplicates the
@@ -736,6 +1560,12 @@ export interface AdvancedVizKindDescriptor {
   /** "plot" for pure visualisations, "tool" for statistical methods that
    *  compute then plot (GSEA, GWAS, ANCOM-BC, DA barplot per contrast). */
   category: 'plot' | 'tool';
+  /** True for a kind kept alive only so stored dashboards keep loading: the
+   *  backend rewrites it into a view of another kind at read time (`ma`, `qq`,
+   *  `enrichment`, `roc_pr_curve`). Pickers must hide these. Optional because
+   *  an older backend's descriptor does not carry the flag, and an absent flag
+   *  means "not legacy". */
+  legacy?: boolean;
 }
 
 /** Metadata used by the builder's viz-kind picker. Cached on first load. */
@@ -754,17 +1584,33 @@ export async function fetchPolarsSchema(dcId: string): Promise<Record<string, st
   return res.json();
 }
 
+/** The evidence behind a suggestion: every distinctive role has a column named
+ *  like it (`named`), the table has the shape the kind reads (`shape`), the
+ *  dashboard tab makes it right (`context`), or none of these (`weak`). */
+export type VizSuggestionMatch = 'named' | 'shape' | 'context' | 'weak';
+
 /** One viz kind scored against a DC schema by the backend suggestion engine.
- *  `score` is a graded 0-1 fit (dtype compatibility × column-name similarity).
- *  `role_candidates` lists dtype-compatible columns per required role, ranked
- *  best-first, for pre-filling bindings. `unmet_roles` / `weak_roles` drive the
- *  builder's inline guidance. */
+ *  `score` (0-1) is for ranking only; what the UI shows is `match` and the
+ *  short `reasons` behind it. `role_candidates` lists dtype-compatible columns
+ *  per required role, ranked best-first, for pre-filling bindings.
+ *  `unmet_roles` / `weak_roles` drive the builder's inline guidance. */
 export interface VizKindSuggestion {
   viz_kind: string;
   score: number;
   role_candidates: Record<string, string[]>;
   unmet_roles: string[];
   weak_roles: string[];
+  /** Absent on older APIs. */
+  match?: VizSuggestionMatch;
+  reasons?: string[];
+}
+
+/** What the builder knows about the dashboard tab a new tile lands on. */
+export interface VizSuggestionContext {
+  /** Columns emitted by the tab's selection-capable tiles. */
+  selectionColumns?: readonly string[];
+  /** Advanced-viz kinds already on the tab. */
+  existingKinds?: readonly string[];
 }
 
 export interface VizSuggestionsResponse {
@@ -776,11 +1622,19 @@ export interface VizSuggestionsResponse {
 /** Ranked viz-kind suggestions for an existing DC. Reads the DC's inferred
  *  polars schema server-side and runs the graded scoring engine, returning
  *  every kind scored (best-first) so the builder can present a "suggest but
- *  tolerate" picker. */
+ *  tolerate" picker. `context` lets kinds that depend on the dashboard (a
+ *  record card following a selection) be recommended. */
 export async function fetchVizSuggestions(
   dcId: string,
+  context?: VizSuggestionContext,
 ): Promise<VizSuggestionsResponse> {
-  const res = await authFetch(`${API_BASE}/datacollections/viz-suggestions/${dcId}`);
+  const params = new URLSearchParams();
+  for (const c of context?.selectionColumns ?? []) params.append('selection_columns', c);
+  for (const k of context?.existingKinds ?? []) params.append('existing_kinds', k);
+  const qs = params.toString();
+  const res = await authFetch(
+    `${API_BASE}/datacollections/viz-suggestions/${dcId}${qs ? `?${qs}` : ''}`,
+  );
   if (!res.ok) throw new Error(`Failed to fetch viz suggestions: ${res.status}`);
   return res.json();
 }
@@ -933,6 +1787,7 @@ export interface ComplexHeatmapPayload {
   dc_id: string;
   index_column: string;
   value_columns?: string[] | null;
+  value_columns_pattern?: string | null;
   row_annotation_cols?: string[];
   cluster_rows?: boolean;
   cluster_cols?: boolean;
@@ -949,6 +1804,16 @@ export interface ComplexHeatmapResult {
   col_count: number;
   load_ms?: number;
   compute_ms?: number;
+  /** Metadata columns the viz-controls picker may offer for the column strips,
+   *  resolved server-side through the matrix's metadata link. Only columns that
+   *  take at least two distinct values across the current samples are listed,
+   *  so the picker never offers one the heatmap would then refuse to paint.
+   *  Empty when the matrix has no metadata link, which hides the control. */
+  available_col_annotations?: string[];
+  /** Metadata columns that exist but hold one value across the current samples.
+   *  Shown greyed out rather than omitted, so the picker answers why a column
+   *  cannot be chosen instead of appearing to have lost it. */
+  constant_col_annotations?: string[];
 }
 
 export interface ComplexHeatmapJob {
@@ -983,6 +1848,8 @@ export interface UpsetPayload {
   wf_id: string;
   dc_id: string;
   set_columns?: string[] | null;
+  /** Regex picking the set columns by name; exclusive with `set_columns`. */
+  set_columns_pattern?: string | null;
   annotation_cols?: string[] | null;
   sort_by?: 'cardinality' | 'degree' | 'degree-cardinality' | 'input';
   sort_order?: 'descending' | 'ascending';
@@ -1041,6 +1908,8 @@ export interface CoverageTrackPayload {
   samples_filter?: string[] | null;
   smoothing_window?: number;
   max_rows?: number | null;
+  /** Server bins each sample track to at most this many rows when wider. */
+  max_bins_per_track?: number | null;
   filter_metadata: InteractiveFilter[];
 }
 
@@ -1061,6 +1930,10 @@ export interface CoverageTrackResult {
     n_samples: number;
     mean_value: number | null;
     max_value: number | null;
+    /** Bin width (bp) when the server binned the tracks to its row budget. */
+    bin_width?: number | null;
+    /** Rows before binning. */
+    input_rows?: number;
   };
   row_count: number;
   load_ms?: number;
@@ -1094,6 +1967,99 @@ export async function pollCoverageTrack(jobId: string): Promise<CoverageTrackJob
   return res.json();
 }
 
+/**
+ * One window of a Hi-C matrix, at one resolution.
+ *
+ * `resolution: null` asks the server to pick: it compares the span the tile is
+ * showing (`start`..`end` over `pixels`) against the resolutions the data
+ * collection actually holds as partitions, and reads the one whose bins land
+ * closest to `target_bins_per_pixel`. A collection with no resolution column
+ * is served as a single matrix, which is what every contact map authored
+ * before multi-resolution gets.
+ */
+export interface ContactMapPayload {
+  wf_id: string;
+  dc_id: string;
+  chrom1_col: string;
+  start1_col: string;
+  chrom2_col: string;
+  start2_col: string;
+  count_col: string;
+  end1_col?: string | null;
+  end2_col?: string | null;
+  sample_col?: string | null;
+  resolution_col?: string | null;
+  chrom?: string | null;
+  start?: number | null;
+  end?: number | null;
+  resolution?: number | null;
+  pixels?: number | null;
+  target_bins_per_pixel?: number | null;
+  sample?: string | null;
+  max_cells?: number | null;
+  filter_metadata: InteractiveFilter[];
+}
+
+export interface ContactMapResult {
+  rows: Record<string, unknown[]>;
+  columns: {
+    chrom1: string;
+    start1: string;
+    end1?: string | null;
+    chrom2: string;
+    start2: string;
+    end2?: string | null;
+    count: string;
+    sample?: string | null;
+    resolution?: string | null;
+  };
+  summary: {
+    row_count: number;
+    /** Every resolution the collection holds, ascending. Empty = flat DC. */
+    resolutions: number[];
+    /** The one this window was read at, or null on a flat DC. */
+    resolution: number | null;
+    resolution_col?: string | null;
+    chromosomes: string[];
+    samples: string[];
+    n_samples: number;
+    bin_count: number;
+    region: { chrom: string | null; start: number | null; end: number | null } | null;
+    bins_per_pixel: number | null;
+    multi_resolution: boolean;
+    /** The window did not fit the cell budget and no coarser level existed. */
+    truncated: boolean;
+  };
+  row_count: number;
+  load_ms?: number;
+  compute_ms?: number;
+}
+
+export interface ContactMapJob {
+  job_id: string;
+  status: 'pending' | 'done' | 'failed';
+  result?: ContactMapResult | null;
+  error?: string | null;
+  from_cache?: boolean;
+}
+
+/** Dispatch a contact-map window Celery task. */
+export async function dispatchContactMap(payload: ContactMapPayload): Promise<ContactMapJob> {
+  const res = await authFetch(`${API_BASE}/advanced_viz/compute_contact_map`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Failed to dispatch compute_contact_map: ${res.status}`);
+  return res.json();
+}
+
+/** Poll a previously-dispatched contact-map window. */
+export async function pollContactMap(jobId: string): Promise<ContactMapJob> {
+  const res = await authFetch(`${API_BASE}/advanced_viz/compute_contact_map/${jobId}`);
+  if (!res.ok) throw new Error(`Failed to poll compute_contact_map: ${res.status}`);
+  return res.json();
+}
+
 /** Dispatch payload for the Sankey Celery task. NOTE: `color_mode`,
  *  `link_opacity`, and `show_node_labels` from SankeyConfig (Pydantic) are
  *  intentionally NOT in this payload — those are pure presentation tweaks
@@ -1108,6 +2074,8 @@ export interface SankeyPayload {
   sort_mode?: 'alphabetical' | 'total_flow' | 'input';
   min_link_value?: number;
   step_filters?: Record<string, string[]> | null;
+  /** Columns whose distinct values come back as `step_options`. */
+  option_cols?: string[] | null;
   filter_metadata: InteractiveFilter[];
 }
 
@@ -1119,6 +2087,10 @@ export interface SankeyResult {
   link_count: number;
   total_flow: number;
   row_count: number;
+  /** Rows before the step filters (absent on older APIs). */
+  input_rows?: number;
+  /** Distinct values per `option_cols` column, before the step filters. */
+  step_options?: Record<string, string[]>;
   load_ms?: number;
   compute_ms?: number;
 }
@@ -1145,6 +2117,95 @@ export async function dispatchSankey(payload: SankeyPayload): Promise<SankeyJob>
 export async function pollSankey(jobId: string): Promise<SankeyJob> {
   const res = await authFetch(`${API_BASE}/advanced_viz/compute_sankey/${jobId}`);
   if (!res.ok) throw new Error(`Failed to poll compute_sankey: ${res.status}`);
+  return res.json();
+}
+
+
+/** One arm of a group comparison: the column a selection was captured on and
+ *  the values it captured. A saved selection group (`GroupRenderDef`) and a
+ *  single value of the config's `group_col` both collapse to this shape, which
+ *  is what lets the worker treat "two lassos" and "two labels" identically. */
+export interface GroupCompareSelector {
+  label: string;
+  column: string;
+  values: string[];
+}
+
+export interface GroupComparePayload {
+  wf_id: string;
+  dc_id: string;
+  index_col: string;
+  group_a: GroupCompareSelector;
+  group_b: GroupCompareSelector;
+  test?: 'wilcoxon' | 't_test';
+  log_transform?: boolean;
+  max_features?: number;
+  min_observations?: number;
+  fdr_threshold?: number;
+  log2fc_threshold?: number;
+  top_n_labels?: number;
+  filter_metadata: InteractiveFilter[];
+}
+
+/** One feature's result. `log2fc` is A relative to B, so positive means higher
+ *  in group A. Any statistic that came out non-finite arrives as null. */
+export interface GroupCompareRow {
+  feature: string;
+  mean_a: number | null;
+  mean_b: number | null;
+  log2fc: number | null;
+  p_value: number | null;
+  fdr: number | null;
+  significant: boolean;
+  direction: 'up' | 'down' | 'ns';
+}
+
+export interface GroupCompareResult {
+  /** Sorted by raw p-value, most significant first. */
+  rows: GroupCompareRow[];
+  group_a: { label: string; n: number };
+  group_b: { label: string; n: number };
+  /** Observations claimed by both selectors, dropped from both arms. */
+  overlap_dropped: number;
+  /** Numeric feature columns in the matrix, before the `max_features` cap. */
+  feature_count: number;
+  tested_features: number;
+  significant_count: number;
+  test: string;
+  log_transform: boolean;
+  fdr_threshold: number;
+  log2fc_threshold: number;
+  top_n_labels: number;
+  row_count: number;
+  load_ms?: number;
+  compute_ms?: number;
+}
+
+export interface GroupCompareJob {
+  job_id: string;
+  status: 'pending' | 'done' | 'failed';
+  result?: GroupCompareResult | null;
+  error?: string | null;
+  from_cache?: boolean;
+}
+
+/** Dispatch a two-group differential test. Same dispatch + poll + cache
+ *  contract as the UpSet and Sankey computes. */
+export async function dispatchGroupCompare(
+  payload: GroupComparePayload,
+): Promise<GroupCompareJob> {
+  const res = await authFetch(`${API_BASE}/advanced_viz/compute_group_compare`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Failed to dispatch compute_group_compare: ${res.status}`);
+  return res.json();
+}
+
+/** Poll a previously-dispatched group comparison. */
+export async function pollGroupCompare(jobId: string): Promise<GroupCompareJob> {
+  const res = await authFetch(`${API_BASE}/advanced_viz/compute_group_compare/${jobId}`);
+  if (!res.ok) throw new Error(`Failed to poll compute_group_compare: ${res.status}`);
   return res.json();
 }
 
@@ -1185,6 +2246,8 @@ export async function renderTable(
   sortBy?: string | null,
   sortDir: 'asc' | 'desc' = 'desc',
   signal?: AbortSignal,
+  /** Data time travel pins + definition version; see `bulkComputeCards`. */
+  dataVersions?: Record<string, unknown>,
 ): Promise<TableResponse> {
   const res = await authFetch(
     `${API_BASE}/dashboards/render_table/${dashboardId}/${componentId}`,
@@ -1196,11 +2259,12 @@ export async function renderTable(
         limit,
         sort_by: sortBy ?? null,
         sort_dir: sortDir,
+        ...(dataVersions ?? {}),
       }),
       signal,
     },
   );
-  if (!res.ok) throw new Error(`Failed to render table: ${res.status}`);
+  if (!res.ok) await throwRenderError(res, 'Failed to render table', dataVersions);
   return res.json();
 }
 
@@ -1235,15 +2299,22 @@ export async function fetchImagePaths(
   filters: InteractiveFilter[] = [],
   sortBy?: string | null,
   sortDir: 'asc' | 'desc' = 'desc',
+  dataVersions?: Record<string, unknown>,
 ): Promise<ImageGridResponse> {
   const res = await authFetch(
     `${API_BASE}/dashboards/render_image_paths/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, max, sort_by: sortBy ?? null, sort_dir: sortDir }),
+      body: JSON.stringify({
+        filters,
+        max,
+        sort_by: sortBy ?? null,
+        sort_dir: sortDir,
+        ...(dataVersions ?? {}),
+      }),
     },
   );
-  if (!res.ok) throw new Error(`Failed to fetch image paths: ${res.status}`);
+  if (!res.ok) await throwRenderError(res, 'Failed to fetch image paths', dataVersions);
   return (await res.json()) as ImageGridResponse;
 }
 
@@ -1253,15 +2324,16 @@ export async function renderMap(
   componentId: string,
   filters: InteractiveFilter[],
   theme: 'light' | 'dark' = 'light',
+  dataVersions?: Record<string, unknown>,
 ): Promise<FigureResponse> {
   const res = await authFetch(
     `${API_BASE}/dashboards/render_map/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, theme }),
+      body: JSON.stringify({ filters, theme, ...(dataVersions ?? {}) }),
     },
   );
-  if (!res.ok) throw new Error(`Failed to render map: ${res.status}`);
+  if (!res.ok) await throwRenderError(res, 'Failed to render map', dataVersions);
   return res.json();
 }
 
@@ -1282,6 +2354,7 @@ export async function fetchMapData(
   componentId: string,
   filters: InteractiveFilter[],
   signal?: AbortSignal,
+  dataVersions?: Record<string, unknown>,
 ): Promise<MapDataResponse> {
   // Not queued through `enqueueFetch`, unlike `fetchAdvancedVizData` above:
   // this fires when the user opens the popover, and making it wait behind a
@@ -1290,11 +2363,11 @@ export async function fetchMapData(
     `${API_BASE}/dashboards/map_data/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters }),
+      body: JSON.stringify({ filters, ...(dataVersions ?? {}) }),
       signal,
     },
   );
-  if (!res.ok) throw new Error(`Failed to fetch map data: ${res.status}`);
+  if (!res.ok) await throwRenderError(res, 'Failed to fetch map data', dataVersions);
   return (await res.json()) as MapDataResponse;
 }
 
@@ -1442,6 +2515,93 @@ export async function fetchServerStatus(): Promise<ServerStatusResponse> {
   return res.json();
 }
 
+/** What the server says about itself: backs the server info popover.
+ *
+ *  `version_check` is non-null for admins only, so the same call serves the
+ *  version line everyone sees and the update notice only an admin gets. */
+export interface VersionCheckBlock {
+  enabled: boolean;
+  /** The deployment pins the setting through an env var: no UI toggle. */
+  locked_by_env: boolean;
+  update_available: boolean;
+  latest_version: string | null;
+  release_url: string | null;
+  /** Naive UTC ISO (no offset), like every other API timestamp. */
+  published_at: string | null;
+  checked_at: string | null;
+  last_error: string | null;
+}
+
+export interface ServerInfo {
+  status: 'online' | string;
+  version: string;
+  api_version: string;
+  repository_url: string;
+  release_notes_url: string;
+  docs_url: string;
+  version_check: VersionCheckBlock | null;
+}
+
+/** Optional-auth: the bearer goes along when there is one (it is what makes
+ *  `version_check` appear for an admin), and the route never answers 401. */
+export async function fetchServerInfo(): Promise<ServerInfo> {
+  const res = await authFetch(`${API_BASE}/utils/server-info`, { cache: 'no-cache' });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load server info');
+  return res.json();
+}
+
+/** The admin view of the update check: the setting, where it comes from, and
+ *  the last result. */
+export interface VersionCheckAdmin {
+  enabled: boolean;
+  /** The env var's value, or null when it is unset. */
+  env_enabled: boolean | null;
+  /** The admin's stored override, or null when none is set. */
+  override: boolean | null;
+  locked_by_env: boolean;
+  interval_hours: number;
+  repository: string;
+  current_version: string;
+  update_available: boolean;
+  latest_version: string | null;
+  release_url: string | null;
+  published_at: string | null;
+  checked_at: string | null;
+  last_error: string | null;
+}
+
+export async function fetchVersionCheckAdmin(): Promise<VersionCheckAdmin> {
+  const res = await authFetch(`${API_BASE}/utils/version-check`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load the version check setting');
+  return res.json();
+}
+
+/** Turn the update check on or off. A 409 means the env var locks it; the
+ *  thrown error carries the server's `detail`. */
+export async function updateVersionCheckAdmin(enabled: boolean): Promise<VersionCheckAdmin> {
+  const res = await authFetch(`${API_BASE}/utils/version-check`, {
+    method: 'PUT',
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to save the version check setting');
+  return res.json();
+}
+
+/** Drop the admin's override, so the env default applies again. */
+export async function resetVersionCheckAdmin(): Promise<VersionCheckAdmin> {
+  const res = await authFetch(`${API_BASE}/utils/version-check`, { method: 'DELETE' });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to reset the version check setting');
+  return res.json();
+}
+
+/** Check GitHub now. A 409 means the check is off; the thrown error carries
+ *  the server's `detail`. */
+export async function runVersionCheckAdmin(): Promise<VersionCheckAdmin> {
+  const res = await authFetch(`${API_BASE}/utils/version-check/run`, { method: 'POST' });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to run the version check');
+  return res.json();
+}
+
 /**
  * Runtime configuration the frontend cannot know at build time.
  *
@@ -1455,13 +2615,44 @@ export interface PublicConfigResponse {
     enabled: boolean;
     tracking_id: string | null;
   };
+  /** Instance brand theme (#397), already resolved: derived figure colors
+   *  materialised and defaults made explicit, so the client never re-derives
+   *  a palette. Empty-ish object on an unbranded deployment. */
+  branding?: BrandTheme;
+  /** The instance's default chrome style id (set by an admin); null means the
+   *  built-in default. Absent on a backend that predates it. */
+  default_chrome?: string | null;
+  /** Opt-in feedback link for dashboard headers. `url` is a template the SPA
+   *  fills with what the reader is looking at ({project}, {dashboard}, {tab},
+   *  {url}); absent or disabled on a deployment that set none. */
+  feedback?: {
+    enabled: boolean;
+    url: string | null;
+    label: string;
+  };
+}
+
+let publicConfigSeen: PublicConfigResponse | null = null;
+const publicConfigListeners = new Set<(config: PublicConfigResponse) => void>();
+
+/** Calls `callback` with the public config once it has loaded (at once, if it
+ *  already has), so a module that loads after the boot fetch still sees it. */
+export function onPublicConfig(callback: (config: PublicConfigResponse) => void): () => void {
+  publicConfigListeners.add(callback);
+  if (publicConfigSeen) callback(publicConfigSeen);
+  return () => {
+    publicConfigListeners.delete(callback);
+  };
 }
 
 export async function fetchPublicConfig(): Promise<PublicConfigResponse> {
   try {
     const res = await fetch(`${API_BASE}/utils/public-config`, { cache: 'no-cache' });
     if (!res.ok) return {};
-    return await res.json();
+    const config: PublicConfigResponse = await res.json();
+    publicConfigSeen = config;
+    publicConfigListeners.forEach((listener) => listener(config));
+    return config;
   } catch {
     // Optional configuration. An older backend without this route, or a network
     // blip, must not stop the app from starting.
@@ -1486,8 +2677,13 @@ export interface UpdateTabPayload {
   title?: string;
   tab_icon?: string;
   tab_icon_color?: string;
+  /** Null ungroups the tab; leaving the key out keeps its group. */
+  tab_group?: string | null;
   /** Only allowed on main tabs — backend rejects with 400 for child tabs. */
   main_tab_name?: string;
+  /** The Guide's settings, for the whole dashboard. Main tabs only. */
+  show_guide?: boolean;
+  guide_intro?: string;
 }
 
 export async function updateTab(
@@ -1540,7 +2736,7 @@ export async function reorderTabs(
  */
 export async function createTab(
   parentDashboardId: string,
-  fields: { title: string; tab_icon?: string; tab_icon_color?: string },
+  fields: { title: string; tab_icon?: string; tab_icon_color?: string; tab_group?: string | null },
 ): Promise<string> {
   const parent = await fetchDashboard(parentDashboardId);
   const siblings = await fetchAllDashboards();
@@ -1562,7 +2758,7 @@ export async function createTab(
     workflow_system: 'none',
     notes_content: '',
     permissions: (parent as Record<string, unknown>).permissions ?? {},
-    is_public: false,
+    // is_public is server-stamped from the parent project on insert.
     last_saved_ts: '',
     project_id: parent.project_id,
     is_main_tab: false,
@@ -1570,6 +2766,7 @@ export async function createTab(
     tab_order: nextOrder,
     tab_icon: fields.tab_icon ?? null,
     tab_icon_color: fields.tab_icon_color ?? null,
+    tab_group: fields.tab_group ?? null,
   };
 
   const res = await authFetch(`${API_BASE}/dashboards/save/${newId}`, {
@@ -1692,17 +2889,94 @@ export async function fetchDeltaShape(dcId: string): Promise<DcShapeResponse> {
 export interface PreviewResult {
   columns: string[];
   rows: Array<Record<string, unknown>>;
+  /** Filtered row count when `filter_applied`, else the full table's. */
   total_rows: number;
   total_columns: number;
+  /** True when the server narrowed the frame with dashboard filters. */
+  filter_applied?: boolean;
+  /** Delta version actually read; null when the current table was read. */
+  version?: number | null;
 }
 
 export async function fetchDataCollectionPreview(
   dcId: string,
   limit = 100,
+  filters: InteractiveFilter[] = [],
+  /** Read a historical Delta commit instead of the current table. */
+  version?: number | null,
 ): Promise<PreviewResult> {
-  const res = await authFetch(`${API_BASE}/deltatables/preview/${dcId}?limit=${limit}`);
+  // The filtered POST variant has no version parameter. Refuse the combination
+  // rather than return current rows labelled as a past version.
+  if (version != null && filters.length > 0) {
+    throw new Error('A filtered preview cannot read a historical Delta version');
+  }
+  // Unfiltered callers keep the existing GET; the POST variant applies the
+  // dashboard's active filters server-side so builder previews match what the
+  // dashboard's components show (rows AND total_rows are filtered).
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (version != null) params.set('version', String(version));
+  const res =
+    filters.length === 0
+      ? await authFetch(`${API_BASE}/deltatables/preview/${dcId}?${params.toString()}`)
+      : await authFetch(`${API_BASE}/deltatables/preview/${dcId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ limit, filters }),
+        });
   if (!res.ok) {
     throw new Error(`Failed to fetch preview: ${res.status}`);
+  }
+  return res.json();
+}
+
+/** One commit in a data collection's Delta history.
+ *
+ *  Rows are a merge of two sources, hence the sparse fields: `origin: 'delta'`
+ *  is a commit Delta knows about but depictio never recorded (or recorded
+ *  before delta_version existed), `'mongo'` is an aggregation whose commit has
+ *  aged out of the requested window, `'both'` has the full picture. Callers
+ *  should render what is present rather than assuming any field is set.
+ *
+ *  `by_email` is populated only for project owners, editors and admins. */
+export interface DeltaVersionEntry {
+  version?: number | null;
+  timestamp?: string | null;
+  operation?: string | null;
+  rows_added?: number | null;
+  files_added?: number | null;
+  files_removed?: number | null;
+  metadata?: Record<string, string>;
+  aggregation_version?: number | null;
+  aggregation_time?: string | null;
+  /** The Delta commit a depictio record was written at, when it recorded one. */
+  delta_version?: number | null;
+  by_email?: string | null;
+  run_id?: string | null;
+  trigger?: string | null;
+  write_mode?: string | null;
+  rows_total?: number | null;
+  origin: 'delta' | 'mongo' | 'both';
+}
+
+export interface DeltaHistoryResponse {
+  delta_table_location: string;
+  current_version: number | null;
+  /** True when the object store could not be reached and only Mongo's view is
+   *  present — the UI says so rather than implying the table has no history. */
+  degraded: boolean;
+  versions: DeltaVersionEntry[];
+  /** True when the history holds more entries than `limit` returned. */
+  truncated?: boolean;
+}
+
+/** Commit history of a data collection's Delta table, newest first. */
+export async function fetchDeltaHistory(
+  dcId: string,
+  limit = 20,
+): Promise<DeltaHistoryResponse> {
+  const res = await authFetch(`${API_BASE}/deltatables/history/${dcId}?limit=${limit}`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch Delta history: ${res.status}`);
   }
   return res.json();
 }
@@ -1723,6 +2997,12 @@ export interface FigurePreviewRequest {
   metadata: Record<string, unknown>;
   filters?: InteractiveFilter[];
   theme?: 'light' | 'dark';
+  /** Owning dashboard — lets the server fold the dashboard's `brand_theme`
+   *  figure defaults, its `category_colors` and its sections' figure style into
+   *  the preview so it matches the saved render. */
+  dashboard_id?: string;
+  /** Style override, as on `renderFigure`. */
+  style?: FigureStyleRequest;
 }
 
 export async function previewFigure(
@@ -1904,10 +3184,30 @@ export interface SaveComponentOptions {
     | { panel: 'left' | 'right'; x?: number; y?: number; w?: number; h?: number };
 }
 
-// Default grid box for a freshly-created component. Sizes track the seeded
-// dashboards under depictio/projects/<project>/.db_seeds/dashboard*.json —
-// small KPI tiles for cards, full-width tables, medium plots elsewhere.
-function defaultLayoutForType(
+/** Grid geometry a dashboard box is measured in — the values `DashboardGrid`
+ *  passes react-grid-layout. Exported so a consumer that has to render one
+ *  component OUTSIDE a grid (a builder preview, Tool Studio's render list) can
+ *  give it the size it will actually have on a dashboard, instead of guessing a
+ *  pixel height. */
+export const GRID_COLS = 8;
+export const GRID_ROW_HEIGHT = 100;
+export const GRID_ROW_GAP = 4;
+
+/** Pixel height of a box `h` rows tall, gaps included. */
+export function gridBoxHeight(h: number): number {
+  return h * GRID_ROW_HEIGHT + Math.max(0, h - 1) * GRID_ROW_GAP;
+}
+
+/** Default grid box for a freshly-created component, in `DashboardGrid` units
+ *  (`cols=8`, `rowHeight=100`, `margin=[12, 4]` at the lg breakpoint). Sizes
+ *  track the seeded dashboards under
+ *  depictio/projects/<project>/.db_seeds/dashboard*.json — small KPI tiles for
+ *  cards, full-width tables, medium plots elsewhere.
+ *
+ *  Exported because the catalog preview frames its iframe to the same box — a
+ *  preview that fills whatever space it is given tells you nothing about how a
+ *  card will actually look on the dashboard. */
+export function defaultLayoutForType(
   componentType: string,
   panel: 'left' | 'right',
   y: number,
@@ -1922,6 +3222,12 @@ function defaultLayoutForType(
       return { x: 0, y, w: 2, h: 2 };
     case 'figure':
       return { x: 0, y, w: 4, h: 5 };
+    case 'advanced_viz':
+      // Phylogenies, heatmaps, oncoplots and ordinations carry axis labels and
+      // a legend that a half-width box crushes. The seeded dashboards give them
+      // w8 h8 in 43 of 58 placements, against w4 h4 in 2; the type had no case
+      // here and fell to the generic default, which is the small one.
+      return { x: 0, y, w: 8, h: 8 };
     case 'multiqc':
       return { x: 0, y, w: 4, h: 5 };
     case 'table':
@@ -2013,6 +3319,147 @@ export async function saveDashboardNotes(
     body: JSON.stringify(payload),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to save dashboard notes');
+}
+
+// ---- Instance branding (admin panel) --------------------------------------
+
+/** Admin view of the three branding layers.
+ *
+ *  `overrides` is what the admin explicitly set (the form's value),
+ *  `env_defaults` what the deployment's DEPICTIO_BRANDING_* vars provide (the
+ *  form's placeholders), and `effective` the resolved result the rest of the
+ *  app sees — derived figure colors included. */
+export interface AdminBrandingState {
+  overrides: BrandTheme;
+  /** The instance's default chrome style id, or null for the built-in one.
+   *  Saved apart from the brand theme (see `updateInstanceLook`). */
+  default_chrome?: string | null;
+  env_defaults: BrandTheme;
+  effective: BrandTheme;
+}
+
+/** A named starting palette offered by the Branding panel. */
+export interface BrandPreset {
+  id: string;
+  label: string;
+  /** What applying it writes into the form. */
+  theme: BrandTheme;
+  /** The same theme resolved, so the picker can show real swatches. */
+  preview: BrandTheme;
+}
+
+export async function fetchBrandingAdmin(): Promise<AdminBrandingState> {
+  const res = await authFetch(`${API_BASE}/utils/branding`);
+  if (!res.ok) await throwHttpError(res, 'Failed to load branding settings');
+  return res.json();
+}
+
+/** Replace the override set — omitted/null fields fall back to env defaults. */
+export async function updateBrandingAdmin(theme: BrandTheme): Promise<AdminBrandingState> {
+  const res = await authFetch(`${API_BASE}/utils/branding`, {
+    method: 'PUT',
+    body: JSON.stringify(theme),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to save branding settings');
+  return res.json();
+}
+
+/** Set the instance's default chrome style (null = the built-in default). */
+export async function updateInstanceLook(
+  defaultChrome: string | null,
+): Promise<AdminBrandingState> {
+  const res = await authFetch(`${API_BASE}/utils/branding/look`, {
+    method: 'PUT',
+    body: JSON.stringify({ default_chrome: defaultChrome }),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to save the default look');
+  return res.json();
+}
+
+export async function resetBrandingAdmin(): Promise<AdminBrandingState> {
+  const res = await authFetch(`${API_BASE}/utils/branding`, { method: 'DELETE' });
+  if (!res.ok) await throwHttpError(res, 'Failed to reset branding settings');
+  return res.json();
+}
+
+/** Resolve a draft theme (derive its figure colors, make defaults explicit)
+ *  without saving it.
+ *
+ *  The derivation lives server-side so the two ends can't drift, so a live
+ *  preview of an unsaved draft has to ask for it. Cheap and pure — debounce
+ *  it, don't cache it. */
+export async function resolveBrandTheme(theme: BrandTheme): Promise<BrandTheme> {
+  const res = await authFetch(`${API_BASE}/utils/branding/resolve`, {
+    method: 'POST',
+    body: JSON.stringify(theme),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to resolve brand theme');
+  return res.json();
+}
+
+/** The shipped brand presets. Public, like the login page's branding. */
+export async function fetchBrandPresets(): Promise<BrandPreset[]> {
+  try {
+    const res = await fetch(`${API_BASE}/utils/branding/presets`, { cache: 'no-cache' });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { presets?: BrandPreset[] };
+    return data.presets ?? [];
+  } catch {
+    // Presets are a convenience: an older backend without the route must not
+    // break the panel, the pickers still work.
+    return [];
+  }
+}
+
+/** Upload an instance logo variant; the server stores it under
+ *  /static/branding/ and points the matching override at it. */
+export async function uploadBrandingLogo(
+  variant: 'light' | 'dark',
+  file: File,
+): Promise<AdminBrandingState> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await authFetch(`${API_BASE}/utils/branding/logo/${variant}`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to upload branding logo');
+  return res.json();
+}
+
+// ---- Per-dashboard appearance ----------------------------------------------
+
+/** Replace a dashboard's brand override.
+ *
+ *  A targeted PATCH rather than the full-document `/save`: appearance edits
+ *  and an in-flight layout save would otherwise be last-writer-wins against
+ *  each other. An empty theme clears the override. */
+export async function updateDashboardAppearance(
+  dashboardId: string,
+  theme: BrandTheme | null,
+): Promise<BrandTheme | null> {
+  const res = await authFetch(`${API_BASE}/dashboards/appearance/${dashboardId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(theme ?? {}),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to save dashboard appearance');
+  const data = (await res.json()) as { brand_theme: BrandTheme | null };
+  return data.brand_theme;
+}
+
+/** Upload a dashboard logo image. The server stores the file, stamps it on the
+ *  dashboard's brand theme (ownership-checked) and returns the cache-busted
+ *  URL. */
+export async function uploadDashboardLogo(dashboardId: string, file: File): Promise<string> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await authFetch(`${API_BASE}/dashboards/upload_logo/${dashboardId}`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to upload dashboard logo');
+  const data = (await res.json()) as { logo_url: string };
+  return data.logo_url;
 }
 
 // ---- Per-user dashboard filter state -------------------------------------
@@ -2107,7 +3554,22 @@ export type AuthMode = 'standard' | 'single_user' | 'unauthenticated';
 
 export interface AuthStatusResponse {
   auth_mode: AuthMode;
-  user: { id: string; email: string; is_admin: boolean } | null;
+  user: {
+    id: string;
+    email: string;
+    is_admin: boolean;
+    /** Naive-UTC ISO stamp of the user's profile picture, null when they have
+     *  none. Changes on every replacement, so it doubles as the cache key.
+     *  Older backends omit it, which reads as "no picture". */
+    avatar_updated_at?: string | null;
+    /** Where the picture came from. `provider` names the identity provider
+     *  (`google`, ...) when `avatar_source` is `provider`. */
+    avatar_source?: 'upload' | 'provider' | null;
+    avatar_provider?: string | null;
+    /** A public-mode guest: a temporary account that expires. Older backends
+     *  omit it, which reads as "not a guest". */
+    is_temporary?: boolean;
+  } | null;
   is_public_mode: boolean;
   is_single_user_mode: boolean;
   /** Demo mode (public mode + onboarding tooltips). Older backends omit this
@@ -2120,7 +3582,20 @@ export interface AuthStatusResponse {
    *  allow pre-provisioned accounts to log in. Older backends omit this —
    *  treat absent as `false`. */
   registration_disabled?: boolean;
+  /** Email + password sign-in is disabled — hide the credentials form and
+   *  leave Google OAuth as the only way in. Already accounts for whether
+   *  Google OAuth is actually configured. Older backends omit this — treat
+   *  absent as `false`. */
+  password_login_disabled?: boolean;
+  /** Public mode is gated by a shared access code — do not auto-mint a
+   *  temporary session, ask for the code first. Older backends omit this —
+   *  treat absent as `false`. */
+  public_access_code_required?: boolean;
   google_oauth_enabled: boolean;
+  /** SAML SSO login enabled. Older backends omit this — treat absent as `false`. */
+  saml_enabled?: boolean;
+  /** Label for the SAML login button (e.g. "Sign in with EMBL"). */
+  saml_login_label?: string;
   /** Development mode (DEPICTIO_DEV_MODE). Suppresses the walkthrough. */
   is_dev_mode?: boolean;
   /** Explicit walkthrough kill switch (DEPICTIO_WALKTHROUGH_DISABLED). */
@@ -2132,6 +3607,28 @@ export interface AuthStatusResponse {
   /** Component inspector feature flag. Older backends omit this — treat absent
    *  as `false`, which keeps the inspect action off everywhere. */
   inspector_enabled?: boolean;
+  /** Which view /dashboards opens in for someone who never picked one
+   *  (`DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW`). Older backends omit it, and
+   *  the listing then keeps its own built-in default. */
+  dashboards_default_view?: string;
+  /** The server may read run folders from its own disk (single-user mode with
+   *  allowed local folders), so the "From a run folder" tab accepts a local
+   *  path and offers a folder browser. No path is ever sent here. Older
+   *  backends omit it: treat absent as `false`. */
+  local_data_roots_enabled?: boolean;
+  /** The server may browse S3 locations an administrator listed for reading
+   *  run folders, so the run tab's folder browser offers an S3 side. No
+   *  bucket name is ever sent here. Older backends omit it: treat absent as
+   *  `false`. */
+  remote_browse_enabled?: boolean;
+  /** The component export API answers (`DEPICTIO_FASTAPI_EMBED_ENABLED`), so
+   *  every tile offers "Export / embed". Older backends omit it: treat absent
+   *  as `false`. */
+  embed_enabled?: boolean;
+  /** At least one site may frame an embed (a non-empty
+   *  `DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS`). The origins themselves are not
+   *  sent. False means an `<iframe>` of an embed is refused by its own CSP. */
+  embed_framing_enabled?: boolean;
 }
 
 /** Session payload persisted to localStorage['local-store'] on successful auth.
@@ -2261,11 +3758,17 @@ export async function registerUser(email: string, password: string): Promise<Reg
   return { success: Boolean(body.success), message: body.message };
 }
 
-/** Public-mode "Continue as temporary user" — the React modal calls this. */
-export async function createTemporaryUser(): Promise<SessionPayload> {
+/** Public-mode "Continue as temporary user" — the React modal calls this.
+ *
+ *  `accessCode` is the shared secret a protected public deployment asks for
+ *  (`DEPICTIO_AUTH_PUBLIC_ACCESS_CODE`). Omit it on an open one; the server
+ *  rejects a missing or wrong code with 403 either way, so this is a
+ *  convenience for the form rather than the check itself. */
+export async function createTemporaryUser(accessCode?: string): Promise<SessionPayload> {
   const res = await fetch(`${API_BASE}/auth/public/create_temporary_user`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(accessCode ? { access_code: accessCode } : {}),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to create temporary user');
   return (await res.json()) as SessionPayload;
@@ -2285,6 +3788,13 @@ export async function startGoogleOAuth(): Promise<{ authorization_url: string; s
   return (await res.json()) as { authorization_url: string; state: string };
 }
 
+/** URL starting the SAML SP-initiated login. Use as a full-page navigation
+ *  (window.location.assign), NOT a fetch — the backend 302s to the IdP.
+ *  `next` must be a same-origin path; the backend re-validates it. */
+export function samlLoginUrl(next: string = '/dashboards'): string {
+  return `${API_BASE}/auth/saml/login?next=${encodeURIComponent(next)}`;
+}
+
 /** Complete the Google OAuth flow with the code/state from the redirect URL. */
 export interface GoogleCallbackResult {
   success: boolean;
@@ -2297,7 +3807,8 @@ export async function handleGoogleCallback(code: string, state: string): Promise
   const params = new URLSearchParams({ code, state });
   const res = await fetch(`${API_BASE}/auth/google/callback?${params.toString()}`);
   if (!res.ok) {
-    const detail = await res.text().catch(() => '');
+    // The API answers with a `{detail}` envelope; show its text, not the JSON.
+    const detail = await readErrorDetail(res);
     return { success: false, message: detail || `OAuth failed: ${res.status}`, session: null };
   }
   const body = (await res.json()) as {
@@ -2356,6 +3867,7 @@ export function persistSession(session: SessionPayload): void {
   } catch (err) {
     console.error('Failed to persist auth session:', err);
   }
+  announceSessionChange();
 }
 
 /** Clear the persisted session — used for logout.
@@ -2371,6 +3883,26 @@ export function clearSession(): void {
   } catch {
     // ignore — quota / private mode
   }
+  announceSessionChange();
+}
+
+/** Window event fired when this tab signs in or out. Pieces that fetch
+ *  something the signed-in user shapes (the server info's admin block) listen
+ *  to it, since a `storage` event only reaches the *other* tabs. */
+export const AUTH_SESSION_EVENT = 'depictio:auth-session';
+
+function announceSessionChange(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event(AUTH_SESSION_EVENT));
+}
+
+/** Who is signed in, as an opaque id: the refresh token, which stays the same
+ *  while the access token is renewed and changes on a login or a logout.
+ *  Null when nobody is. */
+export function currentSessionId(): string | null {
+  const session = readStoredSession();
+  if (typeof session?.refresh_token === 'string') return session.refresh_token;
+  return typeof session?.access_token === 'string' ? session.access_token : null;
 }
 
 /** Proactively refresh the access token if it's within ``REFRESH_WINDOW_MS``
@@ -2560,6 +4092,8 @@ export interface IngestionDataCollection {
   removal_reason: string | null;
   files_found: number;
   files_new: number;
+  /** Files whose content changed since the previous scan. */
+  files_updated: number;
   files_skipped: number;
   files_failed: number;
   ingested: boolean;
@@ -2579,6 +4113,10 @@ export interface IngestionRun {
   scan_time: string | null;
   /** 'ok' | 'partial' | 'no_scan' */
   status: string;
+  /** Tallies from this run's most recent scan, summed across its DCs. */
+  files_total: number;
+  files_new: number;
+  files_updated: number;
 }
 
 export interface IngestionSummary {
@@ -2602,9 +4140,42 @@ export interface IngestionReport {
     applied_at: string | null;
     data_root: string | null;
   } | null;
-  /** 'template_manifest' (faithful) | 'live_project' (legacy fallback) */
-  manifest_source: string;
+  /**
+   * Where the expected-collection list came from. 'template_manifest' compares
+   * against the manifest frozen when the template was applied; 'live_project'
+   * is assembled from the project's current collections, so gated-out
+   * collections are unknown rather than zero.
+   */
+  manifest_source: 'template_manifest' | 'live_project';
+  /**
+   * What invoked the project's most recent ingestion. 'manual' when someone ran
+   * the CLI themselves, otherwise the engine whose completion trigger did (e.g.
+   * 'nextflow'). Open vocabulary, so treat an unknown value as a label to show,
+   * not a case to handle.
+   */
+  triggered_by: string;
+  /**
+   * Identity of the pipeline behind the data, read back from the workflow
+   * config. Independent of `triggered_by`: a manually ingested directory still
+   * carries a pipeline identity, and a triggered run whose engine left no
+   * breadcrumbs carries none. Null when nothing was detected.
+   */
+  pipeline: {
+    engine: string | null;
+    name: string | null;
+    version: string | null;
+    engine_version: string | null;
+    tool_count: number;
+  } | null;
   variables: Array<{ name: string; value: string }>;
+  /** Pipeline run provenance (parameters, thresholds, tool versions), grouped
+   *  as the template's ProvenanceSpec laid them out. Empty for projects
+   *  ingested before provenance collection existed. */
+  run_provenance: Array<{
+    group: string;
+    entries: Array<{ source: string; key: string; value: string; highlight: boolean }>;
+  }>;
+  run_provenance_files: string[];
   data_collections: IngestionDataCollection[];
   runs: IngestionRun[];
   summary: IngestionSummary;
@@ -2702,12 +4273,719 @@ export async function createProject(
   return { ...result, project_id: result.project_id ?? newId };
 }
 
+/** One data collection ingested (or planned, under dry_run) from a manifest. */
+export interface ManifestIngestDCResult {
+  data_collection_tag: string;
+  data_collection_id: string | null;
+  entries: number;
+  status: 'ingested' | 'failed' | 'planned';
+  message: string | null;
+}
+
+/** One template dashboard imported (or planned) for a from-manifest project. */
+export interface DashboardImportResult {
+  path: string;
+  success: boolean;
+  dashboard_id: string | null;
+  title: string | null;
+  error: string | null;
+}
+
+/** Inputs for POST /projects/from_manifest. The backend injects the
+ *  `MANIFEST_URL` template variable from `manifest_url`: never send it via
+ *  `variables`. With `dry_run` nothing is created and the report comes back
+ *  with `planned` statuses and null ids. */
+export interface FromManifestRequest {
+  manifest_url: string;
+  template_id: string;
+  project_name?: string | null;
+  variables?: Record<string, string>;
+  dry_run?: boolean;
+}
+
+/** Report returned by POST /projects/from_manifest, both for real creation
+ *  and for a dry-run plan. `success: false` means the project exists but some
+ *  collections/dashboards failed (per-row `message`/`error` says why). */
+export interface FromManifestReport {
+  project_id: string | null;
+  project_name: string;
+  template_id: string;
+  manifest_url: string;
+  manifest_entries: number;
+  ingestion: ManifestIngestDCResult[];
+  dashboards: DashboardImportResult[];
+  unmatched_manifest_types: string[];
+  pruned_optional_dcs: string[];
+  dry_run: boolean;
+  success: boolean;
+}
+
+/** Create (or, with `dry_run`, plan) a project from a Data Manifest URL.
+ *  Backend errors carry actionable `{detail}` strings (rejected URL, unknown
+ *  template, duplicate name, unparseable manifest), surfaced verbatim. */
+export async function createProjectFromManifest(
+  input: FromManifestRequest,
+): Promise<FromManifestReport> {
+  const res = await authFetch(`${API_BASE}/projects/from_manifest`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create project from manifest');
+  return (await res.json()) as FromManifestReport;
+}
+
+/** What one data collection of a template resolved to under a run folder.
+ *
+ *  `matched` is how many sources the server actually found; `missing_sources`
+ *  names the ones it looked for and did not find, verbatim, because a data
+ *  root set one directory too high (or too low) shows every row at 0 and only
+ *  those paths say why. `status` is `ok` when something matched, `empty` when
+ *  the location exists but holds nothing, `missing` when it does not exist,
+ *  and `pruned` when a template conditional dropped the collection. */
+export interface FromRunDCPreview {
+  data_collection_tag: string;
+  /** `scan` walks a location for files; `recipe` derives a table from sources. */
+  kind: 'scan' | 'recipe';
+  /** Scan mode (`recursive`, `s3_prefix`, ...); null for a recipe. */
+  mode: string | null;
+  location: string;
+  matched: number;
+  missing_sources: string[];
+  optional: boolean;
+  status: 'ok' | 'empty' | 'missing' | 'pruned';
+  /** What a scan looks for, as the template wrote it (a pattern, a file
+   *  name, a manifest URL); null for a recipe. Older backends omit it. */
+  rule?: string | null;
+  /** The first files matched, as real paths or `s3://` URLs; `matched`
+   *  counts them all. Older backends omit it. */
+  samples?: string[];
+  /** The deepest folder holding every file matched, relative to the run
+   *  folder (`''` at its top); null when none was. Older backends omit it. */
+  found_in?: string | null;
+  /** For a recipe: the recipe applied and what each of its inputs found.
+   *  Older backends omit it. */
+  recipe?: FromRunRecipePreview | null;
+}
+
+/** One input a recipe reads: files found by a pattern or a path, another
+ *  collection's table, or a URL read at ingestion. `found` is null when it
+ *  cannot be told before ingestion (a URL). */
+export interface FromRunRecipeSource {
+  ref: string;
+  kind: 'file' | 'collection' | 'url';
+  /** The glob or path looked up (after the template's overrides). */
+  pattern: string | null;
+  /** The collection whose table is read, for `kind: 'collection'`. */
+  dc_ref: string | null;
+  optional: boolean;
+  matched: number;
+  /** The first files matched, as real paths or `s3://` URLs. */
+  samples: string[];
+  found: boolean | null;
+  /** The deepest folder holding every file matched, relative to the run
+   *  folder (`''` at its top); null when none was. */
+  found_in?: string | null;
+}
+
+/** The recipe that builds a table, as the template names it. */
+export interface FromRunRecipePreview {
+  /** e.g. `nf-core/ampliseq/alpha_diversity.py`. */
+  name: string;
+  /** First line of the recipe's own description. */
+  summary: string | null;
+  sources: FromRunRecipeSource[];
+}
+
+/** Inputs for POST /projects/from_run. The backend injects the `DATA_ROOT`
+ *  template variable from `dataRoot`, so it is never sent via `variables`. With
+ *  `dryRun` nothing is created: the report comes back with the per-collection
+ *  plan and null ids. */
+export interface FromRunRequest {
+  /** One pipeline run folder: an `s3://bucket/prefix`, or, when the server
+   *  allows local folders (`local_data_roots_enabled`), an absolute path or a
+   *  `~/...` path on the server's disk. */
+  dataRoot: string;
+  /** The template to use; null or absent asks the server to recognise the
+   *  pipeline from the folder (see `FromRunReport.detected_template`). A
+   *  folder it cannot recognise is a 422 with code `template_not_detected`. */
+  templateId?: string | null;
+  projectName?: string | null;
+  variables?: Record<string, string>;
+  dryRun?: boolean;
+  /** Connection settings of the private bucket `dataRoot` is in. The run
+   *  folder is then read with them alone; a real creation stores them as the
+   *  project's storage settings (`FromRunReport.storage_saved`), a dry run
+   *  stores nothing. */
+  storage?: RunStorageIn | null;
+}
+
+/** Connection settings typed in for a private bucket, before the project
+ *  they are for exists (`RunStorageIn` server-side). There is no bucket
+ *  field: the bucket is the one the `s3://` location names. An empty
+ *  `endpoint_url` means Amazon S3, an empty `region` the default one. The
+ *  access key and its secret are required: the server answers 422 without
+ *  either. The secret only ever travels in a request body, never in a URL,
+ *  and is never echoed back. */
+export interface RunStorageIn {
+  endpoint_url: string | null;
+  region: string | null;
+  access_key_id: string | null;
+  secret_access_key: string | null;
+}
+
+/** How the template chosen for a run relates to the run's own version:
+ *  `exact` when the template targets the version that made the run,
+ *  `closest` when another version of the same pipeline was chosen, `none`
+ *  when the run was recognised but no installed template matches it. */
+export type TemplateMatch = 'exact' | 'closest' | 'none';
+
+/** What the server recognised in a run folder (`POST /projects/from_run`
+ *  when no template was given, `GET /projects/folder_inspect`). Every field
+ *  is null when it could not tell; `template_id` null means no installed
+ *  template matches. `version` is the pipeline version that made the run;
+ *  `template_version` is the pipeline version the chosen template targets. */
+export interface DetectedTemplate {
+  template_id: string | null;
+  /** e.g. `nf-core/ampliseq`. */
+  pipeline: string | null;
+  /** Version of the pipeline that made the run. */
+  version: string | null;
+  /** Workflow engine, e.g. `nextflow`. */
+  engine: string | null;
+  /** Pipeline version the chosen template targets. Older backends omit it. */
+  template_version?: string | null;
+  /** Older backends omit it. */
+  match?: TemplateMatch | null;
+}
+
+/** Report returned by POST /projects/from_run, both for a dry-run plan and
+ *  for a real creation. A real run answers as soon as the project and its
+ *  dashboards exist and hands back `run_id`: the per-collection ingestion
+ *  continues on the workers and is polled with `getManifestRefreshRun`.
+ *  `truncated` means the server stopped counting early, so every `matched`
+ *  is a lower bound. */
+export interface FromRunReport {
+  project_id: string | null;
+  project_name: string;
+  /** The template actually used: the one asked for, with a `latest` alias
+   *  expanded to its version, or the one detected from the folder. */
+  template_id: string;
+  /** Set whenever detection ran (no template in the request), null otherwise. */
+  detected_template?: DetectedTemplate | null;
+  data_root: string;
+  detected_runs: string[];
+  resolved_variables: Record<string, string>;
+  data_collections: FromRunDCPreview[];
+  /** Empty on a dry run. */
+  dashboards: DashboardImportResult[];
+  pruned_optional_dcs: string[];
+  truncated: boolean;
+  /** Ingestion run to poll; null on a dry run. */
+  run_id: string | null;
+  dry_run: boolean;
+  success: boolean;
+  /** The request's `storage` was stored as the new project's storage
+   *  settings. False on a dry run and without `storage`; older backends
+   *  omit it. */
+  storage_saved?: boolean;
+  /** The run's own records under the data root. Null when no engine
+   *  recognised the folder; older backends omit it. */
+  run_info?: RunInfoSummary | null;
+  /** The files the template is pointed at (its `*_FILE` variables), in the
+   *  template's order. Older backends omit it. */
+  input_files?: RunInputFile[];
+}
+
+/** One file a template variable points at (`SAMPLESHEET_FILE`, ...), as the
+ *  dry run resolved it. */
+export interface RunInputFile {
+  /** The template variable, e.g. `METADATA_FILE`. */
+  name: string;
+  description: string | null;
+  required: boolean;
+  /** Real path or `s3://` URL; null when the variable is not set. */
+  location: string | null;
+  /** The file exists under the data root; null when that cannot be told. */
+  found: boolean | null;
+  /** Data collections that read it, or that a condition on it switches. */
+  used_by: string[];
+}
+
+/** Create (or, with `dryRun`, plan) a project from a pipeline run folder.
+ *  Backend errors carry actionable `{detail}` strings (unreadable prefix,
+ *  unknown template, duplicate name) and they are surfaced verbatim; the
+ *  thrown `ApiDetailError` keeps the server's `code` (`template_not_detected`,
+ *  `s3_access_denied`, ...). */
+export async function createProjectFromRun(
+  input: FromRunRequest,
+  options: { signal?: AbortSignal } = {},
+): Promise<FromRunReport> {
+  const res = await authFetch(`${API_BASE}/projects/from_run`, {
+    method: 'POST',
+    body: JSON.stringify({
+      data_root: input.dataRoot,
+      template_id: input.templateId ?? null,
+      project_name: input.projectName ?? null,
+      variables: input.variables ?? {},
+      dry_run: Boolean(input.dryRun),
+      ...(input.storage ? { storage: input.storage } : {}),
+    }),
+    signal: options.signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create project from run folder');
+  return (await res.json()) as FromRunReport;
+}
+
+/** One sub-directory in a folder listing (local or S3). */
+export interface LocalDirEntry {
+  name: string;
+  /** Absolute path on the server's disk, or an `s3://bucket/prefix/` URL. */
+  path: string;
+  /** The folder holds `pipeline_info/` or `multiqc/`, so it is likely the
+   *  output folder of one pipeline run. Always false for S3 entries (only
+   *  the listing-level flag is known there). */
+  looks_like_run: boolean;
+  /** The folder holds at least one sub-folder. Always true for S3 entries
+   *  (unknown without another request). Older backends omit it: treat absent
+   *  as `true`, so the folder can still be opened. */
+  has_children?: boolean;
+}
+
+/** Response of GET /projects/local_dirs and GET /projects/s3_dirs. Without a
+ *  path, `entries` are the allowed roots themselves and `path`, `root` and
+ *  `parent` are null. */
+export interface LocalDirListing {
+  path: string | null;
+  /** The allowed root `path` sits under. */
+  root: string | null;
+  /** Null at a root and for the roots listing. */
+  parent: string | null;
+  /** Sub-directories only, sorted by name. */
+  entries: LocalDirEntry[];
+  /** More sub-directories exist than the server lists (500). */
+  truncated: boolean;
+  /** The listed folder itself holds `pipeline_info/` or `multiqc/`. */
+  looks_like_run?: boolean;
+}
+
+/** The S3 listing has the local listing's shape; entry paths are
+ *  `s3://bucket/prefix/` URLs ending with a slash. */
+export type S3DirListing = LocalDirListing;
+
+/** Optional request settings shared by the folder calls. */
+export interface FolderRequestOptions {
+  /** Cancels the request (a newer selection or keystroke supersedes it). */
+  signal?: AbortSignal;
+  /** Connection settings of the private bucket an `s3://` location is in.
+   *  With them the call goes to the route's POST twin, the settings in the
+   *  body (never in the URL), and the location is read with them alone: the
+   *  bucket itself is then the browse root. Nothing is stored. */
+  storage?: RunStorageIn | null;
+}
+
+/** POST one of the folder routes' twins: the GET query fields and the
+ *  storage settings in a JSON body. */
+function postFolderRoute(
+  route: string,
+  body: Record<string, unknown>,
+  options: FolderRequestOptions,
+): Promise<Response> {
+  return authFetch(`${API_BASE}/projects/${route}`, {
+    method: 'POST',
+    body: JSON.stringify({ ...body, storage: options.storage }),
+    signal: options.signal,
+  });
+}
+
+/** List the sub-folders of `path` on the server's disk, or the allowed root
+ *  folders when `path` is omitted. Only available when the server allows
+ *  local folders (`local_data_roots_enabled`): a 404 means the path is outside
+ *  every allowed folder, refused or missing; a 403 means the caller may not
+ *  browse. Both carry a plain-English `{detail}`, surfaced verbatim. */
+export async function listLocalDirs(
+  path?: string | null,
+  options: FolderRequestOptions = {},
+): Promise<LocalDirListing> {
+  const query = path ? `?path=${encodeURIComponent(path)}` : '';
+  const res = await authFetch(`${API_BASE}/projects/local_dirs${query}`, {
+    signal: options.signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list folders');
+  return (await res.json()) as LocalDirListing;
+}
+
+/** List the sub-folders (common prefixes) of an `s3://` location the server
+ *  may browse, or the allowed locations themselves when `url` is omitted.
+ *  Only useful when `remote_browse_enabled`, or with `options.storage` for a
+ *  private bucket. A location outside every allowed one is refused with an
+ *  S3 code (`s3_refused`, `s3_access_denied`, ...). */
+export async function listS3Dirs(
+  url?: string | null,
+  options: FolderRequestOptions = {},
+): Promise<S3DirListing> {
+  const query = url ? `?url=${encodeURIComponent(url)}` : '';
+  const res =
+    url && options.storage
+      ? await postFolderRoute('s3_dirs', { url }, options)
+      : await authFetch(`${API_BASE}/projects/s3_dirs${query}`, {
+          signal: options.signal,
+        });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list S3 folders');
+  return (await res.json()) as S3DirListing;
+}
+
+/** Direct children of one kind (folders or files) in a folder inspection. */
+export interface FolderContents {
+  /** Everything visible, not only the names below. */
+  count: number;
+  /** The first 200 (20 on older backends), sorted. */
+  names: string[];
+}
+
+/** One file of a run's `pipeline_info` that Depictio recognised. */
+export interface RunReportFile {
+  kind: 'software_versions' | 'params' | 'execution_report' | 'execution_trace' | 'pipeline_dag';
+  /** A real path, or an `s3://` URL. */
+  location: string;
+  name: string;
+  /** Bytes; null when unknown. */
+  size: number | null;
+}
+
+/** What a run folder's `pipeline_info` says about the run. */
+export interface RunInfoSummary {
+  engine: string | null;
+  engine_version: string | null;
+  run_name: string | null;
+  homepage: string | null;
+  /** The run's parameters, long values clipped, at most 200 of them. */
+  params: Record<string, string | number | boolean | null>;
+  /** How many parameters the run has in all. */
+  params_total: number;
+  tools_executed: string[];
+  reports: RunReportFile[];
+  /** Other details the engine's reader kept, as text. */
+  extra: Record<string, string>;
+  /** The tasks of the run, from its execution trace. Null without a trace
+   *  (or a trace with no status); older backends omit it. */
+  tasks?: RunTaskSummary | null;
+  /** "pipeline version" pairs, when the folder holds runs of more than one
+   *  pipeline or version. Older backends omit it. */
+  identities_seen?: string[];
+  /** How many run sub-folders the identity was read across, when more than
+   *  the folder itself. Older backends omit it. */
+  runs_scanned?: number | null;
+}
+
+/** The tasks of a run, by the status of each task's last attempt. */
+export interface RunTaskSummary {
+  /** The trace read: a real path or an `s3://` URL. */
+  trace: string;
+  total: number;
+  completed: number;
+  cached: number;
+  /** Last attempt FAILED or ABORTED. */
+  failed: number;
+  /** Failed once, then completed (or cached). */
+  retried: number;
+  /** Last attempt in any other status: the run did not finish them. */
+  other: number;
+  /** The trace was bigger than the server reads: counts cover its start. */
+  partial: boolean;
+}
+
+/** Response of POST /projects/run_file_preview: the start of one file of a
+ *  run folder. */
+export interface RunFilePreview {
+  location: string;
+  name: string;
+  /** Bytes; null when unknown. */
+  size: number | null;
+  /** `none`: not previewable (binary, an HTML report, too large); `reason`
+   *  says why. */
+  format: 'table' | 'text' | 'none';
+  columns: string[];
+  /** Cells as text, long ones clipped. */
+  rows: Array<Array<string | null>>;
+  columns_total: number;
+  /** Known for a parquet file and for a table read in full; null otherwise. */
+  rows_total: number | null;
+  text: string | null;
+  /** Rows, columns or text were cut. */
+  truncated: boolean;
+  reason: string | null;
+}
+
+/** Read the start of one file of a run folder: its first rows as a table, or
+ *  its first lines. `location` must be under `dataRoot`; the folder is read
+ *  with the same checks as a dry run of `createProjectFromRun`. */
+export async function previewRunFile(
+  input: {
+    dataRoot: string;
+    location: string;
+    storage?: RunStorageIn | null;
+    maxRows?: number;
+  },
+  options: { signal?: AbortSignal } = {},
+): Promise<RunFilePreview> {
+  const res = await authFetch(`${API_BASE}/projects/run_file_preview`, {
+    method: 'POST',
+    body: JSON.stringify({
+      data_root: input.dataRoot,
+      location: input.location,
+      max_rows: input.maxRows ?? 20,
+      ...(input.storage ? { storage: input.storage } : {}),
+    }),
+    signal: options.signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to preview the file');
+  return (await res.json()) as RunFilePreview;
+}
+
+/** Response of GET /projects/folder_inspect: what one folder holds, and the
+ *  pipeline and template recognised in it. */
+export interface FolderInspection {
+  /** The resolved location (a real path, or an `s3://.../` URL). */
+  location: string;
+  source: 'local' | 's3';
+  name: string;
+  looks_like_run: boolean;
+  /** Run markers present, e.g. `pipeline_info`, `multiqc`. */
+  markers: string[];
+  folders: FolderContents;
+  files: FolderContents;
+  /** The listing was cut short, so the counts are a lower bound. */
+  truncated: boolean;
+  /** Null when no engine recognised the folder (or detection was off). */
+  detected: DetectedTemplate | null;
+  /** The run's own records, read with the detection. Null when no engine
+   *  recognised the folder; older backends omit it. */
+  run_info?: RunInfoSummary | null;
+}
+
+/** Inspect one folder: its direct contents, its run markers and, unless
+ *  `detect` is false, the pipeline, version and template recognised in it.
+ *  `location` is an absolute path, a `~/...` path or an `s3://` URL. */
+export async function inspectFolder(
+  location: string,
+  options: FolderRequestOptions & { detect?: boolean } = {},
+): Promise<FolderInspection> {
+  let res: Response;
+  if (options.storage) {
+    res = await postFolderRoute(
+      'folder_inspect',
+      { location, detect: options.detect !== false },
+      options,
+    );
+  } else {
+    const params = new URLSearchParams({ location });
+    if (options.detect === false) params.set('detect', 'false');
+    res = await authFetch(`${API_BASE}/projects/folder_inspect?${params.toString()}`, {
+      signal: options.signal,
+    });
+  }
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to inspect the folder');
+  return (await res.json()) as FolderInspection;
+}
+
+/** One run folder found below a location by `findRunFolders`. */
+export interface FoundRunFolder {
+  location: string;
+  name: string;
+  /** Path relative to the searched location, e.g. `a/run1`; `.` when the
+   *  searched folder is itself a run folder. */
+  relative: string;
+  markers: string[];
+  /** Filled for the first hits of a local search; null otherwise (inspect
+   *  the folder on selection instead). */
+  detected: DetectedTemplate | null;
+}
+
+/** Response of GET /projects/find_runs. */
+export interface FindRunsResult {
+  location: string;
+  runs: FoundRunFolder[];
+  /** A bound was hit (depth, folders visited, keys listed or hits kept), so
+   *  more run folders may exist. */
+  truncated: boolean;
+  /** Folders visited (local) or object keys listed (S3). */
+  scanned: number;
+}
+
+/** Look for run folders (folders holding `pipeline_info/` or `multiqc/`)
+ *  below `location`. Bounded server-side; `truncated` says when a bound was
+ *  hit. */
+export async function findRunFolders(
+  location: string,
+  options: FolderRequestOptions = {},
+): Promise<FindRunsResult> {
+  const params = new URLSearchParams({ location });
+  const res = options.storage
+    ? await postFolderRoute('find_runs', { location }, options)
+    : await authFetch(`${API_BASE}/projects/find_runs?${params.toString()}`, {
+        signal: options.signal,
+      });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to search for run folders');
+  return (await res.json()) as FindRunsResult;
+}
+
+/** Try storage settings typed in for a private bucket before its project
+ *  exists (`POST /projects/storage_test`): the bucket of `location` is
+ *  reached, its region detected and one key listed under the location's
+ *  prefix. Nothing is stored, the detected region included: put it in the
+ *  region field. Settings no read could use, and a failed connection, come
+ *  back as `{success: false, message}`; a location that is not `s3://` (422
+ *  `s3_refused`), settings without the access key or its secret (422) and a
+ *  refusal to the caller (403) throw an `ApiDetailError` carrying the
+ *  server's `detail`. */
+export async function testRunStorage(
+  location: string,
+  storage: RunStorageIn,
+  options: Pick<FolderRequestOptions, 'signal'> = {},
+): Promise<ProjectStorageTestResult> {
+  const res = await authFetch(`${API_BASE}/projects/storage_test`, {
+    method: 'POST',
+    body: JSON.stringify({ location, storage }),
+    signal: options.signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'The connection test did not run');
+  return (await res.json()) as ProjectStorageTestResult;
+}
+
+/** Per-DC status of a manifest refresh. A synchronous refresh reports
+ *  `ingested` / `failed` (or `planned` under `dry_run`); a polled async run
+ *  additionally passes through `dispatched` (queued for a worker) and
+ *  `running`. Mirrors `_REFRESH_STEP_TO_DC_STATUS` server-side. */
+export type ManifestRefreshStatus =
+  | 'ingested'
+  | 'failed'
+  | 'planned'
+  | 'dispatched'
+  | 'running'
+  /** An optional collection whose source is absent from the run folder: nominal, never a worker task. */
+  | 'skipped';
+
+/** One data collection of a manifest refresh (`ManifestIngestDCResult`
+ *  server-side). `data_collection_id` is empty for a polled run whose project
+ *  has since been deleted. `message` explains a `failed` row, including the
+ *  pre-flight skips (manifest unreachable, type dropped from the manifest)
+ *  that never reach a worker. */
+export interface ManifestRefreshEntry {
+  data_collection_tag: string;
+  data_collection_id: string | null;
+  entries: number;
+  status: ManifestRefreshStatus;
+  message: string | null;
+}
+
+/** Report of POST /projects/refresh_manifest and of the poll endpoint
+ *  GET /projects/refresh_manifest/{run_id}. `run_id` is set when the refresh
+ *  was fanned out to workers (`async_run`); `success` flips once every row is
+ *  `ingested`. */
+export interface ManifestRefreshReport {
+  project_id: string;
+  refreshed: ManifestRefreshEntry[];
+  run_id: string | null;
+  dry_run: boolean;
+  success: boolean;
+}
+
+/** Inputs for POST /projects/refresh_manifest. `dataCollectionTag` restricts
+ *  the refresh to one re-readable collection (all of them otherwise);
+ *  `dryRun` only reports per-DC entry counts; `asyncRun` dispatches the
+ *  per-DC re-ingestion to workers and returns a `run_id` to poll with
+ *  `getManifestRefreshRun`. */
+export interface RefreshManifestInput {
+  projectId: string;
+  dataCollectionTag?: string | null;
+  dryRun?: boolean;
+  asyncRun?: boolean;
+}
+
+/** Re-read and re-ingest the data collections whose source this server can
+ *  still reach, whatever their scan mode (owners and editors; admins only in
+ *  public mode). Backend errors carry actionable `{detail}` strings (nothing
+ *  re-readable, unknown tag, no edit permission) and are surfaced verbatim. */
+export async function refreshManifest(
+  input: RefreshManifestInput,
+): Promise<ManifestRefreshReport> {
+  const res = await authFetch(`${API_BASE}/projects/refresh_manifest`, {
+    method: 'POST',
+    body: JSON.stringify({
+      project_id: input.projectId,
+      data_collection_tag: input.dataCollectionTag ?? null,
+      dry_run: Boolean(input.dryRun),
+      async_run: Boolean(input.asyncRun),
+    }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to refresh data');
+  return (await res.json()) as ManifestRefreshReport;
+}
+
+/** Poll an async manifest refresh by the `run_id` that `refreshManifest`
+ *  returned. Only the user who started the run (or an admin) may read it. */
+export async function getManifestRefreshRun(
+  runId: string,
+): Promise<ManifestRefreshReport> {
+  const res = await authFetch(
+    `${API_BASE}/projects/refresh_manifest/${encodeURIComponent(runId)}`,
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load manifest refresh status');
+  return (await res.json()) as ManifestRefreshReport;
+}
+
+/** A variable a project template accepts. `MANIFEST_URL` is special-cased by
+ *  the from-manifest endpoint and must not be collected from the user. */
+export interface TemplateVariable {
+  name: string;
+  description: string | null;
+  required: boolean;
+  default: string | null;
+}
+
+/** One entry from GET /projects/templates. Only templates with
+ *  `manifest_capable` can back the from-manifest flow, and only those with
+ *  `run_folder_capable` the from-run-folder flow. */
+export interface TemplateInfo {
+  template_id: string;
+  name: string;
+  description: string | null;
+  /** The template's own revision, not the pipeline version it targets (that
+   *  one is the version segment of `template_id`). */
+  version: string | null;
+  manifest_capable: boolean;
+  variables: TemplateVariable[];
+  dashboards: string[];
+  /** The template resolves against a run folder and scans under it. Older
+   *  backends omit it. */
+  run_folder_capable?: boolean;
+  /** First id segment, e.g. `nf-core`. Older backends omit it. */
+  source?: string | null;
+  /** Id without its version, e.g. `nf-core/ampliseq`. Older backends omit it. */
+  pipeline?: string | null;
+  /** Workflow engine when the template declares it, e.g. `nextflow`. */
+  engine?: string | null;
+}
+
+/** Envelope returned by GET /projects/templates. */
+export interface TemplateListResponse {
+  templates: TemplateInfo[];
+}
+
+/** List the project templates known to the backend, unwrapping the
+ *  `{templates}` envelope. */
+export async function listProjectTemplates(): Promise<TemplateInfo[]> {
+  const res = await authFetch(`${API_BASE}/projects/templates`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list project templates');
+  const body = (await res.json()) as TemplateListResponse;
+  return body.templates ?? [];
+}
+
 /** Fields editable via the Edit modal. Update-project endpoint accepts a
  *  full Project, so the caller fetches the existing project, merges these
  *  fields, and PUTs the merged document. */
 export interface EditProjectInput {
   name?: string;
-  is_public?: boolean;
   data_management_platform_project_url?: string | null;
 }
 
@@ -2765,6 +5043,95 @@ export async function updateProjectPermissions(
     body: JSON.stringify(input),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to update permissions');
+}
+
+/** Per-project S3-compatible storage configuration, as returned by the
+ *  backend. The secret is write-only: it is stored encrypted server-side and
+ *  never echoed back; responses only carry `has_secret`. `bucket` is null
+ *  only on a config saved before the bucket became required. */
+export interface ProjectStorageConfig {
+  endpoint_url: string;
+  bucket: string | null;
+  region: string;
+  access_key_id: string | null;
+  has_secret: boolean;
+  updated_at: string | null;
+}
+
+/** PUT body for the storage config. `bucket` is required (an empty one is
+ *  refused with a 422). `region` defaults to `us-east-1` server-side; the
+ *  connection test detects the bucket's real region and saves it. Omitting
+ *  (or nulling) `secret_access_key` KEEPS the previously stored secret, so
+ *  edits don't require retyping it; a non-empty string replaces it. */
+export interface ProjectStorageConfigInput {
+  endpoint_url: string;
+  bucket: string;
+  region?: string;
+  access_key_id?: string | null;
+  secret_access_key?: string | null;
+}
+
+/** Result of POST /projects/{id}/storage/test. A failed connection is NOT an
+ *  HTTP error: it comes back 200 with `success: false` and a sanitized
+ *  message. `detected_region` is set when the test found the bucket's region
+ *  (the server has then already saved it on the config); null otherwise,
+ *  and absent from servers older than the region detection. */
+export interface ProjectStorageTestResult {
+  success: boolean;
+  message: string;
+  detected_region?: string | null;
+}
+
+/** Fetch a project's storage config. Returns null when none is set (the
+ *  backend answers 404 for "not configured": that's a normal state, not an
+ *  error). Other failures (401/403, invalid project) throw with the backend's
+ *  `{detail}` string. */
+export async function getProjectStorage(
+  projectId: string,
+): Promise<ProjectStorageConfig | null> {
+  const res = await authFetch(`${API_BASE}/projects/${projectId}/storage`);
+  if (res.status === 404) return null;
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load storage configuration');
+  return (await res.json()) as ProjectStorageConfig;
+}
+
+/** Create or update a project's storage config (owners only). Backend 400s
+ *  and 422s carry actionable `{detail}` strings (a rejected private endpoint
+ *  host, a missing bucket), surfaced verbatim. */
+export async function setProjectStorage(
+  projectId: string,
+  input: ProjectStorageConfigInput,
+): Promise<ProjectStorageConfig> {
+  const res = await authFetch(`${API_BASE}/projects/${projectId}/storage`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to save storage configuration');
+  return (await res.json()) as ProjectStorageConfig;
+}
+
+/** Remove a project's storage config, including the stored secret. */
+export async function deleteProjectStorage(projectId: string): Promise<void> {
+  const res = await authFetch(`${API_BASE}/projects/${projectId}/storage`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to remove storage configuration');
+}
+
+/** Test the saved storage credentials against the configured bucket.
+ *  Connection failures come back as `{success: false, message}` rather than
+ *  throwing; only transport/authorization errors throw. S3 errors raised by
+ *  any route carry `{detail, code}` (`s3_refused`, `s3_access_denied`,
+ *  `s3_no_such_bucket`, `s3_wrong_region`, `s3_unreachable`, `s3_error`);
+ *  the thrown message is the `detail`. */
+export async function testProjectStorage(
+  projectId: string,
+): Promise<ProjectStorageTestResult> {
+  const res = await authFetch(`${API_BASE}/projects/${projectId}/storage/test`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Storage connection test failed');
+  return (await res.json()) as ProjectStorageTestResult;
 }
 
 /** Upload a project .zip and create the project from its contents.
@@ -2827,6 +5194,35 @@ export async function exportProjectZip(projectId: string): Promise<void> {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+/** POST body for /projects/{id}/export_template. `template_id` is a
+ *  slash-separated path (e.g. `my-lab/rnaseq-qc/1`); each segment must match
+ *  `[A-Za-z0-9][A-Za-z0-9._-]*`. `data_root` re-parameterizes a local path
+ *  prefix as `{DATA_ROOT}` in the exported config; leave it unset for
+ *  manifest-driven projects. */
+export interface ExportTemplateRequest {
+  template_id: string;
+  description?: string | null;
+  version?: string;
+  data_root?: string | null;
+}
+
+/** Export a project as a reusable template bundle (owners/editors/admins).
+ *  Resolves to the zip Blob; the caller decides how to hand it to the user.
+ *  Backend 422s carry meaningful `{detail}` strings (bad template_id format,
+ *  or the exported config failing its round-trip self-check), surfaced
+ *  verbatim. */
+export async function exportProjectTemplate(
+  projectId: string,
+  payload: ExportTemplateRequest,
+): Promise<Blob> {
+  const res = await authFetch(`${API_BASE}/projects/${projectId}/export_template`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to export template');
+  return res.blob();
 }
 
 /** MultiQC report list response shape — used to render the DC viewer panel
@@ -2961,6 +5357,51 @@ export async function createDataCollectionFromUpload(
   return res.json();
 }
 
+export interface CreateDataCollectionUrlInput {
+  projectId: string;
+  name: string;
+  description?: string;
+  dataType?: string;
+  fileFormat: string;
+  separator: string;
+  customSeparator?: string | null;
+  compression: string;
+  hasHeader: boolean;
+  /** Absolute https:// or s3:// URL (http:// only where the server allows it).
+   *  Screened server-side by the SSRF gateway. */
+  url: string;
+  latColumn?: string | null;
+  lonColumn?: string | null;
+}
+
+/** Create a data collection from a remote URL: the no-upload twin of
+ *  `createDataCollectionFromUpload`. The file is fetched server-side, so this
+ *  works for data far too large to push through the browser, and for buckets
+ *  the browser cannot reach. */
+export async function createDataCollectionFromUrl(
+  input: CreateDataCollectionUrlInput,
+): Promise<CreateDataCollectionResult> {
+  const res = await authFetch(`${API_BASE}/datacollections/create_from_url`, {
+    method: 'POST',
+    body: JSON.stringify({
+      project_id: input.projectId,
+      name: input.name,
+      description: input.description ?? '',
+      data_type: input.dataType ?? 'table',
+      file_format: input.fileFormat,
+      separator: input.separator,
+      custom_separator: input.customSeparator ?? null,
+      compression: input.compression,
+      has_header: input.hasHeader,
+      url: input.url,
+      lat_column: input.latColumn ?? null,
+      lon_column: input.lonColumn ?? null,
+    }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create data collection from URL');
+  return res.json();
+}
+
 /** Fields the management Create-modal collects. Matches the allowlist on
  *  POST /dashboards/save/{id} — we hand the rest of the payload defaults
  *  client-side so the user only fills what's interesting. */
@@ -2994,7 +5435,7 @@ export async function createDashboard(input: CreateDashboardInput): Promise<stri
     workflow_system: input.workflow_system || 'none',
     notes_content: '',
     permissions: { owners: [ownerEntry], editors: [], viewers: [] },
-    is_public: false,
+    // is_public is server-stamped from the parent project on insert.
     last_saved_ts: '',
     project_id: input.project_id,
     is_main_tab: true,
@@ -3058,7 +5499,7 @@ export async function duplicateDashboard(sourceDashboardId: string): Promise<str
     _id: newId,
     title: `${(source.title as string) || 'Untitled'} (copy)`,
     permissions: { owners: [ownerEntry], editors: [], viewers: [] },
-    is_public: false,
+    // is_public is server-stamped from the parent project on insert.
     is_main_tab: true,
     parent_dashboard_id: null,
     tab_order: 0,
@@ -3093,7 +5534,7 @@ export async function duplicateDashboard(sourceDashboardId: string): Promise<str
           _id: newChildId,
           title: child.title ?? (childSource.title as string) ?? 'Tab',
           permissions: { owners: [ownerEntry], editors: [], viewers: [] },
-          is_public: false,
+          // is_public is server-stamped from the parent project on insert.
           is_main_tab: false,
           parent_dashboard_id: newId,
           tab_order: child.tab_order ?? (childSource.tab_order as number) ?? 0,
@@ -3311,6 +5752,202 @@ export async function cleanExampleProjects(): Promise<{ deleted: ExampleProject[
   return { deleted };
 }
 
+// ---- Admin backup & restore (/backup) -----------------------------------
+//
+// Back the admin Backups tab. All endpoints are admin-gated server side.
+// Restore is destructive (per-collection wipe-and-replace) — the UI runs
+// validation first and gates the real restore behind a typed confirmation.
+
+/** One entry from GET /backup/list. */
+export interface AdminBackupEntry {
+  backup_id: string;
+  filename: string;
+  size_mb: number;
+  created: string;
+  created_by: string;
+  total_documents: number;
+  collections: string[];
+  depictio_version?: string | null;
+  /** False for legacy backups without a .sha256 sidecar; restoring those
+   *  requires allow_unverified. */
+  has_checksum?: boolean;
+  /** True for snapshots taken by the scheduler rather than by an admin. */
+  is_automatic?: boolean;
+  /** Set only on the backup this deployment's data was last restored from.
+   *  ISO timestamp with an explicit UTC offset. */
+  restored_at?: string | null;
+  restored_by?: string | null;
+}
+
+/** GET/PUT /backup/schedule — the scheduled-backup config in force.
+ *  Env vars supply the deployment default; anything saved from the admin UI
+ *  overrides it and is what the running scheduler reads. */
+export interface BackupScheduleStatus {
+  enabled: boolean;
+  interval_hours: number;
+  /** 0 means backups are kept forever. */
+  retention_days: number;
+  /** Grandfather-father-son tiers applied past retention_days: one backup kept
+   *  per ISO week for `weekly_weeks`, then one per calendar month for
+   *  `monthly_months`. 0 turns a tier off; both at 0 is a plain age cutoff. */
+  weekly_weeks: number;
+  monthly_months: number;
+  /** "HH:MM" UTC anchor the schedule's slots sit on. Null means a rolling
+   *  schedule: due whenever an interval has passed since the last run. */
+  time_of_day: string | null;
+  /** ISO timestamps with an explicit UTC offset; null before the first run. */
+  last_run: string | null;
+  next_run: string | null;
+  /** True once a value has been saved from the UI, overriding the env default. */
+  is_customized?: boolean;
+}
+
+export interface BackupCollectionValidation {
+  total: number;
+  valid: number;
+  invalid: number;
+  errors: string[];
+}
+
+export interface BackupValidationResult {
+  success: boolean;
+  message: string;
+  valid: boolean;
+  total_documents: number;
+  valid_documents: number;
+  invalid_documents: number;
+  collections_validated: Record<string, BackupCollectionValidation>;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface BackupCreateResult {
+  success: boolean;
+  message: string;
+  backup_id: string | null;
+  total_documents: number;
+  collections_backed_up: string[];
+  filename: string | null;
+}
+
+export interface BackupUploadResult {
+  success: boolean;
+  message: string;
+  backup_id: string | null;
+  filename: string | null;
+  validation: BackupValidationResult | null;
+}
+
+export interface BackupRestoreResult {
+  success: boolean;
+  message: string;
+  restored_collections: Record<string, { count: number; status: string }>;
+  total_restored: number;
+  errors: string[];
+}
+
+export async function listBackups(): Promise<AdminBackupEntry[]> {
+  const res = await authFetch(`${API_BASE}/backup/list`);
+  if (!res.ok) await throwHttpError(res, 'Failed to list backups');
+  const data = await res.json();
+  return Array.isArray(data?.backups) ? (data.backups as AdminBackupEntry[]) : [];
+}
+
+export async function getBackupSchedule(): Promise<BackupScheduleStatus> {
+  const res = await authFetch(`${API_BASE}/backup/schedule`);
+  if (!res.ok) await throwHttpError(res, 'Failed to load the backup schedule');
+  return res.json();
+}
+
+/** Change the schedule. Only the provided fields are updated; the response is
+ *  the schedule in force afterwards. Takes effect without an API restart. */
+export async function updateBackupSchedule(update: {
+  enabled?: boolean;
+  intervalHours?: number;
+  retentionDays?: number;
+  weeklyWeeks?: number;
+  monthlyMonths?: number;
+  /** "HH:MM" UTC. Pass the empty string to clear the anchor; omit to leave it. */
+  timeOfDay?: string;
+}): Promise<BackupScheduleStatus> {
+  const res = await authFetch(`${API_BASE}/backup/schedule`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      enabled: update.enabled,
+      interval_hours: update.intervalHours,
+      retention_days: update.retentionDays,
+      weekly_weeks: update.weeklyWeeks,
+      monthly_months: update.monthlyMonths,
+      time_of_day: update.timeOfDay,
+    }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to update the backup schedule');
+  return res.json();
+}
+
+export async function createBackup(): Promise<BackupCreateResult> {
+  const res = await authFetch(`${API_BASE}/backup/create`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create backup');
+  return res.json();
+}
+
+/** Download a backup file to the browser (blob + anchor click, like
+ *  `exportProjectZip`). */
+export async function downloadBackup(backupId: string): Promise<void> {
+  const res = await authFetch(`${API_BASE}/backup/download/${backupId}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to download backup');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `depictio_backup_${backupId}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/** Upload a backup file; the server stores it as a first-class backup and
+ *  returns the validation result alongside the new server-side backup_id. */
+export async function uploadBackup(file: File): Promise<BackupUploadResult> {
+  const fd = new FormData();
+  fd.append('file', file, file.name);
+  const res = await authFetch(`${API_BASE}/backup/upload`, { method: 'POST', body: fd });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to upload backup');
+  return res.json();
+}
+
+export async function validateBackup(backupId: string): Promise<BackupValidationResult> {
+  const res = await authFetch(`${API_BASE}/backup/validate`, {
+    method: 'POST',
+    body: JSON.stringify({ backup_id: backupId }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to validate backup');
+  return res.json();
+}
+
+/** Restore a backup. DESTRUCTIVE unless dryRun — wipes and replaces every
+ *  restored collection. The server refuses backups that fail Pydantic
+ *  validation (no skip escape hatch is exposed to the UI on purpose). */
+export async function restoreBackup(
+  backupId: string,
+  opts: { dryRun?: boolean; allowUnverified?: boolean } = {},
+): Promise<BackupRestoreResult> {
+  const res = await authFetch(`${API_BASE}/backup/restore`, {
+    method: 'POST',
+    body: JSON.stringify({
+      backup_id: backupId,
+      dry_run: opts.dryRun ?? false,
+      allow_unverified: opts.allowUnverified ?? false,
+    }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to restore backup');
+  return res.json();
+}
+
 // ---- Admin "Log & Task" monitoring (/monitoring) ------------------------
 //
 // Back the admin Monitoring tab. All read endpoints are admin-gated server
@@ -3355,13 +5992,67 @@ export interface MonitoringIngestionRun {
   project_config_path?: string | null;
   data_root?: string | null;
   data_collections?: MonitoringIngestionDataCollection[];
-  status: 'running' | 'success' | 'partial' | 'failed';
-  steps?: { name: string; status: string; detail?: string | null }[];
+  /** `abandoned`: still `running` when no write arrived within the stale threshold. */
+  status: 'running' | 'success' | 'partial' | 'failed' | 'interrupted' | 'abandoned';
+  steps?: MonitoringIngestionStep[];
   /** Step currently running (live async ingestion); null for finished runs. */
   current_step?: string | null;
   error?: string | null;
   started_at?: string;
+  /** Last write to the record; what the stale sweep measures from. */
+  updated_at?: string | null;
   finished_at?: string | null;
+
+  /** How the run was initiated. Absent on runs recorded before this existed,
+   *  which the UI shows as "manual" — correct, since nothing else could start
+   *  one at the time. */
+  trigger?: 'manual' | 'watch' | 'schedule' | 'ui' | null;
+  /** Why a watcher fired: the paths whose change triggered this cycle. */
+  trigger_reason?: string | null;
+  progress?: MonitoringProgress | null;
+  counters?: Record<string, number> | null;
+  timings?: Record<string, number> | null;
+  concurrency?: number | null;
+  warnings?: string[];
+  errors?: MonitoringIngestionError[];
+  errors_truncated?: boolean;
+  logs_truncated?: boolean;
+}
+
+/** One step of an ingestion run. `counters` is an open dict so the CLI can add
+ *  measurements without a server-side schema change. */
+export interface MonitoringIngestionStep {
+  name: string;
+  status: string;
+  detail?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  duration_ms?: number | null;
+  index?: number | null;
+  total?: number | null;
+  progress?: MonitoringProgress | null;
+  counters?: Record<string, number> | null;
+  data_collection_tag?: string | null;
+  job_id?: string | null;
+  error?: string | null;
+}
+
+export interface MonitoringProgress {
+  current?: number | null;
+  total?: number | null;
+  /** Only present when the backend can compute a real fraction. The UI must
+   *  never synthesise one from a step index — a bar that jumps 0→50→100 across
+   *  three very unequal steps is worse than no bar at all. */
+  percent?: number | null;
+  unit?: string | null;
+}
+
+export interface MonitoringIngestionError {
+  step?: string | null;
+  data_collection_tag?: string | null;
+  message: string;
+  file_path?: string | null;
+  ts?: string | null;
 }
 
 /** Per-data-collection summary + local scan paths captured for an ingestion run. */
@@ -3373,6 +6064,54 @@ export interface MonitoringIngestionDataCollection {
   scan_pattern?: string | null;
   locations?: string[];
   file_count?: number | null;
+
+  /** Outcome counters. */
+  files_new?: number | null;
+  files_updated?: number | null;
+  files_unchanged?: number | null;
+  files_skipped?: number | null;
+  files_failed?: number | null;
+  rows_written?: number | null;
+  delta_version?: number | null;
+  duration_ms?: number | null;
+  status?: string | null;
+
+  /** Scan diagnostics. These turn a bare "No files found" from a dead end into
+   *  something actionable: how much of the tree was walked, how many candidates
+   *  the regex rejected, and example paths that were seen but not matched. */
+  dirs_walked?: number | null;
+  files_seen?: number | null;
+  regex_rejected?: number | null;
+  skip_reasons?: Record<string, number> | null;
+  sample_rejected?: string[];
+}
+
+/** A long-running CLI agent (a `depictio watch` process) as the server
+ *  last heard from it. Rows expire via TTL a few heartbeats after one dies, so
+ *  a listed agent is a live one. */
+export interface MonitoringCliAgent {
+  agent_id: string;
+  instance_label?: string | null;
+  hostname?: string | null;
+  pid?: number | null;
+  cli_version?: string | null;
+  project_id?: string | null;
+  project_name?: string | null;
+  mode?: string | null;
+  backend?: string | null;
+  watching?: string[];
+  status: 'idle' | 'settling' | 'scanning' | 'ingesting' | 'error';
+  last_trigger_at?: string | null;
+  last_run_id?: string | null;
+  last_error?: string | null;
+  /** Set while a "Run now" is waiting to be picked up by the agent; cleared the
+   *  moment it claims it, which is how the UI can show "requested" briefly. */
+  run_requested_at?: string | null;
+  run_requested_by?: string | null;
+  runs_total?: number | null;
+  started_at?: string | null;
+  heartbeat_at?: string | null;
+  expires_at?: string | null;
 }
 
 /** A recent application log line from the capped collection. */
@@ -3475,6 +6214,125 @@ export async function fetchAppLogs(opts: {
   return Array.isArray(data?.logs) ? (data.logs as MonitoringAppLog[]) : [];
 }
 
+/** Ingestion-run history for one project, permission-scoped.
+ *
+ * Distinct from `fetchIngestionRuns`, which is admin-only across all projects.
+ * `redacted` tells the UI that operator-machine fields (local paths, hostname,
+ * command line) were stripped because the caller is not an owner/editor — worth
+ * surfacing, so a viewer understands why those columns are empty rather than
+ * assuming the data is missing.
+ *
+ * A 404 means monitoring is off on this server; treated as an empty history.
+ */
+export async function fetchProjectIngestionRuns(
+  projectId: string,
+  opts: { limit?: number; skip?: number } = {},
+): Promise<{ runs: MonitoringIngestionRun[]; redacted: boolean }> {
+  const qs = monitoringQuery({ limit: opts.limit, skip: opts.skip });
+  const res = await authFetch(`${API_BASE}/projects/ingestion-runs/${projectId}${qs}`);
+  if (res.status === 404) return { runs: [], redacted: false };
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load ingestion history');
+  const data = await res.json();
+  return {
+    runs: Array.isArray(data?.runs) ? (data.runs as MonitoringIngestionRun[]) : [],
+    redacted: Boolean(data?.redacted),
+  };
+}
+
+/** Whether this project can be re-ingested from the browser.
+ *
+ *  `enabled` is whether the server offers the feature at all (hide the control
+ *  when false); `available` is whether this caller can use it now (disable and
+ *  show `reason` when false). A 404 means the server predates the endpoint —
+ *  reported as not enabled, which is the correct rendering. */
+export interface IngestionTriggerStatus {
+  enabled: boolean;
+  available: boolean;
+  reason: string | null;
+  /** Counts for everyone; the paths themselves are sent to admins only. */
+  unreachable_count?: number;
+  unreachable_locations?: string[];
+  outside_roots_count?: number;
+  outside_roots?: string[];
+}
+
+export async function fetchIngestionTriggerStatus(
+  projectId: string,
+): Promise<IngestionTriggerStatus> {
+  const res = await authFetch(`${API_BASE}/projects/ingestion/trigger-status/${projectId}`);
+  if (!res.ok) return { enabled: false, available: false, reason: null };
+  return res.json();
+}
+
+/** Start a server-side ingestion. Returns the job to poll and the run_id it
+ *  will be recorded under. `already_running` means an ingestion for this
+ *  project was already in flight and its job was handed back instead. */
+export interface IngestionTriggerResult {
+  job_id: string;
+  run_id: string | null;
+  already_running: boolean;
+}
+
+export async function triggerProjectIngestion(
+  projectId: string,
+  opts: { overwrite?: boolean } = {},
+): Promise<IngestionTriggerResult> {
+  const qs = opts.overwrite ? '?overwrite=true' : '';
+  const res = await authFetch(`${API_BASE}/projects/ingestion/trigger/${projectId}${qs}`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to start ingestion');
+  return res.json();
+}
+
+/** One offloaded job's status. Mirrors the JobStatus model; `poll_after_seconds`
+ *  is the server telling the client how long to wait before asking again. */
+export interface JobStatusResponse {
+  job_id: string;
+  kind: string;
+  status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
+  step?: string | null;
+  detail?: string | null;
+  progress?: { current?: number; total?: number } | null;
+  result?: Record<string, unknown> | null;
+  error?: string | null;
+  poll_after_seconds?: number | null;
+}
+
+export async function fetchJob(jobId: string): Promise<JobStatusResponse> {
+  const res = await authFetch(`${API_BASE}/jobs/${jobId}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to read job status');
+  return res.json();
+}
+
+/** List live CLI agents (watchers). Admin-scoped, or project-scoped when a
+ *  projectId is given. A 404 means this server predates agents — treated as an
+ *  empty list rather than an error, so the pane degrades to "none" instead of
+ *  showing a failure. */
+export async function fetchCliAgents(
+  opts: { projectId?: string; limit?: number } = {},
+): Promise<MonitoringCliAgent[]> {
+  const qs = monitoringQuery({ project_id: opts.projectId, limit: opts.limit });
+  const res = await authFetch(`${API_BASE}/monitoring/agents${qs}`);
+  if (res.status === 404) return [];
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load watchers');
+  const data = await res.json();
+  return Array.isArray(data?.agents) ? (data.agents as MonitoringCliAgent[]) : [];
+}
+
+/** Ask a running watcher to start a cycle now.
+ *
+ *  Resolves once the request is *recorded*, not once the cycle finishes: the
+ *  agent claims it on its next command poll (a few seconds), so the caller
+ *  should refresh rather than expect a result. `agentId` is the stored id from
+ *  `fetchCliAgents`. */
+export async function triggerCliAgentRun(agentId: string): Promise<void> {
+  const res = await authFetch(`${API_BASE}/monitoring/agents/${encodeURIComponent(agentId)}/trigger`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to request a run');
+}
+
 export async function fetchMonitoringHealth(): Promise<MonitoringHealth> {
   const res = await authFetch(`${API_BASE}/monitoring/health`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to load monitoring health');
@@ -3547,6 +6405,44 @@ export async function editPassword(oldPassword: string, newPassword: string): Pr
     body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
   });
   if (!res.ok) await throwHttpDetailError(res, 'Password update failed');
+}
+
+// ---- Profile picture -------------------------------------------------------
+
+/** What the server answers after storing a picture. */
+export interface AvatarInfo {
+  source: 'upload' | 'provider';
+  provider: string | null;
+  /** Naive-UTC ISO stamp; the same value `/auth/me/optional` then reports as
+   *  `avatar_updated_at`. */
+  updated_at: string;
+}
+
+/** The current user's profile picture, or null when they have none (404).
+ *  Fetched as bytes through `authFetch` because an `<img src>` cannot send the
+ *  bearer token. */
+export async function fetchMyAvatarBlob(): Promise<Blob | null> {
+  const res = await authFetch(`${API_BASE}/auth/me/avatar`);
+  if (res.status === 404) return null;
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load profile picture');
+  return res.blob();
+}
+
+/** Replace the current user's picture. The server re-encodes it (square, 256 px
+ *  WebP), so any decodable image up to 5 MB is accepted. Throws with the
+ *  server's `detail` (too large, not an image, not allowed for this account). */
+export async function uploadMyAvatar(file: Blob): Promise<AvatarInfo> {
+  const form = new FormData();
+  form.append('file', file, 'avatar');
+  const res = await authFetch(`${API_BASE}/auth/me/avatar`, { method: 'PUT', body: form });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to upload profile picture');
+  return res.json();
+}
+
+/** Remove the current user's picture. Idempotent. */
+export async function deleteMyAvatar(): Promise<void> {
+  const res = await authFetch(`${API_BASE}/auth/me/avatar`, { method: 'DELETE' });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to remove profile picture');
 }
 
 /** A long-lived CLI token entry — the management page only renders these
@@ -3807,6 +6703,47 @@ export async function fetchMultiQCSampleMappings(
   return (body ?? {}) as Record<string, string[]>;
 }
 
+/** One source value's resolution outcome in the mapping-inspection view. */
+export interface LinkMappingPreviewRow {
+  source_value: string;
+  matched: boolean;
+  /** exact | variant | base | source-suffix | passthrough, or the resolver
+   *  name for non-sample_mapping resolvers. */
+  via: string;
+  resolved: string[];
+}
+
+export interface LinkMappingPreviewResponse {
+  link_id: string;
+  resolver: string;
+  source_dc_id: string;
+  source_column: string;
+  target_dc_id: string;
+  target_type: string;
+  case_sensitive: boolean;
+  mappings_source: 'link_config' | 'multiqc_live' | 'none';
+  source_values_total: number;
+  truncated: boolean;
+  matched_count: number;
+  unmapped_count: number;
+  rows: LinkMappingPreviewRow[];
+  orphan_targets: string[];
+}
+
+/** Full sample ↔ link mapping table for one link — backs the debug/inspect
+ *  view in the link editor (issue #938). */
+export async function fetchLinkMappingPreview(
+  projectId: string,
+  linkId: string,
+  limit = 500,
+): Promise<LinkMappingPreviewResponse> {
+  const res = await authFetch(
+    `${API_BASE}/links/${projectId}/${linkId}/mapping-preview?limit=${limit}`,
+  );
+  if (!res.ok) await throwHttpError(res, 'Failed to fetch mapping preview');
+  return res.json();
+}
+
 // =============================================================================
 // MultiQC DC creation + management (multipart uploads)
 // =============================================================================
@@ -3967,13 +6904,42 @@ export async function clearTableDC(dcId: string): Promise<TableMutationResult> {
 
 export interface CatalogRender {
   component: string;
+  /** Tool-unique render handle, when declared in the catalog. Combined with the
+   *  tool id it forms the `use: <tool>/<id>` snippet (advanced_viz renders). */
+  id?: string;
   kind?: string;
   roles?: Record<string, string>;
   visu_type?: string;
   dict_kwargs?: Record<string, string>;
   column?: string;
   aggregation?: string;
+  /** card only: the secondary-metric strip. `aggregations` drives the stats
+   *  layouts; the rest configure the categorical / QC / progress ones. Mirrors
+   *  `Render` in depictio/models/components/advanced_viz/catalog.py. */
+  aggregations?: string[];
+  secondary_layout?: string;
+  breakdown_col?: string | null;
+  top_n_count?: number;
+  coverage_max?: number | null;
+  threshold_value?: number | null;
+  threshold_direction?: string;
+  threshold_warn?: number | null;
+  attrition_cols?: string[];
+  trend_col?: string | null;
+  filter_expr?: string | null;
+  /** multiqc only: the report module this render surfaces. */
+  section?: string;
   code?: string;
+  /** interactive: the widget and the column it filters on. */
+  interactive_type?: string;
+  column_name?: string;
+  /** table: display options. */
+  columns?: string[];
+  page_size?: number;
+  sortable?: boolean;
+  filterable?: boolean;
+  row_selection_enabled?: boolean;
+  row_selection_column?: string;
   /** advanced_viz only: the pre-computed config blob (role bindings + data-derived
    *  viz-control defaults like manhattan `score_threshold`) the catalog preview
    *  rendered with. Persisting it verbatim makes the added component match its
@@ -3983,11 +6949,33 @@ export interface CatalogRender {
 
 export interface CatalogOutputMatch {
   output_id: string;
+  /** Short display label declared by the catalog (`name:` on the output). */
+  name: string;
+  /** The tool that produced the numbers, when the catalog tool aggregates
+   *  others (MultiQC sections). Null when the tool is the producer. */
+  origin_tool?: string | null;
   description: string;
   dc_id: string;
   wf_id: string;
+  /** Workflow tag. With `dc_tag` these are the two lines a dashboard tile is
+   *  resolved against, so the picker's YAML snippet needs both by name — an id
+   *  is not what `workflow_tag:` takes. */
+  wf_tag: string;
   dc_tag: string;
+  /** Collection type ("table", "multiqc", …) — decides whether the source rows
+   *  can be previewed. */
+  dc_type?: string | null;
   renders_as: CatalogRender[];
+  /** Static provenance from the catalog YAML — what the picker's details
+   *  popover shows, so it needs no second request per selected output. */
+  mode?: string | null;
+  recipe?: string | null;
+  fixture?: string | null;
+  nf_core_url?: string | null;
+  biotools_url?: string | null;
+  /** GitHub blob URL of the catalog YAML declaring this output. */
+  source_url?: string | null;
+  find?: { filename?: string; path_glob?: string };
 }
 
 export interface CatalogModule {
@@ -4076,4 +7064,632 @@ export async function fetchCatalogPreviewPayload(
   const res = await authFetch(`${API_BASE}/catalog/output/${outputId}/preview-payload`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch catalog preview');
   return (await res.json()) as CatalogPreviewPayload;
+}
+
+// ---------------------------------------------------------------------------
+// Component comments & annotations (/comments). Mirrors the Pydantic contract
+// in depictio/models/models/comments.py. Threads are internal to a project's
+// editors and owners: every endpoint but /published answers 403 to others.
+// ---------------------------------------------------------------------------
+
+export type CommentThreadStatus = 'open' | 'resolved' | 'proposed' | 'rejected';
+
+/** What the author was looking at: the viewer's own filter payloads, plus the
+ *  selection summary. Stored as-is so the viewer can restore it untranslated. */
+export interface CommentViewState {
+  filters: InteractiveFilter[];
+  selection?: CommentSelection | null;
+}
+
+/** Selection attached to a comment: which selection filter(s) were active on
+ *  the anchored component, how many rows they held, and the raw filters. */
+export interface CommentSelection {
+  source?: string;
+  count?: number;
+  filters?: InteractiveFilter[];
+  [key: string]: unknown;
+}
+
+export interface CommentAnchor {
+  dashboard_id: string;
+  /** Null pins the thread to the tab itself. */
+  component_index?: string | null;
+  component_title?: string | null;
+  view_state?: CommentViewState | null;
+  component_hash?: string | null;
+  data_hashes?: Record<string, string>;
+  version_id?: string | null;
+  pins?: Record<string, number>;
+}
+
+export interface CommentAgentInfo {
+  name: string;
+  model?: string | null;
+  run_id?: string | null;
+  /** User id of the person who launched the agent. */
+  on_behalf_of?: string | null;
+}
+
+export interface CommentAuthor {
+  kind: 'human' | 'agent';
+  user_id: string;
+  email?: string | null;
+  agent?: CommentAgentInfo | null;
+}
+
+export interface CommentEvidence {
+  claim: string;
+  query?: string | null;
+  values?: Record<string, unknown> | unknown[] | null;
+  view_state?: CommentViewState | null;
+}
+
+export interface CommentReview {
+  decision: 'accepted' | 'rejected';
+  by: string;
+  at: string;
+  reason?: string | null;
+}
+
+export interface ThreadComment {
+  id: string;
+  author: CommentAuthor;
+  body: string;
+  created_at: string;
+  edited_at?: string | null;
+  deleted?: boolean;
+}
+
+export interface ThreadStaleness {
+  component_missing: boolean;
+  component_changed: boolean;
+  data_changed: boolean;
+}
+
+export interface CommentThread {
+  id: string;
+  project_id: string;
+  parent_dashboard_id: string;
+  anchor: CommentAnchor;
+  annotation?: Annotation | null;
+  number?: number | null;
+  status: CommentThreadStatus;
+  review?: CommentReview | null;
+  evidence?: CommentEvidence[] | null;
+  dedupe_key?: string | null;
+  run_id?: string | null;
+  created_by: CommentAuthor;
+  created_at: string;
+  updated_at: string;
+  resolved_by?: string | null;
+  resolved_at?: string | null;
+  /** A person edited this agent-created thread (its annotation or text). */
+  human_edited?: boolean;
+  comments: ThreadComment[];
+  staleness: ThreadStaleness;
+}
+
+export interface ThreadCreatePayload {
+  anchor: Pick<CommentAnchor, 'dashboard_id' | 'component_index' | 'component_title' | 'view_state'>;
+  body?: string | null;
+  annotation?: Annotation | null;
+  evidence?: CommentEvidence[] | null;
+  dedupe_key?: string | null;
+  agent?: CommentAgentInfo | null;
+}
+
+export interface AnnotationPatch {
+  geometry?: Geometry | null;
+  label?: string | null;
+  color?: AnnotationColor | null;
+  style?: AnnotationStyle | null;
+  published?: boolean | null;
+}
+
+export interface ThreadUpdatePayload {
+  status?: 'open' | 'resolved';
+  annotation?: AnnotationPatch;
+}
+
+/** Key used in counts for threads pinned to the tab itself. */
+export const TAB_THREAD_KEY = '__tab__';
+
+export interface CommentCounts {
+  /** Open threads per component index (`__tab__` for tab-level threads). */
+  open: Record<string, number>;
+  /** Agent proposals awaiting review, same keys. */
+  proposed: Record<string, number>;
+}
+
+export interface PublishedAnnotation {
+  thread_id: string;
+  dashboard_id: string;
+  component_index: string | null;
+  number: number | null;
+  kind: AnnotationKind;
+  geometry: Geometry;
+  label: string;
+  color: AnnotationColor;
+  style: AnnotationStyle;
+  variant?: string | null;
+}
+
+export interface ListThreadsOptions {
+  /** `tab` (default): this tab only; `family`: every tab of the dashboard. */
+  scope?: 'tab' | 'family';
+  componentIndex?: string;
+  status?: CommentThreadStatus;
+}
+
+const COMMENTS_BASE = `${API_BASE}/comments`;
+const enc = encodeURIComponent;
+
+async function commentsJson<T>(res: Response, prefix: string): Promise<T> {
+  if (!res.ok) await throwHttpDetailError(res, prefix);
+  return (await res.json()) as T;
+}
+
+/** Whether the current user may read and write comments on this dashboard,
+ *  and whether they may also moderate (resolve threads, publish annotations,
+ *  review proposals). `can_moderate` is absent from an older API, where every
+ *  commenter is an editor. Resolves `{can_comment: false}` rather than
+ *  throwing on 401/403/404, so a viewer simply sees no comments UI.
+ *  `sign_in_required` marks a public-mode guest on an instance where signing
+ *  in would let them comment. */
+export async function fetchCommentAccess(
+  dashboardId: string,
+): Promise<{ can_comment: boolean; can_moderate?: boolean; sign_in_required?: boolean }> {
+  const res = await authFetch(`${COMMENTS_BASE}/access/${enc(dashboardId)}`);
+  if (res.status === 401 || res.status === 403 || res.status === 404) return { can_comment: false };
+  return commentsJson(res, 'Failed to check comment access');
+}
+
+export async function fetchCommentThreads(
+  dashboardId: string,
+  opts: ListThreadsOptions = {},
+): Promise<CommentThread[]> {
+  const qs = new URLSearchParams();
+  if (opts.scope) qs.set('scope', opts.scope);
+  if (opts.componentIndex) qs.set('component_index', opts.componentIndex);
+  if (opts.status) qs.set('status', opts.status);
+  const q = qs.toString();
+  const res = await authFetch(`${COMMENTS_BASE}/dashboard/${enc(dashboardId)}${q ? `?${q}` : ''}`);
+  return commentsJson(res, 'Failed to load comments');
+}
+
+export async function fetchCommentCounts(dashboardId: string): Promise<CommentCounts> {
+  const res = await authFetch(`${COMMENTS_BASE}/counts/${enc(dashboardId)}`);
+  return commentsJson(res, 'Failed to load comment counts');
+}
+
+export async function createCommentThread(payload: ThreadCreatePayload): Promise<CommentThread> {
+  const res = await authFetch(`${COMMENTS_BASE}/threads`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  return commentsJson(res, 'Failed to create comment');
+}
+
+export async function addThreadComment(threadId: string, body: string): Promise<CommentThread> {
+  const res = await authFetch(`${COMMENTS_BASE}/threads/${enc(threadId)}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({ body }),
+  });
+  return commentsJson(res, 'Failed to post reply');
+}
+
+export async function editThreadComment(
+  threadId: string,
+  commentId: string,
+  body: string,
+): Promise<CommentThread> {
+  const res = await authFetch(
+    `${COMMENTS_BASE}/threads/${enc(threadId)}/comments/${enc(commentId)}`,
+    { method: 'PATCH', body: JSON.stringify({ body }) },
+  );
+  return commentsJson(res, 'Failed to edit comment');
+}
+
+export async function deleteThreadComment(
+  threadId: string,
+  commentId: string,
+): Promise<CommentThread | null> {
+  const res = await authFetch(
+    `${COMMENTS_BASE}/threads/${enc(threadId)}/comments/${enc(commentId)}`,
+    { method: 'DELETE' },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to delete comment');
+  return res.status === 204 ? null : ((await res.json().catch(() => null)) as CommentThread | null);
+}
+
+export async function updateCommentThread(
+  threadId: string,
+  patch: ThreadUpdatePayload,
+): Promise<CommentThread> {
+  const res = await authFetch(`${COMMENTS_BASE}/threads/${enc(threadId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+  return commentsJson(res, 'Failed to update thread');
+}
+
+export async function reviewCommentThread(
+  threadId: string,
+  decision: 'accepted' | 'rejected',
+  reason?: string,
+): Promise<CommentThread> {
+  const res = await authFetch(`${COMMENTS_BASE}/threads/${enc(threadId)}/review`, {
+    method: 'POST',
+    body: JSON.stringify(reason ? { decision, reason } : { decision }),
+  });
+  return commentsJson(res, 'Failed to review thread');
+}
+
+export async function deleteCommentThread(threadId: string): Promise<void> {
+  const res = await authFetch(`${COMMENTS_BASE}/threads/${enc(threadId)}`, { method: 'DELETE' });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to delete thread');
+}
+
+/** Published annotations of a tab — the only comment data viewers can read. */
+export async function fetchPublishedAnnotations(dashboardId: string): Promise<PublishedAnnotation[]> {
+  const res = await authFetch(`${COMMENTS_BASE}/published/${enc(dashboardId)}`);
+  return commentsJson(res, 'Failed to load annotations');
+}
+
+// ── Dashboard version history ──────────────────────────────────────────────
+
+/** Which mechanism can reproduce a data collection's state at this version.
+ *  Depictio's data collections don't share a storage format, so coverage is
+ *  genuinely heterogeneous — `none` carries a `reason` the UI shows rather
+ *  than implying a fidelity it doesn't have. */
+export type DataVersionKind = 'delta' | 'manifest' | 'asset' | 'none';
+
+export type DashboardVersionKind = 'auto' | 'explicit' | 'restore' | 'import';
+
+export interface DataCollectionStamp {
+  dc_id: string;
+  dc_type?: string;
+  workflow_tag?: string;
+  data_collection_tag?: string;
+  version_kind: DataVersionKind;
+  schema_hash?: string;
+  columns?: Array<{ name: string; type: string }>;
+  row_count?: number | null;
+  delta_version?: number | null;
+  aggregation_version?: number | null;
+  delta_commit_timestamp?: string | null;
+  as_of?: string | null;
+  manifest_digest?: string | null;
+  s3_locations?: string[];
+  sample_count?: number | null;
+  asset_digest?: string | null;
+  asset_key?: string | null;
+  asset_bytes?: number | null;
+  /** Parts NOT covered by the stamp, e.g. `["image_pixels"]`. */
+  unversioned_parts?: string[];
+  reason?: string | null;
+}
+
+/** Timeline row. Deliberately without `tabs` — the snapshot is ~95% of a
+ *  record's bytes and the drawer lists far more often than it opens one. */
+export interface DashboardVersionSummary {
+  version_id: string;
+  family_id: string;
+  seq: number;
+  kind: DashboardVersionKind;
+  label?: string | null;
+  pinned: boolean;
+  author_id?: string | null;
+  author_email?: string | null;
+  created_at: string;
+  updated_at: string;
+  save_count: number;
+  content_hash: string;
+  tab_count: number;
+  component_count: number;
+  parent_version_id?: string | null;
+  data_version_kinds: Record<string, number>;
+}
+
+export interface DashboardVersionListResponse {
+  family_id: string;
+  total: number;
+  /** The entry matching the live dashboard, or null when the live state has
+   *  drifted from every stored version. */
+  current_version_id: string | null;
+  versions: DashboardVersionSummary[];
+}
+
+export interface DashboardVersionTab {
+  dashboard_id: string;
+  is_main_tab: boolean;
+  tab_order: number;
+  title: string;
+  subtitle?: string;
+  stored_metadata: Array<Record<string, unknown>>;
+  left_panel_layout_data: Array<Record<string, unknown>>;
+  right_panel_layout_data: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
+export interface DashboardVersionDetail extends DashboardVersionSummary {
+  project_id: string;
+  tabs: DashboardVersionTab[];
+  data_collections: DataCollectionStamp[];
+}
+
+export interface RestoreVersionResult {
+  restored_from: string;
+  restored_from_seq: number | null;
+  new_version_id: string | null;
+  tabs_updated: number;
+  tabs_created: number;
+  tabs_deleted: number;
+  /** Ids of the tabs the restore deleted, from servers that list them. The
+   *  count alone cannot say whether the tab being edited was one of them. */
+  deleted_tab_ids?: string[];
+}
+
+/** Version timeline for a dashboard family, newest first. */
+export async function fetchDashboardVersions(
+  dashboardId: string,
+  opts: { limit?: number; beforeSeq?: number; pinnedOnly?: boolean } = {},
+): Promise<DashboardVersionListResponse> {
+  const params = new URLSearchParams();
+  if (opts.limit != null) params.set('limit', String(opts.limit));
+  if (opts.beforeSeq != null) params.set('before_seq', String(opts.beforeSeq));
+  if (opts.pinnedOnly) params.set('pinned_only', 'true');
+  const qs = params.toString();
+  const res = await authFetch(
+    `${API_BASE}/dashboards/${dashboardId}/versions${qs ? `?${qs}` : ''}`,
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch dashboard versions');
+  return (await res.json()) as DashboardVersionListResponse;
+}
+
+/** One version in full, including the snapshot. */
+export async function fetchDashboardVersion(
+  versionId: string,
+): Promise<DashboardVersionDetail> {
+  const res = await authFetch(`${API_BASE}/dashboards/versions/${versionId}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch dashboard version');
+  return (await res.json()) as DashboardVersionDetail;
+}
+
+/** Take a named snapshot of the current state. */
+export async function createDashboardVersion(
+  dashboardId: string,
+  label?: string | null,
+): Promise<{ version_id: string; seq: number; label: string | null }> {
+  const res = await authFetch(`${API_BASE}/dashboards/${dashboardId}/versions`, {
+    method: 'POST',
+    body: JSON.stringify({ label: label ?? null }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create version');
+  return await res.json();
+}
+
+/** Pin a version so retention can never remove it. Also seals it, so the next
+ *  autosave opens a fresh version rather than rewriting this one. */
+export async function pinDashboardVersion(
+  versionId: string,
+  label?: string | null,
+): Promise<DashboardVersionSummary> {
+  const res = await authFetch(`${API_BASE}/dashboards/versions/${versionId}/pin`, {
+    method: 'POST',
+    body: JSON.stringify({ label: label ?? null }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to pin version');
+  return (await res.json()) as DashboardVersionSummary;
+}
+
+export async function unpinDashboardVersion(
+  versionId: string,
+): Promise<DashboardVersionSummary> {
+  const res = await authFetch(`${API_BASE}/dashboards/versions/${versionId}/pin`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to unpin version');
+  return (await res.json()) as DashboardVersionSummary;
+}
+
+export async function renameDashboardVersion(
+  versionId: string,
+  label: string | null,
+): Promise<DashboardVersionSummary> {
+  const res = await authFetch(`${API_BASE}/dashboards/versions/${versionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ label }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to rename version');
+  return (await res.json()) as DashboardVersionSummary;
+}
+
+/** Erase a version. Requires owner; a pinned version needs `force`. */
+export async function deleteDashboardVersion(
+  versionId: string,
+  force = false,
+): Promise<void> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/versions/${versionId}${force ? '?force=true' : ''}`,
+    { method: 'DELETE' },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to delete version');
+}
+
+/** Put a past version back. Non-destructive: the current state is captured as
+ *  a version first, so the restore itself can be undone. */
+export async function restoreDashboardVersion(
+  versionId: string,
+): Promise<RestoreVersionResult> {
+  const res = await authFetch(`${API_BASE}/dashboards/versions/${versionId}/restore`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to restore version');
+  return (await res.json()) as RestoreVersionResult;
+}
+
+export interface CompatibilityCheck {
+  dc_id: string;
+  data_collection_tag?: string;
+  workflow_tag?: string;
+  dc_type?: string;
+  version_kind?: DataVersionKind;
+  delta_version?: number | null;
+  found: boolean;
+  schema_match: boolean;
+  columns_removed: string[];
+  columns_added: string[];
+  columns_retyped: Array<{ name: string; from: string; to: string }>;
+  /** Component indices that reference a column which no longer exists — what
+   *  turns a schema diff into something actionable. */
+  affected_components: string[];
+  issues: string[];
+}
+
+export interface CompatibilityReport {
+  version_id: string;
+  seq: number;
+  severity: 'ok' | 'info' | 'warning' | 'error';
+  /** Schema drift never blocks a restore; it is shown beforehand instead. */
+  renderable: boolean;
+  checks: CompatibilityCheck[];
+}
+
+/** Whether a version can still render against today's data. */
+export async function fetchVersionCompatibility(
+  versionId: string,
+): Promise<CompatibilityReport> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/versions/${versionId}/compatibility`,
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to check version compatibility');
+  return (await res.json()) as CompatibilityReport;
+}
+
+export interface RestoreComponentResult {
+  restored_from: string;
+  restored_from_seq: number | null;
+  component_index: string;
+  /** True when the component had been deleted and was put back. */
+  readded: boolean;
+  layout_restored: boolean;
+  new_version_id: string | null;
+}
+
+/**
+ * Put one component back, leaving the rest of the dashboard alone.
+ *
+ * The narrow counterpart to `restoreDashboardVersion`. Recovering a single
+ * chart by restoring its whole version also reverts every other component and
+ * any work done since, which is rarely what was meant.
+ *
+ * `restoreLayout` is opt-in: the usual request is "give me back what this
+ * showed", and moving neighbours to reinstate an old grid position is a
+ * second, unasked-for change.
+ */
+export async function restoreComponentFromVersion(
+  versionId: string,
+  /** The tab the component lives on. Required: component ids are only unique
+   *  within a tab, and a version holds the whole family. */
+  tabId: string,
+  componentIndex: string,
+  restoreLayout = false,
+): Promise<RestoreComponentResult> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/versions/${versionId}/restore_component`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        tab_id: tabId,
+        component_index: componentIndex,
+        restore_layout: restoreLayout,
+      }),
+    },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to restore component');
+  return (await res.json()) as RestoreComponentResult;
+}
+
+// ---- component export (`/export/...`) ---------------------------------------
+//
+// Serves one component to another site, as a Plotly spec (`json`) or as a
+// self-contained offline page (`html`). Only answers when the server has it on
+// (`AuthStatusResponse.embed_enabled`).
+
+export type ComponentExportFormat = 'json' | 'html';
+
+/** One entry of `GET /export/dashboards/{id}/components`. */
+export interface ComponentExportManifestEntry {
+  component_id: string;
+  component_type: string;
+  viz_kind?: string | null;
+  title: string;
+  formats: ComponentExportFormat[];
+  /** Why there is no Plotly spec for this component, when there is none. */
+  json_unavailable_reason?: string;
+  /** Why there is no offline page for this component, when there is none. */
+  html_unavailable_reason?: string;
+}
+
+/** What each component of a dashboard can be exported as. */
+export async function fetchExportManifest(
+  dashboardId: string,
+): Promise<ComponentExportManifestEntry[]> {
+  const res = await authFetch(`${API_BASE}/export/dashboards/${dashboardId}/components`);
+  if (!res.ok) throw new Error(`Failed to load what this dashboard can export: ${res.status}`);
+  return res.json();
+}
+
+export interface ComponentExportParams {
+  format: ComponentExportFormat;
+  theme: 'light' | 'dark';
+  filters?: InteractiveFilter[];
+  controls?: Record<string, unknown>;
+}
+
+/**
+ * The viewer's filters, cut to what the export reads, so a URL with a filter
+ * stays readable and short.
+ *
+ * A filter in the viewer carries its control's whole description twice (top
+ * level and `metadata`) plus nulls. The render path reads `column_name`,
+ * `interactive_component_type`, `value` and `filter_expr`; link resolution
+ * reads `dc_id` and `source` at either level, and `selection_column` only
+ * under `metadata`, so that one key keeps its nesting.
+ */
+export function compactExportFilters(filters: InteractiveFilter[]): Record<string, unknown>[] {
+  return filters.map((f) => {
+    const meta = (f.metadata ?? {}) as Record<string, unknown>;
+    const out: Record<string, unknown> = { index: f.index, value: f.value };
+    const pick = (key: string) => (f as unknown as Record<string, unknown>)[key] ?? meta[key];
+    for (const key of ['column_name', 'interactive_component_type', 'dc_id', 'source', 'filter_expr']) {
+      const value = pick(key);
+      if (value !== undefined && value !== null && value !== '') out[key] = value;
+    }
+    if (meta.selection_column) out.metadata = { selection_column: meta.selection_column };
+    return out;
+  });
+}
+
+/**
+ * Path, from the site root, of one component's export. The SPA and the API
+ * share an origin, so prefixing `window.location.origin` makes it absolute.
+ */
+export function componentExportPath(
+  dashboardId: string,
+  componentId: string,
+  params: ComponentExportParams,
+): string {
+  const query = new URLSearchParams({ format: params.format, theme: params.theme });
+  if (params.filters && params.filters.length > 0) {
+    query.set('filters', JSON.stringify(compactExportFilters(params.filters)));
+  }
+  if (params.controls && Object.keys(params.controls).length > 0) {
+    query.set('controls', JSON.stringify(params.controls));
+  }
+  return (
+    `${API_BASE}/export/dashboards/${encodeURIComponent(dashboardId)}` +
+    `/components/${encodeURIComponent(componentId)}?${query}`
+  );
 }

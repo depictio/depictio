@@ -39,7 +39,8 @@ if [ -L ".env" ]; then
     echo ""
     echo "🎯 PORT_OFFSET: $(grep "^PORT_OFFSET=" .env.instance | cut -d= -f2)"
     echo "   API Port: $(grep "^DEPICTIO_FASTAPI_EXTERNAL_PORT=" .env.instance | cut -d= -f2)"
-    echo "   MinIO Port: $(grep "^DEPICTIO_MINIO_EXTERNAL_PORT=" .env.instance | cut -d= -f2)"
+    # DEPICTIO_MINIO_EXTERNAL_PORT: legacy name in an older .env.instance.
+    echo "   S3 Port: $(grep -E "^DEPICTIO_(S3|MINIO)_EXTERNAL_PORT=" .env.instance | head -1 | cut -d= -f2)"
 else
     echo "❌ Error: Failed to create symlink"
     exit 1

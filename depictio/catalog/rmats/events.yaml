@@ -1,0 +1,28 @@
+id: rmats_events
+name: Differential splicing events (rMATS)
+mode: splicing/events
+description: >-
+  rMATS junction-and-exon-count (JCEC) results for the five event types,
+  stacked: one row per contrast and covered event with its gene, alternative
+  region, mean inclusion (PSI) per condition, the treatment-minus-control
+  difference, FDR and the significance call.
+find: { path_glob: "**/*.MATS.JCEC.txt" }
+recipe: rmats/events.py
+fixture: events.tsv
+renders_as:
+  - id: event_volcano
+    component: advanced_viz
+    kind: volcano
+    roles: { feature_id: event_id, effect_size: dpsi, significance: fdr, label: gene_name, category: event_type }
+  - id: event_record
+    component: advanced_viz
+    kind: record_card
+    roles: { id: event_id, title: gene_name }
+  - id: event_types
+    component: figure
+    visu_type: histogram
+    dict_kwargs: { x: event_type, color: direction, barmode: stack }
+  - { component: card, column: event_id, aggregation: nunique, secondary_layout: donut, breakdown_col: event_type }
+  - { component: card, column: abs_dpsi, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: interactive, interactive_type: MultiSelect, column_name: event_type }
+  - { component: table, row_selection_enabled: true, row_selection_column: event_id }

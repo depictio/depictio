@@ -1,0 +1,21 @@
+id: snpeff_csv_stats
+name: Annotation composition
+mode: summary-sections
+description: >-
+  What kind of variants a callset holds, as SnpEff counts them: impact classes,
+  functional classes, consequence terms, genomic regions, variant types and
+  zygosity. One long frame keyed by section and category, so a single section
+  picker drives every tile. Percent is null in the zygosity section because
+  SnpEff reports counts only there.
+find:
+  path_glob: "**/*_snpEff.csv"
+recipe: snpeff/csv_stats.py
+fixture: csv_stats.tsv
+renders_as:
+  - { id: composition_bars, component: figure, visu_type: bar,
+      dict_kwargs: {x: category, y: count, color: caller, barmode: group} }
+  - { component: card, column: count, aggregation: sum, secondary_layout: donut, breakdown_col: section }
+  - { component: card, column: count, aggregation: sum, secondary_layout: top_n,
+      breakdown_col: category, top_n_count: 4 }
+  - { component: card, column: percent, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

@@ -1,0 +1,52 @@
+BOWTIE2_ALIGN:
+  bowtie2: 2.4.4
+  pigz: '2.6'
+  samtools: 1.16.1
+BOWTIE2_ALIGN_TRIMMED:
+  bowtie2: 2.4.4
+  pigz: '2.6'
+  samtools: 1.16.1
+COMBINE_MATES:
+  python: 3.9.12
+COOLER_BALANCE:
+  cooler: 0.8.11
+COOLER_CLOAD:
+  cooler: 0.8.11
+COOLER_DUMP:
+  cooler: 0.8.11
+COOLER_MAKEBINS:
+  cooler: 0.8.11
+COOLER_ZOOMIFY:
+  cooler: 0.8.11
+COOLTOOLS_EIGSCIS:
+  cooltools: 0.5.1
+COOLTOOLS_INSULATION:
+  cooltools: 0.5.1
+CUSTOM_DUMPSOFTWAREVERSIONS:
+  python: 3.10.6
+  yaml: '6.0'
+CUSTOM_GETCHROMSIZES:
+  getchromsizes: 1.16.1
+FASTQC:
+  fastqc: 0.11.9
+GET_RESTRICTION_FRAGMENTS:
+  python: 3.9.12
+GET_VALID_INTERACTION:
+  python: 3.9.12
+HICPRO2PAIRS:
+  pairix: 0.3.7
+HIC_PLOT_DIST_VS_COUNTS:
+  hicexplorer: 3.7.2
+MERGE_BOWTIE2:
+  samtools: 1.15.1
+MERGE_STATS:
+  python: 3.9.12
+MERGE_VALID_INTERACTION:
+  sort: '8.30'
+SPLIT_COOLER_DUMP:
+  cooler: ''
+TRIM_READS:
+  gzip: '1.10'
+Workflow:
+  Nextflow: 22.10.5
+  nf-core/hic: 2.0.0

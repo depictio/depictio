@@ -33,15 +33,16 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 def _seed_files() -> list[tuple[str, Path]]:
     """Discover the `.db_seeds/dashboard_*.json` that init actually loads.
 
-    Only walks the directory `ReferenceDatasetRegistry.DATASET_PATHS[project]`
-    points at — legacy template versions sitting next to the active one
-    (e.g. ampliseq/2.14.0/) are intentionally skipped because db_init never
-    reads them.
+    Only walks the directory `resolve_dataset_rel_path(project)` points at (the
+    highest template version for versioned projects) — legacy template versions
+    sitting next to the active one (e.g. ampliseq/2.14.0/) are intentionally
+    skipped because db_init never reads them.
     """
     out: list[tuple[str, Path]] = []
-    for project_key, rel_path in ReferenceDatasetRegistry.DATASET_PATHS.items():
+    for project_key in ReferenceDatasetRegistry.DATASET_PATHS:
         if project_key not in STATIC_IDS:
             continue
+        rel_path = ReferenceDatasetRegistry.resolve_dataset_rel_path(project_key)
         seeds_dir = REPO_ROOT / "depictio" / "projects" / rel_path / ".db_seeds"
         if not seeds_dir.is_dir():
             continue
@@ -64,20 +65,52 @@ def test_seed_dc_ids_are_static(project_key: str, seed_path: Path) -> None:
     offenders: list[str] = []
 
     for component in doc.get("stored_metadata", []) or []:
-        dc_id = component.get("dc_id")
-        if dc_id is None:
-            # Text tiles + similar UI-only components don't bind to a DC.
-            continue
-
-        # dc_id can serialise as either a bare string or `{"$oid": "..."}`.
-        oid = dc_id.get("$oid") if isinstance(dc_id, dict) else str(dc_id)
-        if oid not in valid_ids:
-            tag = component.get("data_collection_tag") or "<no tag>"
-            label = component.get("title") or component.get("index") or "<no label>"
-            offenders.append(f"dc_id={oid} tag={tag} component={label!r}")
+        label = component.get("title") or component.get("index") or "<no label>"
+        # A text tile's live values each bind a DC of their own.
+        bindings = [(component.get("dc_id"), component.get("data_collection_tag"), label)]
+        bindings += [
+            (spec.get("dc_id"), spec.get("dc"), f"{label} values.{name}")
+            for name, spec in (component.get("values") or {}).items()
+            if isinstance(spec, dict)
+        ]
+        for dc_id, tag, where in bindings:
+            if dc_id is None:
+                # Text tiles + similar UI-only components don't bind to a DC.
+                continue
+            # dc_id can serialise as either a bare string or `{"$oid": "..."}`.
+            oid = dc_id.get("$oid") if isinstance(dc_id, dict) else str(dc_id)
+            if oid not in valid_ids:
+                offenders.append(f"dc_id={oid} tag={tag or '<no tag>'} component={where!r}")
 
     assert not offenders, (
         f"{seed_path.relative_to(REPO_ROOT)} references DC IDs that aren't in "
         f"STATIC_IDS[{project_key!r}].data_collections — fresh deploys will 404 "
         f"on these components.\n  " + "\n  ".join(offenders)
     )
+
+
+def test_versioned_dataset_paths_resolve_to_latest_template() -> None:
+    """nf-core dataset paths are version-less; seeding must resolve the highest
+    shipped template version so a new template drop is picked up automatically."""
+    ampliseq = ReferenceDatasetRegistry.resolve_dataset_rel_path("ampliseq")
+    assert ampliseq.startswith(str(Path("nf-core") / "ampliseq"))
+    version = Path(ampliseq).name
+    assert version[0].isdigit(), f"expected a version dir, got {ampliseq!r}"
+    template_dir = REPO_ROOT / "depictio" / "projects" / ampliseq
+    assert (template_dir / "template.yaml").is_file()
+    # Highest version wins: no shipped sibling version may sort above it.
+    versions = [
+        d.name
+        for d in template_dir.parent.iterdir()
+        if d.is_dir() and d.name[0].isdigit() and (d / "template.yaml").is_file()
+    ]
+    assert version == max(versions, key=lambda v: tuple(int(p) for p in v.split(".")))
+    # A version drop is only complete with its seeds: since seeding follows the
+    # newest version automatically, a template.yaml landing without .db_seeds
+    # would silently seed zero dashboards on fresh deployments.
+    assert list((template_dir / ".db_seeds").glob("dashboard_*.json")), (
+        f"{ampliseq} has no .db_seeds/dashboard_*.json — regenerate seeds before "
+        "shipping a new template version (see CLAUDE.md: Dashboard YAML ↔ JSON Seeds)"
+    )
+    # Unversioned datasets pass through untouched.
+    assert ReferenceDatasetRegistry.resolve_dataset_rel_path("iris") == str(Path("init") / "iris")

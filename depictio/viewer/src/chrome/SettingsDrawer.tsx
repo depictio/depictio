@@ -1,54 +1,1084 @@
 import React from 'react';
-import { Divider, Drawer, Group, Text } from '@mantine/core';
+import {
+  Accordion,
+  Anchor,
+  Button,
+  Divider,
+  Drawer,
+  FileButton,
+  Group,
+  SegmentedControl,
+  Stack,
+  Switch,
+  Text,
+  Textarea,
+} from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import type { DashboardData, InteractiveFilter } from 'depictio-react-core';
+import {
+  BrandThemeForm,
+  BrandThemePreview,
+  isEmptyBrandTheme,
+  useBrandScopeAttributes,
+  useResolvedBrandTheme,
+  Z_LAYERS,
+  type BrandTheme,
+  isControlsPlacement,
+  type ControlsPlacement,
+  type DashboardData,
+  type InteractiveFilter,
+  type LogoMode,
+} from 'depictio-react-core';
 import DashboardInfoBody from './DashboardInfoBody';
 import ShareFiltersButton from './ShareFiltersButton';
+import {
+  SECTION_ICON_STYLE,
+  SettingsNavModal,
+  SettingsRailNote,
+  type SettingsNavSection,
+} from '../components/settings/SettingsNavModal';
+import { useBranding } from '../branding';
+import { useFeedbackLink } from '../feedback';
+import { UiScaleField } from '../components/settings/preferences';
+import { CONTENT_WIDTHS, type ContentWidth, useContentWidthPref } from '../hooks/useContentWidthPref';
+
+/** Client-side mirror of the server's upload cap (routes.py). */
+const LOGO_MAX_BYTES = 2 * 1024 * 1024;
+
+/** A color-picker drag fires continuously; this is how long the drawer waits
+ *  before writing. Long enough to coalesce a drag, short enough that letting
+ *  go feels like it saved. */
+const SAVE_DEBOUNCE_MS = 600;
+
+// ---------------------------------------------------------------------------
+// Shared layout pieces
+// ---------------------------------------------------------------------------
+
+/**
+ * Header of one drawer section: icon, title, and a one-line subtitle saying
+ * what the section is for and who it affects. Every section uses this one, so
+ * the drawer reads as a list of like things rather than a stack of ad-hoc
+ * headings.
+ */
+const SectionHeader: React.FC<{ icon: string; title: string; subtitle: string }> = ({
+  icon,
+  title,
+  subtitle,
+}) => (
+  <Group gap="sm" wrap="nowrap" align="center">
+    <Icon icon={icon} width={20} height={20} style={SECTION_ICON_STYLE} />
+    <Stack gap={0} style={{ minWidth: 0 }}>
+      <Text size="sm" fw={600} lh={1.3}>
+        {title}
+      </Text>
+      <Text size="xs" c="dimmed" lh={1.3}>
+        {subtitle}
+      </Text>
+    </Stack>
+  </Group>
+);
+
+/**
+ * One setting inside a section: label, a short dimmed description, then the
+ * control. `inline` puts the control to the right of the text instead (for a
+ * switch), keeping the same label / description pair.
+ */
+const Field: React.FC<{
+  label: React.ReactNode;
+  description?: React.ReactNode;
+  /** id of the control the label names (for a switch, whose own label is not used). */
+  htmlFor?: string;
+  inline?: boolean;
+  testId?: string;
+  children: React.ReactNode;
+}> = ({ label, description, htmlFor, inline = false, testId, children }) => {
+  const text = (
+    <Stack gap={2} style={{ minWidth: 0, flex: 1 }}>
+      <Text
+        size="sm"
+        fw={500}
+        lh={1.3}
+        component={htmlFor ? 'label' : 'div'}
+        htmlFor={htmlFor}
+        style={htmlFor ? { cursor: 'pointer' } : undefined}
+      >
+        {label}
+      </Text>
+      {description && (
+        <Text size="xs" c="dimmed" lh={1.35}>
+          {description}
+        </Text>
+      )}
+    </Stack>
+  );
+  if (inline) {
+    return (
+      <Group gap="md" wrap="nowrap" align="flex-start" justify="space-between" data-testid={testId}>
+        {text}
+        <div style={{ flexShrink: 0, paddingTop: 2 }}>{children}</div>
+      </Group>
+    );
+  }
+  return (
+    <Stack gap={6} data-testid={testId}>
+      {text}
+      {children}
+    </Stack>
+  );
+};
+
+/** A switch laid out as a Field: the text on the left labels it. */
+const SwitchField: React.FC<{
+  label: string;
+  description: React.ReactNode;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  testId?: string;
+}> = ({ label, description, checked, onChange, testId }) => {
+  const id = React.useId();
+  return (
+    <Field label={label} description={description} htmlFor={id} inline>
+      <Switch
+        id={id}
+        checked={checked}
+        onChange={(e) => onChange(e.currentTarget.checked)}
+        data-testid={testId}
+      />
+    </Field>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Your view (per browser)
+// ---------------------------------------------------------------------------
+
+/** Where the app's look went: it is the reader's, not the dashboard's. */
+const ChromeStyleNote: React.FC = () => (
+  <Text size="xs" c="dimmed" data-testid="chrome-style-section">
+    Look: set in your{' '}
+    <Anchor href="/profile#preferences" size="xs">
+      profile
+    </Anchor>
+  </Text>
+);
+
+/** The reader's own page width (Full / Wide / Comfortable / Compact). Lives
+ *  here only: a header button for it was one more control in a bar that
+ *  already carries the dashboard's own actions. */
+const PageWidthBlock: React.FC = () => {
+  const { width, set } = useContentWidthPref();
+  return (
+    <Field
+      label="Page width"
+      description="How wide the dashboard runs on a large screen: Wide 1600px, Comfortable 1240px, Compact 1080px. Each tab remembers its own."
+      testId="page-width-section"
+    >
+      <SegmentedControl
+        size="xs"
+        value={width}
+        onChange={(value) => set(value as ContentWidth)}
+        data={CONTENT_WIDTHS.map((w) => ({ value: w.value, label: w.label }))}
+        data-testid="page-width-control"
+      />
+    </Field>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Your filters (remembered per user, shareable)
+// ---------------------------------------------------------------------------
+
+/** The reader's filters on this dashboard: whether they come back on the next
+ *  visit, in any browser, and a link that hands the current view to someone
+ *  else. Both act on the same filter array the panel and the tiles share. */
+const YourFiltersBlock: React.FC<{ filters: FilterSettings }> = ({ filters }) => (
+  <Stack gap="lg" data-testid="your-filters-section">
+    <SwitchField
+      label="Remember my filters"
+      description="Bring this dashboard back as you left it on your next visit, in any browser you sign in on. Reset all also clears what is remembered."
+      checked={filters.remember}
+      onChange={filters.onRememberChange}
+      testId="remember-filters-switch"
+    />
+    <Field
+      label="Share this view"
+      description="A link that opens this dashboard with the filters you have applied now. With none applied, it is the plain dashboard link."
+    >
+      <ShareFiltersButton filters={filters.current} activeCount={filters.activeCount} />
+    </Field>
+  </Stack>
+);
+
+// ---------------------------------------------------------------------------
+// Tab defaults (editor, saved on the dashboard)
+// ---------------------------------------------------------------------------
+
+/** The dashboard-level defaults this drawer can change, saved on the tab. */
+export type TabDefaults = Pick<
+  DashboardData,
+  'content_width_default' | 'filter_panel_default' | 'show_tab_header'
+>;
+
+/**
+ * What a tab opens with before a viewer has chosen otherwise: its page width,
+ * whether the filter panel starts open, whether its name sits above the
+ * canvas. Saved with the dashboard for everyone, unlike "Your view", which is
+ * the reader's own preference kept in their browser and wins over these.
+ */
+const TabDefaultsBlock: React.FC<{
+  dashboard: DashboardData | null;
+  onChange: (patch: TabDefaults) => void;
+}> = ({ dashboard, onChange }) => (
+  <Stack gap="sm" data-testid="tab-defaults-section">
+    <Text size="xs" c="dimmed" lh={1.35}>
+      These only set where the tab starts. A viewer who picks a page width or toggles the
+      filter panel keeps their own choice.
+    </Text>
+    <Field label="Page width" description="The width the tab opens at.">
+      <SegmentedControl
+        size="xs"
+        value={dashboard?.content_width_default ?? 'full'}
+        onChange={(value) =>
+          onChange({ content_width_default: value as TabDefaults['content_width_default'] })
+        }
+        data={CONTENT_WIDTHS.map((w) => ({ value: w.value, label: w.label }))}
+        data-testid="tab-default-width-control"
+      />
+    </Field>
+    <Field label="Filter panel" description="Whether the filter panel starts open or collapsed.">
+      <SegmentedControl
+        size="xs"
+        value={dashboard?.filter_panel_default ?? 'open'}
+        onChange={(value) =>
+          onChange({ filter_panel_default: value === 'collapsed' ? 'collapsed' : 'open' })
+        }
+        data={[
+          { value: 'open', label: 'Open' },
+          { value: 'collapsed', label: 'Collapsed' },
+        ]}
+        data-testid="tab-default-filter-panel-control"
+      />
+    </Field>
+    <SwitchField
+      label="Show the tab's name"
+      description="The tab's name and subtitle above its content. Turn off for a tab that opens on its own title, such as a landing page."
+      checked={dashboard?.show_tab_header !== false}
+      onChange={(checked) => onChange({ show_tab_header: checked })}
+      testId="tab-default-header-switch"
+    />
+  </Stack>
+);
+
+// ---------------------------------------------------------------------------
+// Tiles (editor, saved on the dashboard)
+// ---------------------------------------------------------------------------
+
+/**
+ * Dashboard-wide tile behaviour: whether tiles size themselves to their
+ * content (`autofit`), and where advanced visualisations draw their controls
+ * (`advanced_viz_controls`). Each control renders only when its callback is
+ * given.
+ */
+const TilesBlock: React.FC<{
+  dashboard: DashboardData | null;
+  onToggleAutofit?: (enabled: boolean) => void;
+  onChangeAdvancedVizControls?: (placement: ControlsPlacement) => void;
+}> = ({ dashboard, onToggleAutofit, onChangeAdvancedVizControls }) => (
+  <Stack gap="lg">
+    {onToggleAutofit && (
+      <SwitchField
+        label="Fit tiles to their content"
+        description="Text, cards, tables and advanced visualisations take the height their content needs, levelled row by row. A tile you resize by hand keeps the height you gave it."
+        checked={dashboard?.autofit !== false}
+        onChange={onToggleAutofit}
+        testId="autofit-section"
+      />
+    )}
+    {onChangeAdvancedVizControls && (
+      <Field
+        label="Advanced viz controls"
+        description="Where every advanced visualisation draws its controls. A tile that carries its own placement keeps it."
+        testId="advanced-viz-controls-section"
+      >
+        <SegmentedControl
+          size="xs"
+          data={[
+            { value: 'popover', label: 'Popover' },
+            { value: 'header', label: 'Under title' },
+            { value: 'rail', label: 'Side rail' },
+          ]}
+          value={
+            isControlsPlacement(dashboard?.advanced_viz_controls)
+              ? dashboard.advanced_viz_controls
+              : 'popover'
+          }
+          onChange={(value) => isControlsPlacement(value) && onChangeAdvancedVizControls(value)}
+        />
+      </Field>
+    )}
+  </Stack>
+);
+
+// ---------------------------------------------------------------------------
+// Guide (editor)
+// ---------------------------------------------------------------------------
+
+/** The Guide's two author settings. Stored on the main tab, for the family. */
+export interface GuideAuthorSettings {
+  show_guide: boolean;
+  guide_intro: string;
+}
+
+/**
+ * Whether readers are offered the Guide, and an optional note at its top.
+ *
+ * The note is typed freely, so it is saved once the author pauses or leaves
+ * the field rather than on every keystroke; a later change from outside (the
+ * main tab saved from another tab) replaces it only while it is not being
+ * edited.
+ */
+const GuideSettingsBlock: React.FC<{
+  settings: GuideAuthorSettings;
+  onChange: (patch: Partial<GuideAuthorSettings>) => void;
+}> = ({ settings, onChange }) => {
+  const [draft, setDraft] = React.useState(settings.guide_intro);
+  const focused = React.useRef(false);
+  const timer = React.useRef<number | undefined>(undefined);
+  React.useEffect(() => {
+    if (!focused.current) setDraft(settings.guide_intro);
+  }, [settings.guide_intro]);
+  React.useEffect(() => () => window.clearTimeout(timer.current), []);
+
+  const commit = (value: string) => {
+    window.clearTimeout(timer.current);
+    if (value !== settings.guide_intro) onChange({ guide_intro: value });
+  };
+
+  return (
+    <Stack gap="sm" data-testid="guide-settings-section">
+      <Text size="xs" c="dimmed" lh={1.35}>
+        The Guide shows readers how to move around this dashboard, filter it and read its
+        components, from the sidebar and the header's ?. Set here once for every tab.
+      </Text>
+      <SwitchField
+        label="Show the Guide"
+        description="Offer the Guide in the sidebar and the header. Turned off, both entries go and a link to it opens the tab instead."
+        checked={settings.show_guide}
+        onChange={(checked) => onChange({ show_guide: checked })}
+        testId="guide-show-switch"
+      />
+      <Field
+        label="Introduction"
+        description="An optional note at the top of the Guide, in Markdown: what the dashboard is for, where to start."
+      >
+        <Textarea
+          value={draft}
+          disabled={!settings.show_guide}
+          autosize
+          minRows={3}
+          maxRows={10}
+          placeholder="Start on the Overview tab, then…"
+          onFocus={() => {
+            focused.current = true;
+          }}
+          onBlur={(e) => {
+            focused.current = false;
+            commit(e.currentTarget.value);
+          }}
+          onChange={(e) => {
+            const value = e.currentTarget.value;
+            setDraft(value);
+            window.clearTimeout(timer.current);
+            timer.current = window.setTimeout(() => commit(value), SAVE_DEBOUNCE_MS * 2);
+          }}
+          data-testid="guide-intro-input"
+        />
+      </Field>
+    </Stack>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Branding (editor)
+// ---------------------------------------------------------------------------
+
+/**
+ * Logo source for this dashboard: inherit the instance's, upload one, or show
+ * none. "Inherit" is the piece that was missing — a dashboard used to show
+ * nothing at all unless it carried its own upload.
+ */
+const LogoBlock: React.FC<{
+  theme: BrandTheme;
+  instanceHasLogo: boolean;
+  onChangeMode: (mode: LogoMode) => void;
+  onUpload: (file: File) => Promise<void>;
+}> = ({ theme, instanceHasLogo, onChangeMode, onUpload }) => {
+  const [uploading, setUploading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const mode: LogoMode = theme.logo_mode ?? (theme.logo_url ? 'custom' : 'inherit');
+
+  const handleFile = async (file: File | null) => {
+    if (!file) return;
+    if (file.size > LOGO_MAX_BYTES) {
+      setError('File is too large (max 2MB).');
+      return;
+    }
+    setError(null);
+    setUploading(true);
+    try {
+      await onUpload(file);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <Stack gap={6} data-testid="dashboard-logo-section">
+      <Text fw={500} size="sm" lh={1.3}>
+        Logo
+      </Text>
+      <Text size="xs" c="dimmed" lh={1.35}>
+        Shown at the bottom of the dashboard sidebar.
+      </Text>
+      <SegmentedControl
+        size="xs"
+        value={mode}
+        onChange={(value) => onChangeMode(value as LogoMode)}
+        data={[
+          { value: 'inherit', label: 'Instance logo' },
+          { value: 'custom', label: 'Upload' },
+          { value: 'none', label: 'None' },
+        ]}
+        data-testid="dashboard-logo-mode"
+      />
+      {mode === 'inherit' && !instanceHasLogo && (
+        <Text size="xs" c="dimmed">
+          This instance has no custom logo, so nothing is shown here.
+        </Text>
+      )}
+      {mode === 'custom' && (
+        <>
+          <Group gap="xs">
+            <FileButton onChange={handleFile} accept="image/png,image/jpeg,image/webp">
+              {(props) => (
+                <Button
+                  {...props}
+                  variant="default"
+                  size="xs"
+                  loading={uploading}
+                  leftSection={<Icon icon="mdi:upload" width={14} />}
+                  data-testid="dashboard-logo-upload"
+                >
+                  {theme.logo_url ? 'Replace logo' : 'Upload logo'}
+                </Button>
+              )}
+            </FileButton>
+            <Text size="xs" c="dimmed">
+              PNG, JPEG or WebP, up to 2MB.
+            </Text>
+          </Group>
+          {error && (
+            <Text size="xs" c="red">
+              {error}
+            </Text>
+          )}
+          {theme.logo_url && (
+            <img
+              src={theme.logo_url}
+              alt="Dashboard logo"
+              style={{ height: 40, maxWidth: 220, objectFit: 'contain', alignSelf: 'center' }}
+            />
+          )}
+        </>
+      )}
+    </Stack>
+  );
+};
+
+/**
+ * The dashboard's brand override: inherit the instance identity, or state the
+ * parts that differ. Edits go into a local draft and are written on a debounce
+ * (and on close) — a color picker fires on every pointer move, and each write
+ * makes every figure on the dashboard refetch.
+ */
+const BrandingBlock: React.FC<{
+  dashboard: DashboardData | null;
+  onChange: (theme: BrandTheme | null) => void;
+  onUploadLogo?: (file: File) => Promise<void>;
+  opened: boolean;
+}> = ({ dashboard, onChange, onUploadLogo, opened }) => {
+  const instance = useBranding();
+  const saved = dashboard?.brand_theme ?? null;
+  // A child tab with no brand of its own is drawn in its main tab's.
+  const inherited = dashboard?.inherited_brand_theme ?? null;
+  const [draft, setDraft] = React.useState<BrandTheme | null>(saved);
+
+  // Adopt whatever the dashboard carries each time the drawer opens; a logo
+  // upload lands on the dashboard directly, so the draft must not shadow it.
+  React.useEffect(() => {
+    if (opened) setDraft(dashboard?.brand_theme ?? null);
+  }, [opened, dashboard?.brand_theme]);
+
+  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pending = React.useRef<BrandTheme | null>(null);
+
+  const flush = React.useCallback(() => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+    if (pending.current !== null) {
+      const value = pending.current;
+      pending.current = null;
+      onChange(isEmptyBrandTheme(value) ? null : value);
+    }
+  }, [onChange]);
+
+  // Closing mid-debounce must not lose the last edit.
+  React.useEffect(() => {
+    if (!opened) flush();
+  }, [opened, flush]);
+  React.useEffect(() => flush, [flush]);
+
+  const emit = (next: BrandTheme | null) => {
+    setDraft(next);
+    pending.current = next ?? {};
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(flush, SAVE_DEBOUNCE_MS);
+  };
+
+  const customising = draft !== null;
+  const value = draft ?? {};
+  const resolved = useResolvedBrandTheme(customising ? value : (inherited ?? instance ?? {}));
+
+  return (
+    <Stack gap="sm" data-testid="dashboard-branding-section">
+      <Field
+        label="Source"
+        description={
+          customising
+            ? 'Anything left empty still follows the instance branding.'
+            : inherited
+              ? "This tab uses the main tab's branding. Change it there for every tab, or customise this tab alone."
+              : 'This dashboard uses the instance colors, logo and figure palette.'
+        }
+      >
+        <SegmentedControl
+          size="xs"
+          value={customising ? 'custom' : 'inherit'}
+          // Customising a tab that inherits starts from the main tab's brand,
+          // so overriding one colour doesn't drop its logo and palette.
+          onChange={(mode) => emit(mode === 'custom' ? (saved ?? inherited ?? {}) : null)}
+          data={[
+            { value: 'inherit', label: inherited ? 'Inherit main tab' : 'Inherit instance' },
+            { value: 'custom', label: 'Customise' },
+          ]}
+          data-testid="dashboard-branding-mode"
+        />
+      </Field>
+
+      {customising && (
+        <BrandThemeForm
+          scope="dashboard"
+          collapsible
+          value={value}
+          defaults={instance}
+          onChange={emit}
+          logoSlot={
+            onUploadLogo ? (
+              <LogoBlock
+                theme={value}
+                instanceHasLogo={!!instance?.logo_url}
+                onChangeMode={(mode) => emit({ ...value, logo_mode: mode })}
+                onUpload={onUploadLogo}
+              />
+            ) : undefined
+          }
+          previewSlot={
+            <Stack gap={6}>
+              <Text size="xs" c="dimmed">
+                How the dashboard looks with these settings.
+              </Text>
+              <BrandThemePreview theme={resolved} compact />
+            </Stack>
+          }
+        />
+      )}
+    </Stack>
+  );
+};
+
+
+// ---------------------------------------------------------------------------
+// Feedback
+// ---------------------------------------------------------------------------
+
+/**
+ * The deployment's feedback link, as a labelled row.
+ *
+ * The header carries the same link as a bare icon, for reacting in the moment.
+ * This is the other half: somewhere to find it when you went looking for it,
+ * with a line saying what it is for. Both read the one config, so there is a
+ * single place the URL can be wrong.
+ */
+const FeedbackBlock: React.FC<{ href: string; label: string }> = ({ href, label }) => (
+  <Stack gap={6} data-testid="feedback-section">
+    <Text size="xs" c="dimmed" lh={1.35}>
+      Tell us what this dashboard gets wrong, or what it is missing. The link carries which
+      dashboard you were on.
+    </Text>
+    <Anchor
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      size="sm"
+      data-testid="feedback-link"
+    >
+      {label}
+    </Anchor>
+  </Stack>
+);
+
+// ---------------------------------------------------------------------------
+// Sections
+// ---------------------------------------------------------------------------
+
+type SectionKey =
+  | 'about'
+  | 'view'
+  | 'my-filters'
+  | 'tab-defaults'
+  | 'tiles'
+  | 'filtering'
+  | 'guide'
+  | 'branding'
+  | 'history'
+  | 'data-version'
+  | 'feedback';
+/** A settings section, for opening the settings on it (`initialSection`). */
+export type SettingsSectionKey = SectionKey;
+type Surface = 'viewer' | 'editor';
+
+/** One settings section: what both layouts draw, so neither carries its own
+ *  copy of the contents. */
+interface SettingsSection extends SettingsNavSection {
+  key: SectionKey;
+}
+
+/**
+ * Which layout the settings use.
+ *
+ * - `nav`: a wide modal laid out like GitHub's or VS Code's settings, a rail
+ *   of sections on the left and the active one as a page on the right.
+ * - `accordion`: the earlier right-hand drawer of collapsible sections, kept
+ *   for comparison.
+ */
+export type SettingsLayout = 'nav' | 'accordion';
+const DEFAULT_LAYOUT: SettingsLayout = 'nav';
+
+// ---------------------------------------------------------------------------
+// Per-browser memory (accordion layout)
+// ---------------------------------------------------------------------------
+
+function readStored<T>(key: string, valid: (v: unknown) => v is T): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw);
+      if (valid(parsed)) return parsed;
+    }
+  } catch {
+    // Storage blocked or corrupt: the caller falls back to its default.
+  }
+  return null;
+}
+
+function writeStored(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Remembering a layout detail is a convenience; ignore failures.
+  }
+}
+
+const isStringArray = (v: unknown): v is string[] =>
+  Array.isArray(v) && v.every((x) => typeof x === 'string');
+
+// ---------------------------------------------------------------------------
+// Accordion layout
+// ---------------------------------------------------------------------------
+
+/** Which sections start open in the accordion, per surface. The viewer is
+ *  mostly about reading and adjusting one's own view; the editor opens on the
+ *  metadata only, so the authoring sections don't all unfold at once. */
+const DEFAULT_OPEN: Record<Surface, SectionKey[]> = {
+  viewer: ['about', 'view'],
+  editor: ['about'],
+};
+
+const AccordionLayout: React.FC<{
+  sections: SettingsSection[];
+  surface: Surface;
+  initialSection?: SectionKey;
+}> = ({ sections, surface, initialSection }) => {
+  const storageKey = `depictio-settings-drawer-open:${surface}`;
+  const [open, setOpen] = React.useState<string[]>(() => {
+    const stored = readStored(storageKey, isStringArray) ?? DEFAULT_OPEN[surface];
+    return initialSection && !stored.includes(initialSection)
+      ? [...stored, initialSection]
+      : stored;
+  });
+  return (
+    <Accordion
+      multiple
+      variant="separated"
+      radius="md"
+      chevronPosition="right"
+      value={open}
+      onChange={(value) => {
+        setOpen(value);
+        writeStored(storageKey, value);
+      }}
+      // A flex gap rather than the separated variant's md margin between
+      // items, so the drawer stays compact.
+      style={{ display: 'flex', flexDirection: 'column', gap: 'var(--mantine-spacing-xs)' }}
+      styles={{
+        item: { marginTop: 0 },
+        control: { paddingInline: 'var(--mantine-spacing-sm)' },
+        label: { paddingBlock: 'var(--mantine-spacing-xs)' },
+        content: {
+          paddingInline: 'var(--mantine-spacing-sm)',
+          paddingTop: 'var(--mantine-spacing-xs)',
+          paddingBottom: 'var(--mantine-spacing-sm)',
+        },
+      }}
+    >
+      {sections.map((s) => (
+        <Accordion.Item key={s.key} value={s.key} data-testid={`settings-section-${s.key}`}>
+          <Accordion.Control>
+            <SectionHeader icon={s.icon} title={s.title} subtitle={s.subtitle} />
+          </Accordion.Control>
+          <Accordion.Panel>{s.body}</Accordion.Panel>
+        </Accordion.Item>
+      ))}
+    </Accordion>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Nav layout (the shared `SettingsNavModal`)
+// ---------------------------------------------------------------------------
+
+/** The section a surface opens on before the reader has picked one: a
+ *  viewer's own display options, or the editor's tab defaults (what an author
+ *  most often comes here to change; About is one click up the rail). */
+const DEFAULT_ACTIVE: Record<Surface, SectionKey> = {
+  viewer: 'view',
+  editor: 'tab-defaults',
+};
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
 
 interface SettingsDrawerProps {
   opened: boolean;
   onClose: () => void;
   dashboard: DashboardData | null;
-  /** Current filter state, for the Share section's copy-link button.
-   *  Omitted by hosts without one (the editor) — the button then copies the
-   *  plain page URL. */
-  filters?: InteractiveFilter[];
-  activeFilterCount?: number;
+  /** Which layout to draw. Defaults to `nav`; `accordion` keeps the earlier
+   *  drawer available for comparison. */
+  layout?: SettingsLayout;
+  /** Editor only: shows the Branding section. The viewer leaves this unset
+   *  and the section is not rendered. */
+  onChangeBrandTheme?: (theme: BrandTheme | null) => void;
+  /** Editor only: persists the dashboard's `funnel_filtering` field (issue
+   *  #939) and shows the Filtering section. */
+  onToggleFunnelFiltering?: (enabled: boolean) => void;
+  /** Editor-only: persists the dashboard's default placement for advanced-viz
+   *  controls. Omitted in the viewer, where the block is not rendered. */
+  onChangeAdvancedVizControls?: (placement: ControlsPlacement) => void;
+  /** Editor-only: persists the dashboard's `autofit` field. Omitted in the
+   *  viewer, where the block is not rendered. */
+  onToggleAutofit?: (enabled: boolean) => void;
+  /** Editor only: uploads a dashboard logo (the server stamps it on the
+   *  dashboard's brand theme) — reject to surface an error. */
+  onUploadLogo?: (file: File) => Promise<void>;
+  /** Editor only: saves the tab's display defaults (page width, filter panel,
+   *  tab header) on its dashboard document, and shows the Tab defaults
+   *  section. */
+  onChangeTabDefaults?: (patch: TabDefaults) => void;
+  /** Editor only: the Guide's settings for the family, and shows the Guide
+   *  section. */
+  guide?: {
+    settings: GuideAuthorSettings;
+    onChange: (patch: Partial<GuideAuthorSettings>) => void;
+  };
+  /** Editor only: the History section's body, the dashboard's version
+   *  timeline. Built by the editor and handed in, like `dataVersionPanel`, so
+   *  the viewer never imports version history at all: everything in it writes
+   *  or re-points the dashboard (see `check_served_bundle.py`). */
+  historyPanel?: React.ReactNode;
+  /** Editor only: the Data version section's body, which points the editor at
+   *  the data of a past dashboard version or pins one collection. */
+  dataVersionPanel?: React.ReactNode;
+  /** Viewer only: the reader's own filters, and the "Your filters" section
+   *  that remembers them and shares them as a link. Omitted by the editor and
+   *  by a version preview, where the section is not rendered. */
+  filters?: FilterSettings;
+  /** The section to open on, instead of the one last visited. */
+  initialSection?: SettingsSectionKey;
+}
+
+/** What the "Your filters" section needs from the viewer. */
+export interface FilterSettings {
+  /** The filters currently applied, for the share link. */
+  current: InteractiveFilter[];
+  activeCount: number;
+  /** Whether this dashboard's filters are remembered for the reader. */
+  remember: boolean;
+  onRememberChange: (on: boolean) => void;
 }
 
 /**
- * Right-side drawer with read-only metadata about the current dashboard,
- * followed by per-dashboard actions grouped in labelled sections (Share
- * today; serverless export is planned as a sibling section).
+ * The current dashboard's settings, in sections that each say what they hold
+ * and who they affect:
  *
- * The metadata content lives in `DashboardInfoBody`, shared with the
- * inspector's Info tab — which is what the inspector replaces this drawer
- * with when enabled.
+ * 1. About this dashboard: metadata (`DashboardInfoBody`, shared with the
+ *    inspector's Info tab, which replaces these settings when enabled).
+ * 2. Your view: the reader's own font size (#854) and page width, kept in
+ *    this browser.
+ * 3. Tab defaults (editor): page width, filter panel and tab name the tab
+ *    opens with, for everyone; a reader's own choice still wins.
+ *    Tiles (editor): autofit and the advanced-viz controls placement.
+ * 4. Filtering (editor): the funnel-filtering default (#939).
+ *    Guide (editor): whether readers are offered the Guide, and its intro.
+ * 5. Branding (editor): the dashboard's brand override (#397 — logo, colors,
+ *    surfaces and figure palette, inheriting the main tab or instance).
+ * 6. History (editor): the version timeline, to preview, restore, bookmark
+ *    or delete a past version.
+ *    Data version (editor): draw the editor from a past version's data, or
+ *    pin one collection.
+ * 7. Feedback: the deployment's feedback link, when one is configured.
+ *
+ * Editor sections render only when their callback (or body) is given. Two
+ * layouts draw the same sections (see `SettingsLayout`): by default a wide
+ * modal with a section rail, remembering the last section per browser
+ * (viewer and editor apart); or the earlier drawer of collapsible sections,
+ * remembering which are open.
+ *
+ * Both are portaled to <body>, outside the dashboard's BrandScope wrapper, so
+ * the root carries the scope's attributes to stay in the dashboard's brand.
  */
 const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   opened,
   onClose,
   dashboard,
-  filters = [],
-  activeFilterCount = 0,
-}) => (
-  <Drawer
-    opened={opened}
-    onClose={onClose}
-    position="right"
-    size="md"
-    title={
-      <Group gap="xs">
-        <Icon icon="mdi:cog" width={20} />
-        <Text fw={600}>Dashboard settings</Text>
-      </Group>
-    }
-  >
-    <DashboardInfoBody dashboard={dashboard} active={opened} />
-    <Divider label="Share" labelPosition="left" my="md" />
-    <ShareFiltersButton filters={filters} activeCount={activeFilterCount} />
-  </Drawer>
-);
+  layout = DEFAULT_LAYOUT,
+  onChangeBrandTheme,
+  onToggleFunnelFiltering,
+  onChangeAdvancedVizControls,
+  onToggleAutofit,
+  onUploadLogo,
+  onChangeTabDefaults,
+  guide,
+  historyPanel,
+  dataVersionPanel,
+  filters,
+  initialSection,
+}) => {
+  const surface: Surface =
+    onChangeBrandTheme ||
+    onToggleFunnelFiltering ||
+    onChangeTabDefaults ||
+    onToggleAutofit ||
+    onChangeAdvancedVizControls ||
+    historyPanel ||
+    dataVersionPanel
+      ? 'editor'
+      : 'viewer';
+  const brandScope = useBrandScopeAttributes();
+
+  const feedback = useFeedbackLink({
+    dashboard: dashboard?.title ?? null,
+    dashboardId: dashboard?.dashboard_id ?? dashboard?._id ?? null,
+    tab: null,
+  });
+
+  const sections: SettingsSection[] = [
+    {
+      key: 'about',
+      icon: 'mdi:information-outline',
+      title: 'About this dashboard',
+      navLabel: 'About',
+      subtitle: 'Project, template, run and owner',
+      body: <DashboardInfoBody dashboard={dashboard} active={opened} />,
+    },
+    {
+      key: 'view',
+      icon: 'mdi:monitor-eye',
+      title: 'Your view',
+      subtitle: 'Only for you, saved in this browser',
+      body: (
+        <Stack gap="lg">
+          <UiScaleField />
+          <PageWidthBlock />
+          <ChromeStyleNote />
+        </Stack>
+      ),
+    },
+  ];
+  if (filters) {
+    sections.push({
+      key: 'my-filters',
+      icon: 'mdi:filter-check-outline',
+      title: 'Your filters',
+      navLabel: 'Filters',
+      subtitle: 'Kept for you on this dashboard, and shareable as a link',
+      body: <YourFiltersBlock filters={filters} />,
+    });
+  }
+  if (onChangeTabDefaults) {
+    sections.push({
+      key: 'tab-defaults',
+      icon: 'mdi:tab',
+      title: 'Tab defaults',
+      subtitle: 'What this tab opens with, for everyone',
+      body: <TabDefaultsBlock dashboard={dashboard} onChange={onChangeTabDefaults} />,
+    });
+  }
+  if (onToggleAutofit || onChangeAdvancedVizControls) {
+    sections.push({
+      key: 'tiles',
+      icon: 'mdi:view-dashboard-outline',
+      title: 'Tiles',
+      subtitle: 'How tiles size themselves and place their controls, for everyone',
+      body: (
+        <TilesBlock
+          dashboard={dashboard}
+          onToggleAutofit={onToggleAutofit}
+          onChangeAdvancedVizControls={onChangeAdvancedVizControls}
+        />
+      ),
+    });
+  }
+  if (onToggleFunnelFiltering) {
+    sections.push({
+      key: 'filtering',
+      icon: 'mdi:filter-variant',
+      title: 'Filtering',
+      subtitle: 'How the filters behave on this dashboard, for everyone',
+      body: (
+        <SwitchField
+          label="Funnel filtering by default"
+          description="Highlight, in every other filter, the values that still lead to a non-empty result set. Viewers can still turn it off from the filter panel."
+          checked={dashboard?.funnel_filtering !== false}
+          onChange={onToggleFunnelFiltering}
+          testId="funnel-filtering-default-switch"
+        />
+      ),
+    });
+  }
+  if (guide) {
+    sections.push({
+      key: 'guide',
+      icon: 'mdi:help-circle-outline',
+      title: 'Guide',
+      subtitle: "The readers' guide to this dashboard, for every tab",
+      body: <GuideSettingsBlock settings={guide.settings} onChange={guide.onChange} />,
+    });
+  }
+  if (onChangeBrandTheme) {
+    sections.push({
+      key: 'branding',
+      icon: 'mdi:palette-outline',
+      title: 'Branding',
+      subtitle: 'Logo, colours and figure palette, for everyone',
+      body: (
+        <BrandingBlock
+          dashboard={dashboard}
+          onChange={onChangeBrandTheme}
+          onUploadLogo={onUploadLogo}
+          opened={opened}
+        />
+      ),
+    });
+  }
+  if (historyPanel) {
+    sections.push({
+      key: 'history',
+      icon: 'mdi:history',
+      title: 'History',
+      subtitle: 'Every saved version of this dashboard: preview, restore or bookmark one',
+      body: historyPanel,
+    });
+  }
+  if (dataVersionPanel) {
+    sections.push({
+      key: 'data-version',
+      icon: 'mdi:database-clock-outline',
+      title: 'Data version',
+      subtitle: 'Draw this dashboard from earlier data, for you only, until you reload',
+      body: dataVersionPanel,
+    });
+  }
+  if (feedback) {
+    sections.push({
+      key: 'feedback',
+      icon: 'mdi:comment-quote-outline',
+      title: 'Feedback',
+      subtitle: 'Report a problem or suggest an improvement',
+      body: <FeedbackBlock href={feedback.href} label={feedback.label} />,
+    });
+  }
+
+  const title = (
+    <Group gap="xs">
+      <Icon icon="ic:baseline-settings" width={20} height={20} style={SECTION_ICON_STYLE} />
+      <Text fw={600}>Dashboard settings</Text>
+    </Group>
+  );
+  const rootProps = {
+    className: brandScope?.className,
+    'data-mantine-color-scheme': brandScope?.['data-mantine-color-scheme'],
+    // Above the floating map card, so the overlay dims it like the rest of
+    // the dashboard instead of leaving it lit on top.
+    zIndex: Z_LAYERS.overlay,
+  };
+
+  if (layout === 'accordion') {
+    return (
+      <Drawer
+        opened={opened}
+        onClose={onClose}
+        position="right"
+        size="md"
+        title={title}
+        {...rootProps}
+      >
+        <AccordionLayout sections={sections} surface={surface} initialSection={initialSection} />
+      </Drawer>
+    );
+  }
+
+  return (
+    <SettingsNavModal
+      opened={opened}
+      onClose={onClose}
+      title={title}
+      sections={sections}
+      storageKey={`depictio-settings-active:${surface}`}
+      defaultSection={DEFAULT_ACTIVE[surface]}
+      initialSection={initialSection}
+      footer={
+        <SettingsRailNote icon="mdi:check-circle-outline">
+          Changes save as you make them.
+        </SettingsRailNote>
+      }
+      modalProps={rootProps}
+    />
+  );
+};
 
 export default SettingsDrawer;

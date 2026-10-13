@@ -1,0 +1,34 @@
+id: deseq2_vst_distribution
+name: Sample expression distributions
+mode: exploratory/distribution
+description: >-
+  Per-sample density of the variance-stabilised expression matrix, binned on a
+  grid shared by every sample so the curves are directly comparable, plus each
+  sample's five-number summary. The features sitting at the matrix floor are
+  excluded from the grid, because the spike they form is tall enough to flatten
+  the rest of the curve, and published as a share instead. This is the panel that
+  says whether a library is shaped like its neighbours at all, which a PCA cannot.
+find: { path_glob: "**/all.vst.tsv" }
+recipe: deseq2/vst_distribution.py
+fixture: vst_distribution.tsv
+renders_as:
+  - id: distribution_profile
+    component: advanced_viz
+    kind: profile
+    roles: { series: sample_id, x: bin_centre, y: density }
+  - {
+      component: card,
+      column: median,
+      aggregation: range,
+      aggregations: [box_plot_stats],
+      secondary_layout: box_plot,
+    }
+  - {
+      component: card,
+      column: floor_share,
+      aggregation: average,
+      secondary_layout: gauge,
+      coverage_max: 1,
+    }
+  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: donut, breakdown_col: group }
+  - { component: table }

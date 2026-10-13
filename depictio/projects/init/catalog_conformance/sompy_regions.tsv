@@ -1,0 +1,6 @@
+caller	label	truth_set	af_bin	recall	precision	f1	tp	fp	fn
+strelka	callset2	SEQC2	0.000000-0.200000	0.0	0.0	0.0	0	105	0
+strelka	callset2	SEQC2	0.200000-0.400000	0.0	0.0	0.0	0	0	0
+strelka	callset2	SEQC2	0.400000-0.600000	0.0	0.0	0.0	0	0	0
+strelka	callset2	SEQC2	0.600000-0.800000	0.0	0.0	0.0	0	0	0
+strelka	callset2	SEQC2	0.800000-1.000000	0.0	0.0	0.0	0	0	0

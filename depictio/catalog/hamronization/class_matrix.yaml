@@ -1,0 +1,19 @@
+id: hamronization_class_matrix
+name: Drug class by sample matrix
+mode: arg/class_matrix
+description: >-
+  Drug class by sample hit-count matrix, one aggregation level above the gene
+  matrix: the three tool vocabularies are folded onto one leading class per
+  row, with the screen that reports the class most often and how many distinct
+  genes it covers as row annotations.
+find:
+  path_glob: "**/hamronization_summarize/*combined_report.tsv"
+  path_glob_alt: ["**/hamronization/*combined_report.tsv"]
+recipe: hamronization/class_matrix.py
+fixture: class_matrix.tsv
+renders_as:
+  - id: arg_class_heatmap
+    component: advanced_viz
+    kind: complex_heatmap
+    roles: {index: drug_class, row_annotation_cols: [top_tool, n_genes_band]}
+  - { component: table }

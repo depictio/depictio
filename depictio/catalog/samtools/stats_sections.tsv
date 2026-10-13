@@ -1,0 +1,15 @@
+sample	section	series	metric	bin	n_reads	n_bases	n_indels	n_pairs	reads_total	reads_mapped	reads_mapped_pct	bases_mapped	error_rate	identity_pct	average_length	maximum_length	average_quality	supplementary_alignments
+A549_R1	SN	A549_R1	summary						2861374.0	2267013.0	79.22812606810574	1714806948.0	0.1487167	85.12832999999999	796.0	16679.0	11.7	33206.0
+A549_R2	SN	A549_R2	summary						1881992.0	1359865.0	72.25668334403122	1705520233.0	0.1366282	86.33718	1237.0	196677.0	11.1	292034.0
+A549_R1	RL	A549_R1	read_length	5.102441149412386	46.0													
+A549_R1	RL	A549_R1	read_length	6.001253944551245	13.0													
+A549_R1	RL	A549_R1	read_length	7.058395746737715	28.0													
+A549_R1	RL	A549_R1	read_length	7.97175613337843	15.0													
+A549_R1	COV	A549_R1	coverage_depth	1.017419366180605		26526435.0												
+A549_R1	COV	A549_R1	coverage_depth	2.0300185198596843		7600561.0												
+A549_R1	COV	A549_R1	coverage_depth	2.968246743463242		4023633.0												
+A549_R1	COV	A549_R1	coverage_depth	4.050419451364931		2613685.0												
+A549_R1	ID	A549_R1 deletions	deletions	1.0143616071937718			32279130.0											
+A549_R1	ID	A549_R1 deletions	deletions	2.0111633850124444			12748450.0											
+A549_R1	ID	A549_R1 deletions	deletions	2.9980981162248574			5131416.0											
+A549_R1	ID	A549_R1 deletions	deletions	3.9875110932131794			2306606.0											

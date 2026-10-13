@@ -3,7 +3,7 @@
 Each test writes a minimal synthetic input file into a temp data_dir, runs
 the recipe via ``execute_recipe``, and asserts:
 
-  1. The recipe's own ``EXPECTED_SCHEMA`` is met (this is enforced by the
+  1. The recipe's own ``OUTPUT_SCHEMA`` is met (this is enforced by the
      recipe engine — checkpoint 4 in depictio/recipes/__init__.py:288).
   2. The result is non-empty.
   3. The canonical viz binding validates against the produced schema via
@@ -38,36 +38,61 @@ def _polars_schema_name(df: pl.DataFrame) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
+def _write_rel_tables(data_dir: Path) -> None:
+    tables = data_dir / "qiime2" / "rel_abundance_tables"
+    tables.mkdir(parents=True)
+    lineages = {
+        2: ("k__Bacteria;p__Firmicutes", "k__Bacteria;p__Bacteroidetes"),
+        3: ("k__Bacteria;p__Firmicutes;c__Bacilli", "k__Bacteria;p__Bacteroidetes;c__Bacteroidia"),
+        4: (
+            "k__Bacteria;p__Firmicutes;c__Bacilli;o__Lactobacillales",
+            "k__Bacteria;p__Bacteroidetes;c__Bacteroidia;o__Bacteroidales",
+        ),
+        5: (
+            "k__Bacteria;p__Firmicutes;c__Bacilli;o__Lactobacillales;f__Lactobacillaceae",
+            "k__Bacteria;p__Bacteroidetes;c__Bacteroidia;o__Bacteroidales;f__Bacteroidaceae",
+        ),
+        6: (
+            "k__Bacteria;p__Firmicutes;c__Bacilli;o__Lactobacillales;f__Lactobacillaceae;"
+            "g__Lactobacillus",
+            "k__Bacteria;p__Bacteroidetes;c__Bacteroidia;o__Bacteroidales;f__Bacteroidaceae;"
+            "g__Bacteroides",
+        ),
+    }
+    for level, (first, second) in lineages.items():
+        (tables / f"rel-table-{level}.tsv").write_text(
+            "# Constructed from biom file\n"
+            "#OTU ID\tS1\tS2\n"
+            f"{first}\t0.55\t0.40\n"
+            f"{second}\t0.30\t0.50\n"
+        )
+
+
 def test_ampliseq_stacked_taxonomy_canonical(tmp_path: Path) -> None:
     # The recipe fans in QIIME2 rel-table-{2..6}.tsv (one wide table per rank,
-    # taxa × samples) via dc_ref sources — injected here as `extra_sources`.
-    # Only the Phylum level (rel-table-2) is supplied; the recipe tolerates the
-    # deeper levels being absent and derives a Kingdom level from the Phylum rows.
-    phylum = pl.DataFrame(
-        {
-            "#OTU ID": ["k__Bacteria;p__Firmicutes", "k__Bacteria;p__Bacteroidetes"],
-            "S1": [0.55, 0.30],
-            "S2": [0.40, 0.50],
-        }
-    )
-    empty = pl.DataFrame()
+    # taxa × samples), read from the run directory. Each carries the
+    # "# Constructed from biom file" banner QIIME2's biom export writes, which is
+    # why the sources skip a row.
+    #
+    # All five levels are written because the recipe engine rejects a required
+    # source that is missing *or* that loads zero rows, so a run cannot present
+    # QIIME2's collapse levels one at a time. Kingdom is not among them: the
+    # recipe derives it by summing the Phylum rows.
+    _write_rel_tables(tmp_path)
 
-    result = execute_recipe(
-        "qiime2/stacked_taxonomy_canonical.py",
-        tmp_path,
-        extra_sources={
-            "phylum": phylum,
-            "class_": empty,
-            "order": empty,
-            "family": empty,
-            "genus": empty,
-        },
-    )
+    result = execute_recipe("qiime2/stacked_taxonomy_canonical.py", tmp_path)
 
     assert not result.is_empty()
     assert set(["sample_id", "taxon", "rank", "abundance"]).issubset(result.columns)
-    # Phylum rows plus a Kingdom level the recipe derives by summing Phylum.
-    assert set(result["rank"].unique().to_list()) == {"Kingdom", "Phylum"}
+    # Every collapse level, plus the Kingdom the recipe derives by summing Phylum.
+    assert set(result["rank"].unique().to_list()) == {
+        "Kingdom",
+        "Phylum",
+        "Class",
+        "Order",
+        "Family",
+        "Genus",
+    }
 
     cfg = StackedTaxonomyConfig(
         sample_id_col="sample_id",
@@ -77,6 +102,34 @@ def test_ampliseq_stacked_taxonomy_canonical(tmp_path: Path) -> None:
     )
     errors = validate_binding(cfg, _polars_schema_name(result))
     assert errors == [], f"binding errors: {errors}"
+
+
+def test_ampliseq_stacked_taxonomy_joins_categorical_metadata(tmp_path: Path) -> None:
+    # Annotation strips colour bars by a per-sample column read from this DC.
+    # A run grouped by something other than the reference dataset's `habitat`
+    # (TREC: `locality`) used to get no metadata at all, so every bar came out
+    # in one colour. Every low-cardinality categorical column is joined now;
+    # numeric and high-cardinality columns are not.
+    _write_rel_tables(tmp_path)
+    metadata = pl.DataFrame(
+        {
+            "ID": ["S1", "S2"],
+            "locality": ["Naples", "Athens"],
+            "season": ["spring", "spring"],
+            "depth_m": [1.0, 5.0],  # numeric: not a strip
+        }
+    )
+
+    result = execute_recipe(
+        "qiime2/stacked_taxonomy_canonical.py", tmp_path, extra_sources={"metadata": metadata}
+    )
+
+    assert {"locality", "season"}.issubset(result.columns)
+    assert not {"depth_m", "ID"} & set(result.columns)
+    per_sample = dict(result.select("sample_id", "locality").unique().iter_rows())
+    assert per_sample == {"S1": "Naples", "S2": "Athens"}
+    # Bars come out grouped by the first categorical column: Athens first.
+    assert result["sample_id"][0] == "S2"
 
 
 # ---------------------------------------------------------------------------
@@ -184,3 +237,46 @@ def test_validate_binding_per_kind_happy_path(kind, cfg) -> None:
     else:  # stacked_taxonomy
         schema = {"s": "String", "t": "String", "r": "String", "a": "Float64"}
     assert validate_binding(cfg, schema) == []
+
+
+# ---------------------------------------------------------------------------
+# ampliseq: upset — taxon attributes must survive the pivot
+# ---------------------------------------------------------------------------
+
+
+def test_ampliseq_upset_carries_taxon_attributes(tmp_path: Path) -> None:
+    """Rank columns come across; per-sample and metadata columns do not.
+
+    The presence matrix is `taxon` + one binary column per group. Without the
+    taxon attributes a dashboard filter on `Phylum` has no column to bite on
+    and the UpSet silently ignores it.
+    """
+    rel_abundance = pl.DataFrame(
+        {
+            "sample": ["S1", "S2", "S3", "S1", "S2", "S3"],
+            "taxonomy": ["Bacteria;Firmicutes"] * 3 + ["Bacteria;Bacteroidota"] * 3,
+            "rel_abundance": [0.5, 0.4, 0.0, 0.0, 0.3, 0.6],
+            "Kingdom": ["Bacteria"] * 6,
+            "Phylum": ["Firmicutes"] * 3 + ["Bacteroidota"] * 3,
+        }
+    )
+    metadata = pl.DataFrame({"ID": ["S1", "S2", "S3"], "locality": ["Athens", "Athens", "Naples"]})
+
+    result = execute_recipe(
+        "nf-core/ampliseq/upset_canonical.py",
+        tmp_path,
+        extra_sources={"rel_abundance": rel_abundance, "metadata": metadata},
+    )
+
+    assert result.columns[0] == "taxon"
+    # Sets: one per locality. Attributes: the taxonomic ranks, nothing else.
+    assert {"Athens", "Naples"}.issubset(result.columns)
+    assert {"Kingdom", "Phylum"}.issubset(result.columns)
+    # `sample` varies within a taxon, `locality` is the pivot itself — neither
+    # is a taxon attribute.
+    assert "sample" not in result.columns
+    assert "locality" not in result.columns
+    firmicutes = result.filter(pl.col("taxon") == "Bacteria;Firmicutes")
+    assert firmicutes["Phylum"].to_list() == ["Firmicutes"]
+    assert firmicutes["Athens"].to_list() == [1]
+    assert firmicutes["Naples"].to_list() == [0]

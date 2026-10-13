@@ -28,23 +28,47 @@ services:
       timeout: 3s
       retries: 5
 
-  minio:
-    image: minio/minio:RELEASE.2025-01-20T14-49-07Z
-    container_name: minio
+  s3:
+    # Bundled local object storage = SeaweedFS (`weed mini`), S3 API on :9000.
+    # The `minio` network alias keeps `http://minio:9000` in existing CLI
+    # configs resolving. Legacy DEPICTIO_MINIO_* variables are still read as a
+    # fallback for DEPICTIO_S3_*.
+    image: chrislusf/seaweedfs:4.46
+    container_name: s3
+    networks:
+      default:
+        aliases:
+          - minio
     user: "${UID:-1000}:${GID:-1000}"
     volumes:
-      - ./${DATA_DIR:-data}/minio_data:/data
+      # New dir name: a pre-existing `minio_data` dir holds MinIO's own on-disk
+      # layout and cannot be reused — see docs/migrate-minio-to-seaweedfs.md.
+      - ./${DATA_DIR:-data}/seaweedfs_data:/data
     environment:
-      MINIO_ROOT_USER: ${DEPICTIO_MINIO_ROOT_USER:?DEPICTIO_MINIO_ROOT_USER must be set in docker-compose/.env}
-      MINIO_ROOT_PASSWORD: ${DEPICTIO_MINIO_ROOT_PASSWORD:?DEPICTIO_MINIO_ROOT_PASSWORD must be set in docker-compose/.env (>=16 chars, not a known default)}
-    command: server /data --console-address :9001
+      # Required on the new name only: Compose resolves a nested `:?` even when
+      # the outer variable is set, so `${NEW:-${LEGACY:?msg}}` always fails.
+      AWS_ACCESS_KEY_ID: ${DEPICTIO_S3_ROOT_USER:?DEPICTIO_S3_ROOT_USER must be set in docker-compose/.env (formerly DEPICTIO_MINIO_ROOT_USER)}
+      AWS_SECRET_ACCESS_KEY: ${DEPICTIO_S3_ROOT_PASSWORD:?DEPICTIO_S3_ROOT_PASSWORD must be set in docker-compose/.env (formerly DEPICTIO_MINIO_ROOT_PASSWORD; >=16 chars, not a known default)}
+      # Bucket is created at boot (idempotent) so the API's create_bucket() is a no-op.
+      S3_BUCKET: ${DEPICTIO_S3_BUCKET:-${DEPICTIO_MINIO_BUCKET:-depictio-bucket}}
+    # Dev only: the SeaweedFS admin UI is served on :9001 (the old MinIO console
+    # port, loopback-published below) and guarded with the root credentials.
+    # WebDAV is switched off.
+    command:
+      - mini
+      - -dir=/data
+      - -s3.port=9000
+      - -webdav=false
+      - -admin.port=9001
+      - -admin.user=${DEPICTIO_S3_ROOT_USER}
+      - -admin.password=${DEPICTIO_S3_ROOT_PASSWORD}
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     ports:
-      - "127.0.0.1:${MINIO_PORT:-9000}:9000"
-      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "127.0.0.1:${S3_PORT:-${MINIO_PORT:-9000}}:9000"
+      - "127.0.0.1:${S3_CONSOLE_PORT:-${MINIO_CONSOLE_PORT:-9001}}:9001"
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:9000/healthz || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -76,7 +100,6 @@ services:
       - ./VERSION:/app/VERSION
       - ./docker-images/run_fastapi.sh:/app/run_fastapi.sh
       - ./${DATA_DIR}/prof_files:/app/prof_files
-      - ./${DATA_DIR}/minio_data:/app/minio_data
       # Phase 2: shared with the celery worker so the worker writes
       # pre-rendered MultiQC figures here and the backend reads them on
       # Redis miss. Survives `docker compose down`, so a container restart
@@ -103,8 +126,8 @@ services:
         # bundle; locally it stays on Vite (service name + in-container port 5173).
         DEPICTIO_VIEWER_SERVICE_NAME: "${DEPICTIO_VIEWER_SERVICE_NAME:-depictio-viewer-dev}"
         DEPICTIO_VIEWER_SERVICE_PORT: "${DEPICTIO_VIEWER_SERVICE_PORT:-5173}"
-        DEPICTIO_MINIO_EXTERNAL_PORT: "${DEPICTIO_MINIO_EXTERNAL_PORT:-9000}"
-        DEPICTIO_MINIO_EXTERNAL_HOST: "${DEPICTIO_MINIO_EXTERNAL_HOST:-localhost}"
+        DEPICTIO_S3_EXTERNAL_PORT: "${DEPICTIO_S3_EXTERNAL_PORT:-${DEPICTIO_MINIO_EXTERNAL_PORT:-9000}}"
+        DEPICTIO_S3_EXTERNAL_HOST: "${DEPICTIO_S3_EXTERNAL_HOST:-${DEPICTIO_MINIO_EXTERNAL_HOST:-localhost}}"
         # Point the prerender store at the in-container mount instead of the
         # host-friendly `~/.depictio/multiqc_prerender` default. Backend +
         # worker must agree on this path or they'd write to different dirs.
@@ -112,12 +135,47 @@ services:
         # Realtime event system — opt-in. Backend hosts the MongoDB watcher
         # and the WebSocket / SSE endpoints — both gated on this flag.
         DEPICTIO_EVENTS_ENABLED: "${DEPICTIO_EVENTS_ENABLED:-false}"
+        # Remote data sources (URL / manifest scan modes). Policy for the SSRF
+        # gateway in depictio/api/v1/remote_fetch.py; read by BOTH the backend
+        # and the celery worker, so the worker block below must stay identical.
+        # Safe defaults (https only, no host lists, 500 MiB cap); a value in the
+        # --env-file (docker-compose/.env, the documented launch) or the shell
+        # wins. Plain http:// is only needed for the local demo server. The
+        # allowlist is EXCLUSIVE while set: every other host is rejected.
+        DEPICTIO_REMOTE_ALLOW_HTTP: "${DEPICTIO_REMOTE_ALLOW_HTTP:-false}"
+        DEPICTIO_REMOTE_URL_ALLOWLIST: "${DEPICTIO_REMOTE_URL_ALLOWLIST:-}"
+        DEPICTIO_REMOTE_URL_DENYLIST: "${DEPICTIO_REMOTE_URL_DENYLIST:-}"
+        DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS: "${DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS:-}"
+        DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS: "${DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS:-}"
+        DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES: "${DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES:-524288000}"
+        DEPICTIO_REMOTE_TIMEOUT_S: "${DEPICTIO_REMOTE_TIMEOUT_S:-30}"
+        DEPICTIO_REMOTE_MAX_REDIRECTS: "${DEPICTIO_REMOTE_MAX_REDIRECTS:-3}"
+        # Component export / embed API, off by default; see .env.example.
+        DEPICTIO_FASTAPI_EMBED_ENABLED: "${DEPICTIO_FASTAPI_EMBED_ENABLED:-false}"
+        DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS: "${DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS:-}"
         # Anonymous installation telemetry. Off by default in the DEV stack: this
         # compose file is what maintainers and contributors run, and counting our
         # own development boots as installations would be the fastest way to make
         # the numbers useless. The shipped docker-compose.yaml has it on.
         DEPICTIO_TELEMETRY_ENABLED: "${DEPICTIO_TELEMETRY_ENABLED:-false}"
         DEPICTIO_TELEMETRY_DEPLOYMENT_KIND: "${DEPICTIO_TELEMETRY_DEPLOYMENT_KIND:-docker-compose-dev}"
+        # Release check for admins. No default on purpose: unset (empty) leaves the
+        # /admin toggle usable, any value forces it and locks the toggle.
+        DEPICTIO_VERSION_CHECK_ENABLED: "${DEPICTIO_VERSION_CHECK_ENABLED:-}"
+        # Which view /dashboards opens in for someone who never picked one, and
+        # the geometry of the thumbnails it shows. See .env.example.
+        DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW: "${DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW:-table}"
+        DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_WIDTH: "${DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_WIDTH:-1440}"
+        DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_HEIGHT: "${DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_HEIGHT:-900}"
+        DEPICTIO_PERFORMANCE_SCREENSHOT_SCALE: "${DEPICTIO_PERFORMANCE_SCREENSHOT_SCALE:-2.0}"
+        # Dashboard feedback link, served to the SPA through
+        # /utils/public-config. Off unless both halves are set: the flag alone
+        # renders nothing, and so does a URL without it. The URL is a template
+        # whose {dashboard}, {dashboard_id}, {tab} and {url} are filled in the
+        # browser, so the link arrives carrying what the reader was looking at.
+        DEPICTIO_FEEDBACK_ENABLED: "${DEPICTIO_FEEDBACK_ENABLED:-false}"
+        DEPICTIO_FEEDBACK_URL: "${DEPICTIO_FEEDBACK_URL:-}"
+        DEPICTIO_FEEDBACK_LABEL: "${DEPICTIO_FEEDBACK_LABEL:-Feedback}"
         # Belt-and-suspenders: the editable plotly-upset / plotly-complexheatmap
         # packages are installed into the venv at image build (uv sync). If the
         # build re-used a cached layer (pre-dating the package addition), the
@@ -132,7 +190,7 @@ services:
     depends_on:
       - mongo
       - redis
-      - minio
+      - s3
 
   # ─────────────────────────────────────────────────────────────────────
   # Dev viewer: Vite dev server with hot-module reload — the default viewer in
@@ -197,6 +255,12 @@ services:
       # Container listens on 8080 (nginx-unprivileged / non-root); published
       # host port unchanged.
       - "${VIEWER_PORT:-5080}:8080"
+    environment:
+      # S3 origin the browser reads genome_view file tracks from, added to the
+      # CSP connect-src. Resolved like the backend's settings.s3.external_url
+      # (the host presigned URLs are signed for): public URL first, then the
+      # published host and port.
+      DEPICTIO_CSP_S3_ORIGIN: "${DEPICTIO_CSP_S3_ORIGIN:-${DEPICTIO_S3_PUBLIC_URL:-${DEPICTIO_S3_EXTERNAL_PROTOCOL:-http}://${DEPICTIO_S3_EXTERNAL_HOST:-${DEPICTIO_MINIO_EXTERNAL_HOST:-localhost}}:${DEPICTIO_S3_EXTERNAL_PORT:-${DEPICTIO_MINIO_EXTERNAL_PORT:-9000}}}}"
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     depends_on:
@@ -248,6 +312,16 @@ services:
         # Match the backend flag — keeps event publishers consistent whether
         # the work runs on the API process or the celery worker.
         DEPICTIO_EVENTS_ENABLED: "${DEPICTIO_EVENTS_ENABLED:-false}"
+        # Remote data source policy: must match the backend block above (the
+        # worker performs the remote reads the API enqueues).
+        DEPICTIO_REMOTE_ALLOW_HTTP: "${DEPICTIO_REMOTE_ALLOW_HTTP:-false}"
+        DEPICTIO_REMOTE_URL_ALLOWLIST: "${DEPICTIO_REMOTE_URL_ALLOWLIST:-}"
+        DEPICTIO_REMOTE_URL_DENYLIST: "${DEPICTIO_REMOTE_URL_DENYLIST:-}"
+        DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS: "${DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS:-}"
+        DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS: "${DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS:-}"
+        DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES: "${DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES:-524288000}"
+        DEPICTIO_REMOTE_TIMEOUT_S: "${DEPICTIO_REMOTE_TIMEOUT_S:-30}"
+        DEPICTIO_REMOTE_MAX_REDIRECTS: "${DEPICTIO_REMOTE_MAX_REDIRECTS:-3}"
         # Mirror the backend mount so both processes write to the same dir.
         DEPICTIO_MULTIQC_PRERENDER_DIR: "/app/multiqc_prerender"
         DEPICTIO_S3_CACHE_DIR: "/app/cache/s3_files"
@@ -265,7 +339,54 @@ services:
       - mongo
       - redis
       - depictio-backend
-      - minio
+      - s3
+
+  # Dev counterpart of the ingestion worker (see docker-compose.yaml for why it
+  # is separate from depictio-celery-worker). Behind a profile so the default
+  # `up` is unchanged; bring it up with:
+  #   docker compose -f docker-compose.dev.yaml --profile ingestion up -d depictio-ingestion-worker
+  depictio-ingestion-worker:
+    container_name: depictio-ingestion-worker
+    profiles: ["ingestion"]
+    image: ${DEPICTIO_WORKER_VERSION:-depictio-worker:dev}
+    build:
+      dockerfile: docker-images/Dockerfile.worker
+      context: .
+    volumes:
+      - ./depictio:/app/depictio
+      # Same masks as depictio-celery-worker: never imported by the worker, and
+      # the bulk of what watchmedo would otherwise stat() on every tick.
+      - /app/depictio/cli/.venv
+      - /app/depictio/tests
+      - ./packages/plotly-complexheatmap:/app/packages/plotly-complexheatmap
+      - ./packages/plotly-upset:/app/packages/plotly-upset
+      - ./docker-images/run_celery_worker.sh:/app/run_celery_worker.sh
+      - ./${DATA_DIR}/cache:/app/cache
+    env_file:
+      - docker-compose/.env
+    environment:
+        DEPICTIO_DEV_MODE: "${DEPICTIO_DEV_MODE:-false}"
+        DEPICTIO_LOGGING_VERBOSITY_LEVEL: "${DEPICTIO_LOGGING_VERBOSITY_LEVEL:-DEBUG}"
+        DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-false}"
+        DEPICTIO_CONTEXT: "server"
+        DEPICTIO_EVENTS_ENABLED: "${DEPICTIO_EVENTS_ENABLED:-false}"
+        DEPICTIO_S3_CACHE_DIR: "/app/cache/s3_files"
+        DEPICTIO_DELTA_CACHE_DIR: "/app/cache/delta_cache"
+        DEPICTIO_CELERY_QUEUES: "ingestion"
+        DEPICTIO_CELERY_WORKERS: "${DEPICTIO_INGESTION_WORKER_CONCURRENCY:-2}"
+        DEPICTIO_CELERY_PREFETCH: "1"
+        DEPICTIO_CELERY_MAX_TASKS_PER_CHILD: "10"
+        DEPICTIO_CELERY_NODENAME: "ingestion@%h"
+        PYTHONPATH: "/app:/app/packages/plotly-upset:/app/packages/plotly-complexheatmap"
+    command: ["/app/run_celery_worker.sh"]
+    user: "${UID:-1000}:${GID:-1000}"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      - mongo
+      - redis
+      - depictio-backend
+      - s3
 
   # Optional Celery monitoring UI. Enable with `docker compose --profile monitoring up`.
   # Bound to 127.0.0.1 only — do not expose without auth.

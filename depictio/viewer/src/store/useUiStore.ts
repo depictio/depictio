@@ -12,6 +12,13 @@ import type { AdvancedVizExtrasPayload } from 'depictio-react-core';
  */
 export type InspectorTab = 'controls' | 'data' | 'info' | 'notes';
 
+/** What the comments drawer lists: one component's threads, or the whole tab. */
+export type CommentsScope = 'component' | 'tab';
+/** Which threads the comments drawer lists: plain comments, or figure annotations. */
+export type CommentsView = 'comments' | 'annotations';
+/** Drawing tool of the annotate mode (same union as react-core's `AnnotateTool`). */
+export type AnnotateTool = 'range' | 'line' | 'points' | 'note';
+
 interface UiState {
   /** `StoredMetadata.index` of the inspected component, or null for none. */
   selectedComponentId: string | null;
@@ -25,6 +32,22 @@ interface UiState {
    * subscribes to this slice.
    */
   advancedVizExtras: Record<string, AdvancedVizExtrasPayload | null>;
+  /** Comments drawer. `commentsComponentIndex` is the component the
+   *  "This component" scope shows, kept when switching to the tab scope so
+   *  switching back returns to it. */
+  commentsOpen: boolean;
+  commentsScope: CommentsScope;
+  commentsComponentIndex: string | null;
+  commentsView: CommentsView;
+  /** Thread last clicked in the drawer, highlighted until another is. */
+  focusedThreadId: string | null;
+  /** Annotation thread whose inline editor is open in the drawer. */
+  editingAnnotationThreadId: string | null;
+  /** Bumped to ask the drawer to scroll the focused thread into view. */
+  threadScrollRequest: number;
+  /** Component in annotate mode, and the active drawing tool. */
+  annotateComponentIndex: string | null;
+  annotateTool: AnnotateTool | null;
 }
 
 interface UiActions {
@@ -38,6 +61,20 @@ interface UiActions {
     componentId: string,
     payload: AdvancedVizExtrasPayload | null,
   ) => void;
+  /** Opens the comments drawer on a component, or on the whole tab (null). */
+  openComments: (componentIndex?: string | null) => void;
+  closeComments: () => void;
+  setCommentsScope: (scope: CommentsScope) => void;
+  setCommentsView: (view: CommentsView) => void;
+  setFocusedThread: (threadId: string | null) => void;
+  setEditingAnnotation: (threadId: string | null) => void;
+  /** An annotation clicked on a chart: opens the drawer on its component, in
+   *  the annotations view, with the thread focused and its editor open. */
+  editAnnotation: (threadId: string, componentIndex: string) => void;
+  setAnnotate: (componentIndex: string | null, tool?: AnnotateTool | null) => void;
+  /** Drops every comments/annotate state: called when the dashboard changes,
+   *  so nothing from the previous dashboard leaks into the next one. */
+  resetComments: () => void;
 }
 
 const INITIAL: UiState = {
@@ -45,6 +82,15 @@ const INITIAL: UiState = {
   inspectorOpen: false,
   inspectorTab: 'info',
   advancedVizExtras: {},
+  commentsOpen: false,
+  commentsScope: 'tab',
+  commentsComponentIndex: null,
+  commentsView: 'comments',
+  focusedThreadId: null,
+  editingAnnotationThreadId: null,
+  threadScrollRequest: 0,
+  annotateComponentIndex: null,
+  annotateTool: null,
 };
 
 export const useUiStore = create<UiState & UiActions>((set) => ({
@@ -66,6 +112,50 @@ export const useUiStore = create<UiState & UiActions>((set) => ({
         ? s
         : { advancedVizExtras: { ...s.advancedVizExtras, [componentId]: payload } },
     ),
+  openComments: (componentIndex) =>
+    set((s) =>
+      componentIndex
+        ? { commentsOpen: true, commentsScope: 'component', commentsComponentIndex: componentIndex }
+        : {
+            commentsOpen: true,
+            commentsScope: 'tab',
+            commentsComponentIndex: s.commentsComponentIndex,
+          },
+    ),
+  closeComments: () =>
+    set({
+      commentsOpen: false,
+      focusedThreadId: null,
+      editingAnnotationThreadId: null,
+      commentsComponentIndex: null,
+    }),
+  setCommentsScope: (scope) => set({ commentsScope: scope }),
+  setCommentsView: (view) => set({ commentsView: view }),
+  setFocusedThread: (threadId) => set({ focusedThreadId: threadId }),
+  setEditingAnnotation: (threadId) => set({ editingAnnotationThreadId: threadId }),
+  editAnnotation: (threadId, componentIndex) =>
+    set((s) => ({
+      commentsOpen: true,
+      commentsScope: 'component',
+      commentsComponentIndex: componentIndex,
+      commentsView: 'annotations',
+      focusedThreadId: threadId,
+      editingAnnotationThreadId: threadId,
+      threadScrollRequest: s.threadScrollRequest + 1,
+    })),
+  setAnnotate: (componentIndex, tool = null) =>
+    set({ annotateComponentIndex: componentIndex, annotateTool: componentIndex ? tool : null }),
+  resetComments: () =>
+    set({
+      commentsOpen: false,
+      commentsScope: 'tab',
+      commentsComponentIndex: null,
+      commentsView: 'comments',
+      focusedThreadId: null,
+      editingAnnotationThreadId: null,
+      annotateComponentIndex: null,
+      annotateTool: null,
+    }),
 }));
 
 export default useUiStore;

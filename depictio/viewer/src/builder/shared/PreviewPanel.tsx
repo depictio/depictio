@@ -6,11 +6,15 @@
  * each builder doesn't reimplement them.
  */
 import React from 'react';
-import { Card, Center, Group, Loader, Stack, Text } from '@mantine/core';
+import { Card, Center, Group, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
+
+import PreviewLoading from './PreviewLoading';
 
 interface Props {
   loading?: boolean;
+  /** Overrides the loading label — see `PreviewLoading`. */
+  loadingLabel?: string;
   error?: string | null;
   empty?: boolean;
   emptyMessage?: string;
@@ -20,6 +24,7 @@ interface Props {
 
 const PreviewPanel: React.FC<Props> = ({
   loading,
+  loadingLabel,
   error,
   empty,
   emptyMessage,
@@ -38,16 +43,7 @@ const PreviewPanel: React.FC<Props> = ({
         background: 'var(--mantine-color-body)',
       }}
     >
-      {loading && (
-        <Center style={{ position: 'absolute', inset: 0, zIndex: 2 }}>
-          <Stack align="center" gap={4}>
-            <Loader size="sm" />
-            <Text size="xs" c="dimmed">
-              Updating preview…
-            </Text>
-          </Stack>
-        </Center>
-      )}
+      {loading && <PreviewLoading label={loadingLabel} />}
       {error && !loading && (
         <Group gap="xs" align="flex-start" mt="sm">
           <Icon icon="mdi:alert-circle" width={18} color="var(--mantine-color-red-6)" />

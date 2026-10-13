@@ -16,10 +16,16 @@ import { Icon } from '@iconify/react';
 import type { ProjectListEntry } from 'depictio-react-core';
 
 import ProjectsToolbar from './ProjectsToolbar';
-import ProjectTableView from './views/ProjectTableView';
-import { useProjectViewPrefs } from './hooks/useProjectViewPrefs';
+import ProjectTableView, { useProjectTableColumns } from './views/ProjectTableView';
+import TableDisplayMenu from '../components/TableDisplayMenu';
+import { DEFAULT_DENSITY, useProjectViewPrefs } from './hooks/useProjectViewPrefs';
 import { useProjectPins } from './hooks/useProjectPins';
 import { parseTemplate } from './template';
+import SharedViewBanner from '../components/listing/SharedViewBanner';
+import type { SharedViewScope } from '../components/listing/SharedViewBanner';
+import { listingUrl } from '../lib/listingUrl';
+import { matchesTemplateFilter } from 'depictio-react-core';
+import { useListingAccents } from '../lib/useListingAccents';
 
 interface ProjectsListProps {
   projects: ProjectListEntry[];
@@ -46,21 +52,44 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
   onEdit,
   onDelete,
 }) => {
-  const { prefs, setSearch, setFilters, setOnlyPinned, setDensity, clearFilters } =
-    useProjectViewPrefs();
+  const accent = useListingAccents('projects');
+  const {
+    prefs,
+    arrivedScoped,
+    setSearch,
+    setFilters,
+    setOnlyPinned,
+    setDensity,
+    clearFilters,
+  } = useProjectViewPrefs();
   const { pinnedIds, togglePin } = useProjectPins();
+  const tableColumns = useProjectTableColumns();
 
-  // Template-source options for the filter popover — derived from the loaded
-  // projects so the dropdown only offers sources actually present.
-  const templateSourceOptions = useMemo(() => {
-    const set = new Set<string>();
+  // Template options for the filter popover, derived from the loaded projects
+  // so the dropdown only offers pipelines actually present. Each source
+  // contributes an "all pipelines" entry alongside its individual pipelines,
+  // which is what lets one link scope to a whole source or a single pipeline.
+  const templateOptions = useMemo(() => {
+    const bySource = new Map<string, Set<string>>();
     for (const p of projects) {
       const t = parseTemplate(p);
-      if (t?.source) set.add(t.source);
+      if (!t?.source) continue;
+      const pipelines = bySource.get(t.source) ?? new Set<string>();
+      if (t.repo) pipelines.add(t.repo);
+      bySource.set(t.source, pipelines);
     }
-    return Array.from(set)
-      .sort()
-      .map((s) => ({ value: s, label: s }));
+    const options: { value: string; label: string }[] = [];
+    for (const source of Array.from(bySource.keys()).sort()) {
+      const pipelines = Array.from(bySource.get(source) ?? []).sort();
+      if (pipelines.length > 1) {
+        options.push({ value: source, label: `${source} (all pipelines)` });
+      }
+      for (const repo of pipelines) {
+        options.push({ value: `${source}/${repo}`, label: `${source} / ${repo}` });
+      }
+      if (pipelines.length === 0) options.push({ value: source, label: source });
+    }
+    return options;
   }, [projects]);
 
   // Pipeline: search → filters → onlyPinned → split into sections.
@@ -87,9 +116,8 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
       }
       if (prefs.filters.visibility === 'public' && !p.is_public) return false;
       if (prefs.filters.visibility === 'private' && p.is_public) return false;
-      if (prefs.filters.templateSources.length > 0) {
-        const t = parseTemplate(p);
-        if (!t || !prefs.filters.templateSources.includes(t.source)) return false;
+      if (!matchesTemplateFilter(p.template_origin, prefs.filters.templates)) {
+        return false;
       }
       if (prefs.onlyPinned) {
         const id = String(p._id ?? p.id ?? '');
@@ -149,7 +177,7 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
               withArrow
             >
               <Button
-                color="teal"
+                color={accent.secondary}
                 variant="filled"
                 onClick={onCreateClick}
                 disabled={createDisabled}
@@ -165,26 +193,108 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
     );
   }
 
+  // What the shared link narrowed to, spelled out for the banner.
+  const scopeChips: SharedViewScope[] = [];
+  for (const value of prefs.filters.templates) {
+    const opt = templateOptions.find((o) => o.value === value);
+    scopeChips.push({
+      key: `t:${value}`,
+      label: opt?.label ?? value,
+      onRemove: () =>
+        setFilters({
+          ...prefs.filters,
+          templates: prefs.filters.templates.filter((v) => v !== value),
+        }),
+    });
+  }
+  for (const t of prefs.filters.types) {
+    scopeChips.push({
+      key: `y:${t}`,
+      label: t === 'basic' ? 'Basic' : 'Advanced',
+      onRemove: () =>
+        setFilters({
+          ...prefs.filters,
+          types: prefs.filters.types.filter((v) => v !== t),
+        }),
+    });
+  }
+  if (prefs.filters.visibility !== 'all') {
+    scopeChips.push({
+      key: 'v',
+      label: prefs.filters.visibility === 'public' ? 'Public only' : 'Private only',
+      onRemove: () => setFilters({ ...prefs.filters, visibility: 'all' }),
+    });
+  }
+  if (prefs.onlyPinned) {
+    scopeChips.push({
+      key: 'pinned',
+      label: 'Favorites only',
+      onRemove: () => setOnlyPinned(false),
+    });
+  }
+  if (prefs.search.trim()) {
+    scopeChips.push({
+      key: 'q',
+      label: `"${prefs.search.trim()}"`,
+      onRemove: () => setSearch(''),
+    });
+  }
+
+  // A template scope reads just as well on the dashboards listing, and "show
+  // me this pipeline" usually means both.
+  const crossLink =
+    prefs.filters.templates.length > 0
+      ? {
+          href: listingUrl('/dashboards', { template: prefs.filters.templates }),
+          label: 'See the matching dashboards',
+        }
+      : undefined;
+
+  const showBanner = arrivedScoped && scopeChips.length > 0;
+
   const noResults =
     filtered.length === 0 &&
     (prefs.search.trim().length > 0 ||
       prefs.filters.types.length > 0 ||
       prefs.filters.visibility !== 'all' ||
-      prefs.filters.templateSources.length > 0 ||
+      prefs.filters.templates.length > 0 ||
       prefs.onlyPinned);
 
   return (
     <Stack gap="md">
       <ProjectsToolbar
         prefs={prefs}
-        templateSourceOptions={templateSourceOptions}
+        templateOptions={templateOptions}
+        matchingCount={filtered.length}
+        showFilterChips={!showBanner}
         pinnedCount={pinnedCount}
         pinDisabled={createDisabled}
         setSearch={setSearch}
         setFilters={setFilters}
         setOnlyPinned={setOnlyPinned}
         clearFilters={clearFilters}
+        tableDisplay={
+          <TableDisplayMenu
+            section="projects"
+            density={prefs.density}
+            defaultDensity={DEFAULT_DENSITY}
+            onDensityChange={setDensity}
+            columns={tableColumns}
+          />
+        }
       />
+
+      {showBanner && (
+        <SharedViewBanner
+          scope={scopeChips}
+          shown={filtered.length}
+          total={projects.length}
+          noun="project"
+          crossLink={crossLink}
+          color={accent.secondary}
+          onClearAll={clearFilters}
+        />
+      )}
 
       {createDisabled && (
         <Paper p="xs" radius="md" withBorder>
@@ -228,7 +338,7 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
           pinnedIds={pinnedIds}
           pinDisabled={createDisabled}
           density={prefs.density}
-          onSetDensity={setDensity}
+          columns={tableColumns}
           onView={onView}
           onEdit={onEdit}
           onDelete={onDelete}

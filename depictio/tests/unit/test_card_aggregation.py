@@ -187,3 +187,78 @@ class TestCardFilterExpr:
         )
         loaded = _agg_value(apply_filter_expr(frame, expr)["v"], "average")
         assert pushed == loaded is None
+
+
+class TestTopCategory:
+    """``top`` / ``top_share``: a text tile's dominant category and its share.
+
+    One expression serves the scan pushdown and the collected-frame path, so the
+    tests evaluate it both lazily and eagerly.
+    """
+
+    FRAME = pl.DataFrame(
+        {
+            "phylum": ["b", "a", None, "b", "a", "c", None],
+            "reads": [1.0, 2.0, 10.0, 1.0, 0.0, 1.5, None],
+        }
+    )
+
+    def _both(self, frame: pl.DataFrame, agg: str, weight: str | None):
+        expr = _agg_expr("phylum", agg, weight)
+        assert expr is not None
+        lazy = frame.lazy().select(expr.alias("x")).collect().item()
+        eager = frame.select(expr.alias("x")).item()
+        assert lazy == eager
+        return _coerce_agg_result(lazy, agg)
+
+    def test_weighted_top_breaks_ties_alphabetically(self):
+        # a = 2.0, b = 2.0, c = 1.5: a tie, "a" first.
+        assert self._both(self.FRAME, "top", "reads") == "a"
+
+    def test_weighted_share_is_over_every_rows_weight(self):
+        # 2.0 out of 15.5: the 10.0 read on a null phylum stays in the total.
+        assert self._both(self.FRAME, "top_share", "reads") == pytest.approx(2.0 / 15.5)
+
+    def test_unweighted_counts_rows_and_never_picks_null(self):
+        frame = self.FRAME.with_columns(
+            pl.Series("phylum", [None, "a", None, "b", "a", None, None])
+        )
+        assert self._both(frame, "top", None) == "a"
+        assert self._both(frame, "top_share", None) == pytest.approx(2 / 7)
+
+    def test_largest_weight_wins_over_more_rows(self):
+        frame = pl.DataFrame({"phylum": ["a", "a", "a", "b"], "reads": [1.0, 1.0, 1.0, 9.0]})
+        assert self._both(frame, "top", "reads") == "b"
+        assert self._both(frame, "top", None) == "a"
+
+    def test_no_category_or_no_weight_gives_null(self):
+        empty = pl.DataFrame(
+            {"phylum": [], "reads": []}, schema={"phylum": pl.Utf8, "reads": pl.Float64}
+        )
+        assert self._both(empty, "top", "reads") is None
+        assert self._both(empty, "top_share", None) is None
+        all_null = pl.DataFrame(
+            {"phylum": [None, None], "reads": [1.0, 2.0]},
+            schema={"phylum": pl.Utf8, "reads": pl.Float64},
+        )
+        assert self._both(all_null, "top", "reads") is None
+        assert self._both(all_null, "top_share", "reads") is None
+        zero = pl.DataFrame({"phylum": ["a"], "reads": [0.0]})
+        assert self._both(zero, "top_share", "reads") is None
+
+    def test_a_numeric_category_comes_back_as_text(self):
+        frame = pl.DataFrame({"phylum": [10, 9, 10]})
+        assert self._both(frame, "top", None) == "10"
+
+    def test_runs_beside_card_aggregations_in_one_query(self):
+        row = (
+            self.FRAME.lazy()
+            .select(
+                _agg_expr("phylum", "top", "reads").alias("c0"),
+                _agg_expr("reads", "sum").alias("c1"),
+                _agg_expr("phylum", "nunique").alias("c2"),
+            )
+            .collect()
+            .row(0)
+        )
+        assert row == ("a", 15.5, 4)

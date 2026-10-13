@@ -1,0 +1,17 @@
+id: hicexplorer_distance_decay
+name: Contact probability vs distance
+mode: dist-vs-counts
+description: >-
+  Mean contact frequency against genomic distance, hicexplorer's
+  hicPlotDistVsCounts curve, the standard Hi-C library-quality signature.
+find:
+  path_glob: "**/*_distcount.txt"
+recipe: hicexplorer/distance_decay.py
+fixture: distance_decay.tsv
+renders_as:
+  - id: decay_curve
+    component: advanced_viz
+    kind: profile
+    roles: {series: chromosome, x: distance, y: contacts}
+  - { component: card, column: contacts, aggregation: max, secondary_layout: box_plot, aggregations: [box_plot_stats] }
+  - { component: table }

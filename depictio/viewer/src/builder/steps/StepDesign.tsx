@@ -3,20 +3,30 @@
  * Used by both CreateComponentPage (final step) and EditComponentPage (only step).
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Center, Paper, Stack, Text, Title } from '@mantine/core';
+import { Alert, Button, Center, Group, Paper, Stack, Text, ThemeIcon, Title } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
 import { fetchSpecs, upsertComponent } from 'depictio-react-core';
+import { useGlassPages } from '../../chrome/variants/glass/pages';
 import { useBuilderStore } from '../store/useBuilderStore';
 import type { ColumnSpec } from '../store/useBuilderStore';
 import ComponentBuilder from '../ComponentBuilder';
-import SectionSelect from '../shared/SectionSelect';
 import { buildMetadata } from '../buildMetadata';
 import { getComponentTypeMeta } from '../componentTypes';
+import { SwitchField } from '../shared/BuilderSections';
 
 const StepDesign: React.FC = () => {
   const state = useBuilderStore();
   const [savedRedirect, setSavedRedirect] = useState(false);
+  const glass = useGlassPages();
+
+  // Filters the previews can apply: the dashboard's active ones minus any this
+  // component emitted itself (mirrors useBuilderPreviewFilters, but unhooked
+  // from the toggle — the banner must keep showing the count while the toggle
+  // is off, or there'd be no way to turn it back on).
+  const carriedFilters = state.dashboardFilters.filter(
+    (f) => String(f.index) !== String(state.componentId),
+  );
 
   // Safety net: if user lands on this step without cols loaded (e.g. StepData
   // didn't run to completion before they clicked Next, or edit mode skipped
@@ -49,9 +59,10 @@ const StepDesign: React.FC = () => {
     if (!state.componentType) return false;
     if (!state.dashboardId || !state.componentId) return false;
     if (state.mode === 'create') {
-      // Text components are stand-alone — no workflow/DC binding required.
-      if (state.componentType !== 'text' && (!state.wfId || !state.dcId))
-        return false;
+      // Text and highlight components are stand-alone — no workflow/DC
+      // binding required (a highlight's figure has its own, on its tab).
+      const unbound = state.componentType === 'text' || state.componentType === 'highlight';
+      if (!unbound && (!state.wfId || !state.dcId)) return false;
     }
     return true;
   }, [state]);
@@ -110,14 +121,36 @@ const StepDesign: React.FC = () => {
         </Text>
       </Stack>
 
-      <ComponentBuilder />
+      {/* MultiQC previews render pre-aggregated report plots (no row-filter
+          concept) and text components have no data at all — no banner there. */}
+      {carriedFilters.length > 0 &&
+        state.componentType !== 'text' &&
+        state.componentType !== 'multiqc' && (
+          <Paper withBorder radius="md" p="sm" data-testid="builder-filter-banner">
+            <Group gap="sm" wrap="nowrap" align="flex-start">
+              <ThemeIcon variant="light" size="md" radius="md">
+                <Icon icon="mdi:filter-variant" width={16} />
+              </ThemeIcon>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <SwitchField
+                  label={`Previewing with ${carriedFilters.length} active dashboard filter${
+                    carriedFilters.length === 1 ? '' : 's'
+                  }`}
+                  description={
+                    state.applyDashboardFilters
+                      ? "Apply to preview. A heavily filtered preview can be empty — toggle off to preview the full dataset. The saved component always follows the dashboard's live filters."
+                      : "Apply to preview. Off: the preview shows the full dataset. The saved component always follows the dashboard's live filters."
+                  }
+                  checked={state.applyDashboardFilters}
+                  onChange={state.setApplyDashboardFilters}
+                  testId="builder-filter-toggle"
+                />
+              </div>
+            </Group>
+          </Paper>
+        )}
 
-      {/* Placement, not appearance — so it sits outside the per-type builder,
-          which keeps it identical for every component type instead of nine
-          near-copies. */}
-      <Paper withBorder radius="md" p="md">
-        <SectionSelect />
-      </Paper>
+      <ComponentBuilder />
 
       {state.saveError && (
         <Alert color="red" title="Save error">
@@ -128,13 +161,14 @@ const StepDesign: React.FC = () => {
       <Center mt="xl">
         <Button
           variant="filled"
-          color="green"
-          size="xl"
-          leftSection={<Icon icon="mdi:content-save" width={24} />}
+          // Glass: the page's one filled action is the accent, like its siblings.
+          color={glass ? undefined : 'green'}
+          size={glass ? 'lg' : 'xl'}
+          leftSection={<Icon icon="mdi:content-save" width={glass ? 20 : 24} />}
           loading={state.saving}
           disabled={!ready || savedRedirect || !state.previewReady}
           onClick={handleSave}
-          style={{ height: 60, fontSize: 18, fontWeight: 700 }}
+          style={glass ? { height: 52, paddingInline: 28 } : { height: 60, fontSize: 18, fontWeight: 700 }}
           data-tour-id="component-save"
           title={
             !state.previewReady

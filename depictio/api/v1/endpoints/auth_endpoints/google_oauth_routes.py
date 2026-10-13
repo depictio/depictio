@@ -15,7 +15,6 @@ from fastapi import APIRouter, HTTPException, Query
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.auth_endpoints.utils import (
-    cleanup_expired_states,
     create_or_get_user,
     exchange_code_for_token,
     fetch_google_user_info,
@@ -23,6 +22,7 @@ from depictio.api.v1.endpoints.auth_endpoints.utils import (
     validate_oauth_state,
 )
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _add_token
+from depictio.api.v1.services.avatars import set_provider_avatar
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.google_oauth import (
     GoogleOAuthLoginResponse,
@@ -56,11 +56,9 @@ async def google_oauth_login() -> GoogleOAuthLoginResponse:
     ):
         raise HTTPException(status_code=500, detail="Google OAuth configuration incomplete")
 
-    # Clean up expired states
-    cleanup_expired_states()
-
-    # Generate state parameter for CSRF protection
-    state = generate_oauth_state()
+    # Generate state parameter for CSRF protection. Expired states are reaped
+    # by the collection's TTL index, so there is nothing to sweep here.
+    state = await generate_oauth_state()
 
     # Build Google OAuth authorization URL
     auth_params = {
@@ -75,7 +73,7 @@ async def google_oauth_login() -> GoogleOAuthLoginResponse:
 
     authorization_url = f"https://accounts.google.com/o/oauth2/auth?{urlencode(auth_params)}"
 
-    logger.info(f"Generated OAuth login URL with state: {state}")
+    logger.info("Generated OAuth login URL")
 
     return GoogleOAuthLoginResponse(authorization_url=authorization_url, state=state)
 
@@ -111,8 +109,7 @@ async def google_oauth_callback(
         raise HTTPException(status_code=400, detail="Missing authorization code")
 
     # Validate state parameter (CSRF protection)
-    if not validate_oauth_state(state):
-        logger.warning(f"Invalid or expired OAuth state: {state}")
+    if not await validate_oauth_state(state):
         raise HTTPException(status_code=400, detail="Invalid or expired state parameter")
 
     try:
@@ -137,6 +134,12 @@ async def google_oauth_callback(
                 detail="Registration is disabled on this instance. "
                 "Ask an administrator for access.",
             )
+
+        # Profile picture from Google's userinfo. Never raises and never blocks
+        # the login on a failure; an uploaded picture is left untouched, and an
+        # unchanged URL is not downloaded again (see services/avatars.py).
+        if user.id is not None and google_user.picture:
+            await set_provider_avatar(user.id, provider="google", url=google_user.picture)
 
         # Step 4: Create authentication token for the user
         logger.info(f"Creating authentication token for user: {user.id}")

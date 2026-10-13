@@ -1,23 +1,39 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { ActionIcon, Group } from '@mantine/core';
+import React, { useContext, useEffect, useRef, useState } from 'react';
+import { ActionIcon, Group, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { StoredMetadata } from '../../api';
+import CatalogButton from './CatalogButton';
 import MetadataPopover from './MetadataPopover';
 import FullscreenButton from './FullscreenButton';
 import InspectButton from './InspectButton';
 import { useInspectorControl } from './InspectorContext';
+import CommentsButton from './CommentsButton';
+import CurrentDataBadge from './CurrentDataBadge';
+import { useCommentsControl } from './CommentsContext';
+import ExportButton from './ExportButton';
+import { useChromeSource, useComponentExportControl } from './ExportContext';
+import { isDataVersionActive, useDataVersions } from '../../dataVersions';
+import AnnotateButton from './AnnotateButton';
+import { useAnnotationLayer } from '../../annotations/AnnotationLayerContext';
+import { componentSupportsAnnotation } from '../../annotations/plotDecorate';
 import DownloadButton from './DownloadButton';
 import ResetButton from './ResetButton';
+import ClearSelectionButton from './ClearSelectionButton';
+import SaveGroupAction, { SaveGroupContext, SelectionHintAction } from './SaveGroupAction';
+import { supportsSelectionGrouping } from '../../selection';
+import { useGroupingColorVar } from '../../selectionGroups';
+import { actionsFor, type ChromeAction as TypeChromeAction } from './chromeActions';
+import { TILE_ACTION_STYLE } from './actionStyles';
+import { resolveFigureStyle } from '../figureStyle';
 import './chrome.css';
 
-export type ChromeAction =
-  | 'inspect'
-  | 'metadata'
-  | 'fullscreen'
-  | 'download'
-  | 'reset'
-  | 'drag';
+export { actionsFor };
+
+/** Every action the chrome draws: the per-type ones (`actionsFor`, the table
+ *  the Guide also reads), plus those that depend on the viewer rather than on
+ *  the component type. */
+export type ChromeAction = TypeChromeAction | 'comments' | 'annotate' | 'export';
 
 export interface ComponentChromeProps {
   metadata: StoredMetadata;
@@ -40,13 +56,14 @@ export interface ComponentChromeProps {
    *  wired by react-grid-layout via `draggableHandle=".react-grid-dragHandle"`. */
   showDragHandle?: boolean;
   /** When true, this component is the SOURCE of an active dashboard filter
-   *  (e.g. a scatter selection, a table row selection, a map polygon). The
-   *  reset action icon stays in its original position in the chrome row but
-   *  switches to a filled-orange style; otherwise it renders disabled in the
-   *  light variant. The action-icon order is preserved either way. Whether it
-   *  also stays visible without hover is a further question — see
-   *  `persistentReset` below. */
+   *  (e.g. a scatter selection, a table row selection, a map polygon). A
+   *  selection source then shows its clear action even without hover (see
+   *  `showClear` below); an interactive control's in-row reset switches to a
+   *  filled-orange style instead. */
   sourceFilterActive?: boolean;
+  /** Values the tile's own selection holds, for the clear action's
+   *  "Clear selection (N)" label. Omitted or 0 leaves the count out. */
+  selectionCount?: number;
   /**
    * Render the action row at the density of a filter-panel row rather than of a
    * dashboard tile.
@@ -63,39 +80,6 @@ export interface ComponentChromeProps {
    * action is its own component with its own hard-coded `size`.
    */
   compact?: boolean;
-}
-
-/** View-accessible action visibility per component type. Mirrors the
- *  view-accessible subset of `_create_component_buttons` in
- *  `depictio/dash/layouts/edit.py:236-428`. ``reset`` is always last in the
- *  list so the chrome can hide it when ``onResetFilter`` isn't provided. */
-export function actionsFor(componentType: string): ChromeAction[] {
-  switch (componentType) {
-    case 'figure':
-    case 'map':
-      return ['metadata', 'fullscreen', 'reset'];
-    case 'multiqc':
-      return ['metadata', 'fullscreen'];
-    case 'table':
-      return ['metadata', 'fullscreen', 'download', 'reset'];
-    case 'interactive':
-      return ['metadata', 'reset'];
-    case 'advanced_viz':
-      // metadata + fullscreen + reset. Download is dropped — advanced viz
-      // export is handled by the Settings popover (Newick export for trees,
-      // PNG snapshots are out-of-scope for the multi-trace plotly figures).
-      // The Settings + Show-data ActionIcons are injected via extraActions
-      // from ComponentRenderer's advanced_viz dispatch.
-      return ['metadata', 'fullscreen', 'reset'];
-    case 'card':
-    case 'image':
-    case 'jbrowse':
-      return ['metadata'];
-    case 'text':
-      return ['metadata'];
-    default:
-      return ['metadata'];
-  }
 }
 
 /** Action-row orientation per component type. Mirrors `button_configs` in
@@ -132,6 +116,7 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   extraActions,
   showDragHandle = false,
   sourceFilterActive = false,
+  selectionCount,
   compact = false,
 }) => {
   const localFullscreenRef = useRef<HTMLDivElement | null>(null);
@@ -153,28 +138,97 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   const inspector = useInspectorControl();
   const actions: ChromeAction[] = [];
   if (inspector) actions.push('inspect');
+  // Same again for comments: the viewer only provides a control to users who
+  // may comment (editors and owners), on every component type alike.
+  const comments = useCommentsControl();
+  const commentOpenCount = comments?.openCounts[metadata.index] ?? 0;
+  const commentProposedCount = comments?.proposedCounts[metadata.index] ?? 0;
+  const commentStaleCount = comments?.staleCounts[metadata.index] ?? 0;
+  // A component with threads keeps its comments icon on screen without hover:
+  // the count is the point, and a hover-only badge would hide it.
+  const persistentComments =
+    commentOpenCount > 0 || commentProposedCount > 0 || commentStaleCount > 0;
+  if (comments) actions.push('comments');
+  // Annotate mode: cartesian Plotly figures, the advanced_viz kinds whose
+  // renderer wires the annotation layer, and tables with a row-id column; and
+  // only when the app's annotation layer lets this user create annotations
+  // and the mounted renderer reports it can capture in its current view (not
+  // a 3D embedding, a multi-panel barplot tab...).
+  const annotationLayer = useAnnotationLayer();
+  const canAnnotateHere =
+    Boolean(annotationLayer?.canAnnotate) &&
+    componentSupportsAnnotation(componentType, metadata as Record<string, unknown>) &&
+    Boolean(annotationLayer?.isAnnotatable(String(metadata.index)));
+  const annotateActive =
+    canAnnotateHere && annotationLayer?.annotate?.componentIndex === String(metadata.index);
+  if (canAnnotateHere) actions.push('annotate');
+  // Export / embed: a property of the app (is the export API on?) and of where
+  // the tile comes from, so it is prepended from context like the two above.
+  // Left out where the API has nothing to serve: a JBrowse tile is an iframe
+  // onto a live server, and a tile drawn from a past version would export the
+  // live dashboard under a label that says otherwise.
+  const exporter = useComponentExportControl();
+  const chromeSource = useChromeSource();
+  const dataVersions = useDataVersions();
+  const showingPast =
+    isDataVersionActive(dataVersions) || Boolean(dataVersions.definitionVersionId);
+  const exportTarget =
+    exporter && chromeSource?.dashboardId && componentType !== 'jbrowse' && !showingPast
+      ? {
+          dashboardId: chromeSource.dashboardId,
+          componentId: chromeSource.componentId ?? String(metadata.index),
+          componentType,
+          vizKind: (metadata as { viz_kind?: string | null }).viz_kind ?? null,
+          title: typeof metadata.title === 'string' ? metadata.title : undefined,
+          filters: chromeSource.filters,
+        }
+      : null;
+  if (exportTarget) actions.push('export');
+  // Same reasoning as `inspect`: whether this action exists is a property of
+  // the component's provenance, not of its type.
+  if (metadata.catalog_source) actions.push('catalog');
+  /**
+   * The author's own prose about this component, from `description` in the
+   * dashboard YAML. Every renderer but advanced_viz drops it on the floor, so
+   * a card explaining that it exists to demonstrate `filter_expr` said that to
+   * nobody. Surfacing it here rather than in each renderer keeps it out of the
+   * tile's own layout: a card has room for a title and a number, an interactive
+   * for a label and its control, and neither can grow a paragraph.
+   *
+   * advanced_viz is excluded because its renderers already print the same text
+   * as a subtitle under the title, so the icon would only offer a second copy —
+   * except in the `minimal` style, whose header shows the short `subtitle`
+   * instead and would otherwise lose the prose.
+   */
+  const description = typeof metadata.description === 'string' ? metadata.description.trim() : '';
+  const hasDescription =
+    Boolean(description) &&
+    (componentType !== 'advanced_viz' || resolveFigureStyle(metadata.figure_style) === 'minimal');
+  // Sits directly before `metadata` (always first in `actionsFor`): both answer
+  // "what is this component", the prose one before the structured one.
+  if (hasDescription) actions.push('description');
   actions.push(...actionsFor(componentType));
 
   /**
-   * Whether the reset icon stays on screen without hover.
+   * Whether the tile draws its clear-selection action.
    *
-   * The action row floats over the component, so a persistent icon costs
-   * whatever is under the top-right corner. A figure, table or map has plot
-   * area to spare there, and it needs the icon: a scatter selection or a
-   * highlighted row is easy to miss, and nothing else on screen says the
-   * component is filtering the dashboard.
+   * A figure, table, map, image or advanced viz selection is easy to miss, and
+   * nothing else on screen says the tile is filtering the dashboard, so the
+   * way out stays visible while the selection lasts. It is a slot of the action
+   * row, but the one slot that escapes the hover-only default: at rest it shows
+   * alone, with no row frame and the other icons hidden, and on hover the whole
+   * row appears around it. It sits in the slot nearest the tile corner (first
+   * in a vertical row, last in a horizontal one), so the lone icon at rest
+   * stays in the corner rather than floating beside empty slots.
    *
-   * An interactive control has neither. Its frame is a title line and the
-   * control itself with nothing in reserve, so the icon lands on the slider
-   * track or the select's chevron — and it is the one component type whose
-   * active filter is already legible, because the value is displayed in the
-   * control. The panel's summary list, the group headers and "Reset all" all
-   * carry a persistent clear for it too. So here the icon reverts to
-   * hover-only, like every other action; it still turns filled-orange when
-   * revealed, so the state it signalled is not lost.
+   * An interactive control is excluded. Its frame is a title line and the
+   * control itself, so a corner icon lands on the slider track or the select's
+   * chevron, and its active filter is already legible in the control. It keeps
+   * the in-row reset, hover-only, which turns filled-orange when revealed.
    */
-  const persistentReset =
+  const showClear =
     sourceFilterActive && Boolean(onResetFilter) && componentType !== 'interactive';
+  const vertical = orientationFor(componentType) === 'vertical';
 
   const renderAction = (action: ChromeAction) => {
     switch (action) {
@@ -187,6 +241,66 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
             active={inspector.selectedId === metadata.index}
             onInspect={inspector.select}
           />
+        );
+      case 'comments':
+        if (!comments) return null;
+        return (
+          <CommentsButton
+            key="comments"
+            componentId={metadata.index}
+            openCount={commentOpenCount}
+            proposedCount={commentProposedCount}
+            staleCount={commentStaleCount}
+            onOpen={comments.openDrawer}
+          />
+        );
+      case 'annotate':
+        if (!canAnnotateHere || !annotationLayer) return null;
+        return (
+          <AnnotateButton
+            key="annotate"
+            active={annotateActive}
+            onToggle={() =>
+              annotationLayer.setAnnotate(
+                annotateActive ? null : String(metadata.index),
+                annotateActive ? null : 'range',
+              )
+            }
+          />
+        );
+      case 'export':
+        if (!exporter || !exportTarget) return null;
+        return <ExportButton key="export" target={exportTarget} onOpen={exporter.open} />;
+      case 'catalog':
+        if (!metadata.catalog_source) return null;
+        return <CatalogButton key="catalog" source={metadata.catalog_source} />;
+      case 'description':
+        if (!hasDescription) return null;
+        return (
+          // Hover, focus and touch all open it: the icon has no click action of
+          // its own, so a viewer who never hovers (keyboard, tablet) would
+          // otherwise reach a button that does nothing. Mantine's Tooltip wires
+          // no aria-describedby, so the text is repeated in the aria-label,
+          // which is the only copy a screen reader ever reaches.
+          <Tooltip
+            key="description"
+            label={description}
+            withArrow
+            multiline
+            w={260}
+            openDelay={200}
+            position="bottom-end"
+            events={{ hover: true, focus: true, touch: true }}
+          >
+            <ActionIcon
+              variant="subtle"
+              color={TILE_ACTION_STYLE.description.color}
+              size="sm"
+              aria-label={`About this component: ${description}`}
+            >
+              <Icon icon={TILE_ACTION_STYLE.description.icon} width={16} height={16} />
+            </ActionIcon>
+          </Tooltip>
         );
       case 'metadata':
         return <MetadataPopover key="metadata" metadata={metadata} />;
@@ -203,9 +317,11 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           />
         );
       case 'reset':
-        // Skip reset entirely when the host didn't wire one up — keeps the
-        // figure/table/map chrome clean for components without selection.
-        if (!onResetFilter) return null;
+        // Skip reset entirely when the host didn't wire one up, and on every
+        // selection source: their clear action is the standalone one drawn
+        // slot of its own (see `showClear`), only while there is something to
+        // clear.
+        if (!onResetFilter || componentType !== 'interactive') return null;
         return (
           <ResetButton
             key="reset"
@@ -216,24 +332,130 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
     }
   };
 
+  // Analysis mode marks the components a selection can be saved from. Derived
+  // from the context rather than threaded as a prop because `wrapWithChrome`
+  // has ten call sites and only four component types can ever match — and the
+  // context being mounted at all is the same signal that this host is
+  // interactive (see the chromeExtras comment in ComponentRenderer).
+  const saveGroupApi = useContext(SaveGroupContext);
+  const selectionCapable =
+    Boolean(saveGroupApi?.analysisEngaged) &&
+    supportsSelectionGrouping(metadata, Boolean(saveGroupApi));
+  const groupingColorVar = useGroupingColorVar();
+
+  // Flatten `extraActions` once, then split the grouping action off the front.
+  // It leads the stack — above metadata and the rest — because it is the only
+  // action that answers "what can I do with this component *right now*"; the
+  // others are always-available utilities. Flattening fragments first is what
+  // lets `<>{save}{extras}</>` from ComponentRenderer contribute separately.
+  const extraChildren = React.useMemo(() => {
+    const collected: React.ReactNode[] = [];
+    const walk = (node: React.ReactNode) => {
+      if (node == null || node === false) return;
+      if (Array.isArray(node)) {
+        node.forEach(walk);
+        return;
+      }
+      if (React.isValidElement(node) && node.type === React.Fragment) {
+        React.Children.forEach((node.props as { children?: React.ReactNode }).children, walk);
+        return;
+      }
+      collected.push(node);
+    };
+    walk(extraActions);
+    return React.Children.toArray(collected);
+  }, [extraActions]);
+  const isGroupingAction = (child: React.ReactNode) =>
+    React.isValidElement(child) &&
+    (child.type === SelectionHintAction || child.type === SaveGroupAction);
+  const groupingActions = extraChildren.filter(isGroupingAction);
+  const otherActions = extraChildren.filter((c) => !isGroupingAction(c));
+
+  const wrapAction = (
+    child: React.ReactNode,
+    key: string,
+    extraClass = '',
+    tileAction?: string,
+  ) => (
+    <span
+      key={key}
+      data-tile-action={tileAction}
+      // The escape from the hover-only default has to live on THIS span, not on
+      // the action inside it: the rule that hides the row targets
+      // `.depictio-component-actions > *`, and `opacity` applies to the whole
+      // subtree, so a class on the inner button could never win.
+      className={'dgl-no-drag' + extraClass}
+      style={{ display: 'inline-flex', alignItems: 'center' }}
+      onMouseDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      {child}
+    </span>
+  );
+  // The clear-selection slot, placed by orientation in the row below: the end
+  // nearest the tile corner, see `showClear`.
+  const clearSlot =
+    showClear && onResetFilter
+      ? wrapAction(
+          <ClearSelectionButton onClear={onResetFilter} count={selectionCount} />,
+          'clear-selection',
+          ' depictio-clear-selection',
+          // The Guide's legend knows it as the tile's reset.
+          'reset',
+        )
+      : null;
+
   return (
     <div
       ref={fullscreenRef as React.RefObject<HTMLDivElement>}
+      // Finds the component on the page by its index, wherever it is drawn —
+      // a grid tile, the filter panel, a filter bar, a section pinned from
+      // another tab. The dashboard search scrolls to and rings what this marks.
+      data-component-index={metadata.index}
+      // What the tile holds, so a chrome style can frame each kind its own way.
+      data-component-type={componentType}
       className={
         'depictio-component-chrome' +
-        (isFullscreenActive ? ' fullscreen-active' : '')
+        (isFullscreenActive ? ' fullscreen-active' : '') +
+        (selectionCapable ? ' depictio-selection-capable' : '')
+      }
+      style={
+        selectionCapable
+          ? ({ '--depictio-grouping-color': groupingColorVar } as React.CSSProperties)
+          : undefined
       }
     >
       <Group
         gap={compact ? 2 : 4}
         className={
           'depictio-component-actions' +
-          (orientationFor(componentType) === 'vertical' ? ' depictio-actions-vertical' : '') +
-          (persistentReset ? ' has-active-reset' : '') +
+          (vertical ? ' depictio-actions-vertical' : '') +
+          // Cards only: the top-right corner is where a card draws its value's
+          // icon, so the row moves to the quiet bottom edge. Still horizontal.
+          (componentType === 'card' ? ' depictio-actions-bottom' : '') +
+          // No backdrop pinned on without hover: the two slots that stay
+          // visible (the analysis marker, the clear-selection action) carry
+          // their own `light` tint, and a pinned backdrop framed the row's
+          // empty slots around them.
           (compact ? ' is-compact' : '')
         }
         wrap="nowrap"
       >
+        {vertical && clearSlot}
+        {/* Grouping action first (after the grip, which stays where authors
+         * expect it): the analysis marker / save-as-group action belongs above
+         * metadata, not buried at the end of the utility icons. */}
+        {groupingActions.map((child, i) =>
+          wrapAction(
+            child,
+            `grouping-${i}`,
+            child != null && React.isValidElement(child) && child.type === SelectionHintAction
+              ? ' depictio-selection-hint'
+              : '',
+            'group',
+          ),
+        )}
         {/* Drag handle sits alongside the other action icons. drag is gated
          * via `draggableHandle=".react-grid-dragHandle"` on the GridLayout;
          * non-handle icons stop propagation to prevent accidental drag. */}
@@ -246,16 +468,17 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           // bubble up.
           <span
             className="react-grid-dragHandle depictio-drag-handle"
+            data-tile-action="drag"
             style={{ display: 'inline-flex', alignItems: 'center' }}
           >
             <ActionIcon
-              variant="light"
-              color="gray"
+              variant="subtle"
+              color={TILE_ACTION_STYLE.drag.color}
               size="sm"
-              aria-label="Drag to move"
+              aria-label={TILE_ACTION_STYLE.drag.label}
               tabIndex={-1}
             >
-              <Icon icon="mdi:dots-grid" width={16} height={16} />
+              <Icon icon={TILE_ACTION_STYLE.drag.icon} width={16} height={16} />
             </ActionIcon>
           </span>
         )}
@@ -266,11 +489,20 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           // Load-All toggle) looks detached / misaligned from the rest.
           const node = renderAction(a);
           if (!node) return null;
-          const isActiveReset = a === 'reset' && persistentReset;
+          const isPersistentComments = a === 'comments' && persistentComments;
+          const isActiveAnnotate = a === 'annotate' && annotateActive;
           return (
             <span
               key={a}
-              className={'dgl-no-drag' + (isActiveReset ? ' depictio-active-reset' : '')}
+              // Names the action for anything pointing at it from outside
+              // the row (the Guide's legend rings the icon it describes).
+              // The renderers' own actions carry the same attribute.
+              data-tile-action={a}
+              className={
+                'dgl-no-drag' +
+                (isPersistentComments ? ' depictio-comments-persistent' : '') +
+                (isActiveAnnotate ? ' depictio-annotate-active' : '')
+              }
               style={{ display: 'inline-flex', alignItems: 'center' }}
               onMouseDown={(e) => e.stopPropagation()}
               onTouchStart={(e) => e.stopPropagation()}
@@ -285,41 +517,16 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
          *  map / multiqc / advanced_viz). Wrapping all extras in a single
          *  span would force them to share one slot and break the vertical
          *  orientation. */}
-        {extraActions
-          ? React.Children.toArray(
-              // Flatten fragments so <>{a}{b}</> contributes two children.
-              ((): React.ReactNode[] => {
-                const collected: React.ReactNode[] = [];
-                const walk = (node: React.ReactNode) => {
-                  if (node == null || node === false) return;
-                  if (Array.isArray(node)) {
-                    node.forEach(walk);
-                    return;
-                  }
-                  if (React.isValidElement(node) && node.type === React.Fragment) {
-                    React.Children.forEach((node.props as any).children, walk);
-                    return;
-                  }
-                  collected.push(node);
-                };
-                walk(extraActions);
-                return collected;
-              })(),
-            ).map((child, i) => (
-              <span
-                key={`extra-${i}`}
-                className="dgl-no-drag"
-                style={{ display: 'inline-flex', alignItems: 'center' }}
-                onMouseDown={(e) => e.stopPropagation()}
-                onTouchStart={(e) => e.stopPropagation()}
-                onPointerDown={(e) => e.stopPropagation()}
-              >
-                {child}
-              </span>
-            ))
-          : null}
+        {otherActions.map((child, i) => wrapAction(child, `extra-${i}`))}
+        {!vertical && clearSlot}
       </Group>
       {children}
+      {/* Pinned at the bottom-left, out of the action row: a hover-only badge
+       *  would let the tile pass for the past at rest, and the top-left is
+       *  where a figure draws its title. Renders nothing on live data. */}
+      <span className="depictio-current-data-badge dgl-no-drag">
+        <CurrentDataBadge componentType={componentType} />
+      </span>
     </div>
   );
 };

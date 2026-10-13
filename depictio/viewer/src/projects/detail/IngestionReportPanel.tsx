@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Accordion,
   ActionIcon,
   Alert,
   Anchor,
@@ -14,8 +15,10 @@ import {
   Paper,
   SimpleGrid,
   Stack,
+  Switch,
   Table,
   Text,
+  TextInput,
   ThemeIcon,
   Title,
   Tooltip,
@@ -30,6 +33,7 @@ import {
   type RegisteredFile,
 } from 'depictio-react-core';
 import { DcTypeIcon } from '../dcTypeIcon';
+import RunProvenanceCard from './RunProvenanceCard';
 
 /** Visual treatment per DC display-status. Colors are Mantine palette names
  *  (theme tokens), not literals — they recolor with the active theme. */
@@ -49,10 +53,20 @@ const LEGEND: Array<{ key: string; desc: string }> = [
   { key: 'gated_out', desc: 'Excluded by a template condition (hover for the reason)' },
 ];
 
+// `gated_out` is dropped from the legend without a manifest: no row can carry
+// that status, so explaining it would describe something the reader cannot see.
+
+
 const HEALTH_META: Record<string, { color: string; icon: string; label: string }> = {
   ok: { color: 'green', icon: 'mdi:check-circle', label: 'Healthy' },
   partial: { color: 'yellow', icon: 'mdi:alert', label: 'Partial' },
   missing_required: { color: 'red', icon: 'mdi:alert-octagon', label: 'Missing required data' },
+};
+
+// Trigger engines with a brand identity. Keyed by what the CLI stamps into
+// `triggered_by`, which is the engine name in lowercase.
+const TRIGGER_ENGINES: Record<string, { label: string; color: string; icon: string }> = {
+  nextflow: { label: 'Nextflow', color: 'teal', icon: 'simple-icons:nextflow' },
 };
 
 const RUN_STATUS_COLOR: Record<string, string> = { ok: 'green', partial: 'yellow' };
@@ -108,23 +122,39 @@ const SummaryStat: React.FC<{
   value: React.ReactNode;
   icon: string;
   color: string;
-}> = ({ label, value, icon, color }) => (
-  <Card withBorder padding="md" radius="md">
-    <Group gap="sm" wrap="nowrap">
-      <ThemeIcon size={40} radius="md" variant="light" color={color}>
-        <Icon icon={icon} width={22} />
-      </ThemeIcon>
-      <Stack gap={0} style={{ minWidth: 0 }}>
-        <Text size="xl" fw={700} c={color === 'gray' ? undefined : color}>
-          {value}
-        </Text>
-        <Text size="xs" c="dimmed">
-          {label}
-        </Text>
-      </Stack>
-    </Group>
-  </Card>
-);
+  /** Explains a value the tile cannot state outright (e.g. an unknown count). */
+  hint?: string;
+}> = ({ label, value, icon, color, hint }) => {
+  const card = (
+    <Card withBorder padding="md" radius="md">
+      <Group gap="sm" wrap="nowrap">
+        <ThemeIcon size={40} radius="md" variant="light" color={color}>
+          <Icon icon={icon} width={22} />
+        </ThemeIcon>
+        <Stack gap={0} style={{ minWidth: 0 }}>
+          <Text size="xl" fw={700} c={color === 'gray' ? undefined : color}>
+            {value}
+          </Text>
+          <Group gap={4} wrap="nowrap">
+            <Text size="xs" c="dimmed">
+              {label}
+            </Text>
+            {hint && (
+              <Icon icon="mdi:help-circle-outline" width={12} color="var(--mantine-color-dimmed)" />
+            )}
+          </Group>
+        </Stack>
+      </Group>
+    </Card>
+  );
+  return hint ? (
+    <Tooltip label={hint} withArrow multiline maw={320} withinPortal>
+      {card}
+    </Tooltip>
+  ) : (
+    card
+  );
+};
 
 /** A compact inline "icon · label · value" metadata chip for the header row. */
 const InlineMeta: React.FC<{ icon: string; label: string; value?: string | null }> = ({
@@ -194,6 +224,67 @@ const DcFileList: React.FC<{ dcId: string | null; tag: string }> = ({ dcId, tag 
         </Stack>
       )}
     </Stack>
+  );
+};
+
+/** One badge per non-zero change count, so a data collection and a run show
+ *  the same change in the same colour. Empty when nothing changed. */
+function changeBadges(added: number, updated: number, failed = 0): React.ReactNode[] {
+  const badges: React.ReactNode[] = [];
+  if (added > 0) {
+    badges.push(
+      <Badge key="new" size="sm" variant="light" color="blue">
+        +{added} new
+      </Badge>,
+    );
+  }
+  if (updated > 0) {
+    badges.push(
+      <Badge key="updated" size="sm" variant="light" color="orange">
+        {updated} updated
+      </Badge>,
+    );
+  }
+  if (failed > 0) {
+    badges.push(
+      <Badge key="failed" size="sm" variant="light" color="red">
+        {failed} failed
+      </Badge>,
+    );
+  }
+  return badges;
+}
+
+/** "12 new · 3 updated" chips for one data collection.
+ *
+ *  Deliberately *not* a fifth entry in STATUS_META: status answers "is the
+ *  expected data there", freshness answers "did it change recently". Folding
+ *  the second into the first would make a collection that gained files look
+ *  like a different kind of thing from one that did not.
+ *
+ *  The counts come from each run's most recent scan, so they describe the last
+ *  ingestion rather than all-time totals — hence the tooltip. */
+const ChangeChips: React.FC<{ dc: IngestionDataCollection }> = ({ dc }) => {
+  const chips = changeBadges(dc.files_new, dc.files_updated, dc.files_failed);
+  if (chips.length === 0) {
+    return (
+      <Text size="sm" c="dimmed">
+        —
+      </Text>
+    );
+  }
+  return (
+    <Tooltip
+      label="Counted from the latest scan of each run: what the most recent ingestion changed, not an all-time total."
+      multiline
+      w={280}
+      withArrow
+      withinPortal
+    >
+      <Group gap={4} wrap="nowrap">
+        {chips}
+      </Group>
+    </Tooltip>
   );
 };
 
@@ -270,6 +361,9 @@ const DcRow: React.FC<{
         <Text size="sm">{filesCell}</Text>
       </Table.Td>
       <Table.Td>
+        <ChangeChips dc={dc} />
+      </Table.Td>
+      <Table.Td>
         <Group gap={8} wrap="nowrap">
           {dc.status === 'gated_out' ? (
             <Text size="sm" c="dimmed">
@@ -297,7 +391,7 @@ const DcRow: React.FC<{
     </Table.Tr>
     {expanded && hasDetails && (
       <Table.Tr>
-        <Table.Td colSpan={5} style={{ background: 'var(--mantine-color-default-hover)' }}>
+        <Table.Td colSpan={6} style={{ background: 'var(--mantine-color-default-hover)' }}>
           <div style={{ padding: '4px 0 4px 28px' }}>
             {showFiles && <DcFileList dcId={dcId} tag={dc.data_collection_tag} />}
             {showAgg && (
@@ -409,6 +503,43 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
 
   const health = HEALTH_META[report.summary.health] ?? HEALTH_META.ok;
   const { summary, template } = report;
+  // No frozen manifest: the report is assembled from the collections the project
+  // currently declares. What a template excluded or pruned was never recorded,
+  // so "gated out" is unknown here — not zero — and the expected-vs-found
+  // framing has no baseline to compare against.
+  const isLive = report.manifest_source === 'live_project';
+  // A template project predating the manifest is a different story from a
+  // project that never had a template: only the former can be re-imported.
+  const isLegacyTemplate = isLive && !!template;
+  // Only an automated ingestion earns a badge. "manual" is the default and the
+  // overwhelming majority, so labelling it would be noise on every project.
+  // The vocabulary is open, so whatever the server sends is shown as-is rather
+  // than switched on.
+  const trigger =
+    report.triggered_by && report.triggered_by !== 'manual' ? report.triggered_by : null;
+  // Engines we can badge properly. Nextflow is the only one whose brand mark is
+  // in the bundled simple-icons set, so anything else keeps a generic pipeline
+  // icon: a recognisable-but-wrong logo is worse than a neutral one.
+  const engine = trigger
+    ? (TRIGGER_ENGINES[trigger.toLowerCase()] ?? {
+        label: trigger,
+        color: 'violet',
+        icon: 'mdi:pipe',
+      })
+    : null;
+  const provenance = isLive
+    ? {
+        color: 'blue',
+        icon: 'mdi:database-eye-outline',
+        label: 'Live project',
+        tip: "Built from the project's current data collections — there is no template manifest to compare against.",
+      }
+    : {
+        color: 'gray',
+        icon: 'mdi:file-document-check-outline',
+        label: 'Template manifest',
+        tip: 'Compared against the expected-collection manifest frozen when the template was applied.',
+      };
 
   return (
     <Stack gap="md">
@@ -431,22 +562,83 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
               )}
             </div>
           </Group>
-          <Badge
-            size="lg"
-            radius="sm"
-            variant="light"
-            color={health.color}
-            leftSection={<Icon icon={health.icon} width={14} />}
-            style={{ flexShrink: 0 }}
-          >
-            {health.label}
-          </Badge>
+          <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
+            {engine && (
+              <Tooltip
+                label={
+                  <Stack gap={2}>
+                    <Text size="xs">
+                      Ingested automatically when a {engine.label} pipeline completed, not by a
+                      command someone ran.
+                    </Text>
+                    {/* Everything below is what the run itself reported, so it is
+                        absent for a run whose engine left no breadcrumbs rather
+                        than shown as "unknown". */}
+                    {report.pipeline?.name && (
+                      <Text size="xs">
+                        Pipeline: {report.pipeline.name}
+                        {report.pipeline.version ? ` ${report.pipeline.version}` : ''}
+                      </Text>
+                    )}
+                    {report.pipeline?.engine_version && (
+                      <Text size="xs">
+                        {engine.label} {report.pipeline.engine_version}
+                      </Text>
+                    )}
+                    {!!report.pipeline?.tool_count && (
+                      <Text size="xs">
+                        {report.pipeline.tool_count} tools recorded, listed under Run provenance
+                      </Text>
+                    )}
+                    {template?.data_root && <Text size="xs">Ingested from {template.data_root}</Text>}
+                  </Stack>
+                }
+                withArrow
+                multiline
+                maw={360}
+                withinPortal
+              >
+                <Badge
+                  size="lg"
+                  radius="sm"
+                  variant="light"
+                  color={engine.color}
+                  tt="none"
+                  leftSection={<Icon icon={engine.icon} width={14} />}
+                >
+                  Triggered by {engine.label}
+                </Badge>
+              </Tooltip>
+            )}
+            <Tooltip label={provenance.tip} withArrow multiline maw={320} withinPortal>
+              <Badge
+                size="lg"
+                radius="sm"
+                variant="default"
+                color={provenance.color}
+                leftSection={<Icon icon={provenance.icon} width={14} />}
+              >
+                {provenance.label}
+              </Badge>
+            </Tooltip>
+            <Badge
+              size="lg"
+              radius="sm"
+              variant="light"
+              color={health.color}
+              leftSection={<Icon icon={health.icon} width={14} />}
+            >
+              {health.label}
+            </Badge>
+          </Group>
         </Group>
 
         <Divider my="xs" />
 
         <Group gap="lg" wrap="wrap">
-          <InlineMeta icon="mdi:calendar-check" label="Applied" value={template?.applied_at} />
+          {template?.applied_at && (
+            <InlineMeta icon="mdi:calendar-check" label="Applied" value={template.applied_at} />
+          )}
           <InlineMeta icon="mdi:clock-outline" label="Last scan" value={report.scanned_at} />
           <InlineMeta icon="mdi:database-outline" label="Runs" value={String(report.runs.length)} />
           {template?.data_root && (
@@ -482,12 +674,20 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
           )}
         </Group>
 
-        {report.manifest_source === 'live_project' && (
+        {isLegacyTemplate && (
           <Alert mt="xs" color="yellow" variant="light" icon={<Icon icon="mdi:information" />}>
             This project was created before ingestion-report tracking was added, so the collections
             the template skipped or gated out weren't recorded — only the collections actually
-            present are listed below. Re-import it from its template (depictio run --template …) to
-            get the full expected-vs-found breakdown.
+            present are listed below. Refresh it from its template (depictio ingest --template …
+            --update-config) to get the full expected-vs-found breakdown.
+          </Alert>
+        )}
+        {isLive && !template && (
+          <Alert mt="xs" color="blue" variant="light" icon={<Icon icon="mdi:information" />}>
+            This project wasn't created from a template, so there is no manifest of expected
+            collections. Everything below is read from the collections the project declares today:
+            it shows which of them have data, but it cannot tell you whether a collection is
+            missing entirely.
           </Alert>
         )}
       </Paper>
@@ -496,8 +696,14 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
       <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">
         <SummaryStat
           icon="mdi:shield-check"
-          label="Required identified"
-          value={`${summary.required_identified}/${summary.required_total}`}
+          label={isLive ? 'Required with data' : 'Required identified'}
+          // Without a manifest the denominator is just "the collections that
+          // exist", so the ratio compares a number to itself. Show the count.
+          value={
+            isLive
+              ? summary.required_identified
+              : `${summary.required_identified}/${summary.required_total}`
+          }
           color={summary.required_missing > 0 ? 'orange' : 'green'}
         />
         <SummaryStat
@@ -508,15 +714,26 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
         />
         <SummaryStat
           icon="mdi:check-circle-outline"
-          label="Optional identified"
-          value={`${summary.optional_identified}/${summary.optional_total}`}
+          label={isLive ? 'Optional with data' : 'Optional identified'}
+          value={
+            isLive
+              ? summary.optional_identified
+              : `${summary.optional_identified}/${summary.optional_total}`
+          }
           color="teal"
         />
         <SummaryStat
           icon="mdi:filter-remove-outline"
           label="Gated out"
-          value={summary.gated}
+          // A manifest is the only thing that records what a conditional
+          // excluded. Reporting 0 without one would assert something unverified.
+          value={isLive ? '—' : summary.gated}
           color="gray"
+          hint={
+            isLive
+              ? 'Unknown without a template manifest — exclusions were never recorded for this project.'
+              : undefined
+          }
         />
       </SimpleGrid>
 
@@ -533,6 +750,7 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
                 <Table.Th>Requirement</Table.Th>
                 <Table.Th>Status</Table.Th>
                 <Table.Th>Files</Table.Th>
+                <Table.Th>Changes</Table.Th>
                 <Table.Th>Aggregated</Table.Th>
               </Table.Tr>
             </Table.Thead>
@@ -575,6 +793,14 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
         </Card>
       )}
 
+      {/* Run provenance — pipeline parameters / thresholds / tool versions */}
+      {(report.run_provenance?.length ?? 0) > 0 && (
+        <RunProvenanceCard
+          groups={report.run_provenance}
+          files={report.run_provenance_files ?? []}
+        />
+      )}
+
       {/* Runs */}
       {report.runs.length > 0 && (
         <Card withBorder padding="md" radius="md">
@@ -587,6 +813,8 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
                 <Table.Th>Run</Table.Th>
                 <Table.Th>Location</Table.Th>
                 <Table.Th>Last scan</Table.Th>
+                <Table.Th>Files</Table.Th>
+                <Table.Th>Changes</Table.Th>
                 <Table.Th>Status</Table.Th>
               </Table.Tr>
             </Table.Thead>
@@ -614,6 +842,19 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
                     <Text size="xs">{r.scan_time || '—'}</Text>
                   </Table.Td>
                   <Table.Td>
+                    <Text size="sm">{r.files_total || '—'}</Text>
+                  </Table.Td>
+                  <Table.Td>
+                    <Group gap={4} wrap="nowrap">
+                      {changeBadges(r.files_new, r.files_updated)}
+                      {!r.files_new && !r.files_updated && (
+                        <Text size="sm" c="dimmed">
+                          —
+                        </Text>
+                      )}
+                    </Group>
+                  </Table.Td>
+                  <Table.Td>
                     <Badge size="sm" variant="light" color={RUN_STATUS_COLOR[r.status] ?? 'gray'}>
                       {r.status}
                     </Badge>
@@ -626,7 +867,7 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
       )}
 
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="xs">
-        {LEGEND.map(({ key, desc }) => {
+        {LEGEND.filter(({ key }) => !(isLive && key === 'gated_out')).map(({ key, desc }) => {
           const m = STATUS_META[key];
           return (
             <Paper key={key} withBorder radius="md" p="xs">

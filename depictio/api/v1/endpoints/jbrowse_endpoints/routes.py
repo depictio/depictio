@@ -102,7 +102,7 @@ def update_jbrowse_config(config_path, new_tracks=[]):
     config["tracks"] = [
         track
         for track in config["tracks"]
-        if f"{settings.minio.endpoint_url}{settings.minio.port}:/{settings.minio.bucket_name}"  # type: ignore[possibly-unbound-attribute]
+        if f"{settings.s3.endpoint_url}{settings.s3.port}:/{settings.s3.bucket_name}"  # type: ignore[possibly-unbound-attribute]
         not in track["trackId"]
     ]
 
@@ -146,9 +146,9 @@ def handle_jbrowse_tracks(file, user_id, workflow_id, data_collection):
     if not isinstance(file, dict):
         file = file.mongo()
 
-    endpoint_url = settings.minio.external_endpoint  # type: ignore[possibly-unbound-attribute]
-    port = settings.minio.port
-    bucket_name = settings.minio.bucket
+    endpoint_url = settings.s3.external_endpoint  # type: ignore[possibly-unbound-attribute]
+    port = settings.s3.port
+    bucket_name = settings.s3.bucket
 
     file_location = file["file_location"]
     run_id = file["run_id"]

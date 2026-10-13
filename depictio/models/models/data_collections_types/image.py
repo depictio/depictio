@@ -8,7 +8,9 @@ support all component types including the Image gallery component.
 
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from depictio.models.config import DEPICTIO_CONTEXT
 
 # Valid file formats for Image DC
 VALID_FORMATS = ["csv", "tsv", "parquet", "feather", "xls", "xlsx", "mixed"]
@@ -47,7 +49,10 @@ class DCImageConfig(BaseModel):
     )
     local_images_path: str | None = Field(
         default=None,
-        description="Local path to images for CLI push mode",
+        description=(
+            "Local directory of the images, which `depictio ingest` uploads to "
+            "s3_base_folder. A relative path is read from the current directory"
+        ),
     )
     supported_formats: list[str] = Field(
         default_factory=lambda: DEFAULT_IMAGE_EXTENSIONS.copy(),
@@ -96,3 +101,19 @@ class DCImageConfig(BaseModel):
         if not v.startswith("s3://"):
             raise ValueError("s3_base_folder must start with 's3://'")
         return v if v.endswith("/") else f"{v}/"
+
+    @model_validator(mode="after")
+    def require_s3_base_folder_for_local_images(self) -> "DCImageConfig":
+        """The CLI uploads local_images_path to s3_base_folder, and the dashboard reads
+        the images from there, so one without the other has nowhere to go.
+
+        Checked in the CLI only: the server never reads local_images_path, and must
+        still load the collections stored before this rule.
+        """
+        if self.local_images_path and not self.s3_base_folder and DEPICTIO_CONTEXT.lower() == "cli":
+            raise ValueError(
+                "local_images_path is set but s3_base_folder is not: set s3_base_folder "
+                "to the S3 folder the images are uploaded to and the paths in "
+                f"'{self.image_column}' are relative to (e.g. s3://<bucket>/<project>/images/)"
+            )
+        return self

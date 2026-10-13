@@ -1,0 +1,22 @@
+id: qualimap_coverage_across_reference
+name: Coverage across the reference
+description: >-
+  Windowed read depth along the whole reference, from Qualimap BamQC's own
+  coverage_across_reference table. Qualimap reports the window centre on the
+  concatenated reference, so the recipe maps each window back onto its contig
+  using the per-contig lengths in the same run's genome_results.txt; without
+  that file the track falls back to a single pseudo-contig.
+find:
+  path_glob: "**/coverage_across_reference.txt"
+recipe: qualimap/coverage_across_reference.py
+fixture: coverage_across_reference.tsv
+renders_as:
+  - { id: reference_coverage_track, component: advanced_viz, kind: coverage_track,
+      roles: {chromosome: chromosome, position: position, value: coverage, sample: sample} }
+  - { id: reference_genome_view, component: advanced_viz, kind: genome_view,
+      roles: {chr: chromosome, pos: position, score: coverage, sample: sample} }
+  - { component: figure, visu_type: line, dict_kwargs: {x: global_position, y: coverage, color: sample, title: Depth along the concatenated reference} }
+  - { component: card, column: coverage, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: coverage, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: coverage_std, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table, page_size: 25 }

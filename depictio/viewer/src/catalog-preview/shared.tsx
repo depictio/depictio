@@ -6,6 +6,7 @@
 import React from 'react';
 import { ActionIcon, Anchor, Badge, Box, Button, CopyButton, Group, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { componentTypeVisual } from 'depictio-react-core';
 import logoRaw from '../../public/logos/logo_black.svg?raw';
 import logoWhiteRaw from '../../public/logos/logo_white.svg?raw';
 
@@ -19,22 +20,13 @@ export const logoFor = (theme?: string) => (theme === 'dark' ? LOGO_WHITE_SRC : 
  *  (Projects uses teal; each app/section gets its own flat Mantine color). */
 export const CATALOG_ACCENT = 'violet';
 
-/** Component type → badge style, mirrored from depictio/dash/component_metadata.py
- *  (colors/icons kept in sync by hand to stay Dash-free). */
-export const COMPONENT_META: Record<string, { name: string; color: string; icon: string }> = {
-  figure: { name: 'Figure', color: '#9966cc', icon: 'mdi:graph-box' },
-  card: { name: 'Card', color: '#45b8ac', icon: 'formkit:number' },
-  interactive: { name: 'Interactive', color: '#8bc34a', icon: 'bx:slider-alt' },
-  table: { name: 'Table', color: '#6495ed', icon: 'octicon:table-24' },
-  advanced_viz: { name: 'Advanced viz', color: '#f68b33', icon: 'mdi:chart-scatter-plot' },
-  multiqc: { name: 'MultiQC', color: '#f68b33', icon: 'mdi:chart-line' },
-  map: { name: 'Map', color: '#7a5dc7', icon: 'mdi:map-marker-multiple' },
-  image: { name: 'Image', color: '#e6779f', icon: 'mdi:image-area' },
-  text: { name: 'Text', color: '#e6779f', icon: 'mdi:text-box-edit' },
+/** Component type → badge style. One registry for the whole app; see
+ *  `componentTypeMeta` in depictio-react-core. `name` is kept as the key here
+ *  because both views already read `meta.name`. */
+export const metaFor = (t: string) => {
+  const visual = componentTypeVisual(t);
+  return { name: visual.label, color: visual.color, icon: visual.icon };
 };
-
-export const metaFor = (t: string) =>
-  COMPONENT_META[t] || { name: t, color: '#868e96', icon: 'mdi:shape-outline' };
 
 /** Colored depictio-style component-type badge. */
 export const TypeBadge: React.FC<{ type: string; size?: string }> = ({ type, size = 'sm' }) => {
@@ -59,6 +51,21 @@ export const DEFAULT_HEIGHT: Record<string, number> = {
   multiqc: 480,
   image: 480,
   table: 520,
+  // A KPI reads in about this much; without an entry it fell to the 480 catch-all
+  // and reserved an empty half-screen under a two-line metric.
+  card: 190,
+};
+
+/** How wide a tile of this type is on a dashboard.
+ *
+ * A card and a filter live in a narrow grid cell, so previewing them at the full
+ * width of the pane misrepresented them: a metric's top-N bars ran the whole
+ * 1200px with their sample labels truncated to "ERZ166…" at the far left. Types
+ * absent here take the whole width, which is what a figure, a table or an
+ * advanced viz gets on a dashboard too. */
+export const PREVIEW_MAX_WIDTH: Record<string, number> = {
+  card: 380,
+  interactive: 380,
 };
 
 export const InfoRow: React.FC<{ label: string; children: React.ReactNode; align?: string }> = ({
@@ -137,6 +144,8 @@ export const nfCoreLabel = (url: string) => {
 
 export interface OutputInfo {
   id: string;
+  /** The catalog's short label for the output, e.g. "ARG hits". */
+  name?: string;
   description?: string;
   mode?: string | null;
   find?: Record<string, unknown>;

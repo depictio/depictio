@@ -1,0 +1,18 @@
+id: ribowaltz_frames
+name: P-site frame distribution
+mode: riboseq/periodicity
+description: >-
+  Share of each library's P-sites in the three reading frames, per transcript
+  region. Footprints of translating ribosomes pile into frame 0 of the CDS; the
+  UTRs, which ribosomes do not translate, stay close to a third per frame.
+find: { path_glob: "**/*.ribowaltz.frames.tsv" }
+recipe: ribowaltz/frames.py
+fixture: frames.tsv
+renders_as:
+  # rank = region, so the tile opens on the CDS and the reader switches to the UTRs.
+  - id: frame_composition
+    component: advanced_viz
+    kind: stacked_taxonomy
+    roles: { sample_id: sample, taxon: frame, rank: region, abundance: pct }
+  - { component: card, column: count, aggregation: sum, secondary_layout: top_n, breakdown_col: frame, top_n_count: 3 }
+  - { component: table }

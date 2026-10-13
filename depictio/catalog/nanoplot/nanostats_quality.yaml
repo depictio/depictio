@@ -1,0 +1,21 @@
+id: nanoplot_nanostats_quality
+name: Yield above quality cutoffs
+mode: qc/quality-ladder
+description: >-
+  How much of each library survives a quality floor: reads, percentage and
+  megabases above each NanoStat quality cutoff, one row per sample and cutoff.
+  A mean quality hides whether a library is tight around it or bimodal; this
+  ladder does not.
+find:
+  path_glob: "**/NanoStats.txt"
+  path_glob_alt:
+    - "**/*_NanoStats.txt"
+recipe: nanoplot/nanostats_quality.py
+fixture: nanostats_quality.tsv
+renders_as:
+  - { id: quality_ladder, component: advanced_viz, kind: profile, roles: {series: sample, x: q_cutoff, y: pct_reads} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: q_cutoff, y: megabases, color: sample, barmode: group, title: Yield above each quality cutoff} }
+  - { component: card, column: pct_reads, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: megabases, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: n_reads, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: table }

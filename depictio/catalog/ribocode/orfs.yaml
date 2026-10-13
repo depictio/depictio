@@ -1,0 +1,21 @@
+id: ribocode_orfs
+name: RiboCode ORF calls
+mode: riboseq/orfs
+description: >-
+  RiboCode ORFs per library from the collapsed tables, keyed by the genomic
+  stop codon, with the RiboCode ORF type, a class shared with other ORF
+  callers, the protein length, the frame-0 P-sites and the adjusted
+  periodicity p-value.
+find: { path_glob: "**/*_collapsed.txt" }
+recipe: ribocode/orfs.py
+fixture: orfs.tsv
+renders_as:
+  - id: orf_record
+    component: advanced_viz
+    kind: record_card
+    roles: { id: orf_id, title: gene_name }
+  - { component: card, column: orf_id, aggregation: nunique, secondary_layout: donut, breakdown_col: orf_class }
+  - { component: card, column: aa_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: psites_frame0, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: interactive, interactive_type: MultiSelect, column_name: orf_class }
+  - { component: table, row_selection_enabled: true, row_selection_column: orf_id }

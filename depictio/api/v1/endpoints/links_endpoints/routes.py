@@ -14,6 +14,7 @@ from typing import Any
 
 import polars as pl
 from bson import ObjectId
+from bson.errors import InvalidId
 from fastapi import APIRouter, Depends, HTTPException, Path
 
 from depictio.api.v1.configs.logging_init import logger
@@ -32,9 +33,12 @@ from depictio.models.models.links import (
     DCLink,
     LinkConfig,
     LinkCreateRequest,
+    LinkMappingPreviewResponse,
+    LinkMappingPreviewRow,
     LinkResolutionRequest,
     LinkResolutionResponse,
     LinkUpdateRequest,
+    resolve_link_tag_refs,
 )
 from depictio.models.models.users import User
 
@@ -85,7 +89,10 @@ def _get_project_or_404(project_id: str, current_user: User) -> dict:
     if not has_access:
         raise HTTPException(status_code=403, detail="Access denied to project")
 
-    return project
+    # Links may still carry template-time ``tag:`` placeholders when the CLI
+    # sync step never ran (e.g. ``--skip-sync``); resolve them against this
+    # project's DCs so every consumer below matches on real ids.
+    return resolve_link_tag_refs(project)
 
 
 def _find_link_by_id(project: dict, link_id: str) -> tuple[DCLink | None, int]:
@@ -106,24 +113,37 @@ def _find_link_by_id(project: dict, link_id: str) -> tuple[DCLink | None, int]:
     return None, -1
 
 
-def _find_link_for_resolution(project: dict, source_dc_id: str, target_dc_id: str) -> DCLink | None:
+def _find_link_for_resolution(
+    project: dict, source_dc_id: str, target_dc_id: str, resolver: str | None = None
+) -> DCLink | None:
     """Find a link between source and target DCs.
 
     Args:
         project: Project document
         source_dc_id: Source DC ID
         target_dc_id: Target DC ID
+        resolver: When set, only a link using this resolver matches
 
     Returns:
         DCLink if found and enabled, None otherwise
+
+    A ``region`` link never matches unless asked for by name: it renames a
+    genomic region onto the target's coordinate columns
+    (``filter_links.region_link_filters``) and cannot resolve values, so
+    returning it here for a value lookup would end in a 500 from the resolver
+    registry. A project may declare a direct link and a region link on the
+    same pair of collections (sarek: ``stage`` and the locus region between
+    ``mosdepth_windows`` and ``mosdepth_targets``); the direct one answers.
     """
     links = project.get("links", [])
     for link_data in links:
+        link_resolver = (link_data.get("link_config") or {}).get("resolver", "direct")
         # Compare as strings — MongoDB stores ObjectId but API receives strings
         if (
             str(link_data.get("source_dc_id")) == source_dc_id
             and str(link_data.get("target_dc_id")) == target_dc_id
             and link_data.get("enabled", True)
+            and (link_resolver == resolver if resolver is not None else link_resolver != "region")
         ):
             return DCLink(**link_data)
     return None
@@ -134,8 +154,15 @@ async def _translate_filter_values(
     filter_column: str,
     filter_values: list[Any],
     link_column: str,
+    range_filter: bool = False,
 ) -> list[Any]:
     """Translate filter values from one column to another via source DC query.
+
+    ``range_filter`` reads a two-element ``filter_values`` as an inclusive
+    ``[low, high]`` span on ``filter_column`` (a RangeSlider), whatever the
+    column's dtype. Without it a position range ``[26000000, 26300000]`` was
+    an ``is_in`` on two coordinates, matched nothing, and emptied every linked
+    tile (atacseq AT-D26, 2026-09-23).
 
     When filtering by column A but the link is defined on column B, this function
     queries the source DC to translate values from column A to column B.
@@ -208,13 +235,14 @@ async def _translate_filter_values(
 
         # Filter and extract link column values
         # Check if this is a DateRangePicker filter (2-element list + date/datetime column)
-        is_date_range = (
-            isinstance(filter_values, list)
-            and len(filter_values) == 2
-            and schema[filter_column] in [pl.Date, pl.Datetime]
-        )
+        is_pair = isinstance(filter_values, list) and len(filter_values) == 2
+        is_date_range = is_pair and schema[filter_column] in [pl.Date, pl.Datetime]
 
-        if is_date_range:
+        if range_filter and is_pair and not is_date_range:
+            low, high = filter_values
+            logger.info(f"Range filter on column '{filter_column}': [{low}, {high}]")
+            predicate = (pl.col(filter_column) >= low) & (pl.col(filter_column) <= high)
+        elif is_date_range:
             # DateRangePicker: Use date range filtering
             logger.info(
                 f"Detected DateRangePicker filter for column '{filter_column}' "
@@ -265,7 +293,7 @@ async def _translate_filter_values(
         )
 
 
-async def _get_multiqc_sample_mappings(target_dc_id: str) -> dict[str, list[str]]:
+def _get_multiqc_sample_mappings(target_dc_id: str) -> dict[str, list[str]]:
     """Fetch and aggregate sample mappings from ALL MultiQC reports for a DC.
 
     A single MultiQC data collection can have multiple reports (e.g., from different
@@ -636,6 +664,66 @@ async def delete_link(
 # ============================================================================
 
 
+async def _resolve_link_reverse(
+    project: dict, request: LinkResolutionRequest
+) -> LinkResolutionResponse:
+    """Resolve values against a link's declared direction, from its target to its source.
+
+    ``request.source_dc_id`` is the link's TARGET here and ``request.target_dc_id``
+    its source. Only ``direct`` links qualify: they join equal values, so they
+    invert. Other resolvers expand or rename values one way and answer 404, as a
+    missing link does.
+
+    The join column on the target side follows the forward rule (``target_field``,
+    else ``source_column``); a filter on another column is first translated onto
+    it by querying the target. The resolved values name the link's ``source_column``.
+    """
+    link = _find_link_for_resolution(
+        project, request.target_dc_id, request.source_dc_id, resolver="direct"
+    )
+    if link is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No enabled direct link found from {request.target_dc_id} to "
+                f"{request.source_dc_id} to resolve in reverse"
+            ),
+        )
+
+    join_column = link.link_config.target_field or link.source_column
+    values_to_resolve = request.filter_values
+    if request.source_column != join_column or request.range_filter:
+        values_to_resolve = await _translate_filter_values(
+            source_dc_id=request.source_dc_id,
+            filter_column=request.source_column,
+            filter_values=request.filter_values,
+            link_column=join_column,
+            range_filter=request.range_filter,
+        )
+
+    resolved_values, unmapped_values = get_resolver(link.link_config.resolver).resolve(
+        source_values=values_to_resolve,
+        link_config=link.link_config,
+    )
+    logger.info(
+        f"Reverse link resolution {link.id}: {request.source_dc_id}:{request.source_column} "
+        f"-> {request.target_dc_id}:{link.source_column}, "
+        f"{len(request.filter_values)} source values -> {len(resolved_values)} resolved values"
+    )
+    return LinkResolutionResponse(
+        resolved_values=resolved_values,
+        link_id=str(link.id),
+        resolver_used=link.link_config.resolver,
+        match_count=len(resolved_values),
+        # A link records only its target's type, so its source has none to
+        # report. It is read the way `_translate_filter_values` reads any
+        # source: as a Delta table.
+        target_type="table",
+        source_count=len(request.filter_values),
+        unmapped_values=unmapped_values,
+    )
+
+
 @links_endpoint_router.post(
     "/{project_id}/resolve",
     response_model=LinkResolutionResponse,
@@ -672,6 +760,9 @@ async def resolve_link(
     """
     project = _get_project_or_404(project_id, current_user)
 
+    if request.reverse:
+        return await _resolve_link_reverse(project, request)
+
     # Find link between source and target
     link = _find_link_for_resolution(project, request.source_dc_id, request.target_dc_id)
 
@@ -686,12 +777,14 @@ async def resolve_link(
         f"-> {request.target_dc_id} ({link.target_type})"
     )
 
-    # Translate filter values if filtering by different column than link column
+    # Translate filter values if filtering by different column than link column,
+    # or when the values are a range: a range on the join column itself still
+    # has to become the join values it spans.
     values_to_resolve = request.filter_values
-    if request.source_column != link.source_column:
+    if request.source_column != link.source_column or request.range_filter:
         logger.info(
-            f"Filter column '{request.source_column}' differs from link column '{link.source_column}'. "
-            f"Translating filter values via source DC query."
+            f"Filter column '{request.source_column}' differs from link column '{link.source_column}' "
+            f"or is a range. Translating filter values via source DC query."
         )
         # Query source DC to translate filter values to link column values
         translated_values = await _translate_filter_values(
@@ -699,6 +792,7 @@ async def resolve_link(
             filter_column=request.source_column,
             filter_values=request.filter_values,
             link_column=link.source_column,
+            range_filter=request.range_filter,
         )
         logger.info(
             f"Translated {len(request.filter_values)} {request.source_column} values "
@@ -721,8 +815,15 @@ async def resolve_link(
         and not link.link_config.mappings
     ):
         # Auto-fetch sample mappings from MultiQC report
-        sample_mappings = await _get_multiqc_sample_mappings(link.target_dc_id)
+        sample_mappings = _get_multiqc_sample_mappings(link.target_dc_id)
         if sample_mappings:
+            from depictio.cli.cli.utils.sample_mapping import remap_mappings_to_hub
+
+            # Re-key by the values being resolved so suffixed MultiQC names
+            # (NA12878_R1, S1_1_val_1) join the hub ids the filter emitted.
+            sample_mappings = remap_mappings_to_hub(
+                sample_mappings, [str(v) for v in values_to_resolve]
+            )
             # Create new config with fetched mappings
             effective_config = LinkConfig(
                 resolver=link.link_config.resolver,
@@ -787,6 +888,189 @@ async def list_available_resolvers(
     return list_resolvers()
 
 
+def _distinct_source_values(dc_id: str, column: str, cap: int) -> tuple[list[str], int]:
+    """Distinct (stringified, sorted) values of ``column`` in a DC's Delta table.
+
+    Returns ``(values capped at cap, total distinct count)``.
+
+    Raises:
+        HTTPException: 404 when the DC has no Delta table, 400 when the column
+        is missing.
+    """
+    deltatable_doc = deltatables_collection.find_one({"data_collection_id": dc_id})
+    if not deltatable_doc:
+        # A link may legitimately carry a non-ObjectId dc id: DCLink permits an
+        # empty id when a tag is set, and the CLI writes a "tag:<tag>"
+        # placeholder for tags it could not resolve. Those must 404 like any
+        # other missing table, not raise InvalidId as a 500.
+        try:
+            dc_oid = ObjectId(dc_id)
+        except InvalidId:
+            dc_oid = None
+        if dc_oid is not None:
+            deltatable_doc = deltatables_collection.find_one({"data_collection_id": dc_oid})
+    if not deltatable_doc or "delta_table_location" not in deltatable_doc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Delta table not found for DC {dc_id}",
+        )
+
+    from depictio.api.v1.s3 import polars_s3_config
+
+    lf = pl.scan_delta(deltatable_doc["delta_table_location"], storage_options=polars_s3_config)
+    schema = lf.collect_schema()
+    if column not in schema.names():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Column '{column}' not found in DC {dc_id}. "
+            f"Available: {', '.join(schema.names())}",
+        )
+
+    series = lf.select(
+        pl.col(column).cast(pl.Utf8).drop_nulls().unique().sort().alias("_v")
+    ).collect()["_v"]
+    total = int(series.len())
+    return series.head(cap).to_list(), total
+
+
+@links_endpoint_router.get(
+    "/{project_id}/{link_id}/mapping-preview",
+    response_model=LinkMappingPreviewResponse,
+    summary="Inspect how source values map through a link",
+)
+def link_mapping_preview(
+    project_id: str = Path(..., description="Project ID"),
+    link_id: str = Path(..., description="Link ID to inspect"),
+    limit: int = 500,
+    current_user: User = Depends(get_current_user),
+) -> LinkMappingPreviewResponse:
+    """Full sample ↔ link mapping table for one link — the debug/inspect view.
+
+    Loads the distinct values of ``link.source_column`` from the source DC,
+    resolves each one through the link's actual resolver (with the same
+    effective mappings the ``/resolve`` endpoint would use, fetched live from
+    MultiQC reports when the link doesn't freeze its own), and reports per
+    value whether and how it matched. Also lists the target-side sample names
+    no source value reaches, so mismatches are visible from both directions.
+    """
+    project = _get_project_or_404(project_id, current_user)
+
+    link, _ = _find_link_by_id(project, link_id)
+    if link is None:
+        raise HTTPException(status_code=404, detail=f"Link not found: {link_id}")
+
+    limit = max(1, min(int(limit), 2000))
+    source_values, source_total = _distinct_source_values(
+        str(link.source_dc_id), link.source_column, limit
+    )
+    truncated = source_total > len(source_values)
+
+    # Effective mappings — same precedence as the /resolve endpoint.
+    mappings = link.link_config.mappings or {}
+    mappings_source = "link_config" if mappings else "none"
+    if not mappings and link.target_type == "multiqc":
+        mappings = _get_multiqc_sample_mappings(str(link.target_dc_id))
+        if mappings:
+            from depictio.cli.cli.utils.sample_mapping import remap_mappings_to_hub
+
+            mappings = remap_mappings_to_hub(mappings, source_values)
+            mappings_source = "multiqc_live"
+
+    rows: list[LinkMappingPreviewRow] = []
+    reached_targets: set[str] = set()
+
+    if link.link_config.resolver == "sample_mapping":
+        from depictio.api.v1.services.multiqc.sample_matching import match_samples
+
+        for m in match_samples(
+            source_values, mappings, case_sensitive=bool(link.link_config.case_sensitive)
+        ):
+            rows.append(
+                LinkMappingPreviewRow(
+                    source_value=m.source,
+                    matched=m.matched,
+                    via=m.via,
+                    resolved=m.targets,
+                )
+            )
+            if m.matched:
+                reached_targets.update(m.targets)
+    else:
+        resolver = get_resolver(link.link_config.resolver)
+        effective_config = LinkConfig(
+            resolver=link.link_config.resolver,
+            mappings=mappings or None,
+            pattern=link.link_config.pattern,
+            target_field=link.link_config.target_field,
+            case_sensitive=link.link_config.case_sensitive,
+        )
+        # regex / wildcard need the target's known values to match against.
+        target_known_values: list[str] | None = None
+        if link.link_config.resolver in ("regex", "wildcard"):
+            if link.target_type == "multiqc":
+                known: set[str] = set()
+                for canonical, variants in (mappings or {}).items():
+                    known.add(canonical)
+                    known.update(variants or [])
+                target_known_values = sorted(known)
+            elif link.link_config.target_field:
+                try:
+                    target_known_values, _ = _distinct_source_values(
+                        str(link.target_dc_id), link.link_config.target_field, 10000
+                    )
+                except HTTPException:
+                    target_known_values = None
+
+        for value in source_values:
+            resolved, unmapped = resolver.resolve([value], effective_config, target_known_values)
+            matched = value not in unmapped
+            rows.append(
+                LinkMappingPreviewRow(
+                    source_value=str(value),
+                    matched=matched,
+                    via=link.link_config.resolver if matched else "passthrough",
+                    resolved=resolved,
+                )
+            )
+            if matched:
+                reached_targets.update(resolved)
+
+    # Target-side orphans: canonical mapping entries none of the listed source
+    # values reach. Only meaningful when mappings exist; capped like the rows.
+    orphan_targets: list[str] = []
+    for canonical, variants in (mappings or {}).items():
+        names = {canonical, *(variants or [])}
+        if not (names & reached_targets):
+            orphan_targets.append(canonical)
+            if len(orphan_targets) >= limit:
+                break
+    orphan_targets.sort()
+
+    matched_count = sum(1 for r in rows if r.matched)
+    response = LinkMappingPreviewResponse(
+        link_id=str(link.id),
+        resolver=link.link_config.resolver,
+        source_dc_id=str(link.source_dc_id),
+        source_column=link.source_column,
+        target_dc_id=str(link.target_dc_id),
+        target_type=link.target_type,
+        case_sensitive=bool(link.link_config.case_sensitive),
+        mappings_source=mappings_source,  # type: ignore[arg-type]
+        source_values_total=source_total,
+        truncated=truncated,
+        matched_count=matched_count,
+        unmapped_count=len(rows) - matched_count,
+        rows=rows,
+        orphan_targets=orphan_targets,
+    )
+
+    logger.info(
+        f"Mapping preview for link {link_id}: {matched_count}/{len(rows)} matched, "
+        f"{len(orphan_targets)} orphan targets"
+    )
+    return response
+
+
 @links_endpoint_router.get(
     "/{project_id}/multiqc/{dc_id}/sample-mappings",
     response_model=dict[str, list[str]],
@@ -815,7 +1099,7 @@ async def get_multiqc_sample_mappings(
     _get_project_or_404(project_id, current_user)
 
     # Fetch aggregated sample mappings
-    mappings = await _get_multiqc_sample_mappings(dc_id)
+    mappings = _get_multiqc_sample_mappings(dc_id)
 
     logger.info(f"Returning {len(mappings)} aggregated sample mappings for MultiQC DC {dc_id}")
 

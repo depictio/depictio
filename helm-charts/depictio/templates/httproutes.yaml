@@ -1,6 +1,7 @@
 {{- if .Values.gateway.enabled }}
 {{- $backendHttpRoute := .Values.backend.httpRoute | default dict }}
-{{- $minioHttpRoute := .Values.minio.httpRoute | default dict }}
+{{- $s3 := include "depictio.s3" . | fromYaml }}
+{{- $s3HttpRoute := $s3.httpRoute | default dict }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -78,7 +79,10 @@ spec:
       backendRefs:
         - name: {{ .Release.Name }}-depictio-backend
           port: {{ .Values.backend.service.httpPort }}
-{{- if .Values.minio.enabled }}
+{{- /* The S3 route keeps its "-minio-httproute" name, the "-minio" backend
+       Service and the "-minio.gw." host: they are the public S3 endpoint of
+       live deployments (DNS, TLS, presigned URLs). */}}
+{{- if $s3.enabled }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -91,27 +95,27 @@ metadata:
     {{- if .Values.gateway.labels }}
     {{- toYaml .Values.gateway.labels | nindent 4 }}
     {{- end }}
-  {{- if $minioHttpRoute.annotations }}
+  {{- if $s3HttpRoute.annotations }}
   annotations:
-    {{- toYaml $minioHttpRoute.annotations | nindent 4 }}
+    {{- toYaml $s3HttpRoute.annotations | nindent 4 }}
   {{- end }}
 spec:
   parentRefs:
     {{- toYaml .Values.gateway.parentRefs | nindent 4 }}
   hostnames:
-    - {{ include "depictio.minioUrl" . | quote }}
+    - {{ include "depictio.s3Url" . | quote }}
     - "{{ .Release.Name }}-minio.gw.{{ .Values.global.domain }}"
   rules:
     - matches:
         - path:
             type: PathPrefix
             value: /
-      {{- if $minioHttpRoute.filters }}
+      {{- if $s3HttpRoute.filters }}
       filters:
-        {{- toYaml $minioHttpRoute.filters | nindent 8 }}
+        {{- toYaml $s3HttpRoute.filters | nindent 8 }}
       {{- end }}
       backendRefs:
         - name: {{ .Release.Name }}-minio
-          port: {{ .Values.minio.service.httpPort }}
+          port: {{ $s3.service.httpPort }}
 {{- end }}
 {{- end }}

@@ -30,7 +30,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from depictio.cli.cli.utils.templates import _load_yaml
+from depictio.cli.cli.utils.templates import _load_yaml, latest_template_version
 from depictio.models.models.templates import TemplateConditional, TemplateMetadata
 from depictio.recipes import load_recipe, resolve_recipe_path
 
@@ -52,6 +52,10 @@ _STYLE = """<style>
 .gtd-badge{display:inline-block;padding:0 .5em;border-radius:10px;font-size:.78em;font-weight:600;line-height:1.5;white-space:nowrap;}
 .gtd-scan{background:#eef1fb;color:#3949ab;}
 .gtd-transformed{background:#e6f7f5;color:#2a8c82;}
+.gtd-direct{background:#eaf2ff;color:#2563c9;}
+.gtd-derived{background:#f3e8fd;color:#8e44ad;}
+.gtd-recipe{background:#fbe9f1;color:#b4337a;}
+.gtd-file{background:#eef0f2;color:#5a6573;}
 .gtd-opt{background:#fff6e6;color:#b9770e;}
 .gtd-req{background:#e9f7ef;color:#1e8e5a;}
 .gtd-plus-chip{background:#e9f7ef;color:#1e8e5a;}
@@ -67,6 +71,8 @@ _STYLE = """<style>
    only the other columns' long paths may wrap. */
 .md-typeset table td:first-child{white-space:nowrap;}
 .md-typeset table td:not(:first-child) code{overflow-wrap:anywhere;}
+/* Reads-column paths: smaller monospace + wrap so long scan targets keep the row tidy. */
+.md-typeset table code.gtd-path{font-size:.62rem;overflow-wrap:anywhere;}
 .gtd-mtx{margin:.8rem 0;}
 .gtd-mtx table{border-collapse:separate;border-spacing:0;font-size:.7rem;}
 .gtd-mtx th,.gtd-mtx td{border:1px solid var(--md-default-fg-color--lightest,#e6e6e6);padding:2px 5px;text-align:center;}
@@ -195,8 +201,8 @@ def _render_variables(meta: TemplateMetadata) -> list[str]:
     lines = [
         "### Template variables",
         "",
-        "Variables you provide when running the template — `DATA_ROOT` via `--data-root`, "
-        "the rest via `--var NAME=value`:",
+        "Variables you provide when running the template: `DATA_ROOT` is the results "
+        "directory given to `depictio ingest`, the others are set with `--var NAME=value`:",
         "",
         "| Variable | Required | Description |",
         "|---|:--:|---|",
@@ -214,31 +220,103 @@ def _render_variables(meta: TemplateMetadata) -> list[str]:
     return lines
 
 
+_DC_TYPE_ICON = {
+    "table": "material-table",
+    "jbrowse2": "material-dna",
+    "image": "material-image-outline",
+    "geojson": "material-map-marker-radius-outline",
+    "map": "material-map-marker-radius-outline",
+    "phylogeny": "material-graph-outline",
+}
+_DC_TYPE_FALLBACK = "material-file-document-outline"
+# Official MultiQC icon (the app renders this same SVG for MultiQC DCs).
+_MULTIQC_LOGO = "https://raw.githubusercontent.com/MultiQC/logo/main/logos/multiqc_icon_color.svg"
+
+
+def _dc_type_cell(dc_type: str) -> str:
+    """Render the Type cell as the depictio type icon (MultiQC logo) + the type label."""
+    if not dc_type or dc_type == "\u2014":
+        return "\u2014"
+    if dc_type.lower() == "multiqc":
+        return (
+            f'<img src="{_MULTIQC_LOGO}" alt="MultiQC" width="14" '
+            f'style="vertical-align:text-bottom;"> {_esc(dc_type)}'
+        )
+    icon = _DC_TYPE_ICON.get(dc_type.lower(), _DC_TYPE_FALLBACK)
+    return f":{icon}: {_esc(dc_type)}"
+
+
+def _dc_origin(dc: dict[str, Any], pipeline_version: str) -> str:
+    """Classify a DC as 'direct' or 'derived'.
+
+    *Direct* = a real pipeline output: either scanned straight off disk, or a recipe
+    that reads raw pipeline files. *Derived* = a recipe that reshapes one or more other
+    data collections (its recipe declares a ``dc_ref`` source) into the column layout a
+    specific visualization needs — it is a view of existing data, not new measurement.
+    """
+    config = dc.get("config") or {}
+    if config.get("source") != "transformed":
+        return "direct"
+    recipe = (config.get("transform") or {}).get("recipe")
+    if not recipe:
+        return "direct"
+    try:
+        module = load_recipe(recipe, pipeline_version)
+        if any(getattr(s, "dc_ref", None) for s in module.SOURCES):
+            return "derived"
+    except Exception:  # noqa: BLE001 — unresolved recipe falls back to 'direct'
+        pass
+    return "direct"
+
+
 def _badge(text: str, cls: str) -> str:
     return f'<span class="gtd-badge {cls}">{text}</span>'
 
 
-def _render_data_collections(dcs: list[dict[str, Any]]) -> list[str]:
+def _render_data_collections(dcs: list[dict[str, Any]], pipeline_version: str) -> list[str]:
     optional_count = sum(1 for dc in dcs if dc.get("optional"))
     required_count = len(dcs) - optional_count
+    origins = {dc["data_collection_tag"]: _dc_origin(dc, pipeline_version) for dc in dcs}
+    direct_count = sum(1 for o in origins.values() if o == "direct")
+    derived_count = len(origins) - direct_count
     lines = [
         "### Data collections",
         "",
         f"{len(dcs)} data collections — {_badge(f'{required_count} required', 'gtd-req')} "
-        f"{_badge(f'{optional_count} optional', 'gtd-opt')}.",
+        f"{_badge(f'{optional_count} optional', 'gtd-opt')} · "
+        f"{_badge(f'{direct_count} direct', 'gtd-direct')} "
+        f"{_badge(f'{derived_count} derived', 'gtd-derived')}.",
         "",
-        "| Tag | Type | Source | Recipe / scan target | Status |",
-        "|---|---|---|---|:--:|",
+        f"**Origin** tells you whether a collection is *real pipeline data* or a reshape of it: "
+        f"{_badge('direct', 'gtd-direct')} = a pipeline output (scanned, or a recipe that reads raw "
+        f"files); {_badge('derived', 'gtd-derived')} = a recipe that reshapes one or more *direct* "
+        f"collections into the layout a visualization needs (no new measurement). **Reads** shows "
+        f"what produces it: a {_badge('recipe', 'gtd-recipe')} `.py` transform, or a raw "
+        f"{_badge('file', 'gtd-file')} scanned off disk. (A `direct` collection can still have a "
+        f"recipe — one that merely parses/cleans the raw file; `derived` means the recipe reshapes "
+        f"another collection.)",
+        "",
+        "| Tag | Origin | Type | Reads | Status |",
+        "|---|:--:|---|---|:--:|",
     ]
     for dc in dcs:
-        source, detail = _dc_source_detail(dc)
+        source, target = _dc_source_detail(dc)
         dc_type = (dc.get("config") or {}).get("type", "—")
-        src = _badge(source, "gtd-transformed" if source == "transformed" else "gtd-scan")
+        origin = origins[dc["data_collection_tag"]]
+        origin_badge = _badge(origin, "gtd-direct" if origin == "direct" else "gtd-derived")
+        reads_badge = (
+            _badge("recipe", "gtd-recipe")
+            if source == "transformed"
+            else _badge("file", "gtd-file")
+        )
+        # Small monospace, wrap-anywhere so long scan paths don't blow out the row.
+        path = f'<code class="gtd-path">{_html(target)}</code>' if target else "—"
         status = (
             _badge("optional", "gtd-opt") if dc.get("optional") else _badge("required", "gtd-req")
         )
         lines.append(
-            f"| {_code(dc['data_collection_tag'])} | {dc_type} | {src} | {detail} | {status} |"
+            f"| {_code(dc['data_collection_tag'])} | {origin_badge} | {_dc_type_cell(dc_type)} | "
+            f"{reads_badge} {path} | {status} |"
         )
     lines.append("")
     return lines
@@ -373,7 +451,7 @@ def _render_recipes(refs: list[str], pipeline_version: str) -> list[str]:
         "### Recipes",
         "",
         "Each recipe reshapes raw pipeline output into a tidy table. The name links "
-        "to its source; *Output* lists the validated `EXPECTED_SCHEMA` columns.",
+        "to its source; *Output* lists the validated `OUTPUT_SCHEMA` columns.",
         "",
         "| Recipe | Transforms | Output |",
         "|---|---|---|",
@@ -385,7 +463,7 @@ def _render_recipes(refs: list[str], pipeline_version: str) -> list[str]:
             module = load_recipe(ref, pipeline_version)
             doc = (module.__doc__ or "").strip().splitlines()
             summary = _esc(doc[0]) if doc else "—"
-            columns = _recipe_columns(module.EXPECTED_SCHEMA)
+            columns = _recipe_columns(module.OUTPUT_SCHEMA)
         except Exception as exc:  # noqa: BLE001 — surface load failure, don't abort the doc
             summary, columns = f"⚠ failed to load: {_esc(str(exc))}", "—"
         lines.append(f"| {name} | {summary} | {columns} |")
@@ -410,7 +488,7 @@ def render_template(template_path: Path) -> str:
         _STYLE,
         "",
         *_render_variables(meta),
-        *_render_data_collections(dcs),
+        *_render_data_collections(dcs, pipeline_version),
         *_render_conditionals(meta, [dc["data_collection_tag"] for dc in dcs]),
         *_render_links(raw),
         *_render_recipes(recipe_refs, pipeline_version),
@@ -423,6 +501,28 @@ def _output_slug(template_path: Path, templates_root: Path) -> str:
     """e.g. depictio/projects/nf-core/ampliseq/2.16.0/template.yaml -> ampliseq-2.16.0."""
     rel = template_path.parent.relative_to(templates_root)
     return "-".join(rel.parts)
+
+
+def _latest_aliases(template_paths: list[Path], templates_root: Path) -> dict[str, Path]:
+    """Map ``<pipeline>-latest`` alias slugs to the highest-version template.
+
+    Narrative docs pages include the alias partial (e.g. ``ampliseq-latest.md``)
+    instead of a pinned ``ampliseq-2.16.0.md``, so a new template version updates
+    the docs with a single re-run of this script — no page edits. Reuses the same
+    version resolution as seeding/CLI (``latest_template_version``).
+    """
+    pipeline_dirs = {
+        template_path.parent.parent
+        for template_path in template_paths
+        if len(template_path.parent.relative_to(templates_root).parts) >= 2
+    }
+    aliases: dict[str, Path] = {}
+    for pipeline_dir in pipeline_dirs:
+        version = latest_template_version(pipeline_dir)
+        if version:
+            slug = "-".join((*pipeline_dir.relative_to(templates_root).parts, "latest"))
+            aliases[slug] = pipeline_dir / version / "template.yaml"
+    return aliases
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -453,9 +553,36 @@ def main(argv: list[str] | None = None) -> int:
         sys.exit(f"No template.yaml found under {templates_root}")
 
     stale: list[str] = []
+    rendered: dict[Path, str] = {}
     for template_path in template_paths:
         content = render_template(template_path)
+        rendered[template_path] = content
         out_path = out_dir / f"{_output_slug(template_path, templates_root)}.md"
+        existing = out_path.read_text() if out_path.is_file() else None
+
+        if args.check:
+            if existing != content:
+                stale.append(str(out_path.relative_to(docs_root)))
+            continue
+
+        if existing == content:
+            print(f"unchanged  {out_path.relative_to(docs_root)}")
+            continue
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(content)
+        print(f"wrote      {out_path.relative_to(docs_root)}")
+
+    # Version-less `<pipeline>-latest.md` aliases: narrative pages include these
+    # so a new template version only needs a re-run of this script, not page edits.
+    for alias_slug, template_path in sorted(
+        _latest_aliases(template_paths, templates_root).items()
+    ):
+        versioned_slug = _output_slug(template_path, templates_root)
+        content = (
+            f"<!-- Alias of {versioned_slug}.md — always tracks the newest "
+            f"template version. -->\n" + rendered[template_path]
+        )
+        out_path = out_dir / f"{alias_slug}.md"
         existing = out_path.read_text() if out_path.is_file() else None
 
         if args.check:

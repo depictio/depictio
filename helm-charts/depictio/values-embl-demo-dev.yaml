@@ -1,10 +1,12 @@
 # EMBL Dev Environment - dev.demo.depictio.embl.org
-# All tags (including beta) deploy to this environment
+# Every tag (beta and stable) deploys here automatically
 #
 # Layered on top of:
 #   - values.yaml (base configuration)
 #   - values-embl-demo-base.yaml (EMBL infrastructure + demo mode)
-#   - values-embl-secrets.yaml (S3 credentials)
+#   - values-embl-secrets.yaml (shared secrets), then
+#     values-embl-secrets-demodev.yaml (dev's own S3 bucket); both kept on the
+#     self-hosted runner, outside the repo
 #
 # Tenant quota: 32 CPU / 64 GiB / 30 pods, shared between this env and
 # values-embl-demo.yaml. Budget with MongoDB Community Operator HA (3 replicas
@@ -17,19 +19,25 @@
 #   MongoDB ×3        2.1 CPU / 4.5 GiB  2.1 CPU / 4.5G  4.2 CPU / 9 GiB
 #   Redis             0.5 CPU / 512 Mi   0.5 CPU / 512M  1 CPU / 1 GiB
 #   TOTAL             ~15.6 CPU / ~29 G  ~12.6 CPU / ~24 ~28 CPU / ~53 GiB ✅
+#
+# Pods are also capped at 10 per namespace (Capsule quota, seen 2026-10-05),
+# which is what limits the viewer to one replica below.
 
 # Demo environment configuration - auto-wipe on upgrades
 demo:
   autoWipeOnUpgrade: true  # Delete PVCs before each upgrade for fresh demo state
 
-# Viewer (nginx SPA) — stateless and tiny, so run 2 replicas for HA + a
-# zero-downtime rolling deploy (no PVC, so RollingUpdate is safe here).
+# Viewer (nginx SPA) — stateless and tiny: one replica, rolled with a surge
+# pod so a deploy has no downtime (no PVC, so RollingUpdate is safe here).
+# One replica, not two, because the namespace is capped at 10 pods: with
+# backend ×2, celery ×2, MongoDB ×3 and Redis, a second viewer leaves no room
+# for the pre-upgrade wipe job, and every upgrade hangs until Helm times out.
 viewer:
-  replicas: 2
+  replicas: 1
   strategy: "RollingUpdate"
 
 # Protect the multi-replica workloads during node drains / cluster upgrades.
-# dev runs >1 replica for backend, viewer AND celery, so all three get a PDB.
+# Only components with >1 replica get a PDB here: backend and celery.
 podDisruptionBudget:
   enabled: true
   minAvailable: 1
@@ -49,6 +57,15 @@ celery:
       cpu: "4"
   env:
     DEPICTIO_CELERY_WORKERS: "4"  # 4 slots per pod × 2 pods = 8 total
+  extraEnv: &s3ChecksumEnv
+    # The EMBL S3 gateway rejects the checksums botocore >= 1.36 sends by
+    # default (PutObject: "x-amz-content-sha256 must be UNSIGNED-PAYLOAD, ..."),
+    # which fails the backend's startup write check. EMBL's S3 docs recommend
+    # these two switches for every client.
+    - name: AWS_REQUEST_CHECKSUM_CALCULATION
+      value: "when_required"
+    - name: AWS_RESPONSE_CHECKSUM_VALIDATION
+      value: "when_required"
 
 # Backend API — serves the React viewer SPA + its data-fetching endpoints
 # (render_figure, bulk_compute_cards, …). 2 replicas for HA + tail latency;
@@ -80,6 +97,7 @@ backend:
     DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-MCC33FDF2Z"
     # Explicit API URL to match ingress host (for browser-based requests)
     DEPICTIO_FASTAPI_PUBLIC_URL: "https://dev.api.demo.depictio.embl.org"
+  extraEnv: *s3ChecksumEnv
 
 # Ingress - Dev Environment
 ingress:

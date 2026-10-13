@@ -4,6 +4,7 @@ Integrated with FastAPI backend for dashboard component generation.
 """
 
 from celery import Celery
+from celery.signals import task_failure
 
 from depictio.api.v1.configs.config import settings
 
@@ -12,17 +13,46 @@ from depictio.api.v1.configs.config import settings
 celery_app = Celery(
     __name__,
     broker=settings.celery.broker_url,
-    backend=settings.celery.broker_url,
+    # Results go to their own Redis DB (default 2), not the broker's (default
+    # 1). Sharing one DB meant result keys and broker queues lived in the same
+    # keyspace, so a `FLUSHDB` aimed at either one took out both. The two URLs
+    # were already configured separately; only this line disagreed.
+    #
+    # Deploy the API and the workers together: for the duration of a mixed
+    # rollout, a task enqueued by one and executed by the other writes its
+    # result where the poller is not looking.
+    backend=settings.celery.result_backend_url,
 )
 
-# Configure Celery - keep it simple for Dash background callbacks
-# celery_app.conf.update(
-#     task_serializer="json",
-#     accept_content=["json"],
-#     result_serializer="json",
-#     result_expires=7200,
-#     broker_connection_retry_on_startup=True,
-# )
+celery_app.conf.update(
+    task_serializer="json",
+    accept_content=["json"],
+    result_serializer="json",
+    # Celery's own default is 86400. CeleryConfig.result_expires is 3600, and
+    # applying that verbatim would be a regression: Celery reports PENDING both
+    # for an unknown task id and for an expired result, so any poller that
+    # looks away for an hour (`poll_compute_embedding`) would hang forever on a
+    # task that actually finished. Take the larger of the two.
+    result_expires=max(settings.celery.result_expires, 86400),
+    broker_connection_retry_on_startup=True,
+    # Must stay "celery". `CeleryConfig.default_queue` says "dashboard_tasks",
+    # but it was never applied — so every existing task is on "celery", and
+    # run_celery_worker.sh starts without -Q, i.e. consuming "celery". Setting
+    # the declared value here would route all new work to a queue nothing
+    # consumes: every existing task silently stops running. The ingestion queue
+    # is opted into per-task via task_routes instead.
+    task_default_queue="celery",
+    task_routes={
+        "depictio.deltatable.finalize_upsert": {"queue": settings.celery.ingestion_queue},
+        "depictio.ingestion.run_project": {"queue": settings.celery.ingestion_queue},
+    },
+)
+
+# Deliberately NOT set here: worker_concurrency, worker_prefetch_multiplier and
+# worker_max_tasks_per_child. They would silently re-tune the existing
+# interactive worker, which is sized for short dashboard callbacks. The
+# ingestion worker passes them as CLI flags instead, so the two pools stay
+# independently tunable.
 
 
 # Health check task for monitoring
@@ -103,7 +133,7 @@ def generate_dashboard_screenshot_dual(
 
     from beanie import init_beanie
     from celery.exceptions import Ignore
-    from motor.motor_asyncio import AsyncIOMotorClient
+    from pymongo import AsyncMongoClient
 
     from depictio.api.v1.configs.logging_init import logger
     from depictio.api.v1.services.screenshot_service import (
@@ -158,7 +188,7 @@ def generate_dashboard_screenshot_dual(
         """Async wrapper: initializes MongoDB and runs Playwright screenshot generation."""
         from depictio.api.v1.configs.config import MONGODB_URL
 
-        client = AsyncIOMotorClient(MONGODB_URL)
+        client: AsyncMongoClient = AsyncMongoClient(MONGODB_URL)
         try:
             await init_beanie(
                 database=client[settings.mongodb.db_name],
@@ -171,7 +201,7 @@ def generate_dashboard_screenshot_dual(
                 filename_prefix=filename_prefix,
             )
         finally:
-            client.close()
+            await client.close()
 
     try:
         result = asyncio.run(async_screenshot_task())
@@ -188,17 +218,32 @@ def generate_dashboard_screenshot_dual(
             # is the user-visible "modified" time, and a background screenshot
             # is not a user modification (issue #932).
             try:
+                from bson import ObjectId
+
                 from depictio.api.v1.db import dashboards_collection
                 from depictio.models.timestamps import utc_now_str
 
-                dashboards_collection.update_one(
-                    {"dashboard_id": dashboard_id},
+                # `dashboard_id` is an ObjectId in the stored document while the
+                # task takes it as a string, and a string never matches an
+                # ObjectId field. Passing it through raw made this a silent
+                # no-op: 0 documents matched, nothing written, nothing raised —
+                # so `screenshot_ts` stayed "" forever and the listing's
+                # cache-buster never advanced, which is the very staleness this
+                # bump exists to prevent.
+                bumped = dashboards_collection.update_one(
+                    {"dashboard_id": ObjectId(dashboard_id)},
                     {
                         "$set": {
                             "screenshot_ts": utc_now_str(),
                         }
                     },
                 )
+                if bumped.matched_count == 0:
+                    logger.warning(
+                        "screenshot_ts bump matched no dashboard for %s — the "
+                        "listing will keep serving the cached thumbnail.",
+                        dashboard_id,
+                    )
             except Exception as exc:  # noqa: BLE001 — non-fatal best-effort bump
                 logger.warning(
                     "Could not bump screenshot_ts after screenshot for %s: %s",
@@ -222,6 +267,21 @@ def generate_dashboard_screenshot_dual(
     except Exception as e:
         logger.error(f"Dual-screenshot error for {dashboard_id}: {e}")
         return {"status": "error", "dashboard_id": dashboard_id, "error": str(e)}
+
+
+# MultiQC build/prewarm locks hold the owning task id so they can be released
+# on behalf of a task whose worker process died (see _release_lock_of_lost_task).
+_MULTIQC_LOCK_KEYS = {
+    "prewarm_multiqc_dashboard": "multiqc:prewarm_lock:dashboard={}",
+    "build_multiqc_prerender": "multiqc:prerender_build_lock:dc={}",
+    "prewarm_multiqc_dc_all_plots": "multiqc:prerender_build_lock:dc={}",
+}
+
+
+def _release_lock(cache, lock_key: str, owner: str | None) -> None:
+    """Delete ``lock_key`` only while ``owner`` still holds it."""
+    if cache.get(lock_key) == owner:
+        cache.delete(lock_key)
 
 
 def _warm_multiqc_components(
@@ -444,8 +504,9 @@ def prewarm_multiqc_dashboard(self, dashboard_id: str) -> dict:
     # in separate worker processes, adding CPU contention and ~20s of
     # wallclock overhead.
     lock_key = f"multiqc:prewarm_lock:dashboard={dashboard_id}"
+    owner = self.request.id or "direct-call"
 
-    if not cache.set_nx(lock_key, "1", ttl=600):
+    if not cache.set_nx(lock_key, owner, ttl=600):
         logger.info(
             f"prewarm_multiqc_dashboard {dashboard_id}: another worker holds the "
             f"lock; skipping duplicate run"
@@ -480,7 +541,7 @@ def prewarm_multiqc_dashboard(self, dashboard_id: str) -> dict:
         return {"status": "ok", "dashboard_id": dashboard_id, **counts}
     finally:
         try:
-            cache.delete(lock_key)
+            _release_lock(cache, lock_key, owner)
         except Exception as exc:
             logger.warning(f"prewarm_multiqc_dashboard: failed to clear lock {lock_key}: {exc}")
 
@@ -621,8 +682,10 @@ def build_multiqc_prerender(self, dc_id: str) -> dict:
 
     cache = get_cache()
     lock_key = f"multiqc:prerender_build_lock:dc={dc_id}"
+    owner = self.request.id or "direct-call"
 
-    if not cache.set_nx(lock_key, "1", ttl=600):
+    # TTL matches time_limit: a slow build must not lose its lock mid-run.
+    if not cache.set_nx(lock_key, owner, ttl=1200):
         logger.info(
             f"build_multiqc_prerender {dc_id}: another worker holds the "
             f"lock; skipping duplicate run"
@@ -727,7 +790,7 @@ def build_multiqc_prerender(self, dc_id: str) -> dict:
         return {"status": "failed", "dc_id": str(dc_id), "error": str(exc)}
     finally:
         try:
-            cache.delete(lock_key)
+            _release_lock(cache, lock_key, owner)
         except Exception as exc:
             logger.warning(f"build_multiqc_prerender: failed to clear lock {lock_key}: {exc}")
 
@@ -772,8 +835,9 @@ def prewarm_multiqc_dc_all_plots(self, dc_id: str) -> dict:
 
     cache = get_cache()
     lock_key = f"multiqc:prerender_build_lock:dc={dc_id}"
+    owner = self.request.id or "direct-call"
 
-    if not cache.set_nx(lock_key, "1", ttl=1800):
+    if not cache.set_nx(lock_key, owner, ttl=1800):
         logger.info(
             f"prewarm_multiqc_dc_all_plots {dc_id}: lock held by another "
             "worker; skipping duplicate run"
@@ -933,7 +997,7 @@ def prewarm_multiqc_dc_all_plots(self, dc_id: str) -> dict:
         return {"status": "failed", "dc_id": str(dc_id), "error": str(exc)}
     finally:
         try:
-            cache.delete(lock_key)
+            _release_lock(cache, lock_key, owner)
         except Exception as exc:
             logger.warning(f"prewarm_multiqc_dc_all_plots: failed to clear lock {lock_key}: {exc}")
 
@@ -951,6 +1015,27 @@ def prewarm_multiqc_dc_all_plots(self, dc_id: str) -> dict:
 
 # Background callbacks are registered by flask_dispatcher.py when apps are created
 # Management, Viewer, and Editor apps each have their own callback registry
+
+
+@task_failure.connect
+def _release_lock_of_lost_task(sender=None, task_id=None, args=None, **_kwargs) -> None:
+    """Free the MultiQC lock of a task whose worker died (SIGSEGV, SIGKILL, OOM).
+
+    Such a task never reaches its ``finally``; Celery still reports the failure
+    from the main process, and without this the lock blocks every rebuild and
+    keeps the render endpoints answering 202 until its TTL runs out.
+    """
+    template = _MULTIQC_LOCK_KEYS.get(getattr(sender, "name", ""))
+    if template is None or not args:
+        return
+    from depictio.api.cache import get_cache
+
+    try:
+        _release_lock(get_cache(), template.format(args[0]), task_id)
+    except Exception as exc:
+        from depictio.api.v1.configs.logging_init import logger
+
+        logger.warning(f"failed to release the lock of lost task {task_id}: {exc}")
 
 
 # Register monitoring signal handlers (task lifecycle → MongoDB ledger) and the

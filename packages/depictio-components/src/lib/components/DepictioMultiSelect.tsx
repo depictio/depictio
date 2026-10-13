@@ -36,6 +36,11 @@ export interface DepictioMultiSelectProps {
   placeholder?: string;
   /** Mantine color name or CSS color for the accent border. */
   color?: string;
+  /** CSS colour the chosen state wears: the picked options' boxes, the pills
+   *  and the focus ring. Set as `--depictio-control-accent` on the field and on
+   *  the dropdown (portalled, so it would not inherit it), where a chrome's
+   *  stylesheet picks it up; the focus border takes it in any chrome. */
+  accent?: string;
   /** Iconify ID for the leading icon. */
   icon_name?: string;
   /** Mantine color token name (e.g. 'blue', 'orange') used as the icon tint. */
@@ -61,6 +66,13 @@ export interface DepictioMultiSelectProps {
   setProps?: (props: Partial<DepictioMultiSelectProps>) => void;
   /** Non-Dash React onChange handler for the React viewer use case. */
   onChange?: (value: string[]) => void;
+  /** Custom dropdown option renderer, forwarded to Mantine's MultiSelect.
+   *  Used by funnel filtering to color-mark options that still lead to a
+   *  non-empty result set. React-viewer only — Dash never sets this. */
+  renderOption?: (item: {
+    option: MultiSelectOption;
+    checked?: boolean;
+  }) => React.ReactNode;
 }
 
 const normalizeOptions = (
@@ -80,6 +92,7 @@ const DepictioMultiSelect: React.FC<DepictioMultiSelectProps> = ({
   value,
   placeholder,
   color,
+  accent,
   icon_name,
   icon_color,
   title_color,
@@ -91,6 +104,7 @@ const DepictioMultiSelect: React.FC<DepictioMultiSelectProps> = ({
   size = 'sm',
   setProps,
   onChange,
+  renderOption,
 }) => {
   const handleChange = useCallback(
     (next: string[]) => {
@@ -123,6 +137,14 @@ const DepictioMultiSelect: React.FC<DepictioMultiSelectProps> = ({
     resolveColor(color) ||
     'var(--mantine-color-text)';
 
+  const accentVars = accent
+    ? ({
+        '--depictio-control-accent': accent,
+        // Readable ink of the accent for pill text and a single select's check.
+        '--depictio-control-accent-fg': `color-mix(in srgb, ${accent} 78%, var(--mantine-color-text))`,
+      } as React.CSSProperties)
+    : undefined;
+
   const input = (
     <MultiSelect
       data={normalizeOptions(options)}
@@ -135,6 +157,16 @@ const DepictioMultiSelect: React.FC<DepictioMultiSelectProps> = ({
       size={size}
       maxDropdownHeight={220}
       comboboxProps={{ withinPortal: true }}
+      renderOption={renderOption}
+      styles={
+        accentVars
+          ? {
+              root: accentVars,
+              dropdown: accentVars,
+              input: { '--input-bd-focus': accent } as React.CSSProperties,
+            }
+          : undefined
+      }
     />
   );
 

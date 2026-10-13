@@ -1,0 +1,21 @@
+id: mirdeep2_novel_precursors
+name: Novel miRNA precursors
+mode: mirna/discovery
+description: >-
+  miRDeep2's novel precursor calls merged across samples by overlapping locus,
+  one row per hairpin: how many samples report it, its best score and
+  true-positive estimate, the reads on each arm summed over samples, the share
+  of calls with a significant randfold test, any Rfam hit, and the sequences of
+  its strongest call.
+find:
+  path_glob: "**/result_*.csv"
+recipe: mirdeep2/novel_precursors.py
+fixture: novel_precursors.tsv
+renders_as:
+  - { id: novel_support, component: advanced_viz, kind: scatter_xy,
+      roles: {x: samples_detected, y: max_score, label: precursor_id, color: star_support, size: total_reads} }
+  - { component: card, column: precursor_id, aggregation: nunique, secondary_layout: donut, breakdown_col: star_support }
+  - { component: card, column: samples_detected, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: max_score, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: interactive, interactive_type: RangeSlider, column_name: samples_detected }
+  - { component: table, row_selection_enabled: true, row_selection_column: precursor_id }

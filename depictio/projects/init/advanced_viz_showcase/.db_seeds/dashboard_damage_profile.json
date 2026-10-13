@@ -1,0 +1,251 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d79"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d79"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "dmg-text",
+      "component_type": "text",
+      "title": "Damage profile",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Misincorporation profile",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Misincorporation frequency by distance from the read end: C to T rises at the 5 prime end and G to A at the 3 prime end, near 0.3 at position 1 and back to background within 10 bp, the deamination signature that authenticates ancient DNA. Ends and the substitutions highlighted are in the tile header. Input: DamageProfiler or mapDamage output of nf-core/eager.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "dmg-curve",
+      "component_type": "advanced_viz",
+      "title": "Misincorporation profile",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "damage_profile_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d8a"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Ancient-DNA misincorporation profile for 2 samples: C-to-T at the 5' end and G-to-A at the 3' end, both decaying from ~0.3 at position 1",
+        "data_collection_tag": "damage_profile_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d8a"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "5 prime and 3 prime substitution frequency by position, 2 samples, C to T and G to A highlighted. Ends, maximum position and highlighted substitutions sit in the tile header.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Misincorporation profile",
+      "viz_kind": "damage_profile",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "damage_profile",
+        "sample_col": "sample",
+        "end_col": "end",
+        "position_col": "position",
+        "base_change_col": "base_change",
+        "frequency_col": "frequency",
+        "ends": "both",
+        "max_position": 25,
+        "highlight": [
+          "C>T",
+          "G>A"
+        ],
+        "facet_by": "none",
+        "length_bin_col": "length_bin",
+        "max_facets": 6
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "dmg-f-sample",
+      "component_type": "interactive",
+      "title": "Sample",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "damage_profile_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d8a"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Ancient-DNA misincorporation profile for 2 samples: C-to-T at the 5' end and G-to-A at the 3' end, both decaying from ~0.3 at position 1",
+        "data_collection_tag": "damage_profile_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d8a"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Profile scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Profile filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "custom_color": "#E03131",
+      "icon_name": "mdi:test-tube",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-dmg-f-sample",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-dmg-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-dmg-curve",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Ancient DNA damage",
+  "subtitle": "Ancient-DNA misincorporation for 2 synthetic samples: C to T at the 5 prime end, G to A at the 3 prime end, decaying from about 0.3 at position 1",
+  "icon": "mdi:dna",
+  "icon_color": "red",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 37,
+  "main_tab_name": null,
+  "tab_icon": "mdi:dna",
+  "tab_icon_color": "red",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Profile scope",
+      "icon": "mdi:filter-variant",
+      "color": "red",
+      "description": "Restricts which sample curves are drawn",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Misincorporation profile",
+      "icon": "mdi:dna",
+      "color": "red",
+      "description": "Substitution frequency by distance from the read end, 5-prime and 3-prime panels",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

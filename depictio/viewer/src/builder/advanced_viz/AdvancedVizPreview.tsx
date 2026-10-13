@@ -3,8 +3,9 @@
  *
  * Builds a synthetic StoredMetadata from the current viz_kind + column mapping
  * and dispatches it through ComponentRenderer (same path the dashboard viewer
- * uses at runtime), with no interactive filters. Debounces config edits so
- * each keystroke in the Select dropdowns doesn't fire a fetch.
+ * uses at runtime), under the dashboard's active filters carried into the
+ * builder (see useBuilderPreviewFilters). Debounces config edits so each
+ * keystroke in the Select dropdowns doesn't fire a fetch.
  *
  * `onReady` fires (true) once the bindings are valid AND the debounce has
  * fired — i.e. the synthetic config is structurally complete and the renderer
@@ -14,11 +15,12 @@
  * Save button in StepDesign.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { Paper, Stack, Text } from '@mantine/core';
-import { ComponentRenderer } from 'depictio-react-core';
-import type { StoredMetadata } from 'depictio-react-core';
+import { AdvancedVizConfigDraftProvider, ComponentRenderer } from 'depictio-react-core';
+import type { StoredMetadata, VizConfigDraftSink } from 'depictio-react-core';
 
+import PreviewPanel from '../shared/PreviewPanel';
 import { buildAdvancedVizConfigBlob } from './configBlob';
+import { useBuilderPreviewFilters } from '../useBuilderPreviewFilters';
 
 interface Props {
   vizKind: string;
@@ -30,6 +32,10 @@ interface Props {
   /** Catalog/saved preset whose viz-control extras (threshold, top-N…) the
    *  preview should reflect, so Edit & Add matches the catalog preview. */
   presetConfig?: Record<string, unknown> | null;
+  /** Sink for Tier-2 control changes made inside the preview's own settings
+   *  popover. Supplying it is what turns that popover from a viewing aid into
+   *  the builder's Tier-2 editor; omitting it leaves the old behaviour. */
+  onVizControlChange?: (patch: Record<string, unknown>) => void;
 }
 
 const DEBOUNCE_MS = 300;
@@ -42,21 +48,31 @@ const AdvancedVizPreview: React.FC<Props> = ({
   bindingsValid,
   onReady,
   presetConfig,
+  onVizControlChange,
 }) => {
+  const previewFilters = useBuilderPreviewFilters();
   const cmKey = JSON.stringify(columnMapping);
   const presetKey = JSON.stringify(presetConfig ?? null);
   const [debouncedConfig, setDebouncedConfig] = useState<Record<string, unknown> | null>(
     null,
   );
+  // The debounce window is the one stretch nothing else covers: the renderer
+  // draws its own skeleton once it has the config, but until the timer fires
+  // the pane still shows the previous plot (or the empty hint) with no sign
+  // that an edit is on its way.
+  const [debouncing, setDebouncing] = useState(false);
 
   useEffect(() => {
     if (!bindingsValid) {
       setDebouncedConfig(null);
+      setDebouncing(false);
       onReady?.(false);
       return;
     }
+    setDebouncing(true);
     const t = window.setTimeout(() => {
       setDebouncedConfig(buildAdvancedVizConfigBlob(vizKind, columnMapping, presetConfig));
+      setDebouncing(false);
       onReady?.(true);
     }, DEBOUNCE_MS);
     return () => window.clearTimeout(t);
@@ -64,6 +80,12 @@ const AdvancedVizPreview: React.FC<Props> = ({
     // re-debounce on every parent render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vizKind, cmKey, presetKey, wfId, dcId, bindingsValid]);
+
+  // `debouncing` is raised from an effect, so it is still false on the first
+  // render after arriving with bindings already valid — hitting "Edit" on a
+  // catalog render, where everything is pre-bound. That frame would show the
+  // "pick a viz kind" prompt, which is both a flash and untrue.
+  const settling = bindingsValid && !debouncedConfig;
 
   const metadata: StoredMetadata | null = useMemo(() => {
     if (!debouncedConfig) return null;
@@ -78,36 +100,44 @@ const AdvancedVizPreview: React.FC<Props> = ({
     } as unknown as StoredMetadata;
   }, [debouncedConfig, vizKind, wfId, dcId]);
 
+  // Memoised because it is a context value: a fresh identity every render would
+  // re-render the whole preview subtree on each keystroke in a binding Select.
+  // The preview owns exactly one component, so the index it reports is ignored.
+  const draftSink: VizConfigDraftSink | null = useMemo(
+    () => (onVizControlChange ? (_index, patch) => onVizControlChange(patch) : null),
+    [onVizControlChange],
+  );
+
+  // The same panel every other builder's preview uses, so this one gets the
+  // shared loading / empty treatment instead of a second set of conventions.
   // minHeight 520 fits Manhattan / heatmap / phylogenetic which need real
-  // vertical room — 320 cropped them. `overflow: hidden` keeps any renderer
-  // that misbehaves from leaking into the surrounding form rows.
+  // vertical room — 320 cropped them.
+  //
+  // The wrapper is a grid, not a block: the panel's height is only a minimum,
+  // so the renderer's `height: 100%` chain resolved to its content, and a
+  // Plotly figure re-rendered in place (a tree recoloured by its colour
+  // binding) shrank to a strip. A grid's one row stretches to the 480 px floor,
+  // which gives the cell a definite height.
   return (
-    <Paper
-      withBorder
-      p="sm"
-      radius="md"
-      style={{ minHeight: 520, overflow: 'hidden' }}
+    <PreviewPanel
+      minHeight={520}
+      loading={debouncing || settling}
+      empty={!metadata && !debouncing && !settling}
+      emptyMessage="Pick a viz kind and bind required columns to see a live preview."
     >
-      <Stack gap={6} style={{ height: '100%' }}>
-        <Text size="xs" fw={600} c="dimmed">
-          Live preview
-        </Text>
-        {metadata ? (
-          <div style={{ flex: 1, minHeight: 480, position: 'relative' }}>
+      {metadata && (
+        <div style={{ display: 'grid', height: '100%', minHeight: 480, position: 'relative' }}>
+          <AdvancedVizConfigDraftProvider value={draftSink}>
             <ComponentRenderer
               dashboardId="__preview__"
               metadata={metadata}
-              filters={[]}
+              filters={previewFilters}
               showDragHandle={false}
             />
-          </div>
-        ) : (
-          <Text size="xs" c="dimmed" ta="center" mt="lg">
-            Pick a viz kind and bind required columns to see a live preview.
-          </Text>
-        )}
-      </Stack>
-    </Paper>
+          </AdvancedVizConfigDraftProvider>
+        </div>
+      )}
+    </PreviewPanel>
   );
 };
 

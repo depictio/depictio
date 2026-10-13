@@ -1,0 +1,4 @@
+assembly_id	input_file	lineage	complete_pct	single_pct	duplicated_pct	fragmented_pct	missing_pct	n_markers	stop_codon_pct	scaffold_n50	contig_n50	percent_gaps	n_scaffolds
+test_hifi_hifiasm_assembly	test_hifi_hifiasm.fa	brassicales_odb12.2	99.8	99.4	0.4	0.0	0.2	7083	0.7	17670732	17670732	0.0	760
+test_hifiasm_flye_assembly	test_hifiasm_flye_assembly_patch.patch.fa	brassicales_odb12.2	99.8	99.4	0.4	0.0	0.2	7083	0.7	10710070	10710070	0.0	62
+test_hifiasm_flye_links	test_hifiasm_flye_links.scaffolds.fa	brassicales_odb12.2	99.8	99.4	0.4	0.0	0.2	7083	0.7	10743537	10710070	0.001	52

@@ -1,0 +1,14 @@
+id: bambu_counts_gene
+name: Gene-level quantification
+mode: quantification/gene
+description: >-
+  Bambu gene-level read counts, the top 50 genes by total count across
+  samples, features x samples.
+find: { path_glob: "**/bambu/counts_gene.txt" }
+recipe: bambu/counts_gene.py
+fixture: counts_gene.tsv
+renders_as:
+  - { id: top_expressed_genes_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: gene_id} }
+  - { component: card, column: gene_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene_biotype, top_n_count: 3 }
+  - { component: card, column: gene_biotype, aggregation: nunique, secondary_layout: donut, breakdown_col: gene_biotype }
+  - { component: table }

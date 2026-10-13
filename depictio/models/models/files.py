@@ -6,7 +6,18 @@ from pydantic import BaseModel, Field, field_validator
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.models.base import MongoModel, PyObjectId
 from depictio.models.models.data_collections import WildcardRegexBase
+from depictio.models.models.manifest import is_remote_url
 from depictio.models.models.users import Permission
+
+#: Outcomes a single file can have during a scan.
+#:
+#: ``skipped`` predates hash-based detection and is kept so older scan results
+#: still validate; new scans emit ``unchanged``/``changed`` instead.
+ALLOWED_SCAN_REASONS = frozenset({"added", "skipped", "updated", "failed", "unchanged", "changed"})
+
+#: Reasons that mean "this file is already registered and was not re-uploaded".
+#: Counted as skipped rather than as a genuine failure.
+NOT_UPLOADED_SCAN_REASONS = frozenset({"skipped", "unchanged", "changed"})
 
 
 class WildcardRegex(WildcardRegexBase):
@@ -27,6 +38,31 @@ class File(MongoModel):
     file_hash: str
     filesize: int
     permissions: Permission
+    # Canonical entity/sample ID from a Data Manifest entry (scan mode
+    # "manifest"). Injected as the `depictio_manifest_id` column at read time
+    # so manifest-built DCs share a zero-config cross-DC join key.
+    manifest_id: str | None = None
+
+    # --- indexed_file DCs ---------------------------------------------------
+    # Set by the CLI when it mirrors an `indexed_file` DC to S3. Absent on every
+    # other DC type and on every file registered before this existed, which is
+    # what keeps the field additive: the presigned route simply finds nothing.
+    sample: str | None = Field(
+        default=None,
+        description="Sample the file belongs to (indexed_file DCs only)",
+    )
+    s3_key: str | None = Field(
+        default=None,
+        description="Bucket-relative key of the mirrored object (indexed_file DCs only)",
+    )
+    index_s3_key: str | None = Field(
+        default=None,
+        description="Bucket-relative key of the index sidecar, when the format has one",
+    )
+    index_filesize: int | None = Field(
+        default=None,
+        description="Size in bytes of the index sidecar, when the format has one",
+    )
 
     # id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     # id: Optional[PyObjectId] = None
@@ -43,7 +79,9 @@ class File(MongoModel):
 
     @field_validator("filesize")
     def validate_size(cls, v):
-        if v < 0:
+        # -1 is the documented "unknown" sentinel for remote files whose size
+        # could not be determined (no Content-Length on the URL).
+        if v < -1:
             raise ValueError("File size cannot be negative")
         if v == 0:
             raise ValueError("File size cannot be zero")
@@ -81,6 +119,10 @@ class File(MongoModel):
 
     @field_validator("file_location")
     def validate_location(cls, value):
+        if is_remote_url(value):
+            # Remote files (scan mode "url" / manifests) are identified by
+            # their URL; existence checks happen at fetch time, never here.
+            return value
         if DEPICTIO_CONTEXT.lower() == "cli":
             if not os.path.exists(value):
                 raise ValueError(f"The file '{value}' does not exist.")
@@ -116,8 +158,13 @@ class FileScanResult(BaseModel):
             raise ValueError("Scan result must contain 'reason' key")
         if value["result"] not in ["success", "failure"]:
             raise ValueError("Scan result must be one of ['success', 'failure']")
-        if value["reason"] not in ["added", "skipped", "updated", "failed"]:
-            raise ValueError("Scan reason must be one of ['added', 'skipped', 'updated', 'failed']")
+        # ``unchanged``/``changed`` split what used to be a single ``skipped``
+        # bucket: the scanner has always computed a metadata hash per file, but
+        # only logged the comparison. ``result`` still says whether the file gets
+        # uploaded, so ``changed`` appears as a failure until --sync-changed (or
+        # --sync-files) opts into acting on it.
+        if value["reason"] not in ALLOWED_SCAN_REASONS:
+            raise ValueError(f"Scan reason must be one of {sorted(ALLOWED_SCAN_REASONS)}")
         return value
 
     @field_validator("scan_time", mode="before")

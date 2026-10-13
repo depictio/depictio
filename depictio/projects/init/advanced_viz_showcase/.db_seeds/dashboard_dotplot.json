@@ -9,14 +9,34 @@
     "$oid": "646b0f3c1e4a2d7f8e5b8d41"
   },
   "version": 1,
-  "tmp_children_data": [],
-  "stored_layout_data": [],
-  "stored_children_data": [],
   "stored_metadata": [
+    {
+      "index": "dot-text",
+      "component_type": "text",
+      "title": "Marker genes and pathways",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Marker genes and pathways",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Left, marker genes against cell clusters: dot size is the fraction of cells expressing the gene, colour its mean expression, so a marker is a large bright dot alone in its column (nf-core/scrnaseq counts after clustering). Right, the same marks on an enrichment table: one row per pathway, x the normalised enrichment score, size the gene-set size, colour the adjusted p-value (GSEA or g:Profiler output of nf-core/differentialabundance). Colour and sort controls sit in each tile header.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
     {
       "index": "dot-plot",
       "component_type": "advanced_viz",
-      "title": "Marker dot plot",
+      "title": "Marker genes by cluster",
       "workflow_tag": "advanced_viz_demo",
       "data_collection_tag": "dotplot_demo",
       "wf_id": {
@@ -28,7 +48,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Single-cell marker dot plot fixture",
+        "description": "Synthetic single-cell marker matrix: 6 clusters \u00d7 25 marker genes with cluster-specific expression",
         "data_collection_tag": "dotplot_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -37,30 +57,407 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-13T00:00:00.000000",
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Mean expression (colour) and fraction expressing (size) across six PBMC-like clusters.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Marker genes and pathways",
       "viz_kind": "dot_plot",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "dot_plot",
         "cluster_col": "cluster",
         "gene_col": "gene",
         "mean_expression_col": "mean_expression",
         "frac_expressing_col": "frac_expressing",
         "max_dot_size": 22,
-        "min_dot_size": 2
+        "min_dot_size": 2,
+        "colour_scale": "Viridis",
+        "reverse_scale": false,
+        "log_transform": false,
+        "gene_sort": "name",
+        "cluster_sort": "name",
+        "annotate_top_n": 0,
+        "marker_outline": true,
+        "max_genes": 50,
+        "term_col": null,
+        "nes_col": null,
+        "padj_col": null,
+        "gene_count_col": null,
+        "source_col": null,
+        "padj_threshold": 0.05,
+        "top_n": 20,
+        "default_colour_by": "neg_log10_padj",
+        "term_sort": "nes",
+        "view": "dotplot",
+        "views": [
+          "dotplot"
+        ]
       },
-      "wf_tag": "python/advanced_viz_demo",
-      "description": "Mean expression (colour) \u00d7 fraction expressing (size) across 6 PBMC-like clusters."
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gsea-dotplot",
+      "component_type": "advanced_viz",
+      "title": "Pathway enrichment",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "gsea_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d25"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic pathway-enrichment results across 5 ontologies (GO_BP / GO_CC / KEGG / Reactome / Hallmark)",
+        "data_collection_tag": "gsea_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d25"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One row per enriched term: NES on x, gene-set size as dot size, adjusted p-value as colour, five ontologies.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Marker genes and pathways",
+      "viz_kind": "dot_plot",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "dot_plot",
+        "cluster_col": "cluster",
+        "gene_col": "gene",
+        "mean_expression_col": "mean_expression",
+        "frac_expressing_col": "frac_expressing",
+        "max_dot_size": 22,
+        "min_dot_size": 2,
+        "colour_scale": "Viridis",
+        "reverse_scale": false,
+        "log_transform": false,
+        "gene_sort": "name",
+        "cluster_sort": "name",
+        "annotate_top_n": 0,
+        "marker_outline": true,
+        "max_genes": 50,
+        "term_col": "term",
+        "nes_col": "nes",
+        "padj_col": "padj",
+        "gene_count_col": "gene_count",
+        "source_col": "source",
+        "padj_threshold": 0.05,
+        "top_n": 20,
+        "default_colour_by": "neg_log10_padj",
+        "term_sort": "nes",
+        "view": "enrichment",
+        "views": [
+          "enrichment"
+        ]
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "dot-f-cluster",
+      "component_type": "interactive",
+      "title": "Cluster",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "dotplot_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d30"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic single-cell marker matrix: 6 clusters \u00d7 25 marker genes with cluster-specific expression",
+        "data_collection_tag": "dotplot_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d30"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Expression scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "cluster",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Expression filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "custom_color": "#45B8AC",
+      "icon_name": "mdi:form-select",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "dot-f-frac",
+      "component_type": "interactive",
+      "title": "Fraction expressing",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "dotplot_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d30"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic single-cell marker matrix: 6 clusters \u00d7 25 marker genes with cluster-specific expression",
+        "data_collection_tag": "dotplot_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d30"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Expression scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "frac_expressing",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Expression filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": true,
+      "custom_color": "#2E7D32",
+      "icon_name": "mdi:water-percent",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gsea-f-source",
+      "component_type": "interactive",
+      "title": "Ontology",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "gsea_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d25"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic pathway-enrichment results across 5 ontologies (GO_BP / GO_CC / KEGG / Reactome / Hallmark)",
+        "data_collection_tag": "gsea_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d25"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Term scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "source",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Term filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "custom_color": "#7B1FA2",
+      "icon_name": "mdi:form-select",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gsea-f-padj",
+      "component_type": "interactive",
+      "title": "Adjusted p-value",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "gsea_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d25"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic pathway-enrichment results across 5 ontologies (GO_BP / GO_CC / KEGG / Reactome / Hallmark)",
+        "data_collection_tag": "gsea_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d25"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Term scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "padj",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Term filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": true,
+      "custom_color": "#F68B33",
+      "icon_name": "mdi:target",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gsea-f-size",
+      "component_type": "interactive",
+      "title": "Genes in set",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "gsea_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d25"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic pathway-enrichment results across 5 ontologies (GO_BP / GO_CC / KEGG / Reactome / Hallmark)",
+        "data_collection_tag": "gsea_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d25"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Term scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "gene_count",
+      "column_type": "int64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Term filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "custom_color": "#45B8AC",
+      "icon_name": "mdi:counter",
+      "wf_tag": "python/advanced_viz_demo"
     }
   ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
   "stored_edit_dashboard_mode_button": [],
-  "left_panel_layout_data": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-dot-f-cluster",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-dot-f-frac",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-gsea-f-source",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-gsea-f-padj",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-gsea-f-size",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
   "right_panel_layout_data": [
+    {
+      "i": "box-dot-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
     {
       "i": "box-dot-plot",
       "x": 0,
-      "y": 0,
-      "w": 12,
-      "h": 8,
+      "y": 2,
+      "w": 4,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-gsea-dotplot",
+      "x": 4,
+      "y": 2,
+      "w": 4,
+      "h": 9,
       "static": false,
       "resizeHandles": [
         "se",
@@ -80,9 +477,9 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Dot plot",
-  "subtitle": "Single-cell marker expression \u00d7 cluster",
-  "icon": "mdi:dots-grid",
+  "title": "Marker genes and pathways",
+  "subtitle": "Two dot plots: marker genes across cell clusters, and enriched pathways across ontologies",
+  "icon": "mdi:chart-scatter-plot",
   "icon_color": "teal",
   "icon_variant": "filled",
   "workflow_system": "python",
@@ -107,7 +504,7 @@
     "viewers": []
   },
   "is_public": true,
-  "last_saved_ts": "2026-05-13 00:00:00",
+  "last_saved_ts": "2026-05-12 00:00:00",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
@@ -117,7 +514,42 @@
   },
   "tab_order": 17,
   "main_tab_name": null,
-  "tab_icon": "mdi:dots-grid",
+  "tab_icon": "mdi:chart-scatter-plot",
   "tab_icon_color": "teal",
-  "parent_dashboard_title": null
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Expression scope",
+      "icon": "mdi:filter-variant",
+      "color": "teal",
+      "description": "Restricts which clusters and which genes the marker dot plot shows",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Term scope",
+      "icon": "mdi:filter-variant",
+      "color": "violet",
+      "description": "Restricts which ontologies and which set sizes the enrichment dot plot shows",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Marker genes and pathways",
+      "icon": "mdi:chart-scatter-plot",
+      "color": "teal",
+      "description": "Size says how many, colour says how much, in both tiles",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

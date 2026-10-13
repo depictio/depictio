@@ -1,0 +1,2 @@
+sample	n_processed	n_pseudoaligned	p_pseudoaligned	n_barcodes	cells_called
+pbmc8k	784064148	467812652	0.597	1311043	8514

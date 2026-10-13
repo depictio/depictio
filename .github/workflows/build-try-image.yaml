@@ -1,0 +1,126 @@
+name: Build Try Depictio image
+
+# Image of the "Try Depictio" codespace (.devcontainer/try): the published
+# depictio[local] package with its binaries downloaded and the examples loaded.
+# Built once "Publish to PyPI" has published a stable release, and when the image
+# sources change on main. Pull requests build and test it without pushing.
+# One native build per architecture: amd64 for Codespaces, arm64 for a local dev
+# container on Apple silicon.
+
+on:
+  workflow_run:
+    workflows: [Publish to PyPI]
+    types: [completed]
+  push:
+    branches: [main]
+    paths:
+      - ".devcontainer/try/Dockerfile"
+      - ".github/workflows/build-try-image.yaml"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".devcontainer/try/Dockerfile"
+      - ".github/workflows/build-try-image.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}-try
+
+jobs:
+  version:
+    # After "Publish to PyPI", only a successful run for a stable tag (betas carry -b).
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       startsWith(github.event.workflow_run.head_branch, 'v') &&
+       !contains(github.event.workflow_run.head_branch, '-b'))
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.pick.outputs.version }}
+    steps:
+      - id: pick
+        env:
+          TAG: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          if [ -n "$TAG" ]; then
+            version=${TAG#v}
+          else
+            # info.version is the latest release, pre-releases excluded.
+            version=$(curl -sf https://pypi.org/pypi/depictio/json \
+              | python3 -c 'import json, sys; print(json.loads(sys.stdin.read(), strict=False)["info"]["version"])')
+          fi
+          # A release reaches PyPI's simple index (what uv reads) a little after the
+          # upload: wait for it rather than fail the build.
+          for i in $(seq 1 30); do
+            curl -sf -H 'Accept: application/vnd.pypi.simple.v1+json' https://pypi.org/simple/depictio/ \
+              | python3 -c 'import json, sys; sys.exit(sys.argv[1] not in json.loads(sys.stdin.read(), strict=False)["versions"])' "$version" \
+              && break
+            echo "depictio $version is not on PyPI's index yet"
+            sleep 30
+          done
+          echo "Building depictio $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    env:
+      TAG: ${{ needs.version.outputs.version }}-${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build
+        run: |
+          docker build .devcontainer/try \
+            --build-arg DEPICTIO_VERSION=${{ needs.version.outputs.version }} \
+            --tag "$IMAGE:$TAG"
+
+      # What a codespace start runs: the binaries and the examples must already be there.
+      - name: Test
+        run: |
+          docker run -d --name try "$IMAGE:$TAG" sleep infinity
+          docker exec try test -f /home/vscode/.depictio/local/env/.depictio-specs.json
+          # Polars falls back to its default runtime once the compat one is removed.
+          docker exec try /home/vscode/.local/share/uv/tools/depictio/bin/python -c \
+            'import polars as pl; assert pl.DataFrame({"a": [1, 2]})["a"].sum() == 3; print("polars", pl.__version__)'
+          docker exec try depictio local up --no-open --port 8058
+          docker exec try curl -sf -o /dev/null http://127.0.0.1:8058/dashboards
+          docker exec try depictio local status
+          docker image ls "$IMAGE"
+
+      - name: Push
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker push "$IMAGE:$TAG"
+
+  manifest:
+    needs: [version, build]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - name: Tag the release and latest
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker buildx imagetools create \
+            --tag "$IMAGE:$VERSION" --tag "$IMAGE:latest" \
+            "$IMAGE:$VERSION-amd64" "$IMAGE:$VERSION-arm64"

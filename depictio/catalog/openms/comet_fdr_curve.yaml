@@ -1,0 +1,17 @@
+id: openms_comet_fdr_curve
+name: Identifications against FDR
+mode: search/comet-fdr-curve
+description: >-
+  Target PSMs accepted per raw file as the target-decoy q-value threshold on
+  the raw Comet Xcorr is relaxed from 0 to 10%, with the Xcorr cut-off at each
+  threshold. A steep early rise is a file with good spectra.
+find: { path_glob: "**/*_pin.tsv" }
+recipe: openms/comet_fdr_curve.py
+fixture: comet_fdr_curve.tsv
+renders_as:
+  - id: fdr_profile
+    component: advanced_viz
+    kind: profile
+    roles: { series: run_id, x: q_value, y: accepted_psms }
+  - { component: figure, visu_type: line, dict_kwargs: { x: q_value, y: accepted_psms, color: run_id } }
+  - { component: table }

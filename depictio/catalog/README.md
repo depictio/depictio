@@ -13,6 +13,14 @@ It is **not** a runtime column→viz suggestion engine (`schemas.suggest_viz_kin
 does that from a DC's inferred schema). It is the map used to **build / assist
 dashboards when scanning a run**.
 
+## Contribute a tool without writing YAML
+
+**[Tool Studio](https://depictio.github.io/depictio-tool-studio/)** is a no-backend web app
+(source: [`packages/tool-studio/`](../../packages/tool-studio/)) that walks you
+through it: drop a CSV/TSV, bind columns to visualizations with live previews, then
+download a zip or open a PR into this folder. The authoritative check remains
+`depictio dev catalog validate` — the same one CI runs.
+
 ## Layout
 
 **One folder per module** — a self-contained unit holding the tool identity,
@@ -21,7 +29,7 @@ one YAML per output, and each output's **co-located fixture**:
 ```
 depictio/catalog/
   ivar/
-    module.yaml          # lightweight tool identity: id, name, nf_core_url (pointer)
+    module.yaml          # tool identity: id, name, description, homepage, links
     variants_long.yaml   # one output per file — find + recipe + renders_as live HERE
     variants_long.tsv    # its fixture, right next to it
   qiime2/
@@ -35,13 +43,16 @@ depictio/catalog/
 Adding a tool = a PR that adds **one folder** (`module.yaml` + output YAML(s) +
 fixture). **No Python** unless an output needs a reshape (a recipe).
 
-`module.yaml` is deliberately **lightweight**: it carries the folder anchor
-(`id`), a display `name`, and the `nf_core_url` **pointer** — nothing else. The
-rest of the identity (homepage, bio.tools id, EDAM topics) already lives in the
-module's nf-core `meta.yml`, so we don't duplicate it. Declare an identity field
-in `module.yaml` only to **override** a stale `meta.yml` (e.g. MultiQC's homepage
-moved to Seqera) or when there is **no** nf-core module to derive from (QIIME 2,
-whose `nf_core_url` is per-output and whose identity stays declared in full).
+`module.yaml` carries the folder anchor (`id`), a display `name`, the
+`nf_core_url` **pointer** (or `source_url` for a tool with no nf-core module),
+and the identity the catalog card shows: `description`, `homepage` and
+`biotools_url`. Nothing derives them from the nf-core `meta.yml` (the payload
+reads them from `module.yaml` alone), so copy them from it: `description` in one
+or two sentences, `homepage` from `homepage`, else `tool_dev_url`, else
+`documentation`, and `biotools_url` from the `biotools:` identifier. When
+bio.tools has no entry for the tool, write `biotools_url: null` so the gap is
+explicit. `catalog validate` rejects a module without a description or
+homepage, and the catalog tests reject one that leaves out `biotools_url`.
 All depictio-specific glue — `find`, `recipe`, `fixture`, `renders_as` — lives in
 the **output** YAMLs, never in `module.yaml`.
 
@@ -53,13 +64,20 @@ the **output** YAMLs, never in `module.yaml`.
   recipe: ivar/variants_long.py                      # optional reshape (module-owned, co-located here)
   renders_as:
     - { component: advanced_viz, kind: manhattan, roles: {chr: CHROM, pos: POS, score: AF} }
+    - { component: card, column: AF, aggregation: average, secondary_layout: histogram }
+    - { component: interactive, interactive_type: MultiSelect, column_name: GENE }
+    - { component: table, columns: [sample, GENE, AF], page_size: 25 }
 ```
+
+Each render is one dashboard component. `SCHEMA.md` lists every field and which
+component it belongs to; `dev catalog validate` rejects a field used on the
+wrong one.
 
 The golden rule for schemas — **one home, no duplication**:
 
 | Output | where its columns live |
 |---|---|
-| **has a recipe** | the recipe (`EXPECTED_SCHEMA`). The YAML does **not** repeat them; `roles` are grounded against the recipe at validation time. |
+| **has a recipe** | the recipe (`OUTPUT_SCHEMA`). The YAML does **not** repeat them; `roles` are grounded against the recipe at validation time. |
 | **no recipe** (raw is bindable) | the YAML, via a `columns:` block; `roles` bind to those. |
 
 Each advanced_viz render can carry an **`id`** — a tool-unique handle a
@@ -81,7 +99,7 @@ unique within a tool — so when the same `kind` is rendered by several outputs
 each gets a distinct handle (`rarefaction_alpha` vs `rarefaction`).
 
 Don't know a recipe's output column names while writing `roles`?
-`depictio catalog columns <recipe>` prints them.
+`depictio dev catalog columns <recipe>` prints them.
 
 ## Catalog vs `projects/` — where a reshape lives
 
@@ -122,14 +140,27 @@ Live exceptions that prove the rule:
 
 ## Commands
 
+Browsing the catalog is user-facing; everything that maintains it sits behind the
+hidden `dev` group, so the two audiences don't share a namespace.
+
 ```bash
 depictio catalog list                 # every tool + output + render targets
 depictio catalog info qiime2          # one tool: URLs + outputs in detail
-depictio catalog columns <recipe.py>  # the recipe's output columns (to write roles)
-depictio catalog match path/to/run    # recognise tool outputs in a run dir
-depictio catalog validate             # CI gate: schema + roles vs recipe + nf-core/EDAM existence
-depictio catalog refresh-index        # (maintainer, needs network) refresh _index/ from nf-core + EDAM
-depictio catalog schema -o catalog.schema.json   # regenerate the JSON Schema
+depictio catalog preview <output_id>  # render one output's offers in a browser
+depictio catalog gallery              # every tool and output on one page
+```
+
+`preview` and `gallery` serve an ephemeral page and open it; `--out FILE` exports
+self-contained HTML instead. Both read a prebuilt bundle, so build it once with
+`cd depictio/viewer && pnpm run build:catalog-preview`.
+
+```bash
+depictio dev catalog columns <recipe.py>  # the recipe's output columns (to write roles)
+depictio dev catalog match path/to/run    # recognise tool outputs in a run dir
+depictio dev catalog compose path/to/run  # propose a dashboard from a run dir
+depictio dev catalog validate             # CI gate: schema + roles vs recipe + nf-core/EDAM existence
+depictio dev catalog refresh-index        # (maintainer, needs network) refresh _index/ from nf-core + EDAM
+depictio dev catalog schema -o catalog.schema.json   # regenerate the JSON Schema
 ```
 
 Identity validation is two-tier: `mode`/`description` are free; `nf_core_url`
@@ -139,3 +170,55 @@ indices in `_index/` (offline CI), while `biotools_url` is format-only.
 `validate` is the CI guarantee: it fails if any `renders_as` role doesn't exist
 in the recipe's real output — so a green CI means the entry is wired correctly,
 with no manual review.
+
+## After adding an output: regenerate the conformance project
+
+`validate` proves an entry is *wired* correctly. What proves it is *usable*
+(offered by the picker, addable to a dashboard, rendering in the editor and the
+viewer) is the e2e suite, and that needs a project whose collections the catalog
+recognises.
+
+`depictio/projects/init/catalog_conformance/` is that project, and it is
+generated from this directory, so a new output joins the suite with one command:
+
+```bash
+uv run python -m depictio.projects.init.catalog_conformance.scripts.generate_project
+```
+
+It writes a collection per distinct recipe and per recipe-free output, stages the
+fixtures, derives the ids, and refuses to produce an ambiguous staging. Commit
+what it changes. `depictio/tests/catalog/test_conformance_project.py` fails if
+you forget, so the coverage gap cannot go unnoticed.
+
+Two cases need a little more than a rerun:
+
+- **A new MultiQC section** needs a parser-valid stub in
+  `scripts/multiqc_stubs.py`, keyed on the catalog's own `section` value, or
+  the report will not carry it. The generator says which section is missing.
+- **A recipe-free output whose `find` collides** with another output's pattern
+  fails the generator on purpose: one staged file recognised as two outputs
+  would offer a render bound to columns that frame does not have.
+
+The project is opt-in: deployments only seed it when
+`DEPICTIO_SEED_EXTRA_PROJECTS=catalog_conformance` is set, as CI's Playwright
+leg does.
+
+## The other half: a project the CLI actually ingests
+
+The conformance project seeds each recipe's *result*, so it proves an output is
+offerable and renderable but never runs the recipe that produces it. `validate`
+has the same blind spot in the other direction: it grounds `renders_as` against
+the fixture when there is one, and only falls back to the recipe's
+`OUTPUT_SCHEMA` when there is not — so a fixture that has drifted ahead of its
+recipe keeps CI green while a real ingest produces a frame the render cannot
+bind.
+
+`depictio/projects/test/catalog_cli_smoke/` closes that gap for a handful of
+outputs: six collections staged as raw tool output and ingested with
+`depictio-cli ingest`, covering every way a collection reaches the matcher (recipe
+with a file source, with a glob source, with a `dc_ref` source, and no recipe at
+all). `depictio/tests/catalog/test_cli_smoke_project.py` executes every recipe
+against those staged files offline, so a recipe whose input moved or whose output
+lost a bound column fails there rather than in someone's browser.
+
+It is not seeded — running it is the point. See the project's README.

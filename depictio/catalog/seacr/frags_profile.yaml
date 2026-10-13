@@ -1,0 +1,27 @@
+id: seacr_frags_profile
+name: Fragment pile-up around the peaks
+mode: peaks/frags_profile
+description: >-
+  The sequenced fragments piled up in 100 bp bins on a 6 kb window centred on
+  the summit of each sample's 500 strongest non-overlapping SEACR regions, per
+  million fragments of the sample: a metagene matrix around the calls and a
+  fragment coverage track under a locus navigator, from the same rows.
+# Reads the fragment BEDs through a raw scan collection (the sample is in the
+# file name) and the tidy SEACR calls through dc_ref; see the recipe docstring.
+# Fragment BEDs are published by the pipeline but are large (tens of MB per
+# library), so templates declare both collections optional.
+find:
+  path_glob: "**/*.frags.cut.bed"
+recipe: seacr/frags_profile.py
+fixture: frags_profile.tsv
+renders_as:
+  # Regions down, offsets across, one panel per sample, the mean profile on top:
+  # the deepTools plotHeatmap reading, built from fragments instead of a bigWig.
+  - { id: frags_pileup_matrix, component: advanced_viz, kind: signal_matrix, roles: {region_id: peak_id, position: offset_bp, value: cpm, group: sample} }
+  # The same bins at their genomic coordinates: a coverage track that follows
+  # the region of a locus navigator.
+  - { id: frags_pileup_track, component: advanced_viz, kind: coverage_track, roles: {chromosome: chr, position: bin_start, value: cpm, end: bin_end, sample: sample} }
+  - { component: card, column: cpm, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: fragments, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: cpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

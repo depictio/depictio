@@ -1,0 +1,228 @@
+# Genome view: one tab of the advanced-visualisation showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+#
+# Issue #1083. An advanced_viz tile binds exactly one data collection, so a
+# multi-track genome view is several tiles sharing a region filter, not one
+# tile over N collections. The navigator opens zoomed on its `default_region`
+# and carries the locus field in its header; it zooms itself when the reader
+# types a locus or brushes, and publishes the region as filters. The depth track
+# under it reads another collection and follows through the project's region
+# link (locus_peaks_demo -> locus_coverage_demo). The evaluation is in
+# docs/design/genomespy-eval.md.
+title: 'Genome browser tracks'
+subtitle: 'GenomeSpy tracks on a chromosome-aware axis: a CTCF peak navigator, ChIP-seq depth per track over the hg38 genes following its region, and a genome-wide marker scan.'
+icon: 'tabler:dna-2'
+icon_color: 'teal'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8d7a'
+is_main_tab: false
+tab_order: 40
+parent_dashboard_tag: volcano
+tab_icon: 'tabler:dna-2'
+tab_icon_color: 'teal'
+
+# Left-panel filter section. Deliberately not `persistent`: the tabs of this
+# family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Track scope'
+    icon: 'mdi:filter-variant'
+    color: 'teal'
+    description: 'Restricts the tracks to a ChIP track, a peak class, a depth or a score range'
+
+grid_sections:
+  - name: 'Tracks on a locus'
+    icon: 'mdi:dna'
+    color: 'teal'
+    description: 'A CTCF peak navigator and the ChIP depth that follows its region'
+  - name: 'Markers on a locus axis'
+    icon: 'mdi:chart-scatter-plot'
+    color: 'teal'
+    description: 'The Manhattan collection drawn by GenomeSpy, for the side-by-side comparison'
+
+components:
+  - tag: text-genome-view
+    index: gv-text
+    component_type: text
+    title: 'Genome browser tracks'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Tracks on a locus'
+    body: >
+      Both tiles open on the IGF2 and KCNQ1 imprinted domain: the navigator shows the CTCF
+      peaks there, the track below the ChIP-seq depth per track over the hg38 genes. Type
+      a locus or a gene symbol in the navigator header, or brush its axis, and both tiles
+      move together; scroll to zoom and drag to pan inside either. Both tiles read table
+      collections here; with source file the same tile range-reads the VCF,
+      BAM, bigWig or GFF3 a pipeline such as sarek, chipseq or rnaseq publishes.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: viz-genome-view-regions
+    index: 'gv-regions'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'locus_peaks_demo'
+    title: 'Locus navigator'
+    description: 'CTCF peaks on the current region, coloured by where they sit. The locus field in the header and a brush on this axis move this tile and publish the region the track below follows.'
+    section: 'Tracks on a locus'
+    viz_kind: 'genome_view'
+    config:
+      viz_kind: "genome_view"
+      controls_placement: "header"
+      chr_col: "chrom"
+      pos_col: "start"
+      end_col: "end"
+      score_col: "score"
+      feature_col: "peak_id"
+      category_col: "peak_class"
+      mark: "bar"
+      score_title: "CTCF -log10(q)"
+      assembly: "hg38"
+      default_region: "chr11:1,950,000-2,950,000"
+      region_filter_enabled: true
+    layout: { x: 0, y: 2, w: 8, h: 3 }
+
+  - tag: viz-genome-view-depth
+    index: 'gv-depth'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'locus_coverage_demo'
+    title: 'ChIP-seq depth over the genes'
+    description: 'CTCF and H3K27ac depth in 2 kb bins, one lane per track, over the bundled hg38 gene lane. Another collection than the navigator: it follows the region through the project region link.'
+    section: 'Tracks on a locus'
+    viz_kind: 'genome_view'
+    config:
+      viz_kind: "genome_view"
+      chr_col: "chrom"
+      pos_col: "start"
+      end_col: "end"
+      score_col: "coverage"
+      sample_col: "sample"
+      mark: "bar"
+      score_title: "depth"
+      facet_by_sample: true
+      max_facets: 4
+      annotation: "hg38"
+      assembly: "hg38"
+      region_filter_enabled: false
+      follow_region_filter: true
+    layout: { x: 0, y: 5, w: 8, h: 6 }
+
+  - tag: text-genome-view-markers
+    index: gv-text-markers
+    component_type: text
+    title: 'Markers on a locus axis'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Markers on a locus axis'
+    body: >
+      The collection the Manhattan tab reads, on the same grammar: chromosomes are
+      concatenated by the locus scale rather than laid out by hand, and the dashed rule is
+      the significance threshold. Click a marker to filter the rest of the dashboard by
+      feature. Compare it with the Manhattan tab for the same rows drawn in Plotly.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: viz-genome-view-markers
+    index: 'gv-markers'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'manhattan_demo'
+    title: 'Markers by position and score'
+    description: 'chr / pos / score on a chromosome-aware locus scale. Type a locus in the header, zoom with the wheel, pan by dragging.'
+    section: 'Markers on a locus axis'
+    viz_kind: 'genome_view'
+    config:
+      viz_kind: "genome_view"
+      controls_placement: "header"
+      chr_col: "chr"
+      pos_col: "pos"
+      score_col: "score"
+      feature_col: "feature"
+      score_title: "-log10(padj)"
+      score_threshold: 5.0
+      point_size: 5
+      # A marker is one feature at one locus, so the feature is what a click
+      # picks out, and the config has to say so.
+      selection_enabled: true
+      selection_column: "feature"
+      # Its own collection has no region filter to follow, and brushing it would
+      # publish a region the locus tracks above would then have to ignore.
+      region_filter_enabled: false
+    layout: { x: 0, y: 2, w: 8, h: 7 }
+
+  - tag: filter-genome-view-sample
+    index: gv-f-sample
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'locus_coverage_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'sample'
+    column_type: 'object'
+    title: 'ChIP track'
+    placement: left
+    section: 'Track scope'
+    group: 'Track filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:flask'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-genome-view-region
+    index: gv-f-region
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'locus_peaks_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'peak_class'
+    column_type: 'object'
+    title: 'CTCF peak class'
+    placement: left
+    section: 'Track scope'
+    group: 'Track filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:map-marker-path'
+    layout: { x: 0, y: 3, w: 1, h: 3 }
+
+  - tag: filter-genome-view-depth
+    index: gv-f-depth
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'locus_coverage_demo'
+    interactive_component_type: RangeSlider
+    column_name: 'coverage'
+    column_type: 'float64'
+    title: 'Depth'
+    placement: left
+    section: 'Track scope'
+    group: 'Track filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:chart-line'
+    layout: { x: 0, y: 6, w: 1, h: 3 }
+
+  - tag: filter-genome-view-score
+    index: gv-f-score
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'manhattan_demo'
+    interactive_component_type: RangeSlider
+    column_name: 'score'
+    column_type: 'float64'
+    title: 'Score'
+    placement: left
+    section: 'Track scope'
+    group: 'Marker filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:chart-bell-curve'
+    layout: { x: 0, y: 9, w: 1, h: 3 }

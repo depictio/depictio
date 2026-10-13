@@ -11,6 +11,8 @@ from plotly_complexheatmap.clustering import (
     compute_dendrogram,
     compute_linkage,
     dendrogram_traces,
+    impute_for_clustering,
+    masked_euclidean_condensed,
 )
 
 
@@ -25,6 +27,60 @@ class TestComputeLinkage:
         for method in ("ward", "single", "complete", "average"):
             Z = compute_linkage(small_matrix, method=method)
             assert Z.shape[0] == small_matrix.shape[0] - 1
+
+
+class TestImputeForClustering:
+    def test_leaves_a_complete_matrix_alone(self, small_matrix: np.ndarray) -> None:
+        out = impute_for_clustering(small_matrix)
+        np.testing.assert_array_equal(out, small_matrix)
+
+    def test_fills_holes_with_the_column_mean(self) -> None:
+        data = np.array([[1.0, np.nan], [3.0, 4.0], [np.nan, 8.0]])
+        out = impute_for_clustering(data)
+        np.testing.assert_allclose(out, [[1.0, 6.0], [3.0, 4.0], [2.0, 8.0]])
+        # the caller's array is untouched
+        assert np.isnan(data[0, 1])
+
+    def test_fills_an_empty_column_with_zero(self) -> None:
+        data = np.array([[1.0, np.nan], [2.0, np.inf]])
+        out = impute_for_clustering(data)
+        np.testing.assert_allclose(out[:, 1], [0.0, 0.0])
+
+    def test_measures_pairs_on_their_shared_features(self) -> None:
+        n = np.nan
+        data = np.array([[1.0, n], [1.0, 2.0], [4.0, n]])
+        d01, d02, d12 = masked_euclidean_condensed(data)
+        assert d01 == 0.0
+        # one shared feature out of two, so the distance is scaled by sqrt(2)
+        np.testing.assert_allclose(d02, 3.0 * np.sqrt(2.0))
+        np.testing.assert_allclose(d12, 3.0 * np.sqrt(2.0))
+
+    def test_pairs_with_nothing_in_common_are_the_farthest(self) -> None:
+        n = np.nan
+        data = np.array([[1.0, n], [2.0, n], [n, 5.0]])
+        d01, d02, d12 = masked_euclidean_condensed(data)
+        np.testing.assert_allclose(d01, np.sqrt(2.0))
+        assert d02 == d12 == 2.0 * d01
+
+    def test_block_diagonal_distances_cluster(self) -> None:
+        # Two blocks of libraries that were never compared with each other:
+        # the cross-block cells are empty, as a DESeq2 QC run per antibody
+        # leaves them. scipy refused the whole matrix; a column-mean fill
+        # would pair rows across the blocks.
+        n = np.nan
+        data = np.array(
+            [
+                [0.0, 1.0, n, n],
+                [1.0, 0.0, n, n],
+                [n, n, 0.0, 1.0],
+                [n, n, 1.0, 0.0],
+            ]
+        )
+        result = compute_dendrogram(data)
+        order = result.leaf_order.tolist()
+        assert sorted(order) == [0, 1, 2, 3]
+        # each block stays together
+        assert {order[0], order[1]} in ({0, 1}, {2, 3})
 
 
 class TestComputeDendrogram:

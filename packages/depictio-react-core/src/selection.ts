@@ -3,8 +3,8 @@
  *
  * The Dash viewer stores selections in ``interactive-values-store`` with a
  * ``source`` discriminator (``scatter_selection`` / ``table_selection`` /
- * ``map_selection``) so passive components can merge them alongside regular
- * interactive filters. The React viewer mirrors that protocol via
+ * ``map_selection`` / ``tree_selection``) so passive components can merge them
+ * alongside regular interactive filters. The React viewer mirrors that protocol via
  * ``InteractiveFilter.source`` and uses the helpers below to extract values
  * from Plotly/AG Grid events and to merge / clear by ``(index, source)``.
  */
@@ -24,11 +24,47 @@ export function mapSelectionValues(
   filters: InteractiveFilter[],
   componentIndex: string,
 ): string[] {
+  return selectionValuesFor(filters, componentIndex, 'map_selection') ?? [];
+}
+
+/**
+ * The values a component's own selection holds, read back out of the filter
+ * list, or `null` when it has none standing.
+ *
+ * A component that strips its own selection before fetching keeps no other
+ * record of it, so this is how it repaints the highlight — and how it notices
+ * a Reset made elsewhere (the chrome, the panel's "clear selections").
+ */
+export function selectionValuesFor(
+  filters: InteractiveFilter[],
+  componentIndex: string,
+  source: InteractiveFilterSource,
+): string[] | null {
   for (const f of filters) {
-    if (f.index !== componentIndex || f.source !== 'map_selection') continue;
-    if (Array.isArray(f.value)) return f.value.map((v) => String(v));
+    if (f.index !== componentIndex || f.source !== source) continue;
+    if (Array.isArray(f.value) && f.value.length > 0) return f.value.map((v) => String(v));
   }
-  return [];
+  return null;
+}
+
+/** A filter is "source-active" for this component when an entry exists with
+ *  matching `index`, the expected `source` discriminator, and a non-empty
+ *  value (avoid false-positives for filters that were emitted then cleared
+ *  but kept in the array with `value: []`). Drives the chrome's Reset. */
+export function isSourceFilterActive(
+  filters: InteractiveFilter[],
+  componentIndex: string,
+  expectedSource: InteractiveFilter['source'],
+): boolean {
+  for (const f of filters) {
+    if (f.index !== componentIndex) continue;
+    if (f.source !== expectedSource) continue;
+    const v = f.value;
+    if (v == null) continue;
+    if (Array.isArray(v) && v.length === 0) continue;
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -79,6 +115,318 @@ export function isMapSelectionEnabled(metadata: StoredMetadata, hasHandler: bool
 }
 
 /**
+ * The DC column an advanced_viz component emits its selection on, or
+ * `undefined` when it cannot emit one at all.
+ *
+ * Only a few viz kinds carry a per-row (or per-curve) identity to select on,
+ * or, for the UpSet, a known set of rows behind each bar; every other kind
+ * aggregates (bins, taxa) and would emit an envelope pointing at nothing. Each is opt-in per component, so a shipped
+ * dashboard keeps the drag behaviour it has today until its YAML asks for the
+ * lasso.
+ *
+ * Embedding falls back to `sample_id_col` because that is already the value it
+ * writes into every point's customdata, and profile falls back to `series_col`
+ * for the same reason: a profile point belongs to a curve, and the curve is
+ * what the reader is picking. Manhattan has no defensible fallback: one point
+ * there is a row of a long variant table keyed by (sample, chromosome,
+ * position), so selecting on the sample column and selecting on a per-variant
+ * label are two different questions and only the dashboard knows which one it
+ * is asking.
+ *
+ * This is the single source of truth for the capability: the renderers gate
+ * their Plotly handlers on it and `supportsSelectionGrouping` gates the
+ * chrome's marker on it, so the affordance and the behaviour cannot disagree.
+ */
+export function advancedVizSelectionColumn(metadata: StoredMetadata): string | undefined {
+  const config = (metadata.config ?? {}) as Record<string, unknown>;
+  if (config.selection_enabled !== true) return undefined;
+  const named =
+    typeof config.selection_column === 'string' && config.selection_column
+      ? config.selection_column
+      : undefined;
+  switch (typeof metadata.viz_kind === 'string' ? metadata.viz_kind : '') {
+    case 'embedding': {
+      const sampleIdCol =
+        typeof config.sample_id_col === 'string' && config.sample_id_col
+          ? config.sample_id_col
+          : undefined;
+      return named ?? sampleIdCol;
+    }
+    case 'manhattan':
+      return named;
+    case 'genome_view':
+      // Same reasoning as the Manhattan: a mark is one feature at one locus and
+      // the dashboard has to name the column a pick stands for. The region
+      // brush is a separate path (`genomeRegionFilters` below) that needs no
+      // opt-in, because a chromosome and a position range are never ambiguous.
+      return named;
+    case 'profile': {
+      const seriesCol =
+        typeof config.series_col === 'string' && config.series_col
+          ? config.series_col
+          : undefined;
+      return named ?? seriesCol;
+    }
+    case 'scatter_xy': {
+      // The label column, because that is what identifies a point: the axes are
+      // numeric by definition and the colour column is a grouping, so filtering
+      // on either would select a band rather than the points that were clicked.
+      const labelCol =
+        typeof config.label_col === 'string' && config.label_col ? config.label_col : undefined;
+      return named ?? labelCol;
+    }
+    case 'upset_plot':
+      // A clicked intersection selects the rows it counts, by the value they
+      // hold in this column. Nothing else in the config names the matrix's
+      // element column, and the right one is not even that: it is the column
+      // the other tiles' data shares (a taxon's Phylum, say, where the matrix
+      // keys taxa by a lineage string no other table carries).
+      return named;
+    case 'genome_chord': {
+      // A chord is one named link between two loci, so its label is the
+      // identifier. The two chromosome columns are a grouping and the positions
+      // are numeric, so neither could stand in for it.
+      const chordLabelCol =
+        typeof config.label_col === 'string' && config.label_col ? config.label_col : undefined;
+      return named ?? chordLabelCol;
+    }
+    default:
+      return undefined;
+  }
+}
+
+/** Kinds that read their drawn selection back out of the filter list. */
+const CHROME_RESET_KINDS = new Set(['upset_plot']);
+
+/**
+ * Whether the tile's chrome offers "Reset selection" for an advanced_viz.
+ *
+ * Only for a kind that draws its selection from the filter list, so clearing
+ * the filter clears the highlight too. The scatter kinds keep Plotly's own
+ * lasso, which a Reset from the chrome would leave drawn over points that no
+ * longer filter anything; they clear by a double-click in the plot.
+ */
+export function advancedVizChromeReset(metadata: StoredMetadata): boolean {
+  return (
+    CHROME_RESET_KINDS.has(typeof metadata.viz_kind === 'string' ? metadata.viz_kind : '') &&
+    advancedVizSelectionColumn(metadata) !== undefined
+  );
+}
+
+/**
+ * The filter entry an advanced_viz renderer emits for a set of selected
+ * values, in the same `scatter_selection` shape FigureRenderer produces.
+ *
+ * Deliberately not a source of its own (the phylogeny's `tree_selection` is,
+ * and that is exactly why its selections cross-filter but can never become an
+ * analysis group: `SELECTION_SOURCES` in selectionGroups.ts does not list it).
+ * Reusing `scatter_selection` means these renderers reach the Analysis panel
+ * through the path scatter figures already use. Passing `[]` clears.
+ */
+export function advancedVizSelectionFilter(
+  metadata: StoredMetadata,
+  selectionColumn: string,
+  values: string[],
+): InteractiveFilter {
+  return {
+    index: metadata.index,
+    value: values,
+    source: 'scatter_selection',
+    column_name: selectionColumn,
+    interactive_component_type: 'MultiSelect',
+    metadata: {
+      dc_id: metadata.dc_id,
+      column_name: selectionColumn,
+      interactive_component_type: 'MultiSelect',
+      selection_column: selectionColumn,
+    },
+  };
+}
+
+/** A genomic region as a `genome_view` brush reports it. */
+export interface GenomeRegionSelection {
+  /** Chromosomes the brush covers, in genome order. */
+  chroms: string[];
+  /** Position range inside the chromosome, or null when the brush spans
+   *  several: one `[start, end]` pair has no meaning across contigs. */
+  range: [number, number] | null;
+}
+
+/** Index suffix of the position-range half of a region selection.
+ *
+ *  `mergeFiltersBySource` dedupes by `(index, source)`, so the two halves of a
+ *  region need two keys. Suffixing the emitting component's own index keeps
+ *  them recognisably one selection, keeps "clear" able to drop each half, and
+ *  keeps `clearFiltersBySource(filters, 'genome_selection')` able to drop
+ *  both. */
+export const GENOME_POS_INDEX_SUFFIX = '::pos';
+
+export function genomePosFilterIndex(componentIndex: string): string {
+  return `${componentIndex}${GENOME_POS_INDEX_SUFFIX}`;
+}
+
+/** True for either half of a genome region pair (`source: 'genome_selection'`). */
+export function isRegionFilter(f: InteractiveFilter): boolean {
+  return f.source === 'genome_selection';
+}
+
+/**
+ * The filters a card reads: every active filter except the genome region,
+ * unless the card opts in with `follow_region_filter`.
+ *
+ * A region is a place to look, not a subset to summarise, so a card keeps
+ * summarising the whole collection while the tracks follow the locus. Mirrors
+ * `depictio/api/v1/region_scope.py`, which applies the same rule server-side
+ * in `bulk_compute_cards` and the card preview routes.
+ */
+export function cardScopedFilters(
+  filters: InteractiveFilter[],
+  card: { follow_region_filter?: unknown } | null | undefined,
+): InteractiveFilter[] {
+  if (card?.follow_region_filter === true) return filters;
+  return filters.some(isRegionFilter) ? filters.filter((f) => !isRegionFilter(f)) : filters;
+}
+
+/**
+ * The filter pair a `genome_view` region brush emits.
+ *
+ * A genomic region is not a value, it is a chromosome *and* a position range,
+ * and the dashboard's filter pipeline only knows columns. So the brush becomes
+ * two ordinary entries the existing backend already understands:
+ *
+ * - a `MultiSelect` on the tile's `chr_col`, carrying the brushed chromosomes;
+ * - a `RangeSlider` on the tile's `pos_col`, carrying `[start, end]`
+ *   (`deltatables_utils.add_filter` turns that into
+ *   `col >= start & col <= end`).
+ *
+ * Both carry the emitting tile's `dc_id`, so a second tile bound to the *same*
+ * collection narrows immediately, and a tile on a *different* collection
+ * receives them through the project's links whenever that link joins on the
+ * same chromosome / position columns. Nothing new is needed server-side.
+ *
+ * Passing `null` (or a region with no chromosomes) returns the cleared form of
+ * both entries, which `mergeFiltersBySource` drops.
+ */
+export function genomeRegionFilters(
+  metadata: StoredMetadata,
+  chrColumn: string,
+  posColumn: string,
+  region: GenomeRegionSelection | null,
+): InteractiveFilter[] {
+  const chroms = region?.chroms ?? [];
+  const range = chroms.length ? (region?.range ?? null) : null;
+  return [
+    {
+      index: metadata.index,
+      value: chroms,
+      source: 'genome_selection',
+      column_name: chrColumn,
+      interactive_component_type: 'MultiSelect',
+      metadata: {
+        dc_id: metadata.dc_id,
+        column_name: chrColumn,
+        interactive_component_type: 'MultiSelect',
+        selection_column: chrColumn,
+      },
+    },
+    {
+      index: genomePosFilterIndex(metadata.index),
+      // `[]` rather than `null` so both halves clear through the same rule
+      // `mergeFiltersBySource` applies to every other selection source.
+      value: range ?? [],
+      source: 'genome_selection',
+      column_name: posColumn,
+      interactive_component_type: 'RangeSlider',
+      metadata: {
+        dc_id: metadata.dc_id,
+        column_name: posColumn,
+        interactive_component_type: 'RangeSlider',
+        selection_column: posColumn,
+      },
+    },
+  ];
+}
+
+/**
+ * The columns one genomic tile binds for the region roles.
+ *
+ * Every genomic kind names these three differently (`chr_col`/`pos_col`,
+ * `chromosome_col`/`position_col`, `chrom_col`/`start_col`/`end_col`,
+ * `contig_col`, `chrom1_col`/`start1_col`), so the mapping from a kind's
+ * config to this shape lives in one place:
+ * `components/advanced_viz/genomicAxis.ts`.
+ */
+export interface RegionRoleColumns {
+  chrom: string;
+  start: string;
+  /** Interval kinds only (a bin, an exon, a segment). A range filter on the
+   *  end column widens the region the same way one on the start column does. */
+  end?: string;
+}
+
+/**
+ * Read a region back out of the dashboard's filter list, for a tile that
+ * follows one instead of emitting it.
+ *
+ * Deliberately column-keyed rather than index-keyed: the point of the region
+ * filter is that *any* tile or sidebar control naming the same chromosome and
+ * position columns drives it, so a plain `Chromosome` multi-select in the left
+ * panel zooms a following tile exactly as another tile's brush does. Only a
+ * single chromosome yields a region: "chr1 and chr7" is not somewhere to zoom.
+ *
+ * Two call shapes, because the roles a kind binds are not always two columns:
+ * the historical `(filters, chrColumn, posColumn)` and a role map
+ * `(filters, {chrom, start, end?})` for interval kinds, where a range filter
+ * on either coordinate column contributes to the region.
+ */
+export function regionFromFilters(
+  filters: InteractiveFilter[],
+  roles: RegionRoleColumns,
+): { chrom: string; start: number; end: number } | null;
+export function regionFromFilters(
+  filters: InteractiveFilter[],
+  chrColumn: string,
+  posColumn: string,
+): { chrom: string; start: number; end: number } | null;
+export function regionFromFilters(
+  filters: InteractiveFilter[],
+  chrOrRoles: string | RegionRoleColumns,
+  posColumn?: string,
+): { chrom: string; start: number; end: number } | null {
+  const roles: RegionRoleColumns =
+    typeof chrOrRoles === 'string'
+      ? { chrom: chrOrRoles, start: posColumn ?? '' }
+      : chrOrRoles;
+  let chrom: string | null = null;
+  let range: [number, number] | null = null;
+  for (const f of filters) {
+    const column = f.column_name ?? f.metadata?.column_name;
+    if (column === roles.chrom && Array.isArray(f.value)) {
+      if (f.value.length !== 1) return null;
+      chrom = String(f.value[0]);
+    } else if (
+      (column === roles.start || (roles.end && column === roles.end)) &&
+      Array.isArray(f.value) &&
+      f.value.length === 2
+    ) {
+      const lo = Number(f.value[0]);
+      const hi = Number(f.value[1]);
+      if (Number.isFinite(lo) && Number.isFinite(hi) && hi > lo) {
+        // Start and end columns of the same interval kind describe one span,
+        // so two range filters widen to their union rather than the last seen.
+        range = range
+          ? [Math.min(range[0], lo), Math.max(range[1], hi)]
+          : [lo, hi];
+      }
+    }
+  }
+  if (!chrom) return null;
+  // A chromosome with no range is still somewhere to zoom: the contig.
+  if (!range) return { chrom, start: 0, end: Number.POSITIVE_INFINITY };
+  return { chrom, start: range[0], end: range[1] };
+}
+
+/**
  * The filter list a selection-source component should render against: every
  * dashboard filter *except* the one it emitted itself.
  *
@@ -92,6 +440,80 @@ export function filtersExcludingOwn(
   source: InteractiveFilterSource,
 ): InteractiveFilter[] {
   return filters.filter((f) => !(f.index === componentIndex && f.source === source));
+}
+
+/** Whether the dashboard still holds a non-empty selection this component emitted. */
+export function hasOwnSelection(
+  filters: InteractiveFilter[],
+  componentIndex: string,
+  source: InteractiveFilterSource,
+): boolean {
+  return filters.some(
+    (f) =>
+      f.index === componentIndex &&
+      f.source === source &&
+      Array.isArray(f.value) &&
+      f.value.length > 0,
+  );
+}
+
+/**
+ * The sources a tile's "clear selection" affordance covers: the selections a
+ * reader makes by pointing at the tile itself (a lasso, a row pick, a map
+ * polygon, a thumbnail, a genome brush).
+ *
+ * Left out on purpose: `tree_selection` and `axis_selection`, whose tiles
+ * carry their own clear control and keep their visual state locally, so a
+ * clear from the chrome would drop the filter and leave the clade or the brush
+ * drawn; and `group_filter`, which is never in the user's filter list.
+ */
+const CLEARABLE_SELECTION_SOURCES: ReadonlySet<InteractiveFilterSource> = new Set([
+  'scatter_selection',
+  'table_selection',
+  'map_selection',
+  'image_selection',
+  'genome_selection',
+]);
+
+/** The selection one tile currently contributes to the dashboard. */
+export interface OwnSelection {
+  /** The non-empty entries this tile emitted, the region's position half
+   *  included. Empty when the tile has nothing selected. */
+  filters: InteractiveFilter[];
+  /** How many values are selected, for the "Clear selection (N)" label. A
+   *  region's position half is a range, not picked values, so it adds none. */
+  count: number;
+}
+
+/**
+ * Read back the selection a tile has emitted, keyed on its own index (and the
+ * `::pos` index of a genome region's second half) so another tile's selection
+ * on the same column never counts as this one's.
+ */
+export function ownSelection(
+  filters: readonly InteractiveFilter[],
+  componentIndex: string,
+): OwnSelection {
+  const posIndex = genomePosFilterIndex(componentIndex);
+  const own: InteractiveFilter[] = [];
+  let count = 0;
+  for (const f of filters) {
+    if (f.index !== componentIndex && f.index !== posIndex) continue;
+    if (!f.source || !CLEARABLE_SELECTION_SOURCES.has(f.source)) continue;
+    const v = f.value;
+    if (v == null || (Array.isArray(v) && v.length === 0)) continue;
+    own.push(f);
+    if (f.index === componentIndex) count += Array.isArray(v) ? v.length : 1;
+  }
+  return { filters: own, count };
+}
+
+/** The cleared form of each entry, the `[]` shape `mergeFiltersBySource`
+ *  drops. Emitting these one by one is what "clear this tile" means. */
+export function clearedSelectionFilters(
+  filters: readonly InteractiveFilter[],
+): InteractiveFilter[] {
+  return filters.map((f) => ({ ...f, value: [] }));
 }
 
 /**
@@ -230,4 +652,48 @@ export function enrichFilterWithDcId(
         update.interactive_component_type ?? update.metadata?.interactive_component_type,
     },
   };
+}
+
+/**
+ * Whether this component can produce a selection that becomes an analysis
+ * group ("select & compare", issue #89).
+ *
+ * One predicate for all four selection sources, so the capability marker the
+ * chrome draws and the gates the renderers use can never disagree about what
+ * is selectable. Each arm mirrors its renderer's own enable check:
+ *
+ * - `figure` — only scatter / scatter_3d carry the per-row customdata a
+ *   meaningful selection needs; aggregated visus emit per-bin envelopes.
+ * - `table`  — row selection is opt-in per component.
+ * - `map`    — see `isMapSelectionEnabled` (choropleth is excluded).
+ * - `image`  — a gallery selects thumbnails, which requires an image column.
+ * - `advanced_viz`: see `advancedVizSelectionColumn`, i.e. the embedding,
+ *   Manhattan, profile and scatter plots and the UpSet's intersections, each
+ *   opt-in and each needing a resolvable column.
+ *
+ * `hasHandler` folds in the caller's "is anyone listening" check, so read-only
+ * hosts (catalog, project previews) advertise nothing.
+ */
+export function supportsSelectionGrouping(
+  metadata: StoredMetadata,
+  hasHandler: boolean,
+): boolean {
+  if (!hasHandler) return false;
+  switch (metadata.component_type) {
+    case 'figure':
+      return (
+        Boolean(metadata.selection_enabled) &&
+        (metadata.visu_type === 'scatter' || metadata.visu_type === 'scatter_3d')
+      );
+    case 'table':
+      return Boolean(metadata.row_selection_enabled);
+    case 'map':
+      return isMapSelectionEnabled(metadata, true);
+    case 'image':
+      return Boolean(metadata.image_column);
+    case 'advanced_viz':
+      return advancedVizSelectionColumn(metadata) !== undefined;
+    default:
+      return false;
+  }
 }

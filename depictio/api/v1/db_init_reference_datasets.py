@@ -1,6 +1,7 @@
 """Reference dataset initialization with static ID management."""
 
 import copy
+import json
 import os
 import re as _re
 from pathlib import Path
@@ -9,13 +10,33 @@ from typing import Any, cast
 from bson import ObjectId
 
 from depictio.api.v1.configs.logging_init import logger
-from depictio.cli.cli.utils.templates import _apply_conditionals, substitute_template_variables
+from depictio.cli.cli.utils.templates import (
+    _apply_conditionals,
+    materialize_recipe_seeds,
+    substitute_template_variables,
+)
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.templates import TemplateConditional
 from depictio.models.models.users import Permission, UserBase, UserBeanie
 from depictio.models.utils import get_config
 
 _UNRESOLVED_VAR_RE = _re.compile(r"\{[A-Z0-9_]+\}")
+
+# The bundled project.yaml files hardcode the container install path. Rewriting it
+# to the real package root is a no-op in the image (where both are /app/depictio)
+# and lets the same seeds load from a pip/uv install.
+_CONTAINER_PACKAGE_ROOT = "/app/depictio/"
+_PACKAGE_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _relocate_container_paths(obj: Any) -> Any:
+    if isinstance(obj, str) and obj.startswith(_CONTAINER_PACKAGE_ROOT):
+        return str(_PACKAGE_ROOT / obj[len(_CONTAINER_PACKAGE_ROOT) :])
+    if isinstance(obj, dict):
+        return {k: _relocate_container_paths(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_relocate_container_paths(item) for item in obj]
+    return obj
 
 
 def _has_unresolved_vars(obj: Any) -> bool:
@@ -37,6 +58,14 @@ STATIC_IDS = {
         "data_collections": {
             "iris_table": "646b0f3c1e4a2d7f8e5b8c9c",
         },
+        # Without this table `reseed_project --dashboards-only iris` deletes
+        # nothing, and `create_dashboard_from_json` never overwrites an
+        # existing document — so the reseed reported success and changed
+        # nothing at all.
+        "dashboards": {
+            "iris": "6824cb3b89d2b72169309737",
+            "iris_petal": "6a75a191f5e6ff34386c8f0b",
+        },
     },
     "penguins": {
         "project": "646b0f3c1e4a2d7f8e5b8c9d",
@@ -45,6 +74,10 @@ STATIC_IDS = {
             "physical_features": "646b0f3c1e4a2d7f8e5b8c9f",
             "demographic_data": "646b0f3c1e4a2d7f8e5b8ca0",
             "penguins_complete": "646b0f3c1e4a2d7f8e5b8ca1",  # Join result
+        },
+        "dashboards": {
+            "penguins": "6824cb3b89d2b72169309738",
+            "penguins_island_season": "6a75a191f5e6ff34386c8f0c",
         },
     },
     "ampliseq": {
@@ -84,9 +117,18 @@ STATIC_IDS = {
             "alpha_diversity_multi_canonical": "646b0f3c1e4a2d7f8e5b8cda",
             "phylogenetic_tree_canonical": "646b0f3c1e4a2d7f8e5b8cdb",
             "phylogenetic_tree_metadata_canonical": "646b0f3c1e4a2d7f8e5b8cdc",
+            # Overview figures: reads kept per sample, PERMANOVA per metric.
+            "read_tracking": "646b0f3c1e4a2d7f8e5b8cdd",
+            "beta_adonis": "646b0f3c1e4a2d7f8e5b8cde",
         },
         "dashboards": {
-            "ampliseq_multiqc": "646b0f3c1e4a2d7f8e5b8cb7",
+            # The main tab's `_id` IS the project id — the same convention
+            # advanced_viz_showcase follows (…8d00 for both). It was listed as
+            # …8cb7, an id no shipped seed carries, so every dashboard-level
+            # cleanup keyed on this table missed the main tab. The main tab is
+            # the Overview; MultiQC, the main tab until v2, is a child tab.
+            "ampliseq_overview": "646b0f3c1e4a2d7f8e5b8ca2",
+            "ampliseq_multiqc": "646b0f3c1e4a2d7f8e5b8cc6",
             # Phase E — Alpha Diversity (tab 1) + Phylogeny (tab 5) tabs.
             "ampliseq_alpha_diversity": "646b0f3c1e4a2d7f8e5b8cbe",
             "ampliseq_community": "646b0f3c1e4a2d7f8e5b8cb3",
@@ -97,6 +139,19 @@ STATIC_IDS = {
             # added alongside Embedding. Bray-Curtis tile lands in Phase D.
             "ampliseq_ordination": "646b0f3c1e4a2d7f8e5b8cc2",
             "ampliseq_phylogeny": "646b0f3c1e4a2d7f8e5b8cbf",
+            # Reserved rather than seeded. The SIDLE tab is in `base.yaml` and a
+            # real run with SIDLE outputs builds it, but the reference DATA_ROOT
+            # (the project directory in this repo) ships no sidle TSVs, so the
+            # tab is pruned before export and there is no `.db_seeds` file for
+            # it. The id is pinned here because the one `base.yaml` used to
+            # carry, …8d06, is the `embedding_umap` DC of advanced_viz_showcase.
+            "ampliseq_sidle": "646b0f3c1e4a2d7f8e5b8cc5",
+            # The two demo tabs `build_reference_dashboard.py` adds on top of
+            # base.yaml. They bind columns only the reference metadata has
+            # (coordinates, a sampling date, CTD readings), which is why they
+            # live in `reference_extended.yaml` and not in the nf-core template.
+            "ampliseq_sampling_campaign": "646b0f3c1e4a2d7f8e5b8cc3",
+            "ampliseq_environment": "646b0f3c1e4a2d7f8e5b8cc4",
         },
     },
     "ampliseq_base": {
@@ -150,6 +205,42 @@ STATIC_IDS = {
             # never registered here, so seeded deploys 404'd on these tiles.
             "coverage_track_demo": "646b0f3c1e4a2d7f8e5b8d50",
             "categorical_flow_demo": "646b0f3c1e4a2d7f8e5b8d51",
+            # Same omission as the two above, for the benchmark family. Their
+            # four tabs ship YAML with no `dashboard_id` and are not boot-seeded,
+            # but project.yaml declares the DCs, and every declared DC has to be
+            # registered here or the seed build cannot resolve the project.
+            "benchmark_demo": "646b0f3c1e4a2d7f8e5b8d60",
+            "roc_curve_demo": "646b0f3c1e4a2d7f8e5b8d61",
+            # Life-science kinds added with the nf-core template lot: each one
+            # exists because a template had to fall back to figure code mode.
+            "profile_demo": "646b0f3c1e4a2d7f8e5b8d80",
+            "signal_matrix_demo": "646b0f3c1e4a2d7f8e5b8d81",
+            "fusion_structure_demo": "646b0f3c1e4a2d7f8e5b8d82",
+            "gene_arrow_track_demo": "646b0f3c1e4a2d7f8e5b8d83",
+            "gsea_running_score_demo": "646b0f3c1e4a2d7f8e5b8d84",
+            "sashimi_demo": "646b0f3c1e4a2d7f8e5b8d85",
+            "scatter_xy_demo": "646b0f3c1e4a2d7f8e5b8d86",
+            "sashimi_coverage_demo": "646b0f3c1e4a2d7f8e5b8d87",
+            # nf-core template lot 2: contact_map, knee_plot, damage_profile.
+            "contact_map_demo": "646b0f3c1e4a2d7f8e5b8d88",
+            "knee_plot_demo": "646b0f3c1e4a2d7f8e5b8d89",
+            "damage_profile_demo": "646b0f3c1e4a2d7f8e5b8d8a",
+            # Kinds added with the lot 2 remediation wave; ids as declared in
+            # the showcase project.yaml (transcript_structure took 8d9c).
+            "group_compare_demo": "646b0f3c1e4a2d7f8e5b8d8b",
+            "cnv_profile_demo": "646b0f3c1e4a2d7f8e5b8d8d",
+            "genome_chord_demo": "646b0f3c1e4a2d7f8e5b8d8e",
+            "transcript_structure_demo": "646b0f3c1e4a2d7f8e5b8d9c",
+            # The two portal-shaped kinds sit in their own 8dbx block, as the
+            # showcase project.yaml explains: several kind agents reserve ids
+            # in that file at once.
+            "record_card_demo": "646b0f3c1e4a2d7f8e5b8db1",
+            "parallel_coordinates_demo": "646b0f3c1e4a2d7f8e5b8db2",
+            # Locus tracks on the contact-map loci (the 8dcx block), and the
+            # somatic SNVs behind the Manhattan tab's rainfall view.
+            "locus_peaks_demo": "646b0f3c1e4a2d7f8e5b8dc1",
+            "locus_coverage_demo": "646b0f3c1e4a2d7f8e5b8dc2",
+            "somatic_snv_demo": "646b0f3c1e4a2d7f8e5b8dc3",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
@@ -170,20 +261,46 @@ STATIC_IDS = {
             "advanced_viz_rarefaction": "646b0f3c1e4a2d7f8e5b8d22",
             "advanced_viz_ancombc": "646b0f3c1e4a2d7f8e5b8d23",
             "advanced_viz_da_barplot": "646b0f3c1e4a2d7f8e5b8d24",
-            "advanced_viz_enrichment": "646b0f3c1e4a2d7f8e5b8d26",
             "advanced_viz_complex_heatmap": "646b0f3c1e4a2d7f8e5b8d27",
             "advanced_viz_upset": "646b0f3c1e4a2d7f8e5b8d29",
-            "advanced_viz_ma": "646b0f3c1e4a2d7f8e5b8d40",
             "advanced_viz_dotplot": "646b0f3c1e4a2d7f8e5b8d41",
             "advanced_viz_lollipop": "646b0f3c1e4a2d7f8e5b8d42",
-            "advanced_viz_qq": "646b0f3c1e4a2d7f8e5b8d43",
             "advanced_viz_sunburst": "646b0f3c1e4a2d7f8e5b8d44",
             "advanced_viz_oncoplot": "646b0f3c1e4a2d7f8e5b8d45",
+            "advanced_viz_coverage_track": "646b0f3c1e4a2d7f8e5b8d46",
+            "advanced_viz_categorical_flow": "646b0f3c1e4a2d7f8e5b8d47",
+            "advanced_viz_profile": "646b0f3c1e4a2d7f8e5b8d70",
+            "advanced_viz_signal_matrix": "646b0f3c1e4a2d7f8e5b8d71",
+            "advanced_viz_fusion_structure": "646b0f3c1e4a2d7f8e5b8d72",
+            "advanced_viz_gene_arrow_track": "646b0f3c1e4a2d7f8e5b8d73",
+            "advanced_viz_gsea_running_score": "646b0f3c1e4a2d7f8e5b8d74",
+            "advanced_viz_sashimi": "646b0f3c1e4a2d7f8e5b8d75",
+            "advanced_viz_scatter_xy": "646b0f3c1e4a2d7f8e5b8d76",
+            "advanced_viz_contact_map": "646b0f3c1e4a2d7f8e5b8d77",
+            "advanced_viz_knee_plot": "646b0f3c1e4a2d7f8e5b8d78",
+            "advanced_viz_damage_profile": "646b0f3c1e4a2d7f8e5b8d79",
+            "advanced_viz_genome_view": "646b0f3c1e4a2d7f8e5b8d7a",
+            "advanced_viz_group_compare": "646b0f3c1e4a2d7f8e5b8d7b",
+            "advanced_viz_transcript_structure": "646b0f3c1e4a2d7f8e5b8d7c",
+            "advanced_viz_cnv_profile": "646b0f3c1e4a2d7f8e5b8d7d",
+            "advanced_viz_genome_chord": "646b0f3c1e4a2d7f8e5b8d7e",
+            "advanced_viz_record_card": "646b0f3c1e4a2d7f8e5b8d7f",
+            # 8d80 is already the profile_demo collection, so the parallel
+            # coordinates tab takes the next free id in the 8dbx block.
+            "advanced_viz_parallel_coordinates": "646b0f3c1e4a2d7f8e5b8db0",
+            # The locus section (contact matrix, CTCF peaks, ChIP coverage and
+            # genes on one region) opens the 8dcx block; 8dc1 and 8dc2 are its
+            # collections, 8dc3 the somatic SNVs of the Manhattan tab.
+            "advanced_viz_locus_section": "646b0f3c1e4a2d7f8e5b8dc0",
+            "advanced_viz_benchmark_pr": "646b0f3c1e4a2d7f8e5b8d62",
+            "advanced_viz_benchmark_confusion": "646b0f3c1e4a2d7f8e5b8d63",
+            "advanced_viz_benchmark_ci": "646b0f3c1e4a2d7f8e5b8d64",
         },
     },
-    # nf-core/viralrecon 3.0.0 viral-genome analysis template — five-tab
-    # dashboard (MultiQC + Coverage & Depth + Lineage & Clustering + Sample
-    # QC + Variants). Static IDs align with the dashboard_ids hardcoded in
+    # nf-core/viralrecon 3.0.0 viral-genome analysis template, a six-tab
+    # family: the Overview (main tab) + MultiQC + Sample QC + Coverage & Depth
+    # + Variants + Lineage & Clustering. Static IDs align with the dashboard_ids
+    # hardcoded in
     # ``depictio/projects/nf-core/viralrecon/3.0.0/dashboards/base.yaml``.
     # Seed JSONs under ``.db_seeds/`` are generated by running the depictio
     # CLI ingest against a viralrecon test-data run; see
@@ -213,7 +330,8 @@ STATIC_IDS = {
         },
         "dashboards": {
             # Main tab id equals project_id (same convention as ampliseq).
-            "viralrecon_multiqc": "746b0f3c1e4a2d7f8e5b9ca2",
+            "viralrecon_overview": "746b0f3c1e4a2d7f8e5b9ca2",
+            "viralrecon_multiqc": "746b0f3c1e4a2d7f8e5b9cc6",
             "viralrecon_coverage_depth": "746b0f3c1e4a2d7f8e5b9cb5",
             "viralrecon_lineage_clustering": "746b0f3c1e4a2d7f8e5b9cb3",
             "viralrecon_variants": "746b0f3c1e4a2d7f8e5b9cb4",
@@ -221,6 +339,41 @@ STATIC_IDS = {
         },
     },
 }
+
+# Reference projects that are NOT seeded by default. They exist for the test
+# suite, so they stay out of ordinary deployments until DEPICTIO_SEED_EXTRA_PROJECTS
+# names one.
+OPTIONAL_DATASETS = ("catalog_conformance",)
+
+
+def _load_generated_static_ids(dataset_name: str) -> dict[str, Any]:
+    """Read an id table a project generates for itself.
+
+    The conformance project's collections are derived from the catalog, so they
+    come and go with it — a hand-maintained id table above would need editing
+    every time a module is added, which is the friction that project exists to
+    remove. Its generator writes `static_ids.json` instead.
+    """
+    path = (
+        Path(__file__).resolve().parents[2] / "projects" / "init" / dataset_name / "static_ids.json"
+    )
+    if not path.parent.is_dir():
+        # Not installed at all (the published wheel ships iris and penguins
+        # only): nothing to seed, and nothing worth a warning on every start.
+        return {}
+    try:
+        return cast(dict[str, Any], json.loads(path.read_text()))
+    except (OSError, ValueError) as exc:
+        # Best-effort, like every other reference dataset: a missing or broken
+        # id table drops this one project rather than taking startup down.
+        logger.warning(f"No usable static ids for optional dataset '{dataset_name}': {exc}")
+        return {}
+
+
+for _optional in OPTIONAL_DATASETS:
+    _ids = _load_generated_static_ids(_optional)
+    if _ids:
+        STATIC_IDS[_optional] = _ids
 
 
 class ReferenceDatasetRegistry:
@@ -386,14 +539,39 @@ class ReferenceDatasetRegistry:
                     f"for project {project.name}"
                 )
 
-    # Dataset name → relative path under depictio/projects/
+    # Dataset name → relative path under depictio/projects/. Versioned template
+    # projects (nf-core) are declared without a version: the seeding resolves the
+    # highest version directory at run time so a new template drop (e.g. ampliseq
+    # 2.18.0) is picked up with zero code changes.
     DATASET_PATHS: dict[str, str] = {
         "iris": os.path.join("init", "iris"),
         "penguins": os.path.join("init", "penguins"),
-        "ampliseq": os.path.join("nf-core", "ampliseq", "2.16.0"),
+        "ampliseq": os.path.join("nf-core", "ampliseq"),
         "advanced_viz_showcase": os.path.join("init", "advanced_viz_showcase"),
-        "viralrecon": os.path.join("nf-core", "viralrecon", "3.0.0"),
+        "viralrecon": os.path.join("nf-core", "viralrecon"),
+        "catalog_conformance": os.path.join("init", "catalog_conformance"),
     }
+
+    @classmethod
+    def resolve_dataset_rel_path(cls, dataset_name: str) -> str:
+        """Relative path under depictio/projects/ with the version dir resolved.
+
+        Non-versioned datasets pass through; versioned ones (no template YAML at
+        the declared path) get their highest version directory appended.
+        """
+        from depictio.cli.cli.utils.templates import latest_template_version
+
+        rel_path = cls.DATASET_PATHS[dataset_name]
+        base_dir = Path(__file__).resolve().parents[2] / "projects" / rel_path
+        if any((base_dir / f).is_file() for f in ("template.yaml", "project.yaml")):
+            return rel_path
+        version = latest_template_version(base_dir)
+        if version is None:
+            raise FileNotFoundError(
+                f"No template YAML (direct or versioned) for dataset '{dataset_name}' "
+                f"under {base_dir}"
+            )
+        return os.path.join(rel_path, version)
 
     @classmethod
     def resolve_template_for_init(
@@ -430,6 +608,13 @@ class ReferenceDatasetRegistry:
                 continue
             variables[var_name] = var_default.replace("{DATA_ROOT}", data_root)
         provided_vars: set[str] = set(variables.keys())
+        # Declared variable defaults (e.g. GENOME) fill in whatever the reference left unset;
+        # like the CLI, a default satisfies `required` but does not fire `if_var_present`.
+        for var in template_section.get("variables") or []:
+            if var.get("default") is not None:
+                variables.setdefault(
+                    var["name"], str(var["default"]).replace("{DATA_ROOT}", data_root)
+                )
         config = substitute_template_variables(config, variables)
 
         # 3. Apply conditional DC/link removal (pass dummy template_dir — init ignores dashboards)
@@ -458,62 +643,17 @@ class ReferenceDatasetRegistry:
                 and lnk.get("target_dc_tag") not in skipped_dc_tags
             ]
 
-        # 5. Convert recipe DCs → file-scan DCs (skipping any whose seed file is missing)
-        missing_seed_dc_tags: set[str] = set()
-        for workflow in config.get("workflows", []):
-            surviving = []
-            for dc in workflow.get("data_collections", []):
-                dc_config = dc.get("config", {})
-                if dc_config.get("source") == "transformed" and "transform" in dc_config:
-                    dc_tag = dc["data_collection_tag"]
-                    # Convention: pre-computed files are named {dc_tag}.tsv
-                    pre_computed_path = os.path.join(data_root, f"{dc_tag}.tsv")
-                    if not os.path.exists(pre_computed_path):
-                        # Drop the DC rather than letting the workflow scan abort on a
-                        # missing recipe seed (one missing file otherwise sinks every
-                        # other DC in the workflow — see scan_files_for_data_collection).
-                        missing_seed_dc_tags.add(dc_tag)
-                        logger.warning(
-                            f"Init resolver: skipping recipe DC '{dc_tag}' — "
-                            f"pre-computed seed not found at {pre_computed_path}"
-                        )
-                        continue
-                    # Keep ``source: transformed`` on the DC so the React
-                    # viewer (data-source info card, admin panel, builder
-                    # dropdown) surfaces the lineage — the data IS the output
-                    # of a recipe, just materialised as a seed file rather
-                    # than computed at scan time. Only the ``transform`` step
-                    # itself is dropped (it's been replaced with the file scan).
-                    dc_config.pop("transform", None)
-                    dc_config["scan"] = {
-                        "mode": "single",
-                        "scan_parameters": {"filename": pre_computed_path},
-                    }
-                    # Bundled recipe seeds are tab-separated by convention
-                    # ({data_root}/{dc_tag}.tsv). The template's original
-                    # `dc_specific_properties.format` describes the recipe's
-                    # *input* source (e.g. summary_metrics consumes a real
-                    # CSV from multiqc), which is irrelevant once we've
-                    # replaced the recipe with a file_scan. Force the seed
-                    # format to TSV so polars uses the right separator —
-                    # otherwise a CSV-declared, TSV-bundled DC parses the
-                    # whole tab-row as one column.
-                    dc_specific = dc_config.get("dc_specific_properties") or {}
-                    dc_specific["format"] = "tsv"
-                    dc_config["dc_specific_properties"] = dc_specific
-                    logger.debug(
-                        f"Init resolver: converted recipe DC '{dc_tag}' → file scan: {pre_computed_path}"
-                    )
-                surviving.append(dc)
-            workflow["data_collections"] = surviving
-
+        # 5. Convert recipe DCs → file-scan DCs (dropping any whose seed is missing).
+        #    Shared with the CLI's --template path so the two producers cannot
+        #    drift; `drop_missing=True` keeps the init behaviour where one absent
+        #    seed would otherwise sink every other DC in the workflow (see
+        #    scan_files_for_data_collection).
+        _, missing_seed_dc_tags = materialize_recipe_seeds(config, data_root, drop_missing=True)
         if missing_seed_dc_tags:
-            config["links"] = [
-                lnk
-                for lnk in config.get("links", [])
-                if lnk.get("source_dc_tag") not in missing_seed_dc_tags
-                and lnk.get("target_dc_tag") not in missing_seed_dc_tags
-            ]
+            logger.warning(
+                f"Init resolver: dropped {len(missing_seed_dc_tags)} recipe DC(s) "
+                f"without a pre-computed seed: {', '.join(missing_seed_dc_tags)}"
+            )
 
         return config
 
@@ -522,7 +662,7 @@ class ReferenceDatasetRegistry:
         cls, dataset_name: str, admin_user: UserBeanie, token_payload: dict[str, Any]
     ) -> dict[str, Any]:
         """Create a reference project with proper static IDs."""
-        rel_path = cls.DATASET_PATHS[dataset_name]
+        rel_path = cls.resolve_dataset_rel_path(dataset_name)
         project_dir = os.path.join(
             os.path.dirname(__file__),
             "..",
@@ -537,11 +677,10 @@ class ReferenceDatasetRegistry:
 
         if os.path.exists(template_path):
             raw_config = get_config(template_path)
-            # Resolve for Docker init: /app/depictio/projects/<rel_path>
-            data_root = f"/app/depictio/projects/{rel_path}"
+            data_root = str(_PACKAGE_ROOT / "projects" / rel_path)
             project_config = cls.resolve_template_for_init(raw_config, data_root)
         elif os.path.exists(project_yaml_path):
-            project_config = get_config(project_yaml_path)
+            project_config = _relocate_container_paths(get_config(project_yaml_path))
         else:
             raise FileNotFoundError(
                 f"No template.yaml or project.yaml found for dataset '{dataset_name}' in {project_dir}"
@@ -608,15 +747,45 @@ class ReferenceDatasetRegistry:
 
         # Add template_origin for template-based projects (ampliseq)
         if os.path.exists(template_path):
-            from depictio.models.models.templates import TemplateOrigin
+            from depictio.models.models.templates import ProvenanceSpec, TemplateOrigin
 
             raw_template = get_config(template_path)
             tmpl = raw_template.get("template", {})
+
+            # Collect the run's provenance the same way the CLI does. This path
+            # is not the CLI's `resolve_template`, so it has to ask explicitly;
+            # without it a seeded project ships a template_origin whose
+            # run_provenance is empty and the ingestion report's provenance
+            # section (and the dashboard Settings drawer) render blank.
+            #
+            # The bundled projects carry a trimmed pipeline_info/ for exactly
+            # this. Best-effort: a project without one keeps an empty list, and
+            # a malformed file must not stop a deployment from booting.
+            run_provenance: list = []
+            run_provenance_files: list = []
+            try:
+                from depictio.cli.cli.utils.templates import collect_run_provenance
+
+                spec_raw = tmpl.get("provenance")
+                spec = ProvenanceSpec.model_validate(spec_raw) if spec_raw else None
+                entries, files = collect_run_provenance(data_root, spec)
+                run_provenance = [e.model_dump() for e in entries]
+                run_provenance_files = files
+                if entries:
+                    logger.info(
+                        f"Collected {len(entries)} provenance entries for {dataset_name} "
+                        f"from {len(files)} file(s)"
+                    )
+            except Exception as exc:  # noqa: BLE001 - provenance is never load-bearing
+                logger.warning(f"Provenance collection failed for {dataset_name}: {exc}")
+
             project_config["template_origin"] = TemplateOrigin(
                 template_id=tmpl.get("template_id", dataset_name),
                 template_version=tmpl.get("version", "1.0.0"),
                 data_root=data_root,
                 variables=tmpl.get("reference", {}).get("vars", {}),
+                run_provenance=run_provenance,
+                run_provenance_files=run_provenance_files,
             ).model_dump()
 
         # Extract and remove _static_dc_id from join definitions (not allowed in ProjectBeanie)
@@ -713,6 +882,7 @@ async def create_reference_datasets(
     admin_user: UserBeanie,
     token_payload: dict[str, Any],
     only: set[str] | None = None,
+    extra: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Create all reference datasets (iris, penguins, ampliseq).
 
@@ -721,9 +891,12 @@ async def create_reference_datasets(
         token_payload: Default admin token payload for authenticated creation.
         only: Optional allowlist of dataset names to seed (from
             ``DEPICTIO_SEED_PROJECTS``). ``None`` seeds all of them.
+        extra: Optional dataset names to seed *in addition* (from
+            ``DEPICTIO_SEED_EXTRA_PROJECTS``). Only names in
+            ``OPTIONAL_DATASETS`` are honoured.
 
     Note: ampliseq dataset uses 16S rRNA microbiome data from nf-core/ampliseq.
-    Data files are included under depictio/projects/nf-core/ampliseq/2.16.0/.
+    Data files are included under depictio/projects/nf-core/ampliseq/<latest version>/.
     """
     created_projects = []
 
@@ -757,7 +930,15 @@ async def create_reference_datasets(
             ", ".join(datasets_to_create) or "(none matched)",
         )
     else:
-        datasets_to_create = all_datasets
+        datasets_to_create = list(all_datasets)
+
+    # Optional datasets are additive, not part of the default set. Appending
+    # after the allowlist is applied is deliberate: asking for the conformance
+    # project must not also mean giving up iris and the rest.
+    for name in OPTIONAL_DATASETS:
+        if name in (extra or set()) and name in STATIC_IDS:
+            datasets_to_create.append(name)
+            logger.info("DEPICTIO_SEED_EXTRA_PROJECTS — also seeding: %s", name)
 
     for dataset_name in datasets_to_create:
         logger.info(f"Creating reference dataset: {dataset_name}")

@@ -28,8 +28,9 @@ COMPONENT_DC_TYPE_MAPPING: dict[str, list[str]] = {
     # Advanced viz consumes tabular DCs whose columns satisfy one of the
     # canonical viz schemas (see advanced_viz/schemas.py). The viz-side
     # binding validator enforces the exact column shape; this entry only
-    # gates DC-type compatibility.
-    "AdvancedViz": ["table"],
+    # gates DC-type compatibility. A phylogeny DC is the one non-table source:
+    # the phylogenetic kind is bound to its Newick tree, which has no columns.
+    "AdvancedViz": ["table", "phylogeny"],
     # Text component doesn't use data collections (no entry needed)
     # Note: Map components also use "geojson" DCs for choropleth boundaries,
     # but the geojson DC is referenced via geojson_dc_id, not the primary DC binding.
@@ -46,6 +47,7 @@ DC_COMPONENT_TYPE_MAPPING: dict[str, list[str]] = {
     "image": ["Image"],
     "jbrowse2": ["JBrowse2"],
     "geojson": ["Map"],
+    "phylogeny": ["AdvancedViz"],
 }
 
 

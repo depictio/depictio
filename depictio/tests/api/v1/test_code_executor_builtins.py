@@ -1,0 +1,145 @@
+"""The builtins a code-mode figure may call.
+
+RestrictedPython's `safe_builtins` is not the whole allowlist: the executor
+adds to it. A builtin missing from both surfaces only when the figure runs,
+as a bare `NameError` inside the tile, so the set is worth pinning.
+"""
+
+from __future__ import annotations
+
+import plotly.express as px
+import polars as pl
+import pytest
+
+from depictio.api.v1.services.figure.code_executor import SimpleCodeExecutor
+
+PURE_BUILTINS = [
+    "max",
+    "min",
+    "sum",
+    "any",
+    "all",
+    "set",
+    "sorted",
+    "reversed",
+    "abs",
+    "round",
+    "len",
+    "range",
+    "list",
+    "dict",
+    "tuple",
+    "enumerate",
+    "zip",
+    "int",
+    "float",
+    "str",
+]
+
+
+def _frame() -> pl.DataFrame:
+    return pl.DataFrame({"x": [1.0, 4.0, 2.0], "y": [3.0, 1.0, 5.0]})
+
+
+@pytest.mark.parametrize("name", PURE_BUILTINS)
+def test_pure_builtin_is_bound_in_a_code_figure(name: str) -> None:
+    # Binding the name is the whole assertion: an unbound builtin raises
+    # NameError here exactly as it would mid-figure. The preprocessing step
+    # requires the snippet to create a variable, hence the assignment.
+    code = f"probe = {name}\nfig = px.scatter(df.to_pandas(), x='x', y='y')\n"
+    ok, _, message = SimpleCodeExecutor().execute_code(code, _frame())
+    assert ok, f"{name}: {message}"
+
+
+def test_max_sizes_a_reference_line():
+    """The shape that failed in production: a diagonal drawn to the data's own extent."""
+    code = (
+        "limit = max(1, int(max(df['x'].max() or 0, df['y'].max() or 0)))\n"
+        "fig = px.scatter(df.to_pandas(), x='x', y='y')\n"
+        "fig.add_shape(type='line', x0=0, y0=0, x1=limit, y1=limit)\n"
+    )
+    ok, fig, message = SimpleCodeExecutor().execute_code(code, _frame())
+    assert ok, message
+    assert fig.layout.shapes[0].x1 == 5
+
+
+def test_import_is_still_refused():
+    """The allowlist grew; the sandbox did not open."""
+    ok, _, message = SimpleCodeExecutor().execute_code(
+        "import os\nfig = px.scatter(df.to_pandas(), x='x', y='y')\n", _frame()
+    )
+    assert not ok
+    assert "import" in message.lower()
+
+
+def test_tuple_unpack_assignment_is_bound():
+    """`a, b = ...` compiles to `_unpack_sequence_`, which the for-loop guard does not cover.
+
+    The shape that failed in production: differentialabundance's
+    contrast-against-contrast tile picks two contrasts out of a sorted list,
+    and airrflow's clone ribbons unpack an RGB triple.
+    """
+    code = (
+        "names = sorted(['b', 'a'])\n"
+        "first, second = names[0], names[1]\n"
+        "probe = f'{first}{second}'\n"
+        "fig = px.scatter(df.to_pandas(), x='x', y='y')\n"
+    )
+    ok, _, message = SimpleCodeExecutor().execute_code(code, _frame())
+    assert ok, message
+
+
+def test_for_loop_unpacking_still_works():
+    """The neighbouring guard, pinned alongside so neither regresses alone."""
+    code = (
+        "total = 0\n"
+        "for idx, value in enumerate([1, 2, 3]):\n"
+        "    total = total + idx * value\n"
+        "fig = px.scatter(df.to_pandas(), x='x', y='y')\n"
+    )
+    ok, _, message = SimpleCodeExecutor().execute_code(code, _frame())
+    assert ok, message
+
+
+@pytest.mark.parametrize(
+    "assignment",
+    [
+        "labels = {}\nlabels['x'] = 'Temperature'",
+        "pdf = df.to_pandas()\npdf['z'] = pdf['x'] * 2",
+        "pdf = df.to_pandas()\npdf.loc[pdf['x'] > 1, 'x'] = 0",
+        "f = px.scatter(df.to_pandas(), x='x', y='y')\nf.layout.title.text = 'T'",
+    ],
+    ids=["dict", "pandas-column", "pandas-loc", "plotly-layout"],
+)
+def test_subscript_assignment_runs_in_a_code_figure(assignment: str) -> None:
+    """`obj[key] = value` compiles to `_write_(obj)[key] = value`.
+
+    The guard takes the object and returns what the write lands on; one that
+    took `(obj, key, value)` failed every subscript assignment with a
+    TypeError about missing arguments.
+    """
+    code = f"{assignment}\nfig = px.scatter(df.to_pandas(), x='x', y='y')\n"
+    ok, _, message = SimpleCodeExecutor().execute_code(code, _frame())
+    assert ok, message
+
+
+@pytest.mark.parametrize(
+    ("write", "patched"),
+    [
+        ("px.stash = []", lambda: hasattr(px, "stash")),
+        (
+            "pl.DataFrame.filter = lambda self, *a, **k: self",
+            lambda: pl.DataFrame.filter.__name__ == "<lambda>",
+        ),
+    ],
+    ids=["module-attribute", "class-method"],
+)
+def test_a_code_figure_cannot_patch_shared_modules(write: str, patched) -> None:
+    """The modules and classes in the globals are shared by every render in the
+    process: a write there would patch them for the next figure, another
+    user's included."""
+    code = f"{write}\nfig = px.scatter(df.to_pandas(), x='x', y='y')\n"
+    ok, _, message = SimpleCodeExecutor().execute_code(code, _frame())
+    assert not ok
+    assert "cannot write" in message
+    assert not patched()

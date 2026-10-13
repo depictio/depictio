@@ -15,6 +15,7 @@ from __future__ import annotations
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
     _GRID_COLS,
     _component_has_data,
+    _family_fans_out_a_filter,
     _recompact_main_grid,
     _tab_has_visualization_components,
     _tab_meets_minimum,
@@ -155,6 +156,36 @@ def test_recompact_packs_within_a_section():
     assert by_i["box-c"]["y"] == 2
 
 
+def test_recompact_packs_route_alternates_as_one_tile():
+    """Items on one slot are alternates: they keep one place in the row."""
+    items = [
+        {"i": "box-text", "x": 0, "y": 0, "w": 8, "h": 2},
+        {"i": "box-comp", "x": 0, "y": 2, "w": 5, "h": 4},
+        {"i": "box-comp-sintax", "x": 0, "y": 2, "w": 5, "h": 4},
+        {"i": "box-tree", "x": 5, "y": 2, "w": 3, "h": 4},
+        {"i": "box-alpha", "x": 0, "y": 6, "w": 4, "h": 4},
+        {"i": "box-ord", "x": 4, "y": 6, "w": 4, "h": 4},
+    ]
+    by_i = {it["i"]: it for it in _recompact_main_grid(items)}
+    assert by_i["box-comp"] == {**items[1]}
+    assert by_i["box-comp-sintax"] == {**items[2]}
+    assert by_i["box-tree"] == {**items[3]}
+    assert (by_i["box-alpha"]["w"], by_i["box-ord"]["w"]) == (4, 4)
+
+
+def test_recompact_leaves_untouched_sections_as_authored():
+    """Only a section that lost a component is re-packed; the others just stack."""
+    items = [
+        {"i": "box-a", "x": 0, "y": 0, "w": 4, "h": 2},  # QC: a lone half-width tile
+        {"i": "box-b", "x": 0, "y": 2, "w": 4, "h": 2},  # Taxonomy, lost its row-mate
+    ]
+    sections = {"box-a": "QC", "box-b": "Taxonomy"}
+    by_i = {it["i"]: it for it in _recompact_main_grid(items, sections, {"Taxonomy"})}
+    assert by_i["box-a"]["w"] == 4
+    assert by_i["box-b"]["w"] == 8
+    assert by_i["box-b"]["y"] == 2
+
+
 # --------------------------------------------------------------------------- #
 # _tab_meets_minimum / _tab_has_visualization_components
 # --------------------------------------------------------------------------- #
@@ -224,13 +255,35 @@ def _mqc(module, plot):
     }
 
 
-def _mqc_meta(modules, plots):
-    return {"multiqc_data": {"type": "MultiQC", "mqc_modules": modules, "mqc_plots": plots}}
+def _mqc_meta(modules, plots, general_stats=True):
+    return {
+        "multiqc_data": {
+            "type": "MultiQC",
+            "mqc_modules": modules,
+            "mqc_plots": plots,
+            "mqc_general_stats": general_stats,
+        }
+    }
 
 
-def test_mqc_general_stats_always_kept():
-    # Synthetic module is exempt even with empty module/plot metadata.
+def test_mqc_general_stats_kept_when_the_report_has_the_table():
+    # The synthetic module is in no `modules` array, so the module/plot checks
+    # cannot speak for it: presence of the table is what decides.
     assert _component_has_data(_mqc("general_stats", "general_stats"), _mqc_meta(set(), {})) is True
+
+
+def test_mqc_general_stats_kept_when_presence_is_unknown():
+    # Reports ingested before `has_general_stats` existed record nothing, and a
+    # working tile must not be dropped on that.
+    meta = {"multiqc_data": {"type": "MultiQC", "mqc_modules": None, "mqc_plots": None}}
+    assert _component_has_data(_mqc("general_stats", "general_stats"), meta) is True
+
+
+def test_mqc_general_stats_hidden_when_the_report_lacks_the_table():
+    # nf-core/chipseq 2.x: the run's `multiqc_config` drops the table, so the
+    # tile can only fail at render time and is pruned instead.
+    meta = _mqc_meta({"fastqc", "samtools"}, {}, general_stats=False)
+    assert _component_has_data(_mqc("general_stats", "general_stats"), meta) is False
 
 
 def test_mqc_absent_module_hidden():
@@ -260,3 +313,54 @@ def test_mqc_no_ingestion_record_keeps_component():
         _component_has_data(_mqc("snpeff", "Variant Effects by Impact"), _mqc_meta(None, None))
         is True
     )
+
+
+# --------------------------------------------------------------------------- #
+# _family_fans_out_a_filter
+# --------------------------------------------------------------------------- #
+
+
+def _doc(filter_sections=None, components=None) -> dict:
+    return {"filter_sections": filter_sections or [], "components": components or []}
+
+
+def test_family_filter_none_declared():
+    docs = [
+        _doc(
+            filter_sections=[{"name": "Sample", "persistent": False}],
+            components=[{"component_type": "interactive", "section": "Sample"}],
+        )
+    ]
+    assert _family_fans_out_a_filter(docs) is False
+
+
+def test_family_filter_persistent_section_with_a_control():
+    docs = [
+        _doc(
+            filter_sections=[{"name": "Variety", "persistent": True}],
+            components=[{"component_type": "interactive", "section": "Variety"}],
+        ),
+        _doc(components=[{"component_type": "figure", "section": "Petals"}]),
+    ]
+    assert _family_fans_out_a_filter(docs) is True
+
+
+def test_family_filter_persistent_section_without_members():
+    """A declared-but-empty persistent section fans nothing out."""
+    docs = [
+        _doc(
+            filter_sections=[{"name": "Variety", "persistent": True}],
+            components=[{"component_type": "figure", "section": "Variety"}],
+        )
+    ]
+    assert _family_fans_out_a_filter(docs) is False
+
+
+def test_tab_with_no_own_filter_survives_on_a_family_filter():
+    """The reason this exists: a tab can rely entirely on a persistent filter
+    section declared by another tab, and used to be dropped for looking
+    filter-less."""
+    tab = _tab({"component_type": "figure", "data_collection_tag": "taxonomy"})
+    dc_meta = {"taxonomy": {"metatype": "Aggregate"}}
+    assert _tab_meets_minimum(tab, dc_meta) is False
+    assert _tab_meets_minimum(tab, dc_meta, family_fans_out_a_filter=True) is True

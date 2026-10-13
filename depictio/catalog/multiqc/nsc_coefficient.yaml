@@ -1,0 +1,15 @@
+id: multiqc_nsc_coefficient
+name: NSC coefficient
+origin_tool: phantompeakqualtools
+mode: nsc_coefficient
+description: Normalised strand cross-correlation per sample, the ratio of the fragment-length correlation peak to the background. A value near 1 means the library carries no fragment-length enrichment at all.
+find:
+  path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
+  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/
+    - "**/multiqc/*_data/multiqc.parquet"
+    - "**/multiqc/*/*_data/multiqc.parquet"
+# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);
+# `section` selects this module's plot anchors out of the shared report.
+fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
+renders_as:
+  - { component: multiqc, section: nsc }

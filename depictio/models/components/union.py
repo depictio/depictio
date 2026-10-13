@@ -12,6 +12,7 @@ from pydantic import Discriminator
 from depictio.models.components.advanced_viz import AdvancedVizComponent
 from depictio.models.components.card import CardComponent
 from depictio.models.components.figure import FigureComponent
+from depictio.models.components.highlight import HighlightComponent
 from depictio.models.components.interactive import InteractiveComponent
 from depictio.models.components.map import MapComponent
 from depictio.models.components.table import TableComponent
@@ -24,6 +25,7 @@ ComponentMetadata = Annotated[
         AdvancedVizComponent,
         CardComponent,
         FigureComponent,
+        HighlightComponent,
         InteractiveComponent,
         MapComponent,
         TableComponent,

@@ -2,6 +2,8 @@
 
 import os
 
+from rich.markup import escape
+
 from depictio.cli.cli.utils.rich_utils import (
     rich_print_checked_statement,
 )
@@ -53,7 +55,7 @@ def process_project_data_collections(
         dict: Results summary
     """
     rich_print_checked_statement(
-        f"Processing Project: [italic]'{project_config.name}'[/italic]", "info"
+        f"Processing Project: [italic]'{escape(str(project_config.name))}'[/italic]", "info"
     )
 
     # Cross-DC links live on the project, but the columns they match on are
@@ -75,14 +77,27 @@ def process_project_data_collections(
         workflows_to_process = [w for w in workflows_to_process if w.workflow_tag == workflow_name]
         if not workflows_to_process:
             raise Exception(f"Workflow '{workflow_name}' not found in project")
+    # As in the scan: a tag no workflow has is an error, not a warning followed by
+    # processing every collection.
+    if data_collection_tag:
+        known = [dc.data_collection_tag for w in workflows_to_process for dc in w.data_collections]
+        if data_collection_tag not in known:
+            raise Exception(
+                f"Data collection '{data_collection_tag}' not found in project. "
+                f"Known: {', '.join(known) or 'none'}"
+            )
 
     total_processed = 0
     failed_tags: list[str] = []
     skipped_optional: list[str] = []
+    skipped_unchanged: list[str] = []
+    # Collections whose table is now what their registered files say, written or
+    # left as it was. The scan's unsettled mark is cleared for these only.
+    settled_dc_ids: list[str] = []
 
     for workflow in workflows_to_process:
         rich_print_checked_statement(
-            f" ↪ Processing Workflow: [italic]'{workflow.workflow_tag}'[/italic]", "info"
+            f" ↪ Processing Workflow: [italic]'{escape(workflow.workflow_tag)}'[/italic]", "info"
         )
 
         # Filter data collections if specific data_collection_tag is provided
@@ -101,9 +116,9 @@ def process_project_data_collections(
                 if dc.data_collection_tag == data_collection_tag
             ]
             if not data_collections_to_process:
-                rich_print_checked_statement(
-                    f"Data collection '{data_collection_tag}' not found in workflow '{workflow.workflow_tag}'",
-                    "warning",
+                logger.info(
+                    f"Workflow '{workflow.workflow_tag}' has no data collection "
+                    f"'{data_collection_tag}': skipped"
                 )
                 continue
 
@@ -124,25 +139,35 @@ def process_project_data_collections(
                 if error is not None:
                     raise error
 
-                if result["success"]:
+                if result["success"] and (result.get("data") or {}).get("skipped"):
+                    # Counted apart from processed collections: "12 processed"
+                    # when 11 were left untouched would be a lie, and the whole
+                    # point of the skip is that it is visible.
+                    skipped_unchanged.append(dc.data_collection_tag)
+                    settled_dc_ids.append(str(dc.id))
+                elif result["success"]:
                     rich_print_checked_statement(
-                        f"  ✓ Data collection [italic]'{dc.data_collection_tag}'[/italic] processed successfully. {result['data']['message']}",
+                        f"Data collection [italic]'{escape(dc.data_collection_tag)}'[/italic] "
+                        f"processed successfully. {escape(str(result['data']['message']))}",
                         "success",
                     )
                     total_processed += 1
+                    settled_dc_ids.append(str(dc.id))
                 elif getattr(dc, "optional", False):
                     # Optional DCs whose inputs are absent (missing dc_ref / source
                     # file) are skipped, not failed: e.g. seed-only advanced-viz
                     # canonical DCs that depend on intermediate DCs not produced by
                     # a plain CLI ingestion. They stay populated from committed seeds.
                     rich_print_checked_statement(
-                        f"  ⊘ Skipped optional data collection '{dc.data_collection_tag}': {result.get('message', 'inputs unavailable')}",
+                        f"Skipped optional data collection '{escape(dc.data_collection_tag)}': "
+                        f"{escape(str(result.get('message', 'inputs unavailable')))}",
                         "warning",
                     )
                     skipped_optional.append(dc.data_collection_tag)
                 else:
                     rich_print_checked_statement(
-                        f"  ✗ Failed to process data collection '{dc.data_collection_tag}': {result.get('message', 'Unknown error')}",
+                        f"Failed to process data collection '{escape(dc.data_collection_tag)}': "
+                        f"{escape(str(result.get('message', 'Unknown error')))}",
                         "error",
                     )
                     failed_tags.append(dc.data_collection_tag)
@@ -150,38 +175,41 @@ def process_project_data_collections(
             except Exception as e:
                 if getattr(dc, "optional", False):
                     rich_print_checked_statement(
-                        f"  ⊘ Skipped optional data collection '{dc.data_collection_tag}': {e}",
+                        f"Skipped optional data collection '{escape(dc.data_collection_tag)}': "
+                        f"{escape(str(e))}",
                         "warning",
                     )
                     logger.info(f"Optional DC {dc.data_collection_tag} skipped: {e}")
                     skipped_optional.append(dc.data_collection_tag)
                     continue
                 rich_print_checked_statement(
-                    f"  ✗ Error processing data collection '{dc.data_collection_tag}': {e}",
+                    f"Error processing data collection '{escape(dc.data_collection_tag)}': "
+                    f"{escape(str(e))}",
                     "error",
                 )
-                logger.error(f"Detailed error for {dc.data_collection_tag}: {e}", exc_info=True)
+                logger.debug(f"Detailed error for {dc.data_collection_tag}: {e}", exc_info=True)
                 failed_tags.append(dc.data_collection_tag)
 
         rich_print_checked_statement(
-            f"Workflow {workflow.workflow_tag} processing completed", "success"
+            f"Workflow {escape(workflow.workflow_tag)} processing completed", "success"
         )
 
-    skipped_note = (
-        f" ({len(skipped_optional)} optional skipped: {', '.join(skipped_optional)})"
-        if skipped_optional
-        else ""
-    )
+    notes = []
+    if skipped_optional:
+        notes.append(f"{len(skipped_optional)} optional skipped: {', '.join(skipped_optional)}")
+    if skipped_unchanged:
+        notes.append(f"{len(skipped_unchanged)} unchanged: {', '.join(skipped_unchanged)}")
+    skipped_note = f" ({'; '.join(notes)})" if notes else ""
     if failed_tags:
         rich_print_checked_statement(
             f"Processing completed with failures: {total_processed} processed, "
-            f"{len(failed_tags)} failed ({', '.join(failed_tags)}){skipped_note}",
+            f"{len(failed_tags)} failed ({escape(', '.join(failed_tags))}){escape(skipped_note)}",
             "warning",
         )
     else:
         rich_print_checked_statement(
             f"Processing completed! Total data collections processed: "
-            f"{total_processed}{skipped_note}",
+            f"{total_processed}{escape(skipped_note)}",
             "success",
         )
 
@@ -191,6 +219,8 @@ def process_project_data_collections(
         "total_failed": len(failed_tags),
         "failed_tags": failed_tags,
         "skipped_optional": skipped_optional,
+        "skipped_unchanged": skipped_unchanged,
+        "settled_dc_ids": settled_dc_ids,
     }
 
 
@@ -283,12 +313,17 @@ def process_single_data_collection(
         else:
             return {
                 "success": False,
-                "message": f"Failed to process data collection {data_collection.data_collection_tag}: {result.get('message', 'Unknown error')}",
+                # Printed after "Failed to process data collection '<tag>': ", so the reason only.
+                "message": result.get("message", "Unknown error"),
                 "data": result,
             }
 
     except Exception as e:
-        logger.error(f"Error processing data collection {data_collection.data_collection_tag}: {e}")
+        # Reported by the caller, which prints the message.
+        logger.debug(
+            f"Error processing data collection {data_collection.data_collection_tag}: {e}",
+            exc_info=True,
+        )
         return {
             "success": False,
             "message": str(e),

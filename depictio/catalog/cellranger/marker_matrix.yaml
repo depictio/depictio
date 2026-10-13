@@ -1,0 +1,13 @@
+id: cellranger_marker_matrix
+name: Marker gene expression matrix
+mode: analysis/marker_matrix
+description: >-
+  Wide companion to marker_expression: one row per marker gene, one column
+  per cluster, mean log-normalised expression, for the heatmap.
+find:
+  path_glob: "**/filtered_feature_bc_matrix/matrix.mtx.gz"
+recipe: cellranger/marker_matrix.py
+fixture: marker_matrix.tsv
+renders_as:
+  - { id: marker_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: gene} }
+  - { component: table }

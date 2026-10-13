@@ -47,13 +47,20 @@ export interface NumericScale {
   discrete: boolean;
 }
 
-/** Slider value as a reader would write it: an integer bare, a fraction with
- *  enough decimals to tell neighbouring stops apart and no more. */
+/**
+ * Slider value as a reader would write it: an integer bare, a fraction with
+ * enough decimals to tell neighbouring stops apart and no more.
+ *
+ * Three decimals is the ceiling whatever the magnitude. Below 1 this used to
+ * spell out four, which on a sub-unit column turned every mark and every drag
+ * readout into a wall of digits nobody was reading; a fourth decimal has never
+ * been what tells two stops apart at a width the Filters panel can offer.
+ */
 export function formatSliderValue(v: number): string {
   if (!Number.isFinite(v)) return String(v);
   if (Number.isInteger(v)) return String(v);
   const abs = Math.abs(v);
-  const decimals = abs >= 100 ? 1 : abs >= 1 ? 2 : 4;
+  const decimals = abs >= 100 ? 1 : abs >= 1 ? 2 : 3;
   return String(Number(v.toFixed(decimals)));
 }
 
@@ -121,4 +128,56 @@ export function buildNumericScale(
   }
 
   return { step: integral ? 1 : span / 100, marks, discrete: false };
+}
+
+/** The range a column's specs report, as `fetchColumnRange` returns it. */
+export interface ColumnRangeLike {
+  min: number | null;
+  max: number | null;
+  dtype?: string | null;
+  unique?: number | null;
+}
+
+/**
+ * A range slider's bounds from the column's specs. A missing end falls back to
+ * 0 / 100 — what the range slider has always drawn rather than an error, so a
+ * column whose specs predate min/max still gets a control.
+ */
+export function rangeSliderBounds(range: ColumnRangeLike | null | undefined): ColumnScaleStats | null {
+  if (!range) return null;
+  return {
+    min: typeof range.min === 'number' ? range.min : 0,
+    max: typeof range.max === 'number' ? range.max : 100,
+    dtype: range.dtype,
+    unique: range.unique,
+  };
+}
+
+/**
+ * A single-value slider's bounds, or why there are none. Unlike the range
+ * slider it needs real bounds, and on a log10 scale they are transformed — so
+ * a non-positive end cannot be drawn at all.
+ */
+export function sliderBounds(
+  range: ColumnRangeLike | null | undefined,
+  columnName: string | undefined,
+  logScale: boolean,
+): { bounds: ColumnScaleStats | null; error: string | null } {
+  if (!range) return { bounds: null, error: null };
+  if (typeof range.min !== 'number' || typeof range.max !== 'number') {
+    return { bounds: null, error: `No numeric min/max available for column "${columnName}".` };
+  }
+  if (!logScale) {
+    return {
+      bounds: { min: range.min, max: range.max, dtype: range.dtype, unique: range.unique },
+      error: null,
+    };
+  }
+  if (range.min <= 0 || range.max <= 0) {
+    return {
+      bounds: null,
+      error: `Cannot apply log10 scale to column "${columnName}" — non-positive bounds.`,
+    };
+  }
+  return { bounds: { min: Math.log10(range.min), max: Math.log10(range.max) }, error: null };
 }

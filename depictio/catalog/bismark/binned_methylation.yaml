@@ -1,0 +1,24 @@
+id: bismark_binned_methylation
+name: Binned CpG methylation
+mode: methylation/windows
+description: >-
+  Genome-wide CpG methylation averaged into 10 kb windows, one row per library
+  per window, streamed out of the per-CpG bedGraph without ever holding it in
+  memory. The only coordinate-bound collection a methylseq run can produce, and
+  the matrix every cohort-level panel downstream reads.
+find:
+  path_glob: "**/*.bedGraph.gz"
+recipe: bismark/binned_methylation.py
+fixture: binned_methylation.tsv
+renders_as:
+  - { id: methylation_track, component: advanced_viz, kind: coverage_track, roles: {chromosome: chromosome, position: position, value: methylation_pct, end: end, sample: sample} }
+  - { id: methylation_genome_view, component: advanced_viz, kind: genome_view, roles: {chr: chromosome, pos: position, score: methylation_pct, end: end, sample: sample} }
+  - { component: card, column: methylation_pct, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: methylation_pct, aggregation: median, secondary_layout: gauge, coverage_max: 100 }
+  - { component: card, column: n_cpg, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: n_cpg, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  # CpG density is what a CGI is defined by, so its tertiles stand in for the
+  # island annotation nf-core/methylseq bundles at no version.
+  - { component: card, column: methylation_pct, aggregation: count, secondary_layout: donut, breakdown_col: cpg_density_class }
+  - { component: figure, visu_type: box, dict_kwargs: {x: cpg_density_class, y: methylation_pct, color: cpg_density_class, title: Methylation by CpG-density class} }
+  - { component: table }

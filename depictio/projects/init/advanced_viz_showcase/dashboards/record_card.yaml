@@ -1,0 +1,141 @@
+# Record card: one tab of the advanced-visualisation showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+title: 'Gene record'
+subtitle: 'Click a gene in the scatter and its full record opens beside it, grouped into sections, with links out to Ensembl and UniProt'
+icon: 'mdi:information-outline'
+icon_color: 'indigo'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8d7f'
+is_main_tab: false
+tab_order: 45
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:dna'
+tab_icon_color: 'indigo'
+
+# Left-panel filter section. Deliberately not `persistent`: the tabs of this
+# family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Gene scope'
+    icon: 'mdi:filter-variant'
+    color: 'indigo'
+    description: 'Narrows the genes the scatter offers, and so the ones the card can show'
+
+grid_sections:
+  - name: 'Pick a gene'
+    icon: 'mdi:chart-scatter-plot'
+    color: 'indigo'
+    description: 'A scatter whose selection drives the card beside it'
+
+components:
+  - tag: text-record-card
+    index: card-text
+    component_type: text
+    title: 'Gene record'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Pick a gene'
+    body: >
+      The card on the right opens on GENE072, the strongest up-regulated gene, and shows its
+      whole row: identity, location, test result, variant load and pathway, with the Ensembl
+      and UniProt identifiers as links. Click a gene in the scatter (fold change against mean
+      expression) to swap the card to it; a box or lasso selection stacks one card per gene,
+      and clearing the selection returns to the default. The row is a gene-level summary of the kind
+      nf-core/rnaseq and nf-core/differentialabundance results give once joined to the
+      annotation.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: viz-record-card-scatter
+    index: 'card-scatter'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'record_card_demo'
+    title: 'Effect size against mean expression'
+    description: 'One point per gene. Selection is enabled on the feature id, so a click publishes that gene as a dashboard filter and the card beside it reads it back.'
+    section: 'Pick a gene'
+    viz_kind: 'scatter_xy'
+    config:
+      viz_kind: "scatter_xy"
+      x_col: "mean_expression"
+      y_col: "effect_size"
+      label_col: "gene_symbol"
+      color_col: "pathway"
+      x_title: "Mean expression"
+      y_title: "Effect size (log2 fold change)"
+      reference_line: "horizontal"
+      reference_value: 0
+      selection_enabled: true
+      selection_column: "feature_id"
+      legend_pos: "bottom"
+      controls_placement: "header"
+    layout: { x: 0, y: 2, w: 5, h: 9 }
+
+  - tag: viz-record-card
+    index: 'card-panel'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'record_card_demo'
+    title: 'Gene record'
+    description: 'The selected row as a fact panel. Sections are declared by the tile; the reference columns render as links built from a URL template.'
+    section: 'Pick a gene'
+    viz_kind: 'record_card'
+    config:
+      viz_kind: "record_card"
+      id_col: "feature_id"
+      title_col: "gene_symbol"
+      selection_source: "any"
+      default_record: "GENE072"
+      sections:
+        Identity: ["gene_symbol", "gene_name", "biotype"]
+        Location: ["chromosome", "start", "end", "strand"]
+        Differential expression: ["effect_size", "significance", "mean_expression"]
+        Variants: ["n_variants", "top_consequence", "pathway"]
+        References: ["ensembl_id", "uniprot_id"]
+      link_templates:
+        ensembl_id: "https://www.ensembl.org/Homo_sapiens/Gene/Summary?g={value}"
+        uniprot_id: "https://www.uniprot.org/uniprotkb/{value}"
+    layout: { x: 5, y: 2, w: 3, h: 9 }
+
+  - tag: filter-record-card-pathway
+    index: card-f-pathway
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'record_card_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'pathway'
+    column_type: 'object'
+    title: 'Pathway'
+    placement: left
+    section: 'Gene scope'
+    group: 'Gene filters'
+    display:
+      title_size: md
+      custom_color: '#4C6EF5'
+      icon_name: 'mdi:relation-many-to-many'
+    layout: { x: 0, y: 0, w: 1, h: 3 }
+
+  - tag: filter-record-card-biotype
+    index: card-f-biotype
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'record_card_demo'
+    interactive_component_type: MultiSelect
+    column_name: 'biotype'
+    column_type: 'object'
+    title: 'Biotype'
+    placement: left
+    section: 'Gene scope'
+    group: 'Gene filters'
+    display:
+      title_size: md
+      custom_color: '#4C6EF5'
+      icon_name: 'mdi:dna'
+    layout: { x: 0, y: 3, w: 1, h: 3 }

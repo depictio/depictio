@@ -1,0 +1,24 @@
+id: preseq_complexity_curve
+name: Library complexity curve
+mode: complexity-curve
+description: >-
+  How many distinct molecules each library would yield at a given sequencing
+  depth, with the 95% interval preseq puts around that extrapolation. A curve
+  still climbing at the depth already sequenced means resequencing buys new
+  material; one that has flattened means the library is exhausted.
+find:
+  path_glob: "**/*.ccurve.txt"
+recipe: preseq/complexity_curve.py
+fixture: complexity_curve.tsv
+renders_as:
+  # The curve with its interval as a ribbon. This is the whole reason the tool
+  # has an entry of its own: MultiQC's preseq panel plots expected_distinct
+  # alone and drops the two CI columns, so the width of the extrapolation is
+  # only readable here.
+  - { id: complexity_ribbon, component: advanced_viz, kind: profile, roles: {series: sample, x: total_reads, y: expected_distinct, lower: lower_ci, upper: upper_ci} }
+  - { component: figure, visu_type: line, dict_kwargs: {x: total_reads, y: expected_distinct, color: sample, title: Expected distinct molecules by sequencing depth} }
+  - { component: card, column: expected_distinct, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: expected_distinct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: ci_width, aggregation: average, aggregations: [box_plot_stats], secondary_layout: histogram }
+  - { component: card, column: expected_distinct, aggregation: sum, secondary_layout: composition, breakdown_col: sample }
+  - { component: table }

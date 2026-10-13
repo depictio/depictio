@@ -1,0 +1,18 @@
+id: bismark_mbias_all_contexts
+name: M-bias, every context and read
+mode: methylation/mbias-contexts
+description: >-
+  % methylation by read position in all three cytosine contexts and both reads,
+  with the context and the read as columns so two small filters replace six
+  tiles. The CHH panel is the read-position view of bisulfite conversion: a
+  curve that climbs at the 5' end says the first bases of the read are not
+  converting, which a run-level conversion percentage averages away.
+find:
+  path_glob: "**/*.M-bias.txt"
+recipe: bismark/mbias_all_contexts.py
+fixture: mbias_all_contexts.tsv
+renders_as:
+  - { id: mbias_context_profile, component: advanced_viz, kind: profile, roles: {series: series, x: position, y: pct_methylation} }
+  - { component: card, column: pct_methylation, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: coverage, aggregation: sum, secondary_layout: top_n, breakdown_col: context, top_n_count: 3 }
+  - { component: table }

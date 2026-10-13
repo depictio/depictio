@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { beginPanelResize, endPanelResize } from 'depictio-react-core';
 
 /**
- * Persisted, drag-adjustable width for the left filter panel.
+ * Persisted, drag-adjustable width for the left filter panel. Scoped per
+ * dashboard family, like `useFilterPanelOpen` — a width dragged on one tab
+ * carries to its siblings.
  *
  * Hand-rolled rather than built on `react-resizable`: that package ships with
  * react-grid-layout but carries no `@types` entry here, and a one-axis splitter
@@ -21,8 +23,16 @@ const MIN_MAX_WIDTH = 480;
 /** Share of the window the panel may claim. Past this it stops being a side
  *  panel and starts competing with the content column. */
 const MAX_WIDTH_FRACTION = 0.5;
-/** Roughly the old hard-coded `20vw` on a typical laptop. */
-const DEFAULT_WIDTH = 300;
+/**
+ * Wide enough that a date-range picker reads on one line out of the box.
+ * The previous 300 (roughly the hard-coded `20vw` it replaced) sized the panel
+ * for a MultiSelect, so every dashboard carrying a sampling-date filter opened
+ * with the picker wrapped and needed the handle dragged before it was legible.
+ * `MIN_MAX_WIDTH` above already puts the ceiling's floor at 480 for that same
+ * control; this moves the default into the same neighbourhood without spending
+ * the whole budget, leaving the handle somewhere to go in both directions.
+ */
+const DEFAULT_WIDTH = 380;
 /** Arrow-key increment, so the handle is usable without a pointer. */
 export const FILTER_PANEL_KEYBOARD_STEP = 16;
 /**

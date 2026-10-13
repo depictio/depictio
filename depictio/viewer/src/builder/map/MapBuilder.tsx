@@ -6,8 +6,6 @@
  */
 import React, { useEffect, useState } from 'react';
 import {
-  Accordion,
-  Group,
   MultiSelect,
   SegmentedControl,
   Select,
@@ -15,13 +13,14 @@ import {
   Stack,
   Text,
   TextInput,
-  Title,
 } from '@mantine/core';
 import { fetchDataCollectionConfig } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import ColumnSelect from '../shared/ColumnSelect';
 import CrossFilterSection from '../shared/CrossFilterSection';
 import DesignShell from '../shared/DesignShell';
+import { BuilderSection, BuilderSections, Field } from '../shared/BuilderSections';
+import PlacementSection from '../shared/PlacementSection';
 import MapPreview from './MapPreview';
 
 const MAP_TYPES = [
@@ -124,116 +123,139 @@ const MapBuilder: React.FC = () => {
   }));
 
   const form = (
-    <Stack gap="md">
-      <Title order={6}>Map Configuration</Title>
+    <BuilderSections builder="map" required={['coordinates']}>
+      <BuilderSection
+        value="coordinates"
+        icon="mdi:map-marker-radius"
+        title="Map & coordinates"
+        subtitle="The kind of map and the latitude / longitude columns"
+      >
+        <Stack gap="md">
+          <Select
+            label="Map type"
+            data={MAP_TYPES}
+            value={mapType}
+            onChange={(val) => patchConfig({ map_type: val })}
+            allowDeselect={false}
+          />
 
-      <Group grow>
-        <Select
-          label="Map type"
-          data={MAP_TYPES}
-          value={mapType}
-          onChange={(val) => patchConfig({ map_type: val })}
-          allowDeselect={false}
-        />
-        <TextInput
-          label="Title"
-          value={config.title ?? ''}
-          onChange={(e) => patchConfig({ title: e.currentTarget.value })}
-        />
-      </Group>
+          <ColumnSelect
+            label="Latitude Column"
+            value={config.lat_column}
+            onChange={(name) => patchConfig({ lat_column: name })}
+            numericOnly
+            required
+          />
 
-      <ColumnSelect
-        label="Latitude Column"
-        value={config.lat_column}
-        onChange={(name) => patchConfig({ lat_column: name })}
-        numericOnly
-        required
-      />
+          <ColumnSelect
+            label="Longitude Column"
+            value={config.lon_column}
+            onChange={(name) => patchConfig({ lon_column: name })}
+            numericOnly
+            required
+          />
 
-      <ColumnSelect
-        label="Longitude Column"
-        value={config.lon_column}
-        onChange={(name) => patchConfig({ lon_column: name })}
-        numericOnly
-        required
-      />
-
-      {autofilledFromDc && (
-        <Text size="xs" c="dimmed" mt={-8}>
-          Pre-filled from data collection metadata
-        </Text>
-      )}
-
-      <ColumnSelect
-        label="Color Column"
-        value={config.color_column}
-        onChange={(name) => patchConfig({ color_column: name })}
-        clearable
-      />
-
-      {mapType === 'scatter_map' && (
-        <ColumnSelect
-          label="Size Column"
-          value={config.size_column}
-          onChange={(name) => patchConfig({ size_column: name })}
-          numericOnly
-          clearable
-        />
-      )}
-
-      <MultiSelect
-        label="Hover Columns"
-        description="Columns to show on hover tooltip"
-        data={allColumnOptions}
-        value={config.hover_columns ?? []}
-        onChange={(vals) => patchConfig({ hover_columns: vals })}
-        searchable
-        clearable
-      />
-
-      <Stack gap={4}>
-        <Text size="sm" fw={500}>
-          Map Style
-        </Text>
-        <SegmentedControl
-          data={MAP_STYLES}
-          value={mapStyle}
-          onChange={(val) => patchConfig({ map_style: val })}
-          fullWidth
-        />
-      </Stack>
-
-      <Stack gap={4}>
-        <Text size="sm" fw={500}>
-          Opacity
-        </Text>
-        <Slider
-          min={0.1}
-          max={1.0}
-          step={0.1}
-          value={opacity}
-          onChange={(val) => patchConfig({ opacity: val })}
-          marks={OPACITY_MARKS}
-        />
-      </Stack>
-
-      <Stack gap={4}>
-        <Text size="sm" fw={500}>
-          Display
-        </Text>
-        <SegmentedControl
-          data={PLACEMENTS}
-          value={placement}
-          onChange={(val) => patchConfig({ placement: val })}
-          fullWidth
-        />
-        {placement === 'floating' ? (
-          <>
-            <Text size="xs" c="dimmed">
-              The map leaves the grid and becomes a panel reachable from every
-              tab of this dashboard, through the map button in the header.
-              Viewers can float it, dock it in the filter panel or hide it.
+          {autofilledFromDc && (
+            <Text size="xs" c="dimmed" mt={-8}>
+              Pre-filled from data collection metadata
             </Text>
+          )}
+        </Stack>
+      </BuilderSection>
+
+      <BuilderSection
+        value="marks"
+        icon="mdi:map-marker-multiple-outline"
+        title="Marks"
+        subtitle="Colour, size and the hover tooltip's columns"
+      >
+        <Stack gap="md">
+          <ColumnSelect
+            label="Color Column"
+            value={config.color_column}
+            onChange={(name) => patchConfig({ color_column: name })}
+            clearable
+          />
+
+          {mapType === 'scatter_map' && (
+            <ColumnSelect
+              label="Size Column"
+              value={config.size_column}
+              onChange={(name) => patchConfig({ size_column: name })}
+              numericOnly
+              clearable
+            />
+          )}
+
+          <MultiSelect
+            label="Hover Columns"
+            description="Columns to show on hover tooltip"
+            data={allColumnOptions}
+            value={config.hover_columns ?? []}
+            onChange={(vals) => patchConfig({ hover_columns: vals })}
+            searchable
+            clearable
+          />
+        </Stack>
+      </BuilderSection>
+
+      <BuilderSection
+        value="appearance"
+        icon="mdi:palette-outline"
+        title="Appearance"
+        subtitle="Title, base map style and marker opacity"
+      >
+        <Stack gap="md">
+          <TextInput
+            label="Title"
+            value={config.title ?? ''}
+            onChange={(e) => patchConfig({ title: e.currentTarget.value })}
+          />
+
+          <Field label="Map Style" description="The base map drawn under the marks.">
+            <SegmentedControl
+              data={MAP_STYLES}
+              value={mapStyle}
+              onChange={(val) => patchConfig({ map_style: val })}
+              fullWidth
+            />
+          </Field>
+
+          <Field label="Opacity" description="How opaque the marks are over the base map.">
+            <Slider
+              min={0.1}
+              max={1.0}
+              step={0.1}
+              value={opacity}
+              onChange={(val) => patchConfig({ opacity: val })}
+              marks={OPACITY_MARKS}
+              mb="md"
+            />
+          </Field>
+        </Stack>
+      </BuilderSection>
+
+      <BuilderSection
+        value="display"
+        icon="mdi:dock-window"
+        title="Display"
+        subtitle="A tile in the grid, or a floating panel on every tab"
+      >
+        <Field
+          label="Shown as"
+          description={
+            placement === 'floating'
+              ? 'The map leaves the grid and becomes a panel reachable from every tab of this dashboard, through the map button in the header. Viewers can float it, dock it in the filter panel or hide it.'
+              : 'The map is a normal dashboard tile on this tab.'
+          }
+        >
+          <SegmentedControl
+            data={PLACEMENTS}
+            value={placement}
+            onChange={(val) => patchConfig({ placement: val })}
+            fullWidth
+          />
+          {placement === 'floating' && (
             <Select
               label="Initial state"
               description="What viewers see on their first visit. Their own choice is remembered afterwards."
@@ -242,26 +264,22 @@ const MapBuilder: React.FC = () => {
               onChange={(val) => val && patchConfig({ floating_initial_state: val })}
               allowDeselect={false}
             />
-          </>
-        ) : (
-          <Text size="xs" c="dimmed">
-            The map is a normal dashboard tile on this tab.
-          </Text>
-        )}
-      </Stack>
+          )}
+        </Field>
+      </BuilderSection>
 
-      <Accordion variant="separated" radius="md" multiple>
-        <CrossFilterSection
-          enabled={selectionEnabled}
-          onEnabledChange={(checked) =>
-            patchConfig({ selection_enabled: checked })
-          }
-          column={config.selection_column}
-          onColumnChange={(name) => patchConfig({ selection_column: name })}
-          columnDescription="Column to extract from selected points"
-        />
-      </Accordion>
-    </Stack>
+      <CrossFilterSection
+        enabled={selectionEnabled}
+        onEnabledChange={(checked) =>
+          patchConfig({ selection_enabled: checked })
+        }
+        column={config.selection_column}
+        onColumnChange={(name) => patchConfig({ selection_column: name })}
+        columnDescription="Column to extract from selected points"
+      />
+
+      <PlacementSection />
+    </BuilderSections>
   );
 
   return <DesignShell formSlot={form} previewSlot={<MapPreview />} />;

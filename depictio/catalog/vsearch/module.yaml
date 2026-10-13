@@ -1,0 +1,14 @@
+# VSEARCH: multi-output tool, so a folder.
+#
+# `nf_core_url` names the sintax subcommand because that is the only VSEARCH
+# step depictio reads today; a second output from another subcommand overrides
+# it per output, the way QIIME 2's outputs do.
+id: vsearch
+name: VSEARCH
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/vsearch/sintax
+biotools_url: https://bio.tools/vsearch # from nf-core meta.yml identifier
+description: >-
+  Open-source tool for amplicon and metagenomic sequence analysis: chimera
+  detection, clustering, dereplication and searching.
+homepage: https://github.com/torognes/vsearch
+stage: taxonomy

@@ -28,7 +28,7 @@ async def test_dns_resolution() -> dict[str, Any]:
         f"{settings.viewer.service_name}",
         f"{settings.fastapi.service_name}",
         f"{settings.mongodb.service_name}",
-        f"{settings.minio.service_name}",
+        f"{settings.s3.service_name}",
     ]
 
     # Also try common service patterns in case settings are different
@@ -36,7 +36,8 @@ async def test_dns_resolution() -> dict[str, Any]:
         "depictio-viewer",
         "depictio-backend",
         "mongo",
-        "minio",
+        "s3",
+        "minio",  # legacy network alias of the compose S3 service
     ]
 
     # Combine and deduplicate
@@ -75,7 +76,7 @@ async def test_network_latency() -> dict[str, Any]:
         (settings.viewer.internal_url, "frontend"),
         (settings.fastapi.internal_url, "backend"),
         ("http://mongo:27018", "mongodb"),
-        ("http://minio:9000", "minio"),
+        (settings.s3.internal_url, "s3"),
     ]
 
     timeout = httpx.Timeout(10.0)

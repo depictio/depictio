@@ -5,17 +5,48 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Nightly full run: a PR walks only a representative slice of the catalog
+  # (see e2e-playwright), and a docs-only push to main skips the e2e entirely,
+  # so this is what guarantees the whole catalog is walked at least once a day.
+  schedule:
+    - cron: "17 2 * * *"
   workflow_dispatch:
+    inputs:
+      full_catalog:
+        description: "Walk every catalog render in the e2e (false: the representative slice a PR gets)"
+        type: boolean
+        default: true
+
+# A new push supersedes the run in flight: without this every push stacked
+# another 14 jobs on a runner pool shared by every open PR. Main too: each push
+# there walks the whole catalog, three legs of about an hour, so a merge
+# followed by its version bump held six runners for an hour and left PR jobs
+# queued behind them. The newest commit's run covers everything before it.
+# Nightly and manual runs keep a group of their own and are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.event_name == 'push' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 jobs:
   # Smart caching for quality checks - skip tests if code hasn't changed
   # Hashes all Python files, config files, and test files to detect changes
   # If hash matches a previous successful run, quality job is skipped
+  #
+  # Also the one place that looks at what this run changed (it already has the
+  # full history), and names this commit's images, so the jobs below can decide
+  # what to run and the docker-build matrix legs agree on the tags.
   check-quality-cache:
     runs-on: ubuntu-22.04
     outputs:
       cache-hit: ${{ steps.cache-quality.outputs.cache-hit }}
       code-hash: ${{ steps.hash.outputs.hash }}
+      docs-only: ${{ steps.changes.outputs.docs-only }}
+      pixi: ${{ steps.changes.outputs.pixi }}
+      catalog-tools: ${{ steps.changes.outputs.catalog-tools }}
+      full-catalog: ${{ steps.changes.outputs.full-catalog }}
+      api-image: ${{ steps.image-info.outputs.api-image }}
+      worker-image: ${{ steps.image-info.outputs.worker-image }}
+      viewer-image: ${{ steps.image-info.outputs.viewer-image }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -55,9 +86,180 @@ jobs:
             echo "🔍 No cache found - quality checks will run"
           fi
 
-  quality:
+      - name: Detect what changed
+        id: changes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          FULL_CATALOG_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci:full-catalog') }}
+          DISPATCH_FULL_CATALOG: ${{ inputs.full_catalog }}
+        run: |
+          case "$EVENT_NAME" in
+            pull_request)
+              # A PR is checked out on its merge commit, whose first parent is
+              # the base branch tip: this is exactly what merging would change.
+              # Should that ever not hold, treat everything as changed.
+              CHANGED=$(git diff --name-only HEAD^1 HEAD) || CHANGED=$(git ls-files) ;;
+            push)
+              if [[ "$PUSH_BEFORE" =~ ^[0-9a-f]{40}$ && ! "$PUSH_BEFORE" =~ ^0+$ ]] \
+                  && git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then
+                CHANGED=$(git diff --name-only "$PUSH_BEFORE" HEAD)
+              else
+                CHANGED=$(git ls-files)
+              fi ;;
+            *)
+              # schedule / workflow_dispatch: no diff to speak of, run it all.
+              CHANGED=$(git ls-files) ;;
+          esac
+          echo "📝 $(grep -c . <<<"$CHANGED") changed file(s)"
+
+          # Docs-only: nothing that ships in an image changed, so the images,
+          # and every job that needs them, are skipped. An empty diff runs all.
+          DOCS_ONLY=false
+          if [ -n "$CHANGED" ] && ! grep -qvE '(\.md$|^docs/|^LICENSE|^\.github/ISSUE_TEMPLATE/)' <<<"$CHANGED"; then
+            DOCS_ONLY=true
+          fi
+
+          # pixi-install-test only proves the pixi environment still solves.
+          PIXI=false
+          if [ "$EVENT_NAME" != pull_request ] \
+              || grep -qE '^(pixi\.toml|pixi\.lock|pyproject\.toml|uv\.lock|\.github/workflows/depictio-ci\.yaml)$' <<<"$CHANGED"; then
+            PIXI=true
+          fi
+
+          # Catalog tools this PR touches: their directory name is their
+          # tool_id. A PR walks these in full on top of the representative slice.
+          CATALOG_TOOLS=
+          if [ "$EVENT_NAME" = pull_request ]; then
+            CATALOG_TOOLS=$(grep -oE '^depictio/catalog/[^/_][^/]*/' <<<"$CHANGED" | cut -d/ -f3 | sort -u | paste -sd, -)
+          fi
+
+          # The whole catalog is walked off PRs, on a PR labelled ci:full-catalog
+          # (read from the event, so it applies from the next push), and when the
+          # code every render goes through changes: the catalog loader, its
+          # schemas and index, and the compose endpoint.
+          FULL_CATALOG=false
+          case "$EVENT_NAME" in
+            pull_request)
+              if [ "$FULL_CATALOG_LABEL" = true ] \
+                  || grep -qE '^(depictio/catalog/[^/]+\.(py|json)$|depictio/catalog/_index/|depictio/api/v1/endpoints/catalog_endpoints/)' <<<"$CHANGED"; then
+                FULL_CATALOG=true
+              fi ;;
+            workflow_dispatch)
+              [ "$DISPATCH_FULL_CATALOG" = false ] || FULL_CATALOG=true ;;
+            *)
+              FULL_CATALOG=true ;;
+          esac
+
+          {
+            echo "docs-only=$DOCS_ONLY"
+            echo "pixi=$PIXI"
+            echo "catalog-tools=$CATALOG_TOOLS"
+            echo "full-catalog=$FULL_CATALOG"
+          } | tee -a "$GITHUB_OUTPUT"
+
+      - name: Generate image info
+        id: image-info
+        run: |
+          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+
+          # Single shared content hash covering all three images. The api/worker
+          # share Python sources; the viewer adds the JS / nginx config. Hashing
+          # everything together over-rebuilds slightly (a viewer-only change
+          # will also retag the api+worker images), but it keeps this job ~50
+          # lines shorter than maintaining two parallel hashes. The build-push
+          # action's GHA cache absorbs the cost when sources are unchanged.
+          DOCKER_HASH=$(find depictio packages -type f \
+              \( -name "*.py" -o -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.css" -o -name "*.html" \) \
+              ! -path "depictio/tests/*" 2>/dev/null | sort | xargs cat 2>/dev/null | sha256sum | cut -c1-12)
+          CONFIG_HASH=$(cat \
+              pyproject.toml uv.lock \
+              pnpm-lock.yaml pnpm-workspace.yaml \
+              docker-images/Dockerfile.api \
+              docker-images/Dockerfile.worker \
+              docker-images/Dockerfile.viewer \
+              docker-images/nginx.conf \
+              .dockerignore 2>/dev/null | sha256sum | cut -c1-12)
+          CONTENT_HASH="${DOCKER_HASH}-${CONFIG_HASH}"
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            TAG="pr-${{ github.event.number }}-${CONTENT_HASH}"
+          else
+            TAG="main-${CONTENT_HASH}"
+          fi
+
+          API_IMAGE="ghcr.io/${OWNER_LOWER}/depictio-api:${TAG}"
+          WORKER_IMAGE="ghcr.io/${OWNER_LOWER}/depictio-worker:${TAG}"
+          VIEWER_IMAGE="ghcr.io/${OWNER_LOWER}/depictio-viewer:${TAG}"
+
+          echo "api-image=${API_IMAGE}" >> $GITHUB_OUTPUT
+          echo "worker-image=${WORKER_IMAGE}" >> $GITHUB_OUTPUT
+          echo "viewer-image=${VIEWER_IMAGE}" >> $GITHUB_OUTPUT
+          echo "📦 Content hash: ${CONTENT_HASH}"
+          echo "🏷️ Tag: ${TAG}"
+          echo "   api:    ${API_IMAGE}"
+          echo "   worker: ${WORKER_IMAGE}"
+          echo "   viewer: ${VIEWER_IMAGE}"
+
+  # Formatting, lint and the ty gate: the checks a red PR most often fails, and
+  # the only part of quality the image build waits for. About a minute against
+  # six for the test suite, so a formatting slip fails fast and stops the images
+  # and every e2e leg before they start.
+  lint:
     runs-on: ubuntu-22.04
     needs: check-quality-cache
+    if: needs.check-quality-cache.outputs.cache-hit != 'true'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v7
+        with:
+          python-version-file: "pyproject.toml"
+          cache-dependency-path: "pyproject.toml"
+
+      - name: Install Dependencies
+        run: |
+          uv venv --python 3.12.9 venv
+          source venv/bin/activate
+          uv pip install -e ".[dev]"
+
+      - name: Run Ruff formatting check
+        run: |
+          source venv/bin/activate
+          ruff format --check depictio
+
+      - name: Run Ruff linting
+        run: |
+          source venv/bin/activate
+          ruff check depictio
+
+      - name: Run ty type checker (must pass)
+        run: |
+          source venv/bin/activate
+          ty version
+          # Scoped to depictio/models/ to match the pre-commit ty hook after the
+          # Phase A tooling bump (ty 0.0.1-alpha.12 -> 0.0.44). The new ty surfaces
+          # ~280 diagnostics in api/ and cli/ that are deferred to a dedicated
+          # type-debt cleanup (Phase B); gating those here would be red.
+          ty check depictio/models/
+
+      # - name: Run pre-commit hooks
+      #   run: |
+      #     source venv/bin/activate
+      #     pre-commit run --all-files
+
+  # The Python test suite. Runs after lint, so the cache marker below still
+  # means "lint and tests both passed on this code", but nothing downstream
+  # waits for it: the images and the e2e legs start as soon as lint is green.
+  quality:
+    runs-on: ubuntu-22.04
+    needs: [check-quality-cache, lint]
     if: needs.check-quality-cache.outputs.cache-hit != 'true'
     steps:
       - uses: actions/checkout@v7
@@ -87,38 +289,13 @@ jobs:
           uv pip uninstall -y polars polars-runtime-32 2>/dev/null || true
 
           # Ensure correct polars-lts-cpu version is installed (required for MultiQC)
-          echo "📦 Installing polars-lts-cpu 1.19.0..."
-          uv pip install --force-reinstall "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.19.0"
+          echo "📦 Installing polars-lts-cpu 1.33.1..."
+          uv pip install --force-reinstall "polars-lts-cpu[numpy,pandas,pyarrow,excel,deltalake]==1.33.1"
 
           # Verify only polars-lts-cpu is installed
           echo "✅ Verifying polars installation..."
           uv pip list | grep -i polars
-          python -c "import polars; assert '1.19' in polars.__version__, f'Wrong version: {polars.__version__}'; print(f'✅ Polars {polars.__version__} verified')"
-
-      - name: Run Ruff formatting check
-        run: |
-          source venv/bin/activate
-          ruff format --check depictio
-
-      - name: Run Ruff linting
-        run: |
-          source venv/bin/activate
-          ruff check depictio
-
-      - name: Run ty type checker (must pass)
-        run: |
-          source venv/bin/activate
-          ty version
-          # Scoped to depictio/models/ to match the pre-commit ty hook after the
-          # Phase A tooling bump (ty 0.0.1-alpha.12 -> 0.0.44). The new ty surfaces
-          # ~280 diagnostics in api/ and cli/ that are deferred to a dedicated
-          # type-debt cleanup (Phase B); gating those here would be red.
-          ty check depictio/models/
-
-      # - name: Run pre-commit hooks
-      #   run: |
-      #     source venv/bin/activate
-      #     pre-commit run --all-files
+          python -c "import polars; assert '1.33' in polars.__version__, f'Wrong version: {polars.__version__}'; print(f'✅ Polars {polars.__version__} verified')"
 
       - name: Run tests
         run: |
@@ -138,10 +315,41 @@ jobs:
           path: .quality-passed
           key: quality-${{ needs.check-quality-cache.outputs.code-hash }}
 
-  # Test pixi installation and basic functionality (no Docker required)
+  # Vitest unit suites in the pnpm workspace (pure-logic tests only —
+  # currently depictio-react-core's phylo/subtree-selection helpers). No
+  # Docker, no browser; DOM-level coverage lives in e2e-playwright.
+  js-unit:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run unit tests
+        run: pnpm --filter depictio-react-core test
+
+  # Test pixi installation and basic functionality (no Docker required).
+  # Only when the dependency set can have moved (and off PRs): what this proves
+  # is that the pixi environment still solves and imports depictio. It used to
+  # also run the whole pytest suite serially with failures ignored (`|| echo`),
+  # ten minutes of runner time that could never turn the job red; the suite
+  # itself runs in `quality`.
   pixi-install-test:
     runs-on: ubuntu-22.04
     needs: check-quality-cache
+    if: needs.check-quality-cache.outputs.pixi == 'true'
     steps:
       - uses: actions/checkout@v7
 
@@ -190,68 +398,56 @@ jobs:
           pixi run python --version
           pixi run python -c 'import depictio; print("depictio package loaded successfully")'
 
-      - name: Run quick tests (no infrastructure)
-        run: |
-          echo "🧪 Running quick tests without infrastructure..."
-          pixi run test-fast || echo "⚠️ Some tests may require infrastructure - this is expected"
-
       - name: Verify infrastructure commands exist
         run: |
           echo "🔍 Verifying infrastructure commands are available..."
           pixi run mongod --version || echo "MongoDB binary available"
           pixi run redis-server --version || echo "Redis binary available"
-          pixi run minio --version || echo "MinIO binary available"
+          pixi run weed version || echo "SeaweedFS (weed) binary available"
           echo "✅ All infrastructure binaries available via pixi"
 
   docker-build:
-    needs: [check-quality-cache, quality]
+    name: docker-build (${{ matrix.image }})
+    needs: [check-quality-cache, lint]
     # Skip for pull requests from forks — repository secrets (GHCR_PAT) are not
     # exposed to fork PRs, so docker login + push to ghcr.io would fail. The
     # downstream jobs that depend on the pushed images (docker-system-init,
     # e2e-tests*, cli-comprehensive-test, backup-s3-strategies-comprehensive-tests)
     # auto-skip via their `needs.docker-build.result == 'success'` guard.
-    # Run if quality passed OR if it was skipped due to cache hit.
+    # Run if lint passed OR if it was skipped due to cache hit. Waits for lint
+    # only, not the test suite: the images and the e2e legs used to start six
+    # minutes in, behind pytest, and now run alongside it. A docs-only change
+    # ships nothing, so it builds nothing.
     #
     # After the Dash → React migration the monolithic depictio image was split
-    # into three per-service images (api / worker / viewer). This job now
-    # builds all three and exposes them as separate outputs; downstream jobs
-    # consume them via the three `DEPICTIO_*_VERSION` env vars that
-    # docker-compose.dev.yaml expects.
+    # into three per-service images (api / worker / viewer), built here as one
+    # matrix leg each, in parallel. Their tags are named in check-quality-cache,
+    # and downstream jobs read them from there (a matrix job's outputs would only
+    # keep one leg's values); they hand them to the three `DEPICTIO_*_VERSION`
+    # env vars that docker-compose.dev.yaml expects. Nothing is pulled here: the
+    # jobs that run the stack pull on their own runners.
     if: |
       always() &&
+      needs.check-quality-cache.outputs.docs-only != 'true' &&
       (github.event_name != 'pull_request' ||
        github.event.pull_request.head.repo.full_name == github.repository) &&
-      (needs.quality.result == 'success' ||
-       (needs.quality.result == 'skipped' && needs.check-quality-cache.outputs.cache-hit == 'true'))
+      (needs.lint.result == 'success' ||
+       (needs.lint.result == 'skipped' && needs.check-quality-cache.outputs.cache-hit == 'true'))
     runs-on: ubuntu-22.04
+    # Builds and pushes one image, a few minutes; a stalled registry push would
+    # otherwise sit here for six hours.
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
       id-token: write
-    outputs:
-      image-tag: ${{ steps.image-info.outputs.tag }}
-      rebuild-needed: ${{ steps.check-rebuild.outputs.rebuild }}
-      api-image: ${{ steps.image-info.outputs.api-image }}
-      worker-image: ${{ steps.image-info.outputs.worker-image }}
-      viewer-image: ${{ steps.image-info.outputs.viewer-image }}
+    strategy:
+      matrix:
+        image: [api, worker, viewer]
+    env:
+      IMAGE: ${{ needs.check-quality-cache.outputs[format('{0}-image', matrix.image)] }}
     steps:
       - uses: actions/checkout@v7
-
-      - name: Configure Docker Permissions
-        run: |
-          sudo usermod -aG docker $USER || true
-          sudo chmod 666 /var/run/docker.sock
-
-      - name: Export UID and GID
-        run: |
-          echo "UID=$(id -u)" >> $GITHUB_ENV
-          echo "GID=$(id -g)" >> $GITHUB_ENV
-
-      - name: Setup directories
-        run: |
-          cp .env.example .env
-          mkdir -p data/depictioDB data/minio_data
-          chmod 777 data data/depictioDB data/minio_data
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -264,84 +460,45 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_PAT }}
 
-      - name: Generate image info
-        id: image-info
-        run: |
-          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-
-          # Single shared content hash covering all three images. The api/worker
-          # share Python sources; the viewer adds the JS / nginx config. Hashing
-          # everything together over-rebuilds slightly (a viewer-only change
-          # will also retag the api+worker images), but it keeps this job ~50
-          # lines shorter than maintaining two parallel hashes. The build-push
-          # action's GHA cache absorbs the cost when sources are unchanged.
-          DOCKER_HASH=$(find depictio packages -type f \
-              \( -name "*.py" -o -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.css" -o -name "*.html" \) \
-              ! -path "depictio/tests/*" 2>/dev/null | sort | xargs cat 2>/dev/null | sha256sum | cut -c1-12)
-          CONFIG_HASH=$(cat \
-              pyproject.toml uv.lock \
-              pnpm-lock.yaml pnpm-workspace.yaml \
-              docker-images/Dockerfile.api \
-              docker-images/Dockerfile.worker \
-              docker-images/Dockerfile.viewer \
-              docker-images/nginx.conf \
-              .dockerignore 2>/dev/null | sha256sum | cut -c1-12)
-          CONTENT_HASH="${DOCKER_HASH}-${CONFIG_HASH}"
-
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            TAG="pr-${{ github.event.number }}-${CONTENT_HASH}"
-          else
-            TAG="main-${CONTENT_HASH}"
-          fi
-
-          API_IMAGE="ghcr.io/${OWNER_LOWER}/depictio-api:${TAG}"
-          WORKER_IMAGE="ghcr.io/${OWNER_LOWER}/depictio-worker:${TAG}"
-          VIEWER_IMAGE="ghcr.io/${OWNER_LOWER}/depictio-viewer:${TAG}"
-
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          echo "owner=${OWNER_LOWER}" >> $GITHUB_OUTPUT
-          echo "api-image=${API_IMAGE}" >> $GITHUB_OUTPUT
-          echo "worker-image=${WORKER_IMAGE}" >> $GITHUB_OUTPUT
-          echo "viewer-image=${VIEWER_IMAGE}" >> $GITHUB_OUTPUT
-          echo "📦 Content hash: ${CONTENT_HASH}"
-          echo "🏷️ Tag: ${TAG}"
-          echo "   api:    ${API_IMAGE}"
-          echo "   worker: ${WORKER_IMAGE}"
-          echo "   viewer: ${VIEWER_IMAGE}"
-
       - name: Check if rebuild needed
         id: check-rebuild
         run: |
-          API_IMAGE="${{ steps.image-info.outputs.api-image }}"
-          WORKER_IMAGE="${{ steps.image-info.outputs.worker-image }}"
-          VIEWER_IMAGE="${{ steps.image-info.outputs.viewer-image }}"
-          # Rebuild if any of the three images is missing — we always need a
-          # complete set to bring the compose stack up.
-          REBUILD=false
-          for img in "$API_IMAGE" "$WORKER_IMAGE" "$VIEWER_IMAGE"; do
-            if ! docker manifest inspect "$img" > /dev/null 2>&1; then
-              echo "🔨 Missing: $img"
-              REBUILD=true
-            else
-              echo "✅ Exists: $img"
-            fi
-          done
-          echo "rebuild=${REBUILD}" >> $GITHUB_OUTPUT
+          # Tags are content hashes: an image already pushed for this content
+          # is reused as is (a re-run, or a PR push that only touched tests).
+          if docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
+            echo "✅ Exists: $IMAGE"
+            echo "rebuild=false" >> $GITHUB_OUTPUT
+          else
+            echo "🔨 Missing: $IMAGE"
+            echo "rebuild=true" >> $GITHUB_OUTPUT
+          fi
 
-      # Detect if running with act and set cache type accordingly
+      # Detect if running with act and set cache type accordingly. Separate
+      # cache scopes per image so the api/worker (uv + Python base) layers don't
+      # poison the viewer (node + nginx base) cache and vice versa. A branch
+      # falls back on main's scope, which main's own runs write as
+      # `main-<image>` (ref_name), not `refs/heads/main-<image>`: the fallback
+      # used to name the latter, which nothing ever wrote, so a PR's first build
+      # always started cold.
       - name: Set cache strategy
         id: cache-strategy
+        env:
+          SCOPE: ${{ github.ref_name }}
+          IMAGE_NAME: ${{ matrix.image }}
         run: |
           if [ "${ACT:-false}" = "true" ]; then
             echo "Running with act - using local cache"
             echo "cache_from=type=local,src=/tmp/buildx-cache" >> $GITHUB_OUTPUT
             echo "cache_to=type=local,dest=/tmp/buildx-cache-new,mode=max" >> $GITHUB_OUTPUT
-            echo "cache_enabled=local" >> $GITHUB_OUTPUT
           else
             echo "Running on GitHub Actions - using GHA cache"
-            echo "cache_from=type=gha,scope=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-            echo "cache_to=type=gha,mode=max,scope=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-            echo "cache_enabled=gha" >> $GITHUB_OUTPUT
+            {
+              echo "cache_from<<EOF"
+              echo "type=gha,scope=${SCOPE}-${IMAGE_NAME}"
+              echo "type=gha,scope=main-${IMAGE_NAME}"
+              echo "EOF"
+              echo "cache_to=type=gha,mode=max,scope=${SCOPE}-${IMAGE_NAME}"
+            } >> $GITHUB_OUTPUT
           fi
 
       # Create cache directory for act
@@ -351,53 +508,18 @@ jobs:
           mkdir -p /tmp/buildx-cache
           echo "Created local cache directory for act"
 
-      # Per-service build steps. Separate cache scopes per image so the
-      # api/worker (uv + Python base) layers don't poison the viewer
-      # (node + nginx base) cache and vice versa.
-      - name: Build and push depictio-api
+      - name: Build and push depictio-${{ matrix.image }}
         if: steps.check-rebuild.outputs.rebuild == 'true'
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: docker-images/Dockerfile.api
+          file: docker-images/Dockerfile.${{ matrix.image }}
           platforms: linux/amd64
           push: ${{ env.ACT != 'true' }}
           load: ${{ env.ACT == 'true' }}
-          tags: ${{ steps.image-info.outputs.api-image }}
-          cache-from: |
-            ${{ steps.cache-strategy.outputs.cache_from }}-api
-            ${{ env.ACT != 'true' && 'type=gha,scope=refs/heads/main-api' || '' }}
-          cache-to: ${{ steps.cache-strategy.outputs.cache_to }}-api
-
-      - name: Build and push depictio-worker
-        if: steps.check-rebuild.outputs.rebuild == 'true'
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: docker-images/Dockerfile.worker
-          platforms: linux/amd64
-          push: ${{ env.ACT != 'true' }}
-          load: ${{ env.ACT == 'true' }}
-          tags: ${{ steps.image-info.outputs.worker-image }}
-          cache-from: |
-            ${{ steps.cache-strategy.outputs.cache_from }}-worker
-            ${{ env.ACT != 'true' && 'type=gha,scope=refs/heads/main-worker' || '' }}
-          cache-to: ${{ steps.cache-strategy.outputs.cache_to }}-worker
-
-      - name: Build and push depictio-viewer
-        if: steps.check-rebuild.outputs.rebuild == 'true'
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: docker-images/Dockerfile.viewer
-          platforms: linux/amd64
-          push: ${{ env.ACT != 'true' }}
-          load: ${{ env.ACT == 'true' }}
-          tags: ${{ steps.image-info.outputs.viewer-image }}
-          cache-from: |
-            ${{ steps.cache-strategy.outputs.cache_from }}-viewer
-            ${{ env.ACT != 'true' && 'type=gha,scope=refs/heads/main-viewer' || '' }}
-          cache-to: ${{ steps.cache-strategy.outputs.cache_to }}-viewer
+          tags: ${{ env.IMAGE }}
+          cache-from: ${{ steps.cache-strategy.outputs.cache_from }}
+          cache-to: ${{ steps.cache-strategy.outputs.cache_to }}
 
       # Move cache for next run (act only)
       - name: Move cache (act only)
@@ -406,33 +528,98 @@ jobs:
           rm -rf /tmp/buildx-cache
           mv /tmp/buildx-cache-new /tmp/buildx-cache || true
 
-      - name: Pull existing images (GitHub Actions only)
-        if: env.ACT != 'true' && steps.check-rebuild.outputs.rebuild == 'false'
-        run: |
-          echo "📥 All three images already exist in registry, pulling..."
-          docker pull "${{ steps.image-info.outputs.api-image }}"
-          docker pull "${{ steps.image-info.outputs.worker-image }}"
-          docker pull "${{ steps.image-info.outputs.viewer-image }}"
-
-      - name: Pull newly built images (GitHub Actions only)
-        if: env.ACT != 'true' && steps.check-rebuild.outputs.rebuild == 'true'
-        run: |
-          docker pull "${{ steps.image-info.outputs.api-image }}"
-          docker pull "${{ steps.image-info.outputs.worker-image }}"
-          docker pull "${{ steps.image-info.outputs.viewer-image }}"
-
-      - name: Tag images for local use (act only)
+      - name: Tag image for local use (act only)
         if: env.ACT == 'true' || runner.os == 'act'
         run: |
-          docker tag "${{ steps.image-info.outputs.api-image }}" depictio-api:local || true
-          docker tag "${{ steps.image-info.outputs.worker-image }}" depictio-worker:local || true
-          docker tag "${{ steps.image-info.outputs.viewer-image }}" depictio-viewer:local || true
-          echo "Tagged images for local use"
+          docker tag "$IMAGE" "depictio-${{ matrix.image }}:local" || true
+          echo "Tagged image for local use"
+
+  # A stack started with `depictio local up` hands over to Docker Compose: same
+  # dashboards, same table data in S3, and the CLI token still valid (same keys).
+  # Runs on this commit's images: the export is only meant for the same release.
+  local-to-compose:
+    needs: [check-quality-cache, docker-build]
+    if: always() && needs.docker-build.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: depictio local up (iris example)
+        run: uv run --python 3.12 --extra local depictio local up --examples iris --no-open
+
+      - name: Wait for the iris Delta table
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS -o /dev/null \
+              http://127.0.0.1:8058/depictio/api/v1/deltatables/specs/646b0f3c1e4a2d7f8e5b8c9c; then
+              echo "iris delta table registered"; exit 0
+            fi
+            sleep 5
+          done
+          echo "iris delta table never appeared"; exit 1
+
+      - name: Export to Docker Compose
+        run: |
+          uv run --python 3.12 --extra local depictio local down
+          uv run --python 3.12 --extra local depictio local export --out "$RUNNER_TEMP/export"
+          ls -la "$RUNNER_TEMP/export"
+
+      - name: docker compose up on the exported data
+        working-directory: ${{ runner.temp }}/export
+        env:
+          API_IMAGE: ${{ needs.check-quality-cache.outputs.api-image }}
+          WORKER_IMAGE: ${{ needs.check-quality-cache.outputs.worker-image }}
+          VIEWER_IMAGE: ${{ needs.check-quality-cache.outputs.viewer-image }}
+        run: |
+          # Swap the release images for this commit's; the export is unchanged.
+          cat > ci-images.yaml <<YAML
+          services:
+            depictio-backend: {image: "$API_IMAGE"}
+            depictio-celery-worker: {image: "$WORKER_IMAGE"}
+            depictio-viewer: {image: "$VIEWER_IMAGE"}
+          YAML
+          docker compose -f docker-compose.yaml -f docker-compose.override.yaml \
+            -f ci-images.yaml up -d --wait --wait-timeout 300
+
+      - name: Check the dashboards, the table data and the CLI token
+        run: |
+          API=http://127.0.0.1:8058/depictio/api/v1
+          curl -fsS http://127.0.0.1:8058/health
+          curl -fsS -o /dev/null "$API/deltatables/specs/646b0f3c1e4a2d7f8e5b8c9c"
+          # Read back from the exported SeaweedFS data by the worker.
+          curl -fsS -o /dev/null "$API/deltatables/preview/646b0f3c1e4a2d7f8e5b8c9c"
+          # Signed by the local server: only valid if the keys came along.
+          TOKEN=$(yq -r .user.token.access_token ~/.depictio/local/cli/admin_config.yaml)
+          curl -fsS -o /dev/null -H "Authorization: Bearer $TOKEN" "$API/auth/me"
+          curl -fsS -o /dev/null http://127.0.0.1:5080/
+
+      - name: Compose logs
+        if: failure()
+        working-directory: ${{ runner.temp }}/export
+        run: |
+          docker compose -f docker-compose.yaml -f docker-compose.override.yaml \
+            -f ci-images.yaml logs --no-color --tail 200
 
   docker-system-init:
-    needs: docker-build
+    needs: [check-quality-cache, docker-build]
     if: always() && needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
+    # Boots containers and can hang on a health loop (stack boot + init, ~3min observed).
+    timeout-minutes: 20
     permissions:
       contents: read
       packages: read
@@ -455,14 +642,14 @@ jobs:
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
           cp .env.example .env
-          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache data/redis
-          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache data/redis
+          mkdir -p data/depictioDB data/seaweedfs_data data/prof_files data/cache data/redis
+          chmod 777 data data/depictioDB data/seaweedfs_data data/prof_files data/cache data/redis
 
       - name: Start services
         run: |
-          export DEPICTIO_VERSION="${{ needs.docker-build.outputs.api-image }}"
-          export DEPICTIO_WORKER_VERSION="${{ needs.docker-build.outputs.worker-image }}"
-          export DEPICTIO_VIEWER_VERSION="${{ needs.docker-build.outputs.viewer-image }}"
+          export DEPICTIO_VERSION="${{ needs.check-quality-cache.outputs.api-image }}"
+          export DEPICTIO_WORKER_VERSION="${{ needs.check-quality-cache.outputs.worker-image }}"
+          export DEPICTIO_VIEWER_VERSION="${{ needs.check-quality-cache.outputs.viewer-image }}"
           docker pull "${DEPICTIO_VERSION}"
           docker pull "${DEPICTIO_WORKER_VERSION}"
           docker pull "${DEPICTIO_VIEWER_VERSION}"
@@ -474,7 +661,7 @@ jobs:
           # screenshot task must navigate to nginx, so point it there.
           export DEPICTIO_VIEWER_SERVICE_NAME=depictio-viewer
           export DEPICTIO_VIEWER_SERVICE_PORT=8080
-          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env --profile ci up -d mongo redis minio depictio-backend depictio-celery-worker depictio-viewer
+          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env --profile ci up -d mongo redis s3 depictio-backend depictio-celery-worker depictio-viewer
 
       - name: Logs
         run: sleep 3 && docker compose logs
@@ -587,14 +774,14 @@ jobs:
             sleep 2
           done
 
-          # Wait for MinIO
-          echo "Waiting for MinIO..."
+          # Wait for the bundled S3 store (SeaweedFS)
+          echo "Waiting for S3 (SeaweedFS)..."
           for i in {1..30}; do
-            if curl -f http://localhost:9000/minio/health/ready &>/dev/null; then
-              echo "✅ MinIO ready"
+            if curl -f http://localhost:9000/healthz &>/dev/null; then
+              echo "✅ S3 (SeaweedFS) ready"
               break
             fi
-            echo "MinIO not ready yet, attempt $i/30..."
+            echo "S3 not ready yet, attempt $i/30..."
             sleep 2
           done
 
@@ -882,9 +1069,11 @@ jobs:
           docker compose ps
 
   cli-comprehensive-test:
-    needs: [docker-build]
+    needs: [check-quality-cache, docker-build]
     if: always() && needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
+    # Boots containers and can hang on a health loop (~4min observed).
+    timeout-minutes: 20
     permissions:
       contents: read
       packages: read
@@ -907,7 +1096,8 @@ jobs:
           cd depictio/cli
           uv venv --python 3.12.9 venv
           source venv/bin/activate
-          uv pip install -e ".[multiqc]"
+          # The CLI is the root depictio package, without its server extra.
+          uv pip install -e "../..[multiqc]"
 
       # ============================================
       # PHASE 1: Offline Tests (No Server Required)
@@ -933,7 +1123,7 @@ jobs:
           source venv/bin/activate
           echo "📋 Testing dashboard validate (offline)..."
 
-          depictio-cli dashboard validate ../projects/init/iris/dashboards/overview.yaml
+          depictio-cli dashboard validate --offline ../projects/init/iris/dashboards/overview.yaml
 
           echo "✅ Dashboard validate passed"
 
@@ -961,14 +1151,14 @@ jobs:
           source venv/bin/activate
           echo "📋 Testing template validation (offline)..."
 
-          # Validate known template project configs
-          depictio-cli config check \
-            --project-config-path ../projects/nf-core/ampliseq/2.16.0/template.yaml \
-            --CLI-config-path admin_config.yaml 2>&1 || true
-
-          depictio-cli config check \
-            --project-config-path ../projects/nf-core/ampliseq/2.14.0/template.yaml \
-            --CLI-config-path admin_config.yaml 2>&1 || true
+          # Validate every shipped ampliseq template version (version-agnostic:
+          # a new template drop is validated with zero workflow changes)
+          for tpl in ../projects/nf-core/ampliseq/*/template.yaml; do
+            echo "— checking $tpl"
+            depictio-cli config check \
+              --project-config-path "$tpl" \
+              --server admin_config.yaml 2>&1 || true
+          done
 
           echo "✅ Template validation passed"
 
@@ -982,15 +1172,15 @@ jobs:
           echo "UID=$(id -u)" >> $GITHUB_ENV
           echo "GID=$(id -g)" >> $GITHUB_ENV
           cp .env.example .env
-          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache data/redis
-          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache data/redis
+          mkdir -p data/depictioDB data/seaweedfs_data data/prof_files data/cache data/redis
+          chmod 777 data data/depictioDB data/seaweedfs_data data/prof_files data/cache data/redis
 
       - name: Log in and start services
         run: |
           echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
-          export DEPICTIO_VERSION="${{ needs.docker-build.outputs.api-image }}"
-          export DEPICTIO_WORKER_VERSION="${{ needs.docker-build.outputs.worker-image }}"
-          export DEPICTIO_VIEWER_VERSION="${{ needs.docker-build.outputs.viewer-image }}"
+          export DEPICTIO_VERSION="${{ needs.check-quality-cache.outputs.api-image }}"
+          export DEPICTIO_WORKER_VERSION="${{ needs.check-quality-cache.outputs.worker-image }}"
+          export DEPICTIO_VIEWER_VERSION="${{ needs.check-quality-cache.outputs.viewer-image }}"
           docker pull "${DEPICTIO_VERSION}"
           docker pull "${DEPICTIO_WORKER_VERSION}"
           docker pull "${DEPICTIO_VIEWER_VERSION}"
@@ -1003,7 +1193,7 @@ jobs:
           # viewer the CLI test exercises.
           export DEPICTIO_VIEWER_SERVICE_NAME=depictio-viewer
           export DEPICTIO_VIEWER_SERVICE_PORT=8080
-          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env --profile ci up -d mongo redis minio depictio-backend depictio-celery-worker depictio-viewer
+          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env --profile ci up -d mongo redis s3 depictio-backend depictio-celery-worker depictio-viewer
 
           echo "⏳ Waiting for services to be ready..."
 
@@ -1029,14 +1219,14 @@ jobs:
             sleep 2
           done
 
-          # Wait for MinIO
-          echo "Waiting for MinIO..."
+          # Wait for the bundled S3 store (SeaweedFS)
+          echo "Waiting for S3 (SeaweedFS)..."
           for i in {1..30}; do
-            if curl -f http://localhost:9000/minio/health/ready &>/dev/null; then
-              echo "✅ MinIO ready"
+            if curl -f http://localhost:9000/healthz &>/dev/null; then
+              echo "✅ S3 (SeaweedFS) ready"
               break
             fi
-            echo "MinIO not ready yet, attempt $i/30..."
+            echo "S3 not ready yet, attempt $i/30..."
             sleep 2
           done
 
@@ -1090,13 +1280,13 @@ jobs:
           # Validate project config
           depictio-cli --verbose config check \
             --project-config-path ../projects/init/iris/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           # Sync project config (with --update for idempotency)
           depictio-cli --verbose config sync \
             --update \
             --project-config-path ../projects/init/iris/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           echo "✅ Config commands passed"
 
@@ -1116,7 +1306,7 @@ jobs:
           # `python3`: this job's `python3` is the actions/setup-python
           # toolcache build, which has no PyYAML, so a bare `import yaml`
           # aborts with ModuleNotFoundError before the first echo. The CLI
-          # venv (created above via `uv pip install -e .[multiqc]`) ships
+          # venv (created above via `uv pip install -e ../..[multiqc]`) ships
           # PyYAML. (docker-system-init's identical line works because that
           # job uses the system python3, which has python3-yaml.)
           ADMIN_TOKEN=$(depictio/cli/venv/bin/python -c "import yaml; print(yaml.safe_load(open('/tmp/admin_config.yaml'))['user']['token']['access_token'])")
@@ -1175,7 +1365,7 @@ jobs:
           # captured stderr/stdout — otherwise the actual error is invisible.
           echo "🔄 Importing dashboard to server..."
           set +e
-          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/init/iris/dashboards/overview.yaml --config admin_config.yaml --overwrite 2>&1)
+          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/init/iris/dashboards/overview.yaml --server admin_config.yaml --overwrite 2>&1)
           IMPORT_EXIT=$?
           set -e
           echo "$IMPORT_OUTPUT"
@@ -1260,24 +1450,24 @@ jobs:
           # Validate project config
           depictio-cli --verbose config check \
             --project-config-path ../projects/test/cli-test/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           # Sync project to server
           depictio-cli --verbose config sync \
             --project-config-path ../projects/test/cli-test/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           # Scan data files
           depictio-cli --verbose data scan \
             --sync-files \
             --project-config-path ../projects/test/cli-test/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           # Process data into deltatables
           depictio-cli --verbose data process \
             --overwrite \
             --project-config-path ../projects/test/cli-test/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           echo "✅ CLI workflow with local test project passed"
 
@@ -1295,13 +1485,13 @@ jobs:
           # Validate project config (tests validation logic with Docker path detection)
           depictio-cli --verbose config check \
             --project-config-path ../projects/init/penguins/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           # Sync project to server (validates against API)
           depictio-cli --verbose config sync \
             --update \
             --project-config-path ../projects/init/penguins/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           # Skip scan/process/run - penguins is already initialized as reference dataset
           # The verification step below confirms the project and data exist in the database
@@ -1320,24 +1510,16 @@ jobs:
           # Validate project config (tests Image DC model validation)
           depictio-cli --verbose config check \
             --project-config-path ../projects/test/image_demo/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
-          # Sync project to server
-          depictio-cli --verbose config sync \
-            --project-config-path ../projects/test/image_demo/project.yaml \
-            --CLI-config-path admin_config.yaml
-
-          # Scan data files (syncs images to S3)
-          depictio-cli --verbose data scan \
+          # Ingest: sync the project to the server, scan the data files, build the
+          # delta table from the CSV, then upload local_images_path to s3_base_folder
+          # and check every image the table references is in S3 (fails if one is missing)
+          depictio-cli --verbose ingest \
             --sync-files \
+            --update-config \
             --project-config-path ../projects/test/image_demo/project.yaml \
-            --CLI-config-path admin_config.yaml
-
-          # Process data into deltatables (creates delta table from CSV)
-          depictio-cli --verbose data process \
-            --overwrite \
-            --project-config-path ../projects/test/image_demo/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           echo "✅ Image Demo CLI operations passed"
 
@@ -1348,7 +1530,7 @@ jobs:
           echo "📋 Testing Image Demo dashboard import..."
 
           # Import Image Demo dashboard
-          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/test/image_demo/dashboards/gallery.yaml --config admin_config.yaml 2>&1)
+          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/test/image_demo/dashboards/gallery.yaml --server admin_config.yaml 2>&1)
           echo "$IMPORT_OUTPUT"
 
           # Extract dashboard ID
@@ -1398,7 +1580,7 @@ jobs:
           # Import iris YAML to get a fresh dashboard ID to seed the roundtrip
           IMPORT_OUTPUT=$(depictio-cli dashboard import \
             ../projects/init/iris/dashboards/overview.yaml \
-            --config admin_config.yaml --overwrite 2>&1)
+            --server admin_config.yaml --overwrite 2>&1)
           echo "$IMPORT_OUTPUT"
 
           IRIS_ID=$(echo "$IMPORT_OUTPUT" | grep -oE '[0-9a-f]{24}' | head -1)
@@ -1424,7 +1606,7 @@ jobs:
           echo "📋 Testing backup commands (read-only)..."
 
           # List backups (read-only, won't fail if empty)
-          depictio-cli backup list --CLI-config-path admin_config.yaml || true
+          depictio-cli backup list --server admin_config.yaml || true
 
           echo "✅ Backup commands passed"
 
@@ -1445,7 +1627,13 @@ jobs:
 
           # Verify images were uploaded to S3
           echo "📊 Checking S3 for uploaded images..."
-          IMAGE_COUNT=$(docker compose exec -T minio mc ls depictio/depictio-bucket/image_demo/ 2>/dev/null | grep -c "\.png" || true)
+          # SeaweedFS ships no `mc`; count objects through the backend's S3 client.
+          IMAGE_COUNT=$(docker compose exec -T depictio-backend python -c "
+          from depictio.api.v1.configs.config import settings
+          from depictio.api.v1.s3 import s3_client
+          pages = s3_client.get_paginator('list_objects_v2').paginate(Bucket=settings.s3.bucket, Prefix='image_demo/')
+          print(sum(1 for page in pages for o in page.get('Contents', []) if o['Key'].endswith('.png')))
+          " 2>/dev/null | tail -1 || true)
           IMAGE_COUNT=${IMAGE_COUNT:-0}
           [ "$IMAGE_COUNT" -eq 0 ] && echo "⚠️  Warning: No images found in S3, but continuing..." || echo "✅ Found $IMAGE_COUNT images in S3"
 
@@ -1512,7 +1700,8 @@ jobs:
 
       - name: Download ampliseq test data from public S3
         run: |
-          S3_URL="https://nf-core-awsmegatests.s3.amazonaws.com/ampliseq/results-3d5c7e5bec28de279337f3ffe3c312a45940b782"
+          # Megatest of the shipped template version (see depictio/projects/nf-core/ampliseq/<latest>/download_test_data.sh)
+          S3_URL="https://nf-core-awsmegatests.s3.amazonaws.com/ampliseq/results-2723d4c298d48321594920d0324697e14d73ee94"
           TARGET="ampliseq-testdata"
           echo "📥 Downloading ampliseq test data..."
 
@@ -1527,27 +1716,52 @@ jobs:
                    "$TARGET/data/qiime2/taxonomy" \
                    "$TARGET/data/qiime2/rel_abundance_tables"
 
+          # nf-core-awsmegatests is a public third-party bucket that intermittently
+          # answers 503 (SlowDown). Under `bash -e` a single blip on any one of these
+          # files kills the whole job, so every download goes through a retrying fetch.
+          # Creating the destination directory here (rather than only in the
+          # mkdir list above) is what keeps adding a file to this list from
+          # failing with curl (23) "Failure writing output to destination".
+          fetch() {
+            mkdir -p "$(dirname "$TARGET/$2")"
+            curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors \
+                 --connect-timeout 15 --max-time 300 \
+                 "$S3_URL/$1" -o "$TARGET/$2"
+          }
+
           # Download all files needed by recipes + template
-          curl -fsSL "$S3_URL/input/Metadata_full.tsv" -o "$TARGET/input/Metadata_full.tsv"
-          curl -fsSL "$S3_URL/multiqc/multiqc_data/multiqc.parquet" -o "$TARGET/multiqc/multiqc_data/multiqc.parquet"
-          curl -fsSL "$S3_URL/qiime2/diversity/alpha_diversity/faith_pd_vector/metadata.tsv" -o "$TARGET/qiime2/diversity/alpha_diversity/faith_pd_vector/metadata.tsv"
-          curl -fsSL "$S3_URL/qiime2/alpha-rarefaction/faith_pd.csv" -o "$TARGET/qiime2/alpha-rarefaction/faith_pd.csv"
-          curl -fsSL "$S3_URL/qiime2/barplot/level-2.csv" -o "$TARGET/qiime2/barplot/level-2.csv"
-          curl -fsSL "$S3_URL/qiime2/rel_abundance_tables/rel-table-2.tsv" -o "$TARGET/qiime2/rel_abundance_tables/rel-table-2.tsv"
-          for f in lfc_slice.csv p_val_slice.csv q_val_slice.csv w_slice.csv se_slice.csv; do
-            curl -fsSL "$S3_URL/qiime2/ancombc/differentials/Category-habitat-level-2/$f" \
-              -o "$TARGET/qiime2/ancombc/differentials/Category-habitat-level-2/$f"
+          fetch "input/Metadata_full.tsv" "input/Metadata_full.tsv"
+          fetch "multiqc/multiqc_data/multiqc.parquet" "multiqc/multiqc_data/multiqc.parquet"
+          fetch "qiime2/diversity/alpha_diversity/faith_pd_vector/metadata.tsv" "qiime2/diversity/alpha_diversity/faith_pd_vector/metadata.tsv"
+          fetch "qiime2/alpha-rarefaction/faith_pd.csv" "qiime2/alpha-rarefaction/faith_pd.csv"
+          fetch "qiime2/barplot/level-2.csv" "qiime2/barplot/level-2.csv"
+          fetch "qiime2/rel_abundance_tables/rel-table-2.tsv" "qiime2/rel_abundance_tables/rel-table-2.tsv"
+          # ampliseq 2.18.0 defaults to an 8-rank taxonomy (sbdi-gtdb), where the
+          # Phylum sits one QIIME2 level deeper — the shipped template points its
+          # taxonomy DCs at level 3. Both levels are fetched: level-2 feeds the
+          # standalone recipe step below (recipes keep their 7-rank default
+          # paths), level-3 feeds the full template run.
+          fetch "qiime2/barplot/level-3.csv" "qiime2/barplot/level-3.csv"
+          fetch "qiime2/rel_abundance_tables/rel-table-3.tsv" "qiime2/rel_abundance_tables/rel-table-3.tsv"
+          for level in 2 3; do
+            for f in lfc_slice.csv p_val_slice.csv q_val_slice.csv w_slice.csv se_slice.csv; do
+              fetch "qiime2/ancombc/differentials/Category-habitat-level-${level}/$f" "qiime2/ancombc/differentials/Category-habitat-level-${level}/$f"
+            done
           done
 
           # Phase E (added in feat(ampliseq) funnel restructure, commit 7b7db7ccf):
           # template.yaml now declares a phylogenetic_tree_canonical DC (scan: single
           # filename → tree.nwk) and a phylogenetic_tree_metadata_canonical DC whose
           # recipe consumes taxonomy.tsv + rel-table-ASV.tsv. Without these files
-          # `depictio-cli run --template` fails at Project validation
+          # `depictio-cli ingest --template` fails at Project validation
           # (ScanSingle.filename: file does not exist) before any step runs.
-          curl -fsSL "$S3_URL/qiime2/phylogenetic_tree/tree.nwk" -o "$TARGET/data/qiime2/phylogenetic_tree/tree.nwk"
-          curl -fsSL "$S3_URL/qiime2/taxonomy/taxonomy.tsv" -o "$TARGET/data/qiime2/taxonomy/taxonomy.tsv"
-          curl -fsSL "$S3_URL/qiime2/rel_abundance_tables/rel-table-ASV.tsv" -o "$TARGET/data/qiime2/rel_abundance_tables/rel-table-ASV.tsv"
+          fetch "qiime2/phylogenetic_tree/tree.nwk" "data/qiime2/phylogenetic_tree/tree.nwk"
+          fetch "qiime2/taxonomy/taxonomy.tsv" "data/qiime2/taxonomy/taxonomy.tsv"
+          fetch "qiime2/rel_abundance_tables/rel-table-ASV.tsv" "data/qiime2/rel_abundance_tables/rel-table-ASV.tsv"
+          # Named-rank ASV table: the source the hierarchical DCs (sunburst,
+          # Sankey, tree tip metadata) prefer, since its ranks are columns rather
+          # than positions in a lineage string.
+          fetch "qiime2/rel_abundance_tables/rel-table-ASV_with-DADA2-tax.tsv" "qiime2/rel_abundance_tables/rel-table-ASV_with-DADA2-tax.tsv"
 
           # Generate samplesheet from Metadata_full.tsv (ID column → sampleID)
           echo "sampleID" > "$TARGET/samplesheet.csv"
@@ -1586,14 +1800,13 @@ jobs:
           cd depictio/cli
           source venv/bin/activate
           DATA_DIR="$(pwd)/../../ampliseq-testdata"
-          echo "🚀 Running full template pipeline: depictio run --template..."
+          echo "🚀 Running full template pipeline: depictio ingest --template..."
 
-          depictio-cli run \
-            --template nf-core/ampliseq/2.16.0 \
-            --data-root "$DATA_DIR" \
-            --project-name "Ampliseq CI Template Test" \
+          depictio-cli ingest "$DATA_DIR" \
+            --template nf-core/ampliseq/latest \
+            --project "Ampliseq CI Template Test" \
             --var SAMPLESHEET_FILE="$DATA_DIR/samplesheet.csv" \
-            --CLI-config-path admin_config.yaml \
+            --server admin_config.yaml \
             --continue-on-error
 
           echo "✅ Full template pipeline execution completed"
@@ -1640,7 +1853,9 @@ jobs:
           # If any goes missing (.dockerignore tightening, .gitignore drop,
           # accidental rm), the corresponding dashboard tiles 404 on every
           # fresh deploy — catch it here, not in production.
-          PROJ=/app/depictio/projects/nf-core/viralrecon/3.0.0
+          # Resolve the newest shipped template version (same rule as the seeding)
+          PROJ=$(docker compose exec -T depictio-backend sh -c \
+            'ls -d /app/depictio/projects/nf-core/viralrecon/[0-9]* | sort -V | tail -1')
           MISSED=0
           for f in \
             $PROJ/run_1/multiqc/multiqc_data/multiqc.parquet \
@@ -1684,9 +1899,11 @@ jobs:
           retention-days: 7
 
   backup-s3-strategies-comprehensive-tests:
-    needs: [docker-build]
+    needs: [check-quality-cache, docker-build]
     if: always() && needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
+    # Boots containers and can hang on a health loop (~3min observed).
+    timeout-minutes: 20
     permissions:
       contents: read
       packages: read
@@ -1769,11 +1986,11 @@ jobs:
           grep "DEPICTIO_BACKUP" docker-compose/.env || echo "❌ No DEPICTIO_BACKUP vars found!"
 
           echo "📂 Creating required directories..."
-          mkdir -p data/depictioDB data/minio_data data/minio_backup_data data/redis
-          chmod 777 data data/depictioDB data/minio_data data/minio_backup_data data/redis
+          mkdir -p data/depictioDB data/seaweedfs_data data/seaweedfs_backup_data data/redis
+          chmod 777 data data/depictioDB data/seaweedfs_data data/seaweedfs_backup_data data/redis
           # Ensure MongoDB can create additional directories
           chmod -R 777 data/depictioDB 2>/dev/null || echo "Directory permissions already set"
-          ls -la data/depictioDB data/minio_data data/minio_backup_data
+          ls -la data/depictioDB data/seaweedfs_data data/seaweedfs_backup_data
           echo "✅ Directories created and permissions set"
 
       - name: Log in and start services for ${{ matrix.strategy_name }}
@@ -1784,9 +2001,9 @@ jobs:
           echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
 
           echo "🐳 Setting up Docker images (api / worker / viewer)..."
-          export DEPICTIO_VERSION="${{ needs.docker-build.outputs.api-image }}"
-          export DEPICTIO_WORKER_VERSION="${{ needs.docker-build.outputs.worker-image }}"
-          export DEPICTIO_VIEWER_VERSION="${{ needs.docker-build.outputs.viewer-image }}"
+          export DEPICTIO_VERSION="${{ needs.check-quality-cache.outputs.api-image }}"
+          export DEPICTIO_WORKER_VERSION="${{ needs.check-quality-cache.outputs.worker-image }}"
+          export DEPICTIO_VIEWER_VERSION="${{ needs.check-quality-cache.outputs.viewer-image }}"
           echo "Using api image:    $DEPICTIO_VERSION"
           echo "Using worker image: $DEPICTIO_WORKER_VERSION"
           echo "Using viewer image: $DEPICTIO_VIEWER_VERSION"
@@ -1815,7 +2032,7 @@ jobs:
           # service on top of the standard set.
           export DEPICTIO_VIEWER_SERVICE_NAME=depictio-viewer
           export DEPICTIO_VIEWER_SERVICE_PORT=8080
-          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.backup-minio.yaml --env-file docker-compose/.env --profile ci up -d --force-recreate mongo redis minio minio-backup depictio-backend depictio-celery-worker depictio-viewer
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.backup-minio.yaml --env-file docker-compose/.env --profile ci up -d --force-recreate mongo redis s3 minio-backup depictio-backend depictio-celery-worker depictio-viewer
 
           echo "⏳ Waiting 30 seconds for services to start..."
           sleep 30
@@ -1826,10 +2043,10 @@ jobs:
           echo "🔍 Checking individual container status..."
           echo "--- Depictio Backend ---"
           docker compose logs --tail=10 depictio-backend || echo "❌ Backend logs not available"
-          echo "--- Main MinIO ---"
-          docker compose logs --tail=5 minio || echo "❌ MinIO logs not available"
-          echo "--- Backup MinIO ---"
-          docker compose logs --tail=5 minio-backup || echo "❌ Backup MinIO logs not available"
+          echo "--- Main S3 (SeaweedFS) ---"
+          docker compose logs --tail=5 s3 || echo "❌ S3 logs not available"
+          echo "--- Backup S3 (SeaweedFS) ---"
+          docker compose logs --tail=5 minio-backup || echo "❌ Backup S3 logs not available"
           echo "--- MongoDB ---"
           docker compose logs --tail=10 mongo || echo "❌ MongoDB logs not available"
 
@@ -1915,7 +2132,7 @@ jobs:
 
           echo "📦 Installing CLI dependencies..."
           uv pip install --upgrade pip
-          uv pip install -e .
+          uv pip install -e ../..
           echo "✅ CLI dependencies installed"
 
           echo "🔑 Copying admin configuration from backend container..."
@@ -2033,8 +2250,8 @@ jobs:
           print(f'Compress Local Backups: {settings.backup.compress_local_backups}');
 
           print('\n=== SOURCE S3 CONFIGURATION ===');
-          print(f'Source MinIO Bucket: {settings.minio.bucket}');
-          print(f'Source MinIO Endpoint: {settings.minio.endpoint_url}');
+          print(f'Source MinIO Bucket: {settings.s3.bucket}');
+          print(f'Source MinIO Endpoint: {settings.s3.endpoint_url}');
 
           # Test connectivity to both MinIO instances
           import boto3;
@@ -2043,16 +2260,16 @@ jobs:
           # Test source MinIO
           try:
               source_client = boto3.client('s3',
-                  endpoint_url=settings.minio.endpoint_url,
-                  aws_access_key_id=settings.minio.aws_access_key_id,
-                  aws_secret_access_key=settings.minio.aws_secret_access_key,
+                  endpoint_url=settings.s3.endpoint_url,
+                  aws_access_key_id=settings.s3.aws_access_key_id,
+                  aws_secret_access_key=settings.s3.aws_secret_access_key,
                   region_name='us-east-1');
               source_buckets = source_client.list_buckets();
               print(f'✅ Source MinIO accessible, buckets: {[b[\"Name\"] for b in source_buckets.get(\"Buckets\", [])]}');
 
               # Check if source bucket has any deltatable data
-              if settings.minio.bucket in [b[\"Name\"] for b in source_buckets.get(\"Buckets\", [])]:
-                  objects = source_client.list_objects_v2(Bucket=settings.minio.bucket);
+              if settings.s3.bucket in [b[\"Name\"] for b in source_buckets.get(\"Buckets\", [])]:
+                  objects = source_client.list_objects_v2(Bucket=settings.s3.bucket);
                   object_count = len(objects.get('Contents', []));
                   print(f'📊 Source bucket objects count: {object_count}');
                   if object_count > 0:
@@ -2060,7 +2277,7 @@ jobs:
                       for obj in objects.get('Contents', [])[:5]:
                           print(f'  - {obj[\"Key\"]} ({obj[\"Size\"]} bytes)');
               else:
-                  print(f'❌ Source bucket {settings.minio.bucket} not found');
+                  print(f'❌ Source bucket {settings.s3.bucket} not found');
           except Exception as e:
               print(f'❌ Source MinIO not accessible: {e}');
               import traceback;
@@ -2132,7 +2349,7 @@ jobs:
           # Create backup with strategy-specific prefix
           echo ""
           echo "🚀 Starting backup creation with detailed logging..."
-          echo "Command: depictio-cli -v -vl DEBUG backup create --CLI-config-path admin_config.yaml --include-s3-data --s3-backup-prefix ci_${{ matrix.backup_strategy }}_backup"
+          echo "Command: depictio-cli --log-level DEBUG backup create --server admin_config.yaml --include-s3-data --s3-backup-prefix ci_${{ matrix.backup_strategy }}_backup"
           echo "Strategy: ${{ matrix.backup_strategy }}"
           echo "Expected S3 files: ${{ matrix.expected_s3_files }}"
           echo "Expected local files: ${{ matrix.expected_local_files }}"
@@ -2142,8 +2359,8 @@ jobs:
           START_TIME=$(date +%s)
 
           # Run backup command with full debugging
-          if depictio-cli -v -vl DEBUG backup create \
-            --CLI-config-path admin_config.yaml \
+          if depictio-cli --log-level DEBUG backup create \
+            --server admin_config.yaml \
             --include-s3-data \
             --s3-backup-prefix "ci_${{ matrix.backup_strategy }}_backup"; then
             END_TIME=$(date +%s)
@@ -2282,7 +2499,7 @@ jobs:
           source venv/bin/activate
 
           # List backups and get the latest one
-          BACKUP_LIST=$(depictio-cli backup list --CLI-config-path admin_config.yaml)
+          BACKUP_LIST=$(depictio-cli backup list --server admin_config.yaml)
           echo "Available backups for ${{ matrix.strategy_name }}: $BACKUP_LIST"
 
           # Validate backup integrity
@@ -2290,7 +2507,7 @@ jobs:
           echo "Using backup ID for ${{ matrix.strategy_name }}: $BACKUP_ID"
 
           if [ -n "$BACKUP_ID" ]; then
-            depictio-cli -v -vl DEBUG backup validate "$BACKUP_ID" --CLI-config-path admin_config.yaml
+            depictio-cli --log-level DEBUG backup validate "$BACKUP_ID" --server admin_config.yaml
             echo "✅ Backup validation successful for ${{ matrix.strategy_name }}"
           else
             echo "❌ No backup ID found for ${{ matrix.strategy_name }}"
@@ -2314,13 +2531,13 @@ jobs:
           "
 
           # Get backup ID and restore
-          BACKUP_LIST=$(depictio-cli backup list --CLI-config-path admin_config.yaml)
+          BACKUP_LIST=$(depictio-cli backup list --server admin_config.yaml)
           BACKUP_ID=$(echo "$BACKUP_LIST" | grep -o '"backup_id": "[^"]*"' | head -1 | cut -d'"' -f4)
 
           if [ -n "$BACKUP_ID" ]; then
             echo "🔄 Performing restore test for ${{ matrix.strategy_name }}..."
-            depictio-cli -v -vl DEBUG backup restore "$BACKUP_ID" \
-              --CLI-config-path admin_config.yaml \
+            depictio-cli --log-level DEBUG backup restore "$BACKUP_ID" \
+              --server admin_config.yaml \
               --force
 
             # Verify restoration
@@ -2352,10 +2569,10 @@ jobs:
 
           # Dry-run first — must not change anything
           echo "🏃 Running dry-run migrate..."
-          depictio-cli -v -vl DEBUG migrate \
+          depictio-cli --log-level DEBUG migrate \
             --project "$IRIS_PROJECT_NAME" \
-            --CLI-config-path admin_config.yaml \
-            --target-config admin_config.yaml \
+            --server admin_config.yaml \
+            --to-server admin_config.yaml \
             --mode metadata \
             --dry-run
           echo "✅ Dry-run migrate completed"
@@ -2369,10 +2586,10 @@ jobs:
           # Real migrate (same instance as source and target — idempotent upsert)
           # --overwrite required because the project already exists on this instance
           echo "🚀 Running real migrate (metadata mode)..."
-          depictio-cli -v -vl DEBUG migrate \
+          depictio-cli --log-level DEBUG migrate \
             --project "$IRIS_PROJECT_NAME" \
-            --CLI-config-path admin_config.yaml \
-            --target-config admin_config.yaml \
+            --server admin_config.yaml \
+            --to-server admin_config.yaml \
             --mode metadata \
             --overwrite
           echo "✅ Real migrate completed"
@@ -2381,8 +2598,8 @@ jobs:
           echo "🔒 Testing conflict detection (no --overwrite, should fail)..."
           if depictio-cli migrate \
             --project "$IRIS_PROJECT_NAME" \
-            --CLI-config-path admin_config.yaml \
-            --target-config admin_config.yaml \
+            --server admin_config.yaml \
+            --to-server admin_config.yaml \
             --mode metadata 2>&1; then
             echo "❌ Expected conflict exit but command succeeded"
             exit 1
@@ -2423,10 +2640,10 @@ jobs:
 
           # Run migrate and capture output to verify dashboards were actually exported
           MIGRATE_LOG=$(mktemp)
-          depictio-cli -v -vl DEBUG migrate \
+          depictio-cli --log-level DEBUG migrate \
             --project "$IRIS_PROJECT_NAME" \
-            --CLI-config-path admin_config.yaml \
-            --target-config admin_config.yaml \
+            --server admin_config.yaml \
+            --to-server admin_config.yaml \
             --mode dashboard \
             --overwrite 2>&1 | tee "$MIGRATE_LOG"
 
@@ -2490,10 +2707,10 @@ jobs:
           # Run mode=all (self-migration: same instance as source and target)
           # This exercises the S3 copy code path in addition to MongoDB upserts
           MIGRATE_LOG=$(mktemp)
-          depictio-cli -v -vl DEBUG migrate \
+          depictio-cli --log-level DEBUG migrate \
             --project "$IRIS_PROJECT_NAME" \
-            --CLI-config-path admin_config.yaml \
-            --target-config admin_config.yaml \
+            --server admin_config.yaml \
+            --to-server admin_config.yaml \
             --mode all \
             --overwrite 2>&1 | tee "$MIGRATE_LOG"
 
@@ -2643,12 +2860,19 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   e2e-playwright:
     name: e2e-playwright (${{ matrix.auth_mode }})
-    needs: [docker-build]
-    # `quality` upstream may be skipped on cache hits, which makes the default
+    needs: [check-quality-cache, docker-build]
+    # `lint` upstream may be skipped on cache hits, which makes the default
     # success() condition skip this job too — same guard as the other
     # docker-build consumers in this workflow.
     if: always() && needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
+    # No job in this workflow had one, so the only backstop was GitHub's 6h
+    # default — and a leg of this job has run for 3h. Sized for the full catalog
+    # walk (main, nightly, ci:full-catalog), ~60min a leg with ~550 renders each;
+    # a PR's representative walk finishes a leg in ~10. Sized so Playwright
+    # always reaches its own end-of-run summary: a job the runner kills here
+    # skips every `if: always()` step, report included.
+    timeout-minutes: 120
     permissions:
       contents: read
       packages: read
@@ -2656,8 +2880,15 @@ jobs:
       # One failing mode must not cancel the others — each leg is independent.
       fail-fast: false
       matrix:
+        # catalog_shard: the catalog walk is auth-mode independent, so all three
+        # legs used to re-walk the identical several hundred renders, an hour
+        # each. They now take a third apiece and the union is the whole catalog,
+        # once per run. Keep these numbered 1..N with CATALOG_E2E_SHARDS below
+        # equal to N: adding or removing a leg means renumbering them, and a leg
+        # that disappears takes its third of the coverage with it.
         include:
           - auth_mode: standard
+            catalog_shard: "1"
             single_user_mode: "false"
             public_mode: "false"
             demo_mode: "false"
@@ -2665,10 +2896,12 @@ jobs:
           # mode (DEMO_MODE requires PUBLIC_MODE=true), and the specs only
           # branch on is_public_mode — one stack covers both.
           - auth_mode: public-demo
+            catalog_shard: "2"
             single_user_mode: "false"
             public_mode: "true"
             demo_mode: "true"
           - auth_mode: single-user
+            catalog_shard: "3"
             single_user_mode: "true"
             public_mode: "false"
             demo_mode: "false"
@@ -2687,21 +2920,46 @@ jobs:
           sed -i 's/^DEPICTIO_AUTH_PUBLIC_MODE=.*/DEPICTIO_AUTH_PUBLIC_MODE=${{ matrix.public_mode }}/' docker-compose/.env
           sed -i 's/^DEPICTIO_AUTH_DEMO_MODE=.*/DEPICTIO_AUTH_DEMO_MODE=${{ matrix.demo_mode }}/' docker-compose/.env
           sed -i 's/^#* *DEPICTIO_DEV_MODE=.*/DEPICTIO_DEV_MODE=true/' docker-compose/.env
-          mkdir -p data/depictioDB data/minio_data data/prof_files data/cache data/redis
-          chmod 777 data data/depictioDB data/minio_data data/prof_files data/cache data/redis
+          # Standard leg only: the create-from-manifest spec fetches a Data
+          # Manifest the runner serves at http://host.docker.internal:8099 (see
+          # the step below). That name maps to the docker bridge gateway, a
+          # private address the SSRF gateway rejects unless the host is
+          # allowlisted. DEPICTIO_REMOTE_ALLOW_HTTP=true is already the committed
+          # dev default in docker-compose/.env and the sed edits above leave it
+          # alone. The allowlist is exclusive while set; no other spec fetches
+          # a remote URL, and the storage panel's own-endpoint exemption is
+          # checked before it.
+          if [ "${{ matrix.auth_mode }}" = "standard" ]; then
+            echo "DEPICTIO_REMOTE_URL_ALLOWLIST=host.docker.internal" >> docker-compose/.env
+          fi
+          # Seed the catalog conformance project on top of the default set. It is
+          # opt-in because it is a test fixture, and the catalog coverage spec is
+          # the only thing that needs it.
+          echo "DEPICTIO_SEED_EXTRA_PROJECTS=catalog_conformance" >> docker-compose/.env
+          # `multiqc_prerender` is bind-mounted into the backend and the worker,
+          # both of which run as $UID:$GID. Left to Docker to create, it lands
+          # root-owned and every MultiQC render 500s on the cache write.
+          mkdir -p data/depictioDB data/seaweedfs_data data/prof_files data/cache data/redis data/multiqc_prerender
+          chmod 777 data data/depictioDB data/seaweedfs_data data/prof_files data/cache data/redis data/multiqc_prerender
 
       - name: Log in and start services
         run: |
           echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
-          export DEPICTIO_VERSION="${{ needs.docker-build.outputs.api-image }}"
-          export DEPICTIO_WORKER_VERSION="${{ needs.docker-build.outputs.worker-image }}"
-          export DEPICTIO_VIEWER_VERSION="${{ needs.docker-build.outputs.viewer-image }}"
+          export DEPICTIO_VERSION="${{ needs.check-quality-cache.outputs.api-image }}"
+          export DEPICTIO_WORKER_VERSION="${{ needs.check-quality-cache.outputs.worker-image }}"
+          export DEPICTIO_VIEWER_VERSION="${{ needs.check-quality-cache.outputs.viewer-image }}"
           docker pull "${DEPICTIO_VERSION}" &
           docker pull "${DEPICTIO_WORKER_VERSION}" &
           docker pull "${DEPICTIO_VIEWER_VERSION}" &
           wait
           export DEPICTIO_FASTAPI_WORKERS=1  # Single worker to avoid boot race conditions
-          docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env --profile ci up -d mongo redis minio depictio-backend depictio-celery-worker depictio-viewer
+          COMPOSE_FILES="-f docker-compose.dev.yaml"
+          if [ "${{ matrix.auth_mode }}" = "standard" ]; then
+            # host.docker.internal for the backend + worker (Linux docker does
+            # not provide it): lets them reach the manifest server on the runner.
+            COMPOSE_FILES="$COMPOSE_FILES -f docker-compose/docker-compose.e2e-manifest.yaml"
+          fi
+          docker compose $COMPOSE_FILES --env-file docker-compose/.env --profile ci up -d mongo redis s3 depictio-backend depictio-celery-worker depictio-viewer
 
       # Node + Playwright setup runs while the docker stack boots; the
       # explicit health gate below is the only wait.
@@ -2765,9 +3023,88 @@ jobs:
           echo "🔍 Auth mode reported by API:"
           curl -s http://localhost:8058/depictio/api/v1/auth/me/optional || true
 
+      # /health going green only means the API is answering. Reference datasets
+      # are still being scanned and processed in the background at that point,
+      # and the catalog is not stable while that runs: `_multiqc_sections` in
+      # catalog_endpoints/routes.py cannot filter a report whose document does
+      # not exist yet, so `compose` offers every section of it, then stops once
+      # extraction lands. The catalog walk freezes its list of renders once, at
+      # the very start, and then walks it for twenty minutes — so it was walking
+      # a list the picker no longer agreed with, and reporting renders as
+      # unaddable that simply were not offered any more. Same wait the backup
+      # job above already does, same reason.
+      - name: Wait for reference dataset processing to finish
+        run: |
+          for i in {1..40}; do
+            bg_status=$(docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env \
+              exec -T mongo mongosh localhost:27018/depictioDB \
+              --eval "var doc = db.initialization.findOne({_id: 'reference_datasets_metadata'}); \
+                      print(doc ? (doc.background_processing_complete ? 'complete' : (doc.background_processing_failed ? 'failed' : 'pending')) : 'missing')" \
+              --quiet 2>&1 | tail -1)
+            echo "📊 Reference dataset processing (attempt $i/40): $bg_status"
+            if [ "$bg_status" = "complete" ]; then
+              echo "✅ Catalog is stable, starting the suite"
+              break
+            elif [ "$bg_status" = "failed" ]; then
+              echo "❌ Background processing failed:"
+              docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env logs --tail=50 depictio-backend
+              exit 1
+            fi
+            [ "$i" = "40" ] && echo "⚠️  Still $bg_status after 10 minutes — running anyway, the catalog walk will report what it finds"
+            sleep 15
+          done
+
+      # Standard leg only: generate the demo Data Manifest kit on the runner
+      # and serve it over plain HTTP so the create-from-manifest spec runs
+      # end to end (it self-skips without MANIFEST_E2E_URL). The entry URLs
+      # are absolute and must be the address the *backend* resolves, hence
+      # host.docker.internal (mapped by the compose overlay above).
+      - name: Serve a Data Manifest for the create-from-manifest flow
+        if: matrix.auth_mode == 'standard'
+        run: |
+          MANIFEST_DIR="${RUNNER_TEMP}/demo-manifest-data"
+          python3 depictio/dev_scripts/demo_manifest/generate.py \
+            --base-url http://host.docker.internal:8099 \
+            --output-dir "$MANIFEST_DIR"
+          (cd "$MANIFEST_DIR" && nohup python3 -m http.server 8099 --bind 0.0.0.0 > "${RUNNER_TEMP}/manifest-server.log" 2>&1 &)
+          for i in {1..15}; do
+            curl -fs http://localhost:8099/manifest.json > /dev/null && break
+            [ "$i" = "15" ] && { echo "❌ Manifest server never came up"; cat "${RUNNER_TEMP}/manifest-server.log"; exit 1; }
+            sleep 1
+          done
+          # Prove the backend can reach it through the overlay's host mapping
+          # and the allowlist (curl is not in the image; python is).
+          docker compose -f docker-compose.dev.yaml -f docker-compose/docker-compose.e2e-manifest.yaml --env-file docker-compose/.env exec -T depictio-backend \
+            python -c "import urllib.request; print('manifest reachable from backend:', urllib.request.urlopen('http://host.docker.internal:8099/manifest.json', timeout=10).status)"
+
+      # CATALOG_E2E_LANES=1 is measured, not assumed. A second walker has to
+      # share one FastAPI worker and 4 vCPU with mongo, redis, minio, celery
+      # and the viewer, and MultiQC is the one render whose figures the backend
+      # builds on demand: with two lanes those builds queue behind each other,
+      # and two of the three legs failed on nothing else. One walker per leg is
+      # the only shape a full walk has ever finished clean in. Raise it when the
+      # backend has room, not before.
+      #
+      # CATALOG_E2E_SELECT: the full walk (~1650 renders, ~55 min a leg) runs on
+      # main, nightly, on a PR labelled ci:full-catalog and on a PR touching the
+      # code every render goes through (see check-quality-cache). Any other PR
+      # walks one render per distinct shape (component, kind, control, layout),
+      # around sixty, plus every render of the catalog tools it changed — the
+      # same picker -> editor -> viewer path at a few minutes a leg. One chunk
+      # is enough for that slice: chunks exist to bound a long walk's retry.
       - name: Run Playwright tests (${{ matrix.auth_mode }})
+        env:
+          CATALOG_E2E_SELECT: ${{ needs.check-quality-cache.outputs.full-catalog == 'true' && 'all' || 'representative' }}
+          CATALOG_E2E_TOOLS: ${{ needs.check-quality-cache.outputs.catalog-tools }}
+          CATALOG_E2E_CHUNKS: ${{ needs.check-quality-cache.outputs.full-catalog == 'true' && '8' || '1' }}
         run: |
           cd depictio/tests/e2e-playwright
+          echo "Catalog walk: ${CATALOG_E2E_SELECT}${CATALOG_E2E_TOOLS:+ (tools walked in full: ${CATALOG_E2E_TOOLS})}"
+          CATALOG_CONFORMANCE_REQUIRED=1 \
+          CATALOG_E2E_SHARD=${{ matrix.catalog_shard }} \
+          CATALOG_E2E_SHARDS=3 \
+          CATALOG_E2E_LANES=1 \
+          MANIFEST_E2E_URL="${{ matrix.auth_mode == 'standard' && 'http://host.docker.internal:8099/manifest.json' || '' }}" \
           PLAYWRIGHT_BASE_URL=http://localhost:5080 \
           PLAYWRIGHT_API_URL=http://localhost:8058 \
           npx playwright test
@@ -2792,6 +3129,9 @@ jobs:
         if: failure()
         run: |
           docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env logs > e2e-${{ matrix.auth_mode }}-services.log 2>&1 || true
+          if [ -f "${RUNNER_TEMP}/manifest-server.log" ]; then
+            { echo "===== manifest server (runner) ====="; cat "${RUNNER_TEMP}/manifest-server.log"; } >> e2e-${{ matrix.auth_mode }}-services.log
+          fi
 
       - name: Upload service logs on failure
         uses: actions/upload-artifact@v7
@@ -2800,3 +3140,35 @@ jobs:
           name: e2e-services-logs-${{ matrix.auth_mode }}
           path: e2e-${{ matrix.auth_mode }}-services.log
           retention-days: 7
+
+  # The one check to require in branch protection. A job skipped on purpose
+  # (docs-only change, quality cache hit, pixi untouched, fork PR) counts as
+  # passing here; required per-job checks would not survive that, because a
+  # matrix job skipped before it expands never reports under its leg names, so
+  # an "e2e-playwright (standard)" requirement would wait forever.
+  ci-ok:
+    if: always()
+    needs:
+      - check-quality-cache
+      - lint
+      - quality
+      - js-unit
+      - pixi-install-test
+      - docker-build
+      - local-to-compose
+      - docker-system-init
+      - cli-comprehensive-test
+      - backup-s3-strategies-comprehensive-tests
+      - e2e-playwright
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Fail if any job failed or was cancelled
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.value.result)\t\(.key)"'
+          if echo "$RESULTS" | jq -e '[.[].result] | any(. == "failure" or . == "cancelled")' > /dev/null; then
+            echo "❌ At least one job failed or was cancelled"
+            exit 1
+          fi
+          echo "✅ Every job passed or was skipped on purpose"

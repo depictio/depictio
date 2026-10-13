@@ -7,18 +7,63 @@ against Plotly version changes.
 """
 
 import inspect
+import re
 from typing import Any, Dict, List, Optional, Union
 
 import plotly.express as px
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.services.figure.models import (
+    PLOT_TEMPLATE_OPTIONS,
     ParameterCategory,
     ParameterDefinition,
     ParameterType,
     VisualizationDefinition,
     VisualizationGroup,
 )
+
+# A parameter entry in a Plotly Express docstring: `name: type`, flush left.
+_DOC_PARAM_RE = re.compile(r"^(\w+):")
+
+
+def parse_docstring_descriptions(doc: Optional[str]) -> Dict[str, str]:
+    """Per-parameter descriptions from a Plotly Express docstring.
+
+    px docstrings list each parameter flush left as ``name: type``, followed
+    by its description indented beneath, between ``Parameters`` and
+    ``Returns``. The description lines are joined into one paragraph and the
+    backticks dropped, since the hover card shows them as literal characters.
+
+    Args:
+        doc: The function's ``__doc__``.
+
+    Returns:
+        Parameter name to description, for every documented parameter.
+    """
+    if not doc:
+        return {}
+    lines_by_param: Dict[str, List[str]] = {}
+    current: Optional[str] = None
+    in_parameters = False
+    for line in doc.splitlines():
+        stripped = line.strip()
+        if not in_parameters:
+            in_parameters = stripped == "Parameters"
+            continue
+        if stripped == "Returns":
+            break
+        if line[:1].isspace():
+            if current and stripped:
+                lines_by_param[current].append(stripped)
+        elif stripped:
+            # Flush left: a new entry, or the `----------` underline.
+            match = _DOC_PARAM_RE.match(line)
+            current = match.group(1) if match else None
+            if current:
+                lines_by_param[current] = []
+    return {
+        name: " ".join(lines).replace("`", "") for name, lines in lines_by_param.items() if lines
+    }
 
 
 class ParameterInspector:
@@ -89,18 +134,7 @@ class ParameterInspector:
         "template": {
             "type": ParameterType.SELECT,
             "label": "Theme",
-            "options": [
-                "mantine_light",
-                "mantine_dark",
-                "plotly",
-                "plotly_white",
-                "plotly_dark",
-                "ggplot2",
-                "seaborn",
-                "simple_white",
-                "presentation",
-                "none",
-            ],
+            "options": list(PLOT_TEMPLATE_OPTIONS),
             "description": "Plotly template that controls the plot's overall look (background, fonts, gridlines).",
             "default": None,
         },
@@ -673,8 +707,8 @@ class ParameterInspector:
             if param_name in knowledge_base:
                 return knowledge_base[param_name]
 
-        # Return default metadata
-        return {"description": f"Parameter: {param_name}"}
+        # No curated entry: the caller falls back to Plotly's own docstring.
+        return {}
 
     def _get_special_parameter_overrides(
         self, func_name: str
@@ -1032,6 +1066,10 @@ class ParameterInspector:
         if not signature:
             return []
 
+        # Curated descriptions win; every other parameter gets Plotly's own
+        # wording rather than an empty or placeholder hover card.
+        doc_descriptions = parse_docstring_descriptions(getattr(px, func_name).__doc__)
+
         parameters = []
 
         for param_name, param in signature.parameters.items():
@@ -1066,7 +1104,7 @@ class ParameterInspector:
                 label=metadata.get(
                     "label", param_name
                 ),  # Use label from metadata or parameter name
-                description=metadata.get("description", f"Parameter: {param_name}"),
+                description=metadata.get("description") or doc_descriptions.get(param_name, ""),
                 default=metadata.get(
                     "default", param.default if param.default != inspect.Parameter.empty else None
                 ),
@@ -1406,18 +1444,7 @@ def create_umap_visualization_definition() -> VisualizationDefinition:
             category=ParameterCategory.COMMON,
             label="Template",
             description="Plotly template",
-            options=[
-                "mantine_light",
-                "mantine_dark",
-                "plotly",
-                "plotly_white",
-                "plotly_dark",
-                "ggplot2",
-                "seaborn",
-                "simple_white",
-                "presentation",
-                "none",
-            ],
+            options=list(PLOT_TEMPLATE_OPTIONS),
             default=None,
             required=False,
         ),

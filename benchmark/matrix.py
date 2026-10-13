@@ -91,8 +91,11 @@ FIGURE_VISU_ROTATION: tuple[str, ...] = (
 # ``viz_kind`` values rotated across advanced_viz components. Every kind here
 # binds to real columns the linked generator emits (see
 # ``configgen._advanced_viz_config``) and exercises all three sampling policies
-# (``models/components/advanced_viz/sampling.py``): tail (volcano/ma/manhattan),
-# hash (qq/lollipop), none (da_barplot/sunburst/sankey/stacked_taxonomy/dot_plot).
+# (``models/components/advanced_viz/sampling.py``): tail (volcano, its ``ma`` and
+# ``qq`` views, manhattan), hash (lollipop), none (da_barplot/sunburst/sankey/
+# stacked_taxonomy/dot_plot). ``ma`` and ``qq`` stay spelled the legacy way on
+# purpose: the alias path (``kind: ma`` -> ``volcano`` with ``view: ma``) is what
+# every stored dashboard goes through.
 # The ``none`` kinds cross the 2 M no-sample ceiling on a 1 GB features DC, so the
 # rotation also exercises the degraded/flagged-sample path.
 ADVANCED_VIZ_ROTATION: tuple[str, ...] = (

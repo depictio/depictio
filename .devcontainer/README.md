@@ -25,6 +25,10 @@ Click the "Code" button → "Create codespace on [branch]"
 
 Everything works automatically!
 
+To try Depictio rather than develop it, use the lighter codespace in
+[`try/`](try/README.md): it installs the published `depictio[local]` package
+and runs `depictio local up`, without Docker.
+
 ## 🔌 Services & Ports
 
 The devcontainer automatically starts all services:
@@ -35,8 +39,8 @@ The devcontainer automatically starts all services:
 | Redis | 6379 | `localhost:6379` | Cache |
 | FastAPI | 8058 | `localhost:8058` | Backend API |
 | Dash | 5080 | `localhost:5080` | Frontend UI |
-| MinIO | 9000 | `localhost:9000` | S3 Storage |
-| MinIO Console | 9001 | `localhost:9001` | Storage UI |
+| S3 (SeaweedFS) | 9000 | `localhost:9000` | S3 Storage |
+| S3 admin UI | 9001 | `localhost:9001` | Storage UI (SeaweedFS) |
 
 **Local worktrees**: Each branch gets unique ports (offset by 10-150) to avoid conflicts.
 **Codespaces**: Uses standard ports, accessed via GitHub's proxy URLs.
@@ -57,7 +61,7 @@ When using git worktrees locally, you get automatic:
 
 If `docker-compose/.env` doesn't exist, a default is created automatically with:
 - Development mode enabled
-- MinIO credentials: `minio` / `minio123`
+- S3 credentials: `minio` / `minio123`
 - Debug logging
 - OAuth disabled
 
@@ -93,6 +97,14 @@ If git panel is empty:
 1. Check logs in devcontainer build output for git configuration messages
 2. Rebuild container
 
+### `service "minio" has neither an image nor a build context specified`
+
+The storage service is now named `s3`. A worktree set up before the rename has
+a stale generated `docker-compose.override.yaml`: re-run
+`source .devcontainer/scripts/allocate-ports.sh` to regenerate it, then pass
+`--remove-orphans` to the next `docker compose ... up` to drop the old
+`minio` container. See `docs/WORKTREE_WORKFLOW.md`.
+
 ### Services not starting
 
 Check service health:
@@ -117,12 +129,12 @@ docker logs <container-name>  # Check specific service logs
 ┌─────────────────────────────────────────────────────────┐
 │ Services (docker-compose)                               │
 │ ┌─────────┐ ┌─────────┐ ┌────────┐ ┌─────────────────┐│
-│ │ MongoDB │ │  Redis  │ │ MinIO  │ │ FastAPI + Dash  ││
+│ │ MongoDB │ │  Redis  │ │  S3    │ │ FastAPI + Dash  ││
 │ └─────────┘ └─────────┘ └────────┘ └─────────────────┘│
 └─────────────────────────────────────────────────────────┘
 ```
 
-All services communicate via container names (e.g., `mongo:27018`, `minio:9000`).
+All services communicate via container names (e.g., `mongo:27018`, `s3:9000`).
 
 ## 📝 Files
 

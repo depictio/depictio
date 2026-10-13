@@ -1,0 +1,97 @@
+"""Offline unit tests for scripts/bump_template_version.py (tmp dirs only)."""
+
+from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+from types import ModuleType
+
+import pytest
+
+_SCRIPT = Path(__file__).resolve().parents[3] / "scripts" / "bump_template_version.py"
+
+
+@pytest.fixture(scope="module")
+def btv() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("bump_template_version", _SCRIPT)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture()
+def pipeline_dir(tmp_path: Path) -> Path:
+    """A fake nf-core projects root with one pipeline at 2.16.0 (+ legacy 2.14.0)."""
+    for version in ("2.14.0", "2.16.0"):
+        vdir = tmp_path / "ampliseq" / version
+        (vdir / "dashboards").mkdir(parents=True)
+        (vdir / "template.yaml").write_text(
+            f'template:\n  template_id: "nf-core/ampliseq/{version}"\n  version: "{version}"\n'
+        )
+        (vdir / "dashboards" / "base.yaml").write_text(f"# ampliseq {version} dashboard\n")
+        (vdir / "data.parquet").write_bytes(bytes([0, 159, 146, 150]) + version.encode())
+    # Only the latest version ships a megatest manifest pinning its own run.
+    (tmp_path / "ampliseq" / "2.16.0" / "megatest.yaml").write_text(
+        "# manifest\n"
+        "pipeline: ampliseq\n"
+        'version: "2.16.0"\n'
+        '# the release tag_sha\nresults_sha: "3d5c7e5bec28de279337f3ffe3c312a45940b782"\n'
+        'run_root: ""\n'
+        "keys:\n  - multiqc/multiqc_data/multiqc.parquet\n"
+    )
+    return tmp_path
+
+
+def test_bump_copies_from_latest_and_rewrites_versions(btv: ModuleType, pipeline_dir: Path) -> None:
+    new_dir = btv.bump("ampliseq", "2.18.0", projects_dir=pipeline_dir)
+    template = (new_dir / "template.yaml").read_text()
+    # Copied from 2.16.0 (the latest, not legacy 2.14.0), fully re-versioned.
+    assert 'template_id: "nf-core/ampliseq/2.18.0"' in template
+    assert "2.16.0" not in template and "2.14.0" not in template
+    assert "2.18.0 dashboard" in (new_dir / "dashboards" / "base.yaml").read_text()
+    # Binary payloads are copied verbatim, never text-rewritten.
+    assert (new_dir / "data.parquet").read_bytes().endswith(b"2.16.0")
+    # Source dir is untouched; latest now resolves to the new version.
+    assert '"2.16.0"' in (pipeline_dir / "ampliseq" / "2.16.0" / "template.yaml").read_text()
+    assert btv.latest_version(pipeline_dir / "ampliseq") == "2.18.0"
+
+
+def test_bump_blanks_megatest_results_sha_in_the_copy(btv: ModuleType, pipeline_dir: Path) -> None:
+    new_dir = btv.bump("ampliseq", "2.18.0", projects_dir=pipeline_dir)
+    copied = (new_dir / "megatest.yaml").read_text()
+    # The version string is rewritten like any text file, the pinned run is dropped
+    # (it belongs to 2.16.0) and everything else survives verbatim.
+    assert 'version: "2.18.0"' in copied
+    assert "3d5c7e5bec28de279337f3ffe3c312a45940b782" not in copied
+    assert "results_sha: null" in copied
+    assert "# the release tag_sha" in copied and "multiqc/multiqc_data/multiqc.parquet" in copied
+    # The source manifest keeps its pin.
+    source = (pipeline_dir / "ampliseq" / "2.16.0" / "megatest.yaml").read_text()
+    assert 'results_sha: "3d5c7e5bec28de279337f3ffe3c312a45940b782"' in source
+    # Idempotent: a manifest without a sha line is left alone.
+    assert btv.blank_manifest_sha(new_dir / "megatest.yaml") is False
+
+
+def test_bump_refusals_and_dry_run(btv: ModuleType, pipeline_dir: Path) -> None:
+    with pytest.raises(FileExistsError):
+        btv.bump("ampliseq", "2.16.0", from_version="2.14.0", projects_dir=pipeline_dir)
+    # A "new" version sorting below the source would never be picked by
+    # latest-resolution — refuse instead of shipping a dead directory.
+    with pytest.raises(ValueError, match="does not sort above"):
+        btv.bump("ampliseq", "2.15.0", projects_dir=pipeline_dir)
+    with pytest.raises(FileNotFoundError):
+        btv.bump("nope", "1.0.0", projects_dir=pipeline_dir)
+    btv.bump("ampliseq", "2.18.0", projects_dir=pipeline_dir, dry_run=True)
+    assert not (pipeline_dir / "ampliseq" / "2.18.0").exists()
+
+
+def test_rewrite_leaves_longer_numbers_alone(btv: ModuleType, tmp_path: Path) -> None:
+    """A short version like 3.1 is also inside 3.11.0 or 3.14, which are not it."""
+    (tmp_path / "versions.yml").write_text(
+        "nf-core/cutandrun: '3.1'\npython: 3.11.0\nratio: 3.14\nsee v3.1/docs and 13.1.\n"
+    )
+    btv.rewrite_versions(tmp_path, "3.1", "3.2.2")
+    assert (tmp_path / "versions.yml").read_text() == (
+        "nf-core/cutandrun: '3.2.2'\npython: 3.11.0\nratio: 3.14\nsee v3.2.2/docs and 13.1.\n"
+    )

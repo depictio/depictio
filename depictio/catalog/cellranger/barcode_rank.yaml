@@ -1,0 +1,18 @@
+id: cellranger_barcode_rank
+name: Barcode-rank curve
+mode: count/barcode_rank
+description: >-
+  UMI count per barcode against its rank, summed from the raw
+  feature-barcode matrix (background droplets included) and flagged against
+  the barcodes Cell Ranger kept as cells, the knee that separates real
+  cells from ambient noise.
+find:
+  path_glob: "**/raw_feature_bc_matrix/matrix.mtx.gz"
+recipe: cellranger/barcode_rank.py
+fixture: barcode_rank.tsv
+renders_as:
+  - { id: barcode_rank_knee, component: advanced_viz, kind: knee_plot, roles: {sample: sample, rank: rank, umi_count: umi_count, is_cell: is_cell} }
+  - { id: barcode_rank_curve, component: figure, visu_type: line, dict_kwargs: {x: rank, y: umi_count, color: sample, log_x: "true", log_y: "true", title: Barcode-rank curve} }
+  - { component: card, column: umi_count, aggregation: max, secondary_layout: histogram }
+  - { id: barcode_umi_filter, component: interactive, interactive_type: RangeSlider, column_name: umi_count }
+  - { component: table }

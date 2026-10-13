@@ -1,0 +1,321 @@
+"""`depictio-cli config nextflow`: the path a Nextflow command substitutes.
+
+The command exists so a user never has to type a site-packages path:
+
+    nextflow run <pipeline> -c $(depictio-cli config nextflow)
+
+Which means its output contract is unusually strict. Anything printed on stdout
+besides the path itself lands on the Nextflow command line, so these tests guard
+the bareness of the output as much as its content.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pytest
+from typer.testing import CliRunner
+
+from depictio.cli.cli.commands.config import app
+
+runner = CliRunner()
+
+
+def _stdout(*args) -> str:
+    result = runner.invoke(app, ["nextflow", *args])
+    assert result.exit_code == 0, result.output
+    return result.stdout
+
+
+class TestPathOutput:
+    def test_it_prints_a_path_that_exists(self):
+        path = Path(_stdout().strip())
+        assert path.is_file()
+        assert path.name == "depictio.config"
+
+    def test_the_snippet_is_the_one_the_package_ships(self):
+        """A stale copy elsewhere on disk would be worse than no command."""
+        path = Path(_stdout().strip())
+        assert path.parts[-3:] == ("configs", "nextflow", "depictio.config")
+        assert "workflow.onComplete" in path.read_text()
+
+    def test_stdout_is_the_bare_path_and_nothing_else(self):
+        """It is substituted into a shell command: decoration would break it."""
+        out = _stdout()
+        assert out.endswith("\n")
+        assert len(out.strip().splitlines()) == 1
+        # Rich's status symbols, banners and box drawing all fail this.
+        assert not any(ch in out for ch in "•✓✗✅❌╭╮╰╯│▀▄")
+
+
+class TestPrintOutput:
+    def test_print_emits_the_snippet_itself(self):
+        out = _stdout("--print")
+        assert "workflow.onComplete" in out
+        assert "depictio_cli_executable" in out
+
+    def test_print_round_trips_to_a_usable_file(self, tmp_path):
+        """`config nextflow --print > depictio.config` has to yield the original."""
+        source = Path(_stdout().strip())
+        copy = tmp_path / "depictio.config"
+        copy.write_text(_stdout("--print"))
+        assert copy.read_text() == source.read_text()
+
+
+class TestInstallEnablesTheTriggerGlobally:
+    """`--install` writes the include Nextflow reads before every run.
+
+    The point is to stop repeating `-c` on every command. What it must not do
+    is disturb the rest of that file, or leave behind an include that outlives
+    the CLI: Nextflow refuses to parse a config whose `includeConfig` target is
+    missing, so a stale entry breaks *every* pipeline on the machine, whether
+    or not it has anything to do with Depictio.
+    """
+
+    def _run(self, monkeypatch, home, *args):
+        monkeypatch.delenv("NXF_HOME", raising=False)
+        monkeypatch.setenv("HOME", str(home))
+        monkeypatch.setattr(
+            Path, "expanduser", lambda self: Path(str(self).replace("~", str(home), 1))
+        )
+        return runner.invoke(app, ["nextflow", *args])
+
+    def test_include_target_is_outside_the_python_environment(self, monkeypatch, tmp_path):
+        """The include must survive a pip uninstall or a change of virtualenv."""
+        result = self._run(monkeypatch, tmp_path, "--install")
+
+        assert result.exit_code == 0
+        written = (tmp_path / ".nextflow" / "config").read_text()
+        assert str(tmp_path / ".depictio" / "nextflow.config") in written
+        assert "site-packages" not in written
+
+    def test_handler_is_copied_to_the_stable_location(self, monkeypatch, tmp_path):
+        self._run(monkeypatch, tmp_path, "--install")
+
+        copied = tmp_path / ".depictio" / "nextflow.config"
+        assert copied.is_file()
+        assert "workflow.onComplete" in copied.read_text()
+
+    def test_existing_settings_are_preserved(self, monkeypatch, tmp_path):
+        config = tmp_path / ".nextflow" / "config"
+        config.parent.mkdir(parents=True)
+        config.write_text("process.executor = 'slurm'\n")
+
+        self._run(monkeypatch, tmp_path, "--install")
+
+        assert "process.executor = 'slurm'" in config.read_text()
+
+    def test_installing_twice_does_not_duplicate_the_block(self, monkeypatch, tmp_path):
+        self._run(monkeypatch, tmp_path, "--install")
+        self._run(monkeypatch, tmp_path, "--install")
+
+        written = (tmp_path / ".nextflow" / "config").read_text()
+        assert written.count("includeConfig") == 1
+
+    def test_uninstall_removes_only_our_block(self, monkeypatch, tmp_path):
+        config = tmp_path / ".nextflow" / "config"
+        config.parent.mkdir(parents=True)
+        config.write_text("process.executor = 'slurm'\n")
+        self._run(monkeypatch, tmp_path, "--install")
+
+        self._run(monkeypatch, tmp_path, "--uninstall")
+
+        written = config.read_text()
+        assert "includeConfig" not in written
+        assert "process.executor = 'slurm'" in written
+
+    def test_uninstall_without_an_install_is_not_an_error(self, monkeypatch, tmp_path):
+        result = self._run(monkeypatch, tmp_path, "--uninstall")
+
+        assert result.exit_code == 0
+
+    def test_install_and_uninstall_together_are_refused(self, monkeypatch, tmp_path):
+        result = self._run(monkeypatch, tmp_path, "--install", "--uninstall")
+
+        assert result.exit_code == 2
+
+    @pytest.mark.parametrize("other", ["--install", "--uninstall"])
+    def test_print_with_install_or_uninstall_is_refused(self, monkeypatch, tmp_path, other):
+        """One of the two used to be dropped without a word."""
+        result = self._run(monkeypatch, tmp_path, "--print", other)
+
+        assert result.exit_code == 2
+        assert "pass only one" in result.output
+        assert not (tmp_path / ".nextflow" / "config").exists()
+
+    def test_default_disabled_without_install_is_refused(self, monkeypatch, tmp_path):
+        result = self._run(monkeypatch, tmp_path, "--default-disabled")
+
+        assert result.exit_code == 2
+        assert "only applies with --install" in result.output
+
+
+class TestInstallDefaultToggle:
+    """`--default-enabled`/`--default-disabled` picks the fallback --install writes.
+
+    The per-run override (`--depictio_enabled true/false` on `nextflow run`) is
+    read from `params` inside the handler itself and is untouched by this flag
+    either way; only the value used when a run sets neither changes.
+    """
+
+    def _run(self, monkeypatch, home, *args):
+        monkeypatch.delenv("NXF_HOME", raising=False)
+        monkeypatch.setenv("HOME", str(home))
+        monkeypatch.setattr(
+            Path, "expanduser", lambda self: Path(str(self).replace("~", str(home), 1))
+        )
+        return runner.invoke(app, ["nextflow", *args])
+
+    def test_install_defaults_to_enabled(self, monkeypatch, tmp_path):
+        result = self._run(monkeypatch, tmp_path, "--install")
+
+        assert result.exit_code == 0
+        copied = (tmp_path / ".depictio" / "nextflow.config").read_text()
+        assert "cfg.call('depictio_enabled', true)" in copied
+
+    def test_default_disabled_flips_the_installed_fallback(self, monkeypatch, tmp_path):
+        result = self._run(monkeypatch, tmp_path, "--install", "--default-disabled")
+
+        assert result.exit_code == 0
+        copied = (tmp_path / ".depictio" / "nextflow.config").read_text()
+        assert "cfg.call('depictio_enabled', false)" in copied
+        assert "cfg.call('depictio_enabled', true)" not in copied
+
+    def test_default_disabled_does_not_touch_other_params(self, monkeypatch, tmp_path):
+        """Only the depictio_enabled fallback changes; every other default stays put."""
+        import depictio.cli
+
+        source = (
+            Path(depictio.cli.__file__).parent / "configs" / "nextflow" / "depictio.config"
+        ).read_text()
+
+        self._run(monkeypatch, tmp_path, "--install", "--default-disabled")
+
+        copied = (tmp_path / ".depictio" / "nextflow.config").read_text()
+        for line in source.splitlines():
+            if "depictio_enabled" in line:
+                continue
+            assert line in copied
+
+    def test_default_enabled_is_explicit_too(self, monkeypatch, tmp_path):
+        result = self._run(monkeypatch, tmp_path, "--install", "--default-enabled")
+
+        assert result.exit_code == 0
+        copied = (tmp_path / ".depictio" / "nextflow.config").read_text()
+        assert "cfg.call('depictio_enabled', true)" in copied
+
+    def test_reinstall_with_a_different_default_overwrites_the_handler(self, monkeypatch, tmp_path):
+        self._run(monkeypatch, tmp_path, "--install")
+        self._run(monkeypatch, tmp_path, "--install", "--default-disabled")
+
+        copied = (tmp_path / ".depictio" / "nextflow.config").read_text()
+        assert "cfg.call('depictio_enabled', false)" in copied
+
+
+class TestTheHandlerForwardsDashboards:
+    """`params.depictio_dashboard` reaches the CLI as `--dashboard`.
+
+    Without it a pipeline Depictio ships no template for ingests fine and
+    leaves nothing to look at, because only templates carry dashboards.
+    """
+
+    def _snippet(self) -> str:
+        import depictio.cli
+
+        return (
+            Path(depictio.cli.__file__).parent / "configs" / "nextflow" / "depictio.config"
+        ).read_text()
+
+    def test_the_parameter_is_read_and_forwarded(self):
+        snippet = self._snippet()
+        assert "depictio_dashboard" in snippet
+        assert "'--dashboard'" in snippet
+
+    def test_a_list_of_dashboards_is_accepted(self):
+        """Several dashboards per project is the normal case for a template."""
+        assert "dashboards instanceof List" in self._snippet()
+
+    def test_the_example_ships_a_dashboard(self):
+        """The bundled example is the thing people copy; it must demonstrate one."""
+        import depictio.cli
+
+        example = Path(depictio.cli.__file__).parent / "configs" / "nextflow" / "example"
+        assert (example / "depictio_dashboard.yaml").is_file()
+        assert "depictio_dashboard" in (example / "nextflow.config").read_text()
+
+
+class TestTheHandlerCallsIngest:
+    """The handler runs `depictio-cli ingest --server ...`. A handler copied from an
+    older release still calls `run`, which the CLI keeps as an alias."""
+
+    def _nextflow_dir(self) -> Path:
+        import depictio.cli
+
+        return Path(depictio.cli.__file__).parent / "configs" / "nextflow"
+
+    def _snippet(self) -> str:
+        return (self._nextflow_dir() / "depictio.config").read_text()
+
+    def test_it_runs_ingest(self):
+        snippet = self._snippet()
+        assert "argv.add('ingest')" in snippet
+        assert "argv.add('run')" not in snippet
+
+    def test_the_server_reaches_the_cli_as_server(self):
+        snippet = self._snippet()
+        assert "argv += ['--server', cliConfig]" in snippet
+        assert "--CLI-config-path" not in snippet
+
+    def test_the_data_root_is_the_argument_and_the_project_is_project(self):
+        """The CLI's current names, so a pipeline log carries no rename notice."""
+        snippet = self._snippet()
+        assert "argv.add(dataRoot)" in snippet
+        assert "argv += ['--project', projectName]" in snippet
+        # --update-config alone: a refresh keeps the dashboards edited in the viewer.
+        assert "argv += ['--update-config']" in snippet
+
+    def test_without_a_configuration_no_server_is_passed(self):
+        """Naming ~/.depictio/CLI.yaml itself turned off the CLI's own fallback to the
+        local server: with no such file, the ingestion failed on it."""
+        snippet = self._snippet()
+        assert (
+            "cfg.call('depictio_cli_config',\n"
+            "            System.getenv('DEPICTIO_CLI_CONFIG_PATH'))?.toString()?.trim()"
+        ) in snippet
+        assert '/.depictio/CLI.yaml")' not in snippet
+        assert "if (cliConfig) {" in snippet
+
+    def test_the_container_example_needs_a_release_with_ingest(self):
+        """1.9.2, the image it named, has neither `ingest` nor --server: a version
+        written here goes stale at every release, so the reader picks theirs."""
+        files = [self._nextflow_dir() / "depictio.config"]
+        files += sorted((self._nextflow_dir() / "example").iterdir())
+        images = [
+            image
+            for path in files
+            for image in re.findall(r"depictio-cli:[^'\]\s]+", path.read_text())
+        ]
+        assert images and set(images) == {"depictio-cli:<version>"}
+
+    def test_local_is_documented(self):
+        """`depictio_cli_config = 'local'` targets the server `depictio local up` runs."""
+        assert "--depictio_cli_config local" in self._snippet()
+        options = (self._nextflow_dir() / "example" / "depictio_all_options.config").read_text()
+        assert "params.depictio_cli_config = 'local'" in options
+
+    def test_no_text_still_names_the_former_command(self):
+        files = [self._nextflow_dir() / "depictio.config"]
+        files += sorted((self._nextflow_dir() / "example").iterdir())
+        for path in files:
+            text = path.read_text()
+            for former in (
+                "depictio-cli run",
+                "depictio run",
+                "--CLI-config-path",
+                "--data-root <",
+                "'--data-root'",
+                "--project-name",
+                "'--overwrite'",
+            ):
+                assert former not in text, f"{former!r} in {path.name}"

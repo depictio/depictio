@@ -1,0 +1,64 @@
+name: CLI on the base install
+
+# `pip install depictio` (and its depictio-cli alias) is the CLI alone: the server
+# dependencies come with the [server] extra. This runs the CLI and models tests in an
+# environment holding only the base and the multiqc extra, so a top-level import of a
+# server-only package on the CLI side fails here rather than on a user's machine.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - "depictio/cli/**"
+      - "depictio/models/**"
+      - "depictio/api/v1/configs/**"
+      - "depictio/catalog/**"
+      - "depictio/recipes/**"
+      - "depictio/telemetry/**"
+      - "depictio/tests/cli/**"
+      - "depictio/tests/models/**"
+      - "depictio/*.py"
+      - "depictio/api/__init__.py"
+      - "depictio/api/v1/__init__.py"
+      - "pyproject.toml"
+      - ".github/workflows/cli-base-install.yaml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      # The oldest Python the package supports.
+      - name: Install the CLI and the test tools
+        run: |
+          uv venv --python 3.11 venv
+          echo "$GITHUB_WORKSPACE/venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/venv" >> "$GITHUB_ENV"
+          uv pip install --python venv/bin/python -e ".[multiqc]" \
+            pytest pytest-xdist pytest-asyncio mongomock mongomock-motor
+
+      - name: No server package installed
+        run: |
+          for module in fastapi celery playwright uvicorn; do
+            if python -c "import $module" 2>/dev/null; then
+              echo "::error::$module is installed, so this job no longer tests the base install"
+              exit 1
+            fi
+          done
+
+      - name: Run the CLI and models tests
+        run: pytest depictio/tests/cli depictio/tests/models -n auto -q
+
+      - name: Both commands answer
+        run: |
+          depictio --help > /dev/null
+          depictio-cli --help > /dev/null
+          depictio --version

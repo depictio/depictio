@@ -1,0 +1,15 @@
+id: bambu_sample_correlation
+name: Sample correlation matrix
+mode: exploratory/correlation
+description: >-
+  Square sample-by-sample Spearman correlation of log-CPM gene expression: the
+  plot that shows a swapped label or a replicate that did not replicate, one
+  row and one column per sample.
+find: { path_glob: "**/bambu/counts_gene.txt" }
+recipe: bambu/sample_correlation.py
+fixture: sample_correlation.tsv
+renders_as:
+  - { id: correlation_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: sample_id} }
+  - { component: card, column: mean_correlation, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: sample_id, aggregation: nunique, secondary_layout: donut, breakdown_col: condition }
+  - { component: table }

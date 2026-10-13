@@ -1,0 +1,16 @@
+id: simpleaf_barcode_rank
+name: Barcode-rank curve (simpleaf/alevin-fry)
+mode: simpleaf_quant/barcode_rank
+description: >-
+  UMI count per barcode against its rank, read from alevin-fry's per-barcode
+  feature dump and flagged against CellBender's cell-barcode list for this
+  route, so it can be compared to the Cell Ranger knee curve for the same
+  sample.
+find:
+  path_glob: "**/simpleaf_quant/af_quant/featureDump.txt"
+recipe: simpleaf/barcode_rank.py
+fixture: barcode_rank.tsv
+renders_as:
+  - { id: simpleaf_barcode_rank_knee, component: advanced_viz, kind: knee_plot, roles: {sample: sample, rank: rank, umi_count: umi_count, is_cell: is_cell} }
+  - { component: card, column: umi_count, aggregation: max, secondary_layout: histogram }
+  - { component: table }

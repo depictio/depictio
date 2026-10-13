@@ -1,0 +1,25 @@
+id: fusionreport_fusions
+name: Fusion consensus
+mode: detect
+description: >-
+  One row per fusion and sample, with the knowledge bases that already know it,
+  the Fusion Indication Index fusion-report ranks by and a 0/1 flag per caller
+  the run executed, named after the tool. The sample is read off the file name.
+  The caller flags are the set columns a caller-concordance UpSet reads.
+find: { path_glob: "**/fusionreport/*/*.fusions.csv" }
+recipe: fusionreport/fusions.py
+fixture: fusions.tsv
+renders_as:
+  # The caller flags are the binary columns the renderer picks on its own. On a
+  # small run n_databases, n_tools or rank can be 0/1 too, so a dashboard names
+  # the sets by exclusion: set_columns_pattern "^(?!(n_databases|n_tools|rank)$)".
+  - { id: caller_upset, component: advanced_viz, kind: upset_plot }
+  # Rank is the position in fusion-report's own FII ordering, so the lollipop
+  # reads as a ranked list of the run's fusions.
+  - { id: fii_lollipop, component: advanced_viz, kind: lollipop, roles: {feature_id: fusion, position: rank, category: tool_support} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: fusion, y: fii, color: tool_support} }
+  - { component: card, column: fii, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: tool_support, top_n_count: 3, headline: true }
+  - { component: card, column: n_tools, aggregation: average, secondary_layout: donut, breakdown_col: tool_support }
+  - { component: card, column: n_databases, aggregation: average, secondary_layout: histogram }
+  - { component: table, row_selection_enabled: true, row_selection_column: fusion }

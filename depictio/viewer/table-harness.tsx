@@ -1,17 +1,22 @@
-/** Dev-only harness: mounts the real DashboardTableView / ProjectTableView with
- *  fixture data so the column picker and timezone rendering can be exercised in
- *  a browser without a backend.
+/** Dev-only harness: mounts the real DashboardTableView / ProjectTableView,
+ *  each with the Table display menu the listing toolbars carry, on fixture data
+ *  so the column choice and timezone rendering can be exercised in a browser
+ *  without a backend.
  *
  *  Run: `npx vite --config vite.table-harness.config.ts` then open `/`.
  *  Not referenced by the app or its production build.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MantineProvider, Stack, Title } from '@mantine/core';
+import { Group, MantineProvider, Stack, Title } from '@mantine/core';
+import { depictioTheme } from './src/theme';
 import '@mantine/core/styles.css';
 
-import DashboardTableView from './src/dashboards/views/DashboardTableView';
-import ProjectTableView from './src/projects/views/ProjectTableView';
+import TableDisplayMenu, { type TableDensity } from './src/components/TableDisplayMenu';
+import DashboardTableView, {
+  useDashboardTableColumns,
+} from './src/dashboards/views/DashboardTableView';
+import ProjectTableView, { useProjectTableColumns } from './src/projects/views/ProjectTableView';
 
 const owner = { _id: 'u1', email: 'owner@example.com' };
 
@@ -71,41 +76,86 @@ const projects = [
   },
 ] as never;
 
+// One dashboard opened recently, one never opened: exercises both branches of
+// the Last viewed column (a time cell and the "Never" placeholder).
+const recents = [{ id: '646b0f3c1e4a2d7f8e5b8ca2', ts: Date.now() - 3 * 3600_000 }];
+
 const noop = () => {};
 
-const App = () => (
-  <MantineProvider>
-    <Stack p="lg" gap="xl">
-      <Title order={3}>Dashboards</Title>
+const Dashboards = () => {
+  const columns = useDashboardTableColumns(false);
+  const [density, setDensity] = useState<TableDensity>('cozy');
+  return (
+    <Stack gap="xs">
+      <Group justify="space-between">
+        <Title order={3}>Dashboards</Title>
+        <TableDisplayMenu
+          section="dashboards"
+          density={density}
+          defaultDensity="cozy"
+          onDensityChange={setDensity}
+          columns={columns}
+        />
+      </Group>
       <DashboardTableView
         groups={dashboards}
         projectNames={new Map([['p1', 'Iris project'], ['p2', 'Penguins project']])}
         currentUserEmail="owner@example.com"
         pinnedIds={new Set()}
         pinDisabled={false}
-        density="cozy"
+        density={density}
+        columns={columns}
+        recents={recents}
         onView={noop}
         onEdit={noop}
         onDelete={noop}
         onDuplicate={noop}
         onExport={noop}
         onTogglePin={noop}
-        onSetDensity={noop}
         onBulkExport={noop}
         onBulkDelete={noop}
       />
-      <Title order={3}>Projects</Title>
+    </Stack>
+  );
+};
+
+const Projects = () => {
+  const columns = useProjectTableColumns();
+  const [density, setDensity] = useState<TableDensity>('cozy');
+  return (
+    <Stack gap="xs">
+      <Group justify="space-between">
+        <Title order={3}>Projects</Title>
+        <TableDisplayMenu
+          section="projects"
+          density={density}
+          defaultDensity="cozy"
+          onDensityChange={setDensity}
+          columns={columns}
+        />
+      </Group>
       <ProjectTableView
         projects={projects}
         currentUserId="u1"
         isAdmin
         pinnedIds={new Set()}
         pinDisabled={false}
+        density={density}
+        columns={columns}
         onView={noop}
         onEdit={noop}
         onDelete={noop}
         onTogglePin={noop}
       />
+    </Stack>
+  );
+};
+
+const App = () => (
+  <MantineProvider theme={depictioTheme}>
+    <Stack p="lg" gap="xl">
+      <Dashboards />
+      <Projects />
     </Stack>
   </MantineProvider>
 );

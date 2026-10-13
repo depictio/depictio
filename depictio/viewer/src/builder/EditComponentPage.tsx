@@ -15,10 +15,15 @@ import {
   Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { fetchDashboard } from 'depictio-react-core';
-import type { StoredMetadata } from 'depictio-react-core';
+import { Pencil } from 'lucide-react';
+import { BrandScope, fetchDashboard } from 'depictio-react-core';
+import type { BrandTheme, StoredMetadata } from 'depictio-react-core';
 import { useBuilderStore } from './store/useBuilderStore';
 import StepDesign from './steps/StepDesign';
+import BrandMark from '../chrome/BrandMark';
+import { useGlassPages } from '../chrome/variants/glass/pages';
+import GlassBuilderShell from './glass/GlassBuilderShell';
+import { getComponentTypeMeta } from './componentTypes';
 
 export interface EditComponentPageProps {
   dashboardId: string;
@@ -34,11 +39,20 @@ const EditComponentPage: React.FC<EditComponentPageProps> = ({
   const loadExisting = useBuilderStore((s) => s.loadExisting);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // The dashboard's brand, so the preview draws in the colours the component
+  // will have once saved rather than the instance defaults.
+  const [brandTheme, setBrandTheme] = useState<BrandTheme | null>(null);
+  // Named in the Glass top bar's trail and head.
+  const [dashboardTitle, setDashboardTitle] = useState<string | null>(null);
+  const componentType = useBuilderStore((s) => s.componentType);
+  const glass = useGlassPages();
 
   useEffect(() => {
     init({ mode: 'edit', dashboardId, componentId });
     fetchDashboard(dashboardId)
       .then((dash) => {
+        setDashboardTitle(dash.title ?? null);
+        setBrandTheme(dash.brand_theme ?? dash.inherited_brand_theme ?? null);
         const meta = (dash.stored_metadata || []).find(
           (m: StoredMetadata) => String(m.index) === String(componentId),
         );
@@ -59,11 +73,52 @@ const EditComponentPage: React.FC<EditComponentPageProps> = ({
     window.location.assign(`/dashboard-edit/${dashboardId}`);
   };
 
+  const body = (
+    <>
+      {loading && (
+        <Group p="lg">
+          <Loader size="sm" />
+        </Group>
+      )}
+      {error && (
+        <Alert color="red" title="Cannot edit component">
+          {error}
+        </Alert>
+      )}
+      {!loading && !error && <StepDesign />}
+    </>
+  );
+
+  if (glass) {
+    return (
+      <BrandScope theme={brandTheme}>
+        <GlassBuilderShell
+          crumbs={[
+            { label: dashboardTitle || 'Dashboard', href: `/dashboard-edit/${dashboardId}` },
+            { label: 'Edit component' },
+          ]}
+          onCancel={cancel}
+          head={{
+            icon: <Pencil size={22} strokeWidth={1.7} />,
+            title: 'Edit component',
+            description: componentType
+              ? `${getComponentTypeMeta(componentType).label} component. Changes apply when you save.`
+              : undefined,
+          }}
+        >
+          {body}
+        </GlassBuilderShell>
+      </BrandScope>
+    );
+  }
+
   return (
-    <AppShell padding="md" header={{ height: 50 }}>
+    <BrandScope theme={brandTheme}>
+    <AppShell data-testid="app-shell" padding="md" header={{ height: 50 }}>
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
           <Group gap="xs">
+            <BrandMark />
             <Icon icon="mdi:pencil" width={22} />
             <Title order={5}>Edit component</Title>
           </Group>
@@ -75,20 +130,11 @@ const EditComponentPage: React.FC<EditComponentPageProps> = ({
 
       <AppShell.Main>
         <Container size="xl" px="md" py="xl">
-          {loading && (
-            <Group p="lg">
-              <Loader size="sm" />
-            </Group>
-          )}
-          {error && (
-            <Alert color="red" title="Cannot edit component">
-              {error}
-            </Alert>
-          )}
-          {!loading && !error && <StepDesign />}
+          {body}
         </Container>
       </AppShell.Main>
     </AppShell>
+    </BrandScope>
   );
 };
 

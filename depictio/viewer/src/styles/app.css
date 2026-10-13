@@ -32,7 +32,7 @@
  */
 :root {
   --app-bg-color: var(--mantine-color-body);
-  --app-surface-color: var(--mantine-color-body);
+  --app-surface-color: var(--depictio-section-bg, var(--mantine-color-body));
   --app-text-color: var(--mantine-color-text);
   --app-border-color: var(--mantine-color-default-border);
   --app-subtle-bg: var(--mantine-color-default-hover);
@@ -84,11 +84,24 @@ body {
   padding: 0;
   background: var(--app-bg-color);
   color: var(--app-text-color);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* Mantine's token, so a brand's `font_family` reaches plain text and every
+   * non-Mantine element too. The literal stack stays as the fallback for the
+   * first paint, before the theme's variables land. */
+  font-family: var(
+    --mantine-font-family,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif
+  );
   /* Hard cap horizontal overflow at the document root — anything that bleeds
    * beyond viewport (Plotly's modebar, AG Grid's scroll shadow, etc.) gets
-   * clipped here instead of forcing the page to scroll horizontally. */
-  overflow-x: hidden;
+   * clipped here instead of forcing the page to scroll horizontally.
+   * `clip`, not `hidden`: `hidden` turns <body> into a scroll container that
+   * never scrolls, and every `position: sticky` descendant then sticks to it
+   * instead of the viewport, i.e. never sticks at all. */
+  overflow-x: clip;
   width: 100%;
   max-width: 100vw;
 }
@@ -159,7 +172,7 @@ body.panel-transitioning .react-grid-layout {
 
 .dashboard-error {
   padding: 2rem;
-  color: #fa5252;
+  color: var(--mantine-color-red-6);
   text-align: center;
 }
 
@@ -220,17 +233,48 @@ body.panel-transitioning .react-grid-layout {
   border-radius: 6px;
 }
 
+/* A component focused from a comment thread. Drawn on an overlay above the
+ * tile's content (an inset shadow on the grid item is hidden under the card
+ * background), in the theme's primary colour, pulsing twice so it is still
+ * visible once the smooth scroll lands. Applied and removed by
+ * `lib/focusComponent.ts`. */
+@keyframes depictio-comment-flash {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  15%,
+  45%,
+  75% {
+    opacity: 1;
+  }
+  30%,
+  60% {
+    opacity: 0.35;
+  }
+}
+.depictio-comment-flash::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+  border-radius: 8px;
+  border: 3px solid var(--mantine-primary-color-filled);
+  box-shadow:
+    0 0 0 4px var(--mantine-primary-color-light),
+    0 0 24px 4px var(--mantine-primary-color-light);
+  background: var(--mantine-primary-color-light);
+  animation: depictio-comment-flash 2.8s ease-in-out forwards;
+}
+
 /* ── Boot splash ───────────────────────────────────────────────────────────
  * Shown while the route chunk downloads and while the dashboard document is in
- * flight — phases with no panel list yet, so nothing can report a fraction.
+ * flight: phases with no panel list yet, so nothing can report a fraction.
  *
- * The mark and its animation are lifted from depictio-docs (`extra.css`:
- * `triangular-pulse`, staggered per triangle). The seven triangles carry their
- * own brand fills inside the SVG, so no colour is set here.
- *
- * `transform-box: fill-box` is what makes each triangle scale about its own
- * centre; without it `transform-origin: center` resolves against the SVG
- * viewport and the shapes swing instead of pulsing.
+ * The mark is `<depictio-rose>` (see components/rose/), which draws and
+ * animates itself, including its reduced-motion fallback, so only placement
+ * lives here.
  *
  * Fixed and viewport-centred so both boot phases paint the mark in the same
  * place and it doesn't jump when one hands over to the other.
@@ -243,66 +287,15 @@ body.panel-transitioning .react-grid-layout {
   place-items: center;
   pointer-events: none;
 }
-.depictio-boot-splash svg {
-  width: 108px;
-  height: 108px;
-  overflow: visible;
-}
-.depictio-boot-splash [id^='shape-'] {
-  transform-origin: center;
-  transform-box: fill-box;
-  animation: depictio-triangular-pulse 1s ease-in-out infinite;
-}
-/* Sequential stagger — the triangles chase each other around the mark rather
-   than breathing as one blob. Matches the docs' 0.1s step. */
-.depictio-boot-splash #shape-1 {
-  animation-delay: 0s;
-}
-.depictio-boot-splash #shape-2 {
-  animation-delay: 0.1s;
-}
-.depictio-boot-splash #shape-3 {
-  animation-delay: 0.2s;
-}
-.depictio-boot-splash #shape-4 {
-  animation-delay: 0.3s;
-}
-.depictio-boot-splash #shape-5 {
-  animation-delay: 0.4s;
-}
-.depictio-boot-splash #shape-6 {
-  animation-delay: 0.5s;
-}
-.depictio-boot-splash #shape-7 {
-  animation-delay: 0.6s;
-}
-@keyframes depictio-triangular-pulse {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.15);
-  }
-}
-/* Reduced motion: softened, not frozen. A loading indicator that holds still
-   fails at the one thing it is there to say. The pulse is a small scale about
-   each shape's own centre — no travel, no rotation — so easing it down rather
-   than removing it keeps the signal without the trigger. */
-@media (prefers-reduced-motion: reduce) {
-  .depictio-boot-splash [id^='shape-'] {
-    animation-duration: 2.4s;
-    animation-name: depictio-triangular-pulse-subtle;
-  }
-  @keyframes depictio-triangular-pulse-subtle {
-    0%,
-    100% {
-      transform: scale(1);
-      opacity: 0.75;
-    }
-    50% {
-      transform: scale(1.05);
-      opacity: 1;
-    }
-  }
+
+/* The actions column of the Dashboards and Projects tables stays at the right
+ * edge while a narrow viewport scrolls the table sideways, so a row's menu and
+ * shortcuts never scroll out of reach. The blur keeps what slides under it
+ * from showing through. */
+.dc-actions-col {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background-color: color-mix(in srgb, var(--mantine-color-body) 86%, transparent);
+  backdrop-filter: blur(6px);
 }

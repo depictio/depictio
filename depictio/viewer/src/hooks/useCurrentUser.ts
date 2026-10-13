@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 
 import { fetchAuthStatus } from 'depictio-react-core';
 
+import { syncMyAvatar } from '../chrome/account/avatar';
+
 /**
  * Calls /depictio/api/v1/auth/me/optional to identify the current user.
  * Anonymous-tolerant: returns null on missing/invalid token (HTTP 200 with
@@ -23,6 +25,8 @@ export interface CurrentUser {
   id?: string;
   email: string;
   is_admin: boolean;
+  /** A public-mode guest (a temporary account), as opposed to a signed-in user. */
+  is_temporary?: boolean;
 }
 
 export type AuthMode = 'standard' | 'single_user' | 'unauthenticated';
@@ -38,6 +42,12 @@ export interface UseCurrentUserResult {
   /** True when the server is in demo mode (a public_mode variant with a
    *  curated set of read-only example dashboards). */
   isDemoMode: boolean;
+  /** True when Google OAuth is configured: a guest can sign in with it. */
+  googleOAuthEnabled: boolean;
+  /** True when SAML single sign-on is configured. */
+  samlEnabled: boolean;
+  /** Label of the SAML sign-in button, when the server names one. */
+  samlLabel: string | undefined;
   /** True when the server is in development mode (DEPICTIO_DEV_MODE=true).
    *  Used to suppress the walkthrough during local dev — devs hot-reload
    *  constantly and don't need the tour relaunching on every version bump. */
@@ -59,6 +69,23 @@ export interface UseCurrentUserResult {
    *  (`DEPICTIO_VIEWER_INSPECTOR_ENABLED=true`). While false, the component
    *  info and notes surfaces stay in their existing popover and drawer. */
   inspectorEnabled: boolean;
+  /** Deployment default for the /dashboards view, or null when the backend
+   *  does not send one. Only applies to someone who never picked a view. */
+  dashboardsDefaultView: string | null;
+  /** True when the server may read run folders from its own disk: the
+   *  "From a run folder" tab then accepts a local path and offers a folder
+   *  browser. False on older backends that do not send the flag. */
+  localDataRootsEnabled: boolean;
+  /** True when the server may browse S3 locations an administrator listed:
+   *  the run tab's folder browser then offers an S3 side. False on older
+   *  backends that do not send the flag. */
+  remoteBrowseEnabled: boolean;
+  /** True when the component export API answers: every tile then offers
+   *  "Export / embed". False on older backends that do not send the flag. */
+  embedEnabled: boolean;
+  /** True when some site may frame an embed. False means an iframe snippet
+   *  would be refused by the embed's own CSP. */
+  embedFramingEnabled: boolean;
   loading: boolean;
 }
 
@@ -67,27 +94,48 @@ export function useCurrentUser(): UseCurrentUserResult {
   const [authMode, setAuthMode] = useState<AuthMode>('standard');
   const [isPublicMode, setIsPublicMode] = useState<boolean>(false);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
+  const [googleOAuthEnabled, setGoogleOAuthEnabled] = useState<boolean>(false);
+  const [samlEnabled, setSamlEnabled] = useState<boolean>(false);
+  const [samlLabel, setSamlLabel] = useState<string | undefined>(undefined);
   const [isDevMode, setIsDevMode] = useState<boolean>(false);
   const [walkthroughDisabled, setWalkthroughDisabled] = useState<boolean>(false);
   const [isSingleUserMode, setIsSingleUserMode] = useState<boolean>(false);
   const [temporaryUserExpiryHours, setTemporaryUserExpiryHours] = useState<number>(24);
   const [temporaryUserExpiryMinutes, setTemporaryUserExpiryMinutes] = useState<number>(0);
   const [inspectorEnabled, setInspectorEnabled] = useState<boolean>(false);
+  const [dashboardsDefaultView, setDashboardsDefaultView] = useState<string | null>(null);
+  const [localDataRootsEnabled, setLocalDataRootsEnabled] = useState<boolean>(false);
+  const [remoteBrowseEnabled, setRemoteBrowseEnabled] = useState<boolean>(false);
+  const [embedEnabled, setEmbedEnabled] = useState<boolean>(false);
+  const [embedFramingEnabled, setEmbedFramingEnabled] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
+        const startedAt = Date.now();
         const data = await fetchAuthStatus();
         if (cancelled) return;
         setAuthMode((data.auth_mode as AuthMode) ?? 'standard');
         setIsPublicMode(Boolean(data.is_public_mode));
         setIsDemoMode(Boolean(data.is_demo_mode));
+        setGoogleOAuthEnabled(Boolean(data.google_oauth_enabled));
+        setSamlEnabled(Boolean(data.saml_enabled));
+        setSamlLabel(data.saml_login_label);
         setIsDevMode(Boolean(data.is_dev_mode));
         setWalkthroughDisabled(Boolean(data.walkthrough_disabled));
         setIsSingleUserMode(Boolean(data.is_single_user_mode));
         setInspectorEnabled(Boolean(data.inspector_enabled));
+        setLocalDataRootsEnabled(Boolean(data.local_data_roots_enabled));
+        setRemoteBrowseEnabled(Boolean(data.remote_browse_enabled));
+        setEmbedEnabled(Boolean(data.embed_enabled));
+        setEmbedFramingEnabled(Boolean(data.embed_framing_enabled));
+        setDashboardsDefaultView(
+          typeof data.dashboards_default_view === 'string'
+            ? data.dashboards_default_view
+            : null,
+        );
         if (typeof data.temporary_user_expiry_hours === 'number') {
           setTemporaryUserExpiryHours(data.temporary_user_expiry_hours);
         }
@@ -95,7 +143,19 @@ export function useCurrentUser(): UseCurrentUserResult {
           setTemporaryUserExpiryMinutes(data.temporary_user_expiry_minutes);
         }
         const u = data.user;
-        setUser(u?.email ? { id: u.id, email: u.email, is_admin: Boolean(u.is_admin) } : null);
+        setUser(
+          u?.email
+            ? {
+                id: u.id,
+                email: u.email,
+                is_admin: Boolean(u.is_admin),
+                is_temporary: Boolean(u.is_temporary),
+              }
+            : null,
+        );
+        // Feeds the shared avatar store (`chrome/account/avatar.ts`); anonymous
+        // visitors and users without a picture clear it (no fetch).
+        syncMyAvatar(u?.email ? (u.avatar_updated_at ?? null) : null, { startedAt });
       } catch {
         if (!cancelled) setUser(null);
       } finally {
@@ -112,12 +172,20 @@ export function useCurrentUser(): UseCurrentUserResult {
     authMode,
     isPublicMode,
     isDemoMode,
+    googleOAuthEnabled,
+    samlEnabled,
+    samlLabel,
     isDevMode,
     walkthroughDisabled,
     isSingleUserMode,
     temporaryUserExpiryHours,
     temporaryUserExpiryMinutes,
     inspectorEnabled,
+    dashboardsDefaultView,
+    localDataRootsEnabled,
+    remoteBrowseEnabled,
+    embedEnabled,
+    embedFramingEnabled,
     loading,
   };
 }

@@ -1,0 +1,17 @@
+id: ampcombi_embedding
+name: Property embedding
+mode: amp/embedding
+description: >-
+  Two-dimensional PCA of the AMP candidates over their physicochemical
+  descriptors (molecular weight, isoelectric point, hydrophobicity and the
+  helix, turn and sheet fractions), standardised before the decomposition.
+find: { path_glob: "**/ampcombi2/Ampcombi_summary.tsv" }
+recipe: ampcombi/embedding.py
+fixture: embedding.tsv
+renders_as:
+  # One point per candidate, so the embedding's `sample_id` role carries the
+  # CDS id. Charge class is the default colour because the plane is a
+  # physicochemical one; the sample and the per-tool probabilities ride along in
+  # the output, and the renderer's colour menu reaches them.
+  - { id: amp_embedding, component: advanced_viz, kind: embedding, roles: {sample_id: cds_id, dim_1: dim_1, dim_2: dim_2, color: charge_class} }
+  - { component: table }

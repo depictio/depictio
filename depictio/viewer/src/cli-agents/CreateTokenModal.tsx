@@ -1,16 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import {
-  Alert,
-  Button,
-  Group,
-  Modal,
-  Stack,
-  TextInput,
-  Title,
-} from '@mantine/core';
+import { Alert, Button, Group, Modal, Stack, TextInput } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { brandColors } from '../profile/colors';
+import { SectionHeader } from '../components/settings/SettingsSections';
 
 interface CreateTokenModalProps {
   opened: boolean;
@@ -22,9 +14,8 @@ interface CreateTokenModalProps {
   existingNames: string[];
 }
 
-/** Mirrors the "Name Your Configuration" modal in `tokens_management.py:284-360`.
- *  Inputs a token name and posts to /auth/me/tokens via the parent's
- *  onSubmit handler. */
+/** Names a new CLI configuration and posts to /auth/me/tokens via the parent's
+ *  onSubmit handler. Headed like the Account settings sections it opens from. */
 const CreateTokenModal: React.FC<CreateTokenModalProps> = ({
   opened,
   onClose,
@@ -32,12 +23,14 @@ const CreateTokenModal: React.FC<CreateTokenModalProps> = ({
   existingNames,
 }) => {
   const [name, setName] = useState('');
+  const [nameError, setNameError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!opened) {
       setName('');
+      setNameError(null);
       setError(null);
       setSubmitting(false);
     }
@@ -46,11 +39,11 @@ const CreateTokenModal: React.FC<CreateTokenModalProps> = ({
   const handleSave = async () => {
     const trimmed = name.trim();
     if (!trimmed) {
-      setError('CLI Configuration name is required.');
+      setNameError('Give the configuration a name.');
       return;
     }
     if (existingNames.includes(trimmed)) {
-      setError('CLI Configuration name already exists. Please choose a different name.');
+      setNameError('A configuration already has this name.');
       return;
     }
     setSubmitting(true);
@@ -69,7 +62,13 @@ const CreateTokenModal: React.FC<CreateTokenModalProps> = ({
       opened={opened}
       onClose={onClose}
       centered
-      withCloseButton={false}
+      title={
+        <SectionHeader
+          icon="mdi:console-line"
+          title="New CLI configuration"
+          subtitle="A token and its settings, for the depictio CLI"
+        />
+      }
     >
       <Stack
         gap="md"
@@ -81,45 +80,33 @@ const CreateTokenModal: React.FC<CreateTokenModalProps> = ({
           }
         }}
       >
-        <Group justify="flex-start" gap="sm" mb="sm">
-          <Icon icon="mdi:console-line" width={28} height={28} color={brandColors.green} />
-          <Title order={4} c={brandColors.green} m={0}>
-            Name Your Configuration
-          </Title>
-        </Group>
-
         <TextInput
-          label="Configuration Name"
-          placeholder="Enter a name for your CLI configuration"
-          required
+          label="Name"
+          description="To tell your configurations apart, for example the machine it runs on."
+          placeholder="laptop, cluster, CI"
+          data-autofocus
           value={name}
-          onChange={(e) => setName(e.currentTarget.value)}
+          onChange={(e) => {
+            setName(e.currentTarget.value);
+            setNameError(null);
+          }}
+          error={nameError}
           disabled={submitting}
           data-testid="cli-config-name-input"
         />
 
         {error && (
-          <Alert
-            color="red"
-            icon={<Icon icon="mdi:alert-circle" width={20} />}
-            title="CLI Configuration creation failed"
-          >
+          <Alert color="red" variant="light" icon={<Icon icon="mdi:alert-circle" width={18} />}>
             {error}
           </Alert>
         )}
 
-        <Group justify="flex-end" mt="xl">
-          <Button variant="subtle" color="gray" radius="md" onClick={onClose} disabled={submitting}>
+        <Group justify="flex-end" gap="xs" mt="xs">
+          <Button variant="subtle" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button
-            radius="md"
-            onClick={handleSave}
-            loading={submitting}
-            styles={{ root: { backgroundColor: brandColors.green } }}
-            data-testid="save-cli-config-btn"
-          >
-            Save
+          <Button onClick={handleSave} loading={submitting} data-testid="save-cli-config-btn">
+            Create
           </Button>
         </Group>
       </Stack>

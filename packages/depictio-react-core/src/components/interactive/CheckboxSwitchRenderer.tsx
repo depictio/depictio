@@ -3,7 +3,12 @@ import { Checkbox, Switch } from '@mantine/core';
 import { CompactControlSlot } from 'depictio-components';
 
 import { InteractiveFilter, StoredMetadata } from '../../api';
-import { INTERACTIVE_FRAME, InteractiveFrame, InteractiveTitle } from './frame';
+import {
+  INTERACTIVE_FRAME,
+  InteractiveFrame,
+  InteractiveTitle,
+  interactiveAccentRaw,
+} from './frame';
 
 interface CheckboxSwitchRendererProps {
   metadata: StoredMetadata;
@@ -66,7 +71,7 @@ const CheckboxSwitchRenderer: React.FC<CheckboxSwitchRendererProps> = ({
           <Checkbox
             checked={checked}
             onChange={(event) => emit(event.currentTarget.checked)}
-            color={metadata.icon_color || undefined}
+            color={interactiveAccentRaw(metadata)}
             size={compact ? 'xs' : INTERACTIVE_FRAME.controlSize}
             label={metadata.column_name || undefined}
           />
@@ -74,7 +79,7 @@ const CheckboxSwitchRenderer: React.FC<CheckboxSwitchRendererProps> = ({
           <Switch
             checked={checked}
             onChange={(event) => emit(event.currentTarget.checked)}
-            color={metadata.icon_color || undefined}
+            color={interactiveAccentRaw(metadata)}
             size={compact ? 'xs' : INTERACTIVE_FRAME.controlSize}
             label={metadata.column_name || undefined}
           />
@@ -91,7 +96,7 @@ const CheckboxSwitchRenderer: React.FC<CheckboxSwitchRendererProps> = ({
  *   None   -> false
  *   else   -> bool(value)
  */
-function coerceBool(raw: unknown): boolean {
+export function coerceBool(raw: unknown): boolean {
   if (raw === null || raw === undefined) return false;
   if (typeof raw === 'boolean') return raw;
   if (typeof raw === 'string') {

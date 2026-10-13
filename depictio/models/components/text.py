@@ -4,14 +4,15 @@ Extends `TextLiteComponent` with the runtime fields that the dashboard
 loader and discriminated union expect (uuid `index`, optional
 workflow/data-collection placeholders). Text tiles never bind to data, so
 the runtime fields are placeholders kept for shape parity with other
-components.
+components. Their live `values` do: each carries the `dc_id` / `wf_id` its
+`dc` tag resolved to at import.
 """
 
 import uuid
 
 from pydantic import Field
 
-from depictio.models.components.lite import TextLiteComponent
+from depictio.models.components.lite import TextLiteComponent, TextValueRuntimeSpec
 
 
 class TextComponent(TextLiteComponent):
@@ -23,3 +24,5 @@ class TextComponent(TextLiteComponent):
     data_collection_tag: str | None = None
 
     parent_index: str | None = None
+
+    values: dict[str, TextValueRuntimeSpec] | None = None

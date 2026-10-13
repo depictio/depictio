@@ -1,0 +1,18 @@
+id: snpeff_protein_lollipop
+name: Coding variants along the protein
+mode: lollipop
+description: >-
+  Coding variants placed at their amino-acid position, one lane per gene,
+  coloured by impact class. Only variants whose HGVS protein change SnpEff
+  could compute are here, which is what makes the positions comparable within
+  a lane.
+find:
+  path_glob: "**/*_snpEff.ann.vcf.gz"
+recipe: snpeff/protein_lollipop.py
+fixture: protein_lollipop.tsv
+renders_as:
+  - { id: coding_variant_needles, component: advanced_viz, kind: lollipop,
+      roles: {feature_id: gene, position: aa_pos, category: impact, label: hgvs_p, effect: vaf} }
+  - { component: card, column: variant_key, aggregation: count, secondary_layout: top_n,
+      breakdown_col: gene, top_n_count: 5 }
+  - { component: table }

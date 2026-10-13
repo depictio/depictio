@@ -1,0 +1,16 @@
+id: deeptools_correlation_matrix
+name: Sample correlation matrix
+mode: exploratory/correlation
+description: >-
+  Pairwise correlation of the genome-wide bin counts, square (samples x
+  samples). Replicates of one target correlate with each other and with nothing
+  else; a block that spans two targets is a swap or a contamination.
+find:
+  path_glob: "**/*.plotCorrelation.mat.tab"
+recipe: deeptools/correlation_matrix.py
+fixture: correlation_matrix.tsv
+renders_as:
+  # `index` is not optional in practice: ComplexHeatmapConfig.index_column falls
+  # back to the literal "sample_id", which this matrix does not have.
+  - { id: correlation_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: sample} }
+  - { component: table }

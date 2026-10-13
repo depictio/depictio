@@ -2,7 +2,7 @@
 #
 # Expected result: PASS at validate, FAIL at import
 #   depictio-cli dashboard validate test_04_wrong_wf_dc_tags.yaml  → PASS
-#   depictio-cli dashboard import test_04_wrong_wf_dc_tags.yaml --config <cfg>  → components silently unresolved
+#   depictio-cli dashboard import test_04_wrong_wf_dc_tags.yaml --server <cfg>  → components silently unresolved
 #
 # Why it passes validate:
 #   workflow_tag and data_collection_tag are free-text strings — schema validation

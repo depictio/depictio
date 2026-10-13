@@ -11,6 +11,7 @@ import { ScrollArea, Table, Text } from '@mantine/core';
 import { fetchDataCollectionPreview } from 'depictio-react-core';
 import type { PreviewResult } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
+import { useBuilderPreviewFilters } from '../useBuilderPreviewFilters';
 import PreviewPanel from '../shared/PreviewPanel';
 
 type ColCfg = { hide?: boolean; pinned?: 'left' | 'right' | null };
@@ -25,6 +26,8 @@ const TablePreview: React.FC = () => {
     striped?: boolean;
     compact?: boolean;
   };
+  const previewFilters = useBuilderPreviewFilters();
+  const filterKey = JSON.stringify(previewFilters);
 
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -40,7 +43,7 @@ const TablePreview: React.FC = () => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchDataCollectionPreview(dcId, PREVIEW_FETCH_LIMIT)
+    fetchDataCollectionPreview(dcId, PREVIEW_FETCH_LIMIT, previewFilters)
       .then((res) => {
         if (cancelled) return;
         setPreview(res);
@@ -55,7 +58,8 @@ const TablePreview: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [dcId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dcId, filterKey]);
 
   if (!dcId) {
     return (

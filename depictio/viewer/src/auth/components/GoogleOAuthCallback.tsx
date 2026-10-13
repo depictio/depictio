@@ -1,29 +1,8 @@
-import { Anchor, Loader, Stack, Text } from '@mantine/core';
-import { useEffect, useState } from 'react';
+import { Alert, Anchor, Loader, Stack, Text } from '@mantine/core';
+import { useEffect, useRef, useState } from 'react';
 import { handleGoogleCallback, persistSession } from 'depictio-react-core';
 import AuthCard from './AuthCard';
-
-const DEFAULT_POST_AUTH_PATH = '/dashboards';
-
-/**
- * Same-origin redirect guard. The backend ultimately decides the
- * post-auth destination, but a compromised / MITMed response could supply
- * an off-origin URL (or a ``javascript:`` URL on older browsers) and turn
- * this into an open-redirect / phishing primitive. Anything that doesn't
- * normalise to a same-origin path is silently replaced with the safe
- * dashboard landing.
- */
-function safePostAuthTarget(candidate: string | null | undefined): string {
-  if (!candidate) return DEFAULT_POST_AUTH_PATH;
-  try {
-    const target = new URL(candidate, window.location.origin);
-    if (target.origin !== window.location.origin) return DEFAULT_POST_AUTH_PATH;
-    // Strip protocol/host so we never accidentally emit a fully-qualified URL.
-    return `${target.pathname}${target.search}${target.hash}`;
-  } catch {
-    return DEFAULT_POST_AUTH_PATH;
-  }
-}
+import { postAuthDestination } from '../postAuthTarget';
 
 /**
  * Renders at /auth/google/callback?code=...&state=... after Google redirects
@@ -32,8 +11,16 @@ function safePostAuthTarget(candidate: string | null | undefined): string {
  */
 export default function GoogleOAuthCallback() {
   const [error, setError] = useState<string | null>(null);
+  // Run exactly once. React StrictMode invokes effects twice in dev, and both
+  // the authorization code and the CSRF state are single-use — a second
+  // exchange is guaranteed to fail and would surface as a spurious error on
+  // an otherwise successful sign-in.
+  const handledRef = useRef(false);
 
   useEffect(() => {
+    if (handledRef.current) return;
+    handledRef.current = true;
+
     const url = new URL(window.location.href);
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state');
@@ -48,27 +35,25 @@ export default function GoogleOAuthCallback() {
       return;
     }
 
-    let cancelled = false;
     (async () => {
       const result = await handleGoogleCallback(code, state);
-      if (cancelled) return;
       if (result.success && result.session) {
         persistSession(result.session);
-        window.location.assign(safePostAuthTarget(result.redirect_url));
+        window.location.assign(postAuthDestination(result.redirect_url));
         return;
       }
       setError(result.message || 'Google sign-in failed.');
     })();
-
-    return () => { cancelled = true; };
   }, []);
 
   return (
-    <AuthCard heading="Signing you in…">
+    <AuthCard heading={error ? 'Sign-in failed' : 'Signing you in…'}>
       <Stack align="center" gap="md">
         {error ? (
           <>
-            <Text c="red" ta="center">{error}</Text>
+            <Alert color="red" variant="light" data-testid="oauth-callback-error" style={{ width: '100%' }}>
+              {error}
+            </Alert>
             <Anchor href="/auth">Back to sign-in</Anchor>
           </>
         ) : (

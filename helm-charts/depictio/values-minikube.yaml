@@ -47,7 +47,7 @@ mongo:
       memory: "512Mi"
       cpu: "0.5"
 
-minio:
+s3:
   resources:
     requests:
       memory: "256Mi"

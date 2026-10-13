@@ -5,8 +5,7 @@
  * own URL. The recipient's viewer decodes the fragment during state
  * initialization (so the very first fetch is already filtered), applies the
  * entries, and strips the fragment from the address bar — the URL is a
- * hand-off, not live state. The same encoding rides on sidebar tab links so a
- * view survives the full page navigation a tab switch is.
+ * hand-off, not live state.
  *
  * Two encodings coexist:
  *
@@ -265,15 +264,13 @@ export function buildFilterShareUrl(filters: InteractiveFilter[]): string | null
   return `${origin}${pathname}#${FILTER_HASH_PARAM}=${encoded}`;
 }
 
-/** Drop restored entries that don't correspond to a component on this
- *  dashboard (stale storage, or a tab-propagated hash from a sibling tab).
- *  `map_selection` entries are exempt: floating maps live outside this tab's
- *  stored_metadata and are validated by the floating-component pass instead. */
+/** Drop restored entries that don't correspond to a component of this
+ *  dashboard family (stale storage, a deleted tile, a link minted on another
+ *  tab). `knownIndices` is the family-wide set: this tab's components plus the
+ *  cross-tab ones (floating maps, persistent filter sections). */
 export function sanitizeRestoredFilters(
   filters: InteractiveFilter[],
   knownIndices: Set<string>,
 ): InteractiveFilter[] {
-  return filters.filter(
-    (f) => f.source === 'map_selection' || knownIndices.has(f.index),
-  );
+  return filters.filter((f) => knownIndices.has(f.index));
 }

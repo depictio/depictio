@@ -8,14 +8,18 @@ abundance + taxonomy columns are returned.
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.lineage import kingdom_phylum
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="rel_table",
         path="qiime2/rel_abundance_tables/rel-table-2.tsv",
         format="TSV",
+        input_schema={"#OTU ID": pl.Utf8},
         read_kwargs={"skip_rows": 1},
     ),
+    # No input_schema: the sample id column is found by name or position.
     RecipeSource(
         ref="metadata",
         dc_ref="metadata",  # Reference the metadata DC (optional)
@@ -23,15 +27,16 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "taxonomy": pl.Utf8,
     "rel_abundance": pl.Float64,
     "Kingdom": pl.Utf8,
     "Phylum": pl.Utf8,
 }
-# Metadata columns are user-defined; validated dynamically via OPTIONAL_SCHEMA = {}
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+# Metadata columns are user-defined; validated dynamically via OPTIONAL_OUTPUT_SCHEMA = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
@@ -45,10 +50,10 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         on=sample_cols, index="taxonomy", variable_name="sample", value_name="rel_abundance"
     )
     df = df.filter(pl.col("rel_abundance").is_not_null() & (pl.col("rel_abundance") > 0))
-    df = df.with_columns(
-        pl.col("taxonomy").str.split(";").list.get(0).alias("Kingdom"),
-        pl.col("taxonomy").str.split(";").list.get(1).fill_null("Unclassified").alias("Phylum"),
-    )
+    # Tail-read the ranks: the template points this at the rel-table level that
+    # *is* Phylum for the run's reference database (rel-table-2 on a 7-rank
+    # database, rel-table-3 on an 8-rank one like sbdi-gtdb).
+    df = df.with_columns(kingdom_phylum(pl.col("taxonomy")))
 
     # Join ALL metadata columns generically when metadata is available
     metadata = sources.get("metadata")

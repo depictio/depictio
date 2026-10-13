@@ -213,12 +213,12 @@ echo ""
 echo "# Per-run deep dry-run (checks file headers match template expectations):"
 for run in "${RUNS[@]}"; do
     if [ -d "$TARGET_ROOT/$run" ]; then
-        echo "depictio run --template $TEMPLATE --data-root $TARGET_ROOT/$run --dry-run --deep"
+        echo "depictio ingest --template $TEMPLATE --data-root $TARGET_ROOT/$run --dry-run"
     fi
 done
 echo ""
 echo "# Aggregated dry-run (all run_* dirs at once via sequencing-runs structure):"
-echo "depictio run --template $TEMPLATE --data-root $TARGET_ROOT --dry-run --deep"
+echo "depictio ingest --template $TEMPLATE --data-root $TARGET_ROOT --dry-run"
 echo ""
 echo "=== Per-run ingestion (requires running Depictio stack) ==="
 echo ""

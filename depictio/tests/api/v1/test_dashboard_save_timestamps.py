@@ -23,6 +23,22 @@ from depictio.models.models.users import Permission, UserBase
 TS_FMT = "%Y-%m-%d %H:%M:%S"
 
 
+@pytest.fixture(autouse=True)
+def _no_version_capture():
+    """Keep the save route's version capture off the real Mongo.
+
+    These tests are not about versioning; without this, every save waits out
+    the server-selection timeout of a Mongo that is not there.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints import versioning
+
+    with (
+        patch.object(versioning, "capture_quietly", return_value=None),
+        patch.object(versioning, "ensure_baseline_quietly", return_value=None),
+    ):
+        yield
+
+
 @pytest.fixture
 def db():
     client = mongomock.MongoClient()
@@ -33,6 +49,10 @@ def db():
         # already covered by test_dashboard_save_screenshot_guard.py.
         patch.object(dash_routes, "_should_enqueue_screenshot", return_value=False),
         patch.object(dash_routes, "check_project_permission", return_value=True),
+        # The insert branch stamps `is_public` from the parent project; these
+        # tests care about timestamps only, so pin the lookup instead of
+        # seeding a projects collection.
+        patch.object(dash_routes, "get_project_visibility", return_value=False),
     ):
         yield database
 

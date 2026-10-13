@@ -1,58 +1,786 @@
-import React from 'react';
-import { Stack, Text, Title } from '@mantine/core';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  Anchor,
+  Divider,
+  List,
+  Stack,
+  Table,
+  Text,
+  Title,
+  useMantineColorScheme,
+} from '@mantine/core';
 
-import { StoredMetadata } from '../api';
+import { StoredMetadata, TextValueSpec } from '../api';
+import { useAutofitHeight } from './autofit';
+import {
+  Block,
+  Fact,
+  isLinksOnly,
+  LinkRow,
+  parseBlocks,
+  parseFact,
+  parseLinkRow,
+  parseStatRow,
+  parseStep,
+  StatRow,
+} from './blockMarkdown';
+import { CARD_FRAME, CARD_RULE, RESTING_ICON_OPACITY } from './cardFrame';
+import Glyph, { glyphColorVar } from './Glyph';
+import { parseInlineMarkdown } from './inlineMarkdown';
+import { openRunParameters } from '../utils/runParameters';
+import StepFlow from './StepFlow';
+import TabTiles from './TabTiles';
+import {
+  parseTabTile,
+  TabLinkResolver,
+  TabTileItem,
+  tabTilesAllMissing,
+  useTabLinkResolver,
+} from './tabLinks';
+import { formatTextValue, splitPlaceholders, withStandIns } from './textValues';
+import { textLogoSrc } from './textLogo';
 
 interface TextRendererProps {
   metadata: StoredMetadata;
   /** When true (editor preview), show a dimmed placeholder if title is empty.
    *  Renderers in the viewer pass `false` so empty titles render as nothing. */
   placeholder?: boolean;
+  /** This tile's computed live values, keyed `name` / `param:KEY` (the
+   *  bulk-compute response's entry for it); undefined before the first one. */
+  liveValues?: Record<string, unknown> | null;
+  /** True while the values are being (re)computed. */
+  liveLoading?: boolean;
+  /** Draw each placeholder as its name instead of a value: the builder's
+   *  preview, which computes nothing. */
+  valueChips?: boolean;
+}
+
+/** Draws a run of plain text, its live values filled in (see textValues.ts). */
+type Fill = (text: string) => React.ReactNode;
+const plainFill: Fill = (text) => text;
+
+/**
+ * One live value in the prose. While the values are recomputed the last one
+ * stays, dimmed the way a refreshing card dims; before the first arrives, an
+ * ellipsis of fixed width holds its place.
+ */
+const LiveValue: React.FC<{ text: string | null; loading: boolean }> = ({ text, loading }) =>
+  text === null ? (
+    <span
+      aria-label="Loading"
+      style={{ display: 'inline-block', minWidth: '2ch', textAlign: 'center', opacity: 0.6 }}
+    >
+      …
+    </span>
+  ) : (
+    <span style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 120ms ease-out' }}>{text}</span>
+  );
+
+/** A placeholder in the builder's preview: its name, muted, in a dashed chip. */
+const ValueChip: React.FC<{ name: string }> = ({ name }) => (
+  <span
+    title="Live value, computed on the dashboard"
+    style={{
+      display: 'inline-block',
+      padding: '0 5px',
+      border: '1px dashed var(--mantine-color-default-border)',
+      borderRadius: 4,
+      color: 'var(--mantine-color-dimmed)',
+      fontSize: '0.85em',
+      fontWeight: 500,
+      lineHeight: 1.35,
+      whiteSpace: 'nowrap',
+    }}
+  >
+    {name}
+  </span>
+);
+
+function makeFill(
+  specs: Record<string, TextValueSpec> | null | undefined,
+  live: Record<string, unknown> | null | undefined,
+  loading: boolean,
+  chips: boolean,
+): Fill {
+  return (text) => {
+    if (!text.includes('{{')) return text;
+    const parts = splitPlaceholders(text);
+    if (!parts.some((p) => p.type === 'value')) return text;
+    return parts.map((part, i) => {
+      if (part.type === 'text') return <React.Fragment key={i}>{part.value}</React.Fragment>;
+      if (chips) return <ValueChip key={i} name={part.key} />;
+      // No values for this tile yet: still on its way while loading, else
+      // never coming (a host that computes nothing), which reads as missing.
+      const shown =
+        !live && loading ? null : formatTextValue(live?.[part.key], specs?.[part.key]?.format);
+      return <LiveValue key={i} text={shown} loading={loading} />;
+    });
+  };
 }
 
 /**
- * Tiny inline-markdown parser for the body field. Handles the three formats
- * users reach for in section descriptions:
- *   `**bold**`   -> <strong>
- *   `*italic*`   -> <em>
- *   \`code\`     -> <code>
- *
- * We deliberately do NOT pull in react-markdown / remark / rehype — the body
- * is a single paragraph, and a regex pass is ~30 lines vs ~30 KB of deps.
- * Anything more complex (links, lists, images) should use a proper image /
- * table / link component instead.
+ * Maps the body's inline-markdown tokens to React nodes. The grammar itself
+ * lives in `inlineMarkdown.ts` so it can be unit-tested without a DOM.
  */
-const renderInlineMarkdown = (input: string): React.ReactNode[] => {
-  // Pattern order matters: `code` first (greedy backticks), then `**bold**`
-  // (two-asterisk), then `*italic*` (single-asterisk). The capture groups
-  // come back in lockstep with the split() chunks.
-  const pattern = /(`[^`\n]+`|\*\*[^*\n]+\*\*|\*[^*\n]+\*)/g;
-  const parts = input.split(pattern);
-  return parts.map((part, idx) => {
-    if (!part) return null;
-    if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
-      return <strong key={idx}>{part.slice(2, -2)}</strong>;
+const renderInlineMarkdown = (
+  input: string,
+  resolveTab: TabLinkResolver | null = null,
+  fill: Fill = plainFill,
+): React.ReactNode[] =>
+  parseInlineMarkdown(input).map((token, idx) => {
+    switch (token.type) {
+      case 'bold':
+        return <strong key={idx}>{fill(token.value)}</strong>;
+      case 'italic':
+        return <em key={idx}>{fill(token.value)}</em>;
+      case 'icon':
+        return (
+          <Glyph
+            key={idx}
+            icon={token.name}
+            size={16}
+            style={{ display: 'inline-block', verticalAlign: '-0.15em' }}
+          />
+        );
+      case 'swatch':
+        // A legend key, not decoration: it carries a category's colour into
+        // prose, so the name beside it stays in ink and the dot does the
+        // matching (text in a series colour fails contrast on half of them).
+        return (
+          <span
+            key={idx}
+            role={token.label ? 'img' : undefined}
+            aria-label={token.label || undefined}
+            aria-hidden={token.label ? undefined : true}
+            style={{
+              display: 'inline-block',
+              width: '0.6em',
+              height: '0.6em',
+              borderRadius: '50%',
+              background: /^[a-z]+\.[0-9]$/.test(token.color)
+                ? `var(--mantine-color-${token.color.replace('.', '-')})`
+                : glyphColorVar(token.color),
+              marginRight: '0.3em',
+              verticalAlign: '0.02em',
+            }}
+          />
+        );
+      case 'code':
+        return (
+          <code
+            key={idx}
+            style={{
+              background: 'var(--mantine-color-default-hover, rgba(127,127,127,0.12))',
+              padding: '1px 4px',
+              borderRadius: 3,
+              fontSize: '0.92em',
+            }}
+          >
+            {token.value}
+          </code>
+        );
+      case 'link':
+        if (token.href.startsWith('tab:')) {
+          // A tab link wears the tab's own icon and colour, so it reads as the
+          // tab it opens. Unresolved (unknown name, or a renderer with no tab
+          // family, like the editor preview), it stays plain text: a dead
+          // anchor would be worse than none.
+          const target = resolveTab?.(token.href.slice(4)) ?? null;
+          if (!target) return <React.Fragment key={idx}>{fill(token.value)}</React.Fragment>;
+          return (
+            <Anchor
+              key={idx}
+              href={target.href}
+              inherit
+              fw={600}
+              // In the tab's colour as well as its icon: the link is the tab.
+              c={target.color ? glyphColorVar(target.color) : undefined}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'bottom' }}
+            >
+              {target.icon ? <Glyph icon={target.icon} color={target.color} size={16} /> : null}
+              {fill(token.value)}
+            </Anchor>
+          );
+        }
+        if (token.href.startsWith('params:')) {
+          // The run's parameters, opened in the viewer's dialog rather than
+          // navigated to: there is no page of them to go to.
+          const query = token.href.slice('params:'.length);
+          return (
+            <Anchor
+              key={idx}
+              component="button"
+              type="button"
+              inherit
+              fw={600}
+              onClick={() => openRunParameters(query)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'bottom' }}
+            >
+              <Glyph icon="mdi:tune-variant" color="currentColor" size={16} />
+              {fill(token.value)}
+            </Anchor>
+          );
+        }
+        return (
+          <Anchor
+            key={idx}
+            href={token.href}
+            // A dashboard is a working surface: an outbound link opens beside
+            // it, never over it. Same-origin paths navigate in place.
+            target={token.external ? '_blank' : undefined}
+            rel={token.external ? 'noopener noreferrer' : undefined}
+            inherit
+          >
+            {fill(token.value)}
+          </Anchor>
+        );
+      default:
+        return <React.Fragment key={idx}>{fill(token.value)}</React.Fragment>;
     }
-    if (part.startsWith('*') && part.endsWith('*') && part.length >= 3) {
-      return <em key={idx}>{part.slice(1, -1)}</em>;
-    }
-    if (part.startsWith('`') && part.endsWith('`') && part.length >= 3) {
+  });
+
+type HeadingSize = 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
+
+/**
+ * Visual size of the heading for a `title_size`, or null to fall back to the
+ * heading level.
+ *
+ * `order` stays the semantic level (the document outline a screen reader
+ * walks), and `title_size` only sets how big it looks, which is what an
+ * author writing `order: 2` next to `title_size: sm` asks for. Heading names
+ * pass straight through; the t-shirt sizes every component accepts map onto
+ * Mantine's heading scale, `sm` (the model's default) being the h4 step: a
+ * small title that still reads as a heading above its body text.
+ */
+const TITLE_SIZE_HEADING: Record<string, HeadingSize> = {
+  h1: 'h1',
+  h2: 'h2',
+  h3: 'h3',
+  h4: 'h4',
+  h5: 'h5',
+  h6: 'h6',
+  xl: 'h1',
+  lg: 'h2',
+  md: 'h3',
+  sm: 'h4',
+  xs: 'h5',
+};
+
+export function textTitleSize(titleSize: unknown): HeadingSize | null {
+  if (typeof titleSize !== 'string') return null;
+  return TITLE_SIZE_HEADING[titleSize.trim().toLowerCase()] ?? null;
+}
+
+/**
+ * A tile's accent as CSS: a palette name, a literal colour, or `tab:<name>`
+ * for the colour that tab wears in the sidebar. Null when unset or when the
+ * tab is unknown here (the editor preview has no tab family).
+ */
+function resolveAccent(raw: unknown, resolveTab: TabLinkResolver | null): string | null {
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  const accent = raw.trim();
+  if (accent.startsWith('tab:')) {
+    const target = resolveTab?.(accent.slice(4)) ?? null;
+    return target?.color ? glyphColorVar(target.color) : null;
+  }
+  return glyphColorVar(accent);
+}
+
+const PAD_Y = 16;
+
+/** The icon of a `tab:<name>` accent: a finding card rests its tab's mark. */
+function accentIcon(raw: unknown, resolveTab: TabLinkResolver | null): string | null {
+  if (typeof raw !== 'string' || !raw.trim().startsWith('tab:')) return null;
+  return resolveTab?.(raw.trim().slice(4))?.icon ?? null;
+}
+
+/**
+ * The frame a surface draws, and the height it adds around the prose. `card`
+ * matches a metric card's border and radius so the two sit in one row; its
+ * accent is a rule along the top. `tinted` lays the prose on a wash of the
+ * accent, grey without one.
+ */
+function surfaceStyle(
+  surface: 'none' | 'card' | 'tinted',
+  accent: string | null,
+): { style: React.CSSProperties; extra: number } {
+  if (surface === 'card') {
+    // A metric card's frame, so a finding sits in a row of key figures as one
+    // of them; the accent moves to the resting icon and the footer link.
+    return {
+      style: { ...CARD_FRAME, padding: `${PAD_Y}px 18px`, position: 'relative' },
+      extra: PAD_Y * 2 + 3,
+    };
+  }
+  if (surface === 'tinted') {
+    const base = accent ?? 'var(--mantine-color-gray-6)';
+    return {
+      style: {
+        padding: `${PAD_Y}px 18px`,
+        borderRadius: 'var(--mantine-radius-md)',
+        background: `color-mix(in srgb, ${base} 8%, var(--mantine-color-body))`,
+      },
+      extra: PAD_Y * 2,
+    };
+  }
+  return { style: {}, extra: 0 };
+}
+
+const BODY_TEXT_STYLE: React.CSSProperties = {
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-word',
+  margin: 0,
+  lineHeight: 1.35,
+};
+
+/**
+ * Prose stops at a reading measure. A full-width tile on a wide screen ran
+ * paragraphs to ~180 characters a line, where the eye loses the next line's
+ * start. Tables, tiles and strips keep the tile's width.
+ */
+const PROSE_MEASURE = '80ch';
+function proseWidth(alignment: 'left' | 'center' | 'right'): React.CSSProperties {
+  return {
+    maxWidth: PROSE_MEASURE,
+    marginInline: alignment === 'center' ? 'auto' : alignment === 'right' ? 'auto 0' : undefined,
+  };
+}
+
+/**
+ * A list of `![](icon:…) **Label** value` items, drawn as one line of
+ * metadata under a title: a quiet icon, a dimmed label, the value. Unframed
+ * and in grey on purpose: a study's method (pipeline, markers, databases,
+ * sites, period) is context for the page, not one more box competing with
+ * the cards below it. Wraps to as many lines as the width needs.
+ */
+const FactLine: React.FC<{
+  facts: Fact[];
+  inline: (text: string) => React.ReactNode[];
+  fill: Fill;
+}> = ({ facts, inline, fill }) => (
+  <div
+    style={{
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: '6px 22px',
+      width: '100%',
+      margin: '2px 0 6px',
+      fontSize: 'var(--mantine-font-size-sm)',
+      lineHeight: 1.4,
+    }}
+  >
+    {facts.map((fact, i) => (
+      <span
+        key={i}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}
+      >
+        {fact.icon ? (
+          <Glyph icon={fact.icon} color="var(--mantine-color-dimmed)" size={15} />
+        ) : null}
+        <span style={{ color: 'var(--mantine-color-dimmed)' }}>{fill(fact.label)}</span>
+        <span style={{ fontWeight: 600 }}>{inline(fact.value)}</span>
+      </span>
+    ))}
+  </div>
+);
+
+/**
+ * The same facts on a framed tile: a two-column table, labels over a hairline
+ * per row. A card beside the prose (a study's method and run parameters) is
+ * read as a reference, down a column, where a line of facts is read across.
+ */
+const FactTable: React.FC<{
+  facts: Fact[];
+  inline: (text: string) => React.ReactNode[];
+  fill: Fill;
+}> = ({ facts, inline, fill }) => (
+  <div
+    style={{
+      display: 'grid',
+      gridTemplateColumns: 'max-content minmax(0, 1fr)',
+      columnGap: 18,
+      width: '100%',
+      fontSize: 'var(--mantine-font-size-sm)',
+      lineHeight: 1.4,
+    }}
+  >
+    {facts.map((fact, i) => {
+      const cell: React.CSSProperties = {
+        padding: '6px 0',
+        borderTop: i === 0 ? undefined : `1px solid ${CARD_RULE}`,
+      };
       return (
-        <code
-          key={idx}
+        <React.Fragment key={i}>
+          <span
+            style={{
+              ...cell,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 7,
+              color: 'var(--mantine-color-dimmed)',
+            }}
+          >
+            {fact.icon ? (
+              <Glyph icon={fact.icon} color="var(--mantine-color-dimmed)" size={15} />
+            ) : null}
+            {fill(fact.label)}
+          </span>
+          <span style={{ ...cell, fontWeight: 600, minWidth: 0 }}>{inline(fact.value)}</span>
+        </React.Fragment>
+      );
+    })}
+  </div>
+);
+
+/**
+ * A list of `**41%** Claim — context [Tab](tab:Name)` items, drawn as result
+ * rows: the figure in its tab's colour, the claim over its context, the way
+ * in on the right. Reads like an abstract's key results, set apart from the
+ * metric cards a landing page also carries (which state what was measured,
+ * not what was found), and as one panel it takes the height its rows need
+ * instead of a card's worth of grid rows each.
+ */
+const StatList: React.FC<{
+  rows: StatRow[];
+  inline: (text: string) => React.ReactNode[];
+  resolveTab: TabLinkResolver | null;
+  fill: Fill;
+}> = ({ rows, inline, resolveTab, fill }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+    {rows.map((row, i) => {
+      const tabName = row.link ? /\]\(tab:(.+)\)$/.exec(row.link)?.[1] ?? null : null;
+      const color = tabName ? resolveTab?.(tabName)?.color ?? null : null;
+      return (
+        <div
+          key={i}
           style={{
-            background: 'var(--mantine-color-default-hover, rgba(127,127,127,0.12))',
-            padding: '1px 4px',
-            borderRadius: 3,
-            fontSize: '0.92em',
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            columnGap: 20,
+            rowGap: 4,
+            padding: '12px 0',
+            borderTop: i === 0 ? undefined : `1px solid ${CARD_RULE}`,
           }}
         >
-          {part.slice(1, -1)}
-        </code>
+          <span
+            style={{
+              flex: '0 0 auto',
+              minWidth: 92,
+              fontSize: 28,
+              fontWeight: 800,
+              lineHeight: 1.05,
+              letterSpacing: '-0.02em',
+              fontVariantNumeric: 'tabular-nums',
+              color: color ? glyphColorVar(color) : undefined,
+            }}
+          >
+            {fill(row.stat)}
+          </span>
+          <span style={{ flex: '1 1 260px', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            <Text size="sm" fw={700} lh={1.35}>
+              {inline(row.claim)}
+            </Text>
+            {row.context ? (
+              <Text size="sm" c="dimmed" lh={1.35}>
+                {inline(row.context)}
+              </Text>
+            ) : null}
+          </span>
+          {row.link ? (
+            <Text size="sm" style={{ flex: '0 0 auto', marginLeft: 'auto' }}>
+              {inline(row.link)}
+            </Text>
+          ) : null}
+        </div>
       );
-    }
-    return <React.Fragment key={idx}>{part}</React.Fragment>;
+    })}
+  </div>
+);
+
+/**
+ * A paragraph of links (see `parseLinkRow`), drawn as one small row: the
+ * label dimmed, each link kept whole on its line. A link to a tab this
+ * dashboard does not have is dropped rather than left as dead text — a run
+ * without that tab's data never gets it, and the row stays true to what is
+ * there.
+ */
+const LinkLine: React.FC<{
+  row: LinkRow;
+  alignment: 'left' | 'center' | 'right';
+  inline: (text: string) => React.ReactNode[];
+  resolveTab: TabLinkResolver | null;
+  fill: Fill;
+}> = ({ row, alignment, inline, resolveTab, fill }) => {
+  const links = row.links.filter((link) => {
+    const tab = /\]\(tab:(.+)\)$/.exec(link)?.[1];
+    return !tab || !resolveTab || resolveTab(tab) !== null;
   });
+  if (!links.length) return null;
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        justifyContent:
+          alignment === 'center' ? 'center' : alignment === 'right' ? 'flex-end' : 'flex-start',
+        gap: '4px 18px',
+        fontSize: 'var(--mantine-font-size-sm)',
+        lineHeight: 1.5,
+      }}
+    >
+      {row.label ? (
+        <span style={{ color: 'var(--mantine-color-dimmed)', fontWeight: 600 }}>
+          {fill(row.label)}
+        </span>
+      ) : null}
+      {links.map((link, i) => (
+        <span key={i} style={{ whiteSpace: 'nowrap' }}>
+          {inline(link)}
+        </span>
+      ))}
+    </div>
+  );
+};
+
+/** A short heading carrying a number: `41%`, `7.08`, `×3`, `n = 85`, or a
+ *  live value (`{{share}}`), read as the number it will show. */
+function isFigure(text: string): boolean {
+  const figure = withStandIns(text);
+  return /\d/.test(figure) && figure.trim().length <= 12;
+}
+
+/**
+ * A body's blocks (see `blockMarkdown.ts`). A body with no block syntax is one
+ * paragraph and renders as the single pre-wrapped paragraph bodies always were.
+ * Headings start one level below the tile's own title scale (`#` → H3), so a
+ * body never outshouts the title above it.
+ */
+const MarkdownBody: React.FC<{
+  blocks: Block[];
+  alignment: 'left' | 'center' | 'right';
+  /** The tile's accent, for what a body tints (a fact strip's icons). */
+  accentColor?: string | null;
+  /** On a framed tile: a leading heading becomes the headline figure, the
+   *  line under it its caption. */
+  framed?: boolean;
+  /** Inside `::: steps`: every list is drawn as steps. */
+  listsAs?: 'steps' | null;
+  /** The tile's live values, filled in at every leaf of the body. */
+  fill?: Fill;
+}> = ({
+  blocks,
+  alignment,
+  accentColor = null,
+  framed = false,
+  listsAs = null,
+  fill = plainFill,
+}) => {
+  const resolveTab = useTabLinkResolver();
+  const inline = (text: string) => renderInlineMarkdown(text, resolveTab, fill);
+  // A heading over tab tiles not one of which this dashboard has goes with
+  // them: the tiles draw nothing, and a heading over nothing reads as broken.
+  const overMissingTiles = (idx: number) => {
+    const next = blocks[idx + 1];
+    return (
+      resolveTab !== null &&
+      listsAs !== 'steps' &&
+      next?.type === 'list' &&
+      tabTilesAllMissing(next.items, resolveTab)
+    );
+  };
+  // A framed tile opening on a figure (`# 41%`) sets it as a headline number;
+  // a framed tile opening on a word (`### Study`) keeps it a heading.
+  const first = blocks[0];
+  const figureHead = framed && first?.type === 'heading' && isFigure(first.text);
+  return (
+    <>
+      {blocks.map((block, idx) => {
+        switch (block.type) {
+          case 'heading':
+            if (overMissingTiles(idx)) return null;
+            if (figureHead && idx === 0) {
+              // A finding card opens on its number ("# 41%"), set as a
+              // headline metric card sets its value.
+              return (
+                <Text
+                  key={idx}
+                  ta={alignment}
+                  fw={800}
+                  style={{
+                    fontSize: block.level === 1 ? 40 : block.level === 2 ? 30 : 24,
+                    lineHeight: 1.05,
+                    letterSpacing: '-0.02em',
+                    fontVariantNumeric: 'tabular-nums',
+                    margin: 0,
+                  }}
+                >
+                  {inline(block.text)}
+                </Text>
+              );
+            }
+            return (
+              <Title
+                key={idx}
+                order={(block.level + 2) as 3 | 4 | 5}
+                ta={alignment}
+                // Air above a heading that follows other blocks, so it opens
+                // what comes next rather than closing what came before.
+                style={{ margin: idx === 0 ? '0 0 2px' : '14px 0 2px', lineHeight: 1.2 }}
+              >
+                {inline(block.text)}
+              </Title>
+            );
+          case 'list': {
+            if (listsAs === 'steps') {
+              return (
+                <StepFlow
+                  key={idx}
+                  steps={block.items.map(parseStep)}
+                  inline={inline}
+                  fill={fill}
+                  accentColor={accentColor}
+                />
+              );
+            }
+            const stats = block.items.map(parseStatRow);
+            if (stats.length && stats.every(Boolean)) {
+              return (
+                <StatList
+                  key={idx}
+                  rows={stats as StatRow[]}
+                  inline={inline}
+                  resolveTab={resolveTab}
+                  fill={fill}
+                />
+              );
+            }
+            const facts = block.items.map(parseFact);
+            // A numbered list stays a list, bold labels and icons or not:
+            // steps are asked for with `::: steps`.
+            if (!block.ordered && facts.length && facts.every(Boolean)) {
+              return framed ? (
+                <FactTable key={idx} facts={facts as Fact[]} inline={inline} fill={fill} />
+              ) : (
+                <FactLine key={idx} facts={facts as Fact[]} inline={inline} fill={fill} />
+              );
+            }
+            const tiles = resolveTab ? block.items.map(parseTabTile) : [];
+            if (tiles.length && tiles.every(Boolean)) {
+              return (
+                <TabTiles
+                  key={idx}
+                  items={tiles as TabTileItem[]}
+                  ordered={block.ordered}
+                  resolveTab={resolveTab as TabLinkResolver}
+                  fill={fill}
+                />
+              );
+            }
+            return (
+              <List
+                key={idx}
+                type={block.ordered ? 'ordered' : 'unordered'}
+                spacing={4}
+                // Mantine lays an item out as an inline-flex wrapper, which
+                // sizes to its text instead of the tile: long items ran past
+                // the edge and were clipped. Inline flow wraps them.
+                styles={{ itemWrapper: { display: 'inline' }, itemLabel: { display: 'inline' } }}
+                style={{
+                  lineHeight: 1.45,
+                  textAlign: 'left',
+                  paddingRight: 4,
+                  ...proseWidth(alignment),
+                }}
+              >
+                {block.items.map((item, i) => (
+                  <List.Item key={i}>{inline(item)}</List.Item>
+                ))}
+              </List>
+            );
+          }
+          case 'table':
+            return (
+              <Table key={idx} withTableBorder={false} verticalSpacing={6} highlightOnHover>
+                <Table.Thead>
+                  <Table.Tr>
+                    {block.header.map((cell, i) => (
+                      <Table.Th key={i} style={{ textAlign: block.align[i] ?? 'left' }}>
+                        {inline(cell)}
+                      </Table.Th>
+                    ))}
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {block.rows.map((row, r) => (
+                    <Table.Tr key={r}>
+                      {block.header.map((_, i) => (
+                        <Table.Td key={i} style={{ textAlign: block.align[i] ?? 'left' }}>
+                          {inline(row[i] ?? '')}
+                        </Table.Td>
+                      ))}
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            );
+          case 'rule':
+            return <Divider key={idx} my={4} />;
+          case 'div':
+            // The div's name says how what it holds is drawn. One this
+            // renderer does not know draws its content as plain blocks, as a
+            // markdown renderer without fenced divs would.
+            return (
+              <MarkdownBody
+                key={idx}
+                blocks={block.blocks}
+                alignment={alignment}
+                accentColor={accentColor}
+                listsAs={block.name === 'steps' ? 'steps' : listsAs}
+                fill={fill}
+              />
+            );
+          default: {
+            const linkRow = parseLinkRow(block.text);
+            if (linkRow) {
+              return (
+                <LinkLine
+                  key={idx}
+                  row={linkRow}
+                  alignment={alignment}
+                  inline={inline}
+                  resolveTab={resolveTab}
+                  fill={fill}
+                />
+              );
+            }
+            if (framed) {
+              // On a card: the line under its number is that number's caption,
+              // dimmed like a metric card's; the prose after it is card text.
+              const caption = idx === 1 && figureHead;
+              return (
+                <Text
+                  key={idx}
+                  ta={alignment}
+                  size="sm"
+                  c={caption ? 'dimmed' : undefined}
+                  style={{ ...BODY_TEXT_STYLE, lineHeight: 1.45, marginTop: caption ? -4 : 0 }}
+                >
+                  {inline(block.text)}
+                </Text>
+              );
+            }
+            return (
+              <Text key={idx} ta={alignment} style={{ ...BODY_TEXT_STYLE, ...proseWidth(alignment) }}>
+                {inline(block.text)}
+              </Text>
+            );
+          }
+        }
+      })}
+    </>
+  );
 };
 
 /**
@@ -61,20 +789,31 @@ const renderInlineMarkdown = (input: string): React.ReactNode[] => {
  *
  * Fields read from metadata:
  *   - title (string)
- *   - order (1-6 → H1..H6; clamped)
+ *   - order (1-6 → H1..H6; clamped): the semantic heading level
+ *   - title_size ('h1'..'h6' or 'xs'..'xl'): the visual size, see `textTitleSize`
  *   - alignment ('left' | 'center' | 'right'; default 'left')
  *   - vertical_alignment ('top' | 'center' | 'bottom'; default 'center')
  *   - body (optional paragraph)
+ *   - surface ('none' | 'card' | 'tinted'; default 'none') and accent
+ *   - values: the live values `{{name}}` cites, computed by the host with the
+ *     cards and handed in as `liveValues` (see textValues.ts)
  *
  * No data fetching, no editing UI. Same shape in viewer and editor — the
  * editor injects its own action chrome (incl. the Edit menu) around it.
  */
-const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = false }) => {
+const TextRenderer: React.FC<TextRendererProps> = ({
+  metadata,
+  placeholder = false,
+  liveValues,
+  liveLoading = false,
+  valueChips = false,
+}) => {
   const rawTitle = typeof metadata.title === 'string' ? metadata.title : '';
   const rawOrder = Number(metadata.order);
   const order = (Number.isFinite(rawOrder)
     ? Math.min(6, Math.max(1, Math.trunc(rawOrder)))
     : 1) as 1 | 2 | 3 | 4 | 5 | 6;
+  const size = textTitleSize(metadata.title_size) ?? undefined;
   const alignmentRaw =
     typeof metadata.alignment === 'string' ? metadata.alignment : 'left';
   const alignment: 'left' | 'center' | 'right' =
@@ -88,6 +827,55 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
   const body = typeof metadata.body === 'string' ? metadata.body : '';
 
   const hasTitle = rawTitle.trim().length > 0;
+  const { colorScheme } = useMantineColorScheme();
+  const wantedLogo = textLogoSrc(metadata.logo, metadata.logo_dark, colorScheme === 'dark');
+  // A logo that fails to load (an instance without internet, a moved file)
+  // gives way to the title as text rather than a broken image.
+  const [failedLogo, setFailedLogo] = useState<string | null>(null);
+  const logoSrc = wantedLogo && wantedLogo !== failedLogo ? wantedLogo : null;
+  const fill = useMemo(
+    () => makeFill(metadata.values, liveValues, liveLoading, valueChips),
+    [metadata.values, liveValues, liveLoading, valueChips],
+  );
+
+  const resolveTab = useTabLinkResolver();
+  const surface =
+    metadata.surface === 'card' || metadata.surface === 'tinted' ? metadata.surface : 'none';
+  const accentColor = resolveAccent(metadata.accent, resolveTab);
+  const frame = surfaceStyle(surface, accentColor);
+  const restingIcon = surface === 'card' ? accentIcon(metadata.accent, resolveTab) : null;
+
+  // On a framed tile, a closing paragraph of links is the card's footer: it
+  // sits on the bottom edge, so the links of a row of cards line up however
+  // long each card's prose runs.
+  const allBlocks = body ? parseBlocks(body) : [];
+  const last = allBlocks[allBlocks.length - 1];
+  const footer =
+    surface !== 'none' && allBlocks.length > 1 && last?.type === 'paragraph' && isLinksOnly(last.text)
+      ? last
+      : null;
+  const blocks = footer ? allBlocks.slice(0, -1) : allBlocks;
+  const footerRef = useRef<HTMLDivElement | null>(null);
+  const [footerPx, setFooterPx] = useState(0);
+  useLayoutEffect(() => {
+    // Outside the measured prose (it is pushed to the bottom, so measuring it
+    // with the prose would report the tile), so its height is added back.
+    setFooterPx(footerRef.current ? footerRef.current.offsetHeight + 12 : 0);
+  }, [footer?.type === 'paragraph' ? footer.text : null]);
+
+  // Measure the prose itself, not the tile. The Stack below is `h="100%"`, so
+  // it always reports the height it was given; this inner wrapper is
+  // height-auto, so its scrollHeight is what the text actually needs.
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const index = typeof metadata.index === 'string' ? metadata.index : '';
+  useAutofitHeight(
+    index,
+    contentRef,
+    [rawTitle, body, order, size, alignment, surface, footerPx, logoSrc],
+    // The frame's padding and borders, and a footer, sit outside the measured
+    // prose.
+    frame.extra || footerPx ? (h) => h + frame.extra + footerPx : undefined,
+  );
 
   return (
     <Stack
@@ -98,19 +886,71 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
       // preview Card are both column flex containers whose height can be
       // indefinite, where a percentage height alone collapses to the content
       // and vertical alignment would have no room to act.
-      style={{ flex: '1 1 auto', textAlign: alignment, width: '100%', padding: 0 }}
+      style={{
+        flex: '1 1 auto',
+        textAlign: alignment,
+        width: '100%',
+        padding: 0,
+        boxSizing: 'border-box',
+        ...frame.style,
+      }}
     >
+      {restingIcon ? (
+        // The tab's mark, resting faint in the corner as a headline metric
+        // card rests its icon: which tab a finding comes from, at a glance.
+        <span
+          aria-hidden
+          style={{
+            position: 'absolute',
+            top: 16,
+            right: 16,
+            opacity: RESTING_ICON_OPACITY,
+            pointerEvents: 'none',
+          }}
+        >
+          <Glyph icon={restingIcon} color={accentColor} size={36} />
+        </span>
+      ) : null}
+      <div
+        ref={contentRef}
+        // 8px between blocks: paragraphs, lists and tables need air that a
+        // title-over-paragraph pair never did.
+        style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}
+      >
       {hasTitle ? (
         <Title
           order={order}
+          size={size}
           ta={alignment}
           style={{ wordBreak: 'break-word', margin: 0, lineHeight: 1.15 }}
         >
-          {rawTitle}
+          {logoSrc ? (
+            // The heading stays a heading: the logo is its content, the title
+            // its accessible name. A fixed box in `em` holds its place before
+            // the image loads, and `contain` fits any logo into it: the
+            // two-line nf-core logos (2.3:1) take its height, the one-line ones
+            // (up to 8:1) its width, so the pipeline name reads at about the
+            // same size whichever layout a pipeline ships.
+            <img
+              src={logoSrc}
+              alt={rawTitle}
+              onError={() => setFailedLogo(logoSrc)}
+              style={{
+                width: 'min(100%, 7em)',
+                height: '1.9em',
+                objectFit: 'contain',
+                objectPosition: alignment,
+                verticalAlign: 'top',
+              }}
+            />
+          ) : (
+            fill(rawTitle)
+          )}
         </Title>
       ) : placeholder ? (
         <Title
           order={order}
+          size={size}
           ta={alignment}
           c="dimmed"
           style={{ fontStyle: 'italic', margin: 0, lineHeight: 1.15 }}
@@ -118,18 +958,20 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
           Section title
         </Title>
       ) : null}
-      {body ? (
-        <Text
-          ta={alignment}
-          style={{
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            margin: 0,
-            lineHeight: 1.35,
-          }}
-        >
-          {renderInlineMarkdown(body)}
-        </Text>
+      {blocks.length ? (
+        <MarkdownBody
+          blocks={blocks}
+          alignment={alignment}
+          accentColor={surface !== 'none' ? accentColor : null}
+          framed={surface !== 'none'}
+          fill={fill}
+        />
+      ) : null}
+      </div>
+      {footer ? (
+        <div ref={footerRef} style={{ marginTop: 'auto', paddingTop: 12 }}>
+          <MarkdownBody blocks={[footer]} alignment={alignment} fill={fill} />
+        </div>
       ) : null}
     </Stack>
   );

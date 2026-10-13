@@ -2,13 +2,14 @@ import React, { useMemo } from 'react';
 import { ActionIcon, Group, ScrollArea, Stack, Tabs, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { DataGridBody, MetadataBody } from 'depictio-react-core';
+import { DataGridBody, MetadataBody, VizControlsGrid } from 'depictio-react-core';
 import type { DashboardData, DashboardPermissions, StoredMetadata } from 'depictio-react-core';
 import DashboardInfoBody from '../DashboardInfoBody';
 import { useNotesEditor } from '../../components/notes/useNotesEditor';
 import NotesEditorSurface, {
   NotesSaveStatusIndicator,
 } from '../../components/notes/NotesEditorSurface';
+import '../../components/notes/notesSurface.css';
 import { useUiStore } from '../../store/useUiStore';
 import type { InspectorTab } from '../../store/useUiStore';
 
@@ -18,6 +19,9 @@ export const INSPECTOR_WIDTH = 340;
 interface InspectorProps {
   dashboard: DashboardData | null;
   dashboardId: string | null;
+  /** After each notes save. The editor reloads its version list: a notes save
+   *  records a version. */
+  onNotesSaved?: () => void;
 }
 
 /**
@@ -32,7 +36,7 @@ interface InspectorProps {
  * one surface may mount it. The app drops `NotesFooter` when the inspector is
  * enabled.
  */
-const Inspector: React.FC<InspectorProps> = ({ dashboard, dashboardId }) => {
+const Inspector: React.FC<InspectorProps> = ({ dashboard, dashboardId, onNotesSaved }) => {
   const selectedComponentId = useUiStore((s) => s.selectedComponentId);
   const inspectorTab = useUiStore((s) => s.inspectorTab);
   const setInspectorTab = useUiStore((s) => s.setInspectorTab);
@@ -58,12 +62,17 @@ const Inspector: React.FC<InspectorProps> = ({ dashboard, dashboardId }) => {
     dashboardId ?? '',
     (dashboard?.notes_content as string) ?? '',
     dashboard?.permissions as DashboardPermissions | undefined,
+    onNotesSaved,
   );
 
   // Selecting a plain figure while the Controls tab is active would otherwise
   // leave the panel on a tab that no longer exists, showing an empty body.
+  // Either tier is enough to earn the Controls tab: a renderer whose controls
+  // are all encoding ones publishes `primaryControls` and no `controls`.
+  const hasControls = Boolean(extras?.controls || extras?.primaryControls);
+
   const activeTab: InspectorTab =
-    (inspectorTab === 'controls' && !extras?.controls) ||
+    (inspectorTab === 'controls' && !hasControls) ||
     (inspectorTab === 'data' && !extras?.data)
       ? 'info'
       : inspectorTab;
@@ -105,7 +114,7 @@ const Inspector: React.FC<InspectorProps> = ({ dashboard, dashboardId }) => {
         style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
       >
         <Tabs.List grow>
-          {extras?.controls && (
+          {hasControls && (
             <Tabs.Tab
               value="controls"
               leftSection={<Icon icon="tabler:adjustments-horizontal" width={14} />}
@@ -129,10 +138,16 @@ const Inspector: React.FC<InspectorProps> = ({ dashboard, dashboardId }) => {
         {/* The same JSX the settings popover shows, minus the popover — which
             also drops the reason that popover needs `closeOnClickOutside`:
             portalled Mantine Selects have nothing left to close. */}
-        {extras?.controls && (
+        {hasControls && (
           <Tabs.Panel value="controls" style={{ flex: 1, minHeight: 0 }}>
             <ScrollArea h="100%" type="auto" px="sm" py="xs">
-              {extras.controls}
+              {/* Encoding first, cosmetics after: the same order the popover
+                  uses, and the order a reader asks the questions in, what is
+                  plotted before how it looks. */}
+              <VizControlsGrid layout="column">
+                {extras?.primaryControls}
+                {extras?.controls}
+              </VizControlsGrid>
             </ScrollArea>
           </Tabs.Panel>
         )}

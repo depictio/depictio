@@ -3,7 +3,9 @@ import { Paper } from '@mantine/core';
 import { useViewportSize } from '@mantine/hooks';
 
 import type { InteractiveFilter } from '../../api';
+import { Z_LAYERS } from '../../zLayers';
 import MapPanelBody from './MapPanelBody';
+import { useCardResize } from './useCardResize';
 import { clampToViewport, useDraggable, type Position } from './useDraggable';
 import type { MapPanel } from './useMapPanel';
 
@@ -34,10 +36,6 @@ function cardSize(
 /** Default anchor for the floating card: bottom-right, clear of the Notes FAB. */
 const DEFAULT_ANCHOR = { right: 16, bottom: 72 };
 
-/** Above the Notes FAB (200) and banners, below the boot splash (400) and the
- *  walkthrough overlay (1000/1100) so neither gets occluded by a stray card. */
-const Z_INDEX = 250;
-
 export interface MapPanelSurfaceProps {
   panel: MapPanel;
   filters: InteractiveFilter[];
@@ -62,18 +60,30 @@ const MapPanelSurface: React.FC<MapPanelSurfaceProps> = ({
   refreshTick,
   renderEditActions,
 }) => {
-  const { components, state, setPosition } = panel;
+  const { components, state, setPosition, setCardDims } = panel;
   const { nodeRef, livePosition, dragging, handleProps } = useDraggable((pos: Position) =>
     setPosition(pos.x, pos.y),
   );
+  const {
+    liveSize,
+    resizing,
+    handleProps: resizeHandleProps,
+  } = useCardResize(nodeRef, (next) => setCardDims(next.width, next.height));
 
   // `useViewportSize` reports 0×0 until its mount effect runs; fall back to the
   // window so the first paint is already the right size.
   const viewport = useViewportSize();
-  const size = cardSize(state.cardSize, {
+  const preset = cardSize(state.cardSize, {
     width: viewport.width || window.innerWidth,
     height: viewport.height || window.innerHeight,
   });
+  // A freely dragged size beats the preset; the in-flight drag value beats
+  // both. The presets stay reachable because choosing one clears the stored
+  // size (see `setCardSize`).
+  const size = liveSize ?? {
+    width: state.cardWidth ?? preset.width,
+    height: state.cardHeight ?? preset.height,
+  };
 
   // A saved position can fall outside the viewport after a resize or on a
   // smaller screen, so re-clamp before use rather than trusting storage.
@@ -94,7 +104,7 @@ const MapPanelSurface: React.FC<MapPanelSurfaceProps> = ({
       radius="md"
       style={{
         position: 'fixed',
-        zIndex: Z_INDEX,
+        zIndex: Z_LAYERS.mapPanel,
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -120,6 +130,29 @@ const MapPanelSurface: React.FC<MapPanelSurfaceProps> = ({
         dragHandleProps={handleProps}
         dragging={dragging}
         renderEditActions={renderEditActions}
+      />
+      {/* Corner resize handle. A drawn grip rather than a bare hot zone —
+          without a visible affordance nobody discovers the card resizes at
+          all. `data-no-drag` keeps the header's move-drag from swallowing the
+          gesture when the card is small enough for the two to overlap. */}
+      <div
+        {...resizeHandleProps}
+        data-no-drag
+        aria-label="Resize map panel"
+        style={{
+          position: 'absolute',
+          right: 0,
+          bottom: 0,
+          width: 18,
+          height: 18,
+          cursor: 'nwse-resize',
+          touchAction: 'none',
+          zIndex: 2,
+          // Two short diagonal strokes, the browser-native resize-grip idiom.
+          background:
+            'linear-gradient(135deg, transparent 0 50%, var(--mantine-color-dimmed) 50% 57%, transparent 57% 68%, var(--mantine-color-dimmed) 68% 75%, transparent 75%) no-repeat',
+          opacity: resizing ? 0.9 : 0.55,
+        }}
       />
     </Paper>
   );

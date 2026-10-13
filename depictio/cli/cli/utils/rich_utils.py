@@ -1,17 +1,25 @@
+from __future__ import annotations
+
 import json
 import sys
 from collections import defaultdict
 from io import StringIO
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-import polars as pl
 from pydantic import validate_call
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
-from depictio.models.models.workflows import Workflow, WorkflowRun
+# Every command imports this module for its status lines, so it imports neither
+# polars nor the models (beanie, pymongo) itself: they are named here in annotations
+# only, and imported where they are used.
+if TYPE_CHECKING:
+    import polars as pl
+
+    from depictio.models.models.workflows import Workflow, WorkflowRun
 
 # Single shared console for the whole CLI. Everything routes through this so
 # styling/width stays consistent and we never shadow the builtin ``print``.
@@ -21,12 +29,58 @@ from depictio.models.models.workflows import Workflow, WorkflowRun
 console = Console()
 # Stable reference for helpers whose ``console`` parameter shadows the global.
 _DEFAULT_CONSOLE = console
+# For notices about the CLI itself, kept out of the output a script reads.
+err_console = Console(stderr=True)
+
+
+# Symbol, symbol style and message style of each status line. One-cell glyphs rather
+# than emoji: emoji widths vary between terminals, which misaligned consecutive lines.
+_STATUS_STYLES = {
+    "success": ("✓", "bold green", ""),
+    "error": ("✗", "bold red", "red"),
+    "warning": ("!", "bold yellow", "yellow"),
+    "info": ("•", "bold blue", ""),
+    "loading": ("…", "bold yellow", ""),
+}
+# The symbols where the console's encoding has no room for the glyphs above
+# (PYTHONIOENCODING=ascii, a Latin-1 locale): writing those would raise.
+_ASCII_SYMBOLS = {"success": "v", "error": "x", "warning": "!", "info": "*", "loading": "..."}
+
+
+def _encodable(text: str, encoding: str) -> bool:
+    try:
+        text.encode(encoding)
+    except (UnicodeEncodeError, LookupError):
+        return False
+    return True
+
+
+def _print_status(statement: str, mode: str, target: Optional[Console] = None) -> None:
+    # Looked up at each call, as tests swap the module's console for their own.
+    target = target or console
+    symbol, symbol_style, text_style = _STATUS_STYLES[mode]
+    if not _encodable(symbol, target.encoding):
+        symbol = _ASCII_SYMBOLS[mode]
+    # Not highlighted: the highlighter returns a new Text without the message's style,
+    # so an error would lose its red, and it would bold every bracket in it.
+    text = target.render_str(statement, style=text_style, highlight=False)
+    if not _encodable(text.plain, target.encoding):
+        # One '?' per character the encoding lacks, so the styles still line up.
+        text.plain = text.plain.encode(target.encoding, "replace").decode(target.encoding)
+    # Never wrapped here, so a path or a command in the message copies and greps
+    # intact, as in _print_rows: the terminal wraps a long line. A line the message
+    # breaks itself continues under its text rather than under the symbol.
+    for i, line in enumerate(text.split("\n", allow_blank=True)):
+        prefix = Text(symbol, style=symbol_style) if i == 0 else Text(" " * len(symbol))
+        row = Text.assemble(prefix, " ", line)
+        row.rstrip()
+        target.print(row, soft_wrap=True)
 
 
 @validate_call
 def handle_error(message: str, exit: bool = False):
     """Print an error message and raise a ValueError."""
-    console.print(f"• [bold red]:x: {message}[/bold red]")
+    _print_status(message, "error")
     if exit:
         sys.exit()
 
@@ -73,22 +127,18 @@ def rich_print_json(statement: str, json_obj: dict | list[dict]):
 
 
 @validate_call
-def rich_print_checked_statement(statement: str, mode: str, exit: bool = False):
+def rich_print_checked_statement(
+    statement: str, mode: str, exit: bool = False, stderr: bool = False
+):
     """
-    Print a statement with a check mark or cross.
+    Print a status line: a symbol for ``mode`` (loading, success, error, info,
+    warning), then ``statement``, which may hold Rich markup. On stderr with
+    ``stderr``.
     """
-    if mode not in ["loading", "success", "error", "info", "warning"]:
+    if mode not in _STATUS_STYLES:
         handle_error(f"Invalid mode: {mode}", exit=exit)
-    if mode == "loading":
-        console.print(f"• [bold yellow]:hourglass: {statement}[/bold yellow]")
-    elif mode == "success":
-        console.print(f"• [bold green]:white_check_mark: {statement}[/bold green]")
-    elif mode == "error":
-        console.print(f"• [bold red]:x: {statement}[/bold red]")
-    elif mode == "info":
-        console.print(f"• [bold blue]:blue_book: {statement}[/bold blue]")
-    elif mode == "warning":
-        console.print(f"• [bold orange1]:warning: {statement}[/bold orange1]")
+        return
+    _print_status(statement, mode, err_console if stderr else None)
 
 
 def render_records_table(
@@ -306,6 +356,7 @@ def add_rich_display_to_polars():
     Add rich display methods to Polars DataFrame.
     Call this once to enable df.rich_print() methods.
     """
+    import polars as pl
 
     def rich_print(self, title=None, max_rows=20, max_cols=10, show_dtypes=True, console=None):
         print_polars_with_rich(
@@ -374,6 +425,40 @@ def add_rich_display_to_polars():
 #     large_df.rich_print(title="Large Dataset", max_rows=5, max_cols=5)
 
 
+#: Numeric columns of the scan summary tables, as (header, stat key).
+#:
+#: Declared once because the same set is rendered five times per table (header,
+#: per-DC row, run total, grand total, separator width) and across two tables.
+#: Adding a counter is now a single edit here.
+#:
+#: ``New``/``Changed``/``Unchanged`` are grouped: they are the detection
+#: outcomes. ``Skipped`` is retained because it is what pre-hash-detection scan
+#: results recorded, and equals Unchanged + un-pushed Changed.
+SCAN_SUMMARY_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("Total", "total_files"),
+    ("New", "new_files"),
+    ("Changed", "changed_files"),
+    ("Unchanged", "unchanged_files"),
+    ("Updated", "updated_files"),
+    ("Missing", "missing_files"),
+    ("Deleted", "deleted_files"),
+    ("Skipped", "skipped_files"),
+    ("Other", "other_failure_files"),
+)
+
+SCAN_SUMMARY_STAT_KEYS: tuple[str, ...] = tuple(key for _, key in SCAN_SUMMARY_COLUMNS)
+
+
+def _scan_cells(stats: dict, template: str = "{}") -> list[str]:
+    """Render one row's numeric cells in column order."""
+    return [template.format(stats.get(key, 0)) for key in SCAN_SUMMARY_STAT_KEYS]
+
+
+def _accumulate_scan_stats(totals: dict[str, int], stats: dict) -> None:
+    for key in SCAN_SUMMARY_STAT_KEYS:
+        totals[key] += stats.get(key, 0)
+
+
 def rich_print_summary_scan_table_enhanced(
     runs: list[WorkflowRun], workflow: Workflow, show_totals: bool = True
 ) -> None:
@@ -405,24 +490,11 @@ def rich_print_summary_scan_table_enhanced(
     # Define columns
     table.add_column("Run Tag", style="cyan", justify="left", min_width=15)
     table.add_column("Data Collection", style="yellow", justify="left", min_width=18)
-    table.add_column("Total", justify="center", min_width=7)
-    table.add_column("Updated", justify="center", min_width=7)
-    table.add_column("New", justify="center", min_width=7)
-    table.add_column("Missing", justify="center", min_width=7)
-    table.add_column("Deleted", justify="center", min_width=7)
-    table.add_column("Skipped", justify="center", min_width=7)
-    table.add_column("Other", justify="center", min_width=7)
+    for header, _ in SCAN_SUMMARY_COLUMNS:
+        table.add_column(header, justify="center", min_width=7)
 
     # Track totals
-    grand_totals = {
-        "total_files": 0,
-        "updated_files": 0,
-        "new_files": 0,
-        "missing_files": 0,
-        "deleted_files": 0,
-        "skipped_files": 0,
-        "other_failure_files": 0,
-    }
+    grand_totals = dict.fromkeys(SCAN_SUMMARY_STAT_KEYS, 0)
 
     # Check if any runs have dc_stats data
     has_dc_stats = any(
@@ -439,13 +511,7 @@ def rich_print_summary_scan_table_enhanced(
             table.add_row(
                 "[dim]No scan data[/dim]",
                 f"[yellow]{dc.data_collection_tag}[/yellow]",
-                "0",
-                "0",
-                "0",
-                "0",
-                "0",
-                "0",
-                "0",
+                *_scan_cells({}),
             )
 
         console.print(table)
@@ -481,32 +547,19 @@ def rich_print_summary_scan_table_enhanced(
                 table.add_row(
                     run_tag_display,
                     f"[yellow]{dc_tag}[/yellow]",
-                    str(stats.get("total_files", 0)),
-                    str(stats.get("updated_files", 0)),
-                    str(stats.get("new_files", 0)),
-                    str(stats.get("missing_files", 0)),
-                    str(stats.get("deleted_files", 0)),
-                    str(stats.get("skipped_files", 0)),
-                    str(stats.get("other_failure_files", 0)),
+                    *_scan_cells(stats),
                 )
 
                 # Update totals
-                for key in run_totals.keys():
-                    run_totals[key] += stats.get(key, 0)
-                    grand_totals[key] += stats.get(key, 0)
+                _accumulate_scan_stats(run_totals, stats)
+                _accumulate_scan_stats(grand_totals, stats)
 
             # Add run total if multiple data collections
             if show_totals and len(scan_results.dc_stats) > 1:
                 table.add_row(
                     "",
                     "[dim italic]Run Total[/dim italic]",
-                    f"[bold]{run_totals['total_files']}[/bold]",
-                    f"[bold]{run_totals['updated_files']}[/bold]",
-                    f"[bold]{run_totals['new_files']}[/bold]",
-                    f"[bold]{run_totals['missing_files']}[/bold]",
-                    f"[bold]{run_totals['deleted_files']}[/bold]",
-                    f"[bold]{run_totals['skipped_files']}[/bold]",
-                    f"[bold]{run_totals['other_failure_files']}[/bold]",
+                    *_scan_cells(run_totals, "[bold]{}[/bold]"),
                     style="dim",
                 )
         else:
@@ -519,22 +572,15 @@ def rich_print_summary_scan_table_enhanced(
             table.add_row(
                 f"[bold]{run.run_tag}[/bold]",
                 "[dim]aggregated[/dim]",
-                str(stats.get("total_files", "")),
-                str(stats.get("updated_files", "")),
-                str(stats.get("new_files", "")),
-                str(stats.get("missing_files", "")),
-                str(stats.get("deleted_files", "")),
-                str(stats.get("skipped_files", "")),
-                str(stats.get("other_failure_files", "")),
+                *_scan_cells(stats),
             )
 
             # Update grand totals
-            for key in grand_totals.keys():
-                grand_totals[key] += stats.get(key, 0)
+            _accumulate_scan_stats(grand_totals, stats)
 
         # Add separator between runs
         if run_idx < len(runs) - 1:
-            table.add_row("", "", "", "", "", "", "", "", "", style="dim", end_section=True)
+            table.add_row(*([""] * (2 + len(SCAN_SUMMARY_COLUMNS))), style="dim", end_section=True)
 
     # Add grand total row
     if show_totals and len(runs) > 1:
@@ -542,13 +588,7 @@ def rich_print_summary_scan_table_enhanced(
         table.add_row(
             "[bold blue]TOTAL[/bold blue]",
             "[bold blue]All Collections[/bold blue]",
-            f"[bold blue]{grand_totals['total_files']}[/bold blue]",
-            f"[bold blue]{grand_totals['updated_files']}[/bold blue]",
-            f"[bold blue]{grand_totals['new_files']}[/bold blue]",
-            f"[bold blue]{grand_totals['missing_files']}[/bold blue]",
-            f"[bold blue]{grand_totals['deleted_files']}[/bold blue]",
-            f"[bold blue]{grand_totals['skipped_files']}[/bold blue]",
-            f"[bold blue]{grand_totals['other_failure_files']}[/bold blue]",
+            *_scan_cells(grand_totals, "[bold blue]{}[/bold blue]"),
         )
 
     console.print(table)
@@ -581,62 +621,29 @@ def rich_print_summary_scan_table_by_dc(runs: list[WorkflowRun]) -> None:
 
     table.add_column("Data Collection", style="yellow", justify="left", min_width=18)
     table.add_column("Run Tag", style="cyan", justify="left", min_width=15)
-    table.add_column("Total", justify="center")
-    table.add_column("Updated", justify="center")
-    table.add_column("New", justify="center")
-    table.add_column("Missing", justify="center")
-    table.add_column("Deleted", justify="center")
-    table.add_column("Skipped", justify="center")
-    table.add_column("Other", justify="center")
+    for header, _ in SCAN_SUMMARY_COLUMNS:
+        table.add_column(header, justify="center")
 
     for dc_idx, (dc_tag, run_data) in enumerate(dc_data.items()):
         first_row = True
-        dc_totals = {
-            key: 0
-            for key in [
-                "total_files",
-                "updated_files",
-                "new_files",
-                "missing_files",
-                "deleted_files",
-                "skipped_files",
-                "other_failure_files",
-            ]
-        }
+        dc_totals = dict.fromkeys(SCAN_SUMMARY_STAT_KEYS, 0)
 
         for run_tag, stats in run_data:
             # Only show DC tag in first row
             dc_display = f"[bold yellow]{dc_tag}[/bold yellow]" if first_row else ""
             first_row = False
 
-            table.add_row(
-                dc_display,
-                run_tag,
-                str(stats.get("total_files", 0)),
-                str(stats.get("updated_files", 0)),
-                str(stats.get("new_files", 0)),
-                str(stats.get("missing_files", 0)),
-                str(stats.get("deleted_files", 0)),
-                str(stats.get("skipped_files", 0)),
-                str(stats.get("other_failure_files", 0)),
-            )
+            table.add_row(dc_display, run_tag, *_scan_cells(stats))
 
             # Update DC totals
-            for key in dc_totals.keys():
-                dc_totals[key] += stats.get(key, 0)
+            _accumulate_scan_stats(dc_totals, stats)
 
         # Add DC summary row
         if len(run_data) > 1:
             table.add_row(
                 "",
                 "[dim italic]DC Total[/dim italic]",
-                f"[bold]{dc_totals['total_files']}[/bold]",
-                f"[bold]{dc_totals['updated_files']}[/bold]",
-                f"[bold]{dc_totals['new_files']}[/bold]",
-                f"[bold]{dc_totals['missing_files']}[/bold]",
-                f"[bold]{dc_totals['deleted_files']}[/bold]",
-                f"[bold]{dc_totals['skipped_files']}[/bold]",
-                f"[bold]{dc_totals['other_failure_files']}[/bold]",
+                *_scan_cells(dc_totals, "[bold]{}[/bold]"),
                 style="dim",
             )
 

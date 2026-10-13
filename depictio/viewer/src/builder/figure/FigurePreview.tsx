@@ -10,14 +10,42 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Box, Loader, Stack, Text } from '@mantine/core';
 import Plot from 'react-plotly.js';
-import { previewFigure } from 'depictio-react-core';
-import type { FigureResponse } from 'depictio-react-core';
+import { FigureHeader, figurePlotConfig, previewFigure, resolveFigureStyle } from 'depictio-react-core';
+import type { FigureResponse, FigureStyle } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
+import { useBuilderPreviewFilters } from '../useBuilderPreviewFilters';
 import { buildMetadata } from '../buildMetadata';
+import { useSectionFigureStyle } from '../shared/useSectionCardVariant';
 
 const DEBOUNCE_MS = 400;
 
 const PLOT_STYLE: React.CSSProperties = { width: '100%', height: 400 };
+
+/** The grid's default margins, under whatever the server set: a minimal
+ *  figure comes back with tight margins of its own, which must survive. */
+function previewLayout(layout: Record<string, unknown> | undefined): Partial<Plotly.Layout> {
+  const own = layout || {};
+  return {
+    ...own,
+    autosize: true,
+    margin: {
+      t: 30,
+      r: 20,
+      b: 40,
+      l: 50,
+      ...((own.margin as Record<string, unknown>) || {}),
+    },
+  } as Partial<Plotly.Layout>;
+}
+
+interface FigureDisplayConfig {
+  title?: string;
+  subtitle?: string;
+  figure_style?: string | null;
+  icon_name?: string | null;
+  icon_color?: string | null;
+  hide_legend?: boolean | null;
+}
 
 const FigurePreview: React.FC = () => {
   const state = useBuilderStore();
@@ -26,8 +54,14 @@ const FigurePreview: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const reqId = useRef(0);
 
+  const previewFilters = useBuilderPreviewFilters();
+  const sectionStyle = useSectionFigureStyle();
+  const display = state.config as FigureDisplayConfig;
+  const style: FigureStyle = resolveFigureStyle(display.figure_style, sectionStyle);
+
   // Inputs that affect UI-mode preview rendering. Code mode is excluded so
-  // typing in the editor doesn't trigger a request.
+  // typing in the editor doesn't trigger a request. The active dashboard
+  // filters are part of the key: toggling "Apply to preview" must refire.
   const inputKey = JSON.stringify({
     componentType: state.componentType,
     wfId: state.wfId,
@@ -35,6 +69,12 @@ const FigurePreview: React.FC = () => {
     visuType: state.visuType,
     figureMode: state.figureMode,
     dictKwargs: state.dictKwargs,
+    filters: previewFilters,
+    // The server restyles the plot for the minimal look and drops its title
+    // when the card header shows one.
+    style,
+    title: display.title?.trim() || '',
+    hideLegend: Boolean(display.hide_legend),
   });
 
   useEffect(() => {
@@ -54,7 +94,15 @@ const FigurePreview: React.FC = () => {
       const id = ++reqId.current;
       setLoading(true);
       setError(null);
-      previewFigure({ metadata: buildMetadata(state) })
+      previewFigure({
+        // The resolved style, so a figure following its section's minimal
+        // style previews in it before it is saved into the section.
+        metadata: { ...buildMetadata(state), figure_style: style },
+        filters: previewFilters,
+        // Fold the dashboard's plot_theme defaults into the preview so it
+        // matches what the saved component will render.
+        dashboard_id: state.dashboardId ?? undefined,
+      })
         .then((res) => {
           if (reqId.current !== id) return;
           setFigure(res);
@@ -81,8 +129,23 @@ const FigurePreview: React.FC = () => {
   const showCenteredLoader = !inCode && loading && !figure;
   const showInlineLoader = !inCode && loading && Boolean(figure);
 
+  // The card header the grid will draw above a minimal figure.
+  const title = display.title?.trim();
+  const subtitle = display.subtitle?.trim();
+  const header =
+    style === 'minimal' && (title || subtitle || display.icon_name) ? (
+      <FigureHeader
+        title={title}
+        subtitle={subtitle}
+        icon={display.icon_name || undefined}
+        iconColor={display.icon_color || undefined}
+      />
+    ) : null;
+  const plotConfig = figurePlotConfig(style);
+
   return (
     <Box pos="relative" style={{ width: '100%', height: '100%' }}>
+      {header}
       {showInlineLoader && (
         <Box pos="absolute" right={12} top={12} style={{ zIndex: 2 }}>
           <Loader size="xs" />
@@ -116,14 +179,10 @@ const FigurePreview: React.FC = () => {
       {!inCode && figure && (
         <Plot
           data={(figure.figure?.data as Plotly.Data[]) || []}
-          layout={{
-            ...(figure.figure?.layout || {}),
-            autosize: true,
-            margin: { t: 30, r: 20, b: 40, l: 50 },
-          }}
+          layout={previewLayout(figure.figure?.layout as Record<string, unknown> | undefined)}
           useResizeHandler
           style={PLOT_STYLE}
-          config={{ displaylogo: false, responsive: true }}
+          config={plotConfig}
         />
       )}
       {inCode && !codeFig && (
@@ -140,14 +199,10 @@ const FigurePreview: React.FC = () => {
       {inCode && codeFig && (
         <Plot
           data={(codeFig.data as Plotly.Data[]) || []}
-          layout={{
-            ...(codeFig.layout || {}),
-            autosize: true,
-            margin: { t: 30, r: 20, b: 40, l: 50 },
-          }}
+          layout={previewLayout(codeFig.layout)}
           useResizeHandler
           style={PLOT_STYLE}
-          config={{ displaylogo: false, responsive: true }}
+          config={plotConfig}
         />
       )}
     </Box>

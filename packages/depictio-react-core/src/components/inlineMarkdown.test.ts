@@ -1,0 +1,138 @@
+import { describe, expect, it } from 'vitest';
+
+import { parseInlineMarkdown } from './inlineMarkdown';
+
+describe('parseInlineMarkdown', () => {
+  it('leaves plain prose as one text token', () => {
+    expect(parseInlineMarkdown('Reads, then peaks.')).toEqual([
+      { type: 'text', value: 'Reads, then peaks.' },
+    ]);
+  });
+
+  it('reads bold, italic and code', () => {
+    expect(parseInlineMarkdown('**a** *b* `c`')).toEqual([
+      { type: 'bold', value: 'a' },
+      { type: 'text', value: ' ' },
+      { type: 'italic', value: 'b' },
+      { type: 'text', value: ' ' },
+      { type: 'code', value: 'c' },
+    ]);
+  });
+
+  it('links an https target and marks it external', () => {
+    expect(parseInlineMarkdown('made by [ataqv](https://github.com/ParkerLab/ataqv).')).toEqual([
+      { type: 'text', value: 'made by ' },
+      {
+        type: 'link',
+        value: 'ataqv',
+        href: 'https://github.com/ParkerLab/ataqv',
+        external: true,
+      },
+      { type: 'text', value: '.' },
+    ]);
+  });
+
+  it('keeps a site-relative path in the same tab', () => {
+    expect(parseInlineMarkdown('see [the docs](/about)')).toEqual([
+      { type: 'text', value: 'see ' },
+      { type: 'link', value: 'the docs', href: '/about', external: false },
+    ]);
+  });
+
+  it('reads several links in one body', () => {
+    const tokens = parseInlineMarkdown(
+      '[ataqv](https://github.com/ParkerLab/ataqv) and [MACS2](https://github.com/macs3-project/MACS)',
+    );
+    expect(tokens.filter((t) => t.type === 'link')).toHaveLength(2);
+  });
+
+  it('refuses a javascript: target, leaving it as literal text', () => {
+    expect(parseInlineMarkdown('[x](javascript:alert(1))')).toEqual([
+      { type: 'text', value: '[x](javascript:alert(1))' },
+    ]);
+  });
+
+  it('refuses other schemes too', () => {
+    for (const href of ['data:text/html;base64,PHA+', 'ftp://example.org/x', 'vbscript:msgbox']) {
+      expect(parseInlineMarkdown(`[x](${href})`)).toEqual([
+        { type: 'text', value: `[x](${href})` },
+      ]);
+    }
+  });
+
+  it('does not link inside a code span', () => {
+    expect(parseInlineMarkdown('`[x](https://example.org)`')).toEqual([
+      { type: 'code', value: '[x](https://example.org)' },
+    ]);
+  });
+
+  it('leaves a link whose URL was broken by YAML folding as text', () => {
+    // A `[label](url)` construct that wraps mid-URL gets a space folded into
+    // it; better to show the raw text than to link a mangled target.
+    expect(parseInlineMarkdown('[ataqv](https://github.com/ParkerLab/ ataqv)')).toEqual([
+      { type: 'text', value: '[ataqv](https://github.com/ParkerLab/ ataqv)' },
+    ]);
+  });
+
+  it('keeps bold inside link labels literal rather than nesting', () => {
+    const tokens = parseInlineMarkdown('[**bold label**](https://example.org)');
+    expect(tokens).toEqual([
+      { type: 'link', value: '**bold label**', href: 'https://example.org', external: true },
+    ]);
+  });
+
+  it('reads a tab: link, spaces, ampersands and parentheses included', () => {
+    expect(parseInlineMarkdown('open [Community](tab:Community & Diversity (16S))')).toEqual([
+      { type: 'text', value: 'open ' },
+      {
+        type: 'link',
+        value: 'Community',
+        href: 'tab:Community & Diversity (16S)',
+        external: false,
+      },
+    ]);
+  });
+});
+
+describe('inline icons', () => {
+  it('reads an icon in image syntax', () => {
+    expect(parseInlineMarkdown('![](icon:mdi:dna) Pipeline')).toEqual([
+      { type: 'icon', name: 'mdi:dna' },
+      { type: 'text', value: ' Pipeline' },
+    ]);
+  });
+
+  it('reads no icon from a real image or a malformed name', () => {
+    for (const input of ['![x](https://example.org/a.png)', '![](icon:MDI DNA)']) {
+      expect(parseInlineMarkdown(input).some((t) => t.type === 'icon')).toBe(false);
+    }
+  });
+});
+
+describe('run parameter links', () => {
+  it('reads params: with and without a search', () => {
+    expect(parseInlineMarkdown('[All parameters](params:)')).toEqual([
+      { type: 'link', value: 'All parameters', href: 'params:', external: false },
+    ]);
+    expect(parseInlineMarkdown('[DADA2](params:dada2)')[0]).toMatchObject({ href: 'params:dada2' });
+  });
+
+  it('keeps a params: link with anything but a plain search as text', () => {
+    expect(parseInlineMarkdown('[x](params:a b)').some((t) => t.type === 'link')).toBe(false);
+  });
+
+  it('draws a colour swatch, labelled by its alt text', () => {
+    expect(parseInlineMarkdown('![Athens](color:#1a4f8f) Athens · ![](color:teal.6) sea')).toEqual([
+      { type: 'swatch', color: '#1a4f8f', label: 'Athens' },
+      { type: 'text', value: ' Athens · ' },
+      { type: 'swatch', color: 'teal.6', label: '' },
+      { type: 'text', value: ' sea' },
+    ]);
+  });
+
+  it('leaves a swatch whose colour is not a hex or a palette name as text', () => {
+    expect(parseInlineMarkdown('![](color:red;x:1)')).toEqual([
+      { type: 'text', value: '![](color:red;x:1)' },
+    ]);
+  });
+});

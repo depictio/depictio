@@ -347,3 +347,72 @@ async def initialization_test():
 #     #             os.environ.pop(var, None)
 #     #         else:
 #     #             os.environ[var] = value
+
+
+class TestInitializationOrder:
+    """The startup S3 checks must run *after* the bucket has been created.
+
+    ``run_initialization`` verifies the configured bucket with HeadBucket +
+    a write round trip. On a fresh deployment that bucket does not exist yet —
+    nothing provisions it ahead of the app, and ``create_bucket()`` inside this
+    very function is what creates it. Checking first means the API never starts
+    against empty storage.
+    """
+
+    @staticmethod
+    def _patches():
+        return {
+            "s3_checks": patch("depictio.api.v1.initialization.S3_storage_checks"),
+            "initialize_db": patch("depictio.api.v1.initialization.initialize_db"),
+            "create_bucket": patch("depictio.api.v1.initialization.create_bucket"),
+            "settings": patch("depictio.api.v1.initialization.settings"),
+            # Imported inside run_initialization, so patch it at the source.
+            "collection": patch("depictio.api.v1.db.initialization_collection"),
+        }
+
+    @pytest.mark.asyncio
+    async def test_bucket_is_created_before_it_is_checked(self):
+        from depictio.api.v1.initialization import run_initialization
+
+        patchers = self._patches()
+        mocks = {name: p.start() for name, p in patchers.items()}
+        try:
+            mocks["settings"].mongodb.wipe = False
+            mocks["settings"].auth.requires_anonymous_user = False
+            mocks["initialize_db"].return_value = MagicMock(email="admin@example.com")
+
+            order = MagicMock()
+            order.attach_mock(mocks["create_bucket"], "create_bucket")
+            order.attach_mock(mocks["s3_checks"], "s3_checks")
+
+            await run_initialization()
+
+            called = [name for name, _, _ in order.mock_calls]
+            assert called.index("create_bucket") < called.index("s3_checks"), (
+                "S3_storage_checks ran before create_bucket: a fresh deployment would "
+                "fail startup on a bucket that does not exist yet"
+            )
+        finally:
+            for p in patchers.values():
+                p.stop()
+
+    @pytest.mark.asyncio
+    async def test_storage_is_still_checked_when_bucket_creation_fails(self):
+        # create_bucket() swallows its own errors, so the checks that follow are
+        # what turns genuinely broken storage into a refusal to start.
+        from depictio.api.v1.initialization import run_initialization
+
+        patchers = self._patches()
+        mocks = {name: p.start() for name, p in patchers.items()}
+        try:
+            mocks["settings"].mongodb.wipe = False
+            mocks["settings"].auth.requires_anonymous_user = False
+            mocks["initialize_db"].return_value = MagicMock(email="admin@example.com")
+            mocks["create_bucket"].side_effect = Exception("S3 unreachable")
+
+            await run_initialization()
+
+            mocks["s3_checks"].assert_called_once()
+        finally:
+            for p in patchers.values():
+                p.stop()

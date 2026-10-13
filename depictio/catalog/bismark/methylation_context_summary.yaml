@@ -1,0 +1,18 @@
+id: bismark_methylation_context_summary
+name: Methylation by context
+mode: methylation/context
+description: >-
+  Post-deduplication, post-extraction methylation level in each cytosine
+  context (CpG, CHG, CHH), one row per sample per context. CpG is where
+  mammalian methylation concentrates; CHG and CHH sitting near zero is the
+  usual bisulfite-conversion sanity check, not signal.
+find:
+  path_glob: "**/*_splitting_report.txt"
+recipe: bismark/methylation_context_summary.py
+fixture: methylation_context_summary.tsv
+renders_as:
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: pct_methylated, color: context, title: "% methylated cytosines by context"} }
+  - { component: card, column: pct_methylated, aggregation: average, secondary_layout: donut, breakdown_col: context }
+  - { component: card, column: pct_methylated, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: methylated_c, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: table }

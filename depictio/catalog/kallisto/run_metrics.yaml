@@ -1,0 +1,16 @@
+id: kallisto_run_metrics
+name: Run headline numbers (kallisto | bustools)
+mode: kallisto/run_metrics
+description: >-
+  Reads processed and pseudoaligned by kallisto bus, barcodes on the 10x
+  whitelist after correction, and the cells kb count --filter called, one
+  row per sample.
+find:
+  path_glob: "**/*.count/run_info.json"
+recipe: kallisto/run_metrics.py
+fixture: run_metrics.tsv
+renders_as:
+  - { component: card, column: p_pseudoaligned, aggregation: average, secondary_layout: gauge, coverage_max: 1.0 }
+  - { component: card, column: cells_called, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: n_barcodes, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

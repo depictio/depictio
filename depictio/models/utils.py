@@ -37,8 +37,8 @@ def get_config(filename: str) -> dict:
     """
     Get the config file.
     """
-    if not filename.endswith(".yaml"):
-        raise ValueError("Invalid config file. Must be a YAML file.")
+    if not filename.endswith((".yaml", ".yml")):
+        raise ValueError(f"Invalid config file '{filename}': it must be a .yaml or .yml file.")
     if not os.path.exists(filename):
         raise ValueError(f"The file '{filename}' does not exist.")
     if not os.path.isfile(filename):
@@ -62,31 +62,28 @@ def substitute_env_vars(config: Any) -> Any:
     elif isinstance(config, str):
         # Check if string contains environment variables
         if re.search(r"\$|{\$", config):
-            logger.info(f"Processing string with env vars: '{config}'")
-
             # Handle variables with curly braces: {$VAR} -> $VAR
             processed = re.sub(r"\{\$([A-Za-z_][A-Za-z0-9_]*)\}", r"$\1", config)
-            logger.info(f"After brace removal: '{processed}'")
+            # The names only, at DEBUG: the values, and the strings that hold them, can
+            # be tokens and passwords, and `depictio -v` logs this module at INFO.
+            names = sorted(set(re.findall(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)", processed)))
+            logger.debug(f"Environment variables in a configuration value: {', '.join(names)}")
 
             # Now substitute environment variables
             result = os.path.expandvars(processed)
-            logger.info(f"After expandvars: '{result}'")
 
             # Special handling for $PWD if it wasn't expanded
             if "$PWD" in result:
                 current_dir = os.getcwd()
                 result = result.replace("$PWD", current_dir)
-                logger.info(f"After PWD replacement: '{result}'")
 
             # Special handling for $GITHUB_WORKSPACE
             if "$GITHUB_WORKSPACE" in result:
                 if "GITHUB_WORKSPACE" in os.environ:
                     workspace = os.environ["GITHUB_WORKSPACE"]
                     result = result.replace("$GITHUB_WORKSPACE", workspace)
-                    logger.info(f"After GITHUB_WORKSPACE replacement: '{result}'")
                 else:
                     logger.warning("GITHUB_WORKSPACE not found in environment")
-                    logger.info(f"Current environment variables: {os.environ}")
 
             return result
         else:
@@ -119,16 +116,13 @@ def validate_model_config(config: dict, pydantic_model: type[BaseModel]) -> Base
     if not isinstance(config, dict):
         raise ValueError("Invalid config. Must be a dictionary.")
     try:
-        # List environment variables
-        logger.info(f"Env args: {os.environ}")
-
-        # Substitute environment variables within the config
+        # Substitute environment variables within the config. Neither the environment
+        # nor the substituted config is logged: both can hold tokens and passwords.
         substituted_config = substitute_env_vars(config)
-        logger.info(f"Substituted Config: {substituted_config}")
 
         # Load the config into a Pydantic model
         data = pydantic_model(**substituted_config)
-        logger.info(f"Resulting object model: {data}")
+        logger.debug(f"Validated {pydantic_model.__name__} configuration")
     except ValidationError as e:
         raise ValueError(f"Invalid config: {e}")
     return data

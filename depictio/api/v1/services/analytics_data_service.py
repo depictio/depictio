@@ -19,7 +19,7 @@ class AnalyticsDataService:
     """Convert MongoDB analytics data to Depictio-readable Delta format."""
 
     def __init__(self):
-        self.s3_base_path = f"s3://{settings.minio.bucket}/analytics"
+        self.s3_base_path = f"s3://{settings.s3.bucket}/analytics"
 
     @staticmethod
     def is_valid_objectid(user_id: str) -> bool:
@@ -238,7 +238,7 @@ class AnalyticsDataService:
             )
         )
 
-        # Save to temporary location (in production, this would go to S3/MinIO)
+        # Save to temporary location (in production, this would go to S3)
         temp_path = Path("/tmp/depictio_analytics")
         temp_path.mkdir(exist_ok=True)
         delta_path = temp_path / "user_summary.parquet"

@@ -6,6 +6,8 @@ parameters (either UI dict_kwargs or executed user code). They are Dash-free so
 the API/Celery preview path can use them without importing the Dash app.
 """
 
+import ast
+import re
 from typing import Any
 
 import plotly.express as px
@@ -15,11 +17,104 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.services.figure.error_figure import create_error_figure
 from depictio.api.v1.services.figure.heatmap import collect_heatmap_kwargs
 from depictio.api.v1.services.multiqc.themes import get_theme_template
+from depictio.models.models.branding import BrandTheme, resolve_brand_theme
 
 # Above this row count, per-marker plots are downsampled before being handed to
 # Plotly: a 1M-row scatter serialises to tens of MB of trace JSON that stalls the
 # browser, and beyond ~50k markers the extra points are visually indistinguishable.
 FIGURE_MAX_POINTS = 50_000
+
+# Template names that mean "follow the UI theme" rather than an explicit style
+# choice. Legacy components carry `template: "mantine_light"` as a stamped
+# default, so honoring it literally would lock them to light mode.
+_THEME_FOLLOW_TEMPLATES = frozenset({"mantine_light", "mantine_dark"})
+
+
+def resolve_template_override(requested: str | None) -> str | None:
+    """The explicit Plotly template a component/dashboard picked, if any.
+
+    Returns ``None`` for unset values and for the mantine sentinels — both mean
+    "use the theme-matched mantine template".
+    """
+    if requested and requested not in _THEME_FOLLOW_TEMPLATES:
+        return requested
+    return None
+
+
+def merge_dashboard_brand_theme(brand_theme: Any, dict_kwargs: dict) -> dict:
+    """Apply a dashboard's brand theme figure defaults to a figure's kwargs (#397).
+
+    ``brand_theme`` is a ``BrandTheme`` or its dict form (what Mongo stores).
+    It is resolved first, so a dashboard that only sets ``primary`` still hands
+    the figure a derived colorway — the same one the SPA received.
+
+    Component-explicit choices always win:
+    - ``colorway`` fills ``color_discrete_sequence`` only when the component
+      sets neither a sequence nor a ``color_discrete_map``.
+    - ``template`` applies only when the component's own template is unset or a
+      mantine sentinel (i.e. "follow the UI theme" — see
+      ``resolve_template_override``).
+    """
+    if not brand_theme:
+        return dict_kwargs
+
+    theme = brand_theme if isinstance(brand_theme, BrandTheme) else BrandTheme(**brand_theme)
+    plots = resolve_brand_theme(theme).plots
+    if not plots:
+        return dict_kwargs
+
+    merged = dict(dict_kwargs)
+    if (
+        plots.colorway
+        and not merged.get("color_discrete_sequence")
+        and not merged.get("color_discrete_map")
+    ):
+        merged["color_discrete_sequence"] = plots.colorway
+    if plots.template and resolve_template_override(merged.get("template")) is None:
+        merged["template"] = plots.template
+    return merged
+
+
+def merge_category_colors(category_colors: Any, dict_kwargs: dict) -> dict:
+    """Colour a figure's categories the way the dashboard colours them.
+
+    ``category_colors`` is the dashboard family's ``{column: {value: colour}}``
+    (see ``effective_category_colors``). When the figure colours by a column that
+    has an entry, that entry becomes its ``color_discrete_map``, so a category
+    is drawn in one colour on every tile.
+
+    The component's own ``color_discrete_map`` still wins value by value: it is
+    laid over the dashboard's rather than replaced by it. Apply after
+    ``merge_dashboard_brand_theme``, so values the map does not name keep the
+    brand's colorway. Code-mode figures build their own kwargs; they receive
+    the same map as ``depictio_category_colors`` instead.
+    """
+    if not isinstance(category_colors, dict) or not isinstance(dict_kwargs, dict):
+        return dict_kwargs
+    column = dict_kwargs.get("color")
+    if not isinstance(column, str) or not column:
+        return dict_kwargs
+    palette = category_colors.get(column)
+    if not isinstance(palette, dict):
+        return dict_kwargs
+    palette = {str(k): v for k, v in palette.items() if isinstance(v, str) and v}
+    if not palette:
+        return dict_kwargs
+
+    explicit = dict_kwargs.get("color_discrete_map")
+    if isinstance(explicit, str) and explicit.strip():
+        # Stored from the builder or YAML as a JSON string; parsed the same way
+        # `create_figure_from_data` would.
+        import json
+
+        try:
+            explicit = json.loads(explicit)
+        except (json.JSONDecodeError, ValueError):
+            explicit = None
+    merged = dict(dict_kwargs)
+    merged["color_discrete_map"] = {**palette, **(explicit if isinstance(explicit, dict) else {})}
+    return merged
+
 
 # Scatter-family plots — one marker per row, and the only types we force to WebGL.
 _POINT_PLOT_TYPES = frozenset(
@@ -190,11 +285,128 @@ def _decimate_ordered(plot_df, x_col: str | None, cap: int):
     )
 
 
+# Code that picks its own trace colours; the dashboard's are then left alone.
+_CODE_SETS_COLORS_RE = re.compile(
+    r"color_discrete_(?:map|sequence)|marker_color|\bcolorway\b|update_traces\([^)]*color"
+)
+# A colour map taken from the analysis groups (`color_discrete_map=
+# depictio_group_kwargs.get("color_discrete_map", {})`, as the ampliseq
+# templates write it): no colours of the code's own while no group is set.
+_GROUP_COLOR_REF_RE = re.compile(
+    r"color_discrete_map\s*=\s*depictio_group_kwargs\.get\([^()]*(?:\([^()]*\)[^()]*)*\)"
+    r"(?:\s*or\s*\{\s*\})?"
+)
+
+
+def recolor_code_figure(
+    fig: Any, category_colors: Any, code: str | None, *, grouped: bool = False
+) -> bool:
+    """Draw a code-mode figure's categories in the dashboard's colours.
+
+    UI-mode figures get the dashboard's ``category_colors`` as their
+    ``color_discrete_map`` (``merge_category_colors``). Code builds its own
+    kwargs, so a ``px.histogram(..., color="locality")`` that names no colours
+    came out in Plotly's default cycle while every other tile drew Athens in
+    the dashboard's blue. After the code has run, its traces are recoloured
+    when their names are the values of one column the dashboard colours, every
+    name but "Other" known. Code that sets colours itself (a discrete map or
+    sequence, a marker colour, a colorway) is left as written; a map read from
+    the analysis groups counts as the code's own only while ``grouped`` (the
+    request carries groups, so that map holds their colours).
+
+    Returns whether the figure was recoloured.
+    """
+    if not isinstance(category_colors, dict) or not category_colors or fig is None:
+        return False
+    if code and not grouped:
+        code = _GROUP_COLOR_REF_RE.sub("", code)
+    if code and _CODE_SETS_COLORS_RE.search(code):
+        return False
+    traces = [t for t in getattr(fig, "data", ()) if getattr(t, "name", None)]
+    names = {str(t.name) for t in traces} - {"Other"}
+    if not names:
+        return False
+    palette = next(
+        (
+            {str(k): v for k, v in values.items() if isinstance(v, str) and v}
+            for values in category_colors.values()
+            if isinstance(values, dict) and names <= {str(k) for k in values}
+        ),
+        None,
+    )
+    if not palette:
+        return False
+    for trace in traces:
+        colour = palette.get(str(trace.name))
+        if not colour:
+            continue
+        if hasattr(trace, "marker"):
+            trace.marker.color = colour
+        line = getattr(trace, "line", None)
+        if line is not None and getattr(line, "color", None) is not None:
+            line.color = colour
+        if getattr(trace, "fillcolor", None) is not None:
+            trace.fillcolor = colour
+    return True
+
+
+# A `template=` keyword argument, not the tail of `hovertemplate=` or
+# `texttemplate=`: the word boundary rules out an identifier character before
+# it, the lookahead an `==` comparison.
+_TEMPLATE_KWARG_RE = re.compile(r"\btemplate\s*=(?!=)")
+
+
+def code_sets_template(code: str) -> bool:
+    """Whether user figure code picks its own Plotly template.
+
+    Code mode keeps the author's template and applies the theme's only when the
+    code chose none. The check used to be the substring ``"template="``, which
+    every ``hovertemplate=`` and ``texttemplate=`` also contains, so a figure
+    that merely formatted its hover text lost the theme template and drew in
+    Plotly's default look.
+
+    Read from the syntax tree: a ``template=`` keyword in any call, an
+    assignment to a ``.template`` attribute (``fig.layout.template = …``) or to
+    ``templates.default``, or a ``"template"`` key in a dict literal
+    (``fig.update_layout({"template": …})``). Code that does not parse falls
+    back to a word-bounded match on the keyword.
+    """
+    if not code:
+        return False
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return bool(_TEMPLATE_KWARG_RE.search(code))
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            if any(kw.arg == "template" for kw in node.keywords):
+                return True
+        elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                if not isinstance(target, ast.Attribute):
+                    continue
+                if target.attr == "template":
+                    return True
+                if (
+                    target.attr == "default"
+                    and isinstance(target.value, ast.Attribute)
+                    and target.value.attr == "templates"
+                ):
+                    return True
+        elif isinstance(node, ast.Dict):
+            if any(isinstance(k, ast.Constant) and k.value == "template" for k in node.keys):
+                return True
+    return False
+
+
 def process_code_mode_figure(
     code_content: str,
     df: Any,
     current_theme: str,
     task_id: str,
+    extra_globals: dict[str, Any] | None = None,
 ) -> tuple[bool, go.Figure | None, str | None]:
     """
     Process a figure in code mode by executing user-provided code.
@@ -204,6 +416,8 @@ def process_code_mode_figure(
         df: DataFrame to pass to the code execution
         current_theme: Current theme name for styling
         task_id: Task ID for logging
+        extra_globals: Extra names to bind in the sandbox, e.g. the grouping
+            kwargs a code figure spreads to honour the Colour/Split toggle
 
     Returns:
         Tuple of (success, figure, visu_type):
@@ -221,7 +435,7 @@ def process_code_mode_figure(
     )
 
     executor = SimpleCodeExecutor()
-    success, fig, message = executor.execute_code(code_content, df)
+    success, fig, message = executor.execute_code(code_content, df, extra_globals)
 
     if not success:
         logger.error(f"[{task_id}] Code execution failed: {message}")
@@ -229,7 +443,7 @@ def process_code_mode_figure(
 
     detected_visu_type = extract_visualization_type_from_code(code_content)
 
-    if "template=" not in code_content:
+    if not code_sets_template(code_content):
         theme_template = f"mantine_{current_theme}"
         fig.update_layout(template=theme_template)
 
@@ -334,7 +548,10 @@ def create_figure_from_data(
             elif v != "" and v != [] or (k in keep_empty_string_params and v == ""):
                 cleaned_kwargs[k] = v
 
-        cleaned_kwargs["template"] = template
+        # An explicit template choice (component picker or dashboard brand theme)
+        # wins; otherwise follow the UI theme (see resolve_template_override).
+        if resolve_template_override(cleaned_kwargs.get("template")) is None:
+            cleaned_kwargs["template"] = template
 
         if selection_enabled and selection_column and selection_column in plot_df.columns:
             existing_custom_data = cleaned_kwargs.get("custom_data", [])

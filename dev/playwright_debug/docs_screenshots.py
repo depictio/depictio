@@ -30,13 +30,14 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable
 
 import typer
 import yaml
-from playwright.async_api import Page, async_playwright
+from playwright.async_api import Locator, Page, async_playwright
 
 # Repo-rooted import so the script runs from anywhere (e.g. via `python
 # dev/playwright_debug/docs_screenshots.py ...`) without a packaged install.
@@ -63,6 +64,8 @@ class ShotContext:
     dashboard_id: str
     output_dir: Path
     theme: str = "light"
+    #: Project name used to pick the ingestion row of a watcher-driven cycle.
+    watch_project_name: str = "Watcher Demo"
 
 
 ShotFn = Callable[[ShotContext], Awaitable[None]]
@@ -373,6 +376,259 @@ async def _mon_ingestion_live(ctx: ShotContext) -> None:
     await _mon_expand_shot(ctx, "Viralrecon", _rb(f"admin_monitoring_ingestion_live_{ctx.theme}"))
 
 
+@register("admin_monitoring_agents")
+async def _mon_agents(ctx: ShotContext) -> None:
+    """Watchers pane with the first watcher expanded: fields, "Run now", watched paths.
+
+    Needs a live `depictio watch` registered against the stack — an empty
+    registry produces an empty-state shot rather than a failure.
+    """
+    await _open_monitoring(ctx, "Watchers")
+    control = ctx.page.locator("button.mantine-Accordion-control").first
+    await control.wait_for(state="visible", timeout=10_000)
+    await control.click()
+    await ctx.page.wait_for_timeout(600)
+    await _page_shot_current(ctx, _rb(f"admin_monitoring_agents_{ctx.theme}"))
+
+
+@register("admin_monitoring_ingestion_watch")
+async def _mon_ingestion_watch(ctx: ShotContext) -> None:
+    """Ingestion detail for a watcher cycle: trigger badge/reason + per-phase steps.
+
+    Matches on the project name of the watched project, so a stack where that
+    project has never been watched will pick the wrong row — pass
+    `--watch-project-name` to point it at whichever project has watch runs.
+    """
+    await _mon_expand_shot(
+        ctx, ctx.watch_project_name, _rb(f"admin_monitoring_ingestion_watch_{ctx.theme}")
+    )
+
+
+# ---- Dashboard / dataset version shots ------------------------------------
+# All of these live in the **editor** (`/dashboard-edit/{id}`), because every
+# affordance here either writes or re-points the dashboard at data it was not
+# saved with. The one exception is the read-only `?version=` preview, which is
+# a viewer route by design.
+#
+# They need a dashboard with real version history and, for the dataset shots, a
+# Delta-backed data collection with several commits. `depictio/projects/init/
+# iris_versioned/rebuild_demo.py` produces exactly that; against a dashboard
+# with no versions these shots capture empty states rather than failing.
+
+
+async def _open_editor(ctx: ShotContext, wait_ms: int = 5_000) -> None:
+    """Load the editor and let the grid settle before touching any control."""
+    await ctx.page.goto(
+        f"{ctx.viewer_url}/dashboard-edit/{ctx.dashboard_id}", wait_until="domcontentloaded"
+    )
+    await wait_for_theme_applied(ctx.page, ctx.theme)
+    await ctx.page.wait_for_timeout(wait_ms)
+    await dismiss_notifications(ctx.page)
+
+
+async def _open_settings_section(ctx: ShotContext, section: str, panel_test_id: str) -> None:
+    """Editor → Settings → one section of the settings rail.
+
+    Version history and data time travel are sections of the editor's settings
+    rather than header buttons, so a shot that jumped straight to them would
+    document a path that does not exist. `section` is the section key: the rail
+    item is `settings-nav-{section}`.
+    """
+    await _open_editor(ctx)
+    await ctx.page.get_by_role("button", name="Settings").click()
+    await ctx.page.get_by_test_id(f"settings-nav-{section}").click()
+    # Wait on the section's own body, not the modal: Mantine puts `data-testid`
+    # on the Modal root, which stays `visibility: hidden` for the whole
+    # transition and never satisfies `state="visible"`.
+    await ctx.page.get_by_test_id(panel_test_id).wait_for(state="visible", timeout=15_000)
+
+
+async def _open_version_history(ctx: ShotContext) -> None:
+    """Editor → Settings → History, with the timeline loaded."""
+    await _open_settings_section(ctx, "history", "version-history-panel")
+    # The list is loaded with the editor, but a fresh stack may still be
+    # answering; without this the shot can be a section with a loader in it.
+    try:
+        await ctx.page.get_by_test_id("version-row").first.wait_for(state="visible", timeout=10_000)
+    except Exception:
+        typer.echo("  ! no version rows — dashboard has no recorded versions", err=True)
+    await ctx.page.wait_for_timeout(600)
+
+
+@register("version_timeline")
+async def _version_timeline(ctx: ShotContext) -> None:
+    """Settings → History: date-grouped versions, bookmarks, per-row actions."""
+    await _open_version_history(ctx)
+    await _page_shot_current(ctx, _rb(f"version_timeline_{ctx.theme}"))
+
+
+@register("version_row_actions")
+async def _version_row_actions(ctx: ShotContext) -> None:
+    """A version row's actions (preview, restore, bookmark, delete), Restore's tooltip up."""
+    await _open_version_history(ctx)
+    # Deliberately not the first row. The newest entry *is* the current state,
+    # so Restore is unavailable there and the shot would document a dead action.
+    rows = ctx.page.get_by_test_id("version-row")
+    row = rows.nth(1 if await rows.count() > 1 else 0)
+    await row.get_by_test_id("version-restore").hover()
+    await ctx.page.locator(".mantine-Tooltip-tooltip").first.wait_for(
+        state="visible", timeout=10_000
+    )
+    await ctx.page.wait_for_timeout(300)
+    await _page_shot_current(ctx, _rb(f"version_row_actions_{ctx.theme}"))
+
+
+@register("version_dataset_picker")
+async def _version_dataset_picker(ctx: ShotContext) -> None:
+    """Settings → Data version: as-of-a-version select and per-collection commits.
+
+    The section mounts its picker on open, and mounting is what triggers the
+    Delta history fetches, hence the settle after opening it.
+    """
+    await _open_settings_section(ctx, "data-version", "data-version-panel")
+    await ctx.page.wait_for_timeout(2_200)
+    # Open the commit list. Closed, the picker reads as a single inert field and
+    # says nothing about what time travel offers; open, it shows the actual
+    # commits with their row counts.
+    try:
+        # The picker labels each Select "Data version for <collection tag>", so
+        # match the prefix rather than guessing at DOM order.
+        select = ctx.page.locator('input[aria-label^="Data version for"]').first
+        await select.click(timeout=5_000)
+        await ctx.page.wait_for_timeout(700)
+    except Exception:
+        typer.echo("  ! no commit dropdown — collection may not be Delta-backed", err=True)
+    await _page_shot_current(ctx, _rb(f"version_dataset_picker_{ctx.theme}"))
+
+
+async def _open_component_history(ctx: ShotContext) -> None:
+    """Open the per-component History modal from a grid item's action menu.
+
+    The menu icon only exists on hover, and the History item only when the
+    dashboard has recorded versions, so both are waited for rather than assumed.
+    """
+    await _open_editor(ctx)
+    # A figure, not whatever happens to be first. The first grid item is usually
+    # a card, whose history is two numbers side by side — true but uninformative.
+    # A chart that changed kind between versions is what the modal is for.
+    item = (
+        ctx.page.locator(".react-grid-item").filter(has=ctx.page.locator(".js-plotly-plot")).first
+    )
+    if not await item.count():
+        item = ctx.page.locator(".react-grid-item").first
+    await item.wait_for(state="visible", timeout=20_000)
+    await item.scroll_into_view_if_needed()
+    await item.hover()
+    await ctx.page.wait_for_timeout(400)
+    # `force`: the chrome cluster fades in on hover and Playwright's own
+    # stability check can catch it mid-transition and give up.
+    await item.get_by_label("Component actions").first.click(force=True)
+    await ctx.page.get_by_test_id("component-history-action").click()
+    # Same Mantine trap as the drawer: `data-testid` sits on the Modal root,
+    # which stays `visibility: hidden`. Wait on the content instead.
+    await ctx.page.locator(".mantine-Modal-content").last.wait_for(state="visible", timeout=15_000)
+    # The modal renders the component at the selected version through the same
+    # render endpoint the grid uses, so it needs a real settle.
+    await ctx.page.wait_for_timeout(4_000)
+    # Step back to a genuinely past version. The modal opens on the newest
+    # entry, which *is* the current state — a shot of that documents nothing,
+    # because the whole point is seeing what the component used to be.
+    for _ in range(3):
+        older = ctx.page.get_by_test_id("component-version-older")
+        if await older.is_disabled():
+            break
+        await older.click()
+        await ctx.page.wait_for_timeout(2_500)
+    # Park the cursor off the figure: hovering a Plotly plot pops its modebar
+    # into the corner of every shot.
+    await _park_cursor(ctx)
+
+
+@register("component_history")
+async def _component_history(ctx: ShotContext) -> None:
+    """Component history modal: one component at a past version, with its stamp."""
+    await _open_component_history(ctx)
+    await _page_shot_current(ctx, _rb(f"component_history_{ctx.theme}"))
+
+
+async def _enable_compare(ctx: ShotContext) -> None:
+    """Turn on the modal's side-by-side comparison.
+
+    Mantine's Switch puts the test id on a visually-hidden `<input>` parked
+    outside the viewport, so clicking it directly fails however much force is
+    applied. Drive the label the user actually clicks, which is what forwards to
+    the input.
+    """
+    await ctx.page.locator(
+        "label", has=ctx.page.get_by_test_id("component-version-compare-toggle")
+    ).first.click()
+    await ctx.page.wait_for_timeout(4_500)
+
+
+@register("component_history_compare")
+async def _component_history_compare(ctx: ShotContext) -> None:
+    """Compare mode: the stored version beside current, each with its own data axis."""
+    await _open_component_history(ctx)
+    await _enable_compare(ctx)
+    await _park_cursor(ctx)
+    await _page_shot_current(ctx, _rb(f"component_history_compare_{ctx.theme}"))
+
+
+@register("component_history_compare_menu")
+async def _component_history_compare_menu(ctx: ShotContext) -> None:
+    """The past pane's dataset selector, open, while comparing.
+
+    The two panes carry independent data axes, which is the part of compare mode
+    that a static shot cannot show: with the selector closed, the two dropdowns
+    look like one duplicated control rather than two questions. Open, the commits
+    are visible and "hold the data constant to isolate the config change" becomes
+    a thing you can see rather than a claim in the prose.
+    """
+    await _open_component_history(ctx)
+    await _enable_compare(ctx)
+    await ctx.page.get_by_test_id("component-version-data-select-past").click()
+    # Wait on the *visible* popover. A bare `[role=listbox]` also matches the
+    # dashboard's own MultiSelect filters, which keep a permanently hidden
+    # options node — first() lands on one of those and never resolves.
+    await ctx.page.locator(
+        ".mantine-Combobox-dropdown:visible, .mantine-Select-dropdown:visible"
+    ).first.wait_for(state="visible", timeout=10_000)
+    await ctx.page.wait_for_timeout(700)
+    await _page_shot_current(ctx, _rb(f"component_history_compare_menu_{ctx.theme}"))
+
+
+@register("version_preview")
+async def _version_preview(ctx: ShotContext) -> None:
+    """Read-only `?version=` preview in the viewer, behind its banner.
+
+    Resolves the oldest version through the API rather than hard-coding an id,
+    so the shot shows a layout that visibly differs from the current one.
+    """
+    await _open_editor(ctx, wait_ms=1_500)
+    version_id = await ctx.page.evaluate(
+        """async (dashboardId) => {
+            const store = JSON.parse(localStorage.getItem('local-store') || '{}');
+            const res = await fetch(
+                `/depictio/api/v1/dashboards/${dashboardId}/versions`,
+                { headers: { Authorization: `Bearer ${store.access_token}` } },
+            );
+            if (!res.ok) return null;
+            const body = await res.json();
+            const versions = body.versions || [];
+            return versions.length ? versions[versions.length - 1].version_id : null;
+        }""",
+        ctx.dashboard_id,
+    )
+    if not version_id:
+        raise RuntimeError("dashboard has no recorded versions — nothing to preview")
+    await _page_shot(
+        ctx,
+        f"/dashboard/{ctx.dashboard_id}?version={version_id}",
+        _rb(f"version_preview_{ctx.theme}"),
+        wait_ms=9_000,
+    )
+
+
 # ---- Real-time events shots -----------------------------------------------
 # Driven against a dashboard in a project with `realtime.enabled: true`. The
 # event log lives in localStorage (`depictio.realtime.journal`), so a fresh
@@ -511,6 +767,433 @@ async def _realtime_highlight(ctx: ShotContext) -> None:
     await _page_shot_current(ctx, _rb(f"realtime_highlight_{ctx.theme}"))
 
 
+# ---- Catalog picker shots -------------------------------------------------
+# The picker lives inside the Add-component route, and none of its surfaces
+# change the URL, so every shot re-enters through the same door: navigate to
+# /component/add/<fresh uuid>, then click through. A fresh uuid per entry keeps
+# shots independent — reusing one would let a component added by an earlier
+# shot be overwritten by a later one.
+
+# Generous: a cold dev server compiles the builder's module graph on first entry.
+_NAV_TIMEOUT_MS = 120_000
+
+# An output that offers four renders across two component types, so one row
+# demonstrates the render switcher, the `use:` snippet and the details popover.
+CATALOG_DEMO_OUTPUT = "ivar_variants_long"
+# Index of the `manhattan` render inside that output's renders_as.
+CATALOG_DEMO_RENDER = 2
+
+# Component added by _add_catalog_component, reused by the provenance shots so
+# they don't each append another tile to the dashboard.
+_added_component_id: str | None = None
+
+
+def _cat(name: str) -> str:
+    """Place catalog shots under a catalog/ subdir within --version."""
+    return f"catalog/{name}"
+
+
+async def _open_add_component(ctx: ShotContext) -> str:
+    """Navigate to a fresh Add-component route and return the component id."""
+    component_id = str(uuid.uuid4())
+    # `commit`, not `domcontentloaded`: a dev server compiles the builder's
+    # module graph on demand, and DOMContentLoaded waits on every deferred
+    # module of it. Waiting on the first rendered element instead keeps the
+    # navigation only as slow as the thing being shot.
+    await ctx.page.goto(
+        f"{ctx.viewer_url}/dashboard-edit/{ctx.dashboard_id}/component/add/{component_id}",
+        wait_until="commit",
+        timeout=_NAV_TIMEOUT_MS,
+    )
+    await ctx.page.get_by_test_id("component-source-catalog").wait_for(
+        state="visible", timeout=_NAV_TIMEOUT_MS
+    )
+    await ctx.page.wait_for_timeout(600)
+    await dismiss_notifications(ctx.page)
+    return component_id
+
+
+async def _open_catalog_browser(ctx: ShotContext) -> str:
+    """Enter the catalog browser and wait until compose has resolved."""
+    component_id = await _open_add_component(ctx)
+    await ctx.page.get_by_test_id("component-source-catalog").click()
+    # The preview panel only mounts once /catalog/project/{id}/compose has
+    # answered and a first row has been auto-selected.
+    await ctx.page.get_by_test_id("catalog-preview-panel").wait_for(
+        state="visible", timeout=_NAV_TIMEOUT_MS
+    )
+    await ctx.page.wait_for_timeout(2_500)
+    return component_id
+
+
+async def _park_cursor(ctx: ShotContext) -> None:
+    """Move the pointer off every interactive surface before a shot.
+
+    Rows, render tabs and the Filters button all carry tooltips, and leaving the
+    cursor over the preview iframe pops Plotly's modebar into the frame. The
+    bottom-left gutter sits outside both panels.
+    """
+    await ctx.page.mouse.move(16, 870)
+    await ctx.page.wait_for_timeout(600)
+
+
+async def _select_output(ctx: ShotContext, output_id: str, render_index: int | None = None) -> None:
+    """Click one offer, optionally switching to one of its render tabs."""
+    await ctx.page.locator(
+        f'[data-testid="catalog-match"][data-output-id="{output_id}"]'
+    ).first.click()
+    panel = ctx.page.locator(f'[data-testid="catalog-preview-panel"][data-output-id="{output_id}"]')
+    await panel.wait_for(state="visible", timeout=20_000)
+    if render_index is not None:
+        await ctx.page.locator(
+            f'[data-testid="catalog-render-tab"][data-render-index="{render_index}"]'
+        ).click()
+        await panel.and_(ctx.page.locator(f'[data-selected-index="{render_index}"]')).wait_for(
+            state="visible", timeout=20_000
+        )
+    # The preview is an iframe loading its own bundle; give it time to paint.
+    await ctx.page.wait_for_timeout(4_000)
+    await _park_cursor(ctx)
+
+
+@register("catalog_choice")
+async def _catalog_choice(ctx: ShotContext) -> None:
+    """Step 0 of Add component: build manually, or pick from the tools catalog."""
+    await _open_add_component(ctx)
+    await _page_shot_current(ctx, _cat("catalog_choice"))
+
+
+@register("catalog_browser")
+async def _catalog_browser(ctx: ShotContext) -> None:
+    """The catalog browser: offers grouped by tool on the left, live preview on the right."""
+    await _open_catalog_browser(ctx)
+    await _select_output(ctx, CATALOG_DEMO_OUTPUT)
+    await _page_shot_current(ctx, _cat("catalog_browser"))
+
+
+@register("catalog_search")
+async def _catalog_search(ctx: ShotContext) -> None:
+    """Search narrows the offer list across tool, output, description and collection."""
+    await _open_catalog_browser(ctx)
+    await ctx.page.get_by_test_id("catalog-search").fill("coverage")
+    await ctx.page.wait_for_timeout(1_200)
+    await _select_output(ctx, "mosdepth_genome_coverage")
+    await _page_shot_current(ctx, _cat("catalog_search"))
+
+
+@register("catalog_filters")
+async def _catalog_filters(ctx: ShotContext) -> None:
+    """The Filters popover: facets for component type and data collection, with counts."""
+    await _open_catalog_browser(ctx)
+    # Both facet groups together are taller than the default viewport, and a
+    # popover clipped at the fold reads as a broken list rather than a long one.
+    viewport = ctx.page.viewport_size or {"width": 1440, "height": 900}
+    await ctx.page.set_viewport_size({**viewport, "height": 1180})
+    await ctx.page.get_by_role("button", name="Filters").click()
+    await ctx.page.locator(".mantine-Popover-dropdown").first.wait_for(
+        state="visible", timeout=10_000
+    )
+    await _park_cursor(ctx)
+    await _page_shot_current(ctx, _cat("catalog_filters"))
+    await ctx.page.set_viewport_size(viewport)
+
+
+@register("catalog_render_tabs")
+async def _catalog_render_tabs(ctx: ShotContext) -> None:
+    """One output, several renders: the switcher reframes the preview at the target size."""
+    await _open_catalog_browser(ctx)
+    await _select_output(ctx, CATALOG_DEMO_OUTPUT, CATALOG_DEMO_RENDER)
+    await _shot(ctx, '[data-testid="catalog-preview-panel"]', _cat("catalog_render_tabs"))
+
+
+@register("catalog_details")
+async def _catalog_details(ctx: ShotContext) -> None:
+    """The details popover: which file matched, through which recipe, and where it is defined."""
+    await _open_catalog_browser(ctx)
+    await _select_output(ctx, CATALOG_DEMO_OUTPUT)
+    await ctx.page.locator('[aria-label="Output details"]').click()
+    dropdown = ctx.page.locator(".mantine-Popover-dropdown").first
+    await dropdown.wait_for(state="visible", timeout=10_000)
+    await ctx.page.wait_for_timeout(600)
+    await _shot(ctx, ".mantine-Popover-dropdown", _cat("catalog_details"))
+
+
+@register("catalog_use_snippet")
+async def _catalog_use_snippet(ctx: ShotContext) -> None:
+    """The copyable `use:` reference that addresses the same render from a dashboard YAML."""
+    await _open_catalog_browser(ctx)
+    await _select_output(ctx, CATALOG_DEMO_OUTPUT, CATALOG_DEMO_RENDER)
+    await ctx.page.locator('[aria-label="Show use snippet"]').click()
+    dropdown = ctx.page.locator(".mantine-Popover-dropdown").first
+    await dropdown.wait_for(state="visible", timeout=10_000)
+    await ctx.page.wait_for_timeout(600)
+    await _shot(ctx, ".mantine-Popover-dropdown", _cat("catalog_use_snippet"))
+
+
+@register("catalog_multiqc")
+async def _catalog_multiqc(ctx: ShotContext) -> None:
+    """MultiQC offers: one report, one row per section, each naming the tool it came from."""
+    await _open_catalog_browser(ctx)
+    await ctx.page.get_by_test_id("catalog-search").fill("multiqc")
+    await ctx.page.wait_for_timeout(1_200)
+    await _select_output(ctx, "multiqc_ivar")
+    await _page_shot_current(ctx, _cat("catalog_multiqc"))
+
+
+@register("catalog_design_step")
+async def _catalog_design_step(ctx: ShotContext) -> None:
+    """Edit drops the offer into the Design step, with Back to catalog preserving the browse."""
+    await _open_catalog_browser(ctx)
+    await _select_output(ctx, CATALOG_DEMO_OUTPUT, CATALOG_DEMO_RENDER)
+    await ctx.page.get_by_test_id("catalog-edit-add").click()
+    # "Back to catalog" only exists in the Design step, so it is the signal that
+    # the step has mounted; the settle after it covers the preview render.
+    await ctx.page.get_by_role("button", name="Back to catalog").wait_for(
+        state="visible", timeout=_NAV_TIMEOUT_MS
+    )
+    await ctx.page.wait_for_timeout(6_000)
+    await dismiss_notifications(ctx.page)
+    await _page_shot_current(ctx, _cat("catalog_design_step"))
+
+
+async def _add_catalog_component(ctx: ShotContext) -> str:
+    """Add one catalog offer to the dashboard and return to the editor.
+
+    Cached: the two provenance shots want the same tile, and running the picker
+    twice would leave two copies of it on the dashboard.
+    """
+    global _added_component_id
+    if _added_component_id:
+        return _added_component_id
+    component_id = await _open_catalog_browser(ctx)
+    await _select_output(ctx, CATALOG_DEMO_OUTPUT, CATALOG_DEMO_RENDER)
+    await ctx.page.get_by_test_id("catalog-add").click()
+    await ctx.page.wait_for_url(f"**/dashboard-edit/{ctx.dashboard_id}", timeout=30_000)
+    _added_component_id = component_id
+    return component_id
+
+
+async def _open_added_tile_action(ctx: ShotContext, aria_label: str) -> Locator:
+    """Scroll the freshly added tile into view, open one of its chrome actions,
+    and return the tile so a caller can frame it together with what it opened."""
+    component_id = await _add_catalog_component(ctx)
+    await ctx.page.goto(
+        f"{ctx.viewer_url}/dashboard-edit/{ctx.dashboard_id}",
+        wait_until="commit",
+        timeout=_NAV_TIMEOUT_MS,
+    )
+    tile = ctx.page.locator(f'[data-component-id="{component_id}"]')
+    await tile.wait_for(state="visible", timeout=_NAV_TIMEOUT_MS)
+    await tile.scroll_into_view_if_needed()
+    await ctx.page.wait_for_timeout(4_000)
+    await dismiss_notifications(ctx.page)
+    # The action row is hover-revealed, so the tile has to be under the cursor
+    # before its buttons are clickable.
+    await tile.hover()
+    await ctx.page.wait_for_timeout(400)
+    await tile.locator(f'[aria-label="{aria_label}"]').click()
+    await ctx.page.locator(".mantine-Popover-dropdown").first.wait_for(
+        state="visible", timeout=10_000
+    )
+    await ctx.page.wait_for_timeout(800)
+    return tile
+
+
+async def _union_clip(ctx: ShotContext, tile: Locator, dropdown: Locator) -> dict:
+    """Bounding box covering tile and dropdown, padded, clamped to the viewport.
+
+    Popovers render in a body-level portal, so an element screenshot of the tile
+    would drop the dropdown it just opened. A clip over both keeps the flag and
+    what it opens in one frame.
+    """
+    boxes = [box for box in (await tile.bounding_box(), await dropdown.bounding_box()) if box]
+    pad = 12
+    left = max(0, min(b["x"] for b in boxes) - pad)
+    top = max(0, min(b["y"] for b in boxes) - pad)
+    right = max(b["x"] + b["width"] for b in boxes) + pad
+    bottom = max(b["y"] + b["height"] for b in boxes) + pad
+    size = ctx.page.viewport_size or {"width": 1440, "height": 900}
+    return {
+        "x": left,
+        "y": top,
+        "width": min(right, size["width"]) - left,
+        "height": min(bottom, size["height"]) - top,
+    }
+
+
+@register("catalog_tile_flag")
+async def _catalog_tile_flag(ctx: ShotContext) -> None:
+    """A catalog-sourced tile keeps its origin: tool, output, `use:` reference, definition link."""
+    tile = await _open_added_tile_action(ctx, "Catalog origin")
+    dropdown = ctx.page.locator(".mantine-Popover-dropdown").first
+    await _clip_shot(ctx, await _union_clip(ctx, tile, dropdown), _cat("catalog_tile_flag"))
+
+
+@register("catalog_inspector")
+async def _catalog_inspector(ctx: ShotContext) -> None:
+    """The metadata inspector: identity, resolved configuration, data source, catalog origin."""
+    await _open_added_tile_action(ctx, "Component metadata")
+    await _shot(ctx, ".mantine-Popover-dropdown", _cat("catalog_inspector"))
+
+
+# ---- Cross-DC link inspection shots ---------------------------------------
+# Driven against a project that owns at least one MultiQC `sample_mapping`
+# link (the nf-core reference projects do). The links section is collapsed by
+# default, so every shot here expands it first.
+
+
+async def _open_links_section(ctx: ShotContext) -> None:
+    """Open the project page and expand the Cross-DC links section."""
+    await ctx.page.goto(
+        f"{ctx.viewer_url}/projects/{ctx.project_id}", wait_until="domcontentloaded"
+    )
+    await ctx.page.wait_for_timeout(1_500)
+    await dismiss_notifications(ctx.page)
+    toggle = ctx.page.get_by_test_id("links-section-toggle")
+    await toggle.wait_for(state="visible", timeout=15_000)
+    await toggle.click()
+    # Wait for a row rather than a fixed delay: the list is fetched on mount.
+    await ctx.page.locator('[data-testid="inspect-link-btn"]').first.wait_for(
+        state="visible", timeout=15_000
+    )
+    await ctx.page.wait_for_timeout(400)
+
+
+@register("link_inspect_action")
+async def _link_inspect_action(ctx: ShotContext) -> None:
+    """Cross-DC links table with the per-row inspect (magnifier) action."""
+    await _open_links_section(ctx)
+    await _shot(ctx, '[data-testid="links-section"]', _rb("link_inspect_action"))
+
+
+@register("link_mapping_modal")
+async def _link_mapping_modal(ctx: ShotContext) -> None:
+    """Standalone mapping inspector, opened from a sample_mapping link's magnifier."""
+    await _open_links_section(ctx)
+    row = ctx.page.locator("tr", has_text="sample_mapping").first
+    await row.get_by_test_id("inspect-link-btn").click()
+    # The preview resolves every distinct source value server-side; wait for
+    # the grid to hold rows so the shot isn't the loading state.
+    await ctx.page.locator('[data-testid="mapping-inspector-grid"] .ag-row').first.wait_for(
+        state="visible", timeout=60_000
+    )
+    await ctx.page.wait_for_timeout(600)
+    await _shot(ctx, '[data-testid="link-mapping-modal"]', _rb("link_mapping_modal"))
+
+
+# ---- Funnel filtering shots ------------------------------------------------
+# Driven against a dashboard with categorical (MultiSelect) filters. Funnel
+# filtering is an author-level dashboard flag; these shots flip it with the
+# panel's own toggle, which is per-page-view and writes nothing.
+
+FUNNEL_PICKS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("species", ("Adelie",)),
+    ("island", ("Torgersen", "Biscoe")),
+    ("sex", ("male",)),
+)
+
+
+async def _filter_panel(ctx: ShotContext):
+    """The filter panel Paper — located from the funnel toggle it contains."""
+    return ctx.page.get_by_test_id("funnel-toggle").locator(
+        "xpath=ancestor::*[contains(@class,'mantine-Paper-root')][1]"
+    )
+
+
+async def _open_funnel_panel(ctx: ShotContext) -> None:
+    """Open the dashboard, reveal the filter panel and switch funnelling on."""
+    await ctx.page.goto(
+        f"{ctx.viewer_url}/dashboard/{ctx.dashboard_id}", wait_until="domcontentloaded"
+    )
+    await ctx.page.wait_for_timeout(6_000)
+    await dismiss_notifications(ctx.page)
+    rail = ctx.page.locator('[aria-label="Show filters"]')
+    if await rail.count() and await rail.first.is_visible():
+        await rail.first.click()
+        await ctx.page.wait_for_timeout(800)
+    toggle = ctx.page.get_by_test_id("funnel-toggle")
+    await toggle.wait_for(state="visible", timeout=20_000)
+    # The overview button is mounted-but-disabled while funnelling is off —
+    # that is the state check, since the toggle itself only varies by variant.
+    overview = ctx.page.get_by_test_id("funnel-view-button")
+    if await overview.is_disabled():
+        await toggle.click()
+        await ctx.page.wait_for_timeout(1_500)
+
+
+async def _apply_funnel_filters(ctx: ShotContext) -> None:
+    """Select the categorical values the funnel captions describe."""
+    for column, values in FUNNEL_PICKS:
+        field = ctx.page.get_by_placeholder(f"Select {column}…")
+        await field.wait_for(state="visible", timeout=15_000)
+        await field.click()
+        for value in values:
+            await ctx.page.get_by_role("option", name=value, exact=True).first.click()
+        await ctx.page.keyboard.press("Escape")
+        # Each change debounces, refetches the availability sets and re-renders.
+        await ctx.page.wait_for_timeout(2_500)
+
+
+@register("funnel_panel_header")
+async def _funnel_panel_header(ctx: ShotContext) -> None:
+    """Panel header: title, attached funnel pair, overflow menu, Reset."""
+    await _open_funnel_panel(ctx)
+    await _apply_funnel_filters(ctx)
+    box = await (await _filter_panel(ctx)).bounding_box()
+    if not box:
+        raise RuntimeError("filter panel not found")
+    await _clip_shot(
+        ctx,
+        {"x": box["x"], "y": box["y"], "width": box["width"], "height": min(box["height"], 150)},
+        _rb("funnel_panel_header"),
+    )
+
+
+@register("funnel_panel_highlighting")
+async def _funnel_panel_highlighting(ctx: ShotContext) -> None:
+    """Whole panel with funnelling on: per-value markers and n/N badges."""
+    await _open_funnel_panel(ctx)
+    await _apply_funnel_filters(ctx)
+    panel = await _filter_panel(ctx)
+    target = ctx.output_dir / f"{_rb('funnel_panel_highlighting')}.png"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    await panel.screenshot(path=str(target))
+    typer.echo(f"  → {_rel(target)}")
+
+
+async def _open_funnel_overview(ctx: ShotContext):
+    await ctx.page.get_by_test_id("funnel-view-button").click()
+    modal = ctx.page.locator(".mantine-Modal-content").first
+    await modal.wait_for(state="visible", timeout=20_000)
+    # Plotly draws after the funnel counts land; wait for the trace itself.
+    await ctx.page.locator(".mantine-Modal-content .js-plotly-plot").first.wait_for(
+        state="visible", timeout=60_000
+    )
+    await ctx.page.wait_for_timeout(1_500)
+    return modal
+
+
+@register("funnel_overview")
+async def _funnel_overview(ctx: ShotContext) -> None:
+    """Funnel overview modal: cascading row counts + the stage list."""
+    await _open_funnel_panel(ctx)
+    await _apply_funnel_filters(ctx)
+    await _open_funnel_overview(ctx)
+    await _shot(ctx, ".mantine-Modal-content", _rb("funnel_overview"))
+
+
+@register("funnel_overview_reordered")
+async def _funnel_overview_reordered(ctx: ShotContext) -> None:
+    """Same funnel with the last stage moved up — intermediate counts change,
+    the final count does not."""
+    await _open_funnel_panel(ctx)
+    await _apply_funnel_filters(ctx)
+    await _open_funnel_overview(ctx)
+    await ctx.page.locator('[aria-label^="Move "][aria-label$=" earlier"]').last.click()
+    await ctx.page.wait_for_timeout(3_000)
+    await _shot(ctx, ".mantine-Modal-content", _rb("funnel_overview_reordered"))
+
+
 # ---- CLI ------------------------------------------------------------------
 
 
@@ -550,6 +1233,11 @@ def run(
         DEFAULT_DOCS_IMAGE_ROOT,
         "--output-root",
         help="Parent dir for <version>/ subfolders.",
+    ),
+    watch_project_name: str = typer.Option(
+        "Watcher Demo",
+        "--watch-project-name",
+        help="Project name whose watcher-driven ingestion run should be captured.",
     ),
     theme: str = typer.Option(
         "light",
@@ -599,6 +1287,7 @@ def run(
             theme,
             journal,
             seed_auth,
+            watch_project_name,
         )
     )
 
@@ -615,6 +1304,7 @@ async def _run(
     theme: str,
     journal: Path | None = None,
     seed_auth: bool = True,
+    watch_project_name: str = "Watcher Demo",
 ) -> None:
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=headless)
@@ -648,6 +1338,7 @@ async def _run(
             dashboard_id=dashboard_id,
             output_dir=output_dir,
             theme=theme,
+            watch_project_name=watch_project_name,
         )
         for name in names:
             typer.echo(f"• {name}")

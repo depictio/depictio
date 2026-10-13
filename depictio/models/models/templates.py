@@ -30,12 +30,19 @@ class TemplateVariable(BaseModel):
     """A variable required by a template (e.g., DATA_ROOT).
 
     Variables are declared in the template metadata section and must be provided
-    by the user at template instantiation time (e.g., via --data-root CLI flag).
+    by the user at template instantiation time (e.g., via the DATA_DIR argument of `depictio ingest`).
     """
 
     name: str = Field(..., description="Variable name (e.g., 'DATA_ROOT')")
     description: str = Field(..., description="Human-readable description of this variable")
     required: bool = Field(default=True, description="Whether this variable must be provided")
+    default: str | None = Field(
+        default=None,
+        description="Value used when the run does not provide this variable (e.g. GENOME: hg38). "
+        "A defaulted variable resolves {NAME} in template.yaml and in the dashboard YAMLs, "
+        "and satisfies `required`, but does not count as provided for `if_var_present` "
+        "conditionals.",
+    )
 
     @field_validator("name")
     @classmethod
@@ -124,6 +131,125 @@ class TemplateConditional(BaseModel):
     )
 
 
+class ProvenanceSource(BaseModel):
+    """One file (or file family) the run's provenance is collected from.
+
+    Declared in a template's ``template.provenance.sources``. Paths are globs
+    relative to DATA_ROOT, so the same spec works for every instantiation of
+    the pipeline. Reusable across pipelines: any template can point at its own
+    params/versions/recap files, and the CLI's ``--provenance-file`` flag adds
+    ad-hoc user files through the same machinery.
+    """
+
+    name: str = Field(..., description="Source label shown next to each entry (e.g. 'params')")
+    glob: str = Field(
+        ..., description="Glob relative to DATA_ROOT (e.g. 'pipeline_info/params*.json')"
+    )
+    format: str = Field(
+        default="auto",
+        description="File format: 'json', 'yaml', 'tsv' (2-column key/value) or 'auto' (by suffix)",
+    )
+    pick: str = Field(
+        default="latest",
+        description="When the glob matches several files: 'latest' (last in sorted order — "
+        "nf-core timestamps sort chronologically), 'first', or 'all' (merged in order, later wins)",
+    )
+    exclude_keys: list[str] = Field(
+        default_factory=list,
+        description="fnmatch globs of keys to drop (e.g. '*_ref_databases' — bulky catalogs). "
+        "The ONLY way an available key is omitted: everything else is kept, so the "
+        "listing stays complete.",
+    )
+    group: str | None = Field(
+        default=None,
+        description="Assign every key of this source to one group (e.g. 'Software versions'), "
+        "bypassing the group rules",
+    )
+
+    @field_validator("format")
+    @classmethod
+    def validate_format(cls, v: str) -> str:
+        allowed = {"json", "yaml", "tsv", "auto"}
+        if v not in allowed:
+            raise ValueError(f"format must be one of {sorted(allowed)}, got {v!r}")
+        return v
+
+    @field_validator("pick")
+    @classmethod
+    def validate_pick(cls, v: str) -> str:
+        allowed = {"latest", "first", "all"}
+        if v not in allowed:
+            raise ValueError(f"pick must be one of {sorted(allowed)}, got {v!r}")
+        return v
+
+
+class ProvenanceGroupRule(BaseModel):
+    """Assigns keys matching any pattern to a named group, in declaration order.
+
+    Keys no rule matches land in the catch-all 'Other' group — nothing is
+    silently dropped.
+    """
+
+    group: str = Field(..., description="Group name shown as an accordion in the UI")
+    key_patterns: list[str] = Field(
+        ..., description="fnmatch globs matched against the flattened key (first match wins)"
+    )
+
+
+class ProvenanceSpec(BaseModel):
+    """Template-declared recipe for collecting a run's provenance.
+
+    Lives under ``template.provenance``. When a template has none, the CLI
+    falls back to a default spec (nf-core ``pipeline_info/params*.json``,
+    everything in one 'Parameters' group).
+    """
+
+    sources: list[ProvenanceSource] = Field(default_factory=list)
+    groups: list[ProvenanceGroupRule] = Field(default_factory=list)
+    highlight: list[str] = Field(
+        default_factory=list,
+        description="Keys surfaced inline in the dashboard Settings drawer (the full listing "
+        "stays in the ingestion report)",
+    )
+
+
+class ProvenanceEntry(BaseModel):
+    """One collected provenance fact: a parameter, threshold or tool version."""
+
+    source: str = Field(..., description="ProvenanceSource name (or 'user' for --provenance-file)")
+    group: str = Field(..., description="Group the key was assigned to")
+    key: str = Field(..., description="Flattened key (nested files use dotted paths)")
+    value: str = Field(..., description="Stringified value ('null' for unset params)")
+    highlight: bool = Field(default=False, description="Listed in the spec's highlight set")
+
+
+class UnrecognisedFile(BaseModel):
+    """A tabular file no catalog output recognised, with what it could show.
+
+    Written by the composer (``depictio template compose``) into a composed
+    template, and carried onto the project's ``TemplateOrigin`` so the project
+    page can list what was left out and how to add it.
+    """
+
+    path: str = Field(
+        ...,
+        description="Path relative to the data root; for files of one shape, a glob "
+        "(`abricate/*/*.txt`) that `--include` takes as is",
+    )
+    title: str | None = Field(default=None, description="A short name for it")
+    n_files: int = Field(default=1, description="How many files of this shape, one per sample")
+    format: str = Field(..., description="csv, tsv or parquet")
+    n_columns: int = Field(default=0, description="Number of columns read")
+    columns: list[str] = Field(default_factory=list, description="Its first columns, at most 30")
+    sample_column: str | None = Field(
+        default=None, description="The column that looks like a sample identifier"
+    )
+    proposal: list[str] = Field(
+        default_factory=list,
+        description="The tiles it would get if included, e.g. 'card: mean of reads'",
+    )
+
+
 class TemplateMetadata(BaseModel):
     """Metadata section declared in a template project.yaml.
 
@@ -185,6 +311,16 @@ class TemplateMetadata(BaseModel):
         description="Regex pattern for run directory names (e.g., 'run_*'). "
         "Only used when structure='sequencing-runs'.",
     )
+    provenance: ProvenanceSpec | None = Field(
+        default=None,
+        description="How to collect this pipeline's run provenance (params, thresholds, "
+        "tool versions) — see ProvenanceSpec. None = the CLI's generic default.",
+    )
+    unrecognised_files: list[UnrecognisedFile] = Field(
+        default_factory=list,
+        description="Set by the composer: tabular files of the run no catalog output "
+        "recognised, left out of the template, each with a proposal",
+    )
 
     @field_validator("template_id")
     @classmethod
@@ -199,6 +335,10 @@ class TemplateMetadata(BaseModel):
     def get_required_variable_names(self) -> list[str]:
         """Return names of all required variables."""
         return [var.name for var in self.variables if var.required]
+
+    def get_variable_defaults(self) -> dict[str, str]:
+        """Return ``{name: default}`` for every declared variable that has a default."""
+        return {var.name: var.default for var in self.variables if var.default is not None}
 
 
 class ExpectedDataCollection(BaseModel):
@@ -236,7 +376,12 @@ class TemplateOrigin(BaseModel):
         ..., description="Template identifier (e.g., 'nf-core/ampliseq/2.16.0')"
     )
     template_version: str = Field(..., description="Template schema version at time of use")
-    data_root: str = Field(..., description="The actual --data-root value provided by the user")
+    data_root: str | None = Field(
+        default=None,
+        description="The actual DATA_DIR value provided by the user. None for "
+        "manifest-driven instantiations, where MANIFEST_URL in `variables` plays "
+        "the equivalent provenance role.",
+    )
     applied_at: str = Field(
         default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         description="Timestamp when template was applied",
@@ -253,6 +398,22 @@ class TemplateOrigin(BaseModel):
         default_factory=list,
         description="Full template DC superset at resolution time (required + optional), "
         "each marked included/excluded with a removal reason — drives the ingestion report",
+    )
+    run_provenance: list[ProvenanceEntry] = Field(
+        default_factory=list,
+        description="Collected run provenance (pipeline parameters, filtering thresholds, "
+        "tool versions), grouped and ordered — drives the ingestion report's "
+        "'Run provenance' card and the dashboard Settings highlights",
+    )
+    run_provenance_files: list[str] = Field(
+        default_factory=list,
+        description="The files the provenance was collected from (relative to data_root "
+        "where possible)",
+    )
+    unrecognised_files: list[UnrecognisedFile] = Field(
+        default_factory=list,
+        description="For a composed template: the run's tabular files no catalog output "
+        "recognised and that were not included, with a proposal for each",
     )
 
     @field_validator("config_snapshot", mode="before")
@@ -278,5 +439,7 @@ class TemplateOrigin(BaseModel):
 
     @field_validator("data_root")
     @classmethod
-    def validate_data_root(cls, v: str) -> str:
+    def validate_data_root(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
         return _require_nonempty(v, "Data root")

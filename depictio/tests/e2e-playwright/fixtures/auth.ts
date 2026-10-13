@@ -40,6 +40,10 @@ export interface TokenBundle {
   access_token: string;
   refresh_token: string;
   user_id: string;
+  /** Access-token expiry as the API serialises it ("YYYY-MM-DD HH:MM:SS", UTC,
+   *  no offset). Returned by /auth/login and required by seedTokenInStorage —
+   *  see the comment there for why leaving it out breaks the caller's token. */
+  expire_datetime?: string;
   /** Populated by loginAsTestUser from the credentials table — not returned by
    *  the login endpoint but required by the viewer's local-store session shape
    *  so the ownership check (isOwner) works correctly. */
@@ -147,11 +151,44 @@ export async function seedTokenInStorage(
     }, tokens);
   } else {
     await page.addInitScript((t) => {
+      // Seed this bundle ONCE per page context, then never again.
+      //
+      // This script re-runs on every navigation, so an unconditional write
+      // would undo whatever the app itself did to the session in between:
+      //   - /auth/refresh rotates the stored access token (the API resolves a
+      //     caller by looking the access token up in the token document, so
+      //     the previous one stops authenticating). Restoring `t.access_token`
+      //     hands the page a revoked credential and every call 401s.
+      //   - a logout clears `local-store` on purpose. Re-seeding it puts the
+      //     user straight back into a valid session on the next navigation,
+      //     so the app bounces off /auth and the logout looks like it failed.
+      //
+      // Keying the guard on a marker this script writes itself covers both:
+      // it does not care what the app left behind, only whether *this* bundle
+      // has already been injected. Keying on the refresh_token keeps the
+      // switch-user case (loginAsUser then loginAsAdmin on the same page)
+      // working — a different login re-seeds, the same one never does.
+      // sessionStorage is per-tab and outlives navigations within it, which is
+      // exactly the scope of one addInitScript registration.
+      const MARKER = "e2e-seeded-refresh";
+      try {
+        if (window.sessionStorage.getItem(MARKER) === t.refresh_token) return;
+        window.sessionStorage.setItem(MARKER, t.refresh_token);
+      } catch {
+        // sessionStorage unavailable (blocked storage): fall back to seeding
+        // on every navigation, i.e. the pre-marker behaviour.
+      }
       window.localStorage.setItem(
         "local-store",
         JSON.stringify({
           access_token: t.access_token,
           refresh_token: t.refresh_token,
+          // Without a parseable expiry the SPA treats the session as already
+          // stale and calls /auth/refresh on the first authenticated request
+          // of every page load (see ensureFreshAccessToken in
+          // depictio-react-core), rotating the token document each time. Seed
+          // the real one so a freshly minted token is simply used as-is.
+          ...(t.expire_datetime ? { expire_datetime: t.expire_datetime } : {}),
           logged_in: true,
           user_id: t.user_id,
           email: t.email ?? "",
@@ -219,6 +256,58 @@ export async function loginAsTestUser(
   }
   await seedTokenInStorage(page, tokens);
   return user;
+}
+
+/**
+ * Same login and storage seed, but hands back the tokens rather than the
+ * credentials row.
+ *
+ * `loginAsTestUser` returns a `TestUser` (email / password / is_admin), which
+ * carries no `access_token`. A test that destructures one off it gets
+ * `undefined`, sends `Authorization: Bearer undefined`, and every call it
+ * guards comes back 401 — silently, unless the test asserts on the response.
+ * Use this when the test needs both a browser session and its tokens.
+ *
+ * For API calls alone, prefer `apiOnlyToken`: the bundle returned here is also
+ * seeded into the page, and the SPA rotates it on refresh — see the note there.
+ */
+export async function loginAsTestUserWithToken(
+  page: Page,
+  request: APIRequestContext,
+  userType: UserType = "testUser",
+): Promise<TokenBundle> {
+  await loginAsTestUser(page, request, userType);
+  // Populated by the call above, which caches before it returns.
+  return _tokenCache.get(userType)!;
+}
+
+/**
+ * Tokens minted for direct API calls only — never seeded into a browser.
+ *
+ * `loginAsTestUserWithToken` hands back the same bundle `seedTokenInStorage`
+ * puts in the page's localStorage, so the browser and the API caller share one
+ * token document. The SPA refreshes that document when the access token nears
+ * expiry, and /auth/refresh rotates the stored access token, which revokes the
+ * copy the API caller is still sending — a 401 with no obvious cause. A token
+ * that never reaches a page cannot be rotated out from under its holder.
+ *
+ * Cached per worker like `_tokenCache`, so this costs one extra /auth/login per
+ * worker rather than one per call (the login endpoint is rate-limited per IP).
+ */
+const _apiTokenCache = new Map<UserType, TokenBundle>();
+
+export async function apiOnlyToken(
+  request: APIRequestContext,
+  userType: UserType = "adminUser",
+): Promise<TokenBundle> {
+  let tokens = _apiTokenCache.get(userType);
+  if (!tokens) {
+    const user = credentials[userType];
+    tokens = await apiLogin(request, user.email, user.password);
+    tokens.email = user.email;
+    _apiTokenCache.set(userType, tokens);
+  }
+  return tokens;
 }
 
 /**

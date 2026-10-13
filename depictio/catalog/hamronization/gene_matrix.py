@@ -1,0 +1,76 @@
+"""Gene by sample ARG hit matrix for a clustered heatmap.
+
+Pivots the hAMRonization combined report into one row per gene symbol with
+one numeric column per sample holding the number of hits, plus the gene's
+most frequent ``drug_class`` and a short form of it as categorical row
+annotations. Genes and samples are discovered from the report, so the sample
+columns are dynamic; only the three leading columns are fixed.
+
+Output columns:
+    gene_symbol, drug_class, drug_class_primary, <one Float64 column per sample>
+"""
+
+import polars as pl
+
+from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.hamronization import primary_class
+
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
+SOURCES: list[RecipeSource] = [
+    RecipeSource(
+        ref="report",
+        path="reports/hamronization_summarize/hamronization_combined_report.tsv",
+        format="TSV",
+        input_schema={
+            "input_file_name": pl.Utf8,
+            "gene_symbol": pl.Utf8,
+            "drug_class": pl.Utf8,
+        },
+        read_kwargs={"infer_schema_length": 10000, "null_values": ["NA", ""]},
+    ),
+]
+
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
+    "gene_symbol": pl.Utf8,
+    "drug_class": pl.Utf8,
+    "drug_class_primary": pl.Utf8,
+}
+
+_TOOL_SUFFIX = r"(abricate|amrfinderplus|deeparg|fargene|rgi|resfinder|srax|staramr|kmerresistance|groot|ariba|csstar|tbprofiler|mykrobe|pointfinder|amrplusplus)"
+_SAMPLE_STRIP_PATTERNS = [
+    r"_retrieved-genes-.+-hmmsearched\.out(\.fargene)?$",
+    r"\.mapping(\.potential)?\.ARG(\.deeparg)?$",
+    r"\.(tsv|txt|csv|out|json|tab)\." + _TOOL_SUFFIX + r"$",
+    r"\." + _TOOL_SUFFIX + r"$",
+    r"\.(tsv|txt|csv|out|json|tab)$",
+]
+
+
+def _sample(col: pl.Expr) -> pl.Expr:
+    for pattern in _SAMPLE_STRIP_PATTERNS:
+        col = col.str.replace(pattern, "")
+    return col
+
+
+def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
+    """Count hits per (gene, sample) and pivot samples into columns."""
+    df = sources["report"].select(
+        _sample(pl.col("input_file_name").cast(pl.Utf8)).alias("sample"),
+        pl.col("gene_symbol").cast(pl.Utf8),
+        pl.col("drug_class").cast(pl.Utf8).fill_null("unclassified"),
+    )
+    # ``mode()`` returns its ties in an arbitrary order; sorted so the same
+    # report always labels a gene with the same class.
+    annotation = df.group_by("gene_symbol").agg(pl.col("drug_class").mode().sort().first())
+    annotation = annotation.with_columns(
+        primary_class(pl.col("drug_class")).alias("drug_class_primary")
+    )
+    counts = df.group_by("gene_symbol", "sample").agg(pl.len().cast(pl.Float64).alias("hits"))
+    matrix = counts.pivot(on="sample", index="gene_symbol", values="hits").fill_null(0.0)
+    sample_cols = sorted(c for c in matrix.columns if c != "gene_symbol")
+    return (
+        annotation.join(matrix, on="gene_symbol", how="inner")
+        .select("gene_symbol", "drug_class", "drug_class_primary", *sample_cols)
+        .sort("gene_symbol")
+    )

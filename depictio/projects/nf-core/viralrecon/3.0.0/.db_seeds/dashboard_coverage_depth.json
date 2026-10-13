@@ -14,124 +14,32 @@
   "stored_children_data": [],
   "stored_metadata": [
     {
-      "index": "a177519f-0145-48f4-a673-6a815205cec7",
+      "index": "cov-intro",
       "component_type": "text",
-      "title": "Coverage & Depth - Amplicon and Genome Coverage",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "summary_metrics",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
+      "title": "",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": null,
       "dc_id": null,
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
-        "data_collection_tag": "summary_metrics",
-        "dc_specific_properties": null,
-        "_id": null
-      },
+      "dc_config": {},
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T21:27:37.060458",
-      "title_size": "sm",
+      "last_updated": "2026-08-29T00:00:00.000000",
       "title_align": "left",
-      "order": 3,
+      "section": null,
+      "order": 1,
       "alignment": "left",
-      "body": "Did each sample's amplicons get adequate sequencing depth? The **genome track** shows per-position coverage (log y-axis); look for systematic drop-outs across samples. The **clustered amplicon heatmap** flags amplicons that consistently fail (dark rows). The tables below carry the underlying numbers for ad-hoc inspection.",
-      "wf_tag": "nextflow/viralrecon"
+      "vertical_alignment": "center",
+      "body": "Depth from [mosdepth](https://github.com/brentp/mosdepth), per 200 bp window and per amplicon. A gap in the genome track is a dropout; the amplicon views name the amplicon behind it, a dark column in the heatmap being a primer problem and a dark row a sample one.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null
     },
     {
-      "index": "5d561416-868b-48a7-9725-151368c5e8dd",
-      "component_type": "card",
-      "title": "Amplicons Tracked",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "mosdepth_amplicon_coverage",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c16"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Per-amplicon coverage depth across all samples (from mosdepth)",
-        "data_collection_tag": "mosdepth_amplicon_coverage",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c16"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-05-20T21:27:37.060485",
-      "title_size": "sm",
-      "title_align": "left",
-      "aggregation": "nunique",
-      "column_name": "region",
-      "column_type": "object",
-      "value": null,
-      "aggregations": null,
-      "filter_expr": null,
-      "secondary_layout": "coverage",
-      "breakdown_col": null,
-      "top_n_count": 3,
-      "coverage_max": 99.0,
-      "icon_name": "mdi:dna",
-      "icon_color": "#FF9800",
-      "title_color": "#FF9800",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "592dcbdd-5373-41a4-94ae-d6ac4710fe23",
-      "component_type": "card",
-      "title": "Amplicon Coverage",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "mosdepth_amplicon_coverage",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c16"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Per-amplicon coverage depth across all samples (from mosdepth)",
-        "data_collection_tag": "mosdepth_amplicon_coverage",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c16"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-05-20T21:27:37.060525",
-      "title_size": "sm",
-      "title_align": "left",
-      "aggregation": "average",
-      "column_name": "coverage",
-      "column_type": "float64",
-      "value": null,
-      "aggregations": [
-        "box_plot_stats"
-      ],
-      "filter_expr": null,
-      "secondary_layout": "box_plot",
-      "breakdown_col": null,
-      "top_n_count": 3,
-      "coverage_max": null,
-      "icon_name": "mdi:chart-areaspline",
-      "icon_color": "#009688",
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "b6ae680f-4891-48ce-80fc-ebba9a71b7f2",
-      "component_type": "card",
-      "title": "Genome Coverage",
+      "index": "cov-genome-depth",
+      "component_type": "interactive",
+      "title": "Window depth",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "mosdepth_genome_coverage",
       "wf_id": {
@@ -152,29 +60,29 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T21:27:37.060535",
-      "title_size": "sm",
+      "last_updated": "2026-08-29T00:00:00.000000",
       "title_align": "left",
-      "aggregation": "average",
+      "section": "Coverage filters",
+      "interactive_component_type": "RangeSlider",
       "column_name": "coverage",
       "column_type": "float64",
       "value": null,
-      "aggregations": [
-        "box_plot_stats"
-      ],
+      "default_state": null,
       "filter_expr": null,
-      "secondary_layout": "box_plot",
-      "breakdown_col": null,
-      "top_n_count": 3,
-      "coverage_max": null,
+      "placement": "left",
+      "group": "Depth",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "blue",
       "icon_name": "mdi:chart-line",
-      "icon_color": "#2196F3",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "cov-sample-filter",
+      "index": "cov-amplicon",
       "component_type": "interactive",
-      "title": "Sample ID",
+      "title": "Amplicon",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "mosdepth_amplicon_coverage",
       "wf_id": {
@@ -195,27 +103,308 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T21:27:37.060570",
-      "title_size": "md",
+      "last_updated": "2026-08-29T00:00:00.000000",
       "title_align": "left",
+      "section": "Coverage filters",
       "interactive_component_type": "MultiSelect",
-      "column_name": "sample",
+      "column_name": "region",
       "column_type": "object",
       "value": null,
       "default_state": null,
       "filter_expr": null,
       "placement": "left",
-      "group": null,
+      "group": "Depth",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#45B8AC",
-      "icon_name": "mdi:flask",
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "cyan",
+      "icon_name": "mdi:vector-line",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "adv-cov-genome-track",
+      "index": "cov-amplicon-depth",
+      "component_type": "interactive",
+      "title": "Amplicon depth",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "mosdepth_amplicon_coverage",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c16"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-amplicon coverage depth across all samples (from mosdepth)",
+        "data_collection_tag": "mosdepth_amplicon_coverage",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c16"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "Coverage filters",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "coverage",
+      "column_type": "int64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Depth",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "teal",
+      "icon_name": "mdi:chart-areaspline",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "cov-card-genome-depth",
+      "component_type": "card",
+      "title": "Window depth",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "mosdepth_genome_coverage",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c17"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Genome-wide coverage in 200bp windows across all samples (from mosdepth)",
+        "data_collection_tag": "mosdepth_genome_coverage",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c17"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Median depth over every sample and 200 bp window in view.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "mosdepth/genome_coverage",
+      "catalog_source": {
+        "toolId": "mosdepth",
+        "toolName": "mosdepth",
+        "outputId": "mosdepth_genome_coverage",
+        "use": "mosdepth/genome_coverage",
+        "description": "Genome-wide coverage in windows, aggregated across all samples."
+      },
+      "section": "Coverage at a glance",
+      "aggregation": "median",
+      "column_name": "coverage",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "histogram",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:chart-line",
+      "icon_color": "blue",
+      "caption": "per window, with its distribution",
+      "decimals": 0,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "cov-card-low-windows",
+      "component_type": "card",
+      "title": "Windows under 10x",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "mosdepth_genome_coverage",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c17"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Genome-wide coverage in 200bp windows across all samples (from mosdepth)",
+        "data_collection_tag": "mosdepth_genome_coverage",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c17"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Sample and window pairs under 10x, which the consensus masks; a bar at 0 is a true gap, the rest thin coverage.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "mosdepth/genome_coverage",
+      "catalog_source": {
+        "toolId": "mosdepth",
+        "toolName": "mosdepth",
+        "outputId": "mosdepth_genome_coverage",
+        "use": "mosdepth/genome_coverage",
+        "description": "Genome-wide coverage in windows, aggregated across all samples."
+      },
+      "section": "Coverage at a glance",
+      "aggregation": "count",
+      "column_name": "coverage",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": "col('coverage') < 10",
+      "secondary_layout": "histogram",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:chart-timeline-variant",
+      "icon_color": "orange",
+      "caption": "their depth, from no reads to just under 10x",
+      "decimals": 0,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "cov-card-amplicon-depth",
+      "component_type": "card",
+      "title": "Amplicon depth",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "mosdepth_amplicon_coverage",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c16"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-amplicon coverage depth across all samples (from mosdepth)",
+        "data_collection_tag": "mosdepth_amplicon_coverage",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c16"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Median depth over every sample and amplicon in view; the bar counts the pairs at 10x or more.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "mosdepth/amplicon_coverage",
+      "catalog_source": {
+        "toolId": "mosdepth",
+        "toolName": "mosdepth",
+        "outputId": "mosdepth_amplicon_coverage",
+        "use": "mosdepth/amplicon_coverage",
+        "description": "Per-amplicon coverage depth, aggregated across all samples (bindable as-is)."
+      },
+      "section": "Coverage at a glance",
+      "aggregation": "median",
+      "column_name": "coverage",
+      "column_type": "int64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "threshold",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": 10,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:chart-areaspline",
+      "icon_color": "teal",
+      "caption": "sample and amplicon pairs against 10x",
+      "decimals": 0,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "cov-card-dropouts",
+      "component_type": "card",
+      "title": "Amplicons under 10x",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "mosdepth_amplicon_coverage",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c16"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-amplicon coverage depth across all samples (from mosdepth)",
+        "data_collection_tag": "mosdepth_amplicon_coverage",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c16"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Amplicons under 10x in at least one sample; one that fails in many samples points at its primers.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "mosdepth/amplicon_coverage",
+      "catalog_source": {
+        "toolId": "mosdepth",
+        "toolName": "mosdepth",
+        "outputId": "mosdepth_amplicon_coverage",
+        "use": "mosdepth/amplicon_coverage",
+        "description": "Per-amplicon coverage depth, aggregated across all samples (bindable as-is)."
+      },
+      "section": "Coverage at a glance",
+      "aggregation": "nunique",
+      "column_name": "region",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": "col('coverage') < 10",
+      "secondary_layout": "uniqueness",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:alert-outline",
+      "icon_color": "red",
+      "caption": "and the one that drops out most often",
+      "decimals": 0,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "cov-genome-track",
       "component_type": "advanced_viz",
-      "title": "Genome coverage track per sample",
+      "title": "Depth along the genome",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "coverage_track_canonical",
       "wf_id": {
@@ -236,12 +425,22 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T21:27:37.060599",
-      "description": "Per-position genome coverage (log y-axis), one sub-track per sample. Drop-outs stand out as gaps.",
-      "title_size": "h3",
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "One lane per sample on a linear axis; a dropout reads as a gap.",
+      "title_size": "sm",
       "title_align": "left",
+      "use": "mosdepth/coverage_track_genome",
+      "catalog_source": {
+        "toolId": "mosdepth",
+        "toolName": "mosdepth",
+        "outputId": "mosdepth_genome_coverage",
+        "use": "mosdepth/coverage_track_genome",
+        "description": "Genome-wide coverage in windows, aggregated across all samples."
+      },
+      "section": "Along the genome",
       "viz_kind": "coverage_track",
       "config": {
+        "controls_placement": "popover",
         "viz_kind": "coverage_track",
         "chromosome_col": "chromosome",
         "position_col": "position",
@@ -255,52 +454,22 @@
         "show_annotation_lane": false,
         "annotation_id": null,
         "chromosomes_filter": null,
-        "samples_filter": null
+        "samples_filter": null,
+        "view_mode": null,
+        "show_individuals": true,
+        "mark": "line",
+        "facet_by_sample": false,
+        "locus_annotation": "none",
+        "locus_assembly": null,
+        "view": "track",
+        "views": null
       },
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "adv-cov-heatmap",
+      "index": "cov-amplicon-track",
       "component_type": "advanced_viz",
-      "title": "Amplicon coverage heatmap (clustered)",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "complex_heatmap_canonical",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c1b"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "ComplexHeatmap-ready amplicon-coverage matrix (samples \u00d7 amplicons)",
-        "data_collection_tag": "complex_heatmap_canonical",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c1b"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-05-20T21:27:37.060602",
-      "description": "Log10-scaled per-amplicon coverage; rows clustered. Dark = dropout, bright = high coverage.",
-      "title_size": "h3",
-      "viz_kind": "complex_heatmap",
-      "config": {
-        "cluster_cols": false,
-        "cluster_rows": true,
-        "colorscale": "Viridis",
-        "index_column": "sample",
-        "normalize": "none",
-        "viz_kind": "complex_heatmap"
-      },
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "fa2741c2-2f6a-4428-8e90-2642a79843a9",
-      "component_type": "table",
-      "title": "Amplicon coverage table",
+      "title": "Depth per amplicon",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "mosdepth_amplicon_coverage",
       "wf_id": {
@@ -321,33 +490,183 @@
       },
       "cols_json": {},
       "parent_index": null,
-      "last_updated": "2026-05-20T21:27:37.060611",
-      "description": "Per-amplicon median coverage depth for each sample.",
-      "title_size": "h3",
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "One lane per sample on a log axis; the amplicon filter on the left narrows it.",
+      "title_size": "sm",
       "title_align": "left",
+      "use": "mosdepth/coverage_track_amplicon",
+      "catalog_source": {
+        "toolId": "mosdepth",
+        "toolName": "mosdepth",
+        "outputId": "mosdepth_amplicon_coverage",
+        "use": "mosdepth/coverage_track_amplicon",
+        "description": "Per-amplicon coverage depth, aggregated across all samples (bindable as-is)."
+      },
+      "section": "Per amplicon",
+      "viz_kind": "coverage_track",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "coverage_track",
+        "chromosome_col": "chrom",
+        "position_col": "start",
+        "value_col": "coverage",
+        "end_col": null,
+        "sample_col": "sample",
+        "category_col": "region",
+        "y_scale": "log",
+        "smoothing_window": 5,
+        "color_by": "single",
+        "show_annotation_lane": true,
+        "annotation_id": null,
+        "chromosomes_filter": null,
+        "samples_filter": null,
+        "view_mode": null,
+        "show_individuals": true,
+        "mark": "line",
+        "facet_by_sample": false,
+        "locus_annotation": "none",
+        "locus_assembly": null,
+        "view": "track",
+        "views": null
+      },
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "cov-heatmap",
+      "component_type": "advanced_viz",
+      "title": "Amplicon depth per sample (clustered)",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "complex_heatmap_canonical",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c1b"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ComplexHeatmap-ready amplicon-coverage matrix (samples \u00d7 amplicons)",
+        "data_collection_tag": "complex_heatmap_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c1b"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Log10 depth, samples in rows clustered, amplicons in scheme order; dark is a dropout.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "mosdepth/complex_heatmap",
+      "catalog_source": {
+        "toolId": "mosdepth",
+        "toolName": "mosdepth",
+        "outputId": "mosdepth_amplicon_heatmap",
+        "use": "mosdepth/complex_heatmap",
+        "description": "Log10 amplicon-coverage matrix (samples \u00d7 amplicons)."
+      },
+      "section": "Per amplicon",
+      "viz_kind": "complex_heatmap",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "complex_heatmap",
+        "matrix_wf_id": null,
+        "matrix_dc_id": null,
+        "index_column": "sample",
+        "value_columns": null,
+        "value_columns_pattern": null,
+        "row_annotation_cols": [],
+        "col_annotations": null,
+        "col_annotation_cols": [],
+        "annotation_source_dc_tag": null,
+        "col_annotation_colors": null,
+        "cluster_rows": true,
+        "cluster_cols": false,
+        "cluster_method": "ward",
+        "cluster_metric": "euclidean",
+        "normalize": "none",
+        "colorscale": "Viridis"
+      },
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "cov-amplicon-table",
+      "component_type": "table",
+      "title": "Depth per sample and amplicon",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "mosdepth_amplicon_coverage",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c16"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-amplicon coverage depth across all samples (from mosdepth)",
+        "data_collection_tag": "mosdepth_amplicon_coverage",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c16"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "mosdepth/amplicon_coverage",
+      "catalog_source": {
+        "toolId": "mosdepth",
+        "toolName": "mosdepth",
+        "outputId": "mosdepth_amplicon_coverage",
+        "use": "mosdepth/amplicon_coverage",
+        "description": "Per-amplicon coverage depth, aggregated across all samples (bindable as-is)."
+      },
+      "section": "Amplicon table",
       "columns": [],
-      "page_size": 10,
+      "page_size": 100,
       "sortable": true,
       "filterable": true,
-      "row_selection_enabled": false,
-      "row_selection_column": null,
+      "compact": false,
+      "row_selection_enabled": true,
+      "row_selection_column": "sample",
       "wf_tag": "nextflow/viralrecon"
     }
   ],
   "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [
     {
-      "i": "box-cov-sample-filter",
+      "i": "box-cov-genome-depth",
       "x": 0,
-      "y": 2,
+      "y": 0,
       "w": 1,
-      "h": 2,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-cov-amplicon",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-cov-amplicon-depth",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
       "static": false
     }
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-a177519f-0145-48f4-a673-6a815205cec7",
+      "i": "box-cov-intro",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -362,33 +681,41 @@
       ]
     },
     {
-      "i": "box-5d561416-868b-48a7-9725-151368c5e8dd",
+      "i": "box-cov-card-genome-depth",
       "x": 0,
-      "y": 1,
+      "y": 0,
       "w": 2,
       "h": 2,
       "static": true
     },
     {
-      "i": "box-592dcbdd-5373-41a4-94ae-d6ac4710fe23",
+      "i": "box-cov-card-low-windows",
       "x": 2,
-      "y": 1,
-      "w": 3,
+      "y": 0,
+      "w": 2,
       "h": 2,
       "static": true
     },
     {
-      "i": "box-b6ae680f-4891-48ce-80fc-ebba9a71b7f2",
-      "x": 5,
-      "y": 1,
-      "w": 3,
+      "i": "box-cov-card-amplicon-depth",
+      "x": 4,
+      "y": 0,
+      "w": 2,
       "h": 2,
       "static": true
     },
     {
-      "i": "box-adv-cov-genome-track",
+      "i": "box-cov-card-dropouts",
+      "x": 6,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-cov-genome-track",
       "x": 0,
-      "y": 3,
+      "y": 0,
       "w": 8,
       "h": 6,
       "static": false,
@@ -401,9 +728,9 @@
       ]
     },
     {
-      "i": "box-adv-cov-heatmap",
+      "i": "box-cov-amplicon-track",
       "x": 0,
-      "y": 9,
+      "y": 0,
       "w": 8,
       "h": 6,
       "static": false,
@@ -416,11 +743,26 @@
       ]
     },
     {
-      "i": "box-fa2741c2-2f6a-4428-8e90-2642a79843a9",
+      "i": "box-cov-heatmap",
       "x": 0,
-      "y": 15,
+      "y": 6,
       "w": 8,
-      "h": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-cov-amplicon-table",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 6,
       "static": false,
       "resizeHandles": [
         "se",
@@ -431,6 +773,100 @@
       ]
     }
   ],
+  "filter_sections": [
+    {
+      "name": "Coverage filters",
+      "icon": "mdi:filter-variant",
+      "color": "teal",
+      "description": "Narrows the windows and amplicons by depth",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Coverage at a glance",
+      "icon": "mdi:counter",
+      "color": "teal",
+      "description": "Depth per window and per amplicon over the samples in view",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Along the genome",
+      "icon": "mdi:chart-line",
+      "color": "teal",
+      "description": "Depth per 200 bp window, one lane per sample",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Per amplicon",
+      "icon": "mdi:chart-timeline-variant",
+      "color": "teal",
+      "description": "Depth per amplicon, as tracks and as a clustered heatmap",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Amplicon table",
+      "icon": "mdi:table",
+      "color": "gray",
+      "description": "Depth per sample and amplicon",
+      "collapsed": true,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "category_colors": null,
+  "funnel_filtering": true,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true,
+  "brand_theme": null,
   "buttons_data": {
     "unified_edit_mode": true,
     "add_components_button": {
@@ -441,7 +877,7 @@
     "count": 0
   },
   "title": "Coverage & Depth",
-  "subtitle": "Amplicon and Genome Coverage (mosdepth)",
+  "subtitle": "Where along the genome does each sample lose depth?",
   "icon": "/assets/images/workflows/nf-core.png",
   "icon_color": "green",
   "icon_variant": "filled",
@@ -466,8 +902,10 @@
     "editors": [],
     "viewers": []
   },
-  "is_public": false,
-  "last_saved_ts": "2026-05-20 21:27:37",
+  "is_public": true,
+  "last_saved_ts": "2026-08-29 00:00:00",
+  "creation_time": "2026-10-08 21:52:39",
+  "screenshot_ts": "",
   "project_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
   },
@@ -475,10 +913,14 @@
   "parent_dashboard_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
   },
-  "tab_order": 1,
+  "tab_order": 3,
   "main_tab_name": null,
   "tab_icon": "mdi:chart-areaspline",
   "tab_icon_color": "teal",
+  "tab_group": "Data & QC",
   "parent_dashboard_title": null,
-  "project_realtime": null
+  "project_realtime": null,
+  "inherited_brand_theme": null,
+  "inherited_category_colors": null,
+  "source_key": "nf-core/viralrecon:dashboards/base.yaml#Coverage & Depth"
 }

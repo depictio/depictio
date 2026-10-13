@@ -1,0 +1,17 @@
+id: qualimap_coverage_histogram
+name: Coverage histogram
+description: >-
+  How many bases of the reference sit at each read depth, from Qualimap BamQC.
+  The share of the reference at each depth is derived alongside the raw base
+  count so two libraries mapped against different references stay comparable.
+find:
+  path_glob: "**/coverage_histogram.txt"
+recipe: qualimap/coverage_histogram.py
+fixture: coverage_histogram.tsv
+renders_as:
+  - { id: depth_histogram_profile, component: advanced_viz, kind: profile,
+      roles: {series: sample, x: coverage, y: fraction} }
+  - { component: figure, visu_type: line, dict_kwargs: {x: coverage, y: n_genomic_locations, color: sample, title: Bases of the reference at each depth} }
+  - { component: card, column: coverage, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: n_genomic_locations, aggregation: sum, secondary_layout: donut, breakdown_col: sample }
+  - { component: table, page_size: 25 }

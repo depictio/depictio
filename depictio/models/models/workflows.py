@@ -10,13 +10,37 @@ from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.logging import logger
 from depictio.models.models.base import DirectoryPath, MongoModel, PyObjectId
 from depictio.models.models.data_collections import DataCollection, DataCollectionResponse
+from depictio.models.models.manifest import validate_remote_url_syntax
 from depictio.models.models.users import Permission
+
+
+def _is_url(value: str) -> bool:
+    """A location carrying a scheme is a remote URL, not a filesystem path."""
+    return "://" in value
+
+
+def _validated_local_location(location: str) -> str:
+    """A local data location once its placeholders are expanded (CLI context only).
+
+    A file passes as-is: a local manifest is a valid location, since it lists
+    the actual sources. Anything else is a scan root and must be an existing
+    directory (``DirectoryPath``).
+    """
+    path = Path(location)
+    if path.is_file():
+        return str(path)
+    return DirectoryPath(path=str(path)).path
 
 
 class WorkflowDataLocation(MongoModel):
     structure: str
     locations: list[str]
     runs_regex: str | None = None
+    # The locations `ingest --attach-run` added: a refresh keeps them next to the
+    # ones it is given, and drops any other. Left out of the payload while empty,
+    # because a server older than this field rejects it (extra="forbid") and a
+    # project without attached runs must still sync to one.
+    attached_locations: list[str] = Field(default_factory=list, exclude_if=lambda value: not value)
 
     @field_validator("structure", mode="before")
     def validate_mode(cls, value):
@@ -26,13 +50,24 @@ class WorkflowDataLocation(MongoModel):
 
     @field_validator("locations", mode="after")
     def validate_and_recast_parent_runs_location(cls, value):
+        # Remote locations (manifest/url-backed workflows) are not local
+        # directories: no existence check, but the scheme allowlist applies in
+        # every context (http:// only behind DEPICTIO_REMOTE_ALLOW_HTTP, and
+        # matched case-insensitively, exactly like ScanURL / manifest entries).
+        value = [
+            validate_remote_url_syntax(location) if _is_url(location) else location
+            for location in value
+        ]
         if DEPICTIO_CONTEXT.lower() == "cli":
             # Recast to List[DirectoryPath] and validate
 
             env_var_pattern = re.compile(r"\{([A-Z0-9_]+)\}")
 
-            expanded_paths = []
+            validated: list[str] = []
             for location in value:
+                if _is_url(location):
+                    validated.append(location)
+                    continue
                 matches = env_var_pattern.findall(location)
                 for match in matches:
                     env_value = os.environ.get(match)
@@ -45,10 +80,9 @@ class WorkflowDataLocation(MongoModel):
                         )
                     # Replace the placeholder with the actual value
                     location = location.replace(f"{{{match}}}", env_value)
-                expanded_paths.append(location)
+                validated.append(_validated_local_location(location))
 
-            # Validate the expanded paths if in CLI context
-            return [DirectoryPath(path=str(Path(location))).path for location in expanded_paths]
+            return validated
         else:
             return value
 
@@ -70,6 +104,15 @@ class WorkflowDataLocation(MongoModel):
 class WorkflowConfig(MongoModel):
     version: str | None = None
     workflow_parameters: dict | None = None
+
+    # Per-run provenance, filled from `depictio.models.models.run_info` when the
+    # ingested directory identifies the engine that produced it. All optional and
+    # defaulted: configs written before provenance existed still validate, and a
+    # run whose engine left no breadcrumbs simply leaves them unset.
+    engine_name: str | None = None
+    pipeline_version: str | None = None
+    nextflow_version: str | None = None
+    tools_executed: list[str] | None = None
 
 
 class WorkflowRunScan(BaseModel):
@@ -97,11 +140,17 @@ class WorkflowRun(MongoModel):
 
     @field_validator("run_location", mode="after")
     def validate_and_recast_parent_runs_location(cls, value):
+        # Remote acquisition modes (url / s3_prefix / manifest) put the source
+        # URL here, not a directory. There is nothing on the local filesystem to
+        # check, and the CLI branch below would reject every one of them. The
+        # scheme allowlist still applies: http:// only behind
+        # DEPICTIO_REMOTE_ALLOW_HTTP, matched case-insensitively.
+        if value and _is_url(value):
+            return validate_remote_url_syntax(value)
         if DEPICTIO_CONTEXT == "CLI":
             # Recast to List[DirectoryPath] and validate
             env_var_pattern = re.compile(r"\{([A-Z0-9_]+)\}")
 
-            expanded_paths = []
             location = value
             matches = env_var_pattern.findall(location)
             for match in matches:
@@ -115,10 +164,9 @@ class WorkflowRun(MongoModel):
                     )
                 # Replace the placeholder with the actual value
                 location = location.replace(f"{{{match}}}", env_value)
-            expanded_paths.append(location)
 
-            # Validate the expanded paths if in CLI context
-            return DirectoryPath(path=str(Path(location))).path
+            # A manifest run records the manifest itself as its location.
+            return _validated_local_location(location)
         else:
             return value
 

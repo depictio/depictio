@@ -18,7 +18,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-latest?style=flat-square&logo=fastapi&color=66C2B2)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-latest?style=flat-square&logo=react&logoColor=61DAFB&color=20232A)](https://react.dev/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-latest?style=flat-square&logo=mongodb&color=8FCA82)](https://www.mongodb.com/)
-[![MinIO](https://img.shields.io/badge/MinIO-latest?style=flat-square&logo=minio&color=E88A97)](https://min.io/)
+[![SeaweedFS](https://img.shields.io/badge/SeaweedFS-S3-blue?style=flat-square)](https://github.com/seaweedfs/seaweedfs)
 [![Pydantic](https://img.shields.io/badge/Pydantic-latest?style=flat-square&logo=pydantic&color=F18AAF)](https://pydantic-docs.helpmanual.io/)
 [![Polars](https://img.shields.io/badge/Polars-latest?style=flat-square&logo=polars&color=EDBB85)](https://pola-rs.github.io/polars-book/)
 
@@ -45,19 +45,16 @@
 
 ## Try Depictio
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/depictio/depictio)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/depictio/depictio?devcontainer_path=.devcontainer/try/devcontainer.json&quickstart=1)
+
+## Contribute a tool
+
+[![Tool Studio](https://img.shields.io/badge/tool%20studio-open-7C3AED?style=flat-square&logo=github)](https://depictio.github.io/depictio-tool-studio/)
 
 </div>
 
 Depictio is a self-hosrd modern, interactive platform that enables dashboards creation from bioinformatics workflows outputs.
 
 **Homepage**: [depictio.github.io](https://depictio.github.io/depictio-docs/latest/)
-
-**Telemetry**: Depictio sends an anonymous daily heartbeat (a random installation
-ID, the version, how it was deployed, which features are enabled, and deployment
-size as coarse buckets) so the project can count installations. No personal data,
-names, hostnames or content are ever sent. See [docs/telemetry.md](docs/telemetry.md)
-for the exact payload, how to inspect it on your own deployment, and how to disable
-it (`DEPICTIO_TELEMETRY_ENABLED=false` or `DO_NOT_TRACK=1`).
 
 Copyright(c) 2023-2026 Thomas Weber <thomas.weber@embl.de> (see LICENSE)

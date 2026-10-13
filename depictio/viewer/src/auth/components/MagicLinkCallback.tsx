@@ -2,15 +2,7 @@ import { Anchor, Loader, Stack, Text } from '@mantine/core';
 import { useEffect, useRef, useState } from 'react';
 import { exchangeMagicToken, persistSession } from 'depictio-react-core';
 import AuthCard from './AuthCard';
-
-const DEFAULT_REDIRECT = '/dashboards';
-
-/** Only allow same-origin relative paths as a redirect target, so a crafted
- *  `next=` can't bounce the freshly-authenticated user to an external site. */
-function safeNext(next: string | null): string {
-  if (!next || !next.startsWith('/') || next.startsWith('//')) return DEFAULT_REDIRECT;
-  return next;
-}
+import { postAuthDestination, safePostAuthTarget } from '../postAuthTarget';
 
 /**
  * Renders at /auth/magic#ticket=...&next=... — the passwordless login link a
@@ -32,7 +24,9 @@ export default function MagicLinkCallback() {
 
     const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
     const ticket = params.get('ticket');
-    const next = safeNext(params.get('next'));
+    const next = params.get('next')
+      ? safePostAuthTarget(params.get('next'))
+      : postAuthDestination();
 
     if (!ticket) {
       setError('This login link is missing its token. Please request a new one.');

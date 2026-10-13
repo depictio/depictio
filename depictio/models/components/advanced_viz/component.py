@@ -15,7 +15,7 @@ from pydantic import Field, model_validator
 
 from depictio.models.components.advanced_viz.configs import VizConfig
 from depictio.models.components.lite import BaseLiteComponent
-from depictio.models.components.types import AdvancedVizKind
+from depictio.models.components.types import AdvancedVizKind, FigureStyle
 
 
 class AdvancedVizLiteComponent(BaseLiteComponent):
@@ -34,6 +34,7 @@ class AdvancedVizLiteComponent(BaseLiteComponent):
             significance_col: significance
             significance_threshold: 0.05
             effect_threshold: 1.0
+          controls_placement: auto   # right on a full-width tile, top otherwise
     """
 
     component_type: Literal["advanced_viz"] = "advanced_viz"
@@ -55,6 +56,41 @@ class AdvancedVizLiteComponent(BaseLiteComponent):
     # Per-kind configuration. Pydantic discriminates by config.viz_kind.
     config: VizConfig = Field(
         ..., description="Per-kind configuration (column bindings + display defaults)"
+    )
+
+    # The card header, as a figure has it (see FigureLiteComponent). Only the
+    # frame follows the style: what the renderer draws inside it is its own.
+    figure_style: FigureStyle | None = Field(
+        default=None,
+        description="Unset takes the style of the grid section the tile sits in, else "
+        "`default`. `minimal`: the landing-page card -- the title beside an icon badge "
+        "with the subtitle inline, no border, and a link to the tab it summarises.",
+    )
+    subtitle: str | None = Field(
+        default=None, description="A few dimmed words after the title (`minimal` style)."
+    )
+    icon_name: str | None = Field(
+        default=None, description="Iconify id of the header badge (`minimal` style)."
+    )
+    icon_color: str | None = Field(
+        default=None,
+        description="Mantine palette name or CSS colour of the badge; unset uses the "
+        "brand's primary colour.",
+    )
+    hide_legend: bool | None = Field(
+        default=None, description="Draw the visualisation without its legend."
+    )
+    link: str | None = Field(
+        default=None,
+        description="The tab this tile summarises, as `tab:<name>`, linked from the end "
+        "of the card header (`minimal` style).",
+    )
+    controls_placement: Literal["auto", "right", "top", "popover"] | None = Field(
+        default=None,
+        description="Where the viz controls sit. Unset or `auto`: docked beside the plot "
+        "on a tile that spans its row, above it on a narrower one, behind the settings "
+        "icon on a `minimal` card. `right` / `top` dock them there whatever the width; "
+        "`popover` keeps them behind the icon. The icon folds a docked panel away.",
     )
 
     @model_validator(mode="before")
@@ -139,8 +175,15 @@ class AdvancedVizLiteComponent(BaseLiteComponent):
                     "— set `viz_kind` to pick one, or use a render id"
                 )
 
-        # role → <role>_col, with any user-supplied config taking precedence.
-        inherited = {f"{role}_col": col for role, col in (render.roles or {}).items()}
+        # role → its config field (`role_config_key`, shared with the catalog
+        # preview and the builder), with any user-supplied config taking
+        # precedence. Spelling a list-typed role as `<role>_col` here handed the
+        # renderer a key its config model does not have.
+        from depictio.models.components.advanced_viz.catalog import role_config_key
+
+        inherited = {
+            role_config_key(render.kind, role): col for role, col in (render.roles or {}).items()
+        }
         user_cfg = data.get("config") or {}
         merged = {**inherited, **user_cfg, "viz_kind": render.kind}
         return {**data, "viz_kind": render.kind, "config": merged}
@@ -181,6 +224,22 @@ class AdvancedVizLiteComponent(BaseLiteComponent):
 
     @model_validator(mode="after")
     def _kind_matches_config(self) -> "AdvancedVizLiteComponent":
+        """Keep the mirrored kind in step, following the retired-kind aliases.
+
+        ``config`` is validated through ``VizConfig``, whose before-validator
+        rewrites a retired kind (``ma``, ``qq``, ``enrichment``,
+        ``roc_pr_curve``) into the kind that survived it. The top-level
+        ``viz_kind`` mirrors ``config.viz_kind``, so it follows the same
+        rewrite rather than being reported as a mismatch. Normalising here
+        rather than in a before-validator keeps it independent of the order the
+        two before-validators above run in, and of whether the kind arrived
+        from the payload or from a ``use:`` expansion.
+        """
+        from depictio.models.components.advanced_viz.configs import resolve_viz_kind
+
+        resolved = resolve_viz_kind(self.viz_kind)
+        if resolved != self.viz_kind and resolved == self.config.viz_kind:
+            self.viz_kind = self.config.viz_kind
         if self.viz_kind != self.config.viz_kind:
             raise ValueError(
                 f"viz_kind={self.viz_kind!r} does not match config.viz_kind={self.config.viz_kind!r}"

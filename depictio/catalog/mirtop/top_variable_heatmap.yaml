@@ -1,0 +1,14 @@
+id: mirtop_top_variable_heatmap
+name: Top variable miRNAs
+mode: mirna/expression
+description: >-
+  The most variable expressed miRNAs on the log2(CPM + 1) scale, wide (miRNAs
+  x samples), with the design factors as column annotations when a design
+  table is given.
+find:
+  path_glob: "**/mirtop/joined_samples_mirtop.tsv"
+recipe: mirtop/top_variable_heatmap.py
+fixture: top_variable_heatmap.tsv
+renders_as:
+  - { id: top_variable_mirna_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: mirna} }
+  - { component: table }

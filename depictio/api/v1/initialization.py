@@ -38,11 +38,9 @@ async def run_initialization(
     logger.info("Starting system initialization...")
 
     if s3_config_input is None:
-        s3_config_input = settings.minio
+        s3_config_input = settings.s3
 
-    S3_storage_checks(s3_config_input, checks or ["s3"])
-
-    admin_user = await initialize_db(wipe=bool(settings.mongodb.wipe))
+    admin_user = await initialize_db()
 
     if admin_user:
         logger.info(f"Admin user retrieved: {admin_user.email}")
@@ -52,6 +50,20 @@ async def run_initialization(
             logger.error(f"Error creating bucket: {e}")
     else:
         logger.warning("No admin user available, skipping bucket creation")
+
+    # Verify storage only once the bucket exists: on a fresh deployment nothing
+    # provisions it ahead of the app, so create_bucket() above is what creates
+    # it. Checking any earlier fails startup on empty storage. create_bucket()
+    # logs and swallows its own errors, so these checks are still what turns
+    # genuinely broken storage into a refusal to start.
+    #
+    # "bucket" (HeadBucket) + "write" (put/delete a test object) are scoped to
+    # the configured bucket and are what actually matters for startup. "s3"
+    # (ListBuckets) is account-wide and fails outright against a
+    # least-privilege, bucket-scoped credential (e.g. EMBL's NetApp S3
+    # buckets, which only ever issue per-bucket keys) even when that
+    # credential works fine for everything the app actually does.
+    S3_storage_checks(s3_config_input, checks or ["bucket", "write"])
 
     from depictio.api.v1.db import initialization_collection
 

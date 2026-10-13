@@ -1,0 +1,11 @@
+sample	mapping	filtering	contacts	pairs
+HIC_ES_4	Low quality	Lost	Lost	161357311
+HIC_ES_4	Singleton	Lost	Lost	57775382
+HIC_ES_4	Uniquely mapped	Dangling end	Lost	51009354
+HIC_ES_4	Uniquely mapped	Dumped	Lost	5673410
+HIC_ES_4	Uniquely mapped	Religation	Lost	33502668
+HIC_ES_4	Uniquely mapped	Self circle	Lost	249107
+HIC_ES_4	Uniquely mapped	Valid pairs	Cis	167060018
+HIC_ES_4	Uniquely mapped	Valid pairs	Duplicate	18868269
+HIC_ES_4	Uniquely mapped	Valid pairs	Trans	36351801
+HIC_ES_4	Unmapped	Lost	Lost	4426294

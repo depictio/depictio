@@ -2,12 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActionIcon,
   Badge,
-  Box,
   Button,
   Collapse,
   Group,
   Paper,
   ScrollArea,
+  SegmentedControl,
   Stack,
   Switch,
   Table,
@@ -20,6 +20,7 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
+import { Network, Table2 } from 'lucide-react';
 
 import {
   deleteProjectLink,
@@ -29,7 +30,12 @@ import {
 } from 'depictio-react-core';
 import type { DCLink, ResolverInfo } from 'depictio-react-core';
 
+import { STROKE, useGlassPages } from '../../chrome/variants/glass/pages';
+import { DcTypeIcon } from '../dcTypeIcon';
+import ConnectionsMap from './ConnectionsMap';
+import type { ProjectJoin } from './ConnectionsMap';
 import LinkEditModal from './LinkEditModal';
+import { LinkMappingModal } from './LinkMappingInspector';
 
 interface DataCollectionOption {
   id: string;
@@ -43,8 +49,10 @@ interface LinksSectionProps {
   /** Demo / public mode: still render the buttons so the affordance stays
    *  visible, but disable their action paths. */
   canMutate: boolean;
-  /** Lifts links state to the parent so JoinsGraph can render edges. */
+  /** Lifts links state to the parent. */
   onLinksChange?: (links: DCLink[]) => void;
+  /** The project's joins, drawn beside the links in Glass's map view. */
+  joins?: ProjectJoin[];
 }
 
 /** Sortable column header for the links table. */
@@ -83,7 +91,11 @@ const LinksSection: React.FC<LinksSectionProps> = ({
   dataCollections,
   canMutate,
   onLinksChange,
+  joins = [],
 }) => {
+  const glass = useGlassPages();
+  // Glass opens on the map; the table stays one click away.
+  const [view, setView] = useState<'map' | 'table'>('map');
   const [links, setLinks] = useState<DCLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [resolvers, setResolvers] = useState<ResolverInfo[]>([]);
@@ -96,6 +108,9 @@ const LinksSection: React.FC<LinksSectionProps> = ({
   // guarantees "Target data collection" (and every other field) starts blank
   // when the user clicks Add link a second time.
   const [modalKey, setModalKey] = useState(0);
+  // Read-only mapping inspection, opened straight from a row's magnifier so
+  // checking what a link resolves to doesn't mean entering the edit form.
+  const [inspecting, setInspecting] = useState<DCLink | null>(null);
   // Collapsed by default to keep the Overview tab compact.
   const [opened, { toggle }] = useDisclosure(false);
   const [filter, setFilter] = useState('');
@@ -126,6 +141,22 @@ const LinksSection: React.FC<LinksSectionProps> = ({
     endpointTag(l.source_dc_id, (l as { source_dc_tag?: string }).source_dc_tag);
   const tgtTag = (l: DCLink) =>
     endpointTag(l.target_dc_id, (l as { target_dc_tag?: string }).target_dc_tag);
+  // An endpoint's collection type, by id or (template placeholders) by tag,
+  // so the table shows the same type icon as the manager and the map.
+  const dcByTag = useMemo(
+    () => new Map(dataCollections.map((d) => [d.tag, d] as const)),
+    [dataCollections],
+  );
+  const endpointCell = (idRef: string | undefined, tag: string) => (
+    <Group gap={6} wrap="nowrap">
+      <DcTypeIcon
+        type={(idRef && dcById.get(idRef)?.type) || dcByTag.get(tag)?.type}
+        size={14}
+        withTooltip={false}
+      />
+      <span>{tag}</span>
+    </Group>
+  );
   const resolverOf = (l: DCLink) => l.link_config?.resolver || 'direct';
 
   const visibleLinks = useMemo(() => {
@@ -220,6 +251,8 @@ const LinksSection: React.FC<LinksSectionProps> = ({
     setModalOpened(true);
   };
 
+  const closeInspect = () => setInspecting(null);
+
   const closeModal = () => {
     setModalOpened(false);
     // Clear `editing` too — without this, a saved edit would leave the
@@ -229,46 +262,7 @@ const LinksSection: React.FC<LinksSectionProps> = ({
 
   const disabledTip = canMutate ? undefined : 'Disabled in public/demo mode';
 
-  return (
-    <Paper withBorder radius="md" p="sm">
-      <Group justify="space-between" wrap="nowrap">
-        <UnstyledButton onClick={toggle} style={{ flex: 1, minWidth: 0 }}>
-          <Group gap="xs" wrap="nowrap">
-            <Icon icon="mdi:link-variant" width={20} />
-            <Title order={4}>Cross-DC links</Title>
-            <Badge variant="light" size="sm">
-              {links.length}
-            </Badge>
-            <Box style={{ flex: 1 }} />
-            <Icon icon={opened ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={22} />
-          </Group>
-        </UnstyledButton>
-        <Tooltip label={disabledTip} disabled={canMutate}>
-          <Button
-            data-testid="add-link-btn"
-            leftSection={<Icon icon="mdi:plus" width={16} />}
-            onClick={openCreate}
-            disabled={!canMutate}
-            size="xs"
-          >
-            Add link
-          </Button>
-        </Tooltip>
-      </Group>
-
-      <Collapse in={opened}>
-        <ScrollArea.Autosize mah={460} type="auto" offsetScrollbars pt="sm">
-          {loading && <Text size="sm">Loading…</Text>}
-
-          {!loading && links.length === 0 && (
-            <Text size="sm" c="dimmed">
-              No cross-DC links defined. Add one to connect a column in one data
-              collection to rows in another via a resolver (direct, sample
-              mapping, pattern, regex, or wildcard).
-            </Text>
-          )}
-
-          {!loading && links.length > 0 && (
+  const linksTable = (
             <Stack gap="sm">
               <TextInput
                 placeholder="Filter links…"
@@ -302,15 +296,22 @@ const LinksSection: React.FC<LinksSectionProps> = ({
             {visibleLinks.map((link) => {
               return (
                 <Table.Tr key={link.id}>
-                  <Table.Td>{srcTag(link)}</Table.Td>
+                  <Table.Td>{endpointCell(link.source_dc_id, srcTag(link))}</Table.Td>
                   <Table.Td>
                     <Text fz="xs" ff="monospace">
                       {link.source_column}
                     </Text>
                   </Table.Td>
-                  <Table.Td>{tgtTag(link)}</Table.Td>
-                  <Table.Td>
-                    <Badge size="sm" variant="light">
+                  <Table.Td>{endpointCell(link.target_dc_id, tgtTag(link))}</Table.Td>
+                  <Table.Td style={{ whiteSpace: 'nowrap' }}>
+                    {/* Badge clips its label by default, which made the widest
+                        resolver name read "sample_map…" once the description
+                        column claimed the slack. */}
+                    <Badge
+                      size="sm"
+                      variant="light"
+                      styles={{ label: { overflow: 'visible' } }}
+                    >
                       {link.link_config?.resolver || 'direct'}
                     </Badge>
                   </Table.Td>
@@ -330,7 +331,18 @@ const LinksSection: React.FC<LinksSectionProps> = ({
                     </Text>
                   </Table.Td>
                   <Table.Td>
-                    <Group gap={4} justify="flex-end">
+                    <Group gap={4} justify="flex-end" wrap="nowrap">
+                      <Tooltip label="Inspect mapping" withArrow>
+                        <ActionIcon
+                          variant="subtle"
+                          color="teal"
+                          onClick={() => setInspecting(link)}
+                          aria-label="Inspect mapping"
+                          data-testid="inspect-link-btn"
+                        >
+                          <Icon icon="mdi:magnify-scan" width={16} />
+                        </ActionIcon>
+                      </Tooltip>
                       <Tooltip label={disabledTip} disabled={canMutate}>
                         <ActionIcon
                           variant="subtle"
@@ -360,9 +372,122 @@ const LinksSection: React.FC<LinksSectionProps> = ({
           </Table.Tbody>
         </Table>
             </Stack>
-          )}
-        </ScrollArea.Autosize>
+  );
+
+  return (
+    <Paper withBorder radius="md" p="sm" data-testid="links-section">
+      {/* Same header structure as the Data Collections Manager: clickable
+          title area, then the primary action, then the chevron as an
+          ActionIcon on the far right. */}
+      <Group justify="space-between" wrap="nowrap">
+        <UnstyledButton
+          onClick={toggle}
+          style={{ flex: 1, minWidth: 0 }}
+          data-testid="links-section-toggle"
+        >
+          <Group gap="xs" wrap="nowrap">
+            <Icon icon="mdi:link-variant" width={20} />
+            <Title order={4}>Cross-DC links</Title>
+            <Badge variant="light" size="sm">
+              {links.length}
+            </Badge>
+          </Group>
+        </UnstyledButton>
+        <Group gap="xs" wrap="nowrap">
+          <Tooltip label={disabledTip} disabled={canMutate}>
+            <Button
+              data-testid="add-link-btn"
+              leftSection={<Icon icon="mdi:plus" width={16} />}
+              onClick={openCreate}
+              disabled={!canMutate}
+              size="xs"
+            >
+              Add link
+            </Button>
+          </Tooltip>
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            onClick={toggle}
+            aria-label={opened ? 'Collapse cross-DC links' : 'Expand cross-DC links'}
+          >
+            <Icon icon={opened ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={22} />
+          </ActionIcon>
+        </Group>
+      </Group>
+
+      <Collapse in={opened}>
+        {glass && (links.length > 0 || joins.length > 0) ? (
+          <>
+            <div className="cm-bar">
+              <SegmentedControl
+                size="xs"
+                value={view}
+                onChange={(v) => setView(v as 'map' | 'table')}
+                aria-label="Links view"
+                data-testid="links-view-switch"
+                data={[
+                  {
+                    value: 'map',
+                    label: (
+                      <Group gap={6} wrap="nowrap">
+                        <Network size={14} strokeWidth={STROKE} aria-hidden />
+                        <span>Map</span>
+                      </Group>
+                    ),
+                  },
+                  {
+                    value: 'table',
+                    label: (
+                      <Group gap={6} wrap="nowrap">
+                        <Table2 size={14} strokeWidth={STROKE} aria-hidden />
+                        <span>Table</span>
+                      </Group>
+                    ),
+                  },
+                ]}
+              />
+            </div>
+            {view === 'map' ? (
+              <ConnectionsMap
+                dataCollections={dataCollections}
+                links={links}
+                joins={joins}
+                canMutate={canMutate}
+                onInspect={setInspecting}
+                onEdit={openEdit}
+              />
+            ) : (
+              <ScrollArea.Autosize mah={460} type="auto" offsetScrollbars>
+                {linksTable}
+              </ScrollArea.Autosize>
+            )}
+          </>
+        ) : (
+          <ScrollArea.Autosize mah={460} type="auto" offsetScrollbars pt="sm">
+            {loading && <Text size="sm">Loading…</Text>}
+
+            {!loading && links.length === 0 && (
+              <Text size="sm" c="dimmed">
+                {glass
+                  ? 'Nothing is connected yet. A link lets a filter on one data collection narrow another.'
+                  : 'No cross-DC links defined. Add one to connect a column in one data collection to rows in another via a resolver (direct, sample mapping, pattern, regex, or wildcard).'}
+              </Text>
+            )}
+
+            {!loading && links.length > 0 && linksTable}
+          </ScrollArea.Autosize>
+        )}
       </Collapse>
+
+      <LinkMappingModal
+        opened={!!inspecting}
+        projectId={projectId}
+        link={inspecting}
+        sourceTag={inspecting ? srcTag(inspecting) : ''}
+        targetTag={inspecting ? tgtTag(inspecting) : ''}
+        onClose={closeInspect}
+      />
 
       <LinkEditModal
         key={modalKey}

@@ -1,6 +1,6 @@
 """Drive the benchmark matrix against a live Depictio stack and collect timings.
 
-Per cell: generate data -> write configs -> ingest (``depictio run``) -> import
+Per cell: generate data -> write configs -> ingest (``depictio ingest``) -> import
 the dashboard -> discover its components -> render each one, timing the HTTP
 round-trip and reading the ``X-Celery-Path`` header. Results are appended to
 ``results.jsonl`` (one row per rendered component).
@@ -322,7 +322,7 @@ def _api(base: str) -> str:
 def _ingest(
     cell: Cell, cli_config_path: str, gen: GeneratedConfigs, interpreter: str
 ) -> tuple[float, str]:
-    """Run ``depictio run`` for the generated project.
+    """Run ``depictio ingest`` for the generated project.
 
     Returns ``(wall_clock_ms, stdout)``. The stdout carries the CLI's
     ``DEPICTIO_INGEST_TIMINGS`` markers — without them an ingest row can only
@@ -336,8 +336,8 @@ def _ingest(
     proc = subprocess.run(
         [
             *_cli_argv(interpreter),
-            "run",
-            "--CLI-config-path",
+            "ingest",
+            "--server",
             cli_config_path,
             "--project-config-path",
             gen.project_path,
@@ -378,7 +378,7 @@ def _project_id_by_name(client, base: str, headers: dict, project_name: str) -> 
 def _reset_project(client, base: str, headers: dict, project_name: str) -> bool:
     """Delete ``project_name`` if it exists, so the cell ingests from scratch.
 
-    ``depictio run --overwrite`` overwrites the *config*, not the data: runs are
+    ``depictio ingest --overwrite`` overwrites the *config*, not the data: runs are
     upserted, so re-running a cell against a project that already exists ADDS its
     runs to the ones already there. A second pass over a 1 GB cell silently
     becomes a 2 GB one — the ingest then times out, and any measurement that did
@@ -1393,8 +1393,8 @@ def run_ingest_matrix(
     """Ingest each cell (no render) and append ``kind=="ingest"`` rows.
 
     Dispatches per :class:`~benchmark.matrix.DCKind`: TABLE/MULTIQC run through
-    ``depictio run``; IMAGES additionally pushes the PNGs via ``depictio images
-    push``. The per-phase ``DEPICTIO_INGEST_TIMINGS`` markers emitted by the CLI
+    ``depictio ingest``; IMAGES additionally pushes the PNGs via ``depictio data
+    push-images``. The per-phase ``DEPICTIO_INGEST_TIMINGS`` markers emitted by the CLI
     are parsed out of captured stdout to fill the phase breakdown + peak RSS.
 
     ``run_tag`` namespaces the generated projects so this invocation ingests into
@@ -1450,15 +1450,14 @@ def run_ingest_matrix(
                 cfg_dir,
                 s3_bucket=s3_bucket,
                 metadata_csv=metadata_csv,
-                images_dir=images_dir,
                 run_tag=run_tag,
             )
 
-            # ── ingest (run) ─────────────────────────────────────────────────
+            # ── ingest ───────────────────────────────────────────────────────
             run_args = [
                 *_cli_argv(interpreter),
-                "run",
-                "--CLI-config-path",
+                "ingest",
+                "--server",
                 cli_config_path,
                 "--project-config-path",
                 gen.project_path,
@@ -1472,7 +1471,9 @@ def run_ingest_matrix(
             rc, out, err, wall_ms = _run_cli_capture(run_args, cwd=_REPO_ROOT)
             if rc != 0:
                 emit(
-                    _ingest_kind_error_row(cell, input_bytes, f"run failed (rc={rc}): {err[-300:]}")
+                    _ingest_kind_error_row(
+                        cell, input_bytes, f"ingest failed (rc={rc}): {err[-300:]}"
+                    )
                 )
                 continue
 
@@ -1482,11 +1483,11 @@ def run_ingest_matrix(
                 prc, pout, perr, pwall = _run_cli_capture(
                     [
                         *_cli_argv(interpreter),
-                        "images",
-                        "push",
+                        "data",
+                        "push-images",
                         images_dir,
                         gen.s3_base_folder,
-                        "--CLI-config-path",
+                        "--server",
                         cli_config_path,
                         "--overwrite",
                     ],
@@ -1497,7 +1498,7 @@ def run_ingest_matrix(
                 if prc != 0:
                     emit(
                         _ingest_kind_error_row(
-                            cell, input_bytes, f"images push failed (rc={prc}): {perr[-300:]}"
+                            cell, input_bytes, f"data push-images failed (rc={prc}): {perr[-300:]}"
                         )
                     )
                     continue

@@ -1,0 +1,17 @@
+id: dexseq_results
+name: Differential exon/transcript usage
+mode: differential/usage
+description: >-
+  DEXSeq per-transcript usage statistics from nanoseq's Bambu-based
+  differential expression subworkflow, with the significance call
+  precomputed on the gene-level adjusted q-value.
+find: { path_glob: "**/dexseq/*.results.txt" }
+recipe: dexseq/results.py
+fixture: results.tsv
+renders_as:
+  - { id: volcano, component: advanced_viz, kind: volcano, roles: {feature_id: feature_id, effect_size: log2fc, significance: padj} }
+  - { id: qq, component: advanced_viz, kind: qq, roles: {p_value: pvalue} }
+  - { component: card, column: feature_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: direction, top_n_count: 3 }
+  - { component: card, column: direction, aggregation: count, secondary_layout: donut, breakdown_col: direction }
+  - { component: card, column: log2fc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table, row_selection_enabled: true, row_selection_column: feature_id }

@@ -1,0 +1,20 @@
+/*
+ * The notes editor fills its panel. Mantine's RichTextEditor.Content is three
+ * nested boxes (typography wrapper > content > .ProseMirror) and only the
+ * outermost one is a flex item of the panel: the other two stay as tall as the
+ * text, so a short note was a one-line strip with dead space under it, and a
+ * click below that line did not reach the editor. Each level stretches here;
+ * the wrapper keeps the scroll, so a long note scrolls under a fixed toolbar.
+ */
+.mantine-RichTextEditor-typographyStylesProvider {
+  display: flex;
+  flex-direction: column;
+}
+.mantine-RichTextEditor-typographyStylesProvider > .mantine-RichTextEditor-content {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+}
+.mantine-RichTextEditor-typographyStylesProvider .ProseMirror {
+  flex: 1 0 auto;
+}

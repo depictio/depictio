@@ -15,12 +15,19 @@ import {
 import { Icon } from '@iconify/react';
 
 import type { DashboardListEntry, ProjectListEntry } from 'depictio-react-core';
+import { parseTemplateOrigin } from 'depictio-react-core';
+import { useListingAccents } from '../lib/useListingAccents';
+import { useGlassPages } from '../chrome/variants/glass/pages';
 
 import DashboardsToolbar from './DashboardsToolbar';
+import SharedViewBanner from '../components/listing/SharedViewBanner';
+import type { SharedViewScope } from '../components/listing/SharedViewBanner';
+import { listingUrl } from '../lib/listingUrl';
 import DashboardThumbnailView from './views/DashboardThumbnailView';
-import DashboardListView from './views/DashboardListView';
-import DashboardTableView from './views/DashboardTableView';
-import { useDashboardViewPrefs } from './hooks/useDashboardViewPrefs';
+import DashboardTableView, { useDashboardTableColumns } from './views/DashboardTableView';
+import TableDisplayMenu from '../components/TableDisplayMenu';
+import { DEFAULT_DENSITY, useDashboardViewPrefs } from './hooks/useDashboardViewPrefs';
+import type { ViewMode } from './hooks/useDashboardViewPrefs';
 import { useDashboardFilters } from './hooks/useDashboardFilters';
 import { useDashboardPinsAndRecents } from './hooks/useDashboardPinsAndRecents';
 import {
@@ -34,6 +41,9 @@ interface DashboardsListProps {
   dashboards: DashboardListEntry[];
   projects: ProjectListEntry[];
   currentUserEmail: string | null;
+  /** Deployment default for the view mode, from the auth round-trip. It only
+   *  reaches someone who never picked a view themselves. */
+  defaultView?: ViewMode | null;
   /** When true, pin button is rendered but disabled. Public/demo deployments
    *  pass this so anon visitors don't accumulate per-browser preferences that
    *  bleed across visitor sessions. */
@@ -54,6 +64,17 @@ export interface CategoryInfo {
   label: string;
   color: string;
 }
+
+/** The default sections' hues on a Glass page. The page's own colour goes to
+ *  the dashboards you own, the rest take calm, distinct hues; Public matches
+ *  the globe on the Visibility tag, and no section borrows the Projects teal. */
+const GLASS_SECTION_INK: Record<string, string> = {
+  owned: 'var(--mantine-primary-color-filled)',
+  accessed: 'var(--mantine-color-indigo-5)',
+  public: 'var(--mantine-color-cyan-6)',
+  nfcore: 'var(--mantine-color-green-6)',
+  demo: 'var(--mantine-color-pink-5)',
+};
 
 const SectionHeader: React.FC<{
   icon: string;
@@ -132,6 +153,7 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
   dashboards,
   projects,
   currentUserEmail,
+  defaultView,
   pinDisabled = false,
   onView,
   onEdit,
@@ -142,6 +164,8 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
   onBulkExport,
   onBulkDelete,
 }) => {
+  const accent = useListingAccents('dashboards');
+  const glass = useGlassPages();
   const projectNames = useMemo(() => projectNameLookup(projects), [projects]);
   // Per-project template_origin so the cards can render a TemplateChip
   // without re-fetching the project. Only populated for projects that were
@@ -152,6 +176,7 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
   );
   const {
     prefs,
+    arrivedScoped,
     setView,
     setGroupBy,
     setSortBy,
@@ -159,20 +184,54 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
     setFilters,
     setDensity,
     setOnlyPinned,
+    setCardsPerRow,
+    setCardBadges,
     clearFilters,
-  } = useDashboardViewPrefs();
+  } = useDashboardViewPrefs(defaultView);
   const { pinnedIds, recents, togglePin } = useDashboardPinsAndRecents();
+  // Table mode always passes the section mapping, so Category is offered.
+  const tableColumns = useDashboardTableColumns(true);
 
   const filterCtx = useMemo(
-    () => ({ projectNames, currentUserEmail }),
-    [projectNames, currentUserEmail],
+    () => ({ projectNames, projectTemplates, currentUserEmail }),
+    [projectNames, projectTemplates, currentUserEmail],
   );
 
-  const { sections, totalAfterSearch } = useDashboardFilters(
-    dashboards,
-    prefs,
-    filterCtx,
+  const {
+    sections: rawSections,
+    totalAfterSearch,
+    totalMatching,
+    totalDashboards,
+  } = useDashboardFilters(dashboards, prefs, filterCtx);
+  const sections = useMemo(
+    () =>
+      glass
+        ? rawSections.map((s) =>
+            GLASS_SECTION_INK[s.key] ? { ...s, iconColor: GLASS_SECTION_INK[s.key] } : s,
+          )
+        : rawSections,
+    [glass, rawSections],
   );
+
+  // A link can name a project by id (what the share button emits) or by name
+  // (what a person types). Swap any name that resolves onto its id once the
+  // projects have loaded, so the toolbar's Project dropdown shows the chip
+  // selected rather than a stray unknown value. Idempotent: after the swap
+  // the entry is an id and matches nothing here.
+  useEffect(() => {
+    if (prefs.filters.projects.length === 0 || projectNames.size === 0) return;
+    const byName = new Map<string, string>();
+    for (const [id, name] of projectNames) byName.set(name.toLowerCase(), id);
+    let changed = false;
+    const resolved = prefs.filters.projects.map((value) => {
+      if (projectNames.has(value)) return value;
+      const id = byName.get(value.toLowerCase());
+      if (!id) return value;
+      changed = true;
+      return id;
+    });
+    if (changed) setFilters({ ...prefs.filters, projects: resolved });
+  }, [prefs.filters, projectNames, setFilters]);
 
   // Build the project / owner option lists for the toolbar dropdowns from the
   // currently-loaded dashboards (cheap, no extra fetch).
@@ -190,6 +249,48 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [dashboards, projectNames]);
+
+  // Template options come from the projects the listed dashboards actually
+  // belong to, so the dropdown never offers a pipeline that would filter down
+  // to nothing. Each source contributes an "all pipelines" entry alongside its
+  // individual pipelines.
+  const templateOptions = useMemo(() => {
+    const bySource = new Map<string, Set<string>>();
+    for (const d of dashboards) {
+      if (d.parent_dashboard_id) continue;
+      const pid = d.project_id ? String(d.project_id) : '';
+      if (!pid) continue;
+      const parsed = parseTemplateOrigin(projectTemplates.get(pid));
+      if (!parsed) continue;
+      const pipelines = bySource.get(parsed.source) ?? new Set<string>();
+      if (parsed.repo) pipelines.add(parsed.repo);
+      bySource.set(parsed.source, pipelines);
+    }
+    const options: { value: string; label: string }[] = [];
+    for (const source of Array.from(bySource.keys()).sort()) {
+      const pipelines = Array.from(bySource.get(source) ?? []).sort();
+      if (pipelines.length > 1) {
+        options.push({ value: source, label: `${source} (all pipelines)` });
+      }
+      for (const repo of pipelines) {
+        options.push({ value: `${source}/${repo}`, label: `${source} / ${repo}` });
+      }
+      if (pipelines.length === 0) options.push({ value: source, label: source });
+    }
+    return options;
+  }, [dashboards, projectTemplates]);
+
+  const workflowOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const d of dashboards) {
+      if (d.parent_dashboard_id) continue;
+      const wf = typeof d.workflow_system === 'string' ? d.workflow_system.trim() : '';
+      if (wf && wf !== 'none') set.add(wf);
+    }
+    return Array.from(set)
+      .sort()
+      .map((value) => ({ value, label: value }));
+  }, [dashboards]);
 
   const ownerOptions = useMemo(() => {
     const set = new Set<string>();
@@ -339,6 +440,13 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
     setOpenSections(defaultOpenSig ? defaultOpenSig.split('|') : []);
   }, [userToggled, dashboards.length, defaultOpenSig]);
 
+  // One Set shared by every card, rebuilt only when the selection changes, so
+  // the memoised renderer below doesn't churn on each render.
+  const visibleCardBadges = useMemo(
+    () => new Set(prefs.cardBadges),
+    [prefs.cardBadges],
+  );
+
   // Renderer for the thumbnails view (used inside accordion sections).
   const renderThumbnailsFor = useCallback(
     (groups: GroupedDashboards[]) => (
@@ -346,6 +454,8 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
         groups={groups}
         projectNames={projectNames}
         projectTemplates={projectTemplates}
+        cardsPerRow={prefs.cardsPerRow}
+        visibleBadges={visibleCardBadges}
         currentUserEmail={currentUserEmail}
         pinnedIds={pinnedIds}
         pinDisabled={pinDisabled}
@@ -360,6 +470,8 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
     [
       projectNames,
       projectTemplates,
+      prefs.cardsPerRow,
+      visibleCardBadges,
       currentUserEmail,
       pinnedIds,
       pinDisabled,
@@ -396,6 +508,80 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
 
   const noResults = totalAfterSearch === 0 && prefs.search.trim().length > 0;
 
+  // What the shared link narrowed to, spelled out for the banner. Only the
+  // filters that hide rows appear here — view mode and sort order travel in
+  // the URL too, but they change nothing about *what* the recipient sees.
+  const scopeChips: SharedViewScope[] = [];
+  const dropFrom = (key: 'templates' | 'projects' | 'workflows' | 'owners', value: string) =>
+    setFilters({
+      ...prefs.filters,
+      [key]: prefs.filters[key].filter((v) => v !== value),
+    });
+  for (const value of prefs.filters.templates) {
+    const opt = templateOptions.find((o) => o.value === value);
+    scopeChips.push({
+      key: `t:${value}`,
+      label: opt?.label ?? value,
+      onRemove: () => dropFrom('templates', value),
+    });
+  }
+  for (const id of prefs.filters.projects) {
+    scopeChips.push({
+      key: `p:${id}`,
+      label: projectNames.get(id) ?? id,
+      onRemove: () => dropFrom('projects', id),
+    });
+  }
+  for (const value of prefs.filters.workflows) {
+    scopeChips.push({
+      key: `w:${value}`,
+      label: value,
+      onRemove: () => dropFrom('workflows', value),
+    });
+  }
+  for (const owner of prefs.filters.owners) {
+    scopeChips.push({
+      key: `o:${owner}`,
+      label: owner === '__mine__' ? 'Mine' : owner,
+      onRemove: () => dropFrom('owners', owner),
+    });
+  }
+  if (prefs.filters.visibility !== 'all') {
+    scopeChips.push({
+      key: 'v',
+      label: prefs.filters.visibility === 'public' ? 'Public only' : 'Private only',
+      onRemove: () => setFilters({ ...prefs.filters, visibility: 'all' }),
+    });
+  }
+  if (prefs.onlyPinned) {
+    scopeChips.push({
+      key: 'pinned',
+      label: 'Favorites only',
+      onRemove: () => setOnlyPinned(false),
+    });
+  }
+  if (prefs.search.trim()) {
+    scopeChips.push({
+      key: 'q',
+      label: `"${prefs.search.trim()}"`,
+      onRemove: () => setSearch(''),
+    });
+  }
+
+  // The same template scope reads just as well on the projects listing, and
+  // "show me this pipeline" usually means both. One link per page was the
+  // call, so the pages point at each other instead of the share button
+  // offering a menu.
+  const crossLink =
+    prefs.filters.templates.length > 0
+      ? {
+          href: listingUrl('/projects', { template: prefs.filters.templates }),
+          label: 'See the matching projects',
+        }
+      : undefined;
+
+  const showBanner = arrivedScoped && scopeChips.length > 0;
+
   // Shared chrome: toolbar + optional banners + content.
   const chrome = (content: React.ReactNode) => (
     <Stack gap="md">
@@ -403,6 +589,10 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
         prefs={prefs}
         projectOptions={projectOptions}
         ownerOptions={ownerOptions}
+        templateOptions={templateOptions}
+        workflowOptions={workflowOptions}
+        matchingCount={totalMatching}
+        showFilterChips={!showBanner}
         pinnedCount={pinnedGroups.length}
         pinDisabled={pinDisabled}
         setView={setView}
@@ -411,8 +601,31 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
         setSearch={setSearch}
         setFilters={setFilters}
         setOnlyPinned={setOnlyPinned}
+        setCardsPerRow={setCardsPerRow}
+        setCardBadges={setCardBadges}
         clearFilters={clearFilters}
+        tableDisplay={
+          <TableDisplayMenu
+            section="dashboards"
+            density={prefs.density}
+            defaultDensity={DEFAULT_DENSITY}
+            onDensityChange={setDensity}
+            columns={tableColumns}
+          />
+        }
       />
+
+      {showBanner && (
+        <SharedViewBanner
+          scope={scopeChips}
+          shown={totalMatching}
+          total={totalDashboards}
+          noun="dashboard"
+          crossLink={crossLink}
+          color={accent.tertiary}
+          onClearAll={clearFilters}
+        />
+      )}
 
       {noResults ? (
         <Paper p="xl" radius="md" withBorder>
@@ -430,7 +643,7 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
               </Anchor>
               .
             </Text>
-            <Badge variant="light" color="gray">
+            <Badge variant="light" color="gray" className="gp-tag-plain">
               Searched: <strong>"{prefs.search}"</strong>
             </Badge>
           </Stack>
@@ -441,9 +654,9 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
     </Stack>
   );
 
-  // List & Table modes flatten everything into a single section with a
-  // Category column. Pinned items float to the top of the flat list.
-  if (prefs.view === 'list' || prefs.view === 'table') {
+  // Table mode flattens everything into a single section with a Category
+  // column. Pinned items float to the top of the flat list.
+  if (prefs.view === 'table') {
     if (flatOrderedGroups.length === 0 && !noResults) {
       return chrome(
         <Paper p="xl" radius="md" withBorder>
@@ -454,23 +667,7 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
       );
     }
 
-    const flatContent =
-      prefs.view === 'list' ? (
-        <DashboardListView
-          groups={flatOrderedGroups}
-          projectNames={projectNames}
-          currentUserEmail={currentUserEmail}
-          pinnedIds={pinnedIds}
-          pinDisabled={pinDisabled}
-          categoryById={categoryById}
-          onView={onView}
-          onEdit={onEdit}
-          onDelete={onDelete}
-          onDuplicate={onDuplicate}
-          onExport={onExport}
-          onTogglePin={togglePin}
-        />
-      ) : (
+    const flatContent = (
         <DashboardTableView
           groups={flatOrderedGroups}
           projectNames={projectNames}
@@ -478,14 +675,15 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
           pinnedIds={pinnedIds}
           pinDisabled={pinDisabled}
           density={prefs.density}
+          columns={tableColumns}
           categoryById={categoryById}
+          recents={recents}
           onView={onView}
           onEdit={onEdit}
           onDelete={onDelete}
           onDuplicate={onDuplicate}
           onExport={onExport}
           onTogglePin={togglePin}
-          onSetDensity={setDensity}
           onBulkExport={(ids) => {
             const targets = ids
               .map((id) => allGroupedById.get(id)?.parent)

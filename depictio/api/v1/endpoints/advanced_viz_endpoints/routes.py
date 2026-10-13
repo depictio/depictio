@@ -29,11 +29,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
     oauth2_scheme_optional,
 )
 from depictio.models.components.advanced_viz.sampling import SamplingPolicy
-from depictio.models.components.advanced_viz.schemas import (
-    CANONICAL_SCHEMAS,
-    role_dtype_specs,
-)
-from depictio.models.components.types import AdvancedVizKind
+from depictio.models.components.advanced_viz.schemas import kind_descriptors
 from depictio.models.models.base import PyObjectId
 
 logger = logging.getLogger(__name__)
@@ -138,133 +134,105 @@ def _apply_link_filters_to_payload(
         payload["filter_metadata"] = resolved
 
 
-_KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
-    "phylogenetic": {
-        "label": "Phylogenetic tree",
-        "description": "Newick tree + tip metadata (Microreact-style): 5 layouts, tip search, subtree highlight.",
-        "icon": "tabler:hierarchy-3",
-    },
-    "volcano": {
-        "label": "Volcano plot",
-        "description": "Effect size vs significance, threshold lines, search & top-N labels.",
-        "icon": "tabler:chart-scatter",
-    },
-    "embedding": {
-        "label": "Embedding / clustering",
-        "description": (
-            "2D/3D sample embedding (PCA / UMAP / t-SNE / PCoA) — accepts a "
-            "pre-computed DC (dim_1, dim_2 columns) or runs the reduction "
-            "live on a wide sample×feature matrix DC via Celery."
-        ),
-        "icon": "tabler:atom",
-    },
-    "manhattan": {
-        "label": "Manhattan plot",
-        "description": "chr / pos / score scatter — works for true GWAS, peak qvalues, and variant AF.",
-        "icon": "tabler:chart-histogram",
-        "category": "tool",
-    },
-    "stacked_taxonomy": {
-        "label": "Stacked taxonomy",
-        "description": "Per-sample stacked relative-abundance bar with rank dropdown.",
-        "icon": "tabler:chart-pie",
-    },
-    "rarefaction": {
-        "label": "Rarefaction curves",
-        "description": "Alpha-diversity vs sequencing depth — one line per sample with ±SE band and group colouring.",
-        "icon": "tabler:chart-line",
-    },
-    "da_barplot": {
-        "label": "Differential-abundance bars (tool)",
-        "description": (
-            'Ranked signed-LFC top-N features for differential abundance — `contrast_view: "all"` '
-            "(default) faceted small-multiples, or any specific contrast value for a single-panel drill-in. "
-            "Replaces the previous ancombc_differentials kind (auto-migrated)."
-        ),
-        "icon": "tabler:chart-bar-popular",
-        "category": "tool",
-    },
-    "enrichment": {
-        "label": "GSEA / pathway enrichment (tool)",
-        "description": "Dot plot: term on y, NES on x, dot size = gene-set size, colour = -log10(padj).",
-        "icon": "tabler:chart-dots",
-        "category": "tool",
-    },
-    "complex_heatmap": {
-        "label": "ComplexHeatmap (clustered)",
-        "description": "Clustered heatmap with dendrograms + annotation tracks. Server-side clustering via plotly-complexheatmap, dispatched as a Celery task.",
-        "icon": "tabler:grid-pattern",
-    },
-    "upset_plot": {
-        "label": "UpSet plot",
-        "description": "Set-intersection visualisation (alternative to Venn diagrams). Server-side compute via plotly-upset, dispatched as a Celery task.",
-        "icon": "tabler:chart-bar-popular",
-    },
-    "ma": {
-        "label": "MA plot",
-        "description": "Mean log intensity vs log2 fold change — same hits as a volcano, classic DE / proteomics layout.",
-        "icon": "tabler:chart-bell",
-    },
-    "dot_plot": {
-        "label": "Dot plot",
-        "description": "scanpy / Seurat marker dot plot: cluster × gene with size = fraction expressing, colour = mean expression.",
-        "icon": "tabler:circle-dot",
-    },
-    "lollipop": {
-        "label": "Lollipop / needle plot",
-        "description": "Variant tracks along genes: vertical stems coloured by consequence, marker size = effect.",
-        "icon": "tabler:chart-arcs",
-    },
-    "qq": {
-        "label": "QQ plot",
-        "description": "Quantile-quantile of -log10(p) vs uniform null — standard p-value distribution QC.",
-        "icon": "tabler:chart-line",
-    },
-    "sunburst": {
-        "label": "Sunburst",
-        "description": "Hierarchical taxonomy / pathway viewer — concentric rings from root to leaf.",
-        "icon": "tabler:sun",
-    },
-    "oncoplot": {
-        "label": "Oncoplot",
-        "description": "Sample × gene mutation matrix with discrete mutation-type colours and frequency strips.",
-        "icon": "tabler:grid-pattern",
-    },
-    "coverage_track": {
-        "label": "Coverage track",
-        "description": "Read depth / signal along a coordinate axis. Optional per-sample faceting and categorical annotation lane (gene region, peak class, …).",
-        "icon": "tabler:chart-area-line",
-    },
-    "sankey": {
-        "label": "Sankey (categorical flow)",
-        "description": "Flow across N ordered categorical levels (e.g. sample → lineage → clade). Server-side aggregation, client-side colour / opacity tweaks.",
-        "icon": "tabler:chart-sankey",
-    },
-}
+def _resolve_annotation_join(payload: dict) -> None:
+    """Turn ``col_annotation_cols`` into a resolved ``annotation_join`` payload entry.
+
+    The component names columns, not a data collection: the source is whichever
+    enabled link *targets* this matrix and whose source DC is declared
+    ``metatype: Metadata``. That gate is the whole safety story. An rnaseq
+    expression matrix is the target of two links, one from the samplesheet and
+    one from a derived per-sample stats table; only the first is metadata, so
+    the join resolves without the dashboard naming anything.
+
+    Ambiguity is never guessed. Zero or several surviving candidates leave the
+    payload untouched (no strip, a log line saying which), and
+    ``annotation_source_dc_tag`` is how a dashboard settles it.
+
+    Resolution runs even when no column has been picked yet, because the
+    viz-controls picker cannot offer what was never resolved. An empty ``cols``
+    therefore still yields a join: the worker reads it to list the options and
+    draws nothing. The cost of that is one Mongo read here and, in the worker, a
+    load of a samplesheet-sized table.
+
+    Called before ``_compute_cache_key`` so the resolved source and column list
+    land in the cache namespace: changing the annotation columns has to miss the
+    cache the same way changing ``normalize`` does.
+    """
+    cols = [str(c) for c in (payload.get("col_annotation_cols") or []) if c]
+    wf_id, dc_id = payload.get("wf_id"), payload.get("dc_id")
+    if not wf_id or not dc_id:
+        return
+
+    from depictio.api.v1.db import projects_collection
+
+    try:
+        wf_oid = ObjectId(str(wf_id))
+    except Exception:
+        return
+    project = projects_collection.find_one({"workflows._id": wf_oid}, {"links": 1, "workflows": 1})
+    if not project:
+        return
+
+    # DC id -> (tag, metatype, owning workflow id). The worker needs the owning
+    # workflow to load the Delta table, and it is not on the link itself.
+    dcs: dict[str, tuple[str, str | None, str]] = {}
+    for wf in project.get("workflows") or []:
+        for dc in wf.get("data_collections") or []:
+            dcs[str(dc.get("_id"))] = (
+                str(dc.get("data_collection_tag") or ""),
+                (dc.get("config") or {}).get("metatype"),
+                str(wf.get("_id")),
+            )
+
+    wanted_tag = payload.get("annotation_source_dc_tag")
+    candidates = []
+    for link in project.get("links") or []:
+        if not link.get("enabled", True) or str(link.get("target_dc_id")) != str(dc_id):
+            continue
+        src = dcs.get(str(link.get("source_dc_id")))
+        if not src or str(src[1] or "").lower() != "metadata":
+            continue
+        if wanted_tag and src[0] != str(wanted_tag):
+            continue
+        candidates.append((link, src))
+
+    if len(candidates) != 1:
+        logger.info(
+            "complex_heatmap annotation join skipped: %d metadata-linked candidates "
+            "for dc_id=%s (requested cols=%s, source_tag=%s)",
+            len(candidates),
+            dc_id,
+            cols,
+            wanted_tag,
+        )
+        return
+
+    link, (src_tag, _metatype, src_wf_id) = candidates[0]
+    payload["annotation_join"] = {
+        "source_dc_id": str(link["source_dc_id"]),
+        "source_wf_id": src_wf_id,
+        "source_column": str(link.get("source_column") or ""),
+        "cols": cols,
+    }
+    logger.info(
+        "complex_heatmap annotation join resolved: %s.%s -> dc_id=%s cols=%s",
+        src_tag,
+        link.get("source_column"),
+        dc_id,
+        cols,
+    )
 
 
 @advanced_viz_endpoint_router.get("/kinds")
 def list_kinds(current_user=Depends(get_user_or_anonymous)) -> list[dict[str, Any]]:
-    """Return the metadata payload the React builder uses to populate the viz_kind picker.
+    """The metadata payload the React builder populates its viz_kind picker from.
 
-    `roles` carries the per-role accepted dtypes (required + optional) so the
-    builder drives its binding dropdowns + validation from the backend instead
-    of duplicating the dtype tables in TypeScript. `required_roles` is kept for
-    backwards compatibility.
+    Composed in ``models.components.advanced_viz.schemas`` so the offline
+    snapshot Tool Studio ships (``depictio dev catalog kinds --json``) is the
+    same payload this endpoint returns — its picker would otherwise be a
+    lookalike built from a narrower map.
     """
-    return [
-        {
-            "viz_kind": kind,
-            "label": meta["label"],
-            "description": meta["description"],
-            "icon": meta["icon"],
-            "required_roles": list(CANONICAL_SCHEMAS[kind].keys()),
-            "roles": role_dtype_specs(kind),
-            # Entries without an explicit category are pure visualisations.
-            "category": meta.get("category", "plot"),
-        }
-        for kind, meta in _KIND_METADATA.items()
-    ]
+    return kind_descriptors()
 
 
 def _hash_sample(scan: Any, projection: list[str], total: int, cap: int) -> Any | None:
@@ -450,6 +418,31 @@ def _tail_sample(
     return frame
 
 
+def _log_rank_sample(scan: Any, roles: dict[str, str], available: set[str], cap: int) -> Any | None:
+    """Keep the log-spaced ranks of a rank-ordered curve (the ``log_rank`` policy).
+
+    Rows are kept by rank value, not position, so every sample's curve keeps the
+    same ranks and the budget is split across samples. Returns None when the rank
+    column is unbound or absent, which drops the caller back to a uniform sample.
+    """
+    import polars as pl
+
+    from depictio.models.components.advanced_viz.sampling import log_spaced_rank_thin
+
+    rank_col = roles.get("rank")
+    if not rank_col or rank_col not in available:
+        return None
+    sample_col = roles.get("sample")
+    n_curves = 1
+    if sample_col and sample_col in available:
+        n_curves = max(1, int(scan.select(pl.col(sample_col).n_unique()).collect().item()))
+    max_rank = scan.select(pl.col(rank_col).max()).collect().item()
+    if max_rank is None:
+        return None
+    keep = [pos + 1 for pos in log_spaced_rank_thin(int(max_rank), max(2, cap // n_curves))]
+    return scan.filter(pl.col(rank_col).is_in(keep)).collect()
+
+
 def _load_reduced(
     wf_oid,
     dc_oid,
@@ -530,6 +523,19 @@ def _load_reduced(
             frame = _tail_sample(scan, projection, total, cap, spec) if spec else None
             if frame is not None:
                 return _reduced(frame, total, "tail")
+
+        if policy == "log_rank":
+            frame = _log_rank_sample(scan, roles or {}, set(projection), cap)
+            if frame is not None:
+                return _reduced(frame, total, "log_rank")
+
+        if policy == "head":
+            # The kind asked for a prefix rather than a sample: its renderer
+            # draws one mark per row and stops being legible well before the
+            # cap, so "the first N rows" is as faithful as a uniform subset and
+            # is a sentence a reader can act on. Not `degraded`: nothing the
+            # renderer reports is an estimate, there are simply fewer lines.
+            return _reduced(scan.head(cap).collect(), total, "head")
 
         frame = _hash_sample(scan, projection, total, cap)
         if frame is None:
@@ -869,6 +875,39 @@ def fetch_advanced_viz_data(
 
 _CACHE_KEY_VERSION = "v3"
 
+# A failed computation is retried once its entry is older than this. The short
+# backoff stops a tile that re-dispatches on every render from hot-looping on a
+# persistent error, while a fixed cause (data re-ingested, code fixed) no longer
+# replays the stale error forever.
+_FAILED_RETRY_AFTER_S = 60
+
+
+def _find_reusable_cache_entry(cache, cache_key: str) -> dict | None:
+    """Return the cached compute doc for ``cache_key``, or None on a miss.
+
+    ``done`` and ``pending`` entries are reused as-is. A ``failed`` entry is
+    never treated as a permanent answer: once it is older than
+    ``_FAILED_RETRY_AFTER_S`` it is deleted and the caller re-enqueues the
+    computation. A younger failed entry is still returned so rapid re-renders
+    see the error instead of spawning a task per render.
+    """
+    from datetime import datetime, timezone
+
+    existing = cache.find_one({"_id": cache_key})
+    if not existing or existing.get("status") != "failed":
+        return existing
+    stamp = existing.get("completed_at") or existing.get("created_at")
+    if isinstance(stamp, datetime):
+        if stamp.tzinfo is None:  # pymongo returns naive UTC by default
+            stamp = stamp.replace(tzinfo=timezone.utc)
+        age_s = (datetime.now(timezone.utc) - stamp).total_seconds()
+        if age_s < _FAILED_RETRY_AFTER_S:
+            return existing
+    # Only drop it if it is still the failed doc we read (a concurrent retry may
+    # already have replaced it with a fresh pending entry).
+    cache.delete_one({"_id": cache_key, "status": "failed"})
+    return None
+
 
 def _compute_cache_key(payload: dict, user_id) -> str:
     """Stable key for the compute_results cache.
@@ -941,7 +980,7 @@ def dispatch_compute_embedding(
 
     cache = db["compute_results"]
     cache_key = _compute_cache_key(payload, current_user.id)
-    existing = cache.find_one({"_id": cache_key})
+    existing = _find_reusable_cache_entry(cache, cache_key)
 
     # Cache hit (done or pending).
     if existing:
@@ -1085,6 +1124,7 @@ def dispatch_compute_complex_heatmap(
     from datetime import datetime, timezone
 
     _apply_link_filters_to_payload(payload, access_token, "complex_heatmap")
+    _resolve_annotation_join(payload)
 
     from depictio.api.v1.celery_tasks import compute_complex_heatmap as compute_task
     from depictio.api.v1.db import db
@@ -1100,7 +1140,7 @@ def dispatch_compute_complex_heatmap(
     payload_for_key = dict(payload)
     payload_for_key.setdefault("method", "complex_heatmap")
     cache_key = _compute_cache_key(payload_for_key, current_user.id)
-    existing = cache.find_one({"_id": cache_key})
+    existing = _find_reusable_cache_entry(cache, cache_key)
     if existing:
         return {
             "job_id": cache_key,
@@ -1235,7 +1275,7 @@ def dispatch_compute_upset(
     payload_for_key = dict(payload)
     payload_for_key.setdefault("method", "upset_plot")
     cache_key = _compute_cache_key(payload_for_key, current_user.id)
-    existing = cache.find_one({"_id": cache_key})
+    existing = _find_reusable_cache_entry(cache, cache_key)
     if existing:
         return {
             "job_id": cache_key,
@@ -1378,7 +1418,7 @@ def _dispatch_compute(
             "from_cache": True,
         }
 
-    existing = cache.find_one({"_id": cache_key})
+    existing = _find_reusable_cache_entry(cache, cache_key)
     if existing:
         return _from_cache(existing)
 
@@ -1489,6 +1529,35 @@ def poll_compute_coverage_track(
     return _poll_compute(job_id, current_user)
 
 
+@advanced_viz_endpoint_router.post("/compute_contact_map")
+def dispatch_compute_contact_map(
+    payload: dict = Body(...),
+    current_user=Depends(get_user_or_anonymous),
+    access_token: str | None = Depends(oauth2_scheme_optional),
+) -> dict[str, Any]:
+    """Dispatch one region of a contact matrix, at one resolution.
+
+    Region and resolution are part of the payload, so they are part of the
+    cache key: zooming in dispatches a new job and zooming back out lands on
+    the one already computed. `resolution: null` lets the server pick the level
+    whose bins-per-pixel is closest to the target for the span the client says
+    it is showing.
+    """
+    from depictio.api.v1.celery_tasks import compute_contact_map as compute_task
+
+    _apply_link_filters_to_payload(payload, access_token, "contact_map")
+    return _dispatch_compute(payload, "contact_map", compute_task, current_user)
+
+
+@advanced_viz_endpoint_router.get("/compute_contact_map/{job_id}")
+def poll_compute_contact_map(
+    job_id: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """Poll a previously-dispatched contact-map window."""
+    return _poll_compute(job_id, current_user)
+
+
 @advanced_viz_endpoint_router.post("/compute_sankey")
 def dispatch_compute_sankey(
     payload: dict = Body(...),
@@ -1511,6 +1580,102 @@ def poll_compute_sankey(
     return _poll_compute(job_id, current_user)
 
 
+def _group_selector(raw: Any, side: str) -> dict[str, Any]:
+    """Validate one arm of a group comparison, or raise 400.
+
+    A selector is a column plus the values it captured, which is exactly what
+    a saved selection group is (``GroupRenderDef``) and what a single value of
+    the config's ``group_col`` collapses to. Normalising both into one shape
+    here is what lets the worker treat "two lassos" and "two labels" the same.
+    """
+    if not isinstance(raw, dict):
+        raise HTTPException(status_code=400, detail=f"group_{side} must be an object")
+    column = str(raw.get("column") or "").strip()
+    values = [str(v) for v in (raw.get("values") or []) if v is not None]
+    if not column or not values:
+        raise HTTPException(
+            status_code=400,
+            detail=f"group_{side} needs a column and at least one value",
+        )
+    return {
+        "label": str(raw.get("label") or f"Group {side.upper()}"),
+        "column": column,
+        "values": values,
+    }
+
+
+@advanced_viz_endpoint_router.post("/compute_group_compare")
+def dispatch_compute_group_compare(
+    payload: dict = Body(...),
+    current_user=Depends(get_user_or_anonymous),
+    access_token: str | None = Depends(oauth2_scheme_optional),
+) -> dict[str, Any]:
+    """Dispatch a two-group differential test as a Celery task.
+
+    Same dispatch + poll + cache contract as ``compute_upset``: the cache key
+    hashes the whole payload, so the two group definitions and every statistic
+    tunable pick their own cache entry, and re-running the identical
+    comparison is free.
+    """
+    from depictio.api.v1.celery_tasks import compute_group_compare as compute_task
+
+    payload["group_a"] = _group_selector(payload.get("group_a"), "a")
+    payload["group_b"] = _group_selector(payload.get("group_b"), "b")
+    _apply_link_filters_to_payload(payload, access_token, "group_compare")
+    return _dispatch_compute(payload, "group_compare", compute_task, current_user)
+
+
+@advanced_viz_endpoint_router.get("/compute_group_compare/{job_id}")
+def poll_compute_group_compare(
+    job_id: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """Poll a previously-dispatched group comparison."""
+    return _poll_compute(job_id, current_user)
+
+
+# The repo is bind-mounted at /app in the backend container, so any path holding
+# a `/depictio/projects/` segment has a container twin at the same suffix.
+_CONTAINER_REPO_ROOT = "/app"
+_REPO_PROJECTS_MARKER = "/depictio/projects/"
+
+
+def _container_repo_path(path: str) -> str | None:
+    """Map a host repo path onto its in-container twin, or None if not applicable.
+
+    Returns None when the path carries no ``/depictio/projects/`` segment or is
+    already the container path, so the caller only ever gets a genuinely new
+    candidate to try. Splits on the *last* occurrence, so a checkout that itself
+    sits under a directory of that name still resolves.
+    """
+    idx = path.rfind(_REPO_PROJECTS_MARKER)
+    if idx == -1:
+        return None
+    rewritten = f"{_CONTAINER_REPO_ROOT}{path[idx:]}"
+    return rewritten if rewritten != path else None
+
+
+def _phylogeny_s3_client():
+    """boto3 client for the backend's bucket, shared by both Newick reads below.
+
+    Every Newick request tries S3 first, so an unreachable endpoint must fail
+    fast and fall through to the stored paths instead of waiting on retries.
+    """
+    import boto3
+    from botocore.config import Config
+
+    from depictio.api.v1.configs.config import settings
+
+    return boto3.client(
+        "s3",
+        endpoint_url=settings.s3.endpoint_url,
+        aws_access_key_id=settings.s3.aws_access_key_id,
+        aws_secret_access_key=settings.s3.aws_secret_access_key,
+        verify=settings.s3.verify_tls,
+        config=Config(connect_timeout=3, retries={"total_max_attempts": 2}),
+    )
+
+
 @advanced_viz_endpoint_router.get(
     "/phylogeny/{data_collection_id}/newick", response_class=PlainTextResponse
 )
@@ -1520,13 +1685,21 @@ def get_phylogeny_newick(
 ) -> str:
     """Return the raw Newick string for a phylogeny DC.
 
-    Resolves the file location in two ways: (1) prefer the file registered
+    First tries the copy the CLI uploads at ingest, at
+    ``s3://<bucket>/phylogeny/<dc_id>/tree.nwk``: it is readable by any backend,
+    whichever machine ran the CLI. Any miss there falls through to the stored
+    paths below, which is what reference seeds and older ingests rely on.
+
+    Those stored paths are tried in three ways: (1) prefer the file registered
     by the CLI scan in ``files_collection``; (2) for reference datasets
     (seeded via db_init, never CLI-scanned), traverse the project document
     to find the matching DC under ``workflows[].data_collections[]`` and
     read its ``config.scan.scan_parameters.filename``. DCs are stored
     embedded in the project — there is no top-level ``data_collections``
     document for them — so we can't ``find_one({"_id": dc_oid})`` directly.
+    (3) as a last resort, each stored path rewritten onto the container's
+    ``/app`` bind mount, which is what makes a host-run CLI ingest readable
+    from the backend container.
 
     Returns local file contents directly; stream S3-hosted trees via boto3.
     """
@@ -1540,6 +1713,22 @@ def get_phylogeny_newick(
     # Same vulnerability class as /advanced_viz/data: caller-supplied dc_id
     # returning raw data — gate on project-level access before any file read.
     _assert_dc_access(dc_oid, current_user)
+
+    # Ingest-time copy (CLI `process_phylogeny_data_collection`); a miss falls through.
+    from depictio.api.v1.configs.config import settings
+    from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
+
+    s3_key = phylogeny_s3_key(str(dc_oid))
+    try:
+        obj = _phylogeny_s3_client().get_object(Bucket=settings.s3.bucket, Key=s3_key)
+        return obj["Body"].read().decode("utf-8")
+    except Exception as exc:
+        logger.debug(
+            "phylogeny newick not read from s3://%s/%s (%s); trying stored paths",
+            settings.s3.bucket,
+            s3_key,
+            exc,
+        )
 
     # Build a list of candidate paths and try each. The CLI scan records the
     # *host* path it saw when the user ran depictio-cli on their laptop
@@ -1567,6 +1756,16 @@ def get_phylogeny_newick(
                 if fname and fname not in candidates:
                     candidates.append(str(fname))
 
+    # Dev-loop fallback: the CLI run on the host stores an absolute host path
+    # (``/Users/<me>/Gits/.../depictio/projects/...``) that doesn't exist in the
+    # container, and the project doc holds that same host path because the same
+    # host CLI wrote it. The repo is bind-mounted at ``/app``, so the identical
+    # ``depictio/projects/...`` suffix is readable there. Appended last, after
+    # every stored path, so a deploy whose paths resolve normally never sees it.
+    rewritten = [_container_repo_path(c) for c in candidates if not c.startswith("s3://")]
+    host_rewrites = {c for c in rewritten if c and c not in candidates}
+    candidates.extend(sorted(host_rewrites))
+
     if not candidates:
         raise HTTPException(
             status_code=404,
@@ -1587,6 +1786,16 @@ def get_phylogeny_newick(
         except OSError:
             continue
 
+    if file_path and file_path in host_rewrites:
+        logger.info(
+            "phylogeny newick resolved through the %s fallback: the stored path(s) %s are "
+            "not readable by the backend (host CLI ingest against a containerised backend), "
+            "reading %s instead",
+            _CONTAINER_REPO_ROOT,
+            [c for c in candidates if c not in host_rewrites],
+            file_path,
+        )
+
     if not file_path:
         raise HTTPException(
             status_code=404,
@@ -1598,17 +1807,7 @@ def get_phylogeny_newick(
 
     try:
         if file_path.startswith("s3://"):
-            import boto3
-
-            from depictio.api.v1.configs.config import settings
-
-            s3 = boto3.client(
-                "s3",
-                endpoint_url=settings.minio.endpoint_url,
-                aws_access_key_id=settings.minio.aws_access_key_id,
-                aws_secret_access_key=settings.minio.aws_secret_access_key,
-                verify=settings.minio.verify_tls,
-            )
+            s3 = _phylogeny_s3_client()
             _, _, rest = file_path.partition("s3://")
             bucket, _, key = rest.partition("/")
             obj = s3.get_object(Bucket=bucket, Key=key)

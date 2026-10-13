@@ -1,0 +1,12 @@
+id: qiime2_clustered_heatmap
+name: Clustered abundance heatmap
+mode: rel-abundance/clustered
+description: >-
+  The taxon by sample abundance matrix prepared for ComplexHeatmap: index and
+  row-annotation columns cast to strings, so rows and columns can be clustered.
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/qiime2/relativeabundancetables
+find: { path_glob: "**/qiime2/rel_abundance_tables/rel-table-*.tsv" }
+recipe: nf-core/ampliseq/complex_heatmap_canonical.py
+fixture: clustered_heatmap.tsv
+renders_as:
+  - { id: abundance_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: Phylum} }

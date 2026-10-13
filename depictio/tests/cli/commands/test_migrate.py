@@ -142,8 +142,11 @@ class TestMigrateCLIModeValidation:
             ],
         )
 
-        assert result.exit_code == 1
-        assert "invalid mode" in result.stdout.lower() or "invalid" in result.stdout.lower()
+        # A usage error, before any server is read or logged in to.
+        assert result.exit_code == 2
+        assert "invalid value" in result.output.lower()
+        assert "invalid_mode" in result.output
+        mock_login.assert_not_called()
 
     @pytest.mark.parametrize("mode", ["all", "metadata", "dashboard", "files"])
     @patch("depictio.cli.cli.commands.migrate.api_import_project")
@@ -529,10 +532,10 @@ class TestMigrateCLIErrorHandling:
     @patch("depictio.cli.cli.commands.migrate.api_export_project")
     @patch("depictio.cli.cli.commands.migrate.load_depictio_config")
     @patch("depictio.cli.cli.commands.migrate.api_login")
-    def test_s3_errors_shown_as_warnings(
+    def test_s3_errors_fail_a_files_migration(
         self, mock_login, mock_load, mock_export, runner, config_file
     ):
-        """S3 copy errors surfaced in the bundle are shown as warnings (not hard exit)."""
+        """Files the copy left out of the target: shown, and the command fails."""
         mock_load.return_value = Mock()
         mock_load.return_value.s3_storage.endpoint_url = "http://localhost:9000"
         mock_load.return_value.s3_storage.aws_access_key_id = "minio"
@@ -570,5 +573,358 @@ class TestMigrateCLIErrorHandling:
             ],
         )
 
-        # Should still exit 0 (files mode, S3 warning not fatal at CLI level)
-        assert "S3 error" in result.stdout or "error" in result.stdout.lower()
+        assert result.exit_code == 1
+        out = " ".join(result.output.split())
+        assert "S3 error: Failed to copy dc1/some_file.parquet: S3 timeout" in out
+        assert (
+            "Files-only mode: 1 S3 error above left files out of the target. "
+            "Fix the cause, then run this command again with --mode files" in out
+        )
+        assert "S3 sync complete" not in out
+
+
+# ---------------------------------------------------------------------------
+# Source and target servers: --server / --to-server, and their old names
+# ---------------------------------------------------------------------------
+
+
+class TestMigrateServers:
+    @pytest.fixture
+    def loaded_paths(self):
+        """The configuration files migrate loads, source first; it stops at the first login."""
+        with (
+            patch("depictio.cli.cli.commands.migrate.load_depictio_config") as load,
+            patch(
+                "depictio.cli.cli.commands.migrate.api_login",
+                return_value={"success": True, "is_admin": False},
+            ),
+        ):
+            yield lambda: [call.kwargs["yaml_config_path"] for call in load.call_args_list]
+
+    @pytest.mark.parametrize(
+        "flags",
+        [
+            ["--server", "src.yaml", "--to-server", "dst.yaml"],
+            ["--CLI-config-path", "src.yaml", "--target-config", "dst.yaml"],
+        ],
+    )
+    def test_source_and_target_come_from_the_flags(self, runner, loaded_paths, flags):
+        result = runner.invoke(app, ["--project", "p", *flags])
+
+        assert result.exit_code == 1  # the mocked source login is not an admin
+        assert loaded_paths() == ["src.yaml", "dst.yaml"]
+
+    def test_defaults_are_unchanged(self, runner, loaded_paths):
+        runner.invoke(app, ["--project", "p"])
+
+        assert loaded_paths() == ["~/.depictio/CLI.yaml", "~/.depictio/CLI_remote.yaml"]
+
+    def test_to_server_local_is_the_local_stack_configuration(
+        self, runner, loaded_paths, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path))
+        local = tmp_path / "cli" / "admin_config.yaml"
+        local.parent.mkdir()
+        local.write_text("{}")
+
+        runner.invoke(app, ["--project", "p", "--server", "remote.yaml", "--to-server", "local"])
+
+        assert loaded_paths() == ["remote.yaml", str(local)]
+
+    def test_to_server_local_without_a_local_server_says_how_to_start_one(
+        self, runner, tmp_path, monkeypatch, mock_cli_config
+    ):
+        """Found missing when read, not when parsed: the source is read first, then this."""
+        monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path / "local"))
+        source = tmp_path / "src.yaml"
+        source.write_text(yaml.dump(mock_cli_config))
+
+        with patch("depictio.cli.cli.commands.migrate.api_login") as login:
+            result = runner.invoke(
+                app, ["--project", "p", "--server", str(source), "--to-server", "local"]
+            )
+
+        assert result.exit_code == 1
+        out = " ".join(result.output.split())
+        assert "No local server configuration" in out
+        assert "depictio local up" in out
+        assert "--to-server" in out
+        login.assert_not_called()
+
+    def test_to_server_and_target_config_together_are_refused(self, runner, loaded_paths):
+        result = runner.invoke(
+            app, ["--project", "p", "--to-server", "a.yaml", "--target-config", "b.yaml"]
+        )
+
+        assert result.exit_code == 2
+        assert "not both" in result.output
+
+    def test_help_hides_the_old_names(self, runner):
+        result = runner.invoke(app, ["--help"])
+
+        assert result.exit_code == 0
+        assert "--server" in result.output
+        assert "--to-server" in result.output
+        # Each named once, as what the new option was called before, not listed itself.
+        assert "Formerly" in result.output
+        assert result.output.count("--CLI-config-path") == 1
+        assert result.output.count("--target-config") == 1
+        # No en dash left in the mode table.
+        assert "\u2013" not in result.output
+
+    def test_help_is_a_plain_command_not_a_group(self, runner):
+        result = runner.invoke(app, ["--help"])
+
+        assert "COMMAND [ARGS]" not in result.output
+
+
+class TestMigrateMessages:
+    """What migrate says about each server, each failure, and its result."""
+
+    @pytest.fixture(autouse=True)
+    def no_env_overrides(self, monkeypatch):
+        for var in ("DEPICTIO_CLI_CONFIG_PATH", "DEPICTIO_CLI_API_BASE_URL", "DEPICTIO_CLI_TOKEN"):
+            monkeypatch.delenv(var, raising=False)
+
+    @pytest.fixture
+    def servers(self, tmp_path, mock_cli_config):
+        """Two real configuration files, told apart by their URLs."""
+        paths = []
+        for name, url in (("src", "http://src.test"), ("dst", "http://dst.test")):
+            path = tmp_path / f"{name}.yaml"
+            path.write_text(yaml.dump({**mock_cli_config, "api_base_url": url}))
+            paths.append(str(path))
+        return paths
+
+    def _run(self, runner, servers, *extra):
+        source, target = servers
+        return runner.invoke(
+            app, ["--project", "my-project", "--server", source, "--to-server", target, *extra]
+        )
+
+    @staticmethod
+    def _flat(output: str) -> str:
+        return " ".join(output.split())
+
+    def test_each_server_line_says_which_side_it_is(self, runner, servers):
+        with patch(
+            "depictio.cli.cli.commands.migrate.api_login",
+            return_value={"success": True, "is_admin": False},
+        ):
+            result = self._run(runner, servers)
+
+        out = self._flat(result.output)
+        assert "Source server: http://src.test" in out
+        assert "Target server: http://dst.test" in out
+
+    def test_the_env_overrides_apply_to_the_source_only(self, runner, servers, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_CLI_API_BASE_URL", "http://env.test")
+        with patch(
+            "depictio.cli.cli.commands.migrate.api_login",
+            return_value={"success": True, "is_admin": False},
+        ):
+            result = self._run(runner, servers)
+
+        out = self._flat(result.output)
+        assert "Source server: http://env.test (from DEPICTIO_CLI_API_BASE_URL" in out
+        assert "Target server: http://dst.test" in out
+
+    def test_an_unreachable_source_is_named(self, runner, servers):
+        import httpx
+
+        with patch(
+            "depictio.cli.cli.commands.migrate.api_login",
+            side_effect=httpx.ConnectError("refused"),
+        ):
+            result = self._run(runner, servers)
+
+        assert result.exit_code == 1
+        assert result.exception is None or isinstance(result.exception, SystemExit)
+        out = self._flat(result.output)
+        assert "Source: cannot reach the server: refused" in out
+        assert "Tried http://src.test" in out
+
+    def test_another_answer_is_not_blamed_on_the_token(self, runner, servers):
+        """A viewer host's 404: a new token would not fix it."""
+        with patch(
+            "depictio.cli.cli.commands.migrate.api_login",
+            side_effect=[
+                {"success": True, "is_admin": True},
+                {"success": False, "status_code": 404},
+            ],
+        ):
+            result = self._run(runner, servers)
+
+        assert result.exit_code == 1
+        out = self._flat(result.output)
+        assert "Target: authentication failed: the server answered HTTP 404" in out
+        assert "Tried http://dst.test, read from " in out
+        assert "invalid or expired" not in out
+
+    def test_a_rejected_token_is_not_called_missing_admin_rights(self, runner, servers):
+        with patch(
+            "depictio.cli.cli.commands.migrate.api_login",
+            side_effect=[{"success": True, "is_admin": True}, {"success": False}],
+        ):
+            result = self._run(runner, servers)
+
+        assert result.exit_code == 1
+        out = self._flat(result.output)
+        assert "Target: authentication failed" in out
+        assert "admin access required" not in out
+
+    @staticmethod
+    def _bundle(mode: str) -> dict:
+        return {
+            "migrate_metadata": {
+                "project_name": "my-project",
+                "project_id": "507f1f77bcf86cd799439011",
+                "mode": mode,
+                "document_counts": {"projects": 1},
+            },
+            "data": {"projects": [{"_id": "507f1f77bcf86cd799439011"}]},
+        }
+
+    def test_a_conflict_says_how_to_overwrite_once(self, runner, servers):
+        with (
+            patch(
+                "depictio.cli.cli.commands.migrate.api_login",
+                return_value={"success": True, "is_admin": True},
+            ),
+            patch(
+                "depictio.cli.cli.commands.migrate.api_export_project",
+                return_value=self._bundle("metadata"),
+            ),
+            patch(
+                "depictio.cli.cli.commands.migrate.api_import_project",
+                return_value={
+                    "success": False,
+                    "conflict": True,
+                    "message": "Project 'my-project' already exists on this instance. "
+                    "Set overwrite=true to replace it.",
+                },
+            ),
+        ):
+            result = self._run(runner, servers, "--mode", "metadata")
+
+        assert result.exit_code == 1
+        out = self._flat(result.output)
+        assert (
+            "Conflict: Project 'my-project' already exists on this instance. "
+            "Use --overwrite to replace it." in out
+        )
+        assert "overwrite=true" not in out
+
+    @staticmethod
+    def _with_s3_errors(bundle: dict, *errors: str) -> dict:
+        return {
+            **bundle,
+            "s3_migrate_metadata": {
+                "total_files": 3,
+                "total_bytes": 300,
+                "paths": ["dc1/"],
+                "errors": list(errors),
+            },
+        }
+
+    def test_s3_errors_fail_a_full_migration_after_the_import(self, runner, servers):
+        """The documents are imported, but the files the copy left out fail the command."""
+        bundle = self._with_s3_errors(
+            self._bundle("all"), "Failed to copy dc1/a.parquet", "Error listing dc2"
+        )
+        with (
+            patch(
+                "depictio.cli.cli.commands.migrate.api_login",
+                return_value={"success": True, "is_admin": True},
+            ),
+            patch("depictio.cli.cli.commands.migrate.api_export_project", return_value=bundle),
+            patch(
+                "depictio.cli.cli.commands.migrate.api_import_project",
+                return_value={"success": True, "upserted": {"projects": 1}},
+            ) as import_project,
+        ):
+            result = self._run(runner, servers)
+
+        assert result.exit_code == 1
+        import_project.assert_called_once()
+        out = self._flat(result.output)
+        assert (
+            "Migration incomplete for project 'my-project': 2 S3 errors above left files "
+            "out of the target." in out
+        )
+        assert "Migration complete" not in out
+
+    @pytest.mark.parametrize("mode", ["all", "files"])
+    def test_s3_errors_of_a_dry_run_only_warn(self, runner, servers, mode):
+        bundle = self._with_s3_errors(self._bundle(mode), "Error listing dc2")
+        with (
+            patch(
+                "depictio.cli.cli.commands.migrate.api_login",
+                return_value={"success": True, "is_admin": True},
+            ),
+            patch("depictio.cli.cli.commands.migrate.api_export_project", return_value=bundle),
+            patch(
+                "depictio.cli.cli.commands.migrate.api_import_project",
+                return_value={"success": True, "upserted": {"projects": 1}},
+            ),
+        ):
+            result = self._run(runner, servers, "--mode", mode, "--dry-run")
+
+        assert result.exit_code == 0, result.output
+        assert "S3 error: Error listing dc2" in self._flat(result.output)
+
+    def test_a_files_dry_run_says_nothing_was_copied(self, runner, servers):
+        with (
+            patch(
+                "depictio.cli.cli.commands.migrate.api_login",
+                return_value={"success": True, "is_admin": True},
+            ),
+            patch(
+                "depictio.cli.cli.commands.migrate.api_export_project",
+                return_value=self._bundle("files"),
+            ),
+        ):
+            result = self._run(runner, servers, "--mode", "files", "--dry-run")
+
+        assert result.exit_code == 0, result.output
+        out = self._flat(result.output)
+        assert "Files-only mode, dry run: no S3 file copied, no MongoDB import." in out
+        assert "S3 sync complete" not in out
+
+    @pytest.mark.parametrize(
+        ("extra", "expected"),
+        [
+            ((), "Migration complete for project 'my-project'"),
+            (("--dry-run",), "Migration dry run complete for project 'my-project'"),
+        ],
+    )
+    def test_the_last_line_reads_well(self, runner, servers, extra, expected):
+        with (
+            patch(
+                "depictio.cli.cli.commands.migrate.api_login",
+                return_value={"success": True, "is_admin": True},
+            ),
+            patch(
+                "depictio.cli.cli.commands.migrate.api_export_project",
+                return_value=self._bundle("metadata"),
+            ),
+            patch(
+                "depictio.cli.cli.commands.migrate.api_import_project",
+                return_value={"success": True, "upserted": {"projects": 1}},
+            ),
+        ):
+            result = self._run(runner, servers, "--mode", "metadata", *extra)
+
+        assert result.exit_code == 0, result.output
+        assert expected in result.output
+
+
+def test_migrate_takes_its_options_straight_from_the_root(runner):
+    """Mounted as a command, not a group: `depictio migrate --project p` reaches it."""
+    from depictio.cli.depictio_cli import app as root
+
+    result = runner.invoke(root, ["migrate", "--project", "p", "--mode", "bogus"])
+
+    assert result.exit_code == 2
+    assert "Invalid value for '--mode'" in result.output
+    assert "No such option" not in result.output

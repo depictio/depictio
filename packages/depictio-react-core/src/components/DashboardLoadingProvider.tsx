@@ -28,6 +28,9 @@ export const TRACKED_LOAD_TYPES: ReadonlySet<string> = new Set([
   'image',
   'advanced_viz',
   'multiqc',
+  // Reports under its own index: through the figure it shows once found,
+  // through its placeholder while it looks or when it cannot find it.
+  'highlight',
 ]);
 
 interface LoadingActions {

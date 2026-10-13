@@ -76,7 +76,7 @@ Booleans only — which optional subsystems are switched on.
 | `monitoring_enabled` | boolean | Admin log & task monitoring enabled. |
 | `dashboard_yaml_enabled` | boolean | YAML dashboard sync enabled. |
 | `jbrowse_enabled` | boolean | JBrowse integration enabled. |
-| `external_s3` | boolean | True when object storage is outside the deployment's own network, i.e. something other than the bundled MinIO. A boolean only — the endpoint and bucket name are never sent. |
+| `external_s3` | boolean | True when object storage is outside the deployment's own network, i.e. something other than the bundled object store. A boolean only — the endpoint and bucket name are never sent. |
 
 #### `usage`
 

@@ -30,7 +30,7 @@ const TopPanel: React.FC<TopPanelProps> = ({
     <Paper withBorder radius={0} p="xs" mb="xs">
       <Group gap="md" wrap="nowrap" align="center">
         {components.map((m) => (
-          <div key={m.index} style={{ flex: 1, minWidth: 0 }}>
+          <div key={m.index} data-component-id={m.index} style={{ flex: 1, minWidth: 0 }}>
             <ComponentRenderer
               metadata={m}
               filters={filters}

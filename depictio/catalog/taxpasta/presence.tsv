@@ -1,0 +1,31 @@
+sample	taxonomy_id	taxon	rank	n_profilers	bracken	centrifuge	diamond	kaiju	kmcp	kraken2	krakenuniq	megan6	metaphlan	motus
+MOCK_001_Illumina_Hiseq_3000	66851	Methanobrevibacter oralis	species	9	1	1	1	1	0	1	1	1	1	1
+MOCK_001_Illumina_Hiseq_3000	39152	Methanococcus maripaludis	species	9	1	1	1	1	0	1	1	1	1	1
+MOCK_001_Illumina_Hiseq_3000	62322	Shewanella baltica	species	9	1	1	1	1	0	1	1	1	1	1
+MOCK_001_Illumina_Hiseq_3000	1986146	Desulfobulbus oralis	species	8	1	1	1	1	0	1	1	1	1	0
+MOCK_001_Illumina_Hiseq_3000	103690	Nostoc sp. PCC 7120 = FACHB-418	species	7	1	1	1	1	0	1	1	0	0	1
+MOCK_001_Illumina_Hiseq_3000	126740	Thermotoga sp. RQ2	species	7	1	1	1	1	0	1	1	1	0	0
+MOCK_001_Illumina_Hiseq_3000	0	unclassified	unclassified	7	0	1	1	1	0	1	1	0	1	1
+MOCK_001_Illumina_Hiseq_3000	2	Bacteria	domain	6	0	1	1	0	0	1	1	1	1	0
+MOCK_001_Illumina_Hiseq_3000	44000	Caldicellulosiruptor	genus	6	0	1	1	0	0	1	1	1	1	0
+MOCK_001_Illumina_Hiseq_3000	1091	Chlorobium	genus	6	0	1	1	0	0	1	1	1	1	0
+MOCK_001_Illumina_Hiseq_3000	1236	Gammaproteobacteria	class	6	0	1	1	0	0	1	1	1	1	0
+MOCK_001_Illumina_Hiseq_3000	2276	Pyrobaculum	genus	6	0	1	1	0	0	1	1	1	1	0
+MOCK_001_Illumina_Hiseq_3000	2260	Pyrococcus	genus	6	0	1	1	0	0	1	1	1	1	0
+MOCK_001_Illumina_Hiseq_3000	22	Shewanella	genus	6	0	1	1	0	0	1	1	1	1	0
+MOCK_001_Illumina_Hiseq_3000	2335	Thermotoga	genus	6	0	1	1	0	0	1	1	1	1	0
+MOCK_001_Illumina_Hiseq_3000	203119	Acetivibrio thermocellus ATCC 27405	species	5	0	1	1	0	0	1	1	1	0	0
+MOCK_001_Illumina_Hiseq_3000	666510	Acidilobus saccharovorans 345-15	species	5	0	1	1	0	0	1	1	1	0	0
+MOCK_001_Illumina_Hiseq_3000	240015	Acidobacterium capsulatum ATCC 51196	species	5	0	1	1	0	0	1	1	1	0	0
+MOCK_001_Illumina_Hiseq_3000	439481	Aciduliprofundum boonei T469	species	5	0	1	1	0	0	1	1	1	0	0
+MOCK_001_Illumina_Hiseq_3000	349741	Akkermansia muciniphila ATCC BAA-835	species	5	0	1	1	0	0	1	1	1	0	0
+MOCK_001_Illumina_Hiseq_3000	224325	Archaeoglobus fulgidus DSM 4304	species	5	0	1	1	0	0	1	1	1	0	0
+MOCK_001_Illumina_Hiseq_3000	815	Bacteroidaceae	family	5	0	1	1	0	0	1	1	0	1	0
+MOCK_001_Illumina_Hiseq_3000	226186	Bacteroides thetaiotaomicron VPI-5482	species	5	0	1	1	0	0	1	1	1	0	0
+MOCK_001_Illumina_Hiseq_3000	80840	Burkholderiales	order	5	0	0	1	0	0	1	1	1	1	0
+MOCK_001_Illumina_Hiseq_3000	521460	Caldicellulosiruptor bescii DSM 6725	species	5	0	1	1	0	0	1	1	1	0	0
+MOCK_001_Illumina_Hiseq_3000	351627	Caldicellulosiruptor saccharolyticus DSM 8903	species	5	0	1	1	0	0	1	1	1	0	0
+MOCK_001_Illumina_Hiseq_3000	191412	Chlorobiaceae	family	5	0	1	1	0	0	1	1	0	1	0
+MOCK_001_Illumina_Hiseq_3000	290315	Chlorobium limicola DSM 245	species	5	0	1	1	0	0	1	1	1	0	0
+MOCK_001_Illumina_Hiseq_3000	290317	Chlorobium phaeobacteroides DSM 266	species	5	0	1	1	0	0	1	1	1	0	0
+MOCK_001_Illumina_Hiseq_3000	274493	Chlorobium/Pelodictyon group	family	5	0	1	1	0	0	1	1	1	0	0

@@ -2,8 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { Button, Group, Modal, Stack, Text, TextInput } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { brandColors } from '../profile/colors';
-
 interface DeleteTokenModalProps {
   opened: boolean;
   onClose: () => void;
@@ -41,11 +39,10 @@ const DeleteTokenModal: React.FC<DeleteTokenModalProps> = ({ opened, onClose, on
       opened={opened}
       onClose={onClose}
       centered
-      title="Confirm Deletion"
-      styles={{ title: { color: brandColors.red, fontWeight: 600 } }}
+      title="Delete configuration"
     >
       <Stack gap="md">
-        <Text size="sm" c="gray">
+        <Text size="sm" c="dimmed">
           Are you sure you want to delete this configuration? This action cannot be undone.
         </Text>
         <TextInput
@@ -57,19 +54,18 @@ const DeleteTokenModal: React.FC<DeleteTokenModalProps> = ({ opened, onClose, on
           disabled={submitting}
           data-testid="delete-confirm-input"
         />
-        <Group justify="flex-end" mt="xl">
-          <Button variant="subtle" color="gray" radius="md" onClick={onClose} disabled={submitting}>
+        <Group justify="flex-end" gap="xs" mt="sm">
+          <Button variant="subtle" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
           <Button
-            radius="md"
+            color="red"
             disabled={!canConfirm}
             loading={submitting}
             onClick={handleConfirm}
             data-testid="confirm-delete-token-btn"
-            styles={{ root: { backgroundColor: brandColors.red } }}
           >
-            Confirm Delete
+            Delete
           </Button>
         </Group>
       </Stack>

@@ -1,0 +1,24 @@
+id: damageprofiler_authenticity
+name: Authenticity plane
+description: >-
+  One row per library pairing the two ancient-DNA authenticity signals, terminal
+  deamination at the first base of a read and mapped fragment length, so a
+  modern contaminant (long, undamaged), an ancient extract (short, damaged) and
+  over-sheared modern DNA (short, undamaged) separate on one plane. Derived from
+  the two tidied DamageProfiler collections, which a template must declare
+  before this one.
+find:
+  path_glob: "**/*_freq_misincorporations.txt"
+  path_glob_alt:
+    - "**/lgdistribution.txt"
+recipe: damageprofiler/authenticity.py
+fixture: authenticity.tsv
+renders_as:
+  - { id: authenticity_plane, component: advanced_viz, kind: scatter_xy,
+      roles: {x: mean_length, y: ct_5p_first, label: sample, color: sample, size: n_reads} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: terminal_damage, color: sample, title: Terminal deamination per library} }
+  - { component: card, column: ct_5p_first, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: mean_length, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: ga_3p_first, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: n_reads, aggregation: sum, secondary_layout: donut, breakdown_col: sample }
+  - { component: table }

@@ -1,0 +1,20 @@
+id: macs2_consensus_boolean
+name: Consensus peak overlap
+mode: peaks/consensus
+description: >-
+  Merged consensus intervals against the samples that called a peak on them,
+  as one 0/1 column per sample. The intersections say how reproducible the
+  peak set is between replicates and between conditions.
+find:
+  path_glob: "**/*.consensus_peaks.boolean.txt"
+recipe: macs2/consensus_boolean.py
+fixture: consensus_boolean.tsv
+renders_as:
+  # The renderer enumerates the binary sample columns itself, so the upset
+  # render binds no role.
+  - { id: consensus_upset, component: advanced_viz, kind: upset_plot }
+  - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: consensus_set, top_n_count: 3 }
+  - { component: card, column: num_samples, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: num_peaks, aggregation: sum, secondary_layout: histogram }
+  - { component: card, column: consensus_set, aggregation: count, secondary_layout: donut, breakdown_col: consensus_set }
+  - { component: table, row_selection_enabled: true, row_selection_column: peak_id }

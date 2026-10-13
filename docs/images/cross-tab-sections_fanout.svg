@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1340" height="600" viewBox="0 0 1340 600">
+  <rect width="1340" height="600" fill="#ffffff"/>
+  <text x="46.0" y="52.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="25" fill="#1e1e1e" text-anchor="start" font-weight="normal">A section marked persistent belongs to the tab family</text>
+  <text x="46.0" y="78.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal">one request per page load; the owner tab keeps editing rights</text>
+  <rect x="60.0" y="132.0" width="330.0" height="124.0" rx="6" fill="#f3f0ff"/>
+  <path d="M60.1,131.8 C169.4,130.9 280.5,130.6 389.3,132.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.9,132.5 C168.5,131.8 278.6,130.7 389.4,131.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M390.8,131.3 C390.4,174.8 390.2,214.3 390.6,255.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M389.5,132.1 C388.9,172.1 389.4,215.7 390.2,255.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M390.3,255.9 C280.2,254.6 168.6,255.1 59.7,256.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M389.6,256.1 C279.9,255.4 170.9,256.6 60.0,256.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.9,256.4 C60.7,214.0 61.5,172.1 59.4,132.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.6,255.7 C58.5,215.2 60.8,173.6 60.3,132.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="225.0" y="159.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">Overview (main tab)</text>
+  <text x="225.0" y="183.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">Raw Data · grid section</text>
+  <text x="225.0" y="204.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">Variety · filter section</text>
+  <text x="225.0" y="225.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">both persistent: true</text>
+  <rect x="60.0" y="340.0" width="330.0" height="104.0" rx="6" fill="#ffffff"/>
+  <path d="M60.0,340.3 C170.3,339.9 281.1,341.4 389.3,340.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.8,340.3 C170.5,341.6 281.0,339.3 389.2,339.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M389.4,339.6 C388.9,373.4 388.6,410.2 389.8,444.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M390.5,340.6 C388.7,374.5 390.2,410.6 389.6,443.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M389.5,443.6 C279.5,445.2 171.5,442.9 59.6,444.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M389.8,444.1 C280.3,443.2 168.4,443.7 60.7,444.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.6,444.4 C60.0,409.7 60.6,373.2 60.6,340.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.3,443.3 C59.7,409.0 58.7,375.1 59.5,339.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="225.0" y="367.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">Iris Petal Analysis (tab)</text>
+  <text x="225.0" y="391.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">its own sections only,</text>
+  <text x="225.0" y="412.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">nothing marked persistent</text>
+  <path d="M224.2,255.7 C224.4,282.2 223.0,310.6 224.1,340.7" fill="none" stroke="#adb5bd" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M224.7,255.2 C225.5,282.6 224.0,311.4 225.7,341.0" fill="none" stroke="#adb5bd" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <text x="237.0" y="300.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="start" font-weight="normal">parent_dashboard_id</text>
+  <rect x="450.0" y="196.0" width="400.0" height="184.0" rx="6" fill="#fff9db"/>
+  <path d="M449.7,195.6 C583.2,195.9 715.3,194.7 850.5,195.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M450.1,195.2 C581.8,197.4 716.8,194.9 850.0,196.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M849.5,196.4 C851.2,258.0 849.2,318.2 850.1,380.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M850.6,196.5 C849.5,256.4 851.0,320.2 850.5,380.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M849.2,379.6 C715.8,380.1 582.9,378.5 449.6,380.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M850.7,379.8 C718.1,379.8 584.7,381.6 449.6,379.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M450.5,380.0 C449.0,317.7 450.4,258.6 450.2,196.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M450.4,380.0 C448.7,319.2 451.3,258.2 449.5,196.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="650.0" y="223.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">GET /cross_tab_components/{id}</text>
+  <text x="650.0" y="247.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">_resolve_tab_family → parent + siblings</text>
+  <text x="650.0" y="268.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">→ { floating, persistent_sections }</text>
+  <text x="650.0" y="289.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal"></text>
+  <text x="650.0" y="310.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">useCrossTabComponents: one fetch</text>
+  <text x="650.0" y="331.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">per page load, whichever tab is open</text>
+  <path d="M389.8,214.9 C409.3,224.5 431.9,232.3 450.4,241.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M389.3,214.7 C408.5,221.9 431.6,233.9 451.0,242.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M450.5,242.1 C446.9,238.4 443.6,233.6 441.6,231.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M449.8,241.8 C445.2,243.0 441.3,241.9 435.8,242.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M389.7,381.9 C409.0,365.7 428.5,351.6 450.2,334.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M390.0,381.0 C409.7,367.7 430.0,350.1 449.9,333.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M450.2,334.1 C444.4,335.5 440.2,335.7 436.1,336.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M449.7,333.8 C448.3,338.9 445.5,342.7 444.7,346.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <rect x="910.0" y="128.0" width="380.0" height="136.0" rx="6" fill="#ebfbee"/>
+  <path d="M910.2,128.0 C1036.9,128.8 1164.7,127.8 1290.0,128.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M910.3,128.6 C1036.5,128.1 1163.3,129.4 1290.7,127.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1289.4,127.9 C1290.2,174.8 1291.1,217.5 1289.3,263.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1289.4,128.3 C1288.6,173.9 1290.9,219.9 1290.3,263.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1289.8,264.0 C1164.6,265.5 1035.8,265.4 910.8,264.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1289.5,263.7 C1162.3,263.8 1036.7,263.5 910.4,263.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M910.2,264.0 C910.2,218.5 908.5,172.8 909.3,128.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M909.3,264.4 C910.9,220.2 908.7,172.6 909.6,127.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1100.0" y="155.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">PersistentSectionsHost</text>
+  <text x="1100.0" y="179.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">the owner's grid section, pinned</text>
+  <text x="1100.0" y="200.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">above or below the viewing tab's</text>
+  <text x="1100.0" y="221.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">own grid (pin), read-only; members</text>
+  <text x="1100.0" y="242.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">fetched against the owner tab's id</text>
+  <rect x="910.0" y="318.0" width="380.0" height="126.0" rx="6" fill="#e7f5ff"/>
+  <path d="M909.4,318.7 C1036.4,319.3 1164.4,317.2 1290.1,318.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M909.3,318.7 C1035.4,316.6 1163.9,317.8 1290.2,318.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1289.9,317.7 C1288.7,361.1 1288.6,403.2 1290.1,444.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1289.4,317.5 C1289.3,358.8 1290.1,401.2 1289.3,443.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1290.0,443.5 C1162.7,443.4 1037.5,443.3 909.8,443.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1289.5,444.0 C1162.5,442.4 1037.4,444.2 910.7,443.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M909.8,444.0 C911.0,401.8 910.0,361.1 910.3,318.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M909.8,443.8 C909.5,403.1 910.7,360.4 909.3,317.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="1100.0" y="345.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">The tab's filter panel</text>
+  <text x="1100.0" y="369.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">the persistent section's controls</text>
+  <text x="1100.0" y="390.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">join the panel of every sibling,</text>
+  <text x="1100.0" y="411.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">carrying the same values</text>
+  <path d="M849.2,250.7 C868.3,236.3 889.0,219.3 910.7,206.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M849.3,249.9 C869.1,234.3 889.2,220.5 909.5,206.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M909.8,205.9 C906.3,206.8 900.3,208.3 895.6,207.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M909.5,205.8 C907.9,210.2 905.3,214.4 903.5,218.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M850.2,326.1 C868.2,339.1 889.2,354.9 910.5,371.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M851.0,325.3 C870.9,342.5 889.6,355.3 910.4,371.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M910.2,371.3 C907.1,367.4 906.8,362.8 903.7,358.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M910.1,371.4 C905.4,371.0 901.4,370.2 896.4,369.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M464.5,477.4 C470.4,481.9 476.1,488.7 483.1,495.2" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M465.4,495.3 C471.3,489.4 477.0,481.8 483.0,477.0" fill="none" stroke="#c92a2a" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="496.0" y="492.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">card members are skipped in the fan-out: bulk compute is per-dashboard</text>
+  <text x="46.0" y="566.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal">the flag lives on FilterSectionSpec, so a tabless dashboard is unaffected</text>
+  <text x="1294.0" y="566.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="end" font-weight="normal">/floating_components still answers, on the same family helper</text>
+</svg>

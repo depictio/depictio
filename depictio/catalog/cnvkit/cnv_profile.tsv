@@ -1,0 +1,19 @@
+sample	chrom	start	end	log2	baf	copy_number	segment	label	depth
+TUMOUR1	chr1	0	999	0.02			bin		40.0
+TUMOUR1	chr1	1000	1999	0.61			bin	MYC	41.0
+TUMOUR1	chr1	2000	2999	0.58			bin		42.0
+TUMOUR1	chr1	3000	3999	-0.04			bin		43.0
+TUMOUR1	chr1	4000	4999	-1.15			bin	PTEN	44.0
+TUMOUR1	chr1	5000	5999	-1.09			bin		45.0
+TUMOUR1	chr1	0	999	0.02	0.5	2	segment	CN 2	40.0
+TUMOUR1	chr1	1000	3999	0.6	0.34	3	segment	CN 3	45.0
+TUMOUR1	chr1	4000	5999	-1.12	0.02	1	segment	CN 1	22.0
+TUMOUR2	chr1	0	999	0.02			bin		40.0
+TUMOUR2	chr1	1000	1999	0.61			bin	MYC	41.0
+TUMOUR2	chr1	2000	2999	0.58			bin		42.0
+TUMOUR2	chr1	3000	3999	-0.04			bin		43.0
+TUMOUR2	chr1	4000	4999	-1.15			bin	PTEN	44.0
+TUMOUR2	chr1	5000	5999	-1.09			bin		45.0
+TUMOUR2	chr1	0	999	0.02	0.5	2	segment	CN 2	40.0
+TUMOUR2	chr1	1000	3999	0.6	0.34	3	segment	CN 3	45.0
+TUMOUR2	chr1	4000	5999	-1.12	0.02	1	segment	CN 1	22.0

@@ -11,14 +11,17 @@ import {
   Collapse,
   Group,
   Loader,
+  LoadingOverlay,
   Paper,
   ScrollArea,
+  SegmentedControl,
   SimpleGrid,
   Stack,
   Table,
   Tabs,
   Text,
   Title,
+  Tooltip,
   UnstyledButton,
   useMantineColorScheme,
 } from '@mantine/core';
@@ -28,6 +31,21 @@ import { AgGridReact } from 'ag-grid-react';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import type { ColDef } from 'ag-grid-community';
+import { GlassPage, STROKE, useGlassPages } from '../../chrome/variants/glass/pages';
+import '../../chrome/variants/glass/pages/project-detail.css';
+import {
+  Check,
+  ClipboardCheck,
+  Database,
+  GitBranch,
+  HardDrive,
+  Layers,
+  Settings,
+  ShieldCheck,
+  Table2,
+  Workflow,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 import { notifications } from '@mantine/notifications';
 import {
@@ -40,17 +58,7 @@ import {
   TextInput,
 } from '@mantine/core';
 
-import {
-  fetchProject,
-  fetchDataCollectionPreview,
-  fetchMultiQCByDataCollection,
-  renameDataCollection,
-  deleteDataCollection,
-  createDataCollectionFromUpload,
-  createMultiQCDataCollection,
-  checkMultiQCUniformity,
-  fetchVizSuggestions,
-} from 'depictio-react-core';
+import { checkMultiQCUniformity, createDataCollectionFromUpload, createDataCollectionFromUrl, createMultiQCDataCollection, deleteDataCollection, fetchDataCollectionPreview, fetchDeltaHistory, fetchMultiQCByDataCollection, fetchProject, fetchVizSuggestions, renameDataCollection, useBrandAccents } from 'depictio-react-core';
 import type {
   ProjectListEntry,
   PreviewResult,
@@ -59,6 +67,7 @@ import type {
   VizSuggestionsResponse,
 } from 'depictio-react-core';
 import LinksSection from './LinksSection';
+import type { ProjectJoin } from './ConnectionsMap';
 import ManageDataCollectionModal, {
   type ManageDcType,
 } from './ManageDataCollectionModal';
@@ -70,10 +79,28 @@ import { useFolderDropzone } from '../../hooks/useFolderDropzone';
 
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { AppSidebar } from '../../chrome';
-import JoinsGraph from './JoinsGraph';
 import IngestionReportPanel from './IngestionReportPanel';
+import ProjectIngestionHistoryPanel from './ProjectIngestionHistoryPanel';
+import ProjectIngestionTrigger from './ProjectIngestionTrigger';
+import { DeltaVersionHistory } from './DeltaVersionHistory';
+import ProjectSettingsModal from './ProjectSettingsModal';
 import { parseTemplate, TemplateChip, templateDocsUrl } from '../template';
-import { DcTypeIcon } from '../dcTypeIcon';
+import {
+  DcTypeBadges,
+  DcTypeIcon,
+  dcHasCoordinates,
+  dcTypeSearchKey,
+  GEO_COLOR,
+  GEO_ICON,
+} from '../dcTypeIcon';
+import {
+  AGGREGATE_COLOR,
+  DcMetatypeBadge,
+  dcMetatypeMeta,
+  METADATA_COLOR,
+} from '../dcMetatype';
+import { usePageTitle } from '../../branding';
+import { UnrecognisedFilesPanel } from './UnrecognisedFilesPanel';
 
 interface DataCollectionShape {
   _id?: string;
@@ -84,14 +111,20 @@ interface DataCollectionShape {
   /** S3 path of the registered delta table (post-aggregation) — stamped on
    *  the DC by the project enrichment query. */
   delta_location?: string;
-  /** Last-aggregation snapshot. Shape depends on the DC type; we just
-   *  pull `aggregation_time` for the "Last Aggregated" line. */
+  /** Last-aggregation snapshot. Shape depends on the DC type; we pull
+   *  `aggregation_time` for the "Last Aggregated" line and `delta_version` for
+   *  the "Delta version" line. */
   last_aggregation?:
     | {
         aggregation_time?: string;
+        delta_version?: number | null;
         [k: string]: unknown;
       }
-    | Array<{ aggregation_time?: string; [k: string]: unknown }>;
+    | Array<{
+        aggregation_time?: string;
+        delta_version?: number | null;
+        [k: string]: unknown;
+      }>;
   /** Free-form metadata bag — backend stamps `deltatable_size_bytes` for
    *  table-typed DCs and `total_file_size_bytes` / `s3_location` for
    *  multiqc DCs. Mirrors `flexible_metadata` on the Pydantic model. */
@@ -144,18 +177,6 @@ function getDcSizeBytes(dc: DataCollectionShape): number {
   return (flex.deltatable_size_bytes as number | undefined) ?? 0;
 }
 
-/** A DC is a "coordinates table" when its config carries explicit lat/lon
- *  column hints — backed by DCTableCoordinatesConfig server-side, but the
- *  dc_type stays "table". Mirrors validation.py:dc_has_coordinates. */
-function dcHasCoordinates(dc: DataCollectionShape): boolean {
-  const type = (dc.config?.type as string | undefined)?.toLowerCase();
-  if (type !== 'table') return false;
-  const props = dc.config?.dc_specific_properties as
-    | Record<string, unknown>
-    | undefined;
-  return Boolean(props?.lat_column) && Boolean(props?.lon_column);
-}
-
 /** Pick the right "where is this data stored" string for a DC. */
 function getDcStorageLocation(dc: DataCollectionShape): string {
   const dcId = (dc._id ?? dc.id) as string;
@@ -184,6 +205,17 @@ function getDcLastAggregated(dc: DataCollectionShape): string {
   return updated || 'Never';
 }
 
+/** Delta commit version of the latest aggregation, when the writer recorded
+ *  one. Read from the same `last_aggregation` bag as the timestamp — no extra
+ *  request. Aggregations written before versions were captured return null and
+ *  the row renders as unknown rather than as version 0. */
+function getDcDeltaVersion(dc: DataCollectionShape): number | null {
+  const la = dc.last_aggregation;
+  const latest = Array.isArray(la) ? la[la.length - 1] : la;
+  const version = latest?.delta_version;
+  return typeof version === 'number' ? version : null;
+}
+
 interface WorkflowShape {
   _id?: string;
   id?: string;
@@ -204,6 +236,24 @@ function workflowLabel(wf: WorkflowShape): string {
     (wf._id ?? wf.id) as string ||
     'workflow'
   );
+}
+
+/** What the page below the workflows is scoped to: the selected workflow, the
+ *  only one there is, or all of them. */
+function workflowScope(
+  workflows: WorkflowShape[],
+  selectedId: string | null,
+): { label: string; count: number } | null {
+  if (workflows.length === 0) return null;
+  const wf =
+    workflows.length === 1
+      ? workflows[0]
+      : workflows.find((w) => (w._id ?? w.id) === selectedId);
+  if (wf) return { label: workflowLabel(wf), count: wf.data_collections?.length ?? 0 };
+  return {
+    label: 'All workflows',
+    count: workflows.reduce((n, w) => n + (w.data_collections?.length ?? 0), 0),
+  };
 }
 
 function engineDescription(wf: WorkflowShape): string | null {
@@ -230,54 +280,8 @@ function flattenDataCollections(
   return workflows.flatMap((wf) => wf.data_collections ?? []);
 }
 
-/** Best-effort column extraction matching the Dash version's priority
- *  (depictio/dash/components/depictio_cytoscape_joins.py:948-989):
- *  last_aggregation.aggregation_columns_specs > config.columns
- *  > config.dc_specific_properties.columns_description (keys)
- *  > delta_table_schema (keys or field names). Falls back to []. */
-function extractColumns(dc: DataCollectionShape): string[] {
-  // Priority 1: aggregation_columns_specs from the latest aggregation entry.
-  // For DCs ingested through the React table-create / append flow this is
-  // the only populated source — without it the cytoscape table-DC node
-  // renders an empty box.
-  const lastAggRaw = dc.last_aggregation;
-  const lastAgg = Array.isArray(lastAggRaw)
-    ? lastAggRaw[lastAggRaw.length - 1]
-    : lastAggRaw;
-  const specs = (lastAgg as
-    | { aggregation_columns_specs?: Array<{ name?: unknown }> }
-    | undefined)?.aggregation_columns_specs;
-  if (Array.isArray(specs) && specs.length > 0) {
-    const names = specs
-      .map((s) => (typeof s?.name === 'string' ? s.name : null))
-      .filter((n): n is string => !!n);
-    if (names.length > 0) return names;
-  }
-
-  const config = (dc.config ?? {}) as Record<string, unknown>;
-  const direct = config.columns;
-  if (Array.isArray(direct)) return direct.map(String);
-
-  const dcSpec = config.dc_specific_properties as
-    | { columns_description?: Record<string, unknown> }
-    | undefined;
-  if (dcSpec?.columns_description && typeof dcSpec.columns_description === 'object') {
-    return Object.keys(dcSpec.columns_description);
-  }
-
-  const schema = (dc as Record<string, unknown>).delta_table_schema;
-  if (schema && typeof schema === 'object' && !Array.isArray(schema)) {
-    return Object.keys(schema as Record<string, unknown>);
-  }
-  if (Array.isArray(schema)) {
-    return (schema as Array<Record<string, unknown>>)
-      .map((f) => (typeof f?.name === 'string' ? f.name : null))
-      .filter((n): n is string => !!n);
-  }
-  return [];
-}
-
 const ProjectDetailApp: React.FC = () => {
+  const accent = useBrandAccents();
   const [project, setProject] = useState<ProjectListEntry | null>(null);
   const [deltaLocations, setDeltaLocations] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -287,11 +291,23 @@ const ProjectDetailApp: React.FC = () => {
   // dashboard banner / settings drawer) and is controlled so the ingestion
   // report can switch back to Overview when previewing a data collection.
   const [activeTab, setActiveTab] = useState<string | null>(
-    typeof window !== 'undefined' && window.location.hash === '#ingestion'
+    typeof window !== 'undefined' &&
+      ['#ingestion', '#ingestion-history'].includes(window.location.hash)
       ? 'ingestion'
       : 'overview',
   );
+  // Which half of the Ingestion tab is showing. `#ingestion-history` deep-links
+  // straight to the run history, which is what a "your ingestion failed" link
+  // should open.
+  const [ingestionView, setIngestionView] = useState<'report' | 'history'>(
+    typeof window !== 'undefined' && window.location.hash === '#ingestion-history'
+      ? 'history'
+      : 'report',
+  );
   const [refreshKey, setRefreshKey] = useState(0);
+  // Nudges the history panel off its idle 30s cadence when a browser-triggered
+  // ingestion finishes, so the completed run shows up straight away.
+  const [ingestionHistorySignal, setIngestionHistorySignal] = useState(0);
   // Scroll-to + auto-open the DC viewer when a preview was requested from the
   // ingestion report (set when onPreviewDc fires, consumed once the viewer mounts).
   const dcViewerRef = useRef<HTMLDivElement>(null);
@@ -301,9 +317,10 @@ const ProjectDetailApp: React.FC = () => {
   const [manageTarget, setManageTarget] = useState<DataCollectionShape | null>(null);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
   const [createDcOpened, setCreateDcOpened] = useState(false);
+  const [settingsOpened, setSettingsOpened] = useState(false);
   /** Cross-DC links for this project. Fetched alongside the project doc and
    *  refreshed when the user creates / edits / deletes a link from the
-   *  Links section. Wired into the JoinsGraph for visualization. */
+   *  Links section. */
   const [projectLinks, setProjectLinks] = useState<DCLink[]>([]);
 
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
@@ -312,14 +329,13 @@ const ProjectDetailApp: React.FC = () => {
   // expand/collapse state survives the remount that a refresh() triggers —
   // every DC mutation bumps refreshKey → setLoading(true) swaps the section
   // for a <Loader/>, and section-local state would reset to collapsed.
-  const [dcManagerOpened, { toggle: toggleDcManager }] = useDisclosure(false);
+  const [dcManagerOpened, { toggle: toggleDcManager }] = useDisclosure(true);
 
-  const { user } = useCurrentUser();
+  const { user, isPublicMode, loading: userLoading } = useCurrentUser();
   const projectId = readProjectIdFromPath();
 
-  useEffect(() => {
-    document.title = 'Depictio — Project Data Collections';
-  }, []);
+  usePageTitle('Project Data Collections');
+  const glass = useGlassPages();
 
   useEffect(() => {
     if (!projectId) {
@@ -342,17 +358,26 @@ const ProjectDetailApp: React.FC = () => {
 
   const refresh = () => setRefreshKey((k) => k + 1);
 
-  // Permission check — owners, editors, or admins may mutate DCs.
-  const canMutate = useMemo(() => {
-    if (!user || !project) return false;
-    if (user.is_admin) return true;
+  // Permission check: owners, editors, or admins may mutate DCs. Storage
+  // credentials are owners-only (stricter than canMutate), mirroring the
+  // backend's owner gate on /storage.
+  const { canMutate, isOwner } = useMemo(() => {
+    if (!user || !project) return { canMutate: false, isOwner: false };
+    if (user.is_admin) return { canMutate: true, isOwner: true };
     const matchUser = (list?: Array<{ _id?: string; id?: string }>) =>
       !!list?.some((u) => (u._id ?? u.id) === user.id);
-    return (
-      matchUser(project.permissions?.owners) ||
-      matchUser(project.permissions?.editors)
-    );
+    const owner = matchUser(project.permissions?.owners);
+    return { canMutate: owner || matchUser(project.permissions?.editors), isOwner: owner };
   }, [user, project]);
+
+  // Refresh and export are refused to non-admins on a public/demo deployment.
+  // Whether this is one is unknown until the auth status lands, so both stay
+  // gated until then rather than being enabled for a moment.
+  const publicModeReason = userLoading
+    ? 'Checking what you can change in this project...'
+    : isPublicMode && !user?.is_admin
+      ? 'Disabled in public/demo mode for non-admin users.'
+      : null;
 
   const workflows = useMemo<WorkflowShape[]>(
     () => (project?.workflows as WorkflowShape[] | undefined) || [],
@@ -382,10 +407,6 @@ const ProjectDetailApp: React.FC = () => {
 
   const projectType: 'basic' | 'advanced' =
     project?.project_type === 'advanced' ? 'advanced' : 'basic';
-
-  // The ingestion report only makes sense for template-instantiated projects
-  // (it compares against the frozen expected-DC manifest). Surface a tab when so.
-  const hasTemplate = useMemo(() => !!(project && parseTemplate(project)), [project]);
 
   // Tag → DC id, so identified ingestion rows can lazily list their files.
   const dcIdByTag = useMemo(() => {
@@ -427,179 +448,190 @@ const ProjectDetailApp: React.FC = () => {
     return { total, aggregate, metadata, totalBytes };
   }, [dataCollections]);
 
-  return (
-    <AppShell
-      layout="alt"
-      header={{ height: 64 }}
-      navbar={{
-        width: 260,
-        breakpoint: 'sm',
-        collapsed: { mobile: !mobileOpened, desktop: !desktopOpened },
-      }}
-      padding="md"
-    >
-      <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between" wrap="nowrap">
-          <Group gap="sm" wrap="nowrap">
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              size="md"
-              onClick={toggleMobile}
-              hiddenFrom="sm"
-              aria-label="Toggle navigation (mobile)"
-            >
-              <Icon icon="mdi:menu" width={22} />
-            </ActionIcon>
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              size="md"
-              onClick={toggleDesktop}
-              visibleFrom="sm"
-              aria-label="Toggle navigation"
-            >
-              <Icon icon="mdi:menu" width={22} />
-            </ActionIcon>
+  const body = (
+    <>
+      {loading ? (
+        <Center mih={300}>
+          <Loader />
+        </Center>
+      ) : loadError ? (
+        <Center mih={300}>
+          <Stack align="center" gap="xs">
             <Icon
-              icon="mdi:jira"
-              width={22}
-              color="var(--mantine-color-teal-6)"
+              icon="mdi:alert-circle"
+              width={32}
+              color="var(--mantine-color-red-6)"
             />
-            <Title order={3} c="teal">
-              Project Data Manager
-            </Title>
-          </Group>
-          <Group gap="xs">
-            <Button
-              component="a"
-              href={`/projects/${projectId}/permissions`}
-              variant="subtle"
-              color="blue"
-              leftSection={<Icon icon="mdi:shield-account-outline" width={16} />}
-            >
-              Permissions
+            <Text c="red">{loadError}</Text>
+            <Button component="a" href="/projects" variant="light">
+              Back to projects
             </Button>
-            <Button
-              component="a"
-              href="/projects"
-              variant="subtle"
-              color="gray"
-              leftSection={<Icon icon="mdi:arrow-left" width={16} />}
-            >
-              Back to Projects
-            </Button>
-          </Group>
-        </Group>
-      </AppShell.Header>
-
-      <AppShell.Navbar p="md">
-        <AppSidebar active="projects" />
-      </AppShell.Navbar>
-
-      <AppShell.Main>
-        <Box px="lg" py="md">
-          {loading ? (
-            <Center mih={300}>
-              <Loader />
-            </Center>
-          ) : loadError ? (
-            <Center mih={300}>
-              <Stack align="center" gap="xs">
-                <Icon
-                  icon="mdi:alert-circle"
-                  width={32}
-                  color="var(--mantine-color-red-6)"
+          </Stack>
+        </Center>
+      ) : !project ? null : (
+        (() => {
+          // The workflows come first and scope everything below them, so the
+          // tabs sit under the panel rather than the panel inside a tab.
+          const workflowsPanel =
+            projectType === 'advanced' && workflows.length > 0 ? (
+              <WorkflowsPanel
+                workflows={workflows}
+                templateSource={parseTemplate(project)?.source.toLowerCase() || null}
+                selectedWorkflowId={selectedWorkflowId}
+                scope={workflowScope(workflows, selectedWorkflowId)}
+                onSelect={(id) => {
+                  setSelectedWorkflowId(id);
+                  setSelectedDcId(null);
+                }}
+              />
+            ) : null;
+          const overviewSections = (
+            <Stack gap="lg">
+              <DataCollectionsManagerSection
+                projectType={projectType}
+                scopeLabel={
+                  projectType === 'advanced'
+                    ? (workflowScope(workflows, selectedWorkflowId)?.label ?? null)
+                    : null
+                }
+                stats={stats}
+                dataCollections={dataCollections}
+                selectedDcId={selectedDcId}
+                canMutate={canMutate}
+                opened={dcManagerOpened}
+                onToggle={toggleDcManager}
+                onSelect={setSelectedDcId}
+                onRename={setRenameTarget}
+                onDelete={setDeleteTarget}
+                onManage={setManageTarget}
+                onCreate={() => setCreateDcOpened(true)}
+              />
+              <UnrecognisedFilesPanel
+                templateOrigin={(project as Record<string, unknown>).template_origin}
+              />
+              {projectId && (
+                <LinksSection
+                  projectId={projectId}
+                  dataCollections={allDataCollections.map((d) => ({
+                    id: (d._id ?? d.id) as string,
+                    tag: d.data_collection_tag || ((d._id ?? d.id) as string),
+                    type: (d.config?.type as string | undefined) || 'unknown',
+                  }))}
+                  canMutate={canMutate}
+                  onLinksChange={setProjectLinks}
+                  joins={
+                    ((project as Record<string, unknown>).joins as ProjectJoin[] | undefined) || []
+                  }
                 />
-                <Text c="red">{loadError}</Text>
-                <Button component="a" href="/projects" variant="light">
-                  Back to projects
-                </Button>
-              </Stack>
-            </Center>
-          ) : !project ? null : (
-            (() => {
-              const overviewSections = (
-                <Stack gap="lg">
-                  {projectType === 'advanced' && workflows.length > 0 && (
-                    <WorkflowsPanel
-                      workflows={workflows}
-                      templateSource={parseTemplate(project)?.source.toLowerCase() || null}
-                      selectedWorkflowId={selectedWorkflowId}
-                      onSelect={(id) => {
-                        setSelectedWorkflowId(id);
-                        setSelectedDcId(null);
-                      }}
-                    />
-                  )}
-                  <DataCollectionsManagerSection
+              )}
+              <Box ref={dcViewerRef}>
+                {selectedDc && (
+                  <DataCollectionViewer
+                    dc={selectedDc}
                     projectType={projectType}
-                    stats={stats}
-                    dataCollections={dataCollections}
-                    selectedDcId={selectedDcId}
-                    canMutate={canMutate}
-                    opened={dcManagerOpened}
-                    onToggle={toggleDcManager}
-                    onSelect={setSelectedDcId}
-                    onRename={setRenameTarget}
-                    onDelete={setDeleteTarget}
-                    onManage={setManageTarget}
-                    onCreate={() => setCreateDcOpened(true)}
+                    allDataCollections={dataCollections}
+                    joins={
+                      ((project as Record<string, unknown>).joins as
+                        | Array<{
+                            dc1?: string;
+                            dc2?: string;
+                            on_columns?: string[];
+                          }>
+                        | undefined) || []
+                    }
+                    links={projectLinks}
                   />
-                  {projectId && (
-                    <LinksSection
-                      projectId={projectId}
-                      dataCollections={allDataCollections.map((d) => ({
-                        id: (d._id ?? d.id) as string,
-                        tag: d.data_collection_tag || ((d._id ?? d.id) as string),
-                        type: (d.config?.type as string | undefined) || 'unknown',
-                      }))}
-                      canMutate={canMutate}
-                      onLinksChange={setProjectLinks}
-                    />
-                  )}
-                  <Box ref={dcViewerRef}>
-                    {selectedDc && (
-                      <DataCollectionViewer
-                        dc={selectedDc}
-                        projectType={projectType}
-                        allDataCollections={dataCollections}
-                        joins={
-                          ((project as Record<string, unknown>).joins as
-                            | Array<{
-                                dc1?: string;
-                                dc2?: string;
-                                on_columns?: string[];
-                              }>
-                            | undefined) || []
+                )}
+              </Box>
+            </Stack>
+          );
+          return (
+            <Stack gap="lg">
+              <ProjectHeader project={project} projectType={projectType} />
+              {workflowsPanel}
+              {projectId ? (
+                <Tabs
+                  value={activeTab}
+                  onChange={setActiveTab}
+                  keepMounted={false}
+                  variant="pills"
+                  className="dc-project-tabs"
+                >
+                  {glass ? (
+                    // Glass: the page's switch, two equal halves across the
+                    // content width, each saying what it holds.
+                    <Tabs.List mb="xl">
+                      <Tabs.Tab
+                        value="overview"
+                        className="dc-project-tab"
+                        leftSection={
+                          <span className="dc-project-tab-icon">
+                            <Database size={20} strokeWidth={STROKE} aria-hidden />
+                          </span>
                         }
-                        links={projectLinks}
-                      />
-                    )}
-                  </Box>
-                </Stack>
-              );
-              return (
-                <Stack gap="lg">
-                  <ProjectHeader project={project} projectType={projectType} />
-                  {hasTemplate && projectId ? (
-                    <Tabs value={activeTab} onChange={setActiveTab} keepMounted={false}>
-                      <Tabs.List mb="md">
-                        <Tabs.Tab
-                          value="overview"
-                          leftSection={<Icon icon="mdi:table-cog" width={16} />}
-                        >
-                          Data collections
-                        </Tabs.Tab>
-                        <Tabs.Tab
-                          value="ingestion"
-                          leftSection={<Icon icon="mdi:clipboard-check-outline" width={16} />}
-                        >
-                          Ingestion
-                        </Tabs.Tab>
-                      </Tabs.List>
-                      <Tabs.Panel value="overview">{overviewSections}</Tabs.Panel>
-                      <Tabs.Panel value="ingestion">
+                      >
+                        <span className="dc-project-tab-label">Data collections</span>
+                        <span className="dc-project-tab-meta">
+                          {stats.total} collection{stats.total === 1 ? '' : 's'}
+                          {stats.totalBytes > 0 ? ` · ${formatBytes(stats.totalBytes)}` : ''}
+                        </span>
+                      </Tabs.Tab>
+                      <Tabs.Tab
+                        value="ingestion"
+                        className="dc-project-tab"
+                        leftSection={
+                          <span className="dc-project-tab-icon">
+                            <ClipboardCheck size={20} strokeWidth={STROKE} aria-hidden />
+                          </span>
+                        }
+                      >
+                        <span className="dc-project-tab-label">Ingestion report</span>
+                        <span className="dc-project-tab-meta">What each run found, and when</span>
+                      </Tabs.Tab>
+                    </Tabs.List>
+                  ) : (
+                    <Tabs.List mb="md">
+                      <Tabs.Tab
+                        value="overview"
+                        fz="md"
+                        px="lg"
+                        leftSection={<Icon icon="mdi:table-cog" width={18} />}
+                      >
+                        Data collections
+                      </Tabs.Tab>
+                      <Tabs.Tab
+                        value="ingestion"
+                        fz="md"
+                        px="lg"
+                        leftSection={<Icon icon="mdi:clipboard-check-outline" width={18} />}
+                      >
+                        Ingestion report
+                      </Tabs.Tab>
+                    </Tabs.List>
+                  )}
+                  <Tabs.Panel value="overview">{overviewSections}</Tabs.Panel>
+                  <Tabs.Panel value="ingestion">
+                    <Stack gap="md">
+                      <Group justify="space-between" wrap="wrap" gap="sm">
+                        <SegmentedControl
+                          size="xs"
+                          w="fit-content"
+                          value={ingestionView}
+                          onChange={(v: string) => setIngestionView(v as 'report' | 'history')}
+                          data={[
+                            { value: 'report', label: 'Latest run' },
+                            { value: 'history', label: 'History' },
+                          ]}
+                        />
+                        <ProjectIngestionTrigger
+                          projectId={projectId}
+                          // Switch to History as soon as a run starts —
+                          // that is where its progress is visible.
+                          onStarted={() => setIngestionView('history')}
+                          onFinished={() => setIngestionHistorySignal((n) => n + 1)}
+                        />
+                      </Group>
+                      {ingestionView === 'report' ? (
                         <IngestionReportPanel
                           projectId={projectId}
                           dcIdByTag={dcIdByTag}
@@ -613,18 +645,42 @@ const ProjectDetailApp: React.FC = () => {
                             setActiveTab('overview');
                           }}
                         />
-                      </Tabs.Panel>
-                    </Tabs>
-                  ) : (
-                    overviewSections
-                  )}
-                </Stack>
-              );
-            })()
-          )}
-        </Box>
-      </AppShell.Main>
+                      ) : (
+                        <ProjectIngestionHistoryPanel
+                          projectId={projectId}
+                          refreshSignal={ingestionHistorySignal}
+                        />
+                      )}
+                    </Stack>
+                  </Tabs.Panel>
+                </Tabs>
+              ) : (
+                overviewSections
+              )}
+            </Stack>
+          );
+        })()
+      )}
+    </>
+  );
 
+  const modals = (
+    <>
+      {/* Outside the loading switch, so reloading the project after a
+          refresh keeps the dialog, and the run it follows, mounted. */}
+      {projectId && (
+        <ProjectSettingsModal
+          opened={settingsOpened}
+          onClose={() => setSettingsOpened(false)}
+          projectId={projectId}
+          projectName={project?.name}
+          canManageStorage={isOwner}
+          canMutate={canMutate}
+          publicModeReason={publicModeReason}
+          dataCollections={allDataCollections}
+          onReloadProject={refresh}
+        />
+      )}
       <CreateDataCollectionModal
         opened={createDcOpened}
         projectType={projectType}
@@ -675,6 +731,138 @@ const ProjectDetailApp: React.FC = () => {
           }}
         />
       )}
+    </>
+  );
+
+  if (glass) {
+    const name = project?.name || 'Project';
+    return (
+      <>
+        <GlassPage
+          section="projects"
+          title={name}
+          description="Workflows, data collections, ingestion runs and the links between them."
+          crumbs={[{ label: name }]}
+          actions={
+            <Group gap="xs">
+              {/* Open to every reader once the project has loaded: the sections
+                  inside disable what the reader may not change and say why. */}
+              <Button
+                variant="default"
+                data-testid="project-settings-button"
+                leftSection={<Settings size={17} strokeWidth={1.8} aria-hidden />}
+                disabled={!project}
+                onClick={() => setSettingsOpened(true)}
+              >
+                Project settings
+              </Button>
+              <Button
+                component="a"
+                href={`/projects/${projectId}/permissions`}
+                variant="default"
+                leftSection={<ShieldCheck size={17} strokeWidth={1.8} aria-hidden />}
+              >
+                Permissions
+              </Button>
+            </Group>
+          }
+        >
+          {body}
+        </GlassPage>
+        {modals}
+      </>
+    );
+  }
+
+  return (
+    <AppShell
+      data-testid="app-shell"
+      layout="alt"
+      header={{ height: 64 }}
+      navbar={{
+        width: 260,
+        breakpoint: 'sm',
+        collapsed: { mobile: !mobileOpened, desktop: !desktopOpened },
+      }}
+      padding="md"
+    >
+      <AppShell.Header>
+        <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+          <Group gap="sm" wrap="nowrap">
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              size="md"
+              onClick={toggleMobile}
+              hiddenFrom="sm"
+              aria-label="Toggle navigation (mobile)"
+            >
+              <Icon icon="mdi:menu" width={22} />
+            </ActionIcon>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              size="md"
+              onClick={toggleDesktop}
+              visibleFrom="sm"
+              aria-label="Toggle navigation"
+            >
+              <Icon icon="mdi:menu" width={22} />
+            </ActionIcon>
+            <Icon
+              icon="mdi:jira"
+              width={22}
+              color={`var(--mantine-color-${accent.secondary}-6)`}
+            />
+            <Title order={3} c={accent.secondary}>
+              Project Data Manager
+            </Title>
+          </Group>
+          <Group gap="xs">
+            {/* Open to every reader once the project has loaded: the sections
+                inside disable what the reader may not change and say why. */}
+            <Button
+              variant="light"
+              color={accent.secondary}
+              data-testid="project-settings-button"
+              leftSection={<Icon icon="ic:baseline-settings" width={16} />}
+              disabled={!project}
+              onClick={() => setSettingsOpened(true)}
+            >
+              Project settings
+            </Button>
+            <Button
+              component="a"
+              href={`/projects/${projectId}/permissions`}
+              variant="subtle"
+              color="blue"
+              leftSection={<Icon icon="mdi:shield-account-outline" width={16} />}
+            >
+              Permissions
+            </Button>
+            <Button
+              component="a"
+              href="/projects"
+              variant="subtle"
+              color="gray"
+              leftSection={<Icon icon="mdi:arrow-left" width={16} />}
+            >
+              Back to Projects
+            </Button>
+          </Group>
+        </Group>
+      </AppShell.Header>
+
+      <AppShell.Navbar p="md">
+        <AppSidebar active="projects" />
+      </AppShell.Navbar>
+
+      <AppShell.Main>
+        <Box px="lg" py="md">
+          {body}
+        </Box>
+      </AppShell.Main>
+      {modals}
     </AppShell>
   );
 };
@@ -824,6 +1012,7 @@ const MultiQCUniformityChecklist: React.FC<{
   mismatch: MultiQCMismatch | null;
   onCheck: () => void;
 }> = ({ fileCount, submitting, validating, lastCheckPassed, mismatch, onCheck }) => {
+  const accent = useBrandAccents();
   const hasMultiple = fileCount >= 2;
   const busy = submitting || validating;
   const statusText = !hasMultiple
@@ -857,7 +1046,7 @@ const MultiQCUniformityChecklist: React.FC<{
           <Button
             size="compact-xs"
             variant="light"
-            color="teal"
+            color={accent.secondary}
             onClick={onCheck}
             disabled={!hasMultiple || busy}
             loading={validating}
@@ -1084,7 +1273,14 @@ const CreateDataCollectionModal: React.FC<{
   onClose: () => void;
   onSuccess: () => void;
 }> = ({ opened, projectType, projectId, onClose, onSuccess }) => {
+  const accent = useBrandAccents();
   const [dcType, setDcType] = useState<'table' | 'multiqc'>('table');
+  // Where the table comes from. 'upload' pushes bytes through the browser;
+  // 'url' hands the server a location to fetch itself, which is the only
+  // workable route for files too large to upload or buckets the browser
+  // cannot reach.
+  const [tableSource, setTableSource] = useState<'upload' | 'url'>('upload');
+  const [remoteUrl, setRemoteUrl] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -1181,22 +1377,33 @@ const CreateDataCollectionModal: React.FC<{
     [csvColumns],
   );
 
-  // Auto-confirm coords on lat/lon header detection. Gated by a per-file ref
-  // so a user who toggles the switch off doesn't have it flipped back on by
-  // this effect (the auto-fill fires once per file, then stays out of the way).
-  const autoConfirmedForFileRef = useRef<File | null>(null);
+  // Prefill lat/lon pickers on header detection — a SUGGESTION only. The
+  // "Save as a coordinates table" switch stays off until the user flips it:
+  // silently opting a table in used to turn every metadata table carrying
+  // latitude/longitude columns into a "Coordinates" table, hiding its
+  // Metadata nature. Gated by a per-file ref so it fires once per file.
+  const prefilledForFileRef = useRef<File | null>(null);
   useEffect(() => {
     if (!file) {
-      autoConfirmedForFileRef.current = null;
+      prefilledForFileRef.current = null;
       return;
     }
     if (!coordsGuess) return;
-    if (autoConfirmedForFileRef.current === file) return;
-    autoConfirmedForFileRef.current = file;
+    if (prefilledForFileRef.current === file) return;
+    prefilledForFileRef.current = file;
     setLatColumn(coordsGuess.latColumn);
     setLonColumn(coordsGuess.lonColumn);
-    setCoordsConfirmed(true);
   }, [file, coordsGuess]);
+
+  // The name last filled in from a picked file or a typed URL. While the name
+  // field still holds it, a newer file or URL replaces it; once the user
+  // edits the name, it is theirs and stays.
+  const autoNameRef = useRef('');
+  const autoFillName = (next: string) => {
+    if (name.trim() && name !== autoNameRef.current) return;
+    autoNameRef.current = next;
+    setName(next);
+  };
 
   // Reset everything when the modal closes — otherwise re-opening shows stale
   // state from the previous attempt.
@@ -1205,6 +1412,7 @@ const CreateDataCollectionModal: React.FC<{
       setDcType('table');
       setFile(null);
       setName('');
+      autoNameRef.current = '';
       setDescription('');
       setFileFormat('csv');
       setSeparator(',');
@@ -1218,6 +1426,8 @@ const CreateDataCollectionModal: React.FC<{
       setLonColumn(null);
       setCoordsConfirmed(false);
       setParsingHeader(false);
+      setTableSource('upload');
+      setRemoteUrl('');
       multiqcDropzone.clear();
       tableDropzone.clear();
     }
@@ -1226,8 +1436,10 @@ const CreateDataCollectionModal: React.FC<{
   }, [opened]);
 
   // Auto-fill format + name from picked filename. Don't clobber a name the
-  // user already typed; do clobber the format because picking a new file
-  // means a new format.
+  // user already typed (see autoFillName); do clobber the format because
+  // picking a new file means a new format. Runs per file only: re-running on
+  // every keystroke of the name field would reset a separator or format the
+  // user picked since.
   useEffect(() => {
     if (!file) return;
     const guessed = guessFormat(file.name);
@@ -1235,11 +1447,27 @@ const CreateDataCollectionModal: React.FC<{
       setFileFormat(guessed);
       setSeparator(guessed === 'tsv' ? '\t' : ',');
     }
-    if (!name.trim()) {
-      const stem = file.name.replace(/\.[^.]+$/, '');
-      setName(stem);
+    autoFillName(file.name.replace(/\.[^.]+$/, ''));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file]);
+
+  // Same auto-fill for the remote-URL source: the last path segment plays the
+  // role the picked filename plays above. It follows the URL as it is typed
+  // ("https://e" first gives "e") until the user edits the name.
+  useEffect(() => {
+    if (tableSource !== 'url') return;
+    const basename = remoteUrl.trim().split('?')[0].split('/').pop();
+    if (!basename) return;
+    const guessed = guessFormat(basename);
+    if (guessed) {
+      setFileFormat(guessed);
+      setSeparator(guessed === 'tsv' ? '\t' : ',');
     }
-  }, [file, name]);
+    autoFillName(basename.replace(/\.[^.]+$/, ''));
+    // `name` is intentionally read but not depended on: re-running on every
+    // keystroke of the name field would fight the user's own edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remoteUrl, tableSource]);
 
   // Clear any prior uniformity mismatch (and stale pass state) when the user
   // changes the dropped file set — both refer to a different set of reports.
@@ -1372,6 +1600,46 @@ const CreateDataCollectionModal: React.FC<{
           message: result.message || `"${name.trim()}" is ready.`,
           autoClose: 4000,
         });
+      } else if (tableSource === 'url') {
+        const url = remoteUrl.trim();
+        if (!url) {
+          setError('Enter the URL of the file.');
+          setSubmitting(false);
+          return;
+        }
+        if (!/^(https?|s3):\/\//i.test(url)) {
+          // http:// passes here; whether the server accepts it depends on
+          // DEPICTIO_REMOTE_ALLOW_HTTP.
+          setError(
+            'The URL must start with https://, s3:// or http:// ' +
+              '(plain http:// is only accepted when the server allows it).',
+          );
+          setSubmitting(false);
+          return;
+        }
+        if (separator === 'custom' && !customSeparator) {
+          setError('Custom separator cannot be empty.');
+          setSubmitting(false);
+          return;
+        }
+        const result = await createDataCollectionFromUrl({
+          projectId,
+          name: name.trim(),
+          description: description.trim(),
+          dataType: 'table',
+          fileFormat,
+          separator,
+          customSeparator: separator === 'custom' ? customSeparator : null,
+          compression,
+          hasHeader,
+          url,
+        });
+        notifications.show({
+          color: 'teal',
+          title: 'Data collection created',
+          message: result.message || `"${name.trim()}" is ready.`,
+          autoClose: 2500,
+        });
       } else {
         if (!file) {
           setError('Pick a file to upload.');
@@ -1433,6 +1701,14 @@ const CreateDataCollectionModal: React.FC<{
 
   const isDelimited = fileFormat === 'csv' || fileFormat === 'tsv';
 
+  /** True while the chosen source still lacks an input the Create button needs. */
+  const isMissingInput = (): boolean => {
+    if (!name.trim()) return true;
+    if (dcType === 'multiqc') return multiqcDropzone.files.length === 0;
+    if (tableSource === 'url') return !remoteUrl.trim();
+    return !file || (coordsConfirmed && (!latColumn || !lonColumn));
+  };
+
   return (
     <Modal
       opened={opened}
@@ -1448,9 +1724,9 @@ const CreateDataCollectionModal: React.FC<{
           <Icon
             icon="mdi:database-plus-outline"
             width={32}
-            color="var(--mantine-color-teal-6)"
+            color={`var(--mantine-color-${accent.secondary}-6)`}
           />
-          <Title order={3} c="teal" m={0}>
+          <Title order={3} c={accent.secondary} m={0}>
             Create a Data Collection
           </Title>
         </Group>
@@ -1461,24 +1737,18 @@ const CreateDataCollectionModal: React.FC<{
           variant="default"
         >
           <Tabs.List grow>
+            {/* Same glyphs the manager and the ingestion report use, so the
+                type you pick here is the type you recognise later. */}
             <Tabs.Tab
               value="table"
-              leftSection={<Icon icon="mdi:table" width={18} />}
+              leftSection={<DcTypeIcon type="table" size={18} withTooltip={false} />}
               disabled={submitting}
             >
               Table (CSV / TSV / Parquet)
             </Tabs.Tab>
             <Tabs.Tab
               value="multiqc"
-              leftSection={
-                <img
-                  src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}
-                  alt=""
-                  width={18}
-                  height={18}
-                  style={{ objectFit: 'contain', display: 'block' }}
-                />
-              }
+              leftSection={<DcTypeIcon type="multiqc" size={18} withTooltip={false} />}
               disabled={submitting}
             >
               MultiQC report(s)
@@ -1487,24 +1757,59 @@ const CreateDataCollectionModal: React.FC<{
 
           <Tabs.Panel value="table" pt="md">
             <Stack gap="xs">
-              <TableFileDropZone
-                dropzone={tableDropzone}
-                file={file}
-                submitting={submitting}
-                icon="mdi:file-upload-outline"
-                title="Drop a CSV, TSV, Parquet, or Feather file"
-                onRemove={() => {
-                  setFile(null);
-                  setCsvColumns([]);
-                  setLatColumn(null);
-                  setLonColumn(null);
-                  setCoordsConfirmed(false);
-                  tableDropzone.clear();
-                }}
+              <SegmentedControl
+                fullWidth
+                value={tableSource}
+                onChange={(value) => setTableSource(value as 'upload' | 'url')}
+                disabled={submitting}
+                data={[
+                  { label: 'Upload a file', value: 'upload' },
+                  { label: 'Remote URL', value: 'url' },
+                ]}
               />
-              {file && (
+              {tableSource === 'url' ? (
+                <TextInput
+                  label="File URL"
+                  placeholder="https://example.org/data.csv or s3://bucket/key.csv"
+                  description="Fetched by the server, so the file never travels through your browser. Private buckets use this project's storage credentials; a bucket the administrator marked public is read without any."
+                  value={remoteUrl}
+                  onChange={(e) => setRemoteUrl(e.currentTarget.value)}
+                  disabled={submitting}
+                />
+              ) : (
+                <TableFileDropZone
+                  dropzone={tableDropzone}
+                  file={file}
+                  submitting={submitting}
+                  icon="mdi:file-upload-outline"
+                  title="Drop a CSV, TSV, Parquet, or Feather file"
+                  onRemove={() => {
+                    setFile(null);
+                    setCsvColumns([]);
+                    setLatColumn(null);
+                    setLonColumn(null);
+                    setCoordsConfirmed(false);
+                    tableDropzone.clear();
+                  }}
+                />
+              )}
+              {/* The URL source sends no coordinates, so a file picked before
+                  switching to it must not keep offering them. */}
+              {tableSource === 'upload' && file && (
                 <Paper p="sm" withBorder radius="sm" bg="var(--mantine-color-default-hover)">
                   <Stack gap="xs">
+                    {coordsGuess && !coordsConfirmed && (
+                      <Alert
+                        color={GEO_COLOR}
+                        variant="light"
+                        icon={<Icon icon={GEO_ICON} />}
+                        data-testid="coords-detected-alert"
+                      >
+                        Geographic columns detected ({coordsGuess.latColumn} /{' '}
+                        {coordsGuess.lonColumn}). Turn on the switch below to make this
+                        table available to Map components.
+                      </Alert>
+                    )}
                     <Switch
                       label="Save as a coordinates table"
                       description="Adds latitude / longitude column metadata so the data collection can power Map components."
@@ -1751,9 +2056,11 @@ const CreateDataCollectionModal: React.FC<{
           icon={<Icon icon="mdi:information-outline" width={18} />}
         >
           <Text size="xs">
-            The file will be scanned and aggregated to a Delta table on the
-            server. Larger files take longer — keep this dialog open until you
-            see the success notification. Need the legacy flow?{' '}
+            {dcType === 'table' && tableSource === 'url'
+              ? 'The server fetches the URL itself and aggregates it to a Delta table. The address is screened before any request is made, so private and internal addresses are refused. '
+              : 'The file will be scanned and aggregated to a Delta table on the server. '}
+            Larger files take longer: keep this dialog open until you see the
+            success notification. Need the legacy flow?{' '}
             <Anchor
               href={`/project/${readProjectIdFromPath()}/data`}
               target="_blank"
@@ -1770,16 +2077,10 @@ const CreateDataCollectionModal: React.FC<{
             Cancel
           </Button>
           <Button
-            color="teal"
+            color={accent.secondary}
             onClick={handleSubmit}
             loading={submitting}
-            disabled={
-              !name.trim() ||
-              (dcType === 'multiqc'
-                ? multiqcDropzone.files.length === 0
-                : !file ||
-                  (coordsConfirmed && (!latColumn || !lonColumn)))
-            }
+            disabled={isMissingInput()}
             leftSection={<Icon icon="mdi:cloud-upload-outline" width={16} />}
           >
             Create
@@ -1795,6 +2096,7 @@ const RenameDataCollectionModal: React.FC<{
   onClose: () => void;
   onSuccess: () => void;
 }> = ({ target, onClose, onSuccess }) => {
+  const accent = useBrandAccents();
   const [name, setName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1856,7 +2158,7 @@ const RenameDataCollectionModal: React.FC<{
           <Button variant="default" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button color="teal" onClick={handleSubmit} loading={submitting}>
+          <Button color={accent.secondary} onClick={handleSubmit} loading={submitting}>
             Save
           </Button>
         </Group>
@@ -1939,11 +2241,63 @@ const DeleteDataCollectionModal: React.FC<{
   );
 };
 
+/** Basic / Advanced as one calm tag: the kind is the icon, never a hue. */
+const ProjectTypeTag: React.FC<{
+  projectType: 'basic' | 'advanced';
+  size?: 'sm' | 'md';
+}> = ({ projectType, size = 'sm' }) => {
+  const Glyph = projectType === 'advanced' ? Workflow : Table2;
+  return (
+    <Badge
+      variant="light"
+      color="gray"
+      size={size}
+      leftSection={<Glyph size={12} strokeWidth={2} aria-hidden />}
+    >
+      {projectType === 'advanced' ? 'Advanced' : 'Basic'}
+    </Badge>
+  );
+};
+
 const ProjectHeader: React.FC<{
   project: ProjectListEntry;
   projectType: 'basic' | 'advanced';
 }> = ({ project, projectType }) => {
+  const accent = useBrandAccents();
   const tmpl = parseTemplate(project);
+  const glass = useGlassPages();
+  // Glass: the page head already names the project, so the card keeps only
+  // its facts, on one row.
+  if (glass) {
+    return (
+      <Paper withBorder radius="md" px="lg" py="md">
+        <Group gap="lg" wrap="wrap" align="center">
+          <Group gap="xs" wrap="nowrap">
+            <Text size="sm" c="dimmed" fw={600}>
+              Type
+            </Text>
+            <ProjectTypeTag projectType={projectType} size="md" />
+            <Text size="sm" c="dimmed" visibleFrom="sm">
+              {projectType === 'advanced'
+                ? 'CLI-driven, with workflows and pipelines'
+                : 'Data collections managed here directly'}
+            </Text>
+          </Group>
+          {tmpl && (
+            <Group gap="xs" wrap="wrap">
+              <Text size="sm" c="dimmed" fw={600}>
+                Template
+              </Text>
+              <TemplateChip parsed={tmpl} verbose plain />
+              <Anchor href={templateDocsUrl(tmpl)} target="_blank" rel="noreferrer" size="sm" fw={600}>
+                Documentation
+              </Anchor>
+            </Group>
+          )}
+        </Group>
+      </Paper>
+    );
+  }
   return (
     <Paper withBorder radius="md" p="lg">
       <Stack gap="xs">
@@ -1951,9 +2305,9 @@ const ProjectHeader: React.FC<{
           <Icon
             icon="mdi:database-outline"
             width={26}
-            color="var(--mantine-color-teal-6)"
+            color={`var(--mantine-color-${accent.secondary}-6)`}
           />
-          <Title order={3} c="teal" style={{ fontWeight: 600 }}>
+          <Title order={3} c={accent.secondary} style={{ fontWeight: 600 }}>
             Project Data Manager
           </Title>
         </Group>
@@ -2040,9 +2394,116 @@ const WorkflowsPanel: React.FC<{
    *  redundant engine badge. */
   templateSource: string | null;
   selectedWorkflowId: string | null;
+  /** What the content below is scoped to (Glass draws the link to it). */
+  scope: { label: string; count: number } | null;
   onSelect: (id: string | null) => void;
-}> = ({ workflows, templateSource, selectedWorkflowId, onSelect }) => {
+}> = ({ workflows, templateSource, selectedWorkflowId, scope, onSelect }) => {
+  const glass = useGlassPages();
   const brandImage = templateSource ? WORKFLOW_BRAND_IMAGE[templateSource] : undefined;
+  if (glass) {
+    // A lone workflow is the scope whether or not it was clicked, so it
+    // always shows as selected and cannot be toggled off.
+    const only = workflows.length === 1;
+    return (
+      <section className="pd-workflows" aria-label="Workflows">
+        <div className="pd-section-head">
+          <GitBranch size={18} strokeWidth={STROKE} aria-hidden />
+          <Title order={4}>Workflows</Title>
+          <span className="pd-count">{workflows.length}</span>
+          {!only && (
+            <span className="pd-hint">
+              {selectedWorkflowId
+                ? 'The data collections below are scoped to the selected workflow.'
+                : 'Pick one to scope the data collections below.'}
+            </span>
+          )}
+          {selectedWorkflowId && !only && (
+            <Button
+              variant="subtle"
+              color="gray"
+              size="compact-xs"
+              ml="auto"
+              onClick={() => onSelect(null)}
+            >
+              Show all
+            </Button>
+          )}
+        </div>
+        <div className="pd-wf-grid" role="group" aria-label="Workflow">
+          {workflows.map((wf) => {
+            const id = (wf._id ?? wf.id) as string;
+            const isSelected = only || id === selectedWorkflowId;
+            const dcCount = wf.data_collections?.length ?? 0;
+            const engine = engineDescription(wf);
+            const toggle = () => {
+              if (!only) onSelect(isSelected ? null : id);
+            };
+            return (
+              <div
+                key={id}
+                className="pd-wf-card"
+                data-selected={isSelected || undefined}
+                role="button"
+                tabIndex={0}
+                aria-pressed={isSelected}
+                aria-disabled={only || undefined}
+                onClick={toggle}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggle();
+                  }
+                }}
+              >
+                <span className="pd-wf-chip">
+                  {brandImage ? (
+                    <img
+                      src={`${import.meta.env.BASE_URL}logos/workflows/${brandImage}`}
+                      alt=""
+                      width={22}
+                      height={22}
+                    />
+                  ) : (
+                    <Workflow size={20} strokeWidth={STROKE} aria-hidden />
+                  )}
+                </span>
+                <span className="pd-wf-body">
+                  <span className="pd-wf-name">{workflowLabel(wf)}</span>
+                  <span className="pd-wf-meta">
+                    {[
+                      wf.version ? `Version ${wf.version}` : null,
+                      !brandImage && engine ? engine : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || 'Workflow'}
+                  </span>
+                  <span className="pd-wf-meta">
+                    <Database size={13} strokeWidth={STROKE} aria-hidden />
+                    {dcCount} data collection{dcCount === 1 ? '' : 's'}
+                  </span>
+                </span>
+                <span className="pd-wf-mark" aria-hidden>
+                  {isSelected && <Check size={13} strokeWidth={3} />}
+                </span>
+                {isSelected && <span className="pd-wf-selected">Selected</span>}
+              </div>
+            );
+          })}
+        </div>
+        {scope && (
+          <div className="pd-scope" role="status">
+            <span className="pd-scope-label">
+              <GitBranch size={14} strokeWidth={STROKE} aria-hidden />
+              <b>{scope.label}</b>
+              <span>
+                {scope.count} data collection{scope.count === 1 ? '' : 's'}
+              </span>
+            </span>
+          </div>
+        )}
+      </section>
+    );
+  }
   return (
     <Stack gap="md">
       <Group gap="xs">
@@ -2152,6 +2613,9 @@ const WorkflowsPanel: React.FC<{
 
 const DataCollectionsManagerSection: React.FC<{
   projectType: 'basic' | 'advanced';
+  /** The workflow the list is scoped to (advanced projects), named in the
+   *  Glass header. */
+  scopeLabel?: string | null;
   stats: DcStats;
   dataCollections: DataCollectionShape[];
   selectedDcId: string | null;
@@ -2171,6 +2635,7 @@ const DataCollectionsManagerSection: React.FC<{
   onCreate: () => void;
 }> = ({
   projectType,
+  scopeLabel,
   stats,
   dataCollections,
   selectedDcId,
@@ -2183,31 +2648,159 @@ const DataCollectionsManagerSection: React.FC<{
   onManage,
   onCreate,
 }) => {
-  return (
-    <Card withBorder radius="md" p="sm">
-      <UnstyledButton onClick={onToggle} w="100%">
-        <Group gap="xs" wrap="nowrap">
-          <Icon
-            icon="mdi:database-outline"
-            width={22}
-            color="var(--mantine-color-dark-6)"
-          />
-          <Title order={4}>Data Collections Manager</Title>
-          <Badge
-            color={projectType === 'advanced' ? 'orange' : 'cyan'}
-            variant="light"
-            radius="sm"
-            size="sm"
+  const accent = useBrandAccents();
+  const glass = useGlassPages();
+  if (glass) {
+    const n = dataCollections.length;
+    return (
+      <Paper withBorder radius="md" p="md" className="pd-manager">
+        <Group justify="space-between" wrap="nowrap" gap="sm">
+          <UnstyledButton
+            onClick={onToggle}
+            style={{ flex: 1, minWidth: 0 }}
+            aria-expanded={opened}
           >
-            {projectType === 'advanced' ? 'Advanced Project' : 'Basic Project'}
-          </Badge>
-          <Badge variant="light" color="dark" size="sm">
-            {dataCollections.length}
-          </Badge>
-          <Box style={{ flex: 1 }} />
-          <Icon icon={opened ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={22} />
+            <div className="pd-manager-title">
+              <Title order={4}>
+                {scopeLabel ? `${scopeLabel} data collections` : 'Data collections'}
+              </Title>
+              <span className="pd-hint">
+                {n} data collection{n === 1 ? '' : 's'}
+                {scopeLabel ? ` in ${scopeLabel}` : ''}
+              </span>
+            </div>
+          </UnstyledButton>
+          <Group gap="xs" wrap="nowrap">
+            <Button
+              data-testid="create-dc-btn"
+              size="xs"
+              leftSection={<Icon icon="mdi:plus" width={16} />}
+              disabled={!canMutate}
+              onClick={() => {
+                if (!opened) onToggle();
+                onCreate();
+              }}
+              title={
+                canMutate ? 'Create a new data collection' : 'Owner permission required'
+              }
+            >
+              Create Data Collection
+            </Button>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              onClick={onToggle}
+              aria-label={opened ? 'Collapse data collections' : 'Expand data collections'}
+            >
+              <Icon icon={opened ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={22} />
+            </ActionIcon>
+          </Group>
         </Group>
-      </UnstyledButton>
+        <Collapse in={opened}>
+          <ScrollArea.Autosize mah={640} type="auto" offsetScrollbars pt="md">
+            <Stack gap="md" pr="sm">
+              <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+                <StatCard glassIcon={Database} label="Total collections" primary={String(stats.total)} secondary="Data collections" />
+                <StatCard
+                  glassIcon={Layers}
+                  label="Collection types"
+                  primaryDual={[
+                    { count: stats.aggregate, label: 'Aggregate', color: 'var(--gl-accent)' },
+                    { count: stats.metadata, label: 'Metadata', color: 'var(--gl-faint)' },
+                  ]}
+                />
+                <StatCard
+                  glassIcon={HardDrive}
+                  label="Total storage"
+                  primary={formatBytes(stats.totalBytes)}
+                  secondary={
+                    stats.totalBytes > 0
+                      ? `${n} collection${n === 1 ? '' : 's'}`
+                      : 'No size info yet'
+                  }
+                />
+              </SimpleGrid>
+              <Paper withBorder radius="md" p="md">
+                <Group gap="xs" mb="xs">
+                  <Title order={5}>Data collections</Title>
+                  <span className="pd-count">{n}</span>
+                </Group>
+                <DataCollectionsTable
+                  projectType={projectType}
+                  dataCollections={dataCollections}
+                  selectedDcId={selectedDcId}
+                  canMutate={canMutate}
+                  onSelect={onSelect}
+                  onRename={onRename}
+                  onDelete={onDelete}
+                  onManage={onManage}
+                />
+              </Paper>
+            </Stack>
+          </ScrollArea.Autosize>
+        </Collapse>
+      </Paper>
+    );
+  }
+  return (
+    /* Header mirrors the Cross-DC links section (LinksSection.tsx): Paper,
+       clickable title area, then the primary action and the chevron as an
+       ActionIcon on the far right. Create Data Collection lives in the
+       always-visible header — inside the Collapse it was unreachable while
+       the section was collapsed (the default). */
+    <Paper withBorder radius="md" p="sm">
+      <Group justify="space-between" wrap="nowrap">
+        <UnstyledButton onClick={onToggle} style={{ flex: 1, minWidth: 0 }}>
+          <Group gap="xs" wrap="nowrap">
+            <Icon
+              icon="mdi:database-outline"
+              width={22}
+              color="var(--mantine-color-dark-6)"
+            />
+            <Title order={4}>Data Collections Manager</Title>
+            <Badge
+              color={projectType === 'advanced' ? 'orange' : 'cyan'}
+              variant="light"
+              radius="sm"
+              size="sm"
+            >
+              {projectType === 'advanced' ? 'Advanced Project' : 'Basic Project'}
+            </Badge>
+            <Badge variant="light" color="dark" size="sm">
+              {dataCollections.length}
+            </Badge>
+          </Group>
+        </UnstyledButton>
+        <Group gap="xs" wrap="nowrap">
+          <Button
+            data-testid="create-dc-btn"
+            color={accent.secondary}
+            size="xs"
+            leftSection={<Icon icon="mdi:plus" width={16} />}
+            disabled={!canMutate}
+            onClick={() => {
+              // Expand the section too, so the new DC lands in view.
+              if (!opened) onToggle();
+              onCreate();
+            }}
+            title={
+              canMutate
+                ? 'Create a new data collection'
+                : 'Owner permission required'
+            }
+          >
+            Create Data Collection
+          </Button>
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            onClick={onToggle}
+            aria-label={opened ? 'Collapse data collections' : 'Expand data collections'}
+          >
+            <Icon icon={opened ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={22} />
+          </ActionIcon>
+        </Group>
+      </Group>
 
       <Collapse in={opened}>
         <ScrollArea.Autosize mah={640} type="auto" offsetScrollbars pt="sm">
@@ -2230,8 +2823,8 @@ const DataCollectionsManagerSection: React.FC<{
           iconColor="var(--mantine-color-orange-6)"
           label="Collection Types"
           primaryDual={[
-            { count: stats.aggregate, label: 'Aggregate', color: 'orange' },
-            { count: stats.metadata, label: 'Metadata', color: 'orange' },
+            { count: stats.aggregate, label: 'Aggregate', color: AGGREGATE_COLOR },
+            { count: stats.metadata, label: 'Metadata', color: METADATA_COLOR },
           ]}
         />
         <StatCard
@@ -2249,28 +2842,11 @@ const DataCollectionsManagerSection: React.FC<{
       </SimpleGrid>
 
       <Paper withBorder radius="md" p="md">
-        <Group justify="space-between" mb="xs">
-          <Group gap="xs">
-            <Title order={5}>Data Collections</Title>
-            <Badge variant="light" color="dark" size="sm">
-              {dataCollections.length} COLLECTIONS
-            </Badge>
-          </Group>
-          <Button
-            data-testid="create-dc-btn"
-            color="teal"
-            size="sm"
-            leftSection={<Icon icon="mdi:plus" width={16} />}
-            disabled={!canMutate}
-            onClick={onCreate}
-            title={
-              canMutate
-                ? 'Create a new data collection'
-                : 'Owner permission required'
-            }
-          >
-            Create Data Collection
-          </Button>
+        <Group gap="xs" mb="xs">
+          <Title order={5}>Data Collections</Title>
+          <Badge variant="light" color="dark" size="sm">
+            {dataCollections.length} COLLECTIONS
+          </Badge>
         </Group>
         <DataCollectionsTable
           projectType={projectType}
@@ -2286,23 +2862,49 @@ const DataCollectionsManagerSection: React.FC<{
           </Stack>
         </ScrollArea.Autosize>
       </Collapse>
-    </Card>
+    </Paper>
   );
 };
 
 const StatCard: React.FC<{
-  icon: string;
-  iconColor: string;
+  icon?: string;
+  iconColor?: string;
+  /** Glass: a Lucide glyph in a small accent chip instead of a coloured icon. */
+  glassIcon?: LucideIcon;
   label: string;
   primary?: string;
   secondary?: string;
   primaryColor?: string;
   primaryDual?: Array<{ count: number; label: string; color: string }>;
-}> = ({ icon, iconColor, label, primary, secondary, primaryColor, primaryDual }) => (
+}> = ({ icon, iconColor, glassIcon: GlassGlyph, label, primary, secondary, primaryColor, primaryDual }) => GlassGlyph ? (
+  <Card withBorder radius="md" p="md" className="pd-stat">
+    <div className="pd-stat-head">
+      <span className="pd-stat-chip">
+        <GlassGlyph size={16} strokeWidth={STROKE} />
+      </span>
+      <span className="pd-stat-label">{label}</span>
+    </div>
+    {primary && <div className="pd-stat-value">{primary}</div>}
+    {primaryDual && (
+      <div className="pd-stat-dual">
+        {primaryDual.map((p) => (
+          <div key={p.label}>
+            <div className="pd-stat-value">{p.count}</div>
+            <div className="pd-stat-sub">
+              <i style={{ background: p.color }} aria-hidden />
+              {p.label}
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+    {secondary && <div className="pd-stat-sub">{secondary}</div>}
+  </Card>
+) : (
   <Card withBorder radius="md" p="md">
     <Stack gap="xs" align="center">
       <Group gap={6}>
-        <Icon icon={icon} width={20} color={iconColor} />
+        {icon && <Icon icon={icon} width={20} color={iconColor} />}
         <Text fw={600}>{label}</Text>
       </Group>
       {primary && (
@@ -2389,6 +2991,8 @@ const DataCollectionsTable: React.FC<{
   onDelete,
   onManage,
 }) => {
+  const accent = useBrandAccents();
+  const glass = useGlassPages();
   const [filter, setFilter] = useState('');
   const [sortKey, setSortKey] = useState<DcSortKey>('tag');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -2403,8 +3007,10 @@ const DataCollectionsTable: React.FC<{
 
   const rows = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    const dcType = (dc: DataCollectionShape) =>
-      ((dc.config?.type as string | undefined) || '').toLowerCase();
+    // A geomap answers to both "table" and "geomap", the two words the Type
+    // cell shows for it. Sorting on the same key keeps geomaps next to the
+    // plain tables they are a kind of.
+    const dcType = (dc: DataCollectionShape) => dcTypeSearchKey(dc);
     const list = dataCollections.filter(
       (dc) =>
         !q ||
@@ -2454,7 +3060,7 @@ const DataCollectionsTable: React.FC<{
         highlightOnHover
         stickyHeader
         layout="fixed"
-        miw={760}
+        miw={850}
       >
         <Table.Thead>
           <Table.Tr>
@@ -2464,7 +3070,7 @@ const DataCollectionsTable: React.FC<{
               activeKey={sortKey}
               dir={sortDir}
               onSort={onSort}
-              w={120}
+              w={190}
             />
             <SortableTh
               label="Data collection"
@@ -2473,7 +3079,7 @@ const DataCollectionsTable: React.FC<{
               dir={sortDir}
               onSort={onSort}
             />
-            <Table.Th w={130}>Kind</Table.Th>
+            <Table.Th w={130}>Metatype</Table.Th>
             <SortableTh
               label="Size"
               sortKey="size"
@@ -2508,37 +3114,29 @@ const DataCollectionsTable: React.FC<{
             const isSelected = id === selectedDcId;
             const type = (dc.config?.type as string | undefined) || 'unknown';
             const isMultiQC = type.toLowerCase() === 'multiqc';
-            const isTable = type.toLowerCase() === 'table';
-            const isCoord = dcHasCoordinates(dc);
-            const metatype = (dc.config?.metatype as string | undefined) || null;
             const sizeBytes = getDcSizeBytes(dc);
-            // One consistent classification per DC. An aggregate table looks the
-            // same whether the backend stamped metatype="Aggregated" or left it null
-            // (inferred) — fixes the old grey "AGGREGATED" vs orange "AGGREGATE"
-            // split for what is the same thing.
-            const kind = isCoord
-              ? { label: 'Coordinates', color: 'grape' }
-              : (metatype || '').toLowerCase().startsWith('metadat')
-                ? { label: 'Metadata', color: 'gray' }
-                : projectType === 'advanced' && isTable
-                  ? { label: 'Aggregate', color: 'orange' }
-                  : null;
+            // The two axes come from their own modules, so the row, the DC
+            // viewer and the ingestion report name a collection the same way.
+            const metatypeMeta = dcMetatypeMeta(dc, projectType);
             return (
               <Table.Tr
                 key={id}
                 onClick={() => onSelect(isSelected ? null : id)}
                 style={{
                   cursor: 'pointer',
-                  background: isSelected ? 'var(--mantine-color-teal-light)' : undefined,
+                  background: isSelected
+                    ? glass
+                      ? 'var(--gl-accent-soft)'
+                      : 'var(--mantine-color-teal-light)'
+                    : undefined,
                 }}
               >
                 <Table.Td>
-                  <Group gap={6} wrap="nowrap">
-                    <DcTypeIcon type={type} isCoord={isCoord} withTooltip={false} />
-                    <Text size="xs" c="dimmed">
-                      {type}
-                    </Text>
-                  </Group>
+                  {/* Same component as the DC viewer's Type row: a type reads
+                      identically wherever it is shown. Geomap sits beside the
+                      type, never in place of it, since the collection is still
+                      a table and still binds to every table component. */}
+                  <DcTypeBadges dc={dc} size="xs" />
                 </Table.Td>
                 <Table.Td>
                   <Text fw={600} size="sm" style={{ wordBreak: 'break-word' }}>
@@ -2546,10 +3144,8 @@ const DataCollectionsTable: React.FC<{
                   </Text>
                 </Table.Td>
                 <Table.Td>
-                  {kind ? (
-                    <Badge color={kind.color} variant="light" size="sm">
-                      {kind.label}
-                    </Badge>
+                  {metatypeMeta ? (
+                    <DcMetatypeBadge dc={dc} projectType={projectType} />
                   ) : (
                     <Text size="xs" c="dimmed">
                       —
@@ -2573,7 +3169,7 @@ const DataCollectionsTable: React.FC<{
                       <ActionIcon
                         data-testid="manage-dc-btn"
                         variant="subtle"
-                        color="teal"
+                        color={glass ? 'gray' : accent.secondary}
                         size="sm"
                         disabled={!canMutate}
                         onClick={guard(() => onManage(dc))}
@@ -2588,7 +3184,7 @@ const DataCollectionsTable: React.FC<{
                     )}
                     <ActionIcon
                       variant="subtle"
-                      color="blue"
+                      color={glass ? 'gray' : 'blue'}
                       size="sm"
                       disabled={!canMutate}
                       onClick={guard(() => onRename(dc))}
@@ -2638,17 +3234,12 @@ const DataCollectionViewer: React.FC<{
 }> = ({ dc, projectType, allDataCollections, joins, links }) => {
   const dcId = (dc._id ?? dc.id) as string;
   const type = (dc.config?.type as string | undefined) || 'unknown';
-  const metatype = (dc.config?.metatype as string | undefined) || null;
   const format =
     (dc.config?.dc_specific_properties?.format as string | undefined) || null;
   const isMultiQC = type.toLowerCase() === 'multiqc';
-  // Backend stamps `metatype: "Metadata"` on metadata tables but leaves
-  // aggregate tables with `metatype: null` (see project YAMLs and
-  // `/projects/get/all` payload). Mirror the row's fallback so the viewer
-  // surfaces the implicit "AGGREGATE" classification too.
   const isTable = type.toLowerCase() === 'table';
   const isCoordTable = dcHasCoordinates(dc);
-  const isAggregate = isTable && (metatype || '').toLowerCase() !== 'metadata';
+  const deltaVersion = getDcDeltaVersion(dc);
 
   // Ranked viz-kind fit scores for this DC — surfaced in the viewer as
   // "compatible advanced visualizations" chips so users discover the affinity
@@ -2688,37 +3279,12 @@ const DataCollectionViewer: React.FC<{
           <Title order={4}>Data Collection Viewer</Title>
         </Group>
         <Group gap="sm">
-          {isMultiQC ? (
-            <img
-              src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}
-              alt="MultiQC"
-              width={22}
-              height={22}
-              style={{ objectFit: 'contain', display: 'block' }}
-            />
-          ) : (
-            <Icon
-              icon={
-                isCoordTable
-                  ? 'mdi:map-marker-radius-outline'
-                  : type === 'table'
-                    ? 'mdi:table'
-                    : 'mdi:file-document-outline'
-              }
-              width={22}
-              color={
-                isCoordTable
-                  ? 'var(--mantine-color-grape-6)'
-                  : 'var(--mantine-color-teal-6)'
-              }
-            />
-          )}
           <Title order={4}>{dc.data_collection_tag || dcId}</Title>
-          {isCoordTable && (
-            <Badge color="grape" variant="light" size="sm" radius="sm">
-              COORDINATES
-            </Badge>
-          )}
+          {/* The same badges the manager row carries, in the same order. Three
+              coexisting facts, never alternatives: a table carrying coordinates
+              can be a metadata table and a geomap at once. */}
+          <DcTypeBadges dc={dc} />
+          <DcMetatypeBadge dc={dc} projectType={projectType} />
         </Group>
         {detectedVizKinds.length > 0 && (
           <Alert
@@ -2755,44 +3321,16 @@ const DataCollectionViewer: React.FC<{
             </Group>
             <Stack gap={4}>
               <DetailRow label="Data Collection ID" value={dcId} mono />
-              <DetailRow
-                label="Type"
-                badge={
-                  <Group gap={4} wrap="nowrap">
-                    <Badge color="blue" size="sm" radius="sm">
-                      {type.toUpperCase()}
-                    </Badge>
-                    {isCoordTable && (
-                      <Badge color="grape" variant="light" size="sm" radius="sm">
-                        COORDINATES
-                      </Badge>
-                    )}
-                  </Group>
-                }
-              />
-              {/* Metatype (Metadata vs Aggregate) is meaningful only for
-               *  CLI-driven advanced projects that fan multiple files into
-               *  one DC. Basic projects upload exactly one file per DC, so
-               *  the distinction adds noise without adding information. */}
-              {projectType === 'advanced' && metatype ? (
+              <DetailRow label="Type" badge={<DcTypeBadges dc={dc} />} />
+              {/* Metatype is what the collection IS within its project; the
+               *  Type row above is what it holds. A geomap can be metadata or
+               *  aggregate, so the two rows never merge. */}
+              {dcMetatypeMeta(dc, projectType) && (
                 <DetailRow
                   label="Metatype"
-                  badge={
-                    <Badge color="gray" variant="light" size="sm" radius="sm">
-                      {metatype.toUpperCase()}
-                    </Badge>
-                  }
+                  badge={<DcMetatypeBadge dc={dc} projectType={projectType} />}
                 />
-              ) : projectType === 'advanced' && isAggregate && !isCoordTable ? (
-                <DetailRow
-                  label="Metatype"
-                  badge={
-                    <Badge color="orange" variant="light" size="sm" radius="sm">
-                      AGGREGATE
-                    </Badge>
-                  }
-                />
-              ) : null}
+              )}
               {isCoordTable && (
                 <>
                   <DetailRow
@@ -2840,6 +3378,20 @@ const DataCollectionViewer: React.FC<{
                   label="Last Aggregated"
                   value={getDcLastAggregated(dc)}
                 />
+                <DetailRow
+                  label="Delta version"
+                  badge={
+                    deltaVersion != null ? (
+                      <Badge color="green" size="sm" radius="sm" variant="light">
+                        v{deltaVersion}
+                      </Badge>
+                    ) : (
+                      <Text size="sm" c="dimmed">
+                        Not recorded
+                      </Text>
+                    )
+                  }
+                />
                 {format && (
                   <DetailRow
                     label="Format"
@@ -2866,13 +3418,13 @@ const DataCollectionViewer: React.FC<{
               <Accordion.Control
                 icon={
                   <Icon
-                    icon="mdi:eye-outline"
+                    icon={isCoordTable ? GEO_ICON : 'mdi:eye-outline'}
                     width={18}
-                    color="var(--mantine-color-blue-6)"
+                    color={`var(--mantine-color-${isCoordTable ? GEO_COLOR : 'blue'}-6)`}
                   />
                 }
               >
-                <Text fw={600}>Preview</Text>
+                <Text fw={600}>{isCoordTable ? 'Map preview' : 'Preview'}</Text>
               </Accordion.Control>
               <Accordion.Panel>
                 {isMultiQC ? (
@@ -2914,34 +3466,24 @@ const DataCollectionViewer: React.FC<{
          *  its own per-module preview elsewhere; image and JBrowse types
          *  don't fit a row/column grid. */}
         {!isMultiQC && type === 'table' && (
-          <Card withBorder radius="md" p="md">
-            <Group gap="xs" mb="md">
-              <Icon
-                icon="mdi:table"
-                width={20}
-                color="var(--mantine-color-teal-6)"
-              />
-              <Text fw={600}>Data Preview</Text>
-            </Group>
-            <DataPreviewPanel key={dcId} dcId={dcId} />
-          </Card>
+          <>
+            <Card withBorder radius="md" p="md">
+              <Group gap="xs" mb="md">
+                <Icon
+                  icon="mdi:table"
+                  width={20}
+                  color="var(--mantine-color-teal-6)"
+                />
+                <Text fw={600}>Data Preview</Text>
+              </Group>
+              <DataPreviewPanel key={dcId} dcId={dcId} />
+            </Card>
+            <DeltaVersionHistory key={`history-${dcId}`} dcId={dcId} />
+          </>
         )}
 
         {isMultiQC && <MultiQCReportsCard dcId={dcId} />}
 
-        {/* Relationships graph — rendered under the per-DC metadata so the
-         *  selected collection's joins/links sit alongside its details. */}
-        <JoinsGraph
-          dataCollections={allDataCollections.map((d) => ({
-            id: (d._id ?? d.id) as string,
-            tag: d.data_collection_tag || ((d._id ?? d.id) as string),
-            type: (d.config?.type as string | undefined) || 'unknown',
-            columns: extractColumns(d),
-          }))}
-          joins={joins}
-          links={links}
-          highlightDcId={dcId}
-        />
       </Stack>
     </Paper>
   );
@@ -3330,13 +3872,7 @@ const MultiQCReportsCard: React.FC<{ dcId: string }> = ({ dcId }) => {
   return (
     <Card withBorder radius="md" p="md">
       <Group gap="xs" mb="xs">
-        <img
-          src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}
-          alt="MultiQC"
-          width={20}
-          height={20}
-          style={{ objectFit: 'contain', display: 'block' }}
-        />
+        <DcTypeIcon type="multiqc" size={20} withTooltip={false} />
         <Text fw={600}>MultiQC Report Metadata</Text>
         <Text size="sm" c="dimmed">
           ·{' '}
@@ -3413,17 +3949,26 @@ const DetailRow: React.FC<{
 );
 
 const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
+  const accent = useBrandAccents();
+  const glass = useGlassPages();
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Delta versions available for time travel. Fetched alongside the first
+  // preview rather than on mount: both reads touch the object store, so they
+  // should only happen once the user has asked to see the data.
+  const [versions, setVersions] = useState<number[]>([]);
+  const [currentVersion, setCurrentVersion] = useState<number | null>(null);
+  const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   const { colorScheme } = useMantineColorScheme();
 
-  const handleLoad = async () => {
+  const load = async (version: number | null) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await fetchDataCollectionPreview(dcId, 100);
+      const result = await fetchDataCollectionPreview(dcId, 100, [], version);
       setPreview(result);
+      setSelectedVersion(version);
     } catch (err) {
       setError((err as Error).message || 'Failed to load preview.');
     } finally {
@@ -3431,10 +3976,49 @@ const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
     }
   };
 
-  if (!preview && !loading && !error) {
+  const handleLoad = async () => {
+    // The version list is a nicety; failing to get it must not stop the
+    // preview, so it is fetched independently and its failure swallowed.
+    void fetchDeltaHistory(dcId, 50)
+      .then((history) => {
+        setVersions(
+          history.versions
+            .map((entry) => entry.version)
+            .filter((v): v is number => typeof v === 'number'),
+        );
+        setCurrentVersion(history.current_version);
+      })
+      .catch(() => undefined);
+    await load(null);
+  };
+
+  // Pre-first-load states replace the whole panel. Once a preview exists the
+  // panel keeps its chrome (version picker, staleness warning) while a
+  // different version loads — otherwise the control you just used to switch
+  // version vanishes underneath you.
+  if (!preview) {
+    if (loading) {
+      return (
+        <Center py="md">
+          <Loader size="sm" />
+        </Center>
+      );
+    }
+    if (error) {
+      return (
+        <Stack gap="xs">
+          <Text size="sm" c="red">
+            {error}
+          </Text>
+          <Button size="xs" variant="subtle" onClick={handleLoad}>
+            Retry
+          </Button>
+        </Stack>
+      );
+    }
     return (
       <Button
-        color="teal"
+        color={glass ? undefined : accent.secondary}
         variant="light"
         size="sm"
         onClick={handleLoad}
@@ -3444,26 +4028,6 @@ const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
       </Button>
     );
   }
-  if (loading) {
-    return (
-      <Center py="md">
-        <Loader size="sm" />
-      </Center>
-    );
-  }
-  if (error) {
-    return (
-      <Stack gap="xs">
-        <Text size="sm" c="red">
-          {error}
-        </Text>
-        <Button size="xs" variant="subtle" onClick={handleLoad}>
-          Retry
-        </Button>
-      </Stack>
-    );
-  }
-  if (!preview) return null;
 
   const columns = preview.columns ?? [];
   const rows = preview.rows ?? [];
@@ -3483,16 +4047,63 @@ const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
     resizable: true,
   }));
 
+  // Only worth offering when there is somewhere to travel to. A table with a
+  // single commit gets no picker rather than a picker with one entry.
+  const showVersionPicker = versions.length >= 2;
+  const isHistorical = selectedVersion != null && selectedVersion !== currentVersion;
+
   return (
     <Stack gap="xs">
-      <Text size="xs" c="dimmed">
-        Showing {rows.length} of {preview.total_rows ?? rows.length} rows ·{' '}
-        {preview.total_columns ?? columns.length} columns
-      </Text>
+      <Group gap="sm" justify="space-between" wrap="wrap">
+        <Text size="xs" c="dimmed">
+          Showing {rows.length} of {preview.total_rows ?? rows.length} rows ·{' '}
+          {preview.total_columns ?? columns.length} columns
+        </Text>
+        {showVersionPicker && (
+          <Group gap={6} wrap="nowrap">
+            <Text size="xs" c="dimmed">
+              At version
+            </Text>
+            <Select
+              size="xs"
+              w={140}
+              disabled={loading}
+              value={selectedVersion == null ? 'current' : String(selectedVersion)}
+              onChange={(value) => {
+                if (value == null) return;
+                void load(value === 'current' ? null : Number(value));
+              }}
+              data={[
+                { value: 'current', label: 'Current' },
+                ...versions.map((v) => ({
+                  value: String(v),
+                  label: v === currentVersion ? `v${v} (current)` : `v${v}`,
+                })),
+              ]}
+            />
+          </Group>
+        )}
+      </Group>
+      {isHistorical && (
+        <Alert
+          color="yellow"
+          variant="light"
+          icon={<Icon icon="mdi:history" width={16} />}
+          py={6}
+        >
+          Viewing v{selectedVersion}: this is not the current data.
+        </Alert>
+      )}
+      {error && (
+        <Text size="xs" c="red">
+          {error}
+        </Text>
+      )}
       <Box
         className={isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
-        style={{ height: 400, width: '100%' }}
+        style={{ height: 400, width: '100%', position: 'relative' }}
       >
+        <LoadingOverlay visible={loading} zIndex={1} />
         <AgGridReact
           rowData={rows as Record<string, unknown>[]}
           columnDefs={colDefs}

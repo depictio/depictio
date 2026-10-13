@@ -13,17 +13,22 @@ hider, notification dismisser, unreachable-host markers) live in
 without dragging the MongoDB-backed token loader along.
 """
 
+import functools
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import TypedDict, cast
+from urllib.parse import urlparse
 
+import jwt
 from bson import ObjectId
 from playwright.async_api import Page, async_playwright
 
-from depictio.api.v1.configs.config import settings
+from depictio.api.v1.configs.config import ALGORITHM, PUBLIC_KEY_PATH, settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection, projects_collection
+from depictio.api.v1.key_utils import get_public_key
 from depictio.api.v1.services.screenshot_helpers import (
     HOST_UNREACHABLE_MARKERS,
     apply_init_script,
@@ -33,6 +38,8 @@ from depictio.api.v1.services.screenshot_helpers import (
     wait_for_theme_applied,
 )
 from depictio.models.models.users import TokenBeanie, UserBeanie
+
+_SCREENSHOTS_DIR = str(settings.performance.screenshots_path)
 
 __all__ = [
     "ScreenshotResult",
@@ -132,6 +139,28 @@ async def check_dashboard_owner_permission(dashboard_id: str, user_id: str) -> b
     return check_dashboard_owner_permission_sync(dashboard_id, user_id)
 
 
+def _signed_by_current_keypair(access_token: str) -> bool:
+    """Whether ``access_token`` verifies against the API's current public key.
+
+    Expiry is deliberately NOT checked: the SPA refreshes an expired access
+    token from its refresh token, so an expired-but-authentic token still
+    yields a usable capture session. A signature failure is the one that no
+    amount of refreshing recovers from — it means the token was minted under
+    a previous keypair and the backend will never accept it.
+    """
+    try:
+        jwt.decode(
+            access_token,
+            get_public_key(PUBLIC_KEY_PATH),
+            algorithms=[ALGORITHM],
+            options={"verify_exp": False},
+        )
+        return True
+    except Exception as exc:  # noqa: BLE001 — any decode failure disqualifies the token
+        logger.debug(f"Screenshot token rejected by current keypair: {exc}")
+        return False
+
+
 async def get_admin_auth_token() -> dict[str, str]:
     """
     Retrieve admin authentication token from MongoDB.
@@ -151,13 +180,30 @@ async def get_admin_auth_token() -> dict[str, str]:
     if not current_user:
         raise ValueError("Admin user not found")
 
-    token = await TokenBeanie.find_one(
-        {
-            "user_id": current_user.id,
-            "refresh_expire_datetime": {"$gt": datetime.now()},
-        }
+    # Newest first, and only tokens the *current* keypair can verify. Natural
+    # order hands back the oldest, which is exactly the seeded `default_token`
+    # a keys-volume reset leaves cryptographically stranded (fresh keys against
+    # a surviving database). Nothing about that failure is loud: Playwright
+    # seeds the dead token, the SPA reads `user: null` from /auth/me/optional
+    # and replaces the URL with /auth, and the login form becomes the thumbnail.
+    candidates = (
+        await TokenBeanie.find(
+            {
+                "user_id": current_user.id,
+                "refresh_expire_datetime": {"$gt": datetime.now()},
+            }
+        )
+        .sort("-created_at")
+        .to_list()
     )
+    token = next((t for t in candidates if _signed_by_current_keypair(t.access_token)), None)
     if not token:
+        if candidates:
+            raise ValueError(
+                f"Admin has {len(candidates)} unexpired token(s), none of them signed by "
+                "the current keypair — re-mint the admin token (the keys volume was "
+                "regenerated against a database that outlived it)"
+            )
         raise ValueError("Valid token not found for admin user")
 
     # Prepare token data for localStorage
@@ -177,7 +223,7 @@ async def get_admin_auth_token() -> dict[str, str]:
 
 async def generate_dual_theme_screenshots(
     dashboard_id: str,
-    output_folder: str = "/app/depictio/api/static/screenshots",
+    output_folder: str = _SCREENSHOTS_DIR,
     user_id: str | None = None,
 ) -> ScreenshotResult:
     """
@@ -196,7 +242,7 @@ async def generate_dual_theme_screenshots(
 
     Args:
         dashboard_id: Dashboard ID to screenshot
-        output_folder: Directory to save screenshots (default: /app/depictio/api/static/screenshots)
+        output_folder: Directory to save screenshots (default: depictio/api/static/screenshots)
         user_id: Optional user ID for permission validation (recommended for security)
 
     Returns:
@@ -342,6 +388,11 @@ async def generate_dual_theme_screenshots(
         return error_result
 
 
+def _is_auth_redirect(url: str) -> bool:
+    """True when the capture has been bounced to the SPA's login page."""
+    return urlparse(url).path.startswith("/auth")
+
+
 async def _try_open_viz_settings(page: Page) -> bool:
     """Click the first advanced-viz settings cog so the popover shows in the shot.
 
@@ -383,9 +434,33 @@ def _react_output_paths(
     return light, dark
 
 
+def hidpi_screenshot_path(path: str) -> str:
+    """The `@2x` sibling of a screenshot path.
+
+    Two files come out of every capture: the base one, at CSS resolution, is
+    what the listing grid downloads for all its cards, and this one, at the
+    context's device pixel density, is fetched only when a card is hovered and
+    the preview needs the detail. Keeping them apart is what lets the preview
+    be sharp without making the grid pay for it.
+    """
+    root, ext = os.path.splitext(path)
+    return f"{root}@2x{ext}"
+
+
+async def _capture_both_scales(capture, output_path: str, timeout: int) -> None:
+    """Write both resolutions of one shot from an already-loaded page.
+
+    `capture` is a `screenshot` coroutine function (the page's or an
+    element's). The second call re-encodes the same rendered page, so this
+    costs an encode rather than another navigation and settle.
+    """
+    await capture(path=output_path, timeout=timeout, scale="css")
+    await capture(path=hidpi_screenshot_path(output_path), timeout=timeout, scale="device")
+
+
 async def generate_react_dual_theme_screenshots(
     dashboard_id: str,
-    output_folder: str = "/app/depictio/api/static/screenshots",
+    output_folder: str = _SCREENSHOTS_DIR,
     user_id: str | None = None,
     open_settings: bool = False,
     filename_prefix: str = "",
@@ -460,7 +535,22 @@ async def generate_react_dual_theme_screenshots(
                 # large dashboard. Acceptable because the active path
                 # (`generate_dashboard_screenshot_dual` Celery task) is
                 # fire-and-forget and the user doesn't wait.
-                context = await browser.new_context(viewport={"width": 1920, "height": 1080})
+                # 16:10, not 16:9. The listing renders every thumbnail inside
+                # `AspectRatio ratio={16 / 10}` with `object-fit: cover`
+                # (DashboardCard.tsx), so a 16:9 capture gets scaled to the
+                # box height and loses ~5.5% off each side. Matching the box
+                # ratio here means the card shows the whole shot.
+                # `device_scale_factor` is the thumbnail's sharpness: the card
+                # shows the shot at roughly a quarter of its CSS width, so
+                # rendering at 1x left the text with fewer pixels than the
+                # display could show. See the settings for the trade-off.
+                context = await browser.new_context(
+                    viewport={
+                        "width": settings.performance.screenshot_viewport_width,
+                        "height": settings.performance.screenshot_viewport_height,
+                    },
+                    device_scale_factor=settings.performance.screenshot_scale,
+                )
                 await apply_init_script(context, token_data_json, theme)
                 page = await context.new_page()
 
@@ -499,6 +589,30 @@ async def generate_react_dual_theme_screenshots(
                         f"React: timeout waiting for {theme} theme attribute "
                         f"on dashboard {dashboard_id}"
                     )
+
+                # An unusable session doesn't fail the navigation — the SPA's
+                # `bootstrapSession` quietly replaces the URL with /auth. Capturing
+                # anyway overwrites a good thumbnail with the login form, and every
+                # dashboard on the listing ends up showing the same sign-in card.
+                # Bail out instead and leave the existing PNGs alone.
+                if _is_auth_redirect(page.url):
+                    await context.close()
+                    await browser.close()
+                    logger.error(
+                        f"React screenshot for {dashboard_id} landed on {page.url} — the "
+                        "admin token seeded into localStorage is not accepted by the "
+                        "backend. Existing screenshots left untouched."
+                    )
+                    return {
+                        "status": "error",
+                        "dashboard_id": dashboard_id,
+                        "light_screenshot": None,
+                        "dark_screenshot": None,
+                        "error": (
+                            "SPA redirected to /auth — the admin screenshot session is "
+                            "not authenticated"
+                        ),
+                    }
 
                 try:
                     await wait_for_dashboard_content(page)
@@ -539,32 +653,25 @@ async def generate_react_dual_theme_screenshots(
                 if open_settings:
                     popover_open = await _try_open_viz_settings(page)
 
-                if popover_open:
-                    # Mantine popovers portal to document.body, so they sit
-                    # outside the AppShell.Main DOM bbox — element.screenshot()
-                    # would clip them off. Fall back to a viewport capture.
-                    await page.screenshot(
-                        path=output_path,
-                        full_page=False,
-                        timeout=settings.performance.screenshot_capture_timeout,
-                    )
-                else:
-                    main_element = await page.query_selector(".mantine-AppShell-main")
-                    if main_element:
-                        # Honour the configured capture timeout instead of
-                        # Playwright's default 30s — phylogeny / advanced-viz
-                        # heavy tabs do animated layout passes that the default
-                        # "wait for stable" can't catch in time.
-                        await main_element.screenshot(
-                            path=output_path,
-                            timeout=settings.performance.screenshot_capture_timeout,
-                        )
-                    else:
-                        await page.screenshot(
-                            path=output_path,
-                            full_page=False,
-                            timeout=settings.performance.screenshot_capture_timeout,
-                        )
+                # Mantine popovers portal to document.body, so they sit
+                # outside the AppShell.Main DOM bbox — element.screenshot()
+                # would clip them off, hence the viewport capture whenever one
+                # is open (or the main element is missing).
+                main_element = (
+                    None if popover_open else await page.query_selector(".mantine-AppShell-main")
+                )
+                capture = (
+                    main_element.screenshot
+                    if main_element
+                    else functools.partial(page.screenshot, full_page=False)
+                )
+                # The configured capture timeout rather than Playwright's
+                # default 30s — phylogeny / advanced-viz heavy tabs do animated
+                # layout passes that the default "wait for stable" can't catch
+                # in time.
+                await _capture_both_scales(
+                    capture, output_path, settings.performance.screenshot_capture_timeout
+                )
 
                 await context.close()
 

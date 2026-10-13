@@ -1,14 +1,26 @@
+import functools
 import os
+import re
+import secrets
+import tempfile
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
 from pydantic import AliasChoices, Field, SecretStr, computed_field, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    EnvSettingsSource,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 # Import kept to the dependency-free constants module on purpose — this file is
 # the earliest import in every context and must not pull in httpx.
 from depictio.telemetry.constants import DEFAULT_API_KEY as DEFAULT_TELEMETRY_API_KEY
 from depictio.telemetry.constants import DEFAULT_ENDPOINT as DEFAULT_TELEMETRY_ENDPOINT
+
+if TYPE_CHECKING:
+    from depictio.models.local_access import LocalDataPolicy
 
 # Passwords we refuse to accept on a server boot. Lower-cased before comparison.
 _WEAK_PASSWORDS: frozenset[str] = frozenset(
@@ -30,8 +42,52 @@ _WEAK_PASSWORDS: frozenset[str] = frozenset(
 )
 # "changeme" / "change_me" are intentionally NOT in _WEAK_PASSWORDS so they
 # remain usable as a dev/default admin password for quick local starts.
-_WEAK_PASSWORDS_MINIO: frozenset[str] = _WEAK_PASSWORDS | frozenset({"changeme", "change_me"})
+_WEAK_PASSWORDS_S3: frozenset[str] = _WEAK_PASSWORDS | frozenset(
+    {"changeme", "change_me", "seaweedfs", "seaweed", "secret"}
+)
 _MIN_SECRET_LEN = 8
+
+
+def _warn(message: str) -> None:
+    """Log a config warning without importing the logger at module scope.
+
+    ``logging_init`` reads these settings, so a module-level import would be
+    circular. Everything here runs once, off the hot path.
+    """
+    try:
+        from depictio.api.v1.configs.logging_init import logger
+
+        logger.warning(message)
+    except Exception:  # pragma: no cover - logging must never break config load
+        import warnings
+
+        warnings.warn(message, stacklevel=2)
+
+
+# Storage settings were read from ``DEPICTIO_MINIO_*`` before the bundled store
+# moved to SeaweedFS. Those names are still honoured as a fallback so existing
+# ``.env`` files and Helm values keep working; ``DEPICTIO_S3_*`` wins when both
+# are set.
+S3_ENV_PREFIX = "DEPICTIO_S3_"
+LEGACY_S3_ENV_PREFIX = "DEPICTIO_MINIO_"
+_legacy_s3_env_warned = False
+
+
+def _warn_legacy_s3_env() -> None:
+    """Log one deprecation warning per process when legacy S3 env vars are set."""
+    global _legacy_s3_env_warned
+    if _legacy_s3_env_warned:
+        return
+    legacy = sorted(k for k in os.environ if k.upper().startswith(LEGACY_S3_ENV_PREFIX))
+    if not legacy:
+        return
+    _legacy_s3_env_warned = True
+    _warn(
+        f"Deprecated {LEGACY_S3_ENV_PREFIX}* environment variables found: {', '.join(legacy)}. "
+        f"Rename them to {S3_ENV_PREFIX}* (for example {S3_ENV_PREFIX}ROOT_PASSWORD); "
+        f"the {S3_ENV_PREFIX}* value wins when both are set."
+    )
+
 
 # ── Core Services ─────────────────────────────────────────────────────────────
 
@@ -109,6 +165,33 @@ class FastAPIConfig(ServiceConfig):
         default=True,
         description="Whether the CORS layer attaches credentials (cookies / Authorization).",
     )
+    embed_enabled: bool = Field(
+        default=False,
+        description=(
+            "Enable the component export/embed API (/depictio/api/v1/export). Off by "
+            "default because serving embeds relaxes X-Frame-Options and CSP "
+            "frame-ancestors on that path, and lets anonymous callers read PUBLIC "
+            "projects even on instances that are not in public mode."
+        ),
+    )
+    embed_allowed_origins: list[str] | str = Field(
+        default_factory=list,
+        description=(
+            "Origins permitted to frame an exported component, as a comma-separated "
+            "list in DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS (e.g. "
+            "'https://lab.example.org'). Becomes the CSP frame-ancestors list. Empty "
+            "means frame-ancestors 'none' — embeds render standalone but cannot be "
+            "iframed. The wildcard '*' is rejected; list explicit origins."
+        ),
+    )
+    embed_csp_unsafe_inline: bool = Field(
+        default=False,
+        description=(
+            "Fall back to script-src 'unsafe-inline' for embed HTML instead of "
+            "per-script SHA-256 hashes. Escape hatch for when a bundled dependency "
+            "injects a script tag we cannot hash ahead of time."
+        ),
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_FASTAPI_")
 
@@ -117,11 +200,20 @@ class FastAPIConfig(ServiceConfig):
         # Pydantic-settings parses lists from env via JSON by default; accept the
         # friendlier comma-separated form so deployments can set
         # DEPICTIO_FASTAPI_CORS_ALLOWED_ORIGINS=https://a,https://b
-        if isinstance(self.cors_allowed_origins, str):
-            object.__setattr__(
-                self,
-                "cors_allowed_origins",
-                [o.strip() for o in self.cors_allowed_origins.split(",") if o.strip()],
+        for field in ("cors_allowed_origins", "embed_allowed_origins"):
+            value = getattr(self, field)
+            if isinstance(value, str):
+                object.__setattr__(
+                    self,
+                    field,
+                    [o.strip() for o in value.split(",") if o.strip()],
+                )
+        # A wildcard frame-ancestors would let any site frame a public dashboard's
+        # component; that is a decision to make per-origin, never implicitly.
+        if "*" in self.embed_allowed_origins:
+            raise ValueError(
+                "DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS contains '*'. Frame-ancestors "
+                "must list explicit origins (e.g. https://lab.example.org)."
             )
         return self
 
@@ -144,6 +236,14 @@ class ViewerConfig(ServiceConfig):
         "the selected component's info and notes. Off by default while it is validated "
         "against the reference dashboards; with it off those surfaces stay in the "
         "popovers and drawers they live in today.",
+    )
+
+    dashboards_default_view: Literal["thumbnails", "table"] = Field(
+        default="table",
+        description="Which view /dashboards opens in for someone who has never "
+        "picked one: 'thumbnails' for the card grid with screenshot previews, "
+        "'table' for sortable columns with bulk selection. A view chosen in the "
+        "browser, or named by a shared link, always wins over this.",
     )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_VIEWER_")
@@ -181,39 +281,70 @@ class MongoDBConfig(ServiceConfig):
         deltatables_collection: str = Field(default="deltatables")
         jbrowse_collection: str = Field(default="jbrowse")
         dashboards_collection: str = Field(default="dashboards")
+        dashboard_versions_collection: str = Field(default="dashboard_versions")
+        #: One counter document per dashboard family, holding the next `seq`.
+        #: Kept apart from the versions themselves so the allocation is a single
+        #: atomic $inc rather than a max()+1 read that two concurrent saves
+        #: could both win.
+        dashboard_version_counters_collection: str = Field(default="dashboard_version_counters")
         initialization_collection: str = Field(default="initialization")
         projects_collection: str = Field(default="projects")
         multiqc_collection: str = Field(default="multiqc")
         multiqc_prerender_collection: str = Field(default="multiqc_prerender")
         task_events_collection: str = Field(default="task_events")
         ingestion_runs_collection: str = Field(default="ingestion_runs")
+        project_storage_collection: str = Field(default="project_storage_configs")
         app_logs_collection: str = Field(default="app_logs")
+        # Instance branding: the singleton overrides document and the uploaded
+        # logo bytes. Named here so backup/restore can reach them like any other
+        # collection — a restored deployment that kept every dashboard's
+        # `brand_theme` but lost the instance brand they inherit from is worse
+        # than one that kept neither.
+        instance_settings_collection: str = Field(default="instance_settings")
+        branding_assets_collection: str = Field(default="branding_assets")
+        # Profile pictures: one document per user, keyed by the user's own id.
+        # Apart from `users` so the picture bytes never ride along on a user
+        # read (every auth check loads that document), and so a user delete or
+        # a backup reaches them by name like the branding assets.
+        user_avatars_collection: str = Field(default="user_avatars")
         # Holds the anonymous installation identity and the per-day send guards.
         # Deliberately its own collection: the wipe path in lifespan.py clears
         # everything except the init lock out of `initialization`, so an identity
         # stored there would be regenerated on every dev wipe and inflate the
         # project's installation count.
         telemetry_collection: str = Field(default="telemetry")
+        # Comment threads (and the annotations they carry) pinned to dashboard components. Stored
+        # apart from `dashboards` so a dashboard save never rewrites or drops them.
+        comment_threads_collection: str = Field(default="comment_threads")
+        cli_agents_collection: str = Field(default="cli_agents")
+        jobs_collection: str = Field(default="jobs")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)
 
 
 class S3DepictioCLIConfig(ServiceConfig):
-    """S3/MinIO object storage configuration."""
+    """S3-compatible object storage configuration.
 
-    service_name: str = Field(default="minio")
+    The bundled store is SeaweedFS (``weed mini``, compose service ``s3``);
+    any S3 endpoint (AWS, NetApp, MinIO, …) works via ``DEPICTIO_S3_PUBLIC_URL``
+    + ``DEPICTIO_S3_EXTERNAL_SERVICE``. Every field also accepts the legacy
+    ``DEPICTIO_MINIO_<FIELD>`` name as a fallback (see ``settings_customise_sources``).
+    """
+
+    service_name: str = Field(default="s3")
     service_port: int = Field(default=9000)
     external_port: int = Field(default=9000)
     root_user: str = Field(
         default="minio",
-        description="MinIO/S3 root access key (not a secret on its own).",
+        description="S3 access key (not a secret on its own).",
     )
     root_password: SecretStr = Field(
         default=SecretStr(""),
         description=(
-            "MinIO/S3 root secret key. REQUIRED in server context — set via "
-            "DEPICTIO_MINIO_ROOT_PASSWORD. The server refuses to start when this is unset, "
+            "S3 secret key. REQUIRED in server context — set via "
+            "DEPICTIO_S3_ROOT_PASSWORD (legacy DEPICTIO_MINIO_ROOT_PASSWORD is still "
+            "accepted). The server refuses to start when this is unset, "
             "shorter than 8 characters, or matches a well-known default."
         ),
     )
@@ -223,12 +354,28 @@ class S3DepictioCLIConfig(ServiceConfig):
     verify_tls: bool = Field(
         default=True,
         description=(
-            "Verify TLS certificates when talking to S3/MinIO. Only set to false for local "
-            "development against self-signed dev MinIO instances."
+            "Verify TLS certificates when talking to S3. Only set to false for local "
+            "development against self-signed dev S3 instances."
         ),
     )
 
-    model_config = SettingsConfigDict(env_prefix="DEPICTIO_MINIO_")
+    model_config = SettingsConfigDict(env_prefix=S3_ENV_PREFIX)
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        # A second env source on the legacy prefix, ranked just below the
+        # primary one: DEPICTIO_S3_* wins, DEPICTIO_MINIO_* fills the gaps.
+        # Field names are unchanged, so kwargs and YAML dicts keep working.
+        _warn_legacy_s3_env()
+        legacy_env = EnvSettingsSource(settings_cls, env_prefix=LEGACY_S3_ENV_PREFIX)
+        return init_settings, env_settings, legacy_env, dotenv_settings, file_secret_settings
 
     @property
     def endpoint_url(self) -> str:
@@ -305,6 +452,24 @@ class AuthConfig(BaseSettings):
         "pre-provisioned accounts can log in. Independent of public/single-user "
         "mode — use for private, login-required public-facing instances.",
     )
+    password_login_disabled: bool = Field(
+        default=False,
+        description="Block email + password sign-in. When True the /auth/login "
+        "endpoint returns 403 and the password form is hidden, leaving Google "
+        "OAuth as the only door in. Pairs with registration_disabled for an "
+        "instance whose accounts all come from one identity provider. Ignored "
+        "unless google_oauth_enabled is set, so a half-done configuration "
+        "cannot lock every user out.",
+    )
+    public_access_code: Optional[SecretStr] = Field(
+        default=None,
+        description="Shared access code gating public mode. Public mode otherwise "
+        "hands a temporary session to anyone who loads the page; with this set, a "
+        "visitor must enter the code first, so a deployment can be link-shareable "
+        "without being world-open. Ignored outside public/demo mode. It is a shared "
+        "secret, not an account: everyone who passes it still gets their own "
+        "throwaway user.",
+    )
     anonymous_user_email: str = Field(
         default="anonymous@depict.io",
         description="Default anonymous user email",
@@ -369,6 +534,10 @@ class AuthConfig(BaseSettings):
         if env_registration_disabled in ("true", "1", "yes"):
             object.__setattr__(self, "registration_disabled", True)
 
+        env_password_login_disabled = os.getenv("DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED", "").lower()
+        if env_password_login_disabled in ("true", "1", "yes"):
+            object.__setattr__(self, "password_login_disabled", True)
+
     @computed_field
     @property
     def is_single_user_mode(self) -> bool:
@@ -401,6 +570,39 @@ class AuthConfig(BaseSettings):
     def requires_anonymous_user(self) -> bool:
         """Returns True if any mode requiring anonymous user is enabled."""
         return self.is_single_user_mode or self.is_public_mode
+
+    @computed_field
+    @property
+    def is_public_access_code_required(self) -> bool:
+        """Returns True if public mode should ask for the shared access code.
+
+        Only meaningful in public mode: outside it the code gates nothing, and
+        reporting it as required would put a lock on a door that is not there.
+        """
+        return bool(self.public_access_code and self.is_public_mode)
+
+    def verify_public_access_code(self, candidate: str | None) -> bool:
+        """Constant-time check of a submitted access code."""
+        if not self.is_public_access_code_required:
+            return True
+        if not candidate:
+            return False
+        return secrets.compare_digest(
+            candidate,
+            self.public_access_code.get_secret_value(),  # type: ignore[possibly-unbound-attribute]
+        )
+
+    @computed_field
+    @property
+    def is_password_login_disabled(self) -> bool:
+        """Returns True if email + password sign-in should be refused.
+
+        Conditioned on Google OAuth actually being configured: the flag on its
+        own would leave a deployment with no way in at all, and an operator who
+        sets it while forgetting the OAuth vars should get their password form
+        back rather than a locked front door. Read this, not the raw flag.
+        """
+        return self.password_login_disabled and self.google_oauth_enabled
 
     @computed_field
     @property
@@ -570,7 +772,20 @@ class CeleryConfig(BaseSettings):
     result_expires: int = Field(default=3600, description="Task result expiration in seconds (1hr)")
 
     # Queue settings
-    default_queue: str = Field(default="dashboard_tasks", description="Default task queue name")
+    default_queue: str = Field(
+        default="dashboard_tasks",
+        description=(
+            "Historical value only — NOT applied. celery_app pins "
+            "task_default_queue to 'celery', which is the queue the shipped "
+            "worker command actually consumes. Applying this value would route "
+            "every task to a queue nothing listens on."
+        ),
+    )
+    ingestion_queue: str = Field(
+        default="ingestion",
+        description="Queue for offloaded ingestion tasks, consumed by the dedicated "
+        "ingestion worker so a 20-minute table read cannot starve dashboard callbacks.",
+    )
 
     # Monitoring settings
     worker_send_task_events: bool = Field(default=True, description="Enable task event monitoring")
@@ -684,6 +899,219 @@ class MultiQCPrerenderConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MULTIQC_")
 
 
+class RemoteConfig(BaseSettings):
+    """Policy for fetching user-supplied remote URLs (scan modes url/manifest).
+
+    Source of truth for the SSRF gateway in ``depictio.api.v1.remote_fetch``.
+    The gateway instantiates this section on every call instead of reading the
+    ``settings`` singleton, so the CLI and the Celery worker apply the very same
+    policy without importing the full API configuration.
+
+    Environment variables: ``DEPICTIO_REMOTE_<FIELD>`` (upper-cased field name).
+    A malformed value fails validation at the first fetch instead of silently
+    falling back to a default.
+    """
+
+    allow_http: bool = Field(
+        default=False,
+        description=(
+            "Accept plain http:// URLs in addition to https:// and s3://. Off by "
+            "default: the gateway and the models reject http:// locations. Turn on "
+            "for local or airgapped deployments that serve data without TLS."
+        ),
+    )
+    url_allowlist: str = Field(
+        default="",
+        description=(
+            "Comma-separated host names the gateway may fetch from. Exclusive while "
+            "set: any host not listed is rejected, and a listed host skips the "
+            "private/loopback address rejection (this is how internal deployments "
+            "and tests opt a 127.0.0.1 or intranet host in). Empty accepts every "
+            "public host."
+        ),
+    )
+    url_denylist: str = Field(
+        default="",
+        description=(
+            "Comma-separated host names the gateway always rejects. Checked before "
+            "the allowlist, so a host present in both lists is denied."
+        ),
+    )
+    max_download_bytes: int = Field(
+        default=500 * 1024 * 1024,
+        ge=1,
+        description=(
+            "Size cap in bytes for a single remote download (data file or manifest). "
+            "Downloads stream and abort, removing the partial file, once the cap is "
+            "exceeded."
+        ),
+    )
+    public_s3_buckets: str = Field(
+        default="",
+        description=(
+            "Comma-separated S3 locations readable without credentials, each either "
+            "'bucket' or 'bucket/prefix'. Empty by default, so unsigned access is "
+            "opt-in. A bucket listed here is read with the signature disabled; every "
+            "other s3:// URL needs the project's storage settings (or, on the server, "
+            "an entry in credentialed_s3_buckets). The list is consulted before any "
+            "request goes out, so naming a bucket that is not on it never turns into "
+            "an existence or region oracle."
+        ),
+    )
+    credentialed_s3_buckets: str = Field(
+        default="",
+        description=(
+            "Comma-separated S3 locations the API and the Celery worker may read with "
+            "their own ambient credentials (the AWS default chain: environment, IAM "
+            "role, web identity), same 'bucket' or 'bucket/prefix' syntax as "
+            "public_s3_buckets. Empty by default. Without an entry here, a server-side "
+            "read of an s3:// location that is neither public nor covered by the "
+            "project's storage settings is refused, and the instance's own S3 "
+            "credentials are never used for a user-supplied location. Any user of "
+            "the instance can read what is listed here, so list only data every user "
+            "may see."
+        ),
+    )
+    timeout_s: float = Field(
+        default=30.0,
+        gt=0,
+        description=(
+            "httpx timeout in seconds applied to each connect/read/write operation "
+            "of a remote fetch (not a total download time)."
+        ),
+    )
+    max_redirects: int = Field(
+        default=3,
+        ge=0,
+        description=(
+            "Maximum redirect hops followed for a remote URL. The gateway re-validates "
+            "every Location against this policy before following it."
+        ),
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_REMOTE_")
+
+
+class LocalDataConfig(BaseSettings):
+    """Folders on the server's own disk that a project may be created from.
+
+    For ``depictio local``, where the server is the user's own computer: the
+    browser can then name a run folder on it, and list folders to pick one.
+    Off unless ``roots`` is set, and even then only in single-user mode and in
+    server context (see :func:`local_data_policy`): a shared server must never
+    read its own disk for whoever asks.
+
+    Environment variable: ``DEPICTIO_LOCAL_DATA_ROOTS``.
+    """
+
+    roots: str = Field(
+        default="",
+        description=(
+            "Comma-separated absolute folders (or '~/...') a run folder may be read from, "
+            "e.g. '~,/Volumes/data'. Empty, the default, turns local folders off. Even "
+            "below a root, hidden folders and the folders Depictio keeps for itself "
+            "(keys, admin token, backups, the local home) are never read. Honoured only "
+            "with DEPICTIO_AUTH_SINGLE_USER_MODE."
+        ),
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_LOCAL_DATA_")
+
+    @property
+    def root_list(self) -> list[str]:
+        """``roots`` as a list, blanks dropped."""
+        return [root.strip() for root in self.roots.split(",") if root.strip()]
+
+
+# Every environment variable the local-data policy is built from: the cache key
+# of `_local_data_policy_for`, so a changed setting builds a new policy.
+_LOCAL_POLICY_ENV: tuple[str, ...] = (
+    "DEPICTIO_CONTEXT",
+    "DEPICTIO_AUTH_SINGLE_USER_MODE",
+    "DEPICTIO_LOCAL_DATA_ROOTS",
+    "DEPICTIO_LOCAL_HOME",
+    "DEPICTIO_AUTH_KEYS_DIR",
+    "DEPICTIO_AUTH_CLI_CONFIG_DIR",
+    "DEPICTIO_BACKUP_BASE_DIR",
+    "DEPICTIO_BACKUP_BACKUP_DIR",
+    "DEPICTIO_BACKUP_S3_LOCAL_BACKUP_DIR",
+    "HOME",
+    "TMPDIR",
+)
+
+
+def local_data_policy() -> "LocalDataPolicy | None":
+    """The policy local folders are read under, or None when they are off.
+
+    On only in server context, in single-user mode, and with at least one root
+    in ``DEPICTIO_LOCAL_DATA_ROOTS``. Built from the environment rather than
+    the ``settings`` singleton, like :class:`RemoteConfig`, so the API, the
+    Celery worker and the CLI read paths judge a path alike; cached on that
+    environment, since the read paths ask once per file.
+    """
+    return _local_data_policy_for(tuple(os.environ.get(name) for name in _LOCAL_POLICY_ENV))
+
+
+def local_data_roots_enabled() -> bool:
+    """Whether this server reads run folders on its own disk (see :func:`local_data_policy`)."""
+    return local_data_policy() is not None
+
+
+def remote_browse_enabled() -> bool:
+    """Whether an administrator listed S3 locations every user may browse for a run
+    folder: ``DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS`` or ``..._CREDENTIALED_S3_BUCKETS``.
+
+    Read from the environment like the gateway reads it. A malformed
+    ``DEPICTIO_REMOTE_*`` value turns browsing off here, logged, rather than
+    failing the page-load request that carries the flag; the reads themselves
+    still fail on it loudly.
+    """
+    from pydantic import ValidationError
+
+    from depictio.models.s3_access import parse_bucket_list
+
+    try:
+        remote = RemoteConfig()
+    except ValidationError as exc:
+        _warn(f"Remote S3 browsing is off: the DEPICTIO_REMOTE_* settings are invalid ({exc})")
+        return False
+    return bool(
+        parse_bucket_list(remote.public_s3_buckets)
+        or parse_bucket_list(remote.credentialed_s3_buckets)
+    )
+
+
+@functools.lru_cache(maxsize=8)
+def _local_data_policy_for(_env: tuple[str | None, ...]) -> "LocalDataPolicy | None":
+    # Imported here: this module is the earliest import in every context.
+    from depictio.models.local_access import LocalDataPolicy
+    from depictio.models.utils import get_depictio_context
+
+    if get_depictio_context().strip().lower() == "cli":
+        return None
+    roots = LocalDataConfig().root_list
+    if not roots:
+        return None
+    auth = AuthConfig()
+    if not auth.is_single_user_mode:
+        return None
+    backup = BackupConfig()
+    home = os.path.expanduser("~")
+    denied = [
+        os.path.join(home, ".depictio"),
+        os.environ.get("DEPICTIO_LOCAL_HOME", ""),
+        str(auth.keys_dir),
+        str(auth.cli_config_dir),
+        backup.backup_path,
+        backup.s3_local_backup_path,
+    ]
+    # Read by the server itself: uploads are written to the temporary directory
+    # and scanned from there, and the reference projects ship their data files
+    # inside the package. Never browsable, never a data root.
+    server_dirs = [tempfile.gettempdir(), str(Path(__file__).parents[3] / "projects")]
+    return LocalDataPolicy.build(roots, denied=denied, server_dirs=server_dirs, home=home)
+
+
 # ── Optional Features ─────────────────────────────────────────────────────────
 
 
@@ -714,16 +1142,61 @@ class BackupConfig(BaseSettings):
     backup_s3_secret_key: Optional[str] = Field(default=None, description="Backup S3 secret key")
     backup_s3_region: str = Field(default="us-east-1", description="Backup S3 region")
     compress_local_backups: bool = Field(default=True, description="Compress local S3 data backups")
-    backup_file_retention_days: int = Field(default=30, description="Days to retain backup files")
+    backup_file_retention_days: int = Field(
+        default=30,
+        description=(
+            "Days to keep every backup file. First tier of the retention policy, applied "
+            "to the MongoDB backup directory after every backup (scheduled or manual). "
+            "Set to 0 to keep backups forever."
+        ),
+    )
+    backup_retention_weekly_weeks: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Second retention tier: after backup_file_retention_days, keep one backup per "
+            "ISO week for this many weeks. 0 disables the tier, which makes retention a "
+            "plain age cutoff."
+        ),
+    )
+    backup_retention_monthly_months: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Third retention tier: after the weekly tier, keep one backup per calendar "
+            "month for this many months. 0 disables the tier."
+        ),
+    )
+    auto_backup_enabled: bool = Field(
+        default=False,
+        description=(
+            "Run scheduled MongoDB backups in the background. Opt-in: a deployment that "
+            "has not sized its backup volume should not start filling it on upgrade."
+        ),
+    )
+    auto_backup_interval_hours: int = Field(
+        default=24,
+        ge=1,
+        description="Hours between scheduled backups when auto_backup_enabled is true.",
+    )
+    auto_backup_time_of_day: Optional[str] = Field(
+        default=None,
+        description=(
+            "Time of day to anchor scheduled backups to, as 'HH:MM' on a 24-hour clock "
+            "in UTC (e.g. '03:00'). Slots then sit on a fixed grid from that time, so a "
+            "daily backup lands at it every day. Unset leaves the schedule rolling: due "
+            "whenever an interval has passed since the last run."
+        ),
+    )
     migration_allowed_s3_endpoints: list[str] | str = Field(
         default_factory=list,
         description=(
-            "Opt-in allowlist of external S3/MinIO endpoint URLs that project migration "
+            "Opt-in allowlist of external S3 endpoint URLs that project migration "
             "(/export-project) is permitted to push data to. Set via "
             "DEPICTIO_BACKUP_MIGRATION_ALLOWED_S3_ENDPOINTS as a comma-separated list "
             "(e.g. 'https://s3.partner.example.com,https://minio.other.example.com:9000'). "
             "Empty by default — when empty, ALL caller-supplied external endpoints are "
-            "rejected and only the deployment's own configured MinIO endpoint is allowed "
+            "rejected and only the deployment's own configured S3 endpoint is allowed "
             "(self-migration). Each entry is matched exactly on normalized scheme+host+port. "
             "This is a server-side SSRF / data-exfiltration guard: only add operator-vetted "
             "endpoints you trust the server to connect to."
@@ -835,13 +1308,172 @@ class MonitoringConfig(BaseSettings):
     app_log_capped_mb: int = Field(
         default=64, description="Size cap (MB) of the capped app_logs collection"
     )
+    agent_ttl_seconds: int = Field(
+        default=300,
+        description="How long a CLI agent's heartbeat stays valid. Several beats "
+        "long, so one missed heartbeat does not evict a healthy watcher.",
+    )
     live_updates: bool = Field(
         default=True,
         description="Push live task/ingestion status changes over the events WebSocket "
         "(only active when events.enabled is also true)",
     )
+    ingestion_stale_after_hours: int = Field(
+        default=24,
+        description="Mark a 'running' ingestion run as 'abandoned' once its record has seen no "
+        "write for this many hours (the CLI was killed or lost its connection). Every live "
+        "step update counts as a write, so a run that is still reporting progress is never "
+        "swept; keep this above the longest silent stretch of one step (a single large "
+        "Delta write, for instance). 0 disables the sweep.",
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MONITORING_")
+
+
+class DashboardVersionsConfig(BaseSettings):
+    """Version history for dashboards — the timeline, pins, and restore.
+
+    Retention is a prune function rather than a Mongo TTL index, for two
+    reasons: a TTL index cannot exempt pinned versions, and the thinning
+    policy below (keep one per day past a threshold) is application logic no
+    index can express. The prune runs opportunistically after a capture,
+    because this deployment has no Celery beat schedule — anything scheduled
+    would simply never fire.
+    """
+
+    enabled: bool = Field(default=True, description="Capture a version on each dashboard save")
+    coalesce_window_seconds: int = Field(
+        default=300,
+        description="How long consecutive autosaves by the same author fold into one "
+        "version. Anchored at the version's creation, not sliding, so a long "
+        "editing session yields a reviewable series rather than one entry.",
+    )
+    max_versions_per_family: int = Field(
+        default=100, description="Cap on retained unpinned autosave versions per dashboard family"
+    )
+    retention_days: int = Field(
+        default=90, description="Age cap for unpinned versions. Pinned versions never expire."
+    )
+    keep_daily_for_days: int = Field(
+        default=30,
+        description="Past this age, thin unpinned versions to the last one of each day",
+    )
+    max_snapshot_bytes: int = Field(
+        default=8 * 1024 * 1024,
+        description="Skip (and log) a capture larger than this rather than risk the "
+        "16 MB BSON document limit. A version must never break a save.",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_DASHBOARD_VERSIONS_")
+
+
+class CommentsConfig(BaseSettings):
+    """Who may use the comment threads of a dashboard.
+
+    Threads are internal to a project's editors and owners by default: the
+    discussion can name people and unreleased results. A showcase instance
+    wants the opposite: reviewers who can open a dashboard should be able to
+    comment on it without being able to edit it.
+    """
+
+    viewers_can_comment: bool = Field(
+        default=False,
+        description="Let anyone with viewer access to a project read and write its comment "
+        "threads. They still cannot resolve or reopen a thread, edit or publish an "
+        "annotation, or see an agent's proposals; those stay with editors and owners. "
+        "Anonymous visitors never comment (outside single-user mode).",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_COMMENTS_")
+
+
+class IngestionConfig(BaseSettings):
+    """Server-side limits and opt-ins for the data-ingestion path.
+
+    Everything that changes *behaviour* defaults to off, so an existing
+    deployment upgrades without any change in what it does. Only the step
+    throttle, which merely makes an implicit ceiling explicit, is active by
+    default.
+    """
+
+    step_updates_per_minute: int = Field(
+        default=60,
+        description="Non-terminal ingestion-step updates accepted per run per minute. "
+        "Terminal steps always pass, so a run's final tally is never throttled away.",
+    )
+    async_deltatable_upsert: bool = Field(
+        default=False,
+        description=(
+            "Offload the expensive half of /deltatables/upsert (column specs, row "
+            "hash, Delta history read) to a Celery task and return a job_id. "
+            "Requires DEPICTIO_JOBS_ENABLED=true — without it the API has nowhere "
+            "to record the job and stays on the synchronous path."
+        ),
+    )
+    browser_trigger: bool = Field(
+        default=False,
+        description=(
+            "Allow project owners and editors to start an ingestion from the "
+            "project page. Only meaningful where the API can read the same "
+            "filesystem the data sits on (a shared PVC, a mounted export) — on a "
+            "deployment whose data lives on an HPC node the API cannot see, the "
+            "endpoint rejects the request. Requires DEPICTIO_JOBS_ENABLED=true and "
+            "DEPICTIO_INGESTION_ALLOWED_DATA_ROOTS."
+        ),
+    )
+    allowed_data_roots: list[str] | str = Field(
+        default_factory=list,
+        description=(
+            "Server directories a browser-triggered ingestion may read. Set via "
+            "DEPICTIO_INGESTION_ALLOWED_DATA_ROOTS as a comma-separated list or a JSON "
+            "list (e.g. '/data/runs,/mnt/shared'). Any authenticated user can create a "
+            "project and name any path as its data location, so this is what stops a "
+            "trigger from reading another group's runs or the server's own files. Every "
+            "data location, single-file scan path and image directory of the project must "
+            "resolve (symlinks followed) inside one of these roots, and so must every file "
+            "the scan registers. Empty by default, which refuses every trigger."
+        ),
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_INGESTION_")
+
+    @model_validator(mode="after")
+    def _normalise_allowed_data_roots(self) -> "IngestionConfig":
+        # Accept the comma-separated form as well as pydantic-settings' JSON list,
+        # mirroring cors_allowed_origins.
+        if isinstance(self.allowed_data_roots, str):
+            object.__setattr__(
+                self,
+                "allowed_data_roots",
+                [r.strip() for r in self.allowed_data_roots.split(",") if r.strip()],
+            )
+        return self
+
+
+class JobsConfig(BaseSettings):
+    """User-facing job records for offloaded work (``jobs`` collection).
+
+    Off by default: enabling it creates a collection and its indexes, and
+    changes what ``/deltatables/upsert`` may return. Nothing consults a job
+    unless a client asked for one.
+    """
+
+    enabled: bool = Field(default=False, description="Expose the /jobs endpoints")
+    retention_hours: int = Field(
+        default=24, description="How long a successful job document is kept"
+    )
+    failed_retention_hours: int = Field(
+        default=168,
+        description="How long a failed or cancelled job is kept — longer than a "
+        "success, because a failure is what someone comes back to read.",
+    )
+    max_result_bytes: int = Field(
+        default=262144,
+        description="Results larger than this are dropped and flagged truncated "
+        "rather than risking the 16 MB BSON document ceiling.",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_JOBS_")
 
 
 class DashboardYAMLConfig(BaseSettings):
@@ -1070,12 +1702,35 @@ class PerformanceConfig(BaseSettings):
     browser_page_load_timeout: int = Field(default=90000)  # 90s default
     browser_element_timeout: int = Field(default=30000)  # 30s default
 
+    screenshots_enabled: bool = Field(
+        default=True,
+        description="Generate dashboard thumbnails with Playwright. Off when no Chromium is "
+        "available, e.g. `depictio local up` without --screenshots.",
+    )
+    screenshots_dir: str = Field(
+        default="",
+        description="Where dashboard thumbnails are written and served from. Empty means "
+        "the package's depictio/api/static/screenshots, which ships the reference thumbnails.",
+    )
+
     # Screenshot-specific timeouts (production typically needs longer)
     screenshot_navigation_timeout: int = Field(default=60000)  # 60s for navigation
     screenshot_content_wait: int = Field(default=30000)  # 30s for content
     screenshot_stabilization_wait: int = Field(default=10000)  # 10s for stability
     screenshot_capture_timeout: int = Field(default=120000)  # 120s for actual screenshot capture
     screenshot_api_timeout: int = Field(default=600)  # 10 minutes for complete screenshot API call
+
+    # Screenshot geometry. The viewport is the CSS size the dashboard is laid
+    # out at, and the scale is the pixel density it is rendered with, so the
+    # stored PNG is viewport x scale pixels. 16:10 matches the listing card's
+    # `AspectRatio ratio={16 / 10}`; changing the ratio crops the thumbnail.
+    # Scale 2 is what makes the shot readable once the card shrinks it: at
+    # scale 1 the fine text in a 1440px-wide dashboard turns to mush in a
+    # 350px card. Raising either costs capture time and PNG bytes on every
+    # listing load.
+    screenshot_viewport_width: int = Field(default=1440)
+    screenshot_viewport_height: int = Field(default=900)
+    screenshot_scale: float = Field(default=2.0, ge=1.0, le=3.0)
 
     # Service readiness check settings
     service_readiness_retries: int = Field(default=5)
@@ -1105,6 +1760,12 @@ class PerformanceConfig(BaseSettings):
     )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_PERFORMANCE_")
+
+    @property
+    def screenshots_path(self) -> Path:
+        if self.screenshots_dir:
+            return Path(self.screenshots_dir).expanduser()
+        return Path(__file__).resolve().parents[2] / "static" / "screenshots"
 
 
 class AnalyticsConfig(BaseSettings):
@@ -1235,6 +1896,56 @@ class TelemetryConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_TELEMETRY_")
 
 
+class VersionCheckConfig(BaseSettings):
+    """Configuration for the "is a newer Depictio release out?" check.
+
+    The API asks the GitHub Releases API of ``repository`` every
+    ``interval_hours`` and tells *admins* (never other users) when a newer
+    version exists. Nothing about the installation is sent: it is a plain
+    unauthenticated GET, outbound only.
+
+    ``enabled`` is deliberately tri-state. ``None`` means the operator did not
+    say, so the check is ON and an admin may switch it off from /admin (the
+    choice lives in MongoDB). An explicit ``true``/``false`` in the environment
+    wins over the admin and locks the toggle: an operator who forbids outbound
+    calls (air-gapped, regulated) must not have that undone from a web form.
+    A default of ``True`` here would make the two cases indistinguishable.
+    """
+
+    enabled: bool | None = Field(
+        default=None,
+        description=(
+            "Force the release check on or off. Unset: on by default and admins "
+            "can toggle it at runtime. Set: the environment wins and the admin "
+            "toggle is locked."
+        ),
+    )
+    interval_hours: int = Field(
+        default=6,
+        description="Hours between checks (cluster-wide, not per worker).",
+        ge=1,
+        le=168,
+    )
+    repository: str = Field(
+        default="depictio/depictio",
+        description="GitHub repository (owner/name) whose releases are checked.",
+    )
+    timeout_seconds: float = Field(
+        default=10.0,
+        description="HTTP timeout for the GitHub request.",
+        gt=0,
+    )
+
+    # Compose always passes DEPICTIO_VERSION_CHECK_ENABLED (as "" when the
+    # operator set nothing, so the variable survives the env allowlist without
+    # inventing a value). An empty string must therefore read as "unset", for
+    # every field, not fail bool/int parsing at boot.
+    model_config = SettingsConfigDict(
+        env_prefix="DEPICTIO_VERSION_CHECK_",
+        env_ignore_empty=True,
+    )
+
+
 class GoogleAnalyticsConfig(BaseSettings):
     """Configuration for Google Analytics tracking."""
 
@@ -1250,6 +1961,241 @@ class GoogleAnalyticsConfig(BaseSettings):
     def is_configured(self) -> bool:
         """Check if Google Analytics is properly configured."""
         return self.enabled and self.tracking_id is not None
+
+
+class FeedbackConfig(BaseSettings):
+    """An opt-in "give feedback" link in the dashboard header.
+
+    A deployment that is showing dashboards to an audience it wants to hear
+    from — a pipeline template shared with its maintainers, a facility instance
+    shared with its users — needs the ask to sit where the reader is looking.
+    A message sent separately arrives without context: "the plot is wrong" with
+    no way to tell which dashboard, which tab, or which version it was.
+
+    url is a template. {project}, {dashboard}, {tab} and
+    {url} are substituted client-side and URL-encoded, so a GitHub
+    discussion or issue link can arrive pre-filled with what the reader was
+    looking at::
+
+        DEPICTIO_FEEDBACK_ENABLED=true
+        DEPICTIO_FEEDBACK_URL='https://github.com/org/repo/discussions/new?category=feedback&title=[{project}]&body={url}'
+
+    Off by default: a deployment that has nowhere to send feedback must not
+    grow a button that goes nowhere.
+    """
+
+    enabled: bool = Field(default=False, description="Show the feedback link in dashboard headers")
+    url: Optional[str] = Field(
+        default=None,
+        description=(
+            "URL template opened by the link. {dashboard}, {dashboard_id}, {tab} and {url} "
+            "are substituted and URL-encoded."
+        ),
+    )
+    label: str = Field(default="Feedback", description="Text on the link")
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_FEEDBACK_")
+
+    @property
+    def is_configured(self) -> bool:
+        """Enabled *and* pointed somewhere. Either half alone renders nothing."""
+        return self.enabled and bool(self.url)
+
+
+class BrandingConfig(BaseSettings):
+    """Instance-level branding, the deployment-defaults layer (issue #397).
+
+    Lets a deployment (e.g. a core facility, or an EMBL TREC instance) replace
+    the depictio logo, name the instance, and re-skin the UI and its
+    server-rendered Plotly figures. Everything here is a *default*: the /admin
+    Branding panel overrides it per field, and a dashboard can override it
+    again. See ``depictio.models.models.branding`` for the shared shape and
+    ``depictio.api.v1.services.branding`` for the merge.
+
+    Three ways to set it, most general to most targeted (later wins):
+
+    1. ``DEPICTIO_BRANDING_PRESET=trec`` — a named starting palette.
+    2. ``DEPICTIO_BRANDING_THEME='{"surfaces_light": {"nav_bg": "#f4f8f5"}}'`` —
+       a JSON ``BrandTheme``, the escape hatch for the nested blocks that have
+       no flat env var of their own.
+    3. The flat vars below.
+
+    The "Powered by Depictio" attribution follows the logo: it is shown exactly
+    when the depictio wordmark is not, i.e. once a layer sets ``logo_mode`` to
+    ``custom`` or ``none``. A stock deployment shows the wordmark and no badge.
+    """
+
+    preset: Optional[str] = Field(
+        default=None,
+        description=(
+            "Named starting palette applied before every other branding var "
+            "(e.g. 'trec', 'embl', 'ocean'). Unknown names are ignored with a warning."
+        ),
+    )
+    theme: Optional[str] = Field(
+        default=None,
+        description=(
+            "JSON-encoded BrandTheme, applied over the preset and under the flat vars. "
+            "The only way to set nested blocks (surfaces_light/surfaces_dark) by env."
+        ),
+    )
+
+    logo_url: Optional[str] = Field(
+        default=None,
+        description=(
+            "URL of the custom logo shown in the sidebar and on the login page "
+            "(absolute https:// URL or a path served by this deployment). "
+            "Replaces the depictio logo when set."
+        ),
+    )
+    logo_url_dark: Optional[str] = Field(
+        default=None,
+        description=(
+            "Optional dark-mode variant of the custom logo. Falls back to logo_url when unset."
+        ),
+    )
+    app_name: Optional[str] = Field(
+        default=None,
+        description=(
+            "Instance display name, used for the browser tab title and the login-page greeting."
+        ),
+    )
+
+    primary_color: Optional[str] = Field(
+        default=None,
+        description=(
+            "Primary UI color: a Mantine palette name (e.g. 'teal') or a hex "
+            "color (e.g. '#0ca678') the viewer expands into a palette."
+        ),
+    )
+    secondary_color: Optional[str] = Field(
+        default=None, description="Secondary brand color, same accepted forms as primary_color."
+    )
+    tertiary_color: Optional[str] = Field(
+        default=None, description="Tertiary / accent brand color, same accepted forms."
+    )
+    success_color: Optional[str] = Field(default=None, description="Overrides Mantine green.")
+    warning_color: Optional[str] = Field(default=None, description="Overrides Mantine yellow.")
+    danger_color: Optional[str] = Field(default=None, description="Overrides Mantine red.")
+
+    tint_mode: Optional[str] = Field(
+        default=None,
+        description=(
+            "How far the brand hues reach: 'accent' (primary only, the default) or "
+            "'full' (also remaps the secondary/tertiary accent families)."
+        ),
+    )
+    font_family: Optional[str] = Field(default=None, description="CSS font stack for body text.")
+    headings_font_family: Optional[str] = Field(
+        default=None, description="CSS font stack for headings; falls back to font_family."
+    )
+    default_radius: Optional[str] = Field(
+        default=None, description="Mantine radius token: xs, sm, md, lg or xl."
+    )
+
+    colorway: Optional[str] = Field(
+        default=None,
+        description=(
+            "Comma-separated hex colors (e.g. '#1f77b4,#ff7f0e,...') used as "
+            "the categorical colorway of server-rendered Plotly figures. Unset means "
+            "'derive it from the brand palette'."
+        ),
+    )
+    sequential: Optional[str] = Field(
+        default=None,
+        description=(
+            "Comma-separated hex colors (light to dark) used as the continuous "
+            "colorscale of server-rendered figures. Unset means 'derive from primary_color'."
+        ),
+    )
+    plot_template: Optional[str] = Field(
+        default=None,
+        description=(
+            "Plotly template name applied to figures that don't pick one "
+            "(e.g. 'seaborn'). Unset means 'follow the UI light/dark theme'."
+        ),
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_BRANDING_")
+
+    @staticmethod
+    def _hex_list(raw: Optional[str]) -> Optional[list[str]]:
+        """Parse & validate a comma-separated hex list; None when nothing valid remains."""
+        if not raw:
+            return None
+        colors = [
+            color.strip()
+            for color in raw.split(",")
+            if re.fullmatch(r"#[0-9a-fA-F]{6}", color.strip())
+        ]
+        return colors or None
+
+    @property
+    def colorway_list(self) -> Optional[list[str]]:
+        """Parsed & validated colorway; None when unset or nothing valid remains."""
+        return self._hex_list(self.colorway)
+
+    @property
+    def sequential_list(self) -> Optional[list[str]]:
+        return self._hex_list(self.sequential)
+
+    def as_brand_theme(self):
+        """This deployment's branding as a ``BrandTheme``.
+
+        Preset first, then the JSON blob, then the flat vars, so a targeted
+        ``DEPICTIO_BRANDING_PRIMARY_COLOR`` always beats a blob that also
+        mentions the primary. Malformed input degrades to "ignore that layer"
+        rather than taking the API down at import time.
+        """
+        # Local import: this module is the earliest import in every context and
+        # must stay free of heavier model imports at module scope.
+        from depictio.models.models.branding import BrandTheme, merge_brand_themes, preset_theme
+
+        layers: list[Optional[BrandTheme]] = []
+
+        if self.preset:
+            base = preset_theme(self.preset)
+            if base is None:
+                _warn(f"Unknown DEPICTIO_BRANDING_PRESET {self.preset!r}, ignoring.")
+            layers.append(base)
+
+        if self.theme:
+            try:
+                layers.append(BrandTheme.model_validate_json(self.theme))
+            except Exception as exc:
+                _warn(f"Invalid DEPICTIO_BRANDING_THEME, ignoring: {exc}")
+
+        plots = {
+            "template": self.plot_template,
+            "colorway": self.colorway_list,
+            "sequential": self.sequential_list,
+        }
+        flat = {
+            "app_name": self.app_name,
+            "logo_url": self.logo_url,
+            "logo_url_dark": self.logo_url_dark,
+            "primary": self.primary_color,
+            "secondary": self.secondary_color,
+            "tertiary": self.tertiary_color,
+            "success": self.success_color,
+            "warning": self.warning_color,
+            "danger": self.danger_color,
+            "tint_mode": self.tint_mode,
+            "font_family": self.font_family,
+            "headings_font_family": self.headings_font_family,
+            "default_radius": self.default_radius,
+            "plots": {k: v for k, v in plots.items() if v is not None} or None,
+        }
+        try:
+            layers.append(BrandTheme(**{k: v for k, v in flat.items() if v is not None}))
+        except Exception as exc:
+            _warn(f"Invalid DEPICTIO_BRANDING_* value, ignoring: {exc}")
+
+        return merge_brand_themes(*layers)
+
+    @property
+    def is_configured(self) -> bool:
+        return not self.as_brand_theme().is_empty
 
 
 class ProfilingConfig(BaseSettings):
@@ -1308,7 +2254,7 @@ class Settings(BaseSettings):
     fastapi: FastAPIConfig = Field(default_factory=FastAPIConfig)
     viewer: ViewerConfig = Field(default_factory=ViewerConfig)
     mongodb: MongoDBConfig = Field(default_factory=MongoDBConfig)
-    minio: S3DepictioCLIConfig = Field(default_factory=S3DepictioCLIConfig)
+    s3: S3DepictioCLIConfig = Field(default_factory=S3DepictioCLIConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
     bootstrap: AuthBootstrapConfig = Field(default_factory=AuthBootstrapConfig)
 
@@ -1318,19 +2264,28 @@ class Settings(BaseSettings):
     celery: CeleryConfig = Field(default_factory=CeleryConfig)
     s3_cache: S3CacheConfig = Field(default_factory=S3CacheConfig)
     multiqc_prerender: MultiQCPrerenderConfig = Field(default_factory=MultiQCPrerenderConfig)
+    remote: RemoteConfig = Field(default_factory=RemoteConfig)
+    local_data: LocalDataConfig = Field(default_factory=LocalDataConfig)
 
     # Optional features
     jbrowse: JBrowseConfig = Field(default_factory=JBrowseConfig)
     backup: BackupConfig = Field(default_factory=BackupConfig)
     events: EventsConfig = Field(default_factory=EventsConfig)
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
+    dashboard_versions: DashboardVersionsConfig = Field(default_factory=DashboardVersionsConfig)
+    comments: CommentsConfig = Field(default_factory=CommentsConfig)
+    ingestion: IngestionConfig = Field(default_factory=IngestionConfig)
+    jobs: JobsConfig = Field(default_factory=JobsConfig)
     dashboard_yaml: DashboardYAMLConfig = Field(default_factory=DashboardYAMLConfig)
 
     # Observability & development
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
     analytics: AnalyticsConfig = Field(default_factory=AnalyticsConfig)
     telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
+    version_check: VersionCheckConfig = Field(default_factory=VersionCheckConfig)
     google_analytics: GoogleAnalyticsConfig = Field(default_factory=GoogleAnalyticsConfig)
+    branding: BrandingConfig = Field(default_factory=BrandingConfig)
+    feedback: FeedbackConfig = Field(default_factory=FeedbackConfig)
     profiling: ProfilingConfig = Field(default_factory=ProfilingConfig)
 
     disable_example_dashboards: bool = Field(
@@ -1351,6 +2306,19 @@ class Settings(BaseSettings):
             "all of them. Ignored when DEPICTIO_DISABLE_EXAMPLE_DASHBOARDS is "
             "true (that takes precedence and seeds nothing). Valid names: "
             "iris, penguins, ampliseq, advanced_viz_showcase, viralrecon."
+        ),
+    )
+
+    seed_extra_projects: str = Field(
+        default="",
+        description=(
+            "Comma-separated list of *optional* reference projects to seed in "
+            "addition to the default set, e.g. 'catalog_conformance'. Empty (the "
+            "default) seeds none of them. This is additive, unlike "
+            "DEPICTIO_SEED_PROJECTS which narrows the default set — an optional "
+            "project is a test fixture, so it stays out of ordinary deployments "
+            "until something asks for it. Ignored when "
+            "DEPICTIO_DISABLE_EXAMPLE_DASHBOARDS is true."
         ),
     )
 
@@ -1382,12 +2350,26 @@ class Settings(BaseSettings):
         names = {name.strip() for name in self.seed_projects.split(",") if name.strip()}
         return names or None
 
+    @property
+    def seed_extra_projects_filter(self) -> set[str]:
+        """Optional reference projects to seed on top of the default set.
+
+        Parses ``DEPICTIO_SEED_EXTRA_PROJECTS``. Empty means none: an optional
+        project only exists because something (the e2e suite) asked for it.
+        """
+        return {name.strip() for name in self.seed_extra_projects.split(",") if name.strip()}
+
+    @property
+    def minio(self) -> S3DepictioCLIConfig:
+        """Read-only alias of ``s3``, kept for scripts that still read ``settings.minio``."""
+        return self.s3
+
     @model_validator(mode="after")
     def _enforce_server_secrets(self) -> "Settings":
         """Fail fast at startup if server-context secrets are missing or weak.
 
         Skipped in client (CLI) context — the CLI talks to a remote API and
-        doesn't hold the MinIO root password or seed admins itself.
+        doesn't hold the S3 secret key or seed admins itself.
         """
         if self.context != "server":
             return self
@@ -1398,17 +2380,19 @@ class Settings(BaseSettings):
 
         errors: list[str] = []
 
-        # MinIO root password is consumed by API + worker, so it must always
+        # The S3 secret key is consumed by API + worker, so it must always
         # be set on a server boot regardless of single-user / public mode.
-        minio_pw = self.minio.root_password.get_secret_value()
-        if minio_pw.lower() in _WEAK_PASSWORDS_MINIO:
+        s3_pw = self.s3.root_password.get_secret_value()
+        if s3_pw.lower() in _WEAK_PASSWORDS_S3:
             errors.append(
-                "DEPICTIO_MINIO_ROOT_PASSWORD is unset or matches a known-default value. "
+                "DEPICTIO_S3_ROOT_PASSWORD (legacy: DEPICTIO_MINIO_ROOT_PASSWORD) is unset "
+                "or matches a known-default value. "
                 "Set it to a strong secret before starting the server."
             )
-        elif len(minio_pw) < _MIN_SECRET_LEN:
+        elif len(s3_pw) < _MIN_SECRET_LEN:
             errors.append(
-                f"DEPICTIO_MINIO_ROOT_PASSWORD must be at least {_MIN_SECRET_LEN} characters."
+                "DEPICTIO_S3_ROOT_PASSWORD (legacy: DEPICTIO_MINIO_ROOT_PASSWORD) must be "
+                f"at least {_MIN_SECRET_LEN} characters."
             )
 
         # Bootstrap admin credentials. Empty values are allowed at validator

@@ -1,27 +1,28 @@
 # CLI Venv
 
-Create or refresh the `depictio-cli` virtualenv at `depictio/cli/.venv` via `uv sync`.
+Create or refresh the CLI virtualenv at `depictio/cli/.venv` via `uv sync`.
 
 ## Usage
 
 `/cli-venv`
 
-No arguments. Idempotent — safe to re-run after pulling changes that touched `depictio/cli/pyproject.toml` or `depictio/cli/uv.lock`.
+No arguments. Idempotent — safe to re-run after pulling changes that touched `pyproject.toml` or `uv.lock`.
 
 ## Why a per-worktree CLI venv
 
-The CLI is a separate package (`depictio/cli/pyproject.toml`) with its own pinned deps and lockfile. Installing it into the main `depictio-venv-dash-v3` would mix unrelated dependency trees. A scoped `.venv` next to the package keeps it isolated and lets each worktree target its own allocated API ports without polluting the global `depictio-cli` install.
+The CLI is the root `depictio` package without its `[server]` extra (`depictio/cli/pyproject.toml` only defines the `depictio-cli` alias published to PyPI). A scoped `.venv` holding just the base and `[multiqc]` matches what `pip install depictio` users get, and lets each worktree target its own allocated API ports without polluting the global `depictio-cli` install.
 
 ## Steps
 
 1. **Locate the CLI package**:
-   - From the repo root (the one with the top-level `pyproject.toml`), confirm `depictio/cli/pyproject.toml` and `depictio/cli/uv.lock` both exist. If either is missing, **stop and ask** — wrong directory or unexpected repo layout.
+   - From the repo root, confirm `pyproject.toml`, `uv.lock` and `depictio/cli/` all exist. If any is missing, **stop and ask** — wrong directory or unexpected repo layout.
 
 2. **Run `uv sync`**:
    ```bash
-   (cd depictio/cli && uv sync)
+   UV_PROJECT_ENVIRONMENT=depictio/cli/.venv uv sync --frozen --extra multiqc
    ```
-   - Do not `pip install -e .` as a fallback — the lockfile is authoritative and `uv sync` is what CI uses.
+   - Run it from the repo root: it installs the root project (editable) from the root `uv.lock` into `depictio/cli/.venv`.
+   - Do not `pip install -e .` as a fallback — the lockfile is authoritative. Do not run `uv sync` inside `depictio/cli/` either: that installs the alias, which makes `depictio` a namespace package.
    - If `uv` is missing, **stop and ask**. Don't silently fall back to `pip` or a globally-installed `depictio-cli` (it would point at the wrong source tree).
 
 3. **Verify**:
@@ -38,4 +39,5 @@ The CLI is a separate package (`depictio/cli/pyproject.toml`) with its own pinne
 ## Notes
 
 - `/new-worktree` runs this same `uv sync` step automatically when scaffolding a new worktree. Use `/cli-venv` standalone to refresh after pulling lockfile changes, or to recover after deleting `.venv`.
+- The venv has no server packages (FastAPI, Celery, Playwright): that is intended, it is the CLI install users get.
 - The CLI venv is gitignored (`.venv` pattern) — never commit it.

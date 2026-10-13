@@ -422,17 +422,7 @@ def plan_checks(dash: dict, family_title: str) -> list[Check]:
                     new(
                         meta,
                         subtype=kind,
-                        probe="advanced_viz/data",
-                        method="POST",
-                        path="/advanced_viz/data",
-                        body={
-                            "wf_id": meta.get("wf_id"),
-                            "dc_id": meta.get("dc_id"),
-                            "columns": columns,
-                            "filter_metadata": [],
-                            "limit_rows": 200,
-                        },
-                        validate="advviz",
+                        **_data_probe(meta.get("wf_id"), meta.get("dc_id"), columns),
                     )
                 )
             secondary = _plan_secondary(new, meta, config, columns)
@@ -449,6 +439,39 @@ def plan_checks(dash: dict, family_title: str) -> list[Check]:
     return checks
 
 
+def _data_probe(wf_id: Any, dc_id: Any, columns: list[str], label: str = "") -> dict:
+    """Request fields for an advanced-viz data probe.
+
+    With no column found in the config there is nothing to project, and
+    /advanced_viz/data answers an empty ``columns`` with a 400 the viewer never
+    gets. That happens when the config names no columns at all: an upset_plot
+    with no ``set_columns`` reads the schema and leaves the sets to
+    compute_upset (UpsetRenderer.tsx). Probing the schema then checks what the
+    viewer reads, that the Delta table exists and opens.
+    """
+    suffix = f" ({label})" if label else ""
+    if not columns:
+        return {
+            "probe": f"datacollections/polars_schema{suffix}",
+            "method": "GET",
+            "path": f"/datacollections/polars_schema/{dc_id}",
+            "validate": "schema",
+        }
+    return {
+        "probe": f"advanced_viz/data{suffix}",
+        "method": "POST",
+        "path": "/advanced_viz/data",
+        "body": {
+            "wf_id": wf_id,
+            "dc_id": dc_id,
+            "columns": columns,
+            "filter_metadata": [],
+            "limit_rows": 200,
+        },
+        "validate": "advviz",
+    }
+
+
 def _plan_secondary(new, meta: dict, config: dict, columns: list[str]) -> list[Check]:
     """Probe the extra data collections complex_heatmap, upset_plot and phylogenetic pull."""
     extra: list[Check] = []
@@ -461,17 +484,7 @@ def _plan_secondary(new, meta: dict, config: dict, columns: list[str]) -> list[C
         check = new(
             meta,
             subtype=kind,
-            probe=f"advanced_viz/data ({dc_key})",
-            method="POST",
-            path="/advanced_viz/data",
-            body={
-                "wf_id": config.get(wf_key) or meta.get("wf_id"),
-                "dc_id": dc,
-                "columns": columns,
-                "filter_metadata": [],
-                "limit_rows": 200,
-            },
-            validate="advviz",
+            **_data_probe(config.get(wf_key) or meta.get("wf_id"), dc, columns, dc_key),
         )
         # A secondary dc has its own tag, so drop the component's and let the
         # project context supply the right one.
@@ -546,6 +559,8 @@ def validate_payload(check: Check, payload: Any) -> str:
         return "OK" if payload.get("rows") else "EMPTY_RESULT"
     if kind == "advviz":
         return "OK" if payload.get("row_count") else "EMPTY_RESULT"
+    if kind == "schema":
+        return "OK" if payload else "EMPTY_RESULT"
     if kind == "unique_values":
         return "OK" if payload.get("values") else "EMPTY_RESULT"
     return "OK"

@@ -1,0 +1,31 @@
+id: cutandrun_caller_agreement
+name: Peak caller agreement
+mode: peaks/agreement
+description: >-
+  One row per sample and peak caller: how many peaks that caller made, how wide
+  they are, how many of them the other caller reproduced and how many it never
+  saw. A sample a caller returned nothing for keeps a row with n_peaks 0.
+# nf-core/cutandrun can run SEACR and MACS2 over the same fragments. Neither is
+# a subset of the other: a broad mark can be invisible to MACS2 and obvious to
+# SEACR, so the disagreement is the informative part. The recipe reads both
+# peak collections and the sample hub through dc_ref rather than re-parsing
+# the BEDs, and counts overlap with two as-of joins instead of a cross join.
+find:
+  path_glob: "**/*.seacr.peaks.*.bed"
+  path_glob_alt:
+    - "**/*.macs2_peaks.narrowPeak"
+recipe: cutandrun/caller_agreement.py
+fixture: caller_agreement.tsv
+renders_as:
+  # Yield and agreement as one grid, then the two callers on two axes, then
+  # what each of them saw alone.
+  - { id: caller_yield_dots, component: advanced_viz, kind: dot_plot, roles: {cluster: sample, gene: caller, mean_expression: log10_n_peaks, frac_expressing: frac_shared} }
+  - { id: caller_peak_scatter, component: figure, visu_type: scatter, dict_kwargs: {x: n_peaks_other, y: n_peaks, color: target, title: Peaks called against the other caller} }
+  - { id: caller_unique_bar, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: n_unique, color: caller, title: Calls the other caller did not make} }
+  - { id: caller_shared_bar, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: frac_shared, color: caller, title: Share of calls the other caller reproduced} }
+  - { component: card, column: n_peaks, aggregation: sum, secondary_layout: top_n, breakdown_col: caller, top_n_count: 2 }
+  - { component: card, column: frac_shared, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: frac_shared, aggregation: min, secondary_layout: gauge, coverage_max: 1.0 }
+  - { component: card, column: median_width, aggregation: median, secondary_layout: histogram }
+  - { component: card, column: n_unique, aggregation: sum, secondary_layout: composition, breakdown_col: caller }
+  - { component: table, row_selection_enabled: true, row_selection_column: sample }

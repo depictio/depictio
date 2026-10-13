@@ -27,6 +27,13 @@
           ],
           "default": null,
           "title": "Path Glob"
+        },
+        "path_glob_alt": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Path Glob Alt",
+          "type": "array"
         }
       },
       "title": "CatalogFind",
@@ -39,6 +46,30 @@
         "id": {
           "title": "Id",
           "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "origin_tool": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Origin Tool"
         },
         "mode": {
           "anyOf": [
@@ -56,6 +87,32 @@
           "default": "",
           "title": "Description",
           "type": "string"
+        },
+        "stage": {
+          "anyOf": [
+            {
+              "enum": [
+                "qc",
+                "alignment",
+                "quantification",
+                "peaks",
+                "variants",
+                "fusions",
+                "taxonomy",
+                "annotation",
+                "immune",
+                "differential",
+                "benchmarking",
+                "other"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stage"
         },
         "find": {
           "$ref": "#/$defs/CatalogFind"
@@ -146,7 +203,7 @@
     },
     "Render": {
       "additionalProperties": false,
-      "description": "One render target for an output: a dashboard component + its binding.\n\n- `advanced_viz` \u2192 `kind` + `roles` (role \u2192 column).\n- `figure` \u2192 either UI mode (`visu_type` + `dict_kwargs`, plotly-express) or\n  code mode (`code`: an inline snippet that sets `fig`, depictio's\n  figure `code_content`).\n- `card` \u2192 `column` + `aggregation` (a metric/KPI).\n- `multiqc`/`table`/\u2026 \u2192 no extra binding.\n\nAn optional `id` makes the render a first-class, tool-unique handle so a\ndashboard can address it directly with ``use: <tool>/<render-id>`` \u2014 no need\nto name the output and disambiguate with ``viz_kind``. Ids only need to be\nunique within a tool (enforced on the entry), and a render binds to its\nparent output's columns, so the id lives here, never in ``module.yaml``.",
+      "description": "One render target for an output: a dashboard component + its binding.\n\n- `advanced_viz` \u2192 `kind` + `roles` (role \u2192 column).\n- `figure` \u2192 either UI mode (`visu_type` + `dict_kwargs`, plotly-express) or\n  code mode (`code`: an inline snippet that sets `fig`, depictio's\n  figure `code_content`).\n- `card` \u2192 `column` + `aggregation` (a metric/KPI).\n- `interactive` \u2192 `interactive_type` + `column_name`, the two fields\n  `InteractiveLiteComponent` requires to instantiate a filter control.\n- `table` \u2192 optional display options mirroring `TableLiteComponent`.\n- `multiqc`/`text`/\u2026 \u2192 no extra binding.\n\nAn optional `id` makes the render a first-class, tool-unique handle so a\ndashboard can address it directly with ``use: <tool>/<render-id>`` \u2014 no need\nto name the output and disambiguate with ``viz_kind``. Ids only need to be\nunique within a tool (enforced on the entry), and a render binds to its\nparent output's columns, so the id lives here, never in ``module.yaml``.",
       "properties": {
         "id": {
           "anyOf": [
@@ -183,6 +240,19 @@
           ],
           "title": "Component"
         },
+        "priority": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Priority"
+        },
         "kind": {
           "anyOf": [
             {
@@ -204,7 +274,28 @@
                 "sunburst",
                 "oncoplot",
                 "coverage_track",
-                "sankey"
+                "sankey",
+                "pr_benchmark",
+                "roc_pr_curve",
+                "confusion_matrix",
+                "metric_ci_bars",
+                "profile",
+                "signal_matrix",
+                "fusion_structure",
+                "gene_arrow_track",
+                "gsea_running_score",
+                "sashimi",
+                "scatter_xy",
+                "contact_map",
+                "knee_plot",
+                "damage_profile",
+                "genome_view",
+                "group_compare",
+                "transcript_structure",
+                "cnv_profile",
+                "genome_chord",
+                "record_card",
+                "parallel_coordinates"
               ],
               "type": "string"
             },
@@ -217,7 +308,17 @@
         },
         "roles": {
           "additionalProperties": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ]
           },
           "title": "Roles",
           "type": "object"
@@ -230,7 +331,14 @@
                 "line",
                 "bar",
                 "box",
+                "violin",
                 "histogram",
+                "ecdf",
+                "strip",
+                "area",
+                "funnel",
+                "density_heatmap",
+                "density_contour",
                 "heatmap"
               ],
               "type": "string"
@@ -469,6 +577,114 @@
           "default": null,
           "title": "Filter Expr"
         },
+        "headline": {
+          "default": false,
+          "title": "Headline",
+          "type": "boolean"
+        },
+        "interactive_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "Select",
+                "MultiSelect",
+                "SegmentedControl",
+                "Slider",
+                "RangeSlider",
+                "DateRangePicker",
+                "Timeline",
+                "Switch"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Interactive Type"
+        },
+        "column_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Column Name"
+        },
+        "columns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Columns",
+          "type": "array"
+        },
+        "page_size": {
+          "anyOf": [
+            {
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page Size"
+        },
+        "sortable": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sortable"
+        },
+        "filterable": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filterable"
+        },
+        "row_selection_enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Row Selection Enabled"
+        },
+        "row_selection_column": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Row Selection Column"
+        },
         "section": {
           "anyOf": [
             {
@@ -517,6 +733,18 @@
       "default": null,
       "title": "Homepage"
     },
+    "source_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Url"
+    },
     "nf_core_url": {
       "anyOf": [
         {
@@ -547,6 +775,32 @@
       },
       "title": "Edam Topics",
       "type": "array"
+    },
+    "stage": {
+      "anyOf": [
+        {
+          "enum": [
+            "qc",
+            "alignment",
+            "quantification",
+            "peaks",
+            "variants",
+            "fusions",
+            "taxonomy",
+            "annotation",
+            "immune",
+            "differential",
+            "benchmarking",
+            "other"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Stage"
     },
     "schema_version": {
       "default": 1,

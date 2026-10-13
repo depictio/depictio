@@ -1,0 +1,442 @@
+/* Shared styling for the two worked examples.
+ *
+ * Deliberately plainer than the gallery, the GHGA report or the editorial
+ * piece: those pages demonstrate that an export can take on a host's identity,
+ * while these two demonstrate the mechanism. A neutral instrument-panel look
+ * keeps attention on the badges and the counter.
+ */
+
+body.example {
+  background: #f6f7f9;
+  color: #1f2328;
+  font-family: 'Inter Tight', system-ui, sans-serif;
+}
+
+.ex-wrap {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
+body.example .sitenav {
+  background: #10141a;
+  border-bottom: none;
+}
+
+.ex-page-head {
+  background: #10141a;
+  color: #fff;
+  padding: 2.5rem 0 2rem;
+}
+.ex-eyebrow {
+  margin: 0 0 .5rem;
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: #7d8590;
+}
+.ex-page-head h1 {
+  margin: 0 0 .6rem;
+  font-size: clamp(1.7rem, 3.6vw, 2.5rem);
+  font-weight: 700;
+  letter-spacing: -.02em;
+}
+.ex-lede {
+  margin: 0 0 1.5rem;
+  max-width: 62ch;
+  font-size: .96rem;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, .78);
+}
+.ex-lede a { color: #79c0ff; }
+.ex-page-head code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: .86em;
+  background: rgba(255, 255, 255, .1);
+  padding: .1rem .35rem;
+  border-radius: 3px;
+}
+
+/* The scoreboard is the page's thesis, so it gets the strongest treatment. */
+.scoreboard {
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 4px;
+  padding: 1rem 1.2rem;
+  max-width: 62ch;
+}
+.score-line { font-size: 1.05rem; margin-bottom: .3rem; }
+.score-line strong { font-size: 1.5rem; color: #7ee787; }
+.score-detail {
+  margin: .5rem 0 0;
+  padding-left: 0;
+  list-style: none;
+  font-size: .85rem;
+  color: rgba(255, 255, 255, .72);
+}
+.score-detail li { margin-bottom: .25rem; }
+.score-clean { color: #7ee787; }
+
+/* ---- Manifest brief (example B only) ---- */
+.ex-brief {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 2rem;
+  margin: 2.5rem 0 1rem;
+  padding: 1.6rem;
+  background: #fff;
+  border: 1px solid #d8dde3;
+  border-radius: 4px;
+}
+@media (max-width: 860px) {
+  .ex-brief { grid-template-columns: 1fr; }
+}
+.ex-brief h2 { margin: 0 0 .5rem; font-size: 1.05rem; font-weight: 600; }
+.ex-brief p { margin: 0 0 .9rem; font-size: .89rem; line-height: 1.6; color: #4a5058; }
+.manifest-summary {
+  margin: 0 0 1rem;
+  padding-left: 0;
+  list-style: none;
+  font-size: .87rem;
+}
+.manifest-summary li {
+  padding: .3rem 0;
+  border-bottom: 1px solid #eceff2;
+}
+.manifest-summary code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .85em;
+  color: #1f6feb;
+}
+.ex-cost {
+  background: #fff8f0;
+  border: 1px solid #f0d9bd;
+  border-radius: 4px;
+  padding: 1.1rem;
+}
+.ex-cost h3 {
+  margin: 0 0 .5rem;
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #9a5b12;
+}
+.ex-cost p { margin: 0 0 .7rem; font-size: .85rem; line-height: 1.55; color: #5a4632; }
+.ex-cost-note { font-style: italic; }
+
+/* ---- Panel grid ---- */
+.ex-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 1.25rem;
+  margin: 2rem 0 3rem;
+}
+.ex-span-12 { grid-column: span 12; }
+.ex-span-6 { grid-column: span 6; }
+@media (max-width: 900px) {
+  .ex-span-6, .ex-span-12 { grid-column: span 12; }
+}
+
+.ex-panel {
+  background: #fff;
+  border: 1px solid #d8dde3;
+  border-radius: 4px;
+  padding: 1rem 1.1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+}
+/* A degraded panel is tinted, so scanning the page shows the shape of the
+ * problem before reading a single label. */
+.ex-panel[data-outcome="frame"] { background: #fffdf7; border-color: #e8d9b8; }
+.ex-panel[data-outcome="empty"] { background: #fbfbfc; border-color: #dfe3e8; }
+.ex-panel[data-outcome="error"] { background: #fff6f6; border-color: #f0c9c9; }
+
+.ex-head { margin-bottom: .6rem; }
+.ex-kind {
+  margin: 0 0 .15rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .68rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: #6e7781;
+}
+.ex-panel h3 { margin: 0; font-size: .98rem; font-weight: 600; }
+
+.ex-stage { width: 100%; height: 320px; }
+.ex-span-12 .ex-stage { height: 420px; }
+.ex-frame {
+  width: 100%;
+  height: 100%;
+  border: 1px dashed #d8b98a;
+  border-radius: 3px;
+  background: #fff;
+}
+
+.ex-note {
+  margin: .7rem 0 .6rem;
+  font-size: .83rem;
+  line-height: 1.55;
+  color: #57606a;
+}
+.ex-note code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .88em;
+  background: #f2f4f7;
+  padding: .05rem .3rem;
+  border-radius: 3px;
+}
+.ex-reason {
+  display: block;
+  margin-top: .35rem;
+  padding-left: .7rem;
+  border-left: 2px solid #e8d9b8;
+  color: #7a6540;
+  font-style: italic;
+}
+
+.ex-status {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  margin-bottom: .5rem;
+  font-size: .8rem;
+}
+.ex-badge {
+  display: inline-block;
+  padding: .12rem .5rem;
+  border-radius: 999px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .68rem;
+  font-weight: 500;
+  letter-spacing: .03em;
+  white-space: nowrap;
+}
+.ex-badge-spec { background: #dafbe1; color: #116329; }
+.ex-badge-frame { background: #fff4d6; color: #8a5a00; }
+.ex-badge-empty { background: #eef1f4; color: #57606a; }
+.ex-badge-error { background: #ffebe9; color: #a40e26; }
+.ex-detail { color: #6e7781; }
+
+.ex-req { margin-top: auto; }
+
+/* ---- Closing prose ---- */
+.ex-closing {
+  max-width: 68ch;
+  margin: 0 0 3rem;
+  padding: 1.6rem;
+  background: #fff;
+  border: 1px solid #d8dde3;
+  border-radius: 4px;
+}
+.ex-closing h2 { margin: 0 0 .7rem; font-size: 1.1rem; font-weight: 600; }
+.ex-closing p { margin: 0 0 .9rem; font-size: .9rem; line-height: 1.65; color: #4a5058; }
+.ex-closing code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .87em;
+  background: #f2f4f7;
+  padding: .05rem .3rem;
+  border-radius: 3px;
+}
+.ex-closing a { color: #1f6feb; }
+
+.ex-foot {
+  background: #10141a;
+  color: rgba(255, 255, 255, .6);
+  padding: 1.4rem 0;
+  font-size: .82rem;
+}
+.ex-foot code {
+  font-family: 'JetBrains Mono', monospace;
+  background: rgba(255, 255, 255, .1);
+  padding: .1rem .35rem;
+  border-radius: 3px;
+}
+
+/* ---------------------------------------------------------------------------
+ * The QC report wears GHGA's identity (qc-report.css), so the engine's panel
+ * chrome is re-skinned here rather than duplicated. Only what differs from the
+ * neutral version above is restated.
+ * ------------------------------------------------------------------------- */
+
+body.ghga .ex-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 1.25rem;
+  margin: 0;
+}
+
+.ghga-panel {
+  background: #fff;
+  border: 1px solid var(--ghga-line);
+  border-radius: 0;
+  padding: 0;
+  min-width: 0;
+}
+.ghga-panel .panel-body { position: relative; height: 320px; }
+.ghga-panel.ex-span-12 .panel-body { height: 420px; }
+.ghga-panel .ex-stage { width: 100%; height: 100%; }
+.ghga-panel .ex-note {
+  margin: 0;
+  padding: .7rem .9rem .5rem;
+  font-size: .82rem;
+  line-height: 1.55;
+  color: #4d5658;
+}
+.ghga-panel .ex-note code {
+  font-family: 'Roboto Mono', monospace;
+  background: var(--ghga-wash);
+}
+.ghga-panel .ex-status {
+  padding: 0 .9rem .6rem;
+  margin: 0;
+  font-family: 'Roboto Mono', monospace;
+  font-size: .7rem;
+}
+.ghga-panel .ex-badge {
+  font-family: 'Roboto Mono', monospace;
+  border-radius: 2px;
+}
+.ghga-panel .ex-badge-spec { background: #d7ece3; color: #08483a; }
+
+/* The scoreboard sits on the deep-teal masthead, so it needs the inverse of
+ * the neutral treatment: light type on a translucent panel. */
+.scoreboard-ghga {
+  margin-top: 1.5rem;
+  background: rgba(255, 255, 255, .08);
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 2px;
+  padding: .9rem 1.1rem;
+  max-width: 52ch;
+  color: #fff;
+}
+.scoreboard-ghga .score-line strong { color: var(--ghga-quinary); }
+.scoreboard-ghga .score-detail { color: rgba(255, 255, 255, .75); }
+.scoreboard-ghga .score-clean { color: var(--ghga-quinary); }
+.scoreboard-ghga .score-warn { color: #ffbf9b; }
+
+/* ---- host-built controls ---- */
+
+/* One deck per section, because a filter only means anything against the data
+ * collection whose columns it names. The explanation sits beside the controls
+ * rather than above them, so each section reads as a self-contained unit. */
+.ghga-controls {
+  display: grid;
+  grid-template-columns: minmax(210px, 1fr) 2.2fr;
+  gap: 1.5rem;
+  align-items: start;
+  background: var(--ghga-wash);
+  border: 1px solid var(--ghga-line);
+  border-left: 3px solid var(--ghga-quart);
+  padding: 1.1rem 1.2rem;
+  margin-bottom: 1.25rem;
+}
+@media (max-width: 900px) {
+  .ghga-controls { grid-template-columns: 1fr; }
+}
+
+.control-intro h3 {
+  margin: 0 0 .3rem;
+  font-size: .8rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--ghga-deep);
+}
+.control-intro p {
+  margin: 0 0 .5rem;
+  font-size: .8rem;
+  line-height: 1.5;
+  color: #4d5658;
+}
+.control-intro code {
+  font-family: 'Roboto Mono', monospace;
+  font-size: .85em;
+  background: #fff;
+  padding: .05rem .25rem;
+}
+
+.control-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+  gap: 1rem;
+}
+.control-field { display: grid; gap: .35rem; align-content: start; }
+.control-label {
+  font-size: .68rem;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--ghga-grey);
+}
+.control-field select {
+  font: inherit;
+  font-size: .82rem;
+  padding: .3rem;
+  border: 1px solid var(--ghga-line);
+  background: #fff;
+  color: var(--ghga-ink);
+  border-radius: 2px;
+}
+.control-field select:focus-visible { outline: 2px solid var(--ghga-quart); }
+.control-clear {
+  justify-self: start;
+  font: inherit;
+  font-size: .7rem;
+  padding: .15rem .5rem;
+  border: 1px solid var(--ghga-line);
+  background: #fff;
+  color: var(--ghga-grey);
+  cursor: pointer;
+  border-radius: 2px;
+}
+.control-clear:hover { color: var(--ghga-quart); border-color: var(--ghga-quart); }
+
+/* Two overlaid range inputs: the contract's range is a *pair* of bounds, and
+ * one slider can only express one of them. Stacking them keeps the field the
+ * same height as a select so the deck stays on one row. */
+.control-range { display: grid; gap: .1rem; }
+.control-range input[type='range'] {
+  width: 100%;
+  accent-color: var(--ghga-quart);
+  height: 1.1rem;
+  margin: 0;
+}
+.control-range output {
+  font-family: 'Roboto Mono', monospace;
+  font-size: .7rem;
+  color: var(--ghga-grey);
+}
+
+.native-dates { display: grid; gap: .25rem; }
+.native-dates input {
+  font: inherit;
+  font-size: .78rem;
+  padding: .25rem;
+  border: 1px solid var(--ghga-line);
+  border-radius: 2px;
+}
+
+.control-state { display: grid; gap: .6rem; align-content: start; }
+.filter-chips { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+/* The page-level chip row is the one place the *whole* filter state is visible
+ * at once, which matters when filters are declared per section. */
+.filter-chips-page {
+  margin: 0 0 1.5rem;
+  padding: .5rem .75rem;
+  border-left: 3px solid var(--ghga-accent);
+  background: #fff;
+  border: 1px solid var(--ghga-line);
+  border-left-width: 3px;
+  border-left-color: var(--ghga-accent);
+}
+.filter-empty { font-size: .82rem; color: var(--ghga-grey); font-style: italic; }
+.filter-chip {
+  background: var(--ghga-container);
+  color: var(--ghga-deep);
+  border-radius: 2px;
+  padding: .12rem .5rem;
+  font-family: 'Roboto Mono', monospace;
+  font-size: .68rem;
+}
+.filter-chip strong { font-weight: 500; opacity: .75; margin-right: .25rem; }

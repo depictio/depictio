@@ -2,7 +2,10 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List
 
+from pydantic import BaseModel, ConfigDict
+
 from depictio.cli.cli_logging import logger
+from depictio.models.models.comments import Anchor, Author, ThreadStatus
 from depictio.models.models.dashboards import DashboardData
 from depictio.models.models.data_collections import DataCollection
 from depictio.models.models.deltatables import DeltaTableAggregated
@@ -10,6 +13,99 @@ from depictio.models.models.files import File
 from depictio.models.models.projects import Project
 from depictio.models.models.users import GroupBeanie, User
 from depictio.models.models.workflows import Workflow, WorkflowRun
+
+
+class InstanceSettingsBackupDoc(BaseModel):
+    """Loose shape for the `instance_settings` singleton.
+
+    Written today as `{"_id": "branding", "theme": {...BrandTheme...}}`
+    (see `depictio.api.v1.services.branding.set_brand_theme_overrides`), but
+    `extra="allow"` also tolerates documents the pre-rework admin panel wrote
+    as flat fields, so an older backup still round-trips.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+
+class BrandingAssetBackupDoc(BaseModel):
+    """A stored logo's bytes, as written by `branding.store_logo_asset`."""
+
+    model_config = ConfigDict(extra="allow")
+
+    content_type: str
+    data_b64: str
+    updated_at: int
+
+
+class UserAvatarBackupDoc(BaseModel):
+    """A stored profile picture, as written by `avatars.set_uploaded_avatar`."""
+
+    model_config = ConfigDict(extra="allow")
+
+    content_type: str
+    data_b64: str
+    source: str
+
+
+class CommentThreadBackupDoc(BaseModel):
+    """A stored comment thread (``_id`` plus the ``CommentThread`` fields).
+
+    Loose on purpose: the backup carries Mongo's ``_id`` rather than the API's
+    ``id``, and datetimes as strings. The anchor and author are checked strictly,
+    since a thread whose anchor no longer parses can never be listed again.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    project_id: str
+    parent_dashboard_id: str
+    anchor: Anchor
+    created_by: Author
+    status: ThreadStatus = "open"
+
+
+class DashboardVersionBackupDoc(BaseModel):
+    """A stored dashboard version (``_id`` plus the ``DashboardVersion`` fields).
+
+    Loose on purpose, like the comment threads: the backup carries Mongo's
+    ``_id`` and datetimes as strings, which ``DashboardVersion`` forbids or
+    would coerce. What is checked is what the ledger is queried and ordered by.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    version_id: str
+    family_id: str
+    seq: int
+
+
+class DashboardVersionCounterBackupDoc(BaseModel):
+    """A dashboard family's version-number counter."""
+
+    model_config = ConfigDict(extra="allow")
+
+    family_id: str
+    seq: int
+
+
+class ProjectStorageConfigBackupDoc(BaseModel):
+    """Per-project S3 read credentials, as written by
+    `projects_endpoints.storage_config._set_project_storage`.
+
+    The secret is stored Fernet-encrypted with the instance's key under
+    `DEPICTIO_AUTH_KEYS_DIR`; a backup restored on another instance keeps the
+    document but the owner has to re-enter the secret.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    project_id: Any
+    endpoint_url: str
+    bucket: str | None = None
+    region: str | None = None
+    access_key_id: str | None = None
+    secret_encrypted: str | None = None
+    updated_at: str | None = None
 
 
 def validate_backup_file(backup_path: str) -> Dict[str, Any]:
@@ -64,6 +160,13 @@ def validate_backup_file(backup_path: str) -> Dict[str, Any]:
             # "tokens": TokenBeanie,  # Excluded to avoid circular dependency
             "deltatables": DeltaTableAggregated,
             "groups": GroupBeanie,
+            "instance_settings": InstanceSettingsBackupDoc,
+            "branding_assets": BrandingAssetBackupDoc,
+            "user_avatars": UserAvatarBackupDoc,
+            "comment_threads": CommentThreadBackupDoc,
+            "dashboard_versions": DashboardVersionBackupDoc,
+            "dashboard_version_counters": DashboardVersionCounterBackupDoc,
+            "project_storage_configs": ProjectStorageConfigBackupDoc,
         }
 
         # Validate each collection
@@ -180,6 +283,13 @@ EXPECTED_BACKUP_COLLECTIONS = [
     # "tokens",  # Excluded to avoid circular dependency in backup/restore
     "deltatables",
     "groups",
+    "instance_settings",
+    "branding_assets",
+    "user_avatars",
+    "comment_threads",
+    "dashboard_versions",
+    "dashboard_version_counters",
+    "project_storage_configs",
 ]
 
 
@@ -216,6 +326,13 @@ def check_backup_collections_coverage() -> Dict[str, Any]:
             # "tokens": TokenBeanie,  # Excluded to avoid circular dependency
             "deltatables": DeltaTableAggregated,
             "groups": GroupBeanie,
+            "instance_settings": InstanceSettingsBackupDoc,
+            "branding_assets": BrandingAssetBackupDoc,
+            "user_avatars": UserAvatarBackupDoc,
+            "comment_threads": CommentThreadBackupDoc,
+            "dashboard_versions": DashboardVersionBackupDoc,
+            "dashboard_version_counters": DashboardVersionCounterBackupDoc,
+            "project_storage_configs": ProjectStorageConfigBackupDoc,
         }
 
         # Check against expected collections
@@ -227,11 +344,35 @@ def check_backup_collections_coverage() -> Dict[str, Any]:
         missing_validators = expected_set - validators_set
 
         # Only consider core collections (filter out utility collections like 'test', 'initialization')
-        # Also exclude 'tokens' which is intentionally excluded from backup/restore
+        # Also exclude 'tokens' which is intentionally excluded from backup/restore.
+        # Derived / regenerable collections are excluded too: they are rebuilt from
+        # source data and never need to be part of the MongoDB backup set:
+        #   - 'jbrowse'            : derived track configuration
+        #   - 'multiqc'            : parsed MultiQC reports (regenerated on ingestion)
+        #   - 'multiqc_prerender'  : prerender cache (regenerated on demand)
+        derived_collections = ["jbrowse", "multiqc", "multiqc_prerender"]
+        # 'task_events' (14-day TTL ledger) and 'app_logs' (capped, size-bounded)
+        # self-expire by design — nothing meaningful survives a restore. 'telemetry'
+        # holds anonymous installation stats, not user data — no restore value.
+        # 'ingestion_runs' is real audit/lineage data (no TTL) but isn't wired into
+        # _create_mongodb_backup's collections_config yet either — excluded here to
+        # match current reality, not a judgment that it shouldn't ever be backed up;
+        # adding real backup coverage for it is a separate, deliberate change.
+        # 'jobs' (background job status) and 'cli_agents' (watcher heartbeats) are
+        # TTL-indexed on expires_at: a restore would bring back only expired rows.
+        ledger_collections = [
+            "task_events",
+            "app_logs",
+            "telemetry",
+            "ingestion_runs",
+            "jobs",
+            "cli_agents",
+        ]
         core_collections = {
             col
             for col in collections_in_settings
-            if col not in ["test", "initialization", "jbrowse", "tokens"]
+            if col
+            not in ["test", "initialization", "tokens", *derived_collections, *ledger_collections]
         }
         missing_from_expected_core = core_collections - expected_set
 

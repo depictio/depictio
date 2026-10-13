@@ -1,0 +1,955 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8cb4"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8cb4"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "diff-intro",
+      "component_type": "text",
+      "title": "",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": null,
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": null,
+      "order": 1,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "[ANCOM-BC](https://bioconductor.org/packages/ANCOMBC) tests each taxon for a difference in abundance between two groups, correcting for compositional bias and for the number of tests. Pick a contrast on the left first: every number on this tab depends on it.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null
+    },
+    {
+      "index": "diff-contrast-filter",
+      "component_type": "interactive",
+      "title": "Contrast",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance at Phylum level (from 5 raw CSV slices)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "Differential filters",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "contrast",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Call scope",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "red",
+      "icon_name": "mdi:compare-horizontal",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "diff-filter-phylum",
+      "component_type": "interactive",
+      "title": "Phylum",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance at Phylum level (from 5 raw CSV slices)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "Differential filters",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "Phylum",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Call scope",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "grape",
+      "icon_name": "mdi:bacteria-outline",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "diff-kingdom-filter",
+      "component_type": "interactive",
+      "title": "Kingdom",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance at Phylum level (from 5 raw CSV slices)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "Differential filters",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "Kingdom",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Call scope",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "grape",
+      "icon_name": "mdi:bacteria",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "diff-lfc-slider",
+      "component_type": "interactive",
+      "title": "Log-fold change",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance at Phylum level (from 5 raw CSV slices)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "Differential filters",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "lfc",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "red",
+      "icon_name": "mdi:arrow-expand-horizontal",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "diff-card-total-taxa",
+      "component_type": "card",
+      "title": "Tested",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance at Phylum level (from 5 raw CSV slices)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Taxa ANCOM-BC tested in at least one contrast, split by kingdom.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "qiime2/ancombc",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_ancombc",
+        "use": "qiime2/ancombc",
+        "description": "ANCOM-BC differential-abundance results. The tool writes one CSV per statistic per contrast; the recipe joins + melts them into a long table."
+      },
+      "section": "Calls at a glance",
+      "aggregation": "nunique",
+      "column_name": "id",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "donut",
+      "breakdown_col": "Kingdom",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:bacteria-outline",
+      "icon_color": "cyan",
+      "caption": "split by kingdom",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "diff-card-significant",
+      "component_type": "card",
+      "title": "Significant",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance at Phylum level (from 5 raw CSV slices)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Taxa passing 5% FDR in at least one contrast, split by kingdom.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "qiime2/ancombc",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_ancombc",
+        "use": "qiime2/ancombc",
+        "description": "ANCOM-BC differential-abundance results. The tool writes one CSV per statistic per contrast; the recipe joins + melts them into a long table."
+      },
+      "section": "Calls at a glance",
+      "aggregation": "nunique",
+      "column_name": "id",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": "col('q_val') < 0.05",
+      "secondary_layout": "top_n",
+      "breakdown_col": "contrast",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:check-decagram",
+      "icon_color": "red",
+      "caption": "q < 0.05, by contrast",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "diff-card-enriched",
+      "component_type": "card",
+      "title": "Enriched",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance at Phylum level (from 5 raw CSV slices)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Significant calls, one per taxon and contrast, more abundant in the contrast's group than in its reference.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "qiime2/ancombc",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_ancombc",
+        "use": "qiime2/ancombc",
+        "description": "ANCOM-BC differential-abundance results. The tool writes one CSV per statistic per contrast; the recipe joins + melts them into a long table."
+      },
+      "section": "Calls at a glance",
+      "aggregation": "count",
+      "column_name": "id",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": "(col('q_val') < 0.05) & (col('lfc') > 0)",
+      "secondary_layout": "composition",
+      "breakdown_col": "contrast",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:arrow-up-bold-outline",
+      "icon_color": "pink",
+      "caption": "calls, by contrast",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "diff-card-depleted",
+      "component_type": "card",
+      "title": "Depleted",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance at Phylum level (from 5 raw CSV slices)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Significant calls, one per taxon and contrast, less abundant in the contrast's group than in its reference.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "qiime2/ancombc",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_ancombc",
+        "use": "qiime2/ancombc",
+        "description": "ANCOM-BC differential-abundance results. The tool writes one CSV per statistic per contrast; the recipe joins + melts them into a long table."
+      },
+      "section": "Calls at a glance",
+      "aggregation": "count",
+      "column_name": "id",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": "(col('q_val') < 0.05) & (col('lfc') < 0)",
+      "secondary_layout": "composition",
+      "breakdown_col": "contrast",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:arrow-down-bold-outline",
+      "icon_color": "blue",
+      "caption": "calls, by contrast",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "adv-volcano",
+      "component_type": "advanced_viz",
+      "title": "Effect size against significance",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance at Phylum level (from 5 raw CSV slices)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "qiime2/volcano",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_ancombc",
+        "use": "qiime2/volcano",
+        "description": "ANCOM-BC differential-abundance results. The tool writes one CSV per statistic per contrast; the recipe joins + melts them into a long table."
+      },
+      "section": "Volcano and ranked effects",
+      "viz_kind": "volcano",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "volcano",
+        "feature_id_col": "id",
+        "effect_size_col": "lfc",
+        "significance_col": "q_val",
+        "label_col": "Phylum",
+        "category_col": "contrast",
+        "significance_is_neg_log10": false,
+        "significance_threshold": 0.05,
+        "effect_threshold": 1,
+        "top_n_labels": 6,
+        "show_labels": true,
+        "effect_label": "Log fold change",
+        "significance_label": "-log10 q-value",
+        "avg_log_intensity_col": null,
+        "log2_fold_change_col": null,
+        "fold_change_threshold": 1,
+        "p_value_col": "p_val",
+        "view": "volcano",
+        "views": null,
+        "show_ci": true,
+        "show_identity": true,
+        "point_size": 5,
+        "ma_wf_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+        },
+        "ma_dc_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cd8"
+        },
+        "ma_dc_tag": "ma_canonical",
+        "default_view": "volcano"
+      },
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "adv-da-barplot",
+      "component_type": "advanced_viz",
+      "title": "Largest effects per contrast",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance at Phylum level (from 5 raw CSV slices)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "qiime2/da_barplot",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_ancombc",
+        "use": "qiime2/da_barplot",
+        "description": "ANCOM-BC differential-abundance results. The tool writes one CSV per statistic per contrast; the recipe joins + melts them into a long table."
+      },
+      "section": "Volcano and ranked effects",
+      "viz_kind": "da_barplot",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "da_barplot",
+        "feature_id_col": "id",
+        "contrast_col": "contrast",
+        "lfc_col": "lfc",
+        "significance_col": "q_val",
+        "label_col": "Phylum",
+        "significance_threshold": 0.05,
+        "top_n": 15,
+        "contrast_view": "all"
+      },
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "diff-table-results",
+      "component_type": "table",
+      "title": "ANCOM-BC results",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance at Phylum level (from 5 raw CSV slices)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "qiime2/ancombc",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_ancombc",
+        "use": "qiime2/ancombc",
+        "description": "ANCOM-BC differential-abundance results. The tool writes one CSV per statistic per contrast; the recipe joins + melts them into a long table."
+      },
+      "section": "Taxon detail",
+      "columns": [],
+      "page_size": 100,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": true,
+      "row_selection_column": "id",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "diff-taxon-record",
+      "component_type": "advanced_viz",
+      "title": "Taxon record",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "ancombc_results",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "ANCOM-BC differential abundance at Phylum level (from 5 raw CSV slices)",
+        "data_collection_tag": "ancombc_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Taxon detail",
+      "viz_kind": "record_card",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "record_card",
+        "id_col": "id",
+        "title_col": "Phylum",
+        "sections": {
+          "Test": [
+            "contrast",
+            "lfc",
+            "se",
+            "w",
+            "p_val",
+            "q_val"
+          ],
+          "Lineage": [
+            "Kingdom",
+            "Phylum",
+            "id"
+          ]
+        },
+        "labels": {
+          "lfc": "Log-fold change",
+          "se": "Standard error",
+          "w": "W statistic",
+          "p_val": "p-value",
+          "q_val": "Adjusted p-value (FDR)",
+          "_id": "Full lineage"
+        },
+        "link_templates": null,
+        "selection_source": "any",
+        "linked_component": "diff-table-results",
+        "max_fields": 40,
+        "default_record": null
+      },
+      "wf_tag": "nextflow/ampliseq"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-diff-contrast-filter",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 2,
+      "static": false
+    },
+    {
+      "i": "box-diff-filter-phylum",
+      "x": 0,
+      "y": 2,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-diff-kingdom-filter",
+      "x": 0,
+      "y": 5,
+      "w": 1,
+      "h": 2,
+      "static": false
+    },
+    {
+      "i": "box-diff-lfc-slider",
+      "x": 0,
+      "y": 7,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-diff-intro",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-diff-card-total-taxa",
+      "x": 0,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-diff-card-significant",
+      "x": 2,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-diff-card-enriched",
+      "x": 4,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-diff-card-depleted",
+      "x": 6,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-adv-volcano",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-adv-da-barplot",
+      "x": 0,
+      "y": 6,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-diff-table-results",
+      "x": 0,
+      "y": 0,
+      "w": 5,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-diff-taxon-record",
+      "x": 5,
+      "y": 0,
+      "w": 3,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "filter_sections": [
+    {
+      "name": "Differential filters",
+      "icon": "mdi:filter-variant",
+      "color": "red",
+      "description": "Pick a contrast first, then narrow the taxa",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Calls at a glance",
+      "icon": "mdi:counter",
+      "color": "red",
+      "description": "Taxa tested, and the calls passing 5% FDR by direction",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Volcano and ranked effects",
+      "icon": "mdi:chart-scatter-plot",
+      "color": "red",
+      "description": "Effect size against significance, then the largest effects ranked",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Taxon detail",
+      "icon": "mdi:table",
+      "color": "gray",
+      "description": "Every tested taxon, and the full record of the one picked",
+      "collapsed": true,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "category_colors": null,
+  "funnel_filtering": true,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true,
+  "brand_theme": null,
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Differential Abundance",
+  "subtitle": "Which taxa differ in abundance between groups?",
+  "icon": "/assets/images/workflows/nf-core.png",
+  "icon_color": "green",
+  "icon_variant": "filled",
+  "workflow_system": "nf-core",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": false,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-08-29 00:00:00",
+  "creation_time": "2026-10-08 12:18:23",
+  "screenshot_ts": "",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "tab_order": 5,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-scatter-plot",
+  "tab_icon_color": "red",
+  "tab_group": "Taxa",
+  "parent_dashboard_title": null,
+  "project_realtime": null,
+  "inherited_brand_theme": null,
+  "inherited_category_colors": null,
+  "source_key": "nf-core/ampliseq:dashboards/base.yaml#Differential Abundance"
+}

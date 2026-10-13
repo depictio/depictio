@@ -1,0 +1,41 @@
+import React from 'react';
+import { ActionIcon, Popover, Tooltip } from '@mantine/core';
+import { Icon } from '@iconify/react';
+
+import type { CatalogSource } from '../../api';
+import CatalogOrigin from './CatalogOrigin';
+import { TILE_ACTION_STYLE } from './actionStyles';
+
+const STYLE = TILE_ACTION_STYLE.catalog;
+
+/**
+ * Chrome action marking a component that came from the tools catalog.
+ *
+ * It lives in the action cluster rather than as a badge pinned over the tile:
+ * a badge at top-left sits exactly where a component draws its title, so it
+ * covered the title on every figure. Here it inherits the cluster's behaviour
+ * (revealed on hover, opaque backing, already stacked above Plotly's modebar),
+ * costing nothing at rest. The provenance itself moves one click away, which is
+ * where it belongs — it is reference material, not something to read at a glance.
+ */
+const CatalogButton: React.FC<{ source: CatalogSource }> = ({ source }) => (
+  <Popover position="bottom-end" withArrow shadow="md" width={340}>
+    <Popover.Target>
+      <Tooltip
+        label={source.toolName ? `From catalog · ${source.toolName}` : STYLE.label}
+        withArrow
+      >
+        {/* `subtle` like every other idle action in the cluster: a permanent
+            background made this the one icon that read as switched on. */}
+        <ActionIcon variant="subtle" color={STYLE.color} size="sm" aria-label="Catalog origin">
+          <Icon icon={STYLE.icon} width={16} height={16} />
+        </ActionIcon>
+      </Tooltip>
+    </Popover.Target>
+    <Popover.Dropdown p="sm">
+      <CatalogOrigin source={source} framed={false} />
+    </Popover.Dropdown>
+  </Popover>
+);
+
+export default CatalogButton;

@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=../output.schema.json
+id: ascat_cnv_segments
+name: Allele-specific copy-number segments
+mode: ascat
+description: >-
+  ASCAT's called segments, turned into the canonical copy-number profile
+  contract. Per the ASCAT documentation the .cnvs.txt file carries sample, chr,
+  startpos, endpos, nMajor and nMinor, one row per segment. The major and minor
+  allele counts become an absolute copy number, a log2 ratio against a diploid
+  baseline and the segment's expected B-allele frequency, so copy-neutral LOH
+  reads as a BAF split even though the total copy number never moves.
+find:
+  path_glob: "**/variant_calling/ascat/*/*.cnvs.txt"
+recipe: ascat/cnv_segments.py
+fixture: cnv_segments.tsv
+renders_as:
+  - { id: ascat_profile, component: advanced_viz, kind: cnv_profile, roles: {sample: sample, chrom: chrom, start: start, end: end, log2: log2, baf: baf, copy_number: copy_number, segment: segment, label: label} }
+  - { id: ascat_cn_spread, component: card, column: copy_number, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table, columns: [sample, chrom, start, end, copy_number, baf, label] }

@@ -1,0 +1,4 @@
+assembly_id	report_id	reference_length	genome_fraction	duplication_ratio	misassemblies	misassembled_contigs	misassembled_length	local_misassemblies	mismatches_per_100kbp	indels_per_100kbp	unaligned_length	largest_alignment	total_aligned_length	ng50	nga50	lga50
+test_hifi_flye.assembly	test_hifi_flye_assembly	132081078	99.351	1.008	18	6	13276742	36	14.95	7.54	486531	16485627	132254935	8794213	8793700	6
+test_hifi_hifiasm	test_hifi_hifiasm_assembly	132081078	99.826	1.152	310	133	118118566	165	21.23	12.95	26094427	32638938	151921953	26150967	17664859	3
+test_hifiasm_flye_assembly_patch.patch	test_hifiasm_flye_assembly	132081078	99.355	1.007	19	6	35016680	46	14.75	7.42	718436	18282390	132212825	10710070	8793700	6

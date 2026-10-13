@@ -7,10 +7,11 @@
 # URL surface in dev and prod.
 #
 # This is an nginx envsubst *template* (rendered at container start by the
-# base image's /docker-entrypoint.d/20-envsubst-on-templates.sh). Two
+# base image's /docker-entrypoint.d/20-envsubst-on-templates.sh). Three
 # placeholders are substituted: ${DEPICTIO_API_UPSTREAM} (the backend
-# host:port we export as ENV) and ${NGINX_LOCAL_RESOLVERS} (the DNS
-# resolver auto-detected from /etc/resolv.conf by 15-local-resolvers.envsh).
+# host:port we export as ENV), ${NGINX_LOCAL_RESOLVERS} (the DNS
+# resolver auto-detected from /etc/resolv.conf by 15-local-resolvers.envsh)
+# and ${DEPICTIO_CSP_S3_ORIGIN} (the S3 origin added to the CSP, see below).
 # Every other `$var` below (e.g. $http_upgrade, $host, $upstream) is an
 # nginx runtime variable and is left untouched.
 #
@@ -104,6 +105,50 @@ server {
         add_header Cache-Control "no-cache";
     }
 
+    # Catalog-preview HTML. Same upstream as /depictio/api/, but this location
+    # deliberately re-declares the security headers WITHOUT a Content-Security-
+    # Policy: nginx's `add_header` inheritance is all-or-nothing per block, so
+    # re-declaring the others here drops the server-level CSP for this route and
+    # lets the backend's own nonce-bearing policy through untouched. Two CSP
+    # headers would be intersected by the browser, and the server-level one has
+    # no nonce, so the preview bundle's inline script would still be refused.
+    location ~ ^/depictio/api/v1/catalog/output/[^/]+/preview-html {
+        set $upstream ${DEPICTIO_API_UPSTREAM}; proxy_pass http://$upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_read_timeout 3600s;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()" always;
+        add_header Strict-Transport-Security $depictio_hsts always;
+    }
+
+    # Component export / embed. Same reasoning as the preview-html block above,
+    # one step further: an embed must be frameable by other origins, so this
+    # location also omits X-Frame-Options. The server-level `add_header ...
+    # always` directives would otherwise apply here too, and multiple CSP
+    # headers are enforced as an INTERSECTION — so the backend could never
+    # loosen frame-ancestors on its own. Re-declaring the baseline headers here
+    # replaces the inherited set wholesale, so the backend's per-response CSP
+    # (frame-ancestors from DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS) survives.
+    location ~ ^/depictio/api/v[0-9]+/export/ {
+        set $upstream ${DEPICTIO_API_UPSTREAM}; proxy_pass http://$upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_read_timeout 3600s;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()" always;
+        add_header Strict-Transport-Security $depictio_hsts always;
+    }
+
     # API + WebSocket. Upgrade headers cover the realtime events channel.
     # proxy_buffering off keeps SSE / chunked responses flowing without
     # nginx holding them until the buffer fills.
@@ -172,12 +217,20 @@ server {
     # The cartocdn / openstreetmap origins in ``connect-src`` are the basemap
     # CDNs behind the map component: maplibre fetches a style, its glyphs,
     # sprite and vector tiles over fetch/XHR, which ``img-src`` does not cover.
-    # Keep this list in step with depictio/api/main.py — the two must agree, or
+    # ``worker-src blob:`` lets maplibre start the Web Workers that parse those
+    # tiles; without it the map draws its legend over grey.
+    # ${DEPICTIO_CSP_S3_ORIGIN} is the browser-reachable S3 origin
+    # (scheme://host[:port]): genome_view file tracks read VCF / BAM / BigWig
+    # straight from storage through presigned URLs, which ``connect-src``
+    # governs. Empty (the Dockerfile default) adds nothing. The API derives the
+    # same origin from its S3 settings (security_headers.py). ``data:`` lets
+    # the VCF / BAM / BigWig readers fetch their inlined inflate WebAssembly.
+    # Keep this list in step with depictio/api/v1/configs/security_headers.py: the two must agree, or
     # a map works on one container and renders blank on the other.
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()" always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' ws: wss: https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://tile.openstreetmap.org; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' data: ws: wss: https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://tile.openstreetmap.org ${DEPICTIO_CSP_S3_ORIGIN}; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" always;
     add_header Strict-Transport-Security $depictio_hsts always;
 }

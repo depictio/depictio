@@ -83,29 +83,33 @@ class TestValidateSchema:
         validate_schema(df, {"a": pl.Int64, "b": pl.Utf8}, "test_recipe")
 
     def test_extra_columns_ignored(self):
-        """Columns not in expected_schema are not checked (not an error)."""
+        """Columns not in output_schema are not checked (not an error)."""
         df = pl.DataFrame({"a": [1], "extra": ["ignored"]})
         validate_schema(df, {"a": pl.Int64}, "test_recipe")
 
     def test_optional_schema_absent_col_passes(self):
         """Optional column absent from result: validation passes."""
         df = pl.DataFrame({"a": [1]})
-        validate_schema(df, {"a": pl.Int64}, "test_recipe", optional_schema={"opt_col": pl.Utf8})
+        validate_schema(
+            df, {"a": pl.Int64}, "test_recipe", optional_output_schema={"opt_col": pl.Utf8}
+        )
 
     def test_optional_schema_present_correct_type(self):
         """Optional column present with correct type: validation passes."""
         df = pl.DataFrame({"a": [1], "opt_col": ["value"]})
-        validate_schema(df, {"a": pl.Int64}, "test_recipe", optional_schema={"opt_col": pl.Utf8})
+        validate_schema(
+            df, {"a": pl.Int64}, "test_recipe", optional_output_schema={"opt_col": pl.Utf8}
+        )
 
     def test_optional_schema_present_wrong_type_raises(self):
         """Optional column present with wrong type: RecipeError raised."""
         df = pl.DataFrame({"a": [1], "opt_col": [42]})
         with pytest.raises(RecipeError, match="optional column 'opt_col'"):
             validate_schema(
-                df, {"a": pl.Int64}, "test_recipe", optional_schema={"opt_col": pl.Utf8}
+                df, {"a": pl.Int64}, "test_recipe", optional_output_schema={"opt_col": pl.Utf8}
             )
 
     def test_optional_schema_none_is_noop(self):
-        """optional_schema=None behaves the same as no optional_schema."""
+        """optional_output_schema=None behaves the same as no optional_output_schema."""
         df = pl.DataFrame({"a": [1]})
-        validate_schema(df, {"a": pl.Int64}, "test_recipe", optional_schema=None)
+        validate_schema(df, {"a": pl.Int64}, "test_recipe", optional_output_schema=None)

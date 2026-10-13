@@ -2,9 +2,13 @@ import React from 'react';
 import { ActionIcon, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+import { TILE_ACTION_STYLE } from './actionStyles';
+
+const STYLE = TILE_ACTION_STYLE.inspect;
+
 interface InspectButtonProps {
   componentId: string;
-  /** Drives the filled/light variant so the inspected component is identifiable
+  /** Drives the filled/subtle variant so the inspected component is identifiable
    *  from the grid, not only from the panel's own header. */
   active: boolean;
   onInspect: (componentId: string) => void;
@@ -15,16 +19,16 @@ interface InspectButtonProps {
  * `InspectorContext`, i.e. when the inspector feature is enabled.
  */
 const InspectButton: React.FC<InspectButtonProps> = ({ componentId, active, onInspect }) => (
-  <Tooltip label={active ? 'Close inspector' : 'Inspect'} withArrow>
+  <Tooltip label={active ? 'Close inspector' : STYLE.label} withArrow>
     <ActionIcon
-      variant={active ? 'filled' : 'light'}
-      color="grape"
+      variant={active ? 'filled' : 'subtle'}
+      color={STYLE.color}
       size="sm"
       onClick={() => onInspect(componentId)}
       aria-label={active ? 'Close inspector' : 'Inspect component'}
       aria-pressed={active}
     >
-      <Icon icon="mdi:dock-right" width={16} height={16} />
+      <Icon icon={STYLE.icon} width={16} height={16} />
     </ActionIcon>
   </Tooltip>
 );

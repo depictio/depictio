@@ -27,13 +27,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.version || github.ref }}  # workflow_dispatch builds an existing tag
           fetch-depth: 0  # Important for changelog generation
 
       - name: Extract version info
         id: version
+        env:
+          RELEASE_TAG: ${{ inputs.version || github.ref_name }}
         run: |
           # Extract version from tag (remove 'v' prefix)
-          TAG=${GITHUB_REF#refs/tags/v}
+          TAG=${RELEASE_TAG#v}
           echo "version=$TAG" >> $GITHUB_OUTPUT
 
           # Determine if it's a beta
@@ -45,10 +48,13 @@ jobs:
 
       - name: Generate changelog
         id: changelog
+        env:
+          CURRENT_TAG: ${{ inputs.version || github.ref_name }}
         run: |
-          # Get the previous release tag (excluding the current tag being released)
-          CURRENT_TAG="${{ github.ref_name }}"
-          PREVIOUS_TAG=$(git tag -l --sort=-version:refname | grep -v "^${CURRENT_TAG}$" | head -1)
+          # Previous release = nearest release tag reachable from the commit before this one.
+          # Not a tag-name sort: that picks non-release tags (wip/*) or newer tags when
+          # re-releasing an old version, and the changelog then spans the wrong range.
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 --match 'v[0-9]*' "${CURRENT_TAG}^" 2>/dev/null || true)
           if [ -z "$PREVIOUS_TAG" ]; then
             echo "No previous tag found, generating full changelog"
             PREVIOUS_TAG=""
@@ -74,7 +80,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ inputs.version || github.ref_name }}
           name: Release ${{ needs.changelog.outputs.version }}
           body: ${{ needs.changelog.outputs.changelog }}
           draft: false

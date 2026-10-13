@@ -1,0 +1,356 @@
+/* The project page in Glass (Paper): workflows that say which one is
+ * selected, a labelled rule tying the content below to it, the page's switch
+ * (Data collections / Ingestion report) as two large halves, and calm stat
+ * cards. The accent is the page's primary (the Projects teal); nothing else
+ * carries a hue. */
+
+/* Section head: icon, title, a quiet count, a hint. */
+:root[data-chrome='glass'] .gp-main .pd-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-bottom: 14px;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .gp-main .pd-count {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--gl-muted);
+  font-variant-numeric: tabular-nums;
+}
+:root[data-chrome='glass'] .gp-main .pd-hint {
+  font-size: 13px;
+  color: var(--gl-muted);
+}
+
+/* Workflow cards: icon chip, name, version, collections; the selected one
+ * ringed and tinted in the accent with a filled check, without a hover. */
+:root[data-chrome='glass'] .gp-main .pd-wf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: 14px;
+}
+:root[data-chrome='glass'] .gp-main .pd-wf-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  /* The check tops the last column and "Selected" sits at its foot, so
+   * neither runs into the meta lines. */
+  gap: 14px;
+  padding: 16px 18px 18px;
+  border-radius: 16px;
+  background: var(--gl-paper);
+  color: var(--gl-fg);
+  box-shadow: 0 0 0 1px var(--gl-hair);
+  cursor: pointer;
+  transition:
+    box-shadow 150ms ease,
+    background-color 150ms ease;
+}
+:root[data-chrome='glass'] .gp-main .pd-wf-card[aria-disabled] {
+  cursor: default;
+}
+:root[data-chrome='glass'] .gp-main .pd-wf-card:hover:not([data-selected]) {
+  box-shadow: 0 0 0 1px var(--gl-faint);
+}
+:root[data-chrome='glass'] .gp-main .pd-wf-card:focus-visible {
+  outline: 2px solid var(--gl-ring);
+  outline-offset: 2px;
+}
+:root[data-chrome='glass'] .gp-main .pd-wf-card[data-selected] {
+  background: linear-gradient(var(--gl-accent-soft), var(--gl-accent-soft)), var(--gl-paper);
+  box-shadow: 0 0 0 2px var(--gl-accent);
+}
+:root[data-chrome='glass'] .gp-main .pd-wf-chip {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--gl-well);
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .gp-main .pd-wf-chip img {
+  display: block;
+  object-fit: contain;
+}
+:root[data-chrome='glass'] .gp-main .pd-wf-card[data-selected] .pd-wf-chip {
+  background: var(--gl-paper);
+  color: var(--gl-accent-fg);
+  box-shadow: 0 0 0 1px var(--gl-hair);
+}
+:root[data-chrome='glass'] .gp-main .pd-wf-body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+:root[data-chrome='glass'] .gp-main .pd-wf-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'] .gp-main .pd-wf-card[data-selected] .pd-wf-name {
+  font-weight: 700;
+}
+:root[data-chrome='glass'] .gp-main .pd-wf-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .gp-main .pd-wf-meta svg {
+  flex: none;
+}
+:root[data-chrome='glass'] .gp-main .pd-wf-mark {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--gl-faint);
+  color: var(--mantine-primary-color-contrast);
+}
+:root[data-chrome='glass'] .gp-main .pd-wf-card[data-selected] .pd-wf-mark {
+  background: var(--gl-accent);
+  box-shadow: none;
+}
+:root[data-chrome='glass'] .gp-main .pd-wf-selected {
+  grid-column: 3;
+  grid-row: 1;
+  align-self: end;
+  justify-self: end;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  color: var(--gl-accent-fg);
+}
+
+/* The rule under the workflows: it names what everything below is scoped to. */
+:root[data-chrome='glass'] .gp-main .pd-scope {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 22px;
+}
+:root[data-chrome='glass'] .gp-main .pd-scope::before,
+:root[data-chrome='glass'] .gp-main .pd-scope::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: color-mix(in srgb, var(--gl-accent) 35%, transparent);
+}
+:root[data-chrome='glass'] .gp-main .pd-scope-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--gl-accent-soft);
+  color: var(--gl-accent-fg);
+  font-size: 13px;
+}
+:root[data-chrome='glass'] .gp-main .pd-scope-label b {
+  font-weight: 700;
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'] .gp-main .pd-scope-label svg {
+  flex: none;
+}
+
+/* The page's switch: two equal halves across the content width, the open one
+ * lit in the accent with a filled icon chip and a notch pointing at the
+ * panel it opens. */
+:root[data-chrome='glass'] .gp-main .dc-project-tabs .mantine-Tabs-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 100%;
+  max-width: none;
+  overflow: visible;
+  gap: 14px;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+:root[data-chrome='glass'] .gp-main .dc-project-tabs .dc-project-tab {
+  position: relative;
+  min-width: 0;
+  height: auto;
+  justify-content: flex-start;
+  gap: 16px;
+  padding: 18px 22px;
+  border-radius: 18px;
+  background: var(--gl-paper);
+  color: var(--gl-fg);
+  box-shadow: 0 0 0 1px var(--gl-hair);
+  transition:
+    box-shadow 150ms ease,
+    background-color 150ms ease;
+}
+:root[data-chrome='glass'] .gp-main .dc-project-tabs .dc-project-tab:hover:not([data-active]) {
+  background: var(--gl-paper);
+  box-shadow: 0 0 0 1px var(--gl-faint);
+}
+:root[data-chrome='glass'] .gp-main .dc-project-tabs .dc-project-tab[data-active] {
+  background: linear-gradient(var(--gl-accent-soft), var(--gl-accent-soft)), var(--gl-paper);
+  box-shadow: 0 0 0 2px var(--gl-accent);
+}
+:root[data-chrome='glass'] .gp-main .dc-project-tabs .dc-project-tab[data-active]::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: calc(50% - 7px);
+  width: 14px;
+  height: 14px;
+  background: linear-gradient(var(--gl-accent-soft), var(--gl-accent-soft)), var(--gl-paper);
+  border-right: 2px solid var(--gl-accent);
+  border-bottom: 2px solid var(--gl-accent);
+  border-bottom-right-radius: 3px;
+  transform: rotate(45deg);
+}
+:root[data-chrome='glass'] .gp-main .dc-project-tabs .dc-project-tab .mantine-Tabs-tabLabel {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  text-align: left;
+}
+:root[data-chrome='glass'] .gp-main .dc-project-tabs .dc-project-tab .mantine-Tabs-tabSection {
+  margin: 0;
+}
+:root[data-chrome='glass'] .gp-main .dc-project-tabs .mantine-Tabs-panel {
+  padding-top: 8px;
+}
+.dc-project-tab-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  background: var(--gl-well);
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .gp-main .dc-project-tab[data-active] .dc-project-tab-icon {
+  background: var(--gl-accent);
+  color: var(--mantine-primary-color-contrast);
+}
+.dc-project-tab-label {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.dc-project-tab-meta {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gl-muted);
+}
+
+/* The manager: a scoped title, calm stat cards. */
+:root[data-chrome='glass'] .gp-main .pd-manager-title {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+}
+:root[data-chrome='glass'] .gp-main .pd-stat {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+:root[data-chrome='glass'] .gp-main .pd-stat-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+:root[data-chrome='glass'] .gp-main .pd-stat-chip {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--gl-accent-soft);
+  color: var(--gl-accent-fg);
+}
+:root[data-chrome='glass'] .gp-main .pd-stat-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .gp-main .pd-stat-value {
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--gl-fg);
+  font-variant-numeric: tabular-nums;
+}
+:root[data-chrome='glass'] .gp-main .pd-stat-dual {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 32px;
+}
+:root[data-chrome='glass'] .gp-main .pd-stat-sub {
+  display: flex;
+  align-items: center;
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .gp-main .pd-stat-sub i {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+}
+
+/* No hue but the accent: icons the page's older panels colour inline. */
+:root[data-chrome='glass'] .gp-main .dc-project-tabs :is(svg, span)[style*='mantine-color-orange'],
+:root[data-chrome='glass'] .gp-main .dc-project-tabs :is(svg, span)[style*='mantine-color-cyan'],
+:root[data-chrome='glass'] .gp-main .dc-project-tabs :is(svg, span)[style*='mantine-color-grape'] {
+  color: var(--gl-accent-fg) !important;
+}
+
+/* Phone: the switch stacks, the notch goes. */
+@media (max-width: 36em) {
+  :root[data-chrome='glass'] .gp-main .dc-project-tabs .mantine-Tabs-list {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  :root[data-chrome='glass'] .gp-main .dc-project-tabs .dc-project-tab {
+    padding: 14px 16px;
+  }
+  :root[data-chrome='glass'] .gp-main .dc-project-tabs .dc-project-tab[data-active]::after {
+    display: none;
+  }
+  :root[data-chrome='glass'] .gp-main .pd-wf-card {
+    padding: 14px 14px 18px;
+  }
+  :root[data-chrome='glass'] .gp-main .pd-scope-label {
+    font-size: 12.5px;
+    flex-wrap: wrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-chrome='glass'] .gp-main :is(.pd-wf-card, .dc-project-tab) {
+    transition: none;
+  }
+}

@@ -15,16 +15,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 
-import {
-  listDashboards,
-  listProjects,
-  createDashboard,
-  editDashboard as apiEditDashboard,
-  deleteDashboard as apiDeleteDashboard,
-  duplicateDashboard as apiDuplicateDashboard,
-  importDashboardJson,
-  exportDashboardJson,
-} from 'depictio-react-core';
+import { createDashboard, deleteDashboard as apiDeleteDashboard, duplicateDashboard as apiDuplicateDashboard, editDashboard as apiEditDashboard, exportDashboardJson, importDashboardJson, listDashboards, listProjects, useBrandAccents } from 'depictio-react-core';
 import type {
   CreateDashboardInput,
   DashboardListEntry,
@@ -35,15 +26,21 @@ import type {
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { AppSidebar } from '../chrome';
+import TourButton from '../walkthrough/TourButton';
 import DashboardsList from './DashboardsList';
+import type { ViewMode } from './hooks/useDashboardViewPrefs';
 import CreateDashboardModal from './CreateDashboardModal';
 import EditDashboardModal from './EditDashboardModal';
 import DeleteDashboardModal from './DeleteDashboardModal';
 import { recordOpen as recordDashboardOpen } from './lib/dashboardRecents';
+import { usePageTitle } from '../branding';
+import { GlassPage, useGlassPages } from '../chrome/variants/glass/pages';
+import { Plus } from 'lucide-react';
+import '../chrome/variants/glass/pages/listing.css';
 
-/** Separate storage key from the per-dashboard sidebar (`sidebar-collapsed`)
- *  so the management page can default to OPEN regardless of the user's
- *  in-dashboard preference. */
+/** Separate storage key from the in-dashboard tab sidebar
+ *  (`tab-sidebar-collapsed:<familyId>`, see useSidebarOpen) so the management
+ *  page keeps its own open/closed state. */
 const SIDEBAR_KEY = 'dashboards-sidebar-collapsed';
 
 function useDashboardsSidebar(): [boolean, () => void] {
@@ -70,7 +67,15 @@ function useDashboardsSidebar(): [boolean, () => void] {
   return [opened, toggle];
 }
 
+/** The backend sends the deployment's default view as a plain string, so an
+ *  unknown value (a newer backend, a retired mode) falls back to the
+ *  listing's own default rather than reaching the grid. */
+function asViewMode(value: string | null): ViewMode | null {
+  return value === 'thumbnails' || value === 'table' ? value : null;
+}
+
 const DashboardsApp: React.FC = () => {
+  const accent = useBrandAccents();
   const [dashboards, setDashboards] = useState<DashboardListEntry[]>([]);
   const [projects, setProjects] = useState<ProjectListEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,7 +88,13 @@ const DashboardsApp: React.FC = () => {
 
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, toggleDesktop] = useDashboardsSidebar();
-  const { user, isPublicMode, isDemoMode, loading: authLoading } = useCurrentUser();
+  const {
+    user,
+    isPublicMode,
+    isDemoMode,
+    dashboardsDefaultView,
+    loading: authLoading,
+  } = useCurrentUser();
   // Public/demo deployments don't allow importing user-supplied dashboard
   // JSON — that would let an anonymous visitor write into shared projects.
   // Mirrors the Dash gate added in `layouts_toolbox.create_dashboard_modal`.
@@ -91,9 +102,8 @@ const DashboardsApp: React.FC = () => {
   // the first frame before `/auth/me/optional` resolves.
   const importDisabled = authLoading || isPublicMode || isDemoMode;
 
-  useEffect(() => {
-    document.title = 'Depictio — Dashboards';
-  }, []);
+  usePageTitle('Dashboards');
+  const glass = useGlassPages();
 
   useEffect(() => {
     setLoading(true);
@@ -255,8 +265,102 @@ const DashboardsApp: React.FC = () => {
     [],
   );
 
+  const body = (
+    <>
+    {loading ? (
+      <Center mih={200}>
+        <Loader />
+      </Center>
+    ) : loadError ? (
+      <Center mih={200}>
+        <Stack align="center" gap="xs">
+          <Icon
+            icon="mdi:alert-circle"
+            width={32}
+            color="var(--mantine-color-red-6)"
+          />
+          <Text c="red">{loadError}</Text>
+          <Button variant="light" onClick={refresh}>
+            Try again
+          </Button>
+        </Stack>
+      </Center>
+    ) : (
+      <DashboardsList
+        dashboards={dashboards}
+        projects={projects}
+        currentUserEmail={currentUserEmail}
+        defaultView={asViewMode(dashboardsDefaultView)}
+        onView={handleView}
+        onEdit={(d) => setEditTarget(d)}
+        onDelete={(d) => setDeleteTarget(d)}
+        onDuplicate={handleDuplicate}
+        onExport={handleExport}
+        onCreateClick={openCreate}
+        onBulkExport={handleBulkExport}
+        onBulkDelete={handleBulkDelete}
+      />
+    )}
+    </>
+  );
+
+  const modals = (
+    <>
+      <CreateDashboardModal
+        opened={createOpened}
+        projects={projects}
+        existingTitles={dashboards.map((d) => d.title || '').filter(Boolean)}
+        onClose={closeCreate}
+        onCreate={handleCreate}
+        onImport={handleImport}
+        disableImport={importDisabled}
+      />
+      <EditDashboardModal
+        opened={Boolean(editTarget)}
+        dashboard={editTarget}
+        onClose={() => setEditTarget(null)}
+        onSubmit={handleEdit}
+      />
+      <DeleteDashboardModal
+        opened={Boolean(deleteTarget)}
+        dashboard={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+      />
+    </>
+  );
+
+  if (glass) {
+    return (
+      <>
+        <GlassPage
+          section="dashboards"
+          title="Dashboards"
+          description="Open, pin and organise the dashboards you can access."
+          actions={
+            <>
+              <TourButton />
+              <Button
+                leftSection={<Plus size={17} strokeWidth={2} aria-hidden />}
+                onClick={openCreate}
+                data-testid="new-dashboard-btn"
+                data-tour-id="dashboards-create"
+              >
+                New dashboard
+              </Button>
+            </>
+          }
+        >
+          {body}
+        </GlassPage>
+        {modals}
+      </>
+    );
+  }
+
   return (
     <AppShell
+      data-testid="app-shell"
       layout="alt"
       header={{ height: 64 }}
       navbar={{
@@ -292,23 +396,26 @@ const DashboardsApp: React.FC = () => {
             <Icon
               icon="material-symbols:dashboard"
               width={22}
-              color="var(--mantine-color-orange-6)"
+              color={`var(--mantine-color-${accent.tertiary}-6)`}
             />
-            <Title order={3} c="orange">
+            <Title order={3} c={accent.tertiary}>
               Dashboards
             </Title>
           </Group>
-          <Button
-            color="orange"
-            variant="filled"
-            size="md"
-            onClick={openCreate}
-            data-testid="new-dashboard-btn"
-            style={{ fontFamily: 'Virgil' }}
-            data-tour-id="dashboards-create"
-          >
-            + New Dashboard
-          </Button>
+          <Group gap="sm" wrap="nowrap">
+            <TourButton />
+            <Button
+              color={accent.tertiary}
+              variant="filled"
+              size="md"
+              onClick={openCreate}
+              data-testid="new-dashboard-btn"
+              style={{ fontFamily: 'Virgil' }}
+              data-tour-id="dashboards-create"
+            >
+              + New Dashboard
+            </Button>
+          </Group>
         </Group>
       </AppShell.Header>
 
@@ -318,63 +425,11 @@ const DashboardsApp: React.FC = () => {
 
       <AppShell.Main>
         <Box px="lg" py="md">
-          {loading ? (
-            <Center mih={200}>
-              <Loader />
-            </Center>
-          ) : loadError ? (
-            <Center mih={200}>
-              <Stack align="center" gap="xs">
-                <Icon
-                  icon="mdi:alert-circle"
-                  width={32}
-                  color="var(--mantine-color-red-6)"
-                />
-                <Text c="red">{loadError}</Text>
-                <Button variant="light" onClick={refresh}>
-                  Try again
-                </Button>
-              </Stack>
-            </Center>
-          ) : (
-            <DashboardsList
-              dashboards={dashboards}
-              projects={projects}
-              currentUserEmail={currentUserEmail}
-              onView={handleView}
-              onEdit={(d) => setEditTarget(d)}
-              onDelete={(d) => setDeleteTarget(d)}
-              onDuplicate={handleDuplicate}
-              onExport={handleExport}
-              onCreateClick={openCreate}
-              onBulkExport={handleBulkExport}
-              onBulkDelete={handleBulkDelete}
-            />
-          )}
+          {body}
         </Box>
       </AppShell.Main>
 
-      <CreateDashboardModal
-        opened={createOpened}
-        projects={projects}
-        existingTitles={dashboards.map((d) => d.title || '').filter(Boolean)}
-        onClose={closeCreate}
-        onCreate={handleCreate}
-        onImport={handleImport}
-        disableImport={importDisabled}
-      />
-      <EditDashboardModal
-        opened={Boolean(editTarget)}
-        dashboard={editTarget}
-        onClose={() => setEditTarget(null)}
-        onSubmit={handleEdit}
-      />
-      <DeleteDashboardModal
-        opened={Boolean(deleteTarget)}
-        dashboard={deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={handleDelete}
-      />
+      {modals}
     </AppShell>
   );
 };

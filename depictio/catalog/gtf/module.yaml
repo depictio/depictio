@@ -1,0 +1,16 @@
+# GTF/GFF transcript annotation. Not a tool but a format: nothing in nf-core
+# publishes "a GTF module", yet half a dozen pipelines publish a GTF that is
+# the only place an isoform's exon structure is written down (stringtie
+# `*.transcripts.gtf` on rnaseq, bambu `extended_annotations.gtf` on nanoseq,
+# gffcompare `*.annotated.gtf` wherever assemblies are compared). One folder
+# here, one recipe, and every one of them binds the same way. Its homepage is
+# the format specification, since there is no nf-core module path to point at.
+id: gtf
+name: GTF/GFF transcript annotation
+description: >-
+  Transcript models in GTF or GFF3: one line per feature, exon and CDS blocks
+  carrying the transcript and gene they belong to in the attribute column.
+homepage: https://www.ensembl.org/info/website/upload/gff.html
+biotools_url: null  # no bio.tools entry for this tool
+source_url: https://github.com/The-Sequence-Ontology/Specifications/blob/master/gff3.md
+stage: annotation

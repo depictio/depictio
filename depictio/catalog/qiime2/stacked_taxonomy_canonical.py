@@ -14,31 +14,77 @@ Canonical schema (see depictio/models/components/advanced_viz/schemas.py):
 
 Optional roles:
     lineage : Utf8 — full ``Kingdom;Phylum;…`` lineage string
+    <metadata columns> : Utf8 — every categorical sample-metadata column, for
+        the renderer's annotation strips
 """
 
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
+from depictio.recipes.lib.lineage import parent_rank
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="phylum", dc_ref="rel_abundance_phylum"),
-    RecipeSource(ref="class_", dc_ref="rel_abundance_class"),
-    RecipeSource(ref="order", dc_ref="rel_abundance_order"),
-    RecipeSource(ref="family", dc_ref="rel_abundance_family"),
-    RecipeSource(ref="genus", dc_ref="rel_abundance_genus"),
+    # No input_schema: the lineage column is read by position, then one per sample.
+    RecipeSource(
+        ref="phylum",
+        path="qiime2/rel_abundance_tables/rel-table-2.tsv",
+        format="TSV",
+        read_kwargs={"skip_rows": 1},
+    ),
+    # No input_schema: the lineage column is read by position, then one per sample.
+    RecipeSource(
+        ref="class_",
+        path="qiime2/rel_abundance_tables/rel-table-3.tsv",
+        format="TSV",
+        read_kwargs={"skip_rows": 1},
+    ),
+    # No input_schema: the lineage column is read by position, then one per sample.
+    RecipeSource(
+        ref="order",
+        path="qiime2/rel_abundance_tables/rel-table-4.tsv",
+        format="TSV",
+        read_kwargs={"skip_rows": 1},
+    ),
+    # No input_schema: the lineage column is read by position, then one per sample.
+    RecipeSource(
+        ref="family",
+        path="qiime2/rel_abundance_tables/rel-table-5.tsv",
+        format="TSV",
+        read_kwargs={"skip_rows": 1},
+    ),
+    # No input_schema: the lineage column is read by position, then one per sample.
+    RecipeSource(
+        ref="genus",
+        path="qiime2/rel_abundance_tables/rel-table-6.tsv",
+        format="TSV",
+        read_kwargs={"skip_rows": 1},
+        # Optional because the deepest collapsed table a run produces depends on
+        # how many ranks its reference database declares. A 7-rank database
+        # (rdp, silva) reaches Genus at level 6; an 8-rank one (sbdi-gtdb, the
+        # nf-core/ampliseq default from 2.18.0) needs level 7, which the
+        # pipeline does not emit — the template repoints the refs one level
+        # deeper and this last one simply drops out.
+        optional=True,
+    ),
+    # No input_schema: `habitat` and the id column are read behind presence checks.
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
 _METADATA_ID_COL = "sample"  # `Metadata_full.tsv` calls the sample col "sample"
+# A metadata column with more categories than this is an identifier or a
+# measurement, not something an annotation strip can colour legibly.
+_MAX_STRIP_CATEGORIES = 25
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "taxon": pl.Utf8,
     "rank": pl.Utf8,
     "abundance": pl.Float64,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "lineage": pl.Utf8,
     "habitat": pl.Utf8,
 }
@@ -88,9 +134,11 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Combine 5 rank-level rel-tables + a derived Kingdom level."""
     pieces: list[pl.DataFrame] = []
 
-    # Map source ref → (rank, level). We tolerate missing levels (e.g. if the
-    # pipeline didn't emit a deeper collapse) by skipping them rather than
-    # failing the whole recipe.
+    # Map source ref → (rank, level). QIIME2 writes the five collapse levels
+    # together, and the engine rejects a required source that is missing or
+    # empty, so in practice all five arrive. The skip below is what keeps a
+    # level that was repointed at a glob matching nothing from poisoning the
+    # concat rather than a route the pipeline actually takes.
     level_specs = (
         ("phylum", "Phylum"),
         ("class_", "Class"),
@@ -114,13 +162,13 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     long = pl.concat(pieces, how="vertical")
 
     # Derive Kingdom by summing Phylum-level rows per (sample, kingdom).
-    # Kingdom is the first ";"-separated lineage segment.
+    # Kingdom is the lineage segment directly above the Phylum leaf — read from
+    # the tail rather than as segment 0, so a database that prefixes the lineage
+    # with a Domain rank (sbdi-gtdb) doesn't label the Domain as the Kingdom.
     if "Phylum" in long["rank"].unique().to_list():
         phylum_rows = long.filter(pl.col("rank") == "Phylum")
         kingdom = (
-            phylum_rows.with_columns(
-                pl.col("lineage").str.split(";").list.first().str.strip_chars().alias("taxon")
-            )
+            phylum_rows.with_columns(parent_rank(pl.col("lineage")).alias("taxon"))
             .group_by(["sample_id", "taxon"])
             .agg(pl.col("abundance").sum())
             .with_columns(
@@ -133,25 +181,41 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
     long = long.with_columns(pl.col("taxon").cast(pl.Utf8))
 
-    # Optional habitat join + sort. The StackedTaxonomy renderer's default
-    # ``sample sort`` mode is ``input`` (preserves the row order it reads
-    # from the DC), so sorting the recipe output by (habitat, sample_id)
-    # makes the rendered bars group adjacently per habitat — easier to read
-    # cross-habitat composition shifts than alphabetical sample IDs.
+    # Metadata join + sort. The renderer's annotation strips colour each bar by
+    # a per-sample column read from this DC, so every categorical metadata
+    # column has to be here, not just the reference dataset's `habitat` (a run
+    # grouped by `locality` got one colour for every sample). Only
+    # low-cardinality string columns are joined: they are the only ones a strip
+    # can show, and each joined column is repeated on every (sample, taxon) row.
+    #
+    # The renderer's default ``sample sort`` mode is ``input`` (it preserves the
+    # row order it reads), so sorting by the grouping column groups the bars by
+    # it. That column is `habitat` when present, else the first joined column
+    # (the template convention: metadata column 2 is the grouping column).
     metadata = sources.get("metadata")
-    if metadata is not None and "habitat" in metadata.columns:
+    if metadata is not None:
         sample_col = next(
             (c for c in (_METADATA_ID_COL, "ID", "sample_id") if c in metadata.columns), None
         )
         if sample_col is not None:
-            sample_to_habitat = (
-                metadata.select(sample_col, "habitat")
-                .unique(subset=[sample_col])
-                .rename({sample_col: "sample_id"})
-                .with_columns(pl.col("habitat").cast(pl.Utf8))
-            )
-            long = long.join(sample_to_habitat, on="sample_id", how="left").sort(
-                ["habitat", "sample_id", "rank"]
-            )
+            strip_cols = [
+                c
+                for c in metadata.columns
+                if c != sample_col
+                and c not in long.columns
+                and metadata.schema[c] in (pl.Utf8, pl.Categorical, pl.Boolean)
+                and metadata[c].n_unique() <= _MAX_STRIP_CATEGORIES
+            ]
+            if strip_cols:
+                sample_meta = (
+                    metadata.select(sample_col, *strip_cols)
+                    .unique(subset=[sample_col])
+                    .rename({sample_col: "sample_id"})
+                    .with_columns(pl.col(strip_cols).cast(pl.Utf8))
+                )
+                group_col = "habitat" if "habitat" in strip_cols else strip_cols[0]
+                long = long.join(sample_meta, on="sample_id", how="left").sort(
+                    [group_col, "sample_id", "rank"], nulls_last=True
+                )
 
     return long

@@ -1,0 +1,130 @@
+"""Cascade delete must not leave a project's runs behind.
+
+A run document is keyed by ``workflow_id`` and carries no ``data_collection_id``,
+so deleting runs by collection never matched one. The leftovers are not inert:
+a scan skips runs it has already registered, so re-creating a project on the same
+(static) workflow id inherited the stale runs and registered no files for any
+recursive-scan collection — the collection then looked ingested but held nothing.
+"""
+
+from __future__ import annotations
+
+from unittest.mock import MagicMock, patch
+
+from bson import ObjectId
+
+MODULE = "depictio.api.v1.endpoints.projects_endpoints.routes"
+
+PROJECT_ID = ObjectId()
+WF_ID = ObjectId()
+DC_ID = ObjectId()
+
+
+def _run_cascade(delete_project_versions: MagicMock | None = None):
+    """Run the cascade against mocked collections; return the runs and storage mocks."""
+    from depictio.api.v1.endpoints.projects_endpoints.routes import _cascade_delete_project
+
+    projects = MagicMock()
+    projects.aggregate.return_value = [{"dc_id": DC_ID, "wf_id": WF_ID}]
+    runs = MagicMock()
+    storage = MagicMock()
+
+    with (
+        patch(f"{MODULE}.projects_collection", projects),
+        patch(f"{MODULE}.runs_collection", runs),
+        patch(f"{MODULE}.project_storage_collection", storage),
+        patch(f"{MODULE}.files_collection", MagicMock()),
+        patch(f"{MODULE}.deltatables_collection", MagicMock()),
+        patch(f"{MODULE}.multiqc_collection", MagicMock()),
+        patch(f"{MODULE}.jbrowse_collection", MagicMock()),
+        patch(f"{MODULE}.data_collections_collection", MagicMock()),
+        patch(f"{MODULE}.dashboards_collection", MagicMock()),
+        patch(f"{MODULE}._collect_s3_locations_for_project", return_value=[]),
+        # Both reach their own collections; unpatched, each waits out the real
+        # Mongo's server-selection timeout.
+        patch(f"{MODULE}.delete_threads_for_project", MagicMock()),
+        patch(f"{MODULE}.delete_project_versions", delete_project_versions or MagicMock()),
+    ):
+        _cascade_delete_project(PROJECT_ID, "demo")
+    return runs, storage
+
+
+def test_dashboard_version_ledgers_follow_the_project():
+    """The dashboards go by project, past the dashboard delete route that drops a
+    family's ledger, so the cascade has to drop the project's ledgers itself."""
+    cleanup = MagicMock()
+    _run_cascade(delete_project_versions=cleanup)
+    cleanup.assert_called_once_with(PROJECT_ID)
+
+
+def test_runs_are_deleted_by_workflow():
+    runs, _ = _run_cascade()
+    queried = [call.args[0] for call in runs.delete_many.call_args_list]
+    by_workflow = [q for q in queried if "workflow_id" in q]
+    assert by_workflow, f"cascade never deleted runs by workflow: {queried}"
+    assert WF_ID in by_workflow[0]["workflow_id"]["$in"]
+
+
+def test_runs_are_not_queried_by_collection():
+    """`WorkflowRun` has no `data_collection_id`, so such a filter matches nothing.
+
+    Keeping it as belt-and-braces is what let the missing workflow filter go
+    unnoticed: the cascade looked like it deleted runs.
+    """
+    runs, _ = _run_cascade()
+    queried = [call.args[0] for call in runs.delete_many.call_args_list]
+    assert not any("data_collection_id" in q for q in queried), queried
+
+
+def test_project_storage_config_is_deleted():
+    """Per-project storage credentials live in their own collection; the
+    cascade must not orphan an encrypted secret for a project that is gone."""
+    _, storage = _run_cascade()
+    storage.delete_one.assert_called_once_with({"project_id": PROJECT_ID})
+
+
+def test_the_run_model_really_has_no_collection_key():
+    """Pins the premise of the test above."""
+    from depictio.models.models.workflows import WorkflowRun
+
+    assert "data_collection_id" not in WorkflowRun.model_fields
+    assert "workflow_id" in WorkflowRun.model_fields
+
+
+def test_phylogeny_trees_are_collected_for_deletion():
+    """The CLI uploads a tree under a key derived from the DC id, with no document
+    recording it, so only the embedded DC config can say it exists."""
+    from depictio.api.v1.endpoints.migrate_endpoints.routes import (
+        _collect_s3_locations_for_project,
+    )
+    from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
+
+    tree_dc, table_dc, other_project_tree = ObjectId(), ObjectId(), ObjectId()
+    projects = MagicMock()
+    projects.find.return_value = [
+        {
+            "workflows": [
+                {
+                    "data_collections": [
+                        {"_id": tree_dc, "config": {"type": "phylogeny"}},
+                        {"_id": table_dc, "config": {"type": "table"}},
+                        {"_id": other_project_tree, "config": {"type": "phylogeny"}},
+                    ]
+                }
+            ]
+        }
+    ]
+    empty = MagicMock()
+    empty.find.return_value = []
+    migrate = "depictio.api.v1.endpoints.migrate_endpoints.routes"
+
+    with (
+        patch(f"{migrate}.projects_collection", projects),
+        patch(f"{migrate}.deltatables_collection", empty),
+        patch(f"{migrate}.data_collections_collection", empty),
+        patch(f"{migrate}.multiqc_collection", empty),
+        patch(f"{migrate}.jbrowse_collection", empty),
+    ):
+        locations = _collect_s3_locations_for_project([tree_dc, table_dc], "bucket")
+
+    assert locations == [phylogeny_s3_key(str(tree_dc))]

@@ -1,0 +1,11 @@
+assembly_id	merqury_name	asm_only_kmers	total_kmers	qv	error_rate	solid_kmers_assembly	solid_kmers_reads	kmer_completeness
+test_hifi_flye_assembly	test_hifi_flye.assembly	101344	132865662	44.3968	0.0000363349	108115713	108743656	99.4225
+test_hifi_flye_links	test_hifi_flye_links.scaffolds	101344	132865662	44.3968	0.0000363349	108115713	108743656	99.4225
+test_hifi_flye_ragtag	test_hifi_flye_ragtag	101344	132865662	44.3968	0.0000363349	108115713	108743656	99.4225
+test_hifi_hifiasm_assembly	test_hifi_hifiasm	24909895	178134317	21.4585	0.00714739	108142662	108743656	99.4473
+test_hifi_hifiasm_pilon	test_hifi_hifiasm_pilon	24908223	177949910	21.454	0.00715484	108141776	108743656	99.4465
+test_hifiasm_flye_assembly	test_hifiasm_flye_assembly_patch.patch	68424	133024603	46.1084	0.0000244999	108115728	108743656	99.4226
+test_hifiasm_flye_links	test_hifiasm_flye_links.scaffolds	68424	133024603	46.1084	0.0000244999	108115728	108743656	99.4226
+test_hifiasm_hifiasm_assembly	test_hifiasm_hifiasm_assembly_patch.patch	25154096	178378543	21.4193	0.00721216	108142662	108743656	99.4473
+test_ont_hifiasm_assembly	test_ont_hifiasm	36257671	194102857	20.0886	0.00979804	108071778	108743656	99.3821
+test_ont_hifiasm_ragtag	test_ont_hifiasm_ragtag	36257671	194102857	20.0886	0.00979804	108071778	108743656	99.3821

@@ -1,0 +1,7 @@
+sample	condition	protocol	source_replicate	run_id
+A549_R1	A549	cdna	replicate1	run2
+A549_R2	A549	directcdna	replicate3	run2
+A549_R3	A549	directcdna	replicate5	run3
+K562_R1	K562	cdna	replicate1	run3
+K562_R2	K562	directcdna	replicate3	run1
+K562_R3	K562	directcdna	replicate4	run2

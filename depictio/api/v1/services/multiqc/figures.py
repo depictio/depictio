@@ -51,9 +51,9 @@ MULTIQC_CACHE_TTL_SECONDS = 30 * 24 * 3600
 def _get_s3_filesystem_config() -> Dict[str, Any]:
     """Get S3 filesystem configuration from settings."""
     return {
-        "endpoint_url": settings.minio.endpoint_url,
-        "key": settings.minio.aws_access_key_id,
-        "secret": settings.minio.aws_secret_access_key,
+        "endpoint_url": settings.s3.endpoint_url,
+        "key": settings.s3.aws_access_key_id,
+        "secret": settings.s3.aws_secret_access_key,
     }
 
 

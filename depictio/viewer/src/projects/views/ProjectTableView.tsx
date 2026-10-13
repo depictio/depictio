@@ -10,6 +10,7 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { Globe, Lock, Table2, Workflow } from 'lucide-react';
 
 import type { ProjectListEntry } from 'depictio-react-core';
 
@@ -18,8 +19,13 @@ import { parseTemplate, TemplateChip } from '../template';
 import { determineRole } from '../lib/projectRole';
 import type { Density } from '../hooks/useProjectViewPrefs';
 import { coerceString } from '../../dashboards/lib/format';
-import ColumnPicker from '../../components/ColumnPicker';
-import { type ColumnDef, useTableColumns } from '../../lib/useTableColumns';
+import {
+  type ColumnDef,
+  type UseTableColumnsResult,
+  useTableColumns,
+} from '../../lib/useTableColumns';
+import { useListingAccents } from '../../lib/useListingAccents';
+import { useGlassPages } from '../../chrome/variants/glass/pages';
 import {
   formatDateTime,
   formatDateTimeVerbose,
@@ -34,14 +40,15 @@ export interface ProjectTableViewProps {
   pinnedIds: Set<string>;
   pinDisabled: boolean;
   density: Density;
-  onSetDensity: (d: Density) => void;
+  /** Column state, from `useProjectTableColumns`. */
+  columns: UseTableColumnsResult<ProjectColumnKey>;
   onView: (p: ProjectListEntry) => void;
   onEdit: (p: ProjectListEntry) => void;
   onDelete: (p: ProjectListEntry) => void;
   onTogglePin: (id: string) => void;
 }
 
-type ColumnKey =
+export type ProjectColumnKey =
   | 'name'
   | 'type'
   | 'visibility'
@@ -61,7 +68,7 @@ type SortDir = 'asc' | 'desc';
 
 /** Column catalogue. Order here is the render order; `defaultVisible: false`
  *  keeps the extra metadata columns opt-in so the default table stays readable. */
-const ALL_COLUMNS: ColumnDef<ColumnKey>[] = [
+const ALL_COLUMNS: ColumnDef<ProjectColumnKey>[] = [
   { key: 'name', label: 'Name', alwaysVisible: true },
   { key: 'type', label: 'Type' },
   { key: 'visibility', label: 'Visibility' },
@@ -78,7 +85,20 @@ const ALL_COLUMNS: ColumnDef<ColumnKey>[] = [
   { key: 'id', label: 'ID', description: 'Project ID', defaultVisible: false },
 ];
 
+/** Your role as a dot tag on Glass: the page colour for owner, quiet otherwise. */
+const ROLE_TONE: Record<string, string | undefined> = {
+  Owner: undefined,
+  Editor: 'indigo',
+  Viewer: 'gray',
+};
+
 const STORAGE_KEY = 'depictio.projects.tableColumns.v1';
+
+/** The projects table's column state, owned by the listing so the toolbar's
+ *  Table display menu and the table read the same choice. */
+export function useProjectTableColumns(): UseTableColumnsResult<ProjectColumnKey> {
+  return useTableColumns<ProjectColumnKey>(STORAGE_KEY, ALL_COLUMNS);
+}
 
 interface Row {
   id: string;
@@ -160,7 +180,7 @@ function compareNullable(a: number | null, b: number | null, dir: SortDir): numb
   return mul * (a - b);
 }
 
-function compareRows(a: Row, b: Row, key: ColumnKey, dir: SortDir): number {
+function compareRows(a: Row, b: Row, key: ProjectColumnKey, dir: SortDir): number {
   const mul = dir === 'asc' ? 1 : -1;
   switch (key) {
     case 'name':
@@ -293,17 +313,18 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
   pinnedIds,
   pinDisabled,
   density,
-  onSetDensity,
+  columns,
   onView,
   onEdit,
   onDelete,
   onTogglePin,
 }) => {
-  const [sortKey, setSortKey] = useState<ColumnKey>('name');
+  const accent = useListingAccents('projects');
+  const glass = useGlassPages();
+  const [sortKey, setSortKey] = useState<ProjectColumnKey>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
-  const { visibleColumns, isVisible, allColumns, toggle, reset, isCustomized } =
-    useTableColumns<ColumnKey>(STORAGE_KEY, ALL_COLUMNS);
+  const { visibleColumns, isVisible } = columns;
 
   const rows = useMemo<Row[]>(() => {
     const list: Row[] = projects.map((p) => {
@@ -354,7 +375,7 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
     }
   }, [isVisible, sortKey]);
 
-  const toggleSort = (key: ColumnKey) => {
+  const toggleSort = (key: ProjectColumnKey) => {
     if (key === sortKey) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     } else {
@@ -364,17 +385,37 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
     }
   };
 
-  const renderCell = (r: Row, key: ColumnKey): React.ReactNode => {
+  const renderCell = (r: Row, key: ProjectColumnKey): React.ReactNode => {
     switch (key) {
       case 'name':
         return (
-          <UnstyledButton onClick={() => onView(r.project)} style={{ textAlign: 'left' }}>
-            <Text fw={500} size="sm">
+          <UnstyledButton
+            onClick={() => onView(r.project)}
+            style={{ textAlign: 'left' }}
+            className={glass ? 'dc-title-link' : undefined}
+            title={glass ? r.project.name : undefined}
+          >
+            <Text fw={500} size="sm" className={glass ? 'dc-title-text' : undefined}>
               {r.project.name}
             </Text>
           </UnstyledButton>
         );
-      case 'type':
+      case 'type': {
+        // Glass: told apart by glyph and word, not by hue.
+        if (glass) {
+          const TypeIcon = r.isAdvanced ? Workflow : Table2;
+          return (
+            <Badge
+              color="gray"
+              variant="light"
+              size="sm"
+              leftSection={<TypeIcon size={12} strokeWidth={2} aria-hidden />}
+              styles={{ root: { maxWidth: 'none' }, label: { overflow: 'visible' } }}
+            >
+              {r.isAdvanced ? 'Advanced' : 'Basic'}
+            </Badge>
+          );
+        }
         return (
           <Badge
             color={r.isAdvanced ? 'orange' : 'cyan'}
@@ -388,7 +429,22 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
             {r.isAdvanced ? 'Advanced' : 'Basic'}
           </Badge>
         );
+      }
       case 'visibility':
+        if (glass) {
+          const VisIcon = r.isPublic ? Globe : Lock;
+          return (
+            <Badge
+              color={r.isPublic ? 'cyan' : 'gray'}
+              variant="light"
+              size="sm"
+              leftSection={<VisIcon size={12} strokeWidth={2} aria-hidden />}
+              styles={{ root: { maxWidth: 'none' }, label: { overflow: 'visible' } }}
+            >
+              {r.isPublic ? 'Public' : 'Private'}
+            </Badge>
+          );
+        }
         return (
           <Badge
             color={r.isPublic ? 'green' : 'grape'}
@@ -401,12 +457,17 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
           </Badge>
         );
       case 'template':
-        return r.templateParsed ? <TemplateChip parsed={r.templateParsed} verbose /> : <Dash />;
+        return r.templateParsed ? <TemplateChip parsed={r.templateParsed} verbose plain={glass} /> : <Dash />;
       case 'owner':
         return r.ownerEmail ? <Text size="sm">{r.ownerEmail}</Text> : <Dash />;
       case 'role':
         return r.role ? (
-          <Badge variant="outline" size="sm" styles={{ root: { textTransform: 'none' } }}>
+          <Badge
+            variant={glass ? 'light' : 'outline'}
+            color={glass ? ROLE_TONE[r.role] : undefined}
+            size="sm"
+            styles={{ root: { textTransform: 'none' } }}
+          >
             {r.role}
           </Badge>
         ) : (
@@ -452,41 +513,12 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
   // viewports.
   return (
     <div
+      className="dc-list-table"
       style={{
         border: '1px solid var(--mantine-color-default-border)',
         borderRadius: 8,
       }}
     >
-      <Group justify="flex-end" px="sm" pt="xs" gap="xs">
-        <ColumnPicker
-          columns={allColumns}
-          isVisible={isVisible}
-          onToggle={toggle}
-          onReset={reset}
-          isCustomized={isCustomized}
-          visibleCount={visibleColumns.length}
-        />
-        <Tooltip label="Density" withinPortal>
-          <ActionIcon.Group>
-            <ActionIcon
-              variant={density === 'cozy' ? 'filled' : 'subtle'}
-              color={density === 'cozy' ? 'orange' : 'gray'}
-              onClick={() => onSetDensity('cozy')}
-              aria-label="Cozy density"
-            >
-              <Icon icon="mdi:format-line-spacing" width={16} />
-            </ActionIcon>
-            <ActionIcon
-              variant={density === 'compact' ? 'filled' : 'subtle'}
-              color={density === 'compact' ? 'orange' : 'gray'}
-              onClick={() => onSetDensity('compact')}
-              aria-label="Compact density"
-            >
-              <Icon icon="mdi:format-align-justify" width={16} />
-            </ActionIcon>
-          </ActionIcon.Group>
-        </Tooltip>
-      </Group>
       <div style={{ overflowX: 'auto' }}>
         <Table
           verticalSpacing={density === 'compact' ? 4 : 'sm'}
@@ -497,7 +529,7 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
             <Table.Tr>
               <Table.Th style={{ width: 36 }} aria-label="Pin" />
               {visibleColumns.map((col) => (
-                <Table.Th key={col.key}>
+                <Table.Th key={col.key} data-col={col.key}>
                   <SortHeader
                     label={col.label}
                     tooltip={col.description}
@@ -507,7 +539,11 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
                   />
                 </Table.Th>
               ))}
-              <Table.Th style={{ width: 120, textAlign: 'right' }} aria-label="Actions" />
+              <Table.Th
+                className="dc-actions-col"
+                style={{ width: 120, textAlign: 'right' }}
+                aria-label="Actions"
+              />
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -546,14 +582,17 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
                     </Tooltip>
                   </Table.Td>
                   {visibleColumns.map((col) => (
-                    <Table.Td key={col.key}>{renderCell(r, col.key)}</Table.Td>
+                    <Table.Td key={col.key} data-col={col.key}>
+                      {renderCell(r, col.key)}
+                    </Table.Td>
                   ))}
-                  <Table.Td>
+                  <Table.Td className="dc-actions-col">
                     <Group gap={4} wrap="nowrap" justify="flex-end">
                       <Tooltip label="Workflows & data collections" withinPortal>
                         <ActionIcon
                           variant="subtle"
-                          color="cyan"
+                          color={glass ? 'gray' : accent.secondary}
+                          className={glass ? 'dc-row-action' : undefined}
                           size="sm"
                           component="a"
                           href={`/projects/${r.id}`}
@@ -566,7 +605,8 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
                       <Tooltip label="Roles and permissions" withinPortal>
                         <ActionIcon
                           variant="subtle"
-                          color="blue"
+                          color={glass ? 'gray' : 'blue'}
+                          className={glass ? 'dc-row-action' : undefined}
                           size="sm"
                           component="a"
                           href={`/projects/${r.id}/permissions`}

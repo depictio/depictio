@@ -421,8 +421,7 @@ tabs:
         title_align: left
         aggregations:
         - box_plot_stats
-        secondary_layout: vertical
-        top_n_count: 3
+        secondary_layout: box_plot
         # --- generated on export ---
         tag: card-alpha-card-shannon-73f8df
         index: alpha-card-shannon
@@ -449,8 +448,7 @@ tabs:
         title_align: left
         aggregations:
         - box_plot_stats
-        secondary_layout: vertical
-        top_n_count: 3
+        secondary_layout: box_plot
         # --- generated on export ---
         tag: card-alpha-card-faith-pd-0b1489
         index: alpha-card-faith-pd
@@ -477,8 +475,7 @@ tabs:
         title_align: left
         aggregations:
         - box_plot_stats
-        secondary_layout: vertical
-        top_n_count: 3
+        secondary_layout: box_plot
         # --- generated on export ---
         tag: card-alpha-card-observed-af80c8
         index: alpha-card-observed
@@ -610,8 +607,7 @@ tabs:
         title_align: left
         aggregations:
         - box_plot_stats
-        secondary_layout: vertical
-        top_n_count: 3
+        secondary_layout: box_plot
         # --- generated on export ---
         tag: card-rel_abundance_median-e4d729
         layout:
@@ -1252,8 +1248,7 @@ tabs:
         title_align: left
         aggregations:
         - box_plot_stats
-        secondary_layout: vertical
-        top_n_count: 3
+        secondary_layout: box_plot
         # --- generated on export ---
         tag: card-diff-card-max-effect-116cba
         index: diff-card-max-effect
@@ -1358,8 +1353,7 @@ tabs:
         title_align: left
         aggregations:
         - box_plot_stats
-        secondary_layout: vertical
-        top_n_count: 3
+        secondary_layout: box_plot
         # --- generated on export ---
         tag: card-phylo-card-phyla-c8ba3b
         index: phylo-card-phyla

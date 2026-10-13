@@ -45,17 +45,25 @@ export function screenshotVersion(dashboard: {
   return dashboard.screenshot_ts || dashboard.last_saved_ts || undefined;
 }
 
+/** Which of the two files the capture job writes to ask for.
+ *  `base` is the CSS-resolution shot every card in the grid downloads;
+ *  `hidpi` is its `@2x` sibling, worth its extra weight only where the image
+ *  is shown large, i.e. the hover preview. */
+export type ScreenshotVariant = 'base' | 'hidpi';
+
 export function screenshotUrl(
   dashboardId: string,
   theme: 'light' | 'dark',
   version?: string,
+  variant: ScreenshotVariant = 'base',
 ): string {
   // Cache-bust whenever the PNG is regenerated: the screenshot job overwrites
   // the file in place, so without a versioned URL the browser keeps showing the
   // old image until a hard reload. Pass `screenshotVersion(dashboard)` — it
   // advances when the *image* changes, which `last_saved_ts` alone no longer
   // does now that saves and screenshots are tracked separately (issue #932).
-  const base = `/static/screenshots/${dashboardId}_${theme}.png`;
+  const suffix = variant === 'hidpi' ? '@2x' : '';
+  const base = `/static/screenshots/${dashboardId}_${theme}${suffix}.png`;
   if (!version) return base;
   return `${base}?v=${encodeURIComponent(version)}`;
 }

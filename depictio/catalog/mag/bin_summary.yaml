@@ -1,0 +1,43 @@
+id: mag_bin_summary
+name: Bin summary
+mode: bin-summary
+description: >-
+  Everything four tools know about each recovered bin in one row: how complete
+  and how clean CheckM2 thinks it is, how it is assembled, what Prokka found in
+  it and what GTDB-Tk calls it. It is the table the whole binning question is
+  settled on, and the only place the MIMAG tier is computed with its RNA
+  criteria included rather than from completeness alone.
+find:
+  # Rebuilt from four per-bin collections rather than read from a file; the
+  # glob matches nf-core/mag's own BIN_SUMMARY output so a run that publishes
+  # it is still recognised as carrying this output.
+  path_glob: "**/bin_summary.tsv"
+  path_glob_alt:
+    - "**/*bin_summary*.tsv"
+recipe: mag/bin_summary.py
+fixture: bin_summary.tsv
+renders_as:
+  - { id: mimag_scatter, component: advanced_viz, kind: scatter_xy,
+      roles: {x: completeness, y: contamination, label: bin_id, color: mimag_tier, size: total_length} }
+  - { id: quality_vs_fragmentation, component: advanced_viz, kind: scatter_xy,
+      roles: {x: n50, y: quality_score, label: bin_id, color: phylum, size: total_length} }
+  - { id: binner_phylum_flow, component: advanced_viz, kind: sankey,
+      roles: {steps: [assembler, binner, phylum]} }
+  - { id: bin_lineage, component: advanced_viz, kind: sunburst,
+      roles: {ranks: [domain, phylum, class_name, order, family, genus], abundance: total_length} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: binner, y: quality_score, color: mimag_tier, title: Bin quality by binner and MIMAG tier} }
+  - { id: mimag_donut, component: card, column: bin_id, aggregation: nunique,
+      secondary_layout: donut, breakdown_col: mimag_tier }
+  - { component: card, column: completeness, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: contamination, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: total_length, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: bin_id, aggregation: nunique,
+      secondary_layout: top_n, breakdown_col: phylum, top_n_count: 5 }
+  - { component: card, column: quality_score, aggregation: max,
+      secondary_layout: top_n, breakdown_col: assembler, top_n_count: 4 }
+  - { component: card, column: sources_present, aggregation: average,
+      aggregations: [box_plot_stats], secondary_layout: histogram }
+  - { component: table }

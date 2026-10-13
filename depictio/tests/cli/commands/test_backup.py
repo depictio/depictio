@@ -107,7 +107,10 @@ class TestBackupCLI:
             result = runner.invoke(app, ["create", "--CLI-config-path", config_file, "--dry-run"])
 
             assert result.exit_code == 0
-            assert "DRY RUN" in result.stdout
+            # Honest about what a dry run checks: the server and the admin rights only.
+            out = " ".join(result.stdout.split())
+            assert "DRY RUN: no backup created" in out
+            assert "not what a backup would contain" in out
 
     @patch("depictio.cli.cli.commands.backup.api_login")
     @patch("depictio.cli.cli.utils.api_calls.api_list_backups")
@@ -336,16 +339,270 @@ class TestBackupCLI:
         assert "New collections found without backup coverage" in result.stdout
         assert "new_collection" in result.stdout
 
+    @patch("depictio.cli.cli.commands.backup.api_login")
     @patch("depictio.cli.cli.utils.backup_validation.check_backup_collections_coverage")
-    def test_check_coverage_error_handling(self, mock_detect, runner):
-        """Test coverage check error handling."""
+    def test_check_coverage_error_handling(
+        self, mock_detect, mock_api_login, runner, mock_cli_config
+    ):
+        """Test coverage check error handling.
+
+        Uses a real config file like its siblings: without one the command now
+        stops at "configuration file not found", so the test would pass on the
+        strength of the missing file rather than the reported coverage error.
+        """
+        mock_api_login.return_value = {"success": True, "is_admin": True}
         mock_detect.return_value = {
             "error": "Could not import settings",
             "valid": False,
             "errors": ["Unable to check collection coverage - settings not available"],
         }
 
-        result = runner.invoke(dev_app, ["backup", "check-coverage"])
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_file = os.path.join(tmp_dir, "config.yaml")
+            with open(config_file, "w") as f:
+                yaml.dump(mock_cli_config, f)
+
+            result = runner.invoke(
+                dev_app, ["backup", "check-coverage", "--CLI-config-path", config_file]
+            )
 
         assert result.exit_code == 1
         assert "Coverage check failed" in result.stdout
+        assert "Could not import settings" in result.stdout
+
+
+class TestRestoreCLI:
+    """Test the backup restore CLI command."""
+
+    @patch("depictio.cli.cli.commands.backup.load_depictio_config")
+    @patch("depictio.cli.cli.commands.backup.api_login")
+    def test_restore_declined_confirmation_exits_cleanly(
+        self, mock_api_login, mock_load_config, runner
+    ):
+        """Declining the confirmation prompt must exit 0, not report a failure."""
+        mock_load_config.return_value = Mock()
+        mock_api_login.return_value = {"success": True, "is_admin": True}
+
+        result = runner.invoke(app, ["restore", "20250101_010101"], input="n\n")
+
+        assert result.exit_code == 0
+        assert "Restore cancelled" in result.stdout
+        assert "Restore operation failed" not in result.stdout
+
+    @patch("depictio.cli.cli.utils.api_calls.api_restore_backup")
+    @patch("depictio.cli.cli.commands.backup.load_depictio_config")
+    @patch("depictio.cli.cli.commands.backup.api_login")
+    def test_restore_forwards_safety_flags(
+        self, mock_api_login, mock_load_config, mock_api_restore, runner
+    ):
+        """--allow-unverified and --skip-validation are forwarded to the API call."""
+        mock_load_config.return_value = Mock()
+        mock_api_login.return_value = {"success": True, "is_admin": True}
+        mock_api_restore.return_value = {
+            "success": True,
+            "message": "Restored 0 documents from backup",
+            "restored_collections": {},
+            "total_restored": 0,
+            "errors": [],
+        }
+
+        result = runner.invoke(
+            app,
+            [
+                "restore",
+                "20250101_010101",
+                "--force",
+                "--allow-unverified",
+                "--skip-validation",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "Restore completed successfully" in result.stdout
+        _args, kwargs = mock_api_restore.call_args
+        assert kwargs["allow_unverified"] is True
+        assert kwargs["skip_validation"] is True
+
+    @patch("depictio.cli.cli.utils.api_calls.api_restore_backup")
+    @patch("depictio.cli.cli.commands.backup.load_depictio_config")
+    @patch("depictio.cli.cli.commands.backup.api_login")
+    def test_restore_refused_by_validation_gate(
+        self, mock_api_login, mock_load_config, mock_api_restore, runner
+    ):
+        """A server-side validation refusal surfaces the message and errors."""
+        mock_load_config.return_value = Mock()
+        mock_api_login.return_value = {"success": True, "is_admin": True}
+        mock_api_restore.return_value = {
+            "success": False,
+            "message": "Backup failed model validation: 2 invalid document(s) ...",
+            "restored_collections": {},
+            "total_restored": 0,
+            "errors": ["Document 0 in users: invalid email"],
+        }
+
+        result = runner.invoke(app, ["restore", "20250101_010101", "--force"])
+
+        assert result.exit_code == 1
+        assert "failed model validation" in result.stdout
+        assert "Document 0 in users" in result.stdout
+
+
+class TestBackupFailures:
+    """A rejected token, an unanswered prompt, a dry run with errors: each says what it is."""
+
+    @patch("depictio.cli.cli.commands.backup.load_depictio_config")
+    @patch("depictio.cli.cli.commands.backup.api_login")
+    def test_a_rejected_token_is_an_authentication_failure(
+        self, mock_api_login, mock_load_config, runner
+    ):
+        mock_load_config.return_value = Mock()
+        # What api_login returns when the server refuses the token: no is_admin at all.
+        mock_api_login.return_value = {"success": False}
+
+        result = runner.invoke(app, ["create"])
+
+        assert result.exit_code == 1
+        out = " ".join(result.output.split())
+        assert "Authentication failed" in out
+        assert "invalid or expired" in out
+        assert "Access denied" not in out
+
+    @pytest.mark.parametrize("status", [404, 502])
+    @patch("depictio.cli.cli.commands.backup.api_login")
+    def test_another_answer_is_not_blamed_on_the_token(
+        self, mock_api_login, runner, tmp_path, monkeypatch, mock_cli_config, status
+    ):
+        """A viewer host's 404 or a proxy's 502: a new token would not fix it."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        for var in ("DEPICTIO_CLI_API_BASE_URL", "DEPICTIO_CLI_TOKEN"):
+            monkeypatch.delenv(var, raising=False)
+        config = tmp_path / "CLI.yaml"
+        config.write_text(yaml.dump(mock_cli_config))
+        mock_api_login.return_value = {"success": False, "status_code": status}
+
+        result = runner.invoke(app, ["list", "--server", str(config)])
+
+        assert result.exit_code == 1
+        out = " ".join(result.output.split())
+        assert f"Authentication failed: the server answered HTTP {status}" in out
+        assert "Tried http://localhost:8000, read from ~/CLI.yaml" in out
+        assert "invalid or expired" not in out
+
+    @patch("depictio.cli.cli.commands.backup.load_depictio_config")
+    @patch("depictio.cli.cli.commands.backup.api_login")
+    def test_an_unreachable_server_is_named(self, mock_api_login, mock_load_config, runner):
+        import httpx
+
+        mock_load_config.return_value = Mock()
+        mock_api_login.side_effect = httpx.ConnectError("refused")
+
+        result = runner.invoke(app, ["list"])
+
+        assert result.exit_code == 1
+        assert "Cannot reach the Depictio server: refused" in " ".join(result.output.split())
+        assert result.exception is None or isinstance(result.exception, SystemExit)
+
+    @patch("depictio.cli.cli.utils.api_calls.api_restore_backup")
+    @patch("depictio.cli.cli.commands.backup.load_depictio_config")
+    @patch("depictio.cli.cli.commands.backup.api_login")
+    def test_an_unanswered_confirmation_aborts_without_restoring(
+        self, mock_api_login, mock_load_config, mock_api_restore, runner
+    ):
+        mock_load_config.return_value = Mock()
+        mock_api_login.return_value = {"success": True, "is_admin": True}
+
+        # No input at all: stdin is closed when the prompt reads it.
+        result = runner.invoke(app, ["restore", "20250101_010101"])
+
+        assert result.exit_code == 1
+        assert "Aborted" in result.output
+        assert "Restore operation failed" not in result.output
+        mock_api_restore.assert_not_called()
+
+    @patch("depictio.cli.cli.utils.api_calls.api_restore_backup")
+    @patch("depictio.cli.cli.commands.backup.load_depictio_config")
+    @patch("depictio.cli.cli.commands.backup.api_login")
+    def test_a_dry_run_with_errors_fails(
+        self, mock_api_login, mock_load_config, mock_api_restore, runner
+    ):
+        mock_load_config.return_value = Mock()
+        mock_api_login.return_value = {"success": True, "is_admin": True}
+        mock_api_restore.return_value = {
+            "success": True,
+            "restored_collections": {},
+            "total_restored": 0,
+            "errors": ["Collection nope not found in backup"],
+        }
+
+        result = runner.invoke(
+            app, ["restore", "20250101_010101", "--dry-run", "--collections", "nope"]
+        )
+
+        assert result.exit_code == 1
+        assert "DRY RUN completed with errors" in result.output
+        assert "completed successfully" not in result.output
+        assert "Collection nope not found in backup" in result.output
+
+
+class TestBackupServer:
+    """--server picks the configuration; the hidden --CLI-config-path still does."""
+
+    @pytest.fixture
+    def config_file(self, tmp_path, mock_cli_config):
+        path = tmp_path / "config.yaml"
+        path.write_text(yaml.dump(mock_cli_config))
+        return str(path)
+
+    @pytest.mark.parametrize("command", ["create", "list", "validate", "restore"])
+    def test_help_shows_server_not_the_legacy_option(self, runner, command):
+        result = runner.invoke(app, [command, "--help"])
+
+        assert result.exit_code == 0
+        assert "--server" in result.output
+        # Named once, in the --server help as its former name, and not listed itself.
+        assert "Formerly" in result.output
+        assert result.output.count("--CLI-config-path") == 1
+
+    def test_check_coverage_help_hides_the_legacy_option(self, runner):
+        result = runner.invoke(dev_app, ["backup", "check-coverage", "--help"])
+
+        assert "--server" in result.output
+        assert "Formerly" in result.output
+        assert result.output.count("--CLI-config-path") == 1
+
+    @pytest.mark.parametrize("flag", ["--server", "--CLI-config-path"])
+    @patch("depictio.cli.cli.commands.backup.api_login")
+    def test_create_logs_in_with_the_named_configuration(
+        self, mock_api_login, runner, config_file, flag
+    ):
+        mock_api_login.return_value = {"success": True, "is_admin": True}
+
+        result = runner.invoke(app, ["create", flag, config_file, "--dry-run"])
+
+        assert result.exit_code == 0, result.output
+        mock_api_login.assert_called_once_with(config_file)
+
+    @patch("depictio.cli.cli.utils.api_calls.api_list_backups")
+    @patch("depictio.cli.cli.commands.backup.api_login")
+    def test_list_server_local_is_the_local_stack_configuration(
+        self, mock_api_login, mock_list, runner, tmp_path, monkeypatch, mock_cli_config
+    ):
+        monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path))
+        local = tmp_path / "cli" / "admin_config.yaml"
+        local.parent.mkdir()
+        local.write_text(yaml.dump(mock_cli_config))
+        mock_api_login.return_value = {"success": True, "is_admin": True}
+        mock_list.return_value = {"success": True, "backups": []}
+
+        result = runner.invoke(app, ["list", "--server", "local"])
+
+        assert result.exit_code == 0, result.output
+        mock_api_login.assert_called_once_with(str(local))
+
+    def test_restore_server_and_legacy_together_are_refused(self, runner):
+        result = runner.invoke(
+            app, ["restore", "20250627_123456", "--server", "a.yaml", "--CLI-config-path", "b"]
+        )
+
+        assert result.exit_code == 2
+        assert "not both" in result.output

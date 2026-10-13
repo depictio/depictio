@@ -1,0 +1,555 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8cc3"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8cc3"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "ref-campaign-intro",
+      "component_type": "text",
+      "title": "",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": null,
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": null,
+      "order": 1,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "Where and when each sample was taken. The date range and the site picker on the left are persistent, so a period picked here narrows the diversity, taxonomy and differential tabs too.",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null
+    },
+    {
+      "index": "ref-campaign-samples",
+      "component_type": "card",
+      "title": "Samples",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Samples in the campaign. The bar splits them by habitat.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Campaign at a glance",
+      "aggregation": "count",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "composition",
+      "breakdown_col": "habitat",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:flask-outline",
+      "icon_color": "blue",
+      "caption": "by habitat",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-campaign-sites",
+      "component_type": "card",
+      "title": "Sites visited",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Villages sampled. The bar splits the samples by site.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Campaign at a glance",
+      "aggregation": "nunique",
+      "column_name": "city",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "composition",
+      "breakdown_col": "city",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:map-marker-outline",
+      "icon_color": "teal",
+      "caption": "samples per site",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-campaign-grid",
+      "component_type": "map",
+      "title": "Sampling sites",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Where & when",
+      "map_type": "scatter_map",
+      "lat_column": "lat",
+      "lon_column": "lon",
+      "color_column": "habitat",
+      "size_column": null,
+      "hover_columns": [
+        "sample",
+        "city",
+        "sampling_date"
+      ],
+      "text_column": null,
+      "map_style": "carto-positron",
+      "default_zoom": null,
+      "default_center": null,
+      "opacity": 0.9,
+      "size_max": 26,
+      "z_column": null,
+      "radius": null,
+      "selection_enabled": true,
+      "selection_column": "sample",
+      "dict_kwargs": {},
+      "locations_column": null,
+      "featureidkey": "id",
+      "geojson_data": null,
+      "geojson_url": null,
+      "geojson_dc_id": null,
+      "geojson_dc_tag": null,
+      "choropleth_aggregation": null,
+      "color_continuous_scale": null,
+      "range_color": null,
+      "placement": "grid",
+      "floating_initial_state": "compact",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-campaign-timeline",
+      "component_type": "figure",
+      "title": "Visit order",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Where & when",
+      "visu_type": "scatter",
+      "dict_kwargs": {},
+      "mode": "code",
+      "code_content": "grp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('habitat') or {}\ndf_modified = df.sort('sampling_date')\nfig = px.scatter(\n    df_modified.to_pandas(),\n    x='sampling_date', y='city', color=grp_col,\n    color_discrete_map=colors,\n    hover_name='sample',\n)\nfig.update_traces(marker={'size': 14})\nfig.update_layout(\n    xaxis_title='Sampling date', yaxis_title=None, legend_title_text=None if depictio_group_by else 'Habitat',\n    margin={'t': 24, 'l': 8, 'r': 8, 'b': 40},\n)\n",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "font_scale": null,
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-campaign-design",
+      "component_type": "figure",
+      "title": "Samples per site",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sampling design",
+      "visu_type": "scatter",
+      "dict_kwargs": {},
+      "mode": "code",
+      "code_content": "grp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('habitat') or {}\ndf_modified = df.group_by(list(dict.fromkeys(['city', grp_col]))).len().rename({'len': 'samples'}).sort('city')\nfig = px.bar(\n    df_modified.to_pandas(),\n    x='city', y='samples', color=grp_col,\n    color_discrete_map=colors, barmode='stack',\n)\nfig.update_layout(\n    xaxis_title=None, yaxis_title='Samples', legend_title_text=None if depictio_group_by else 'Habitat',\n    margin={'t': 24, 'l': 56, 'r': 16, 'b': 60},\n)\n",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "font_scale": null,
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-campaign-samplesheet",
+      "component_type": "table",
+      "title": "Samplesheet",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "samplesheet",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cab"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Ampliseq samplesheet (always present, used for cross-DC filtering)",
+        "data_collection_tag": "samplesheet",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cab"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Run manifest",
+      "columns": [],
+      "page_size": 100,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": true,
+      "row_selection_column": "sampleID",
+      "wf_tag": "nextflow/ampliseq"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [],
+  "right_panel_layout_data": [
+    {
+      "i": "box-ref-campaign-intro",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ref-campaign-samples",
+      "x": 0,
+      "y": 0,
+      "w": 4,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-ref-campaign-sites",
+      "x": 4,
+      "y": 0,
+      "w": 4,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-ref-campaign-grid",
+      "x": 0,
+      "y": 0,
+      "w": 5,
+      "h": 7,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ref-campaign-timeline",
+      "x": 5,
+      "y": 0,
+      "w": 3,
+      "h": 7,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ref-campaign-design",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ref-campaign-samplesheet",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "filter_sections": [],
+  "grid_sections": [
+    {
+      "name": "Campaign at a glance",
+      "icon": "mdi:counter",
+      "color": "blue",
+      "description": "Samples by habitat, and the sites they came from",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Where & when",
+      "icon": "mdi:map-marker-outline",
+      "color": "teal",
+      "description": "One marker per sample at its site; click one to filter every tab",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Sampling design",
+      "icon": "mdi:chart-donut",
+      "color": "violet",
+      "description": "Samples per site by habitat; the design is unbalanced",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Run manifest",
+      "icon": "mdi:table",
+      "color": "gray",
+      "description": "The samplesheet the pipeline was launched with, one row per library",
+      "collapsed": true,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "category_colors": null,
+  "funnel_filtering": true,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true,
+  "brand_theme": null,
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Sampling Campaign",
+  "subtitle": "Where and when was each sample taken?",
+  "icon": "/assets/images/workflows/nf-core.png",
+  "icon_color": "green",
+  "icon_variant": "filled",
+  "workflow_system": "nf-core",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": false,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-08-29 00:00:00",
+  "creation_time": "2026-10-08 12:18:48",
+  "screenshot_ts": "",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "tab_order": 8,
+  "main_tab_name": null,
+  "tab_icon": "mdi:map-marker-outline",
+  "tab_icon_color": "blue",
+  "tab_group": "Data & QC",
+  "parent_dashboard_title": null,
+  "project_realtime": null,
+  "inherited_brand_theme": null,
+  "inherited_category_colors": null,
+  "source_key": null
+}

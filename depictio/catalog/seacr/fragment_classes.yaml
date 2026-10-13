@@ -1,0 +1,23 @@
+id: seacr_fragment_classes
+name: Nucleosome fragment classes
+mode: qc/fragments
+description: >-
+  The fragment-length histogram binned into the four nucleosome classes:
+  sub-nucleosomal below 120 bp, mononucleosomal to 250 bp, dinucleosomal to
+  450 bp and multi-nucleosomal above it, with the share of each per sample and
+  the mononucleosome to sub-nucleosome ratio behind it.
+# The raw ladder answers "does this look like chromatin"; the classes answer
+# "how much of this library is nucleosome-free", which is what separates a
+# sharp mark from a broad one. Every sample keeps all four classes even when a
+# class is empty, because an empty class is a finding.
+find:
+  path_glob: "**/*.frags.len.txt"
+recipe: seacr/fragment_classes.py
+fixture: fragment_classes.tsv
+renders_as:
+  - { id: seacr_fragment_class_stack, component: figure, visu_type: bar, dict_kwargs: {x: sample, y: fraction, color: fragment_class, title: Fragment classes per sample} }
+  - { component: card, column: n_fragments, aggregation: sum, secondary_layout: donut, breakdown_col: fragment_class }
+  - { component: card, column: sample_median_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: median_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: mono_to_sub, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

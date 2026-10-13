@@ -1,0 +1,13 @@
+/* The update dot: Mantine's blue and the page surface for its ring, so it
+   reads on a Glass frosted rail and on a Classic one alike. */
+.dc-update-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--mantine-color-blue-6);
+  box-shadow: 0 0 0 2px var(--mantine-color-body);
+  pointer-events: none;
+}

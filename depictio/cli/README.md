@@ -2,105 +2,33 @@
   <img src="https://raw.githubusercontent.com/depictio/depictio/main/docs/images/logo_hd.png" alt="Depictio logo" width="300">
 </p>
 
-# Depictio CLI
+# depictio-cli
 
-A command-line interface for interacting with the Depictio API.
+`depictio-cli` is an alias of the [`depictio`](https://pypi.org/project/depictio/) package.
+It installs the same version of `depictio` and provides the CLI under both of its commands:
+`depictio`, and `depictio-cli` for existing scripts and the Nextflow hook.
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/depictio/depictio)
-
-## Installation
-
-### From Source
-
-To install the CLI directly from the repository:
+New installs can use the package directly:
 
 ```bash
-# Clone the repository
-git clone https://github.com/depictio/depictio.git
-cd depictio
-
-# Install the CLI package
-cd depictio/cli
-pip install -e .
+pip install depictio              # the CLI
+pip install "depictio[multiqc]"   # the CLI, able to read MultiQC reports
 ```
 
-## Usage
+`pip install "depictio-cli[multiqc]"` is equivalent to the second line.
 
-The Depictio CLI provides commands for managing projects, scanning data, and processing datasets.
+`depictio-cli` ships a copy of files that older releases of it installed, so upgrading one
+of them with pip does not delete files `depictio` now owns. The flip side: running
+`pip uninstall depictio-cli` without also uninstalling `depictio` removes files `depictio`
+needs. `pip install --force-reinstall --no-deps depictio` restores them.
 
-### Configuration Commands
+## Documentation
 
-```bash
-# Sync a project configuration to the server
-depictio-cli config sync \
-  --CLI-config-path ~/.depictio/admin_config.yaml \
-  --project-config-path path/to/project_config.yaml \
-  --update
+- [Installing the CLI](https://depictio.github.io/depictio-docs/latest/installation/cli/)
+- [Using the CLI](https://depictio.github.io/depictio-docs/latest/depictio-cli/usage/)
+- [Triggering ingestion from Nextflow](https://depictio.github.io/depictio-docs/latest/depictio-cli/nextflow-trigger/)
 
-# Show CLI configuration
-depictio-cli config show \
-  --CLI-config-path ~/.depictio/admin_config.yaml
+## In this repository
 
-# Run preflight checks (server accessibility + S3 storage)
-depictio-cli config check \
-  --CLI-config-path ~/.depictio/admin_config.yaml
-
-# Validate a project configuration
-depictio-cli config check \
-  --CLI-config-path ~/.depictio/admin_config.yaml \
-  --project-config-path path/to/project_config.yaml
-```
-
-### Data Commands
-
-```bash
-# Scan data files
-depictio-cli data scan \
-  --CLI-config-path ~/.depictio/admin_config.yaml \
-  --project-config-path path/to/project_config.yaml
-
-# Process data
-depictio-cli data process \
-  --CLI-config-path ~/.depictio/admin_config.yaml \
-  --project-config-path path/to/project_config.yaml
-```
-
-## Development
-
-### Package Structure
-
-The CLI package is structured as follows:
-
-```
-depictio/cli/
-├── pyproject.toml  # CLI-specific package configuration
-├── setup.py        # Setup script with version synchronization
-├── README.md       # This file
-├── test_cli_install.py  # Script to test CLI installation
-└── depictio_cli.py      # Main CLI entry point
-    └── cli/             # CLI implementation
-        ├── commands/    # CLI commands
-        └── utils/       # Utility functions
-```
-
-### Testing the Installation
-
-You can test if the CLI package is correctly installed by running:
-
-```bash
-python test_cli_install.py
-```
-
-### Versioning
-
-The CLI package version is synchronized with the main Depictio package version. When you install the CLI package, the `setup.py` script reads the version from the main `pyproject.toml` file and updates the CLI's `pyproject.toml` accordingly.
-
-### CI/CD Integration
-
-For CI/CD integration, see the following files in the root directory:
-
-- `run_ci_locally.sh`: Script to run the GitHub Actions workflow locally
-- `debug_cli_steps.sh`: Script to debug CLI-specific steps
-- `debug_docker_services.sh`: Script to debug Docker services
-- `CI_DEBUGGING_GUIDE.md`: Guide for debugging CI issues
-- `CI_LOCAL_TESTING_README.md`: Overview of local testing tools
+The `depictio` package is built from the `pyproject.toml` at the repository root. The
+`pyproject.toml` next to this file only defines the alias.

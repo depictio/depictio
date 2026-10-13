@@ -1,0 +1,528 @@
+#!/usr/bin/env python3
+"""Compose the nf-core showcase instance: one Depictio project per scenario.
+
+Every nf-core template ships with at least two bodies of real data: the nf-core
+AWS megatest (which IS the `test_full` profile, executed by nf-core and published
+to ``s3://nf-core-awsmegatests/<pipeline>/results-<sha>/``) and a light CI profile
+run on the EMBL cluster by ``scripts/nfcore_validation_hpc.py``. Showing a
+template against both is what demonstrates it copes with more than one scenario.
+
+WHY ONE PROJECT PER SCENARIO. Every template but viralrecon declares
+``structure: flat``, and the scanner then treats the whole DATA_ROOT as a single
+run (``depictio/cli/cli/utils/scan.py``, the "Treat the provided directory as a
+single run" branch). The underlying ``locations`` field is a list and would give
+one run per entry, named after each directory's basename, but the template binds
+it to a single ``{DATA_ROOT}`` and ``ingest`` takes one results directory. Building a
+project config by hand would reach the list, but ``depictio-cli ingest`` guards its
+dashboard import with ``if is_template_mode``, so that route silently loses the
+template's dashboards, which is the entire point of the showcase.
+
+viralrecon is the exception: it declares ``sequencing-runs`` with
+``runs_regex: run_.*``, so its DATA_ROOT is the PARENT of the run directories and
+one project legitimately holds several runs. Both shapes appear below.
+
+TEMPLATE VARIABLES. A scenario may carry ``--var NAME=VALUE`` pairs: a design
+table (METADATA_FILE) the pipeline does not publish, the design column
+(GROUP_COL) when the run's sheet lacks the template default, or the assembly
+(GENOME) when the run was not aligned to hg38. Values may use two placeholders,
+``{data_root}`` (the scenario's DATA_ROOT) and ``{template_dir}`` (the template
+directory in this repository, where vendored design tables live).
+
+Usage:
+    python3 scripts/nfcore_showcase.py list
+    python3 scripts/nfcore_showcase.py ingest --dry-run
+    python3 scripts/nfcore_showcase.py ingest --only chipseq-1.2.0-megatest \\
+        --cli .../depictio-cli --cli-config ~/.depictio/CLI.<stack>.yaml
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import shlex
+import subprocess
+import sys
+import urllib.error
+import urllib.request
+from dataclasses import dataclass, field
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_ROOT = Path(os.environ.get("NFCORE_LOCAL_ROOT", "~/Data/depictio-nfcore")).expanduser()
+DEFAULT_CLI = _REPO_ROOT / "depictio" / "cli" / ".venv" / "bin" / "depictio-cli"
+
+
+@dataclass(frozen=True)
+class Scenario:
+    """One showcase project: a template, a DATA_ROOT and the name it lands under."""
+
+    pipeline: str
+    version: str
+    scenario: str
+    #: Path under the data root. Defaults to "<pipeline>/<version>/<scenario>";
+    #: sequencing-runs templates override it to point one level up.
+    subpath: str | None = None
+    #: Free text shown by `list`, explaining anything unobvious about this entry.
+    note: str = ""
+    #: Run directories this project is expected to expose (sequencing-runs only).
+    runs: tuple[str, ...] = field(default_factory=tuple)
+    #: Template variables passed as ``--var NAME=VALUE``; see "TEMPLATE VARIABLES".
+    vars: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+
+    @property
+    def key(self) -> str:
+        return f"{self.pipeline}-{self.version}-{self.scenario}"
+
+    @property
+    def template_id(self) -> str:
+        return f"nf-core/{self.pipeline}/{self.version}"
+
+    def data_root(self, root: Path) -> Path:
+        return root / (self.subpath or f"{self.pipeline}/{self.version}/{self.scenario}")
+
+    def template_dir(self) -> Path:
+        return _REPO_ROOT / "depictio" / "projects" / "nf-core" / self.pipeline / self.version
+
+    def resolved_vars(self, root: Path) -> list[tuple[str, str]]:
+        """The ``--var`` pairs with ``{data_root}`` and ``{template_dir}`` expanded."""
+        places = {"data_root": str(self.data_root(root)), "template_dir": str(self.template_dir())}
+        return [(name, value.format(**places)) for name, value in self.vars]
+
+    def missing_var_files(self, root: Path) -> list[str]:
+        """Variables whose value is a file path that does not exist."""
+        return [
+            name
+            for name, value in self.resolved_vars(root)
+            if name.endswith("_FILE") and not Path(value).is_file()
+        ]
+
+
+#: The design table most megatest templates read from their DATA_ROOT; the
+#: fetch's post_fetch_help copies the vendored one there.
+_DESIGN_IN_DATA_ROOT = ("METADATA_FILE", "{data_root}/input/sample_metadata.tsv")
+
+
+# The showcase, in the order projects should be created. Megatest ("full") first
+# for each pipeline so the heavier, more complete dashboard is the one a visitor
+# meets first in a name-sorted listing.
+#
+# ONE VERSION PER TEMPLATE: the newest. ampliseq is the only pipeline shipping
+# several template directories (2.14.0, 2.16.0, 2.18.0) and only 2.18.0 appears
+# here. The older two keep their data on disk for template development, but a
+# showcase that listed them would suggest a version choice a visitor never has
+# to make; the seeding, CLI, CI and docs all resolve the highest version dir.
+SCENARIOS: list[Scenario] = [
+    # 5.1.1 has no megatest prefix: the megatest and TCR runs are the 5.1.0 ones,
+    # which 5.1.1 publishes in the same layout; the CI run is an EMBL HPC 5.1.1 run.
+    Scenario(
+        "airrflow",
+        "5.1.1",
+        "megatest",
+        subpath="airrflow/5.1.0/megatest",
+        note="nf-core AWS 5.1.0 megatest (= test_full; no 5.1.1 megatest)",
+    ),
+    # The CI samplesheets carry no `treatment` column (the GROUP_COL default), so
+    # each names the column that varies in its own sheet.
+    Scenario(
+        "airrflow",
+        "5.1.1",
+        "test",
+        note="EMBL HPC run, CI profile, 6 samples",
+        vars=(("GROUP_COL", "cell_subset"),),
+    ),
+    Scenario(
+        "airrflow",
+        "5.1.1",
+        "test_tcr",
+        subpath="airrflow/5.1.0/test_tcr",
+        note="5.1.0 TCR run: same collections, different receptor",
+        vars=(("GROUP_COL", "subject_id"),),
+    ),
+    # ampliseq has no megatest on disk; 2.16.0 carries two locally produced runs
+    # and 2.18.0 the cluster CI run. 2.14.0 has no data at all.
+    Scenario("ampliseq", "2.18.0", "test", note="CI profile; 7-rank DB, see TEST_DATASETS.md"),
+    Scenario("ampliseq", "2.18.0", "test_pacbio_its", note="sintax route, PacBio ITS"),
+    Scenario("ampliseq", "2.18.0", "test_iontorrent", note="sintax route, IonTorrent single-end"),
+    Scenario(
+        "ampliseq",
+        "2.18.0",
+        "test_multiregion",
+        note="SIDLE route: the only one reaching sidle_reconstructed",
+    ),
+    Scenario(
+        "ampliseq",
+        "2.18.0",
+        "test_pplace",
+        note="phylogenetic placement, a route no other ampliseq scenario takes",
+    ),
+    # atacseq 2.x and chipseq 2.x have no usable megatest: their scenarios are
+    # EMBL HPC runs. atacseq's test_full was aligned to hg19, not the GENOME
+    # default; the CI profiles run on a yeast genome no GENOME value covers.
+    Scenario(
+        "atacseq",
+        "2.1.2",
+        "test_full",
+        note="EMBL HPC run (no 2.x megatest); hg19",
+        vars=(("GENOME", "hg19"),),
+    ),
+    Scenario("atacseq", "2.1.2", "test", note="CI profile, yeast"),
+    Scenario("atacseq", "2.1.2", "test_controls", note="control route: libraries with an input"),
+    Scenario("chipseq", "2.1.0", "test", note="EMBL HPC run (no 2.x megatest); yeast, one antibody"),
+    Scenario("chipseq", "2.1.0", "test_star", note="STAR route: adds the STAR MultiQC module"),
+    # No 3.2.x megatest: EMBL HPC runs, with the MultiQC 1.19 report reprocessed
+    # beside them, which MULTIQC_REPROCESSED binds.
+    Scenario(
+        "cutandrun",
+        "3.2.2",
+        "test_full",
+        note="EMBL HPC run (no 3.2.x megatest); MultiQC reprocessed",
+        vars=(("MULTIQC_REPROCESSED", "true"),),
+    ),
+    Scenario(
+        "cutandrun",
+        "3.2.2",
+        "test_full_small",
+        note="EMBL HPC run, chr20 only; MultiQC reprocessed",
+        vars=(("MULTIQC_REPROCESSED", "true"),),
+    ),
+    Scenario(
+        "demultiplex",
+        "1.8.0",
+        "megatest",
+        note="bcl2fastq route; design read from the template dir (GROUP_COL=input_ng regroups)",
+        vars=(("METADATA_FILE", "{template_dir}/input/library_metadata.tsv"),),
+    ),
+    Scenario("differentialabundance", "2.0.0", "megatest", note="nf-core AWS megatest"),
+    Scenario("differentialabundance", "2.0.0", "test_full", note="the one S3-free test_full"),
+    Scenario(
+        "eager",
+        "2.4.5",
+        "megatest",
+        note="DSL1 run, MultiQC reprocessed; 2.5.x megatests are empty",
+    ),
+    Scenario("funcscan", "4.0.0", "megatest", note="nf-core AWS megatest"),
+    Scenario("funcscan", "4.0.0", "test", note="CI profile; several tools not run"),
+    Scenario(
+        "genomeassembler",
+        "2.0.0",
+        "megatest",
+        note="partial run: half the samples never reached assembly QC; no MultiQC",
+    ),
+    Scenario(
+        "hic", "2.0.0", "megatest", note="MultiQC reprocessed; 2.1.0 megatest is a truncated sync"
+    ),
+    Scenario(
+        "mag",
+        "5.5.0",
+        "megatest",
+        note="5.5.0 release-candidate run 171cf369; the 5.4.2 sync dropped small objects",
+    ),
+    Scenario(
+        "methylseq",
+        "2.3.0",
+        "megatest",
+        note="bismark route, MultiQC reprocessed, vendored design; 3.x/4.x megatests are empty",
+        vars=(_DESIGN_IN_DATA_ROOT,),
+    ),
+    # The samplesheet is vendored and copied into input/ by download_test_data.sh;
+    # the template reads it there by default (GROUP_COL defaults to Condition).
+    Scenario("mhcquant", "3.2.0", "megatest", note="test_full profile, vendored samplesheet"),
+    Scenario(
+        "nanoseq",
+        "3.0.0",
+        "megatest",
+        note="MultiQC reprocessed, vendored design; 3.1.0 megatest is empty",
+        vars=(_DESIGN_IN_DATA_ROOT,),
+    ),
+    Scenario(
+        "riboseq",
+        "2.0.0",
+        "megatest",
+        note="tables-only fetch, vendored samplesheet and design",
+        vars=(("METADATA_FILE", "{data_root}/input/metadata.tsv"),),
+    ),
+    Scenario("rnafusion", "4.1.3", "megatest", note="megatest only: no usable test profile"),
+    Scenario("rnaseq", "3.26.0", "megatest", note="nf-core AWS megatest"),
+    Scenario("rnaseq", "3.26.0", "test", note="CI profile; samplesheet injected"),
+    # The one full-size run in the showcase: 6 ENCODE cell lines, 12 libraries,
+    # a 138 GB output directory that the fetch excludes bring down to 831 MB.
+    Scenario(
+        "rnaseq",
+        "3.26.0",
+        "test_full",
+        note="full-size run, 6 cell lines; the CI profile has 2 samples",
+    ),
+    Scenario(
+        "sarek",
+        "3.10.0",
+        "megatest",
+        note="germline NCBench Agilent exome route; no somatic profile published",
+    ),
+    Scenario("scrnaseq", "4.2.0", "megatest", note="Cell Ranger route (aligner_cellranger/)"),
+    # Same megatest twice: with the vendored design, and without it to show the
+    # template pruning its design collection. The run was aligned to hg19.
+    Scenario(
+        "smrnaseq",
+        "2.4.1",
+        "megatest",
+        note="vendored design; hg19",
+        vars=(_DESIGN_IN_DATA_ROOT, ("GROUP_COL", "condition"), ("GENOME", "hg19")),
+    ),
+    Scenario(
+        "smrnaseq",
+        "2.4.1",
+        "megatest-nodesign",
+        subpath="smrnaseq/2.4.1/megatest",
+        note="same megatest without METADATA_FILE: design collection pruned",
+        vars=(("GENOME", "hg19"),),
+    ),
+    Scenario("taxprofiler", "2.0.1", "megatest", note="nf-core AWS megatest"),
+    Scenario("taxprofiler", "2.0.1", "test", note="CI profile, 2 platforms"),
+    # taxprofiler test_malt is deliberately absent. MALT runs and MultiQC reports it,
+    # but the profile writes no taxpasta/ directory at all, and the template's five
+    # taxpasta collections are the whole point of it: the project would open on a
+    # samplesheet and a MultiQC tab. The route is outside what the template covers,
+    # which is worth recording and not worth showing.
+    Scenario("variantbenchmarking", "1.4.0", "germline_small", note="germline route only"),
+    Scenario(
+        "variantbenchmarking",
+        "1.4.0",
+        "germline_sv",
+        note="SV route, 3 callers; wittyer needs $HOME to exist",
+    ),
+    # som.py is somatic-only, so these two tables exist on no other route. Writes
+    # under snv/, a third variant_type after small/ and structural/+copynumber/.
+    Scenario(
+        "variantbenchmarking",
+        "1.4.0",
+        "somatic_snv",
+        note="somatic route: the som.py tables the other two scenarios cannot reach",
+    ),
+    # sequencing-runs: DATA_ROOT is the PARENT of the run_* directories.
+    # Pointing it at one run_* directory instead would match runs_regex against
+    # that run's own subdirectories and find none. The nanopore run gets a
+    # parent of its own (nanopore/run_1 links to ../run_nanopore): route
+    # conditionals (platform, ARTIC sources) apply per project, so a project
+    # mixing an illumina and a nanopore run takes one layout for both.
+    Scenario(
+        "viralrecon",
+        "3.0.0",
+        "nanopore",
+        subpath="viralrecon/3.0.0/nanopore",
+        note="ARTIC route (platform nanopore), restructured under run_1/",
+        runs=("run_1",),
+    ),
+    Scenario(
+        "viralrecon",
+        "3.0.0",
+        "test",
+        subpath="viralrecon/3.0.0/test",
+        note="CI profile, restructured under run_1/",
+        runs=("run_1",),
+    ),
+    Scenario(
+        "viralrecon",
+        "3.0.0",
+        "test_sispa",
+        subpath="viralrecon/3.0.0/test_sispa",
+        note="metagenomic route instead of amplicon, no S3",
+        runs=("run_1",),
+    ),
+    # rnasplice 1.0.4: the AWS megatest is a truncated sync, so the data is an
+    # EMBL cluster test_full run (GRCh37) with its MultiQC report reprocessed.
+    Scenario(
+        "rnasplice",
+        "1.0.4",
+        "test_full",
+        note="EMBL cluster test_full run; MultiQC reprocessed; hg19, vendored design",
+        vars=(("METADATA_FILE", "{data_root}/input/metadata.tsv"), ("GENOME", "hg19")),
+    ),
+]
+
+
+def _log(message: str) -> None:
+    print(message, flush=True)
+
+
+def _select(args: argparse.Namespace) -> list[Scenario]:
+    if not args.only:
+        return list(SCENARIOS)
+    wanted = set(args.only)
+    chosen = [s for s in SCENARIOS if s.key in wanted or s.pipeline in wanted]
+    missing = wanted - {s.key for s in chosen} - {s.pipeline for s in chosen}
+    if missing:
+        sys.exit(f"unknown --only value(s): {', '.join(sorted(missing))}")
+    return chosen
+
+
+def _existing_projects(cli_config: Path | None, api_url: str | None) -> set[str] | None:
+    """Project names already in the instance, or None when they cannot be read.
+
+    Best effort: the CLI config is YAML and this module is stdlib-only, so the
+    token and base URL are pulled out with a regex. A failure here must not stop
+    an ingest, it only costs the "already there" column.
+    """
+    if not cli_config or not cli_config.is_file():
+        return None
+    text = cli_config.read_text()
+    token = re.search(r"^\s*access_token:\s*['\"]?([^'\"\s]+)", text, re.M)
+    base = api_url or (
+        m.group(1)
+        if (m := re.search(r"^\s*api_base_url:\s*['\"]?([^'\"\s]+)", text, re.M))
+        else None
+    )
+    if not token or not base:
+        return None
+    request = urllib.request.Request(
+        f"{base.rstrip('/')}/depictio/api/v1/projects/get/all",
+        headers={"Authorization": f"Bearer {token.group(1)}"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            payload = json.load(response)
+    except (urllib.error.URLError, TimeoutError, ValueError, OSError):
+        return None
+    return {p.get("name", "") for p in payload} if isinstance(payload, list) else None
+
+
+def cmd_list(args: argparse.Namespace) -> int:
+    known = _existing_projects(args.cli_config, args.api_url)
+    header = f"{'project':<44} {'template':<34} {'data':>7}  {'state':<12} note"
+    _log(header)
+    _log("-" * len(header))
+    missing_data = 0
+    for scenario in _select(args):
+        root = scenario.data_root(args.root)
+        present = root.is_dir()
+        if not present:
+            missing_data += 1
+        size = "-"
+        if present:
+            # Only what the scanner reads: for sequencing-runs that is the
+            # declared run directories, not the work/ tree beside them. Symlinks
+            # are skipped so an aliased run is not counted twice.
+            targets = [root / r for r in scenario.runs] if scenario.runs else [root]
+            total = sum(
+                f.stat().st_size
+                for target in targets
+                for f in target.rglob("*")
+                if f.is_file() and not f.is_symlink()
+            )
+            size = f"{total / 1e6:.0f}MB"
+        if not present:
+            state = "NO DATA"
+        elif scenario.missing_var_files(args.root):
+            state = "NO VAR FILE"
+            missing_data += 1
+        elif known is None:
+            state = "?"
+        elif scenario.key in known:
+            state = "ingested"
+        else:
+            state = "to ingest"
+        _log(
+            f"{scenario.key:<44} {scenario.template_id:<34} {size:>7}  {state:<12} {scenario.note}"
+        )
+    _log("-" * len(header))
+    _log(f"{len(_select(args))} scenarios, {missing_data} without data or var files on disk")
+    return 1 if missing_data else 0
+
+
+def cmd_ingest(args: argparse.Namespace) -> int:
+    """Create one project per scenario with `depictio-cli ingest --template`.
+
+    Every project gets an explicit --project. The automatic name is
+    "<template_id> - <basename(data_root)>", which collides across scenarios that
+    share a basename, and project creation is a check-then-insert with no unique
+    index on the name, so two of them would both insert.
+    """
+    known = _existing_projects(args.cli_config, args.api_url) if args.skip_existing else None
+    scenarios = _select(args)
+    failed: list[str] = []
+    skipped = 0
+    for index, scenario in enumerate(scenarios):
+        project = args.project_prefix + scenario.key
+        root = scenario.data_root(args.root)
+        if not root.is_dir():
+            _log(f"! {project}: no data at {root}")
+            failed.append(project)
+            continue
+        if missing := scenario.missing_var_files(args.root):
+            _log(f"! {project}: file of {', '.join(missing)} not found")
+            failed.append(project)
+            continue
+        if known is not None and project in known:
+            _log(f"= {project}: already in the instance, skipped")
+            skipped += 1
+            continue
+        argv = [str(args.cli), "ingest", str(root)]
+        if args.cli_config:
+            argv += ["--server", str(args.cli_config)]
+        argv += [
+            "--template",
+            scenario.template_id,
+            "--project",
+            project,
+        ]
+        for name, value in scenario.resolved_vars(args.root):
+            argv += ["--var", f"{name}={value}"]
+        if index > 0:
+            # The S3 probe writes the fixed key .depictio/write_test; once per batch.
+            argv += ["--skip", "s3-check"]
+        if args.dry_run:
+            argv.append("--dry-run")
+        _log(f"-> {' '.join(shlex.quote(t) for t in argv)}")
+        code = subprocess.run(argv, check=False, cwd=_REPO_ROOT).returncode
+        if code != 0:
+            _log(f"! {project}: depictio-cli ingest exited {code}")
+            failed.append(project)
+    _log("")
+    _log(
+        f"{len(scenarios) - len(failed) - skipped} ingested, {skipped} skipped, {len(failed)} failed"
+    )
+    for project in failed:
+        _log(f"  failed: {project}")
+    return 1 if failed else 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("--root", type=Path, default=DEFAULT_ROOT, help="local data root")
+    parser.add_argument(
+        "--only", action="append", default=[], help="scenario key or pipeline; repeatable"
+    )
+    parser.add_argument(
+        "--cli-config", type=Path, default=None, help="depictio CLI config (token + api_base_url)"
+    )
+    parser.add_argument(
+        "--api-url", default=None, help="override the API base URL read from the CLI config"
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    listing = sub.add_parser(
+        "list", help="show every scenario, its data and whether it is already ingested"
+    )
+    listing.set_defaults(func=cmd_list)
+
+    ingest = sub.add_parser("ingest", help="create one project per scenario")
+    ingest.add_argument("--cli", type=Path, default=DEFAULT_CLI, help="depictio-cli executable")
+    ingest.add_argument("--project-prefix", default="", help="prefix for every project name")
+    ingest.add_argument(
+        "--skip-existing", action="store_true", help="skip names already in the instance"
+    )
+    ingest.add_argument("--dry-run", action="store_true")
+    ingest.set_defaults(func=cmd_ingest)
+
+    args = parser.parse_args()
+    args.root = args.root.expanduser()
+    if args.cli_config:
+        args.cli_config = args.cli_config.expanduser()
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

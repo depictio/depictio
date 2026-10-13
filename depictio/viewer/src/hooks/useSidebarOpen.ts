@@ -2,16 +2,21 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { SIDEBAR_TOGGLE_EVENT, dispatchPanelToggle } from 'depictio-react-core';
 
 /**
- * Persistent desktop-sidebar state, kept in sync with the Dash app's
- * `sidebar-collapsed` `dcc.Store(storage_type="local")` key. Tab switches
- * re-mount the SPA via `window.location.assign(...)`, so without persistence
- * the sidebar would always reset to its default on every navigation.
+ * Persistent desktop state of the dashboard tab sidebar, scoped per dashboard
+ * *family* like `useFilterPanelOpen`: a tab switch is a full page navigation
+ * to a sibling dashboard document (`window.location.assign(...)`), so a
+ * per-tab key would reset the sidebar on every switch, and a single global key
+ * would let one "close" hide it on every dashboard. The apps pass the family
+ * id once it resolves (the tab's own id stands in before that), and the
+ * key-swap effect below re-reads storage when it lands.
  *
- * Storage convention (matches Dash): `true` = collapsed/hidden, `false` =
- * expanded/visible. The dcc.Store JSON-encodes the value, so the localStorage
- * payload is the literal string `"true"` or `"false"`.
+ * Defaults to open: the tab list is how a multi-tab dashboard is navigated, so
+ * it stays visible unless the viewer closed it on this dashboard last time.
+ *
+ * Storage convention (shared with `useFilterPanelOpen`): `true` = collapsed,
+ * JSON-encoded, so the payload is the literal string `"true"` or `"false"`.
  */
-const STORAGE_KEY = 'sidebar-collapsed';
+const STORAGE_KEY_PREFIX = 'tab-sidebar-collapsed:';
 
 // Mirror of Mantine AppShell's `navbar.width` and `transitionDuration` in
 // App.tsx — kept in this hook so the toggle event payload is self-contained.
@@ -19,20 +24,24 @@ const STORAGE_KEY = 'sidebar-collapsed';
 const NAVBAR_WIDTH_PX = 250;
 const TRANSITION_MS = 300;
 
-function readCollapsed(defaultCollapsed: boolean): boolean {
+function storageKey(scopeId: string | null): string {
+  return `${STORAGE_KEY_PREFIX}${scopeId ?? 'unknown'}`;
+}
+
+function readCollapsed(scopeId: string | null): boolean {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw == null) return defaultCollapsed;
+    const raw = localStorage.getItem(storageKey(scopeId));
+    if (raw == null) return false;
     const parsed = JSON.parse(raw);
-    return typeof parsed === 'boolean' ? parsed : defaultCollapsed;
+    return typeof parsed === 'boolean' ? parsed : false;
   } catch {
-    return defaultCollapsed;
+    return false;
   }
 }
 
-function writeCollapsed(collapsed: boolean): void {
+function writeCollapsed(scopeId: string | null, collapsed: boolean): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(collapsed));
+    localStorage.setItem(storageKey(scopeId), JSON.stringify(collapsed));
   } catch {
     // ignore quota / disabled storage
   }
@@ -42,12 +51,11 @@ function writeCollapsed(collapsed: boolean): void {
  * Returns `[opened, toggle]`, matching the shape of `useDisclosure(false)`'s
  * `[value, { toggle }]` API but with persistence baked in.
  *
- * @param defaultCollapsed - fallback when localStorage has no value yet.
- *   Defaults to `true` (collapsed/hidden) to preserve the current React
- *   viewer's first-run UX.
+ * @param scopeId - scopes persistence (the dashboard family id, in practice;
+ *   see above); `null` falls back to a shared key.
  */
-export function useSidebarOpen(defaultCollapsed = true): [boolean, () => void] {
-  const [opened, setOpened] = useState<boolean>(() => !readCollapsed(defaultCollapsed));
+export function useSidebarOpen(scopeId: string | null): [boolean, () => void] {
+  const [opened, setOpened] = useState<boolean>(() => !readCollapsed(scopeId));
   const flagTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The next state is derived here rather than inside a `setOpened` updater:
   // StrictMode double-invokes updaters in dev, which would dispatch the toggle
@@ -56,6 +64,16 @@ export function useSidebarOpen(defaultCollapsed = true): [boolean, () => void] {
   // of the transition (it self-corrects on the post-transition re-measure,
   // which is why this went unnoticed).
   const openedRef = useRef(opened);
+
+  // Resolving the family id swaps the storage key under a mounted sidebar.
+  const scopeRef = useRef(scopeId);
+  useEffect(() => {
+    if (scopeRef.current === scopeId) return;
+    scopeRef.current = scopeId;
+    const next = !readCollapsed(scopeId);
+    openedRef.current = next;
+    setOpened(next);
+  }, [scopeId]);
 
   const toggle = useCallback(() => {
     // Mark `<body>` so width-aware grids can swap their item transition
@@ -69,7 +87,7 @@ export function useSidebarOpen(defaultCollapsed = true): [boolean, () => void] {
 
     const next = !openedRef.current;
     openedRef.current = next;
-    writeCollapsed(!next);
+    writeCollapsed(scopeRef.current, !next);
     // Tell the dashboard grid the predicted final container delta so it
     // can `setContainerWidth` to the destination value once at the start
     // of the transition. RGL then computes new item transforms once,

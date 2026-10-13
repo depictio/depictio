@@ -19,16 +19,22 @@ from depictio.api.v1.endpoints.backup_endpoints.routes import backup_endpoint_ro
 from depictio.api.v1.endpoints.catalog_endpoints.routes import catalog_endpoint_router
 from depictio.api.v1.endpoints.celery_endpoints.routes import celery_endpoint_router
 from depictio.api.v1.endpoints.cli_endpoints.routes import cli_endpoint_router
+from depictio.api.v1.endpoints.comments_endpoints.routes import comments_endpoint_router
 from depictio.api.v1.endpoints.dashboards_endpoints.filter_state_routes import filter_state_router
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import dashboards_endpoint_router
+from depictio.api.v1.endpoints.dashboards_endpoints.versions_routes import (
+    dashboard_versions_endpoint_router,
+)
 from depictio.api.v1.endpoints.datacollections_endpoints.routes import (
     datacollections_endpoint_router,
 )
 from depictio.api.v1.endpoints.deltatables_endpoints.routes import deltatables_endpoint_router
 from depictio.api.v1.endpoints.events_endpoints.routes import events_router
+from depictio.api.v1.endpoints.export_endpoints.routes import export_endpoint_router
 from depictio.api.v1.endpoints.figure_endpoints.routes import figure_endpoint_router
 from depictio.api.v1.endpoints.files_endpoints.routes import files_endpoint_router
 from depictio.api.v1.endpoints.jbrowse_endpoints.routes import jbrowse_endpoints_router
+from depictio.api.v1.endpoints.jobs_endpoints.routes import jobs_endpoint_router
 from depictio.api.v1.endpoints.links_endpoints.routes import links_endpoint_router
 from depictio.api.v1.endpoints.migrate_endpoints.routes import migrate_endpoint_router
 from depictio.api.v1.endpoints.monitoring_endpoints.routes import monitoring_endpoint_router
@@ -112,6 +118,15 @@ router.include_router(
     tags=["CLI"],
 )
 
+# Registered BEFORE the main dashboards router: that one declares
+# `GET /{dashboard_id}/yaml` and `GET /{dashboard_id}/json`, whose greedy path
+# parameter would otherwise match `/versions/{version_id}` first.
+router.include_router(
+    dashboard_versions_endpoint_router,
+    prefix="/dashboards",
+    tags=["Dashboard Versions"],
+)
+
 router.include_router(
     dashboards_endpoint_router,
     prefix="/dashboards",
@@ -127,6 +142,12 @@ router.include_router(
 )
 
 router.include_router(
+    comments_endpoint_router,
+    prefix="/comments",
+    tags=["Comments"],
+)
+
+router.include_router(
     figure_endpoint_router,
     prefix="/figure",
     tags=["Figure Builder"],
@@ -136,6 +157,15 @@ router.include_router(
     advanced_viz_endpoint_router,
     prefix="/advanced_viz",
     tags=["Advanced Viz"],
+)
+
+# Always mounted so the routes self-report why they are unavailable; each handler
+# checks settings.fastapi.embed_enabled and 404s with an actionable message when
+# embedding is off.
+router.include_router(
+    export_endpoint_router,
+    prefix="/export",
+    tags=["Export"],
 )
 
 router.include_router(
@@ -156,6 +186,16 @@ if settings.monitoring.enabled:
         monitoring_endpoint_router,
         prefix="/monitoring",
         tags=["Monitoring"],
+    )
+
+# Polling API for offloaded work. Absent unless jobs are enabled, so a client
+# probing /jobs on a server without them gets a 404 it can read as "this
+# deployment does not offload" — the same signal /utils/capabilities gives.
+if settings.jobs.enabled:
+    router.include_router(
+        jobs_endpoint_router,
+        prefix="/jobs",
+        tags=["Jobs"],
     )
 
 

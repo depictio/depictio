@@ -1,0 +1,26 @@
+id: nanoplot_nanostats
+name: Long-read summary
+mode: qc/long-read-summary
+description: >-
+  NanoStat's per-sample long-read summary read from the report itself: number
+  of reads, yield, mean and median read length and quality, N50, and the
+  longest and highest-quality read the run produced.
+find:
+  path_glob: "**/NanoStats.txt"
+  path_glob_alt:
+    - "**/*_NanoStats.txt"
+recipe: nanoplot/nanostats.py
+fixture: nanostats.tsv
+renders_as:
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: read_length_n50, color: sample, title: Read length N50 per library} }
+  - { component: card, column: n_reads, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: total_gigabases, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: read_length_n50, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: mean_read_quality, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: mean_read_length, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: median_read_length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: stdev_read_length, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: longest_read_length, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: median_read_quality, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: length_vs_quality, component: advanced_viz, kind: scatter_xy, roles: {x: mean_read_length, y: mean_read_quality, label: sample, size: total_gigabases} }
+  - { component: table }

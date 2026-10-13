@@ -1,0 +1,37 @@
+/*
+ * Monitoring accordions: give an *open* row a container of its own.
+ *
+ * These panes are multi-open by design — you compare two failed tasks, or a
+ * run against the run before it. With every row flush against its neighbours
+ * and no boundary, two expanded rows read as one long block and it stops being
+ * obvious where the first one's detail ends and the second one's header begins.
+ * A border, a subtle fill and a little breathing room turn each open row into a
+ * card without adding chrome to the ninety collapsed ones above it.
+ *
+ * Lives in CSS rather than the `styles` prop because the whole point is the
+ * `[data-active]` variant, and Mantine's `styles` are inline — inline rules
+ * cannot express a state selector, and would out-specify this file if they
+ * tried to set the same properties.
+ */
+
+.depictio-monitoring-accordion .mantine-Accordion-item {
+  /* Transparent rather than absent, so opening a row does not shift the ones
+     below it by the width of a border appearing. */
+  border: 1px solid transparent;
+  border-radius: var(--mantine-radius-sm);
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+.depictio-monitoring-accordion .mantine-Accordion-item[data-active] {
+  border-color: var(--mantine-color-default-border);
+  background-color: var(--mantine-color-default-hover);
+  margin-block: 4px;
+}
+
+/* The header of an open row sits on the same fill as its body; without this it
+   reads as a separate strip sitting on top of the card. */
+.depictio-monitoring-accordion .mantine-Accordion-item[data-active] .mantine-Accordion-control {
+  background-color: transparent;
+}

@@ -11,7 +11,7 @@ Check logs for the specified service:
    - `dash` or `frontend` - Dash frontend logs
    - `mongo` or `mongodb` - MongoDB logs
    - `redis` - Redis cache logs
-   - `minio` or `s3` - MinIO storage logs
+   - `s3` or `minio` - S3 storage (SeaweedFS) logs
    - `celery` or `worker` - Celery worker logs
    - `all` - All services
 
@@ -38,7 +38,7 @@ Check logs for the specified service:
 | dash, frontend | dash |
 | mongo, mongodb | mongodb |
 | redis | redis |
-| minio, s3 | minio |
+| s3, minio | s3 |
 | celery, worker | celery_worker |
 
 ## Usage

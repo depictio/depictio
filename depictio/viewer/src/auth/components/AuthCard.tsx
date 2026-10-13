@@ -1,4 +1,11 @@
-import { Center, Image, Paper, Stack, Title, useMantineColorScheme } from '@mantine/core';
+import { Center, Paper, Stack, Title } from '@mantine/core';
+
+import BrandLogo from '../../chrome/BrandLogo';
+import PoweredBy from '../../chrome/PoweredBy';
+import { useBrandLogoMode } from '../../chrome/useBrandLogoMode';
+import { useBranding } from '../../branding';
+import { useGlassPages } from '../../chrome/variants/glass/pages';
+import { GlassAuthCard } from '../../chrome/variants/glass/pages/GlassAuth';
 
 interface Props {
   heading: string;
@@ -11,12 +18,28 @@ interface Props {
  *
  * Mirrors render_login_form / render_register_form in users_management.py so
  * the React form sits in the same visual frame as the prior Dash version.
+ *
+ * On a branded instance (#397) the logo is the deployment's own and the
+ * literal "Depictio" in headings is swapped for the instance name — done here
+ * rather than at every call site so the greeting logic lives in one place.
  */
 export default function AuthCard({ heading, children }: Props) {
-  const { colorScheme } = useMantineColorScheme();
-  const logoSrc = colorScheme === 'dark'
-    ? '/dashboard/logos/logo_white.svg'
-    : '/dashboard/logos/logo_black.svg';
+  const branding = useBranding();
+  const logoMode = useBrandLogoMode();
+  const glass = useGlassPages();
+  // The space before the colon is a normal break opportunity, so a heading long
+  // enough to wrap (any instance name longer than "Depictio") leaves the colon
+  // stranded alone on the second line. A non-breaking space keeps it welded to
+  // the last word; the heading still wraps, just never on that final space.
+  const resolvedHeading = (
+    branding?.app_name ? heading.replace('Depictio', branding.app_name) : heading
+  ).replace(' :', '\u00A0:');
+
+  // Glass: the frosted card (the callbacks land here; AuthApp draws its own
+  // states with GlassAuthCard directly). Body type, no trailing colon.
+  if (glass) {
+    return <GlassAuthCard title={resolvedHeading.replace(/\u00A0:$/, '')}>{children}</GlassAuthCard>;
+  }
 
   return (
     <Paper
@@ -27,9 +50,16 @@ export default function AuthCard({ heading, children }: Props) {
       style={{ width: 480, maxWidth: '90vw' }}
     >
       <Stack gap="md">
-        <Center>
-          <Image src={logoSrc} alt="Depictio" h={60} w="auto" fit="contain" />
-        </Center>
+        {/* A custom mark gets the room the depictio wordmark does not need: the
+            wordmark is a wide lockup that reads fine at 60, a custom logo is as
+            often a square badge that looks incidental at that height. Width
+            stays capped by BrandLogo's `maxWidth: 100%`. The attribution sits
+            under the mark it qualifies, and renders itself only once that mark
+            is no longer the depictio one (see PoweredBy). */}
+        <Stack gap={6} align="center">
+          <BrandLogo height={logoMode === 'custom' ? 110 : 60} />
+          <PoweredBy />
+        </Stack>
         <Center>
           <Title
             order={2}
@@ -37,7 +67,7 @@ export default function AuthCard({ heading, children }: Props) {
             c="gray"
             style={{ fontFamily: 'Virgil' }}
           >
-            {heading}
+            {resolvedHeading}
           </Title>
         </Center>
         {children}

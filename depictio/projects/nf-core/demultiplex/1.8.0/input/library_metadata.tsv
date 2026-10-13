@@ -1,0 +1,19 @@
+sample	organism	input_ng	replicate
+E-coli_1ng_input-rep01	Escherichia coli	1	1
+E-coli_1ng_input-rep02	Escherichia coli	1	2
+E-coli_1ng_input-rep03	Escherichia coli	1	3
+E-coli_100ng_input-rep04	Escherichia coli	100	1
+E-coli_100ng_input-rep05	Escherichia coli	100	2
+E-coli_100ng_input-rep06	Escherichia coli	100	3
+B-cereus_1ng_input-rep07	Bacillus cereus	1	1
+B-cereus_1ng_input-rep08	Bacillus cereus	1	2
+B-cereus_1ng_input-rep09	Bacillus cereus	1	3
+B-cereus_100ng_input-rep10	Bacillus cereus	100	1
+B-cereus_100ng_input-rep11	Bacillus cereus	100	2
+B-cereus_100ng_input-rep12	Bacillus cereus	100	3
+R-sphaeroides_1ng_input-rep13	Rhodobacter sphaeroides	1	1
+R-sphaeroides_1ng_input-rep14	Rhodobacter sphaeroides	1	2
+R-sphaeroides_1ng_input-rep15	Rhodobacter sphaeroides	1	3
+R-sphaeroides_100ng_input-rep16	Rhodobacter sphaeroides	100	1
+R-sphaeroides_100ng_input-rep17	Rhodobacter sphaeroides	100	2
+R-sphaeroides_100ng_input-rep18	Rhodobacter sphaeroides	100	3

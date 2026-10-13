@@ -3,13 +3,14 @@
 Drives the real `DashboardTableView` / `ProjectTableView` React components in
 headless Chromium, via the dev-only `table-harness.html`, under a CEST
 timezone. This covers what typechecking cannot: that timestamps actually
-render shifted into the viewer's zone, and that the column picker really
+render shifted into the viewer's zone, and that the Table display menu really
 shows/hides columns and persists the choice across a reload.
 
 Skipped unless the harness dev server is running:
     cd depictio/viewer && npx vite --config vite.table-harness.config.ts
 """
 
+import re
 import urllib.error
 import urllib.request
 
@@ -56,13 +57,13 @@ def page_factory():
 
 
 def _toggle_column(page, label: str) -> None:
-    """Toggle a column the way a user does: click its label in the picker.
+    """Toggle a column the way a user does: click its name in the menu.
 
-    Deliberately clicks the checkbox's own label rather than the surrounding
-    menu row — that is the natural target, and it caught a double-toggle where
-    the Checkbox's onChange and Menu.Item's onClick cancelled each other out.
+    Clicks the name rather than the row's box: the name is the natural target,
+    and an earlier picker double-toggled there (its Checkbox's onChange and the
+    Menu.Item's onClick cancelled each other out).
     """
-    page.locator('[aria-label="Choose columns"]').first.click()
+    page.locator('[aria-label="Table display"]').first.click()
     page.get_by_text(label, exact=True).last.click()
     page.keyboard.press("Escape")
 
@@ -162,9 +163,9 @@ class TestColumnPicker:
         """Hiding Title would leave rows with no way to identify them."""
         page, ctx = page_factory()
         try:
-            page.locator('[aria-label="Choose columns"]').first.click()
-            checkbox = page.locator('input[type="checkbox"]:disabled').first
-            assert checkbox.is_checked(), "Title must stay checked and disabled"
+            page.locator('[aria-label="Table display"]').first.click()
+            title_row = page.get_by_role("menuitem").filter(has_text=re.compile(r"^Title")).first
+            assert title_row.is_disabled(), "the Title row must be locked"
             page.keyboard.press("Escape")
             assert "Title" in _column_headers(page)
         finally:

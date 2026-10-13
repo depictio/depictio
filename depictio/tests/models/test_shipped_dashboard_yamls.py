@@ -1,0 +1,666 @@
+"""Every dashboard YAML shipped under ``depictio/projects/`` must import cleanly.
+
+Why this exists rather than leaning on the CLI's own validation: ``depictio
+dashboard validate`` model-validates ``main_dashboard`` and stops. A multi-tab
+file's ``tabs:`` entries are never checked — and that is where most of the
+shipped surface lives (ampliseq ships six tabs, viralrecon four). Bugs that
+reached ``main`` through that gap include an ``advanced_viz`` bound to a
+catalog render id that does not exist, and cards whose secondary strip renders
+blank because the layout and the config that feeds it were never paired.
+
+The three checks below are deliberately of different kinds:
+
+* **model validation** — the same thing the importer does, applied to every
+  tab. ``DashboardDataLite._COMPONENT_TYPE_MAP`` has no entry for ``text`` or
+  ``advanced_viz``, so those two fall through the union to ``dict`` and are
+  never domain-checked; ``advanced_viz`` is re-validated explicitly here,
+  which is what catches a bad ``use:``.
+* **secondary-strip config** — every layout draws from a different field, and
+  choosing the layout without the field it reads produces an empty strip and
+  no error anywhere. The pairing table is copied from the ``secondary_layout``
+  field description in ``depictio/models/components/lite.py``.
+* **section icons and colours** — an id outside ``SECTION_ICON_OPTIONS`` is one
+  the section form cannot offer, so opening that form and saving an unrelated
+  field blanks the icon (``iconOptionsWith`` keeps it selectable, but only
+  until someone picks another). Bundling itself is no longer the risk:
+  ``scripts/generate-icon-subset.mjs`` now scans the shipped dashboard data as
+  well as the TS sources, so a YAML-only id reaches the bundle on its own.
+"""
+
+from __future__ import annotations
+
+import math
+import re
+from pathlib import Path
+from typing import Any
+
+import pytest
+import yaml
+
+from depictio.models.components.advanced_viz.component import AdvancedVizLiteComponent
+from depictio.models.components.advanced_viz.record_link import side_panel_pairs
+from depictio.models.components.text_layout import estimate_text_rows, rendered_text
+from depictio.models.models.dashboards import DashboardDataLite
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+PROJECTS_DIR = REPO_ROOT / "depictio" / "projects"
+SECTION_ICONS_TS = (
+    REPO_ROOT / "depictio" / "viewer" / "src" / "components" / "sections" / "sectionIcons.ts"
+)
+
+# Which config field each secondary layout actually reads. Mirrors the
+# `secondary_layout` field description in depictio/models/components/lite.py;
+# a layout added there and forgotten here is caught by
+# `test_layout_requirement_table_covers_every_layout` below.
+_STRIP_REQUIREMENTS: dict[str, str | None] = {
+    # Drawn from the card's own `aggregations` list.
+    "vertical": "aggregations",
+    "compact": "aggregations",
+    "grid": "aggregations",
+    # Compound aggregation; only this layout can draw it.
+    "box_plot": "box_plot_stats",
+    # Server groups by this column.
+    "top_n": "breakdown_col",
+    "concentration": "breakdown_col",
+    "composition": "breakdown_col",
+    "donut": "breakdown_col",
+    # Denominator for the fill bar / dial.
+    "coverage": "coverage_max",
+    "gauge": "coverage_max",
+    # Axis the sparkline is bucketed along.
+    "trend": "trend_col",
+    # QC cut-off rows are counted against.
+    "threshold": "threshold_value",
+    # Ordered stage columns.
+    "attrition": "attrition_cols",
+    # Computed wholly server-side from the card's own column.
+    "histogram": None,
+    "completeness": None,
+    "uniqueness": None,
+}
+
+
+def _shipped_yamls() -> list[Path]:
+    return sorted(PROJECTS_DIR.glob("**/dashboards/*.yaml"))
+
+
+def _rel(path: Path) -> str:
+    return str(path.relative_to(REPO_ROOT))
+
+
+def _tabs_of(doc: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    """(label, dashboard-dict) for every tab a shipped file declares.
+
+    Two shapes ship today: a flat single dashboard, and `main_dashboard` plus
+    a `tabs` list. Both are unpacked so a check never sees only the first tab.
+    """
+    if "main_dashboard" in doc:
+        out = [("main_dashboard", doc["main_dashboard"])]
+        out += [
+            (f"tabs[{i}] {tab.get('title', '?')!r}", tab)
+            for i, tab in enumerate(doc.get("tabs") or [])
+        ]
+        return out
+    return [("<root>", doc)]
+
+
+def _parse_ts_string_list(source: str, const_name: str) -> set[str]:
+    """The `value:` literals of one exported array in sectionIcons.ts.
+
+    Parsed rather than imported because the allow-list is TypeScript: it is the
+    icon-subset generator's input, so the TS file is the authority and a Python
+    copy of it would be the very drift this test exists to prevent.
+    """
+    match = re.search(rf"export const {const_name}[^=]*=\s*\[(.*?)\n\];", source, re.S)
+    assert match, f"{const_name} not found in {SECTION_ICONS_TS}"
+    return set(re.findall(r"value:\s*'([^']*)'", match.group(1)))
+
+
+ALLOWED_SECTION_ICONS = _parse_ts_string_list(SECTION_ICONS_TS.read_text(), "SECTION_ICON_OPTIONS")
+ALLOWED_SECTION_COLORS = _parse_ts_string_list(
+    SECTION_ICONS_TS.read_text(), "SECTION_COLOR_OPTIONS"
+)
+
+
+@pytest.mark.no_db
+def test_shipped_yamls_are_discovered():
+    """A glob that silently matches nothing would make every test below vacuous."""
+    assert len(_shipped_yamls()) >= 8
+
+
+@pytest.mark.no_db
+def test_layout_requirement_table_covers_every_layout():
+    """`_STRIP_REQUIREMENTS` must name every layout the model accepts."""
+    field = DashboardDataLite._COMPONENT_TYPE_MAP["card"].model_fields["secondary_layout"]
+    declared = set(field.annotation.__args__)  # type: ignore[union-attr]
+    assert declared == set(_STRIP_REQUIREMENTS), (
+        "secondary_layout gained or lost a value; update _STRIP_REQUIREMENTS "
+        f"(model-only: {sorted(declared - set(_STRIP_REQUIREMENTS))}, "
+        f"table-only: {sorted(set(_STRIP_REQUIREMENTS) - declared)})"
+    )
+
+
+@pytest.mark.no_db
+@pytest.mark.parametrize("path", _shipped_yamls(), ids=_rel)
+def test_every_tab_validates(path: Path):
+    """Model-validate the main dashboard *and* each tab, not just the first."""
+    doc = yaml.safe_load(path.read_text())
+    errors: list[str] = []
+    for label, tab in _tabs_of(doc):
+        try:
+            DashboardDataLite.model_validate(tab)
+        except Exception as exc:  # pydantic ValidationError or a validator's ValueError
+            errors.append(f"{label}: {exc}")
+    assert not errors, f"{_rel(path)} does not import:\n" + "\n\n".join(errors)
+
+
+@pytest.mark.no_db
+@pytest.mark.parametrize("path", _shipped_yamls(), ids=_rel)
+def test_advanced_viz_components_validate(path: Path):
+    """`advanced_viz` falls through the union to `dict` — check it explicitly.
+
+    This is the check that catches a `use:` naming a catalog render id or
+    output that does not exist, which otherwise surfaces only as a tile that
+    fails to render on a deployed instance.
+    """
+    doc = yaml.safe_load(path.read_text())
+    errors: list[str] = []
+    for label, tab in _tabs_of(doc):
+        for comp in tab.get("components") or []:
+            if not isinstance(comp, dict) or comp.get("component_type") != "advanced_viz":
+                continue
+            try:
+                AdvancedVizLiteComponent.model_validate(comp)
+            except Exception as exc:
+                errors.append(f"{label} [{comp.get('tag', '?')}]: {exc}")
+    assert not errors, f"{_rel(path)} has invalid advanced_viz:\n" + "\n\n".join(errors)
+
+
+@pytest.mark.no_db
+@pytest.mark.parametrize("path", _shipped_yamls(), ids=_rel)
+def test_advanced_viz_survives_the_component_union(path: Path):
+    """A component that validates alone can still be lost by the union.
+
+    ``DashboardDataLite.components`` is ``list[LiteComponent | dict[str, Any]]``.
+    Pydantic's smart union runs a strict pass first, and the ``dict`` member
+    matches any mapping, so a component that fails only under strict rules is
+    silently kept as a raw dict instead of raising. It reaches the database
+    with no ``viz_kind`` and the viewer renders `Unknown advanced viz kind: ""`.
+
+    ``test_advanced_viz_components_validate`` cannot see this: it validates each
+    component on its own, where the lax pass applies and everything passes. The
+    trigger found in the wild was ``shaded_bands``, typed as a tuple, which YAML
+    can only spell as a list.
+    """
+    doc = yaml.safe_load(path.read_text())
+    errors: list[str] = []
+    for label, tab in _tabs_of(doc):
+        expected = sum(
+            1
+            for comp in tab.get("components") or []
+            if isinstance(comp, dict) and comp.get("component_type") == "advanced_viz"
+        )
+        if not expected:
+            continue
+        lite = DashboardDataLite.model_validate(tab)
+        degraded = [
+            comp.get("tag") or comp.get("index") or "?"
+            for comp in lite.components
+            if isinstance(comp, dict) and comp.get("component_type") == "advanced_viz"
+        ]
+        if degraded:
+            errors.append(
+                f"{label}: {len(degraded)} of {expected} advanced_viz components lost to the "
+                f"dict member of the union: {', '.join(degraded)}"
+            )
+    assert not errors, f"{_rel(path)} degrades advanced_viz:\n" + "\n\n".join(errors)
+
+
+@pytest.mark.no_db
+@pytest.mark.parametrize("path", _shipped_yamls(), ids=_rel)
+def test_card_secondary_strips_have_the_config_they_read(path: Path):
+    """A layout without the field it draws from renders an empty strip, silently."""
+    doc = yaml.safe_load(path.read_text())
+    errors: list[str] = []
+    for label, tab in _tabs_of(doc):
+        for comp in tab.get("components") or []:
+            if not isinstance(comp, dict) or comp.get("component_type") != "card":
+                continue
+            layout = comp.get("secondary_layout", "vertical")
+            required = _STRIP_REQUIREMENTS.get(layout)
+            if required is None:
+                continue
+            aggregations = comp.get("aggregations") or []
+            if required == "box_plot_stats":
+                satisfied = "box_plot_stats" in aggregations
+            elif required == "aggregations":
+                # `vertical` is the default, so a plain single-metric card
+                # lands here with no strip intended at all. Only a layout the
+                # author chose on purpose is a promise of a strip.
+                if "secondary_layout" not in comp:
+                    continue
+                satisfied = bool(aggregations)
+            else:
+                satisfied = bool(comp.get(required))
+            if not satisfied:
+                errors.append(
+                    f"{label} [{comp.get('tag', '?')}]: secondary_layout "
+                    f"{layout!r} draws from {required!r}, which is unset"
+                )
+    assert not errors, f"{_rel(path)} has cards with a blank secondary strip:\n" + "\n".join(errors)
+
+
+@pytest.mark.no_db
+@pytest.mark.parametrize("path", _shipped_yamls(), ids=_rel)
+def test_component_sections_are_declared_in_the_right_list(path: Path):
+    """A component's `section` must be declared, and in the matching list.
+
+    `filter_sections` and `grid_sections` are two independent lists on purpose:
+    a section named "QC" in the left panel and one in the grid are different
+    placements that happen to share a name. The cost is that declaring a grid
+    section under `filter_sections` fails silently — the section still renders,
+    just expanded and with no icon, which looks like a styling slip rather than
+    a mis-filed declaration. Interactive components live in the filter panel;
+    everything else lives in the grid, except the controls of a grid section's
+    filter bar (`filter_bar`, or `display: strip`), which name that grid
+    section (stripLayout.ts `isBarMember`).
+    """
+    doc = yaml.safe_load(path.read_text())
+    errors: list[str] = []
+    for label, tab in _tabs_of(doc):
+        declared = {
+            "filter_sections": {s.get("name") for s in tab.get("filter_sections") or []},
+            "grid_sections": {s.get("name") for s in tab.get("grid_sections") or []},
+        }
+        bar_sections = {
+            s.get("name")
+            for s in tab.get("grid_sections") or []
+            if s.get("filter_bar") or s.get("display") == "strip"
+        }
+        for comp in tab.get("components") or []:
+            if not isinstance(comp, dict):
+                continue
+            section = comp.get("section")
+            if not section:
+                continue
+            mine, other = (
+                ("filter_sections", "grid_sections")
+                if comp.get("component_type") == "interactive"
+                else ("grid_sections", "filter_sections")
+            )
+            if section in declared[mine]:
+                continue
+            if (
+                comp.get("component_type") == "interactive"
+                and comp.get("placement") != "top"
+                and section in bar_sections
+            ):
+                continue
+            where = f" (it is declared under {other})" if section in declared[other] else ""
+            errors.append(
+                f"{label} [{comp.get('tag', '?')}]: section {section!r} is not declared "
+                f"in {mine}{where} — it renders unstyled and sorts last"
+            )
+    assert not errors, f"{_rel(path)} has undeclared sections:\n" + "\n".join(errors)
+
+
+@pytest.mark.no_db
+@pytest.mark.parametrize("path", _shipped_yamls(), ids=_rel)
+def test_section_icons_and_colors_are_bundled(path: Path):
+    """Section icons must be one the section form can offer.
+
+    `iconOptionsWith` keeps a YAML-authored id selectable so opening the form
+    does not blank it, but the moment a user picks a different icon the
+    original is gone from the list. An id the picker knows is one a user can
+    put back.
+    """
+    doc = yaml.safe_load(path.read_text())
+    errors: list[str] = []
+    for label, tab in _tabs_of(doc):
+        for key in ("filter_sections", "grid_sections"):
+            for section in tab.get(key) or []:
+                icon = section.get("icon")
+                if icon and icon not in ALLOWED_SECTION_ICONS:
+                    errors.append(
+                        f"{label} {key}[{section.get('name', '?')!r}]: icon {icon!r} is not in "
+                        "SECTION_ICON_OPTIONS — it will render as an empty box"
+                    )
+                color = section.get("color")
+                if color and color not in ALLOWED_SECTION_COLORS:
+                    errors.append(
+                        f"{label} {key}[{section.get('name', '?')!r}]: color {color!r} is not a "
+                        f"Mantine palette name in SECTION_COLOR_OPTIONS"
+                    )
+    assert not errors, f"{_rel(path)} has unbundled section styling:\n" + "\n".join(errors)
+
+
+@pytest.mark.no_db
+@pytest.mark.parametrize("path", _shipped_yamls(), ids=_rel)
+def test_upset_set_colouring_declares_its_palette(path: Path):
+    """`color_intersections_by: set` names where its set colours come from.
+
+    plotly-upset falls back to a generic qualitative palette when no set ->
+    colour map was supplied, so the sets get colours no other tile uses. The
+    colours are declared either on the component (`set_colors`) or, when the
+    sets are the values of a metadata column whose values are only known at
+    ingest, through `set_category_column` naming a column of the main tab's
+    `category_colors` (an `auto` entry resolves to every value at import).
+    """
+    doc = yaml.safe_load(path.read_text())
+    tabs = _tabs_of(doc)
+    family_colors = (tabs[0][1].get("category_colors") or {}) if tabs else {}
+    errors: list[str] = []
+    for label, tab in tabs:
+        for comp in tab.get("components") or []:
+            if not isinstance(comp, dict):
+                continue
+            config = comp.get("config") or {}
+            if config.get("viz_kind") != "upset_plot":
+                continue
+            if config.get("color_intersections_by") != "set":
+                continue
+            if config.get("set_colors"):
+                continue
+            if config.get("set_category_column") in family_colors:
+                continue
+            errors.append(
+                f"{label} [{comp.get('tag', '?')}]: color_intersections_by 'set' with no "
+                "set_colors and no set_category_column in the main tab's category_colors "
+                "draws the sets in colours no other tile uses; supply one or use 'degree'"
+            )
+    assert not errors, f"{_rel(path)} has an UpSet with undeclared set colours:\n" + "\n".join(
+        errors
+    )
+
+
+# `packages/depictio-react-core/src/gridConfig.ts`.
+GRID_COLUMNS = 8
+
+
+def _autofits(tab: dict, comp: dict) -> bool:
+    """Whether the viewer sizes this text tile to its content at render."""
+    return tab.get("autofit") is not False and (comp.get("layout") or {}).get("fit") != "fixed"
+
+
+@pytest.mark.no_db
+@pytest.mark.parametrize(
+    "path",
+    _shipped_yamls(),
+    ids=_rel,
+)
+def test_text_tiles_are_tall_enough_for_their_body(path: Path):
+    """Every shipped dashboard, not just the demo ones.
+
+    The stored height only decides the first paint: the viewer autofits text
+    tiles at render, so an autofitting tile needs half of the estimate (it grows
+    from there), and only a `fit: fixed` tile, or one on a tab with autofit off,
+    has to hold the whole body. The estimate counts block markdown per block
+    (`text_layout.estimate_text_rows`), the same rule
+    `build_reference_dashboard.py` sizes its generated tiles with.
+    """
+    doc = yaml.safe_load(path.read_text())
+    errors: list[str] = []
+    for label, tab in _tabs_of(doc):
+        for comp in tab.get("components") or []:
+            if not isinstance(comp, dict) or comp.get("component_type") != "text":
+                continue
+            layout = comp.get("layout") or {}
+            height = layout.get("h")
+            if height is None:
+                continue
+            need = estimate_text_rows(comp.get("body") or "", layout.get("w") or GRID_COLUMNS)
+            floor = math.ceil(need / 2) if _autofits(tab, comp) else need
+            if height < floor:
+                errors.append(
+                    f"{label} [{comp.get('tag', '?')}]: h={height} for a body of ~{need} rows "
+                    f"(needs h>={floor}); raise h or trim the body"
+                )
+    assert not errors, f"{_rel(path)} has overflowing text tiles:\n" + "\n".join(errors)
+
+
+def _is_multiqc_panel(comp: dict) -> bool:
+    """A tile that renders a panel out of the MultiQC report itself."""
+    if comp.get("component_type") == "multiqc":
+        return True
+    if str(comp.get("use") or "").startswith("multiqc/"):
+        return True
+    return bool(comp.get("selected_module") or comp.get("selected_plot"))
+
+
+@pytest.mark.no_db
+@pytest.mark.parametrize("path", _shipped_yamls(), ids=_rel)
+def test_multiqc_tabs_hold_only_multiqc_panels(path: Path):
+    """A tab called MultiQC is the MultiQC report, not a second overview page.
+
+    Tiles built from the pipeline's own tool outputs kept accumulating there
+    because the MultiQC tab is usually the landing tab, which makes it the
+    tempting place for headline numbers. The result was a tab whose name
+    promised one thing and whose content answered another, and a reader with a
+    MultiQC question had to scroll past cards to reach it.
+
+    Three things are not violations:
+      * `text` and `interactive` tiles, the intros and the filters;
+      * anything in a persistent pinned section, which appears on every tab by
+        design (the sample sheet, the reference tables);
+      * a component with `placement: floating`, which overlays the dashboard
+        rather than taking a place in the tab's grid.
+    """
+    doc = yaml.safe_load(path.read_text())
+    errors: list[str] = []
+    for label, tab in _tabs_of(doc):
+        # `main_tab_name` names the main tab; a secondary tab names itself with
+        # `title`. Reading only one of the two is how a MultiQC tab that is not
+        # the landing tab slips past this check.
+        name = tab.get("main_tab_name") or tab.get("title") or ""
+        if "multiqc" not in str(name).lower():
+            continue
+        pinned = {
+            section.get("name")
+            for section in (tab.get("grid_sections") or [])
+            if isinstance(section, dict) and section.get("persistent") and section.get("pin")
+        }
+        for comp in tab.get("components") or []:
+            if not isinstance(comp, dict):
+                continue
+            if comp.get("component_type") in {"text", "interactive"}:
+                continue
+            if comp.get("placement") == "floating":
+                continue
+            if comp.get("section") in pinned:
+                continue
+            if _is_multiqc_panel(comp):
+                continue
+            errors.append(
+                f"{label} [{comp.get('tag', '?')}]: {comp.get('component_type')} on "
+                f"{comp.get('use') or comp.get('data_collection_tag')} in section "
+                f"{comp.get('section')!r}, which is not a MultiQC panel"
+            )
+    assert not errors, f"{_rel(path)} has non-MultiQC tiles on a MultiQC tab:\n" + "\n".join(errors)
+
+
+@pytest.mark.no_db
+@pytest.mark.parametrize("path", _shipped_yamls(), ids=_rel)
+def test_tables_are_full_width(path: Path):
+    """A table narrower than the grid is not a smaller table, it is a broken one.
+
+    AG Grid keeps its columns at their natural width and scrolls horizontally,
+    so a `w: 4` table shows two of its eight columns and spends a third of its
+    height on the scrollbar. Half-width tables kept reappearing in shipped
+    dashboards because a pair of them looks tidy in the YAML, which is why this
+    is a test and not a review note.
+
+    The one exception is a table with a linked record card as its side panel
+    (see `_narrow_table_errors`): the viewer folds that card into a one-column
+    rail until a row is picked, so the table reads at nearly full width.
+    """
+    doc = yaml.safe_load(path.read_text())
+    errors: list[str] = []
+    for label, tab in _tabs_of(doc):
+        errors += [f"{label} {e}" for e in _narrow_table_errors(tab.get("components") or [])]
+    assert not errors, f"{_rel(path)} has narrow tables:\n" + "\n".join(errors)
+
+
+def _narrow_table_errors(components: list[Any]) -> list[str]:
+    """Tables narrower than the grid, bar those sharing the row with their card.
+
+    A table may leave room for a record card whose `linked_component` names it,
+    when the card sits beside it on the same row of the same section and the
+    two together span the whole grid.
+    """
+    comps = [c for c in components if isinstance(c, dict)]
+    paired: set[int] = set()
+    for source_pos, card_pos in side_panel_pairs(comps):
+        source_layout = comps[source_pos].get("layout") or {}
+        card_layout = comps[card_pos].get("layout") or {}
+        if source_layout.get("w", 0) + card_layout.get("w", 0) == GRID_COLUMNS:
+            paired.add(source_pos)
+    errors: list[str] = []
+    for pos, comp in enumerate(comps):
+        if comp.get("component_type") != "table" or pos in paired:
+            continue
+        width = (comp.get("layout") or {}).get("w")
+        if width is None or width == GRID_COLUMNS:
+            continue
+        errors.append(
+            f"[{comp.get('tag', '?')}]: table at w={width}; tables span all "
+            f"{GRID_COLUMNS} columns unless a linked record card fills the rest of the row"
+        )
+    return errors
+
+
+@pytest.mark.no_db
+def test_a_table_may_share_its_row_with_its_linked_record_card():
+    table = {
+        "component_type": "table",
+        "tag": "samples-table",
+        "section": "Samples",
+        "row_selection_enabled": True,
+        "row_selection_column": "sample",
+        "layout": {"x": 0, "y": 0, "w": 5, "h": 6},
+    }
+    card = {
+        "component_type": "advanced_viz",
+        "tag": "sample-card",
+        "section": "Samples",
+        "viz_kind": "record_card",
+        "config": {
+            "viz_kind": "record_card",
+            "id_col": "sample",
+            "linked_component": "samples-table",
+        },
+        "layout": {"x": 5, "y": 0, "w": 3, "h": 6},
+    }
+    assert _narrow_table_errors([table, card]) == []
+    # Unlinked, on another row, in another section, or leaving a gap: still narrow.
+    unlinked = {**card, "config": {"viz_kind": "record_card", "id_col": "sample"}}
+    other_row = {**card, "layout": {**card["layout"], "y": 6}}
+    other_section = {**card, "section": "Elsewhere"}
+    gap = {**card, "layout": {**card["layout"], "w": 2}}
+    for variant in (unlinked, other_row, other_section, gap):
+        assert len(_narrow_table_errors([table, variant])) == 1
+
+
+@pytest.mark.no_db
+def test_a_tool_link_costs_the_tile_nothing():
+    """The href is authored, not rendered, so it must not eat the height budget."""
+    plain = "Peak calling is done by MACS2, per sample."
+    linked = "Peak calling is done by [MACS2](https://github.com/macs3-project/MACS), per sample."
+    assert rendered_text(linked) == plain
+    assert rendered_text(plain) == plain
+    # Tab and run-parameter links render as their label too.
+    assert rendered_text("See [Alpha](tab:Alpha Diversity) and [the run](params:dada2).") == (
+        "See Alpha and the run."
+    )
+    # A bare bracket pair is not a link and keeps its characters.
+    assert rendered_text("see [1] below") == "see [1] below"
+
+
+@pytest.mark.no_db
+@pytest.mark.parametrize(
+    ("body", "width", "rows"),
+    [
+        ("One short sentence.", 8, 1),
+        # A folded paragraph of ~600 characters: six lines at full width, twelve at half.
+        ("word " * 120, 8, 2),
+        ("word " * 120, 4, 4),
+        # Each heading and list item takes a line however short it is.
+        (
+            "### Data & QC\n- [MultiQC](tab:MultiQC): Did the run work?\n"
+            "### Taxa\n- [Community](tab:Community): Who is there?\n"
+            "- [Differential](tab:Differential): What differs?",
+            8,
+            2,
+        ),
+        # A steps flow is one band across a wide tile, and runs down a narrow one.
+        (":::\n", 8, 1),
+        (
+            "::: steps\n1. ![](icon:mdi:dna) **Trim** primers\n"
+            "2. ![](icon:mdi:filter) **Denoise** DADA2\n:::",
+            8,
+            2,
+        ),
+        (
+            "::: steps\n1. ![](icon:mdi:dna) **Trim** primers\n"
+            "2. ![](icon:mdi:filter) **Denoise** DADA2\n:::",
+            4,
+            2,
+        ),
+        # Table rules are not drawn as a line.
+        ("| a | b |\n|---|---|\n| 1 | 2 |", 8, 1),
+    ],
+)
+def test_estimate_text_rows_counts_blocks(body: str, width: int, rows: int):
+    assert estimate_text_rows(body, width) == rows
+
+
+def _viz_kind_of(comp: dict[str, Any]) -> str:
+    """The kind a component ends up rendering as, `use:` renders included.
+
+    A catalog render carries its kind in the catalog rather than in the YAML,
+    so the raw key is read first and the model is asked only when it is absent.
+    """
+    kind = comp.get("viz_kind") or (comp.get("config") or {}).get("viz_kind")
+    if kind:
+        return str(kind)
+    try:
+        return str(AdvancedVizLiteComponent.model_validate(comp).viz_kind or "")
+    except Exception:
+        return ""
+
+
+@pytest.mark.no_db
+def test_no_double_track_binding():
+    """One collection, one track: `coverage_track` and `genome_view` on the same
+    DC in one tab are two drawings of the same rows.
+
+    They are not the same tile and both are worth keeping as kinds
+    (`coverage_track` owns the Celery binning, the smoothing and the
+    median+IQR ribbon; `genome_view` owns the chromosome axis, the zoom and the
+    region brush), but binding both on one collection gives the reader two
+    tiles saying the same thing, one of which is always the less legible. The
+    answer is one tile with `views: [track, locus]`.
+
+    Enforced since wave 2b (2026-09-23): the six templates that bound both
+    (eager, sarek, methylseq, atacseq, chipseq, cutandrun, plus funcscan and hic)
+    now keep one navigator per collection and reach the other tracks through
+    region links.
+    """
+    offenders: list[str] = []
+    for path in _shipped_yamls():
+        doc = yaml.safe_load(path.read_text())
+        if not isinstance(doc, dict):
+            continue
+        for label, tab in _tabs_of(doc):
+            kinds_by_dc: dict[str, set[str]] = {}
+            for comp in tab.get("components") or []:
+                if not isinstance(comp, dict) or comp.get("component_type") != "advanced_viz":
+                    continue
+                kind = _viz_kind_of(comp)
+                if not kind:
+                    continue
+                dc = str(comp.get("data_collection_tag") or comp.get("dc_tag") or "?")
+                kinds_by_dc.setdefault(dc, set()).add(kind)
+            for dc, kinds in sorted(kinds_by_dc.items()):
+                if {"coverage_track", "genome_view"} <= kinds:
+                    offenders.append(f"{_rel(path)} {label} on '{dc}'")
+    assert not offenders, "coverage_track and genome_view bound on one DC:\n" + "\n".join(offenders)

@@ -14,24 +14,32 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { FolderKanban, Globe, Lock } from 'lucide-react';
 
 import type { DashboardListEntry } from 'depictio-react-core';
 import DashboardActionsMenu from '../DashboardActionsMenu';
 import type { CategoryInfo } from '../DashboardsList';
 import type { GroupedDashboards } from '../lib/splitDefaultSections';
 import { dashboardHref, dashboardLinkClickHandler } from '../lib/dashboardLinks';
+import type { RecentEntry } from '../lib/dashboardRecents';
 import { isOwnedByEmail } from '../lib/splitDefaultSections';
 import { coerceString, isImagePath, resolveAssetUrl } from '../lib/format';
 import { WORKFLOW_COLOR_MAP, WORKFLOW_ICON_MAP } from '../lib/workflowIcons';
 import type { Density } from '../hooks/useDashboardViewPrefs';
-import ColumnPicker from '../../components/ColumnPicker';
-import { type ColumnDef, useTableColumns } from '../../lib/useTableColumns';
+import {
+  type ColumnDef,
+  type UseTableColumnsResult,
+  useTableColumns,
+} from '../../lib/useTableColumns';
 import {
   formatDateTime,
   formatDateTimeVerbose,
   formatRelative,
   timestampSortKey,
 } from '../../lib/datetime';
+import { useListingAccents } from '../../lib/useListingAccents';
+import { useGlassPages } from '../../chrome/variants/glass/pages';
+import { useSectionPalettes } from '../../chrome/variants/glass/pages/GlassPage';
 
 export interface DashboardTableViewProps {
   groups: GroupedDashboards[];
@@ -40,21 +48,27 @@ export interface DashboardTableViewProps {
   pinnedIds: Set<string>;
   pinDisabled: boolean;
   density: Density;
+  /** Column state, from `useDashboardTableColumns`. The listing owns it so
+   *  the toolbar's Table display menu and the table read the same choice. */
+  columns: UseTableColumnsResult<DashboardColumnKey>;
   /** When provided, a Category column is rendered (and made sortable) so the
    *  section the dashboard would have lived in is surfaced inline. */
   categoryById?: Map<string, CategoryInfo>;
+  /** Locally-tracked opens, newest first. Per-browser (localStorage), so the
+   *  Last viewed column is empty on a machine the user has never opened the
+   *  dashboard from — see lib/dashboardRecents.ts. */
+  recents: RecentEntry[];
   onView: (d: DashboardListEntry) => void;
   onEdit: (d: DashboardListEntry) => void;
   onDelete: (d: DashboardListEntry) => void;
   onDuplicate: (d: DashboardListEntry) => void;
   onExport: (d: DashboardListEntry) => void;
   onTogglePin: (id: string) => void;
-  onSetDensity: (d: Density) => void;
   onBulkExport: (ids: string[]) => void;
   onBulkDelete: (ids: string[]) => void;
 }
 
-type ColumnKey =
+export type DashboardColumnKey =
   | 'title'
   | 'subtitle'
   | 'category'
@@ -62,6 +76,7 @@ type ColumnKey =
   | 'owner'
   | 'created'
   | 'modified'
+  | 'lastViewed'
   | 'visibility'
   | 'tabs'
   | 'components'
@@ -73,7 +88,7 @@ type SortDir = 'asc' | 'desc';
 
 /** Column catalogue. Order here is the render order; `defaultVisible: false`
  *  keeps the extra metadata columns opt-in so the default table stays readable. */
-const ALL_COLUMNS: ColumnDef<ColumnKey>[] = [
+const ALL_COLUMNS: ColumnDef<DashboardColumnKey>[] = [
   { key: 'title', label: 'Title', alwaysVisible: true },
   { key: 'subtitle', label: 'Subtitle', defaultVisible: false },
   { key: 'category', label: 'Category' },
@@ -81,6 +96,11 @@ const ALL_COLUMNS: ColumnDef<ColumnKey>[] = [
   { key: 'owner', label: 'Owner' },
   { key: 'created', label: 'Created', description: 'Created (local time)' },
   { key: 'modified', label: 'Modified', description: 'Last modified (local time)' },
+  {
+    key: 'lastViewed',
+    label: 'Last viewed',
+    description: 'Last opened in this browser',
+  },
   { key: 'visibility', label: 'Visibility' },
   { key: 'tabs', label: 'Tabs' },
   { key: 'components', label: 'Components', defaultVisible: false },
@@ -89,7 +109,26 @@ const ALL_COLUMNS: ColumnDef<ColumnKey>[] = [
   { key: 'id', label: 'ID', description: 'Dashboard ID', defaultVisible: false },
 ];
 
-const STORAGE_KEY = 'depictio.dashboards.tableColumns.v1';
+// Bumped to v2 with the Last viewed column: `useTableColumns` replays the
+// stored selection verbatim, so a v1 selection would silently omit any column
+// added afterwards. The cost is one reset of per-browser column choices.
+const STORAGE_KEY = 'depictio.dashboards.tableColumns.v2';
+
+/**
+ * The dashboards table's column state. The Category column only makes sense
+ * when the listing supplies the section mapping; without it the column is
+ * dropped from the catalogue, so nobody can enable a column that would always
+ * render as "—".
+ */
+export function useDashboardTableColumns(
+  withCategory: boolean,
+): UseTableColumnsResult<DashboardColumnKey> {
+  const catalogue = useMemo(
+    () => (withCategory ? ALL_COLUMNS : ALL_COLUMNS.filter((c) => c.key !== 'category')),
+    [withCategory],
+  );
+  return useTableColumns<DashboardColumnKey>(STORAGE_KEY, catalogue);
+}
 
 interface Row {
   id: string;
@@ -102,6 +141,8 @@ interface Row {
   isPublic: boolean;
   lastSavedTs: string;
   createdTs: string;
+  /** Epoch ms of the last local open, or null when never opened here. */
+  lastViewedTs: number | null;
   titleText: string;
   subtitle: string;
   workflowSystem: string;
@@ -118,7 +159,7 @@ function compareNullable(a: number | null, b: number | null, dir: SortDir): numb
   return mul * (a - b);
 }
 
-function compareRows(a: Row, b: Row, key: ColumnKey, dir: SortDir): number {
+function compareRows(a: Row, b: Row, key: DashboardColumnKey, dir: SortDir): number {
   const mul = dir === 'asc' ? 1 : -1;
   switch (key) {
     case 'title':
@@ -138,6 +179,10 @@ function compareRows(a: Row, b: Row, key: ColumnKey, dir: SortDir): number {
       return mul * (timestampSortKey(a.createdTs) - timestampSortKey(b.createdTs));
     case 'modified':
       return mul * (timestampSortKey(a.lastSavedTs) - timestampSortKey(b.lastSavedTs));
+    // Never-opened rows sort last in both directions rather than piling up at
+    // the top of the ascending order, where they'd bury the actual answer.
+    case 'lastViewed':
+      return compareNullable(a.lastViewedTs, b.lastViewedTs, dir);
     case 'visibility':
       return mul * Number(b.isPublic) - mul * Number(a.isPublic);
     case 'tabs':
@@ -205,7 +250,10 @@ const Dash: React.FC = () => (
 /** Absolute local time in the cell, with a tooltip spelling out the timezone
  *  and the original UTC value so a "why is this 2h off?" question answers
  *  itself (issue #932). */
-const TimeCell: React.FC<{ raw: string; empty?: string }> = ({ raw, empty = 'Never' }) => {
+const TimeCell: React.FC<{ raw: string | number | null; empty?: string }> = ({
+  raw,
+  empty = 'Never',
+}) => {
   if (!raw) {
     return (
       <Text size="xs" c="dimmed">
@@ -244,30 +292,31 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
   pinnedIds,
   pinDisabled,
   density,
+  columns,
   categoryById,
+  recents,
   onView,
   onEdit,
   onDelete,
   onDuplicate,
   onExport,
   onTogglePin,
-  onSetDensity,
   onBulkExport,
   onBulkDelete,
 }) => {
-  const [sortKey, setSortKey] = useState<ColumnKey>('modified');
+  const accent = useListingAccents('dashboards');
+  const glass = useGlassPages();
+  const projectInk = `var(--mantine-color-${useSectionPalettes().projects}-filled)`;
+  const [sortKey, setSortKey] = useState<DashboardColumnKey>('modified');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  // The Category column only makes sense when the caller supplies the mapping;
-  // drop it from the picker entirely otherwise so users can't enable a column
-  // that would always render as "—".
-  const columnCatalogue = useMemo(
-    () => (categoryById ? ALL_COLUMNS : ALL_COLUMNS.filter((c) => c.key !== 'category')),
-    [categoryById],
+  const { visibleColumns, isVisible } = columns;
+
+  const lastViewedById = useMemo(
+    () => new Map(recents.map((e) => [e.id, e.ts])),
+    [recents],
   );
-  const { visibleColumns, isVisible, allColumns, toggle, reset, isCustomized } =
-    useTableColumns<ColumnKey>(STORAGE_KEY, columnCatalogue);
 
   const rows = useMemo<Row[]>(() => {
     const list: Row[] = groups.map((g) => {
@@ -290,6 +339,7 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
         isPublic: Boolean(g.parent.is_public),
         lastSavedTs: coerceString(g.parent.last_saved_ts, ''),
         createdTs: coerceString(g.parent.creation_time, ''),
+        lastViewedTs: lastViewedById.get(id) ?? null,
         titleText: g.parent.title || g.parent.dashboard_id,
         subtitle: coerceString(g.parent.subtitle, ''),
         workflowSystem: coerceString(g.parent.workflow_system, ''),
@@ -303,7 +353,7 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
     });
     list.sort((a, b) => compareRows(a, b, sortKey, sortDir));
     return list;
-  }, [groups, projectNames, currentUserEmail, categoryById, sortKey, sortDir]);
+  }, [groups, projectNames, currentUserEmail, categoryById, lastViewedById, sortKey, sortDir]);
 
   // A hidden column must not keep driving the sort order, otherwise the table
   // looks arbitrarily ordered with no visible sort indicator.
@@ -331,13 +381,15 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
     });
   }, [rows]);
 
-  const toggleSort = (key: ColumnKey) => {
+  const toggleSort = (key: DashboardColumnKey) => {
     if (key === sortKey) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortKey(key);
       // Time columns are far more useful newest-first.
-      setSortDir(key === 'modified' || key === 'created' ? 'desc' : 'asc');
+      setSortDir(
+        key === 'modified' || key === 'created' || key === 'lastViewed' ? 'desc' : 'asc',
+      );
     }
   };
 
@@ -368,13 +420,13 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
 
   const verticalSpacing = density === 'compact' ? 4 : 'sm';
 
-  const renderCell = (r: Row, key: ColumnKey): React.ReactNode => {
+  const renderCell = (r: Row, key: DashboardColumnKey): React.ReactNode => {
     switch (key) {
       case 'title': {
         const icon = coerceString(r.dashboard.icon, 'mdi:view-dashboard');
-        const iconColor = coerceString(r.dashboard.icon_color, 'orange');
+        const iconColor = coerceString(r.dashboard.icon_color, accent.tertiary);
         return (
-          <Group gap="xs" wrap="nowrap">
+          <Group gap="xs" wrap="nowrap" className={glass ? 'dc-title-cell' : undefined}>
             {isImagePath(icon) ? (
               <img
                 src={icon}
@@ -402,9 +454,14 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
               component="a"
               href={dashboardHref(String(r.dashboard.dashboard_id))}
               onClick={dashboardLinkClickHandler(() => onView(r.dashboard))}
+              // Same anchor as the thumbnail card, so the public tour's
+              // "Open a dashboard" step finds a target in either view.
+              data-tour-id="dashboard-card"
               style={{ textAlign: 'left', color: 'inherit' }}
+              className={glass ? 'dc-title-link' : undefined}
+              title={glass ? r.titleText : undefined}
             >
-              <Text fw={500} size="sm">
+              <Text fw={500} size="sm" className={glass ? 'dc-title-text' : undefined}>
                 {r.titleText}
               </Text>
             </UnstyledButton>
@@ -435,9 +492,26 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
       case 'project': {
         if (!r.projectName) return <Dash />;
         const pid = (r.dashboard.project_id as string | undefined) || null;
+        // Glass: the project is a place, not a label. Its name as plain text
+        // behind the Projects folder glyph, linked when it has a page.
+        if (glass) {
+          return (
+            <Text
+              size="sm"
+              className="dc-project"
+              component={pid ? 'a' : 'span'}
+              href={pid ? `/projects/${pid}` : undefined}
+              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+              title={r.projectName}
+            >
+              <FolderKanban size={14} strokeWidth={1.9} color={projectInk} aria-hidden />
+              <span>{r.projectName}</span>
+            </Text>
+          );
+        }
         return (
           <Badge
-            color="teal"
+            color={accent.secondary}
             variant="light"
             size="sm"
             component={pid ? 'a' : 'div'}
@@ -455,7 +529,22 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
         return <TimeCell raw={r.createdTs} empty="Unknown" />;
       case 'modified':
         return <TimeCell raw={r.lastSavedTs} />;
+      case 'lastViewed':
+        return <TimeCell raw={r.lastViewedTs} />;
       case 'visibility':
+        if (glass) {
+          const VisIcon = r.isPublic ? Globe : Lock;
+          return (
+            <Badge
+              color={r.isPublic ? 'cyan' : 'gray'}
+              variant="light"
+              size="sm"
+              leftSection={<VisIcon size={12} strokeWidth={2} aria-hidden />}
+            >
+              {r.isPublic ? 'Public' : 'Private'}
+            </Badge>
+          );
+        }
         return (
           <Badge color={r.isPublic ? 'green' : 'grape'} variant="light" size="sm">
             {r.isPublic ? 'Public' : 'Private'}
@@ -554,37 +643,6 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
         </Group>
       )}
 
-      <Group justify="flex-end" px="sm" pt="xs" gap="xs">
-        <ColumnPicker
-          columns={allColumns}
-          isVisible={isVisible}
-          onToggle={toggle}
-          onReset={reset}
-          isCustomized={isCustomized}
-          visibleCount={visibleColumns.length}
-        />
-        <Tooltip label="Density" withinPortal>
-          <ActionIcon.Group>
-            <ActionIcon
-              variant={density === 'cozy' ? 'filled' : 'subtle'}
-              color={density === 'cozy' ? 'orange' : 'gray'}
-              onClick={() => onSetDensity('cozy')}
-              aria-label="Cozy density"
-            >
-              <Icon icon="mdi:format-line-spacing" width={16} />
-            </ActionIcon>
-            <ActionIcon
-              variant={density === 'compact' ? 'filled' : 'subtle'}
-              color={density === 'compact' ? 'orange' : 'gray'}
-              onClick={() => onSetDensity('compact')}
-              aria-label="Compact density"
-            >
-              <Icon icon="mdi:format-align-justify" width={16} />
-            </ActionIcon>
-          </ActionIcon.Group>
-        </Tooltip>
-      </Group>
-
       <Table.ScrollContainer minWidth={800}>
         <Table verticalSpacing={verticalSpacing} highlightOnHover>
           <Table.Thead>
@@ -599,7 +657,7 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
               </Table.Th>
               <Table.Th style={{ width: 36 }} aria-label="Pin" />
               {visibleColumns.map((col) => (
-                <Table.Th key={col.key}>
+                <Table.Th key={col.key} data-col={col.key}>
                   <SortHeader
                     label={col.label}
                     tooltip={col.description}
@@ -609,7 +667,7 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
                   />
                 </Table.Th>
               ))}
-              <Table.Th style={{ width: 36 }} aria-label="Actions" />
+              <Table.Th className="dc-actions-col" style={{ width: 36 }} aria-label="Actions" />
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -655,9 +713,11 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
                     </Tooltip>
                   </Table.Td>
                   {visibleColumns.map((col) => (
-                    <Table.Td key={col.key}>{renderCell(r, col.key)}</Table.Td>
+                    <Table.Td key={col.key} data-col={col.key}>
+                      {renderCell(r, col.key)}
+                    </Table.Td>
                   ))}
-                  <Table.Td>
+                  <Table.Td className="dc-actions-col">
                     <DashboardActionsMenu
                       dashboard={r.dashboard}
                       isOwner={r.isOwner}

@@ -1,0 +1,15 @@
+id: qualimap_bamqc_genome_results
+name: BamQC genome coverage
+description: >-
+  Per-sample depth, mapping quality, error rate and duplication from
+  Qualimap's BamQC genome_results.txt summary.
+find:
+  path_glob: "**/genome_results.txt"
+recipe: qualimap/bamqc_genome_results.py
+fixture: bamqc_genome_results.tsv
+renders_as:
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: mean_coverage, color: sample, title: Mean genome coverage per library} }
+  - { component: card, column: mean_coverage, aggregation: average, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: duplication_rate, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: gc_percentage, aggregation: average, secondary_layout: donut, breakdown_col: sample }
+  - { component: table }

@@ -1,0 +1,18 @@
+BCL2FASTQ:
+  bcl2fastq: 2.20.0.422
+CHECKQC:
+  checkqc: 4.1.0
+FALCO:
+  falco: 1.2.5
+FASTP:
+  fastp: 1.1.0
+MD5SUM:
+  md5sum: 9.5
+SAMSHEE:
+  python: 3.14.3
+  samshee: 0.2.13
+UNTAR_FLOWCELL:
+  untar: 1.34
+Workflow:
+    nf-core/demultiplex: v1.8.0-gdaade37
+    Nextflow: 26.04.6

@@ -179,20 +179,29 @@ def _dataset_of_dashboard(name: str) -> str:
     Dashboard names are consistently prefixed by their dataset, e.g.
     ``ampliseq_multiqc`` → ``ampliseq``, ``advanced_viz_volcano`` →
     ``advanced_viz_showcase``, ``viralrecon_variants`` → ``viralrecon``.
+
+    Every arm is a prefix match, including iris/penguins: their child tabs
+    (``iris_petal``, ``penguins_island_season``) are dashboards in their own
+    right, and an equality test mapped them to themselves — so
+    ``DEPICTIO_SEED_PROJECTS=iris`` silently dropped the tab it was asked for.
     """
-    if name in ("iris", "penguins"):
-        return name
+    if name.startswith("iris"):
+        return "iris"
+    if name.startswith("penguins"):
+        return "penguins"
     if name.startswith("ampliseq"):
         return "ampliseq"
     if name.startswith("advanced_viz"):
         return "advanced_viz_showcase"
     if name.startswith("viralrecon"):
         return "viralrecon"
+    if name.startswith("catalog_conformance"):
+        return "catalog_conformance"
     return name
 
 
 async def create_initial_dashboards(
-    admin_user: UserBeanie, only: set[str] | None = None
+    admin_user: UserBeanie, only: set[str] | None = None, extra: set[str] | None = None
 ) -> list[dict | None]:
     """Create all initial demo dashboards for reference datasets.
 
@@ -200,6 +209,8 @@ async def create_initial_dashboards(
         admin_user: Admin user to set as dashboard owner
         only: Optional allowlist of dataset names (from DEPICTIO_SEED_PROJECTS).
             ``None`` creates dashboards for all datasets.
+        extra: Optional dataset names to include on top of the allowlist (from
+            DEPICTIO_SEED_EXTRA_PROJECTS).
 
     Returns:
         List of dashboard creation responses
@@ -208,14 +219,51 @@ async def create_initial_dashboards(
 
     projects_base = os.path.join(os.path.dirname(__file__), "..", "..", "projects")
 
+    def rel_path(name: str) -> str:
+        try:
+            return ReferenceDatasetRegistry.resolve_dataset_rel_path(name)
+        except FileNotFoundError:
+            # Left out of the installed package (the published wheel ships iris
+            # and penguins only). Its dashboard JSONs are missing too, and
+            # create_dashboard_from_json skips a JSON that does not exist.
+            return ReferenceDatasetRegistry.DATASET_PATHS[name]
+
+    # Resolve each dataset's (possibly versioned) path once — dashboards_config
+    # below references the same dataset up to 23 times (advanced_viz_showcase).
+    rel_paths = {
+        name: rel_path(name)
+        for name in (
+            "iris",
+            "penguins",
+            "ampliseq",
+            "advanced_viz_showcase",
+            "viralrecon",
+            "catalog_conformance",
+        )
+    }
+
     dashboards_config = [
         {
             "name": "iris",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["iris"],
+                rel_paths["iris"],
                 ".db_seeds",
                 "dashboard.json",
+            ),
+            "static_dc_id": STATIC_IDS["iris"]["data_collections"]["iris_table"],
+        },
+        {
+            # Child tab of the iris overview (parent_dashboard_id is pinned in
+            # the JSON). Showcases persistent cross-tab sections: the overview
+            # marks its "Variety" filter section and "Raw Data" grid section
+            # persistent, and this tab receives both through the fan-out.
+            "name": "iris_petal",
+            "json_path": os.path.join(
+                projects_base,
+                ReferenceDatasetRegistry.DATASET_PATHS["iris"],
+                ".db_seeds",
+                "dashboard_petal.json",
             ),
             "static_dc_id": STATIC_IDS["iris"]["data_collections"]["iris_table"],
         },
@@ -223,28 +271,53 @@ async def create_initial_dashboards(
             "name": "penguins",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["penguins"],
+                rel_paths["penguins"],
                 ".db_seeds",
                 "dashboard.json",
             ),
             "static_dc_id": STATIC_IDS["penguins"]["data_collections"]["penguins_complete"],
         },
         {
+            # Child tab of the penguins overview. It is what makes that
+            # dashboard's persistent sections observable at all: `persistent`
+            # is a documented no-op while a family has only one tab.
+            "name": "penguins_island_season",
+            "json_path": os.path.join(
+                projects_base,
+                ReferenceDatasetRegistry.DATASET_PATHS["penguins"],
+                ".db_seeds",
+                "dashboard_island_season.json",
+            ),
+            "static_dc_id": STATIC_IDS["penguins"]["data_collections"]["penguins_complete"],
+        },
+        {
+            # The family's main tab: the synthetic Overview. Listed first so the
+            # child tabs below find their parent already imported.
+            "name": "ampliseq_overview",
+            "json_path": os.path.join(
+                projects_base,
+                rel_paths["ampliseq"],
+                ".db_seeds",
+                "dashboard_overview.json",
+            ),
+            # Use None for multi-DC dashboards to preserve DC IDs from JSON file
+            "static_dc_id": None,
+        },
+        {
             "name": "ampliseq_multiqc",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                rel_paths["ampliseq"],
                 ".db_seeds",
                 "dashboard_multiqc.json",
             ),
-            # Use None for multi-DC dashboards to preserve DC IDs from JSON file
             "static_dc_id": None,
         },
         {
             "name": "ampliseq_alpha_diversity",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                rel_paths["ampliseq"],
                 ".db_seeds",
                 "dashboard_alpha_diversity.json",
             ),
@@ -254,7 +327,7 @@ async def create_initial_dashboards(
             "name": "ampliseq_community",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                rel_paths["ampliseq"],
                 ".db_seeds",
                 "dashboard_community.json",
             ),
@@ -265,7 +338,7 @@ async def create_initial_dashboards(
             "name": "ampliseq_differential",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                rel_paths["ampliseq"],
                 ".db_seeds",
                 "dashboard_differential.json",
             ),
@@ -275,7 +348,7 @@ async def create_initial_dashboards(
             "name": "ampliseq_ordination",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                rel_paths["ampliseq"],
                 ".db_seeds",
                 "dashboard_ordination.json",
             ),
@@ -289,9 +362,33 @@ async def create_initial_dashboards(
             "name": "ampliseq_phylogeny",
             "json_path": os.path.join(
                 projects_base,
-                ReferenceDatasetRegistry.DATASET_PATHS["ampliseq"],
+                rel_paths["ampliseq"],
                 ".db_seeds",
                 "dashboard_phylogeny.json",
+            ),
+            "static_dc_id": None,
+        },
+        # The two demo tabs the reference project adds on top of the nf-core
+        # template (build_reference_dashboard.py). They bind the coordinates,
+        # sampling date and CTD readings only this dataset's metadata carries,
+        # so a real `depictio ingest --template` never receives them.
+        {
+            "name": "ampliseq_sampling_campaign",
+            "json_path": os.path.join(
+                projects_base,
+                rel_paths["ampliseq"],
+                ".db_seeds",
+                "dashboard_sampling_campaign.json",
+            ),
+            "static_dc_id": None,
+        },
+        {
+            "name": "ampliseq_environment",
+            "json_path": os.path.join(
+                projects_base,
+                rel_paths["ampliseq"],
+                ".db_seeds",
+                "dashboard_environment.json",
             ),
             "static_dc_id": None,
         },
@@ -303,7 +400,7 @@ async def create_initial_dashboards(
                 "name": f"advanced_viz_{slug}",
                 "json_path": os.path.join(
                     projects_base,
-                    ReferenceDatasetRegistry.DATASET_PATHS["advanced_viz_showcase"],
+                    rel_paths["advanced_viz_showcase"],
                     ".db_seeds",
                     f"dashboard_{slug}.json",
                 ),
@@ -322,17 +419,35 @@ async def create_initial_dashboards(
                 "rarefaction",
                 "ancombc",
                 "da_barplot",
-                "enrichment",
                 "complex_heatmap",
                 "upset",
-                "ma",
                 "dotplot",
                 "lollipop",
-                "qq",
                 "sunburst",
                 "oncoplot",
                 "coverage_track",
                 "categorical_flow",
+                "profile",
+                "signal_matrix",
+                "fusion_structure",
+                "gene_arrow_track",
+                "gsea_running_score",
+                "sashimi",
+                "scatter_xy",
+                "genome_view",
+                "contact_map",
+                "knee_plot",
+                "damage_profile",
+                "group_compare",
+                "transcript_structure",
+                "cnv_profile",
+                "genome_chord",
+                "record_card",
+                "parallel_coordinates",
+                "locus_section",
+                "benchmark_pr",
+                "benchmark_confusion",
+                "benchmark_ci",
             )
         ),
         # nf-core/viralrecon multi-tab dashboard. Seed JSONs are snapshotted
@@ -346,13 +461,16 @@ async def create_initial_dashboards(
                 "name": f"viralrecon_{slug}",
                 "json_path": os.path.join(
                     projects_base,
-                    ReferenceDatasetRegistry.DATASET_PATHS["viralrecon"],
+                    rel_paths["viralrecon"],
                     ".db_seeds",
                     f"dashboard_{slug}.json",
                 ),
                 "static_dc_id": None,
             }
+            # The Overview is the family's main tab: listed first so the child
+            # tabs find their parent already imported.
             for slug in (
+                "overview",
                 "multiqc",
                 "coverage_depth",
                 "lineage_clustering",
@@ -360,11 +478,37 @@ async def create_initial_dashboards(
                 "sample_qc",
             )
         ),
+        # Optional (DEPICTIO_SEED_EXTRA_PROJECTS) — filtered out below unless the
+        # conformance project itself was seeded. Multi-DC, so DC ids come from
+        # the JSON rather than being forced to one collection.
+        {
+            "name": "catalog_conformance_overview",
+            "json_path": os.path.join(
+                projects_base,
+                rel_paths["catalog_conformance"],
+                ".db_seeds",
+                "dashboard.json",
+            ),
+            "static_dc_id": None,
+        },
+    ]
+
+    # Optional datasets are opt-in in both directions: their dashboards are
+    # skipped unless the project itself was seeded, or they would be created
+    # pointing at a project that does not exist.
+    from depictio.api.v1.db_init_reference_datasets import OPTIONAL_DATASETS
+
+    dashboards_config = [
+        cfg
+        for cfg in dashboards_config
+        if _dataset_of_dashboard(str(cfg["name"])) not in OPTIONAL_DATASETS
+        or _dataset_of_dashboard(str(cfg["name"])) in (extra or set())
     ]
 
     if only is not None:
+        allowed = only | (extra or set())
         dashboards_config = [
-            cfg for cfg in dashboards_config if _dataset_of_dashboard(str(cfg["name"])) in only
+            cfg for cfg in dashboards_config if _dataset_of_dashboard(str(cfg["name"])) in allowed
         ]
 
     results = []
@@ -420,14 +564,9 @@ async def create_dashboard_from_json(
         needs_update = False
         update_fields: dict = {}
 
-        # In public/demo mode, ensure existing reference dashboards stay public so
-        # a pod restart (without a DB wipe) doesn't leave them private and invisible
-        # to anonymous/temporary visitors. We do NOT force this in standard mode —
-        # that would silently revert an operator-driven privacy lockdown (the #779
-        # concern).
-        if settings.auth.is_public_mode and not _check.get("is_public", False):
-            update_fields["is_public"] = True
-            needs_update = True
+        # Visibility is project-driven and converged by
+        # reconcile_dashboard_visibility() at the end of initialize_db, so no
+        # per-dashboard is_public fix-up is needed here.
 
         # Only force static DC ID if specified (for single-DC dashboards like Iris)
         if static_dc_id:
@@ -526,14 +665,12 @@ async def create_dashboard_from_json(
         viewers=[],
     )
 
-    # Reference dashboards are public ONLY when the server runs in public/demo
-    # mode — anonymous/temporary visitors must be able to browse the curated demo
-    # content. On standard deployments they stay private, preserving the #779
-    # security fix (anonymous browsing would otherwise expose all stored_metadata
-    # to the internet). Demo mode implies public mode, so gating on
-    # ``is_public_mode`` covers it. The dashboard owner (admin_user) always has
-    # full access regardless.
-    dashboard_data.is_public = settings.auth.is_public_mode
+    # Visibility is project-driven: save_dashboard stamps `is_public` from the
+    # parent project on insert, so reference dashboards follow their (public)
+    # reference project. On standard deployments "public" only reaches
+    # authenticated users — anonymous access still requires public mode, so the
+    # #779 concern (anonymous internet browsing of stored_metadata) is handled
+    # by the auth mode, not by hiding the flag.
 
     # Create the dashboard object into the database
     response = await save_dashboard(
@@ -662,11 +799,28 @@ async def _bootstrap_admin_and_test_user() -> tuple[UserBeanie | None, dict | No
                     "(no DEPICTIO_BOOTSTRAP_ADMIN_* set)",
                     admin_email,
                 )
+            elif settings.auth.is_password_login_disabled and admin_email:
+                # Google OAuth is the only door in, so this admin's password
+                # can never be used to reach it: /auth/login refuses every
+                # attempt. Requiring one anyway would make an operator invent a
+                # secret whose only job is to be unusable. The email is still
+                # required — it is what the OAuth login matches the admin on
+                # (`create_or_get_user` looks the account up by email), so
+                # setting it to your own Google address is what makes you the
+                # admin without any seeded local account.
+                admin_password = secrets.token_urlsafe(32)
+                logger.info(
+                    "Password sign-in disabled: seeding admin '%s' with an unusable "
+                    "random password; sign in to it with Google",
+                    admin_email,
+                )
             else:
                 raise RuntimeError(
                     "No admin user exists in MongoDB and DEPICTIO_BOOTSTRAP_ADMIN_EMAIL / "
                     "DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD are not set. Set both env vars (via a "
-                    "Kubernetes Secret in production) so the first-boot admin can be created."
+                    "Kubernetes Secret in production) so the first-boot admin can be created. "
+                    "With DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED=true, the email alone is "
+                    "enough: set it to the Google address that should own the instance."
                 )
 
         logger.info(
@@ -748,41 +902,58 @@ async def _bootstrap_admin_and_test_user() -> tuple[UserBeanie | None, dict | No
     return admin_user, token_payload
 
 
-async def initialize_db(wipe: bool = False) -> UserBeanie | None:
+async def wipe_database() -> None:
+    """Empty the database but for the init lock, then the S3 tables it registered.
+
+    Must run before any worker initialises Beanie (see ``handle_initialization``
+    in ``services/lifespan.py``): Beanie creates its indexes then, and a drop
+    afterwards either takes them with it or fails a sibling worker that is still
+    creating them.
+
+    Drops collection by collection rather than the whole database, so the init
+    lock this worker holds never disappears. Dropping the database and restoring
+    the lock left a gap in which a sibling worker took the lock too, and the
+    restore then failed on a duplicate key.
+    """
+    _ensure_mongodb_connection()
+
+    logger.info("Wipe is enabled. Deleting the database...")
+    from depictio.api.v1.db import db, initialization_collection
+
+    for name in db.list_collection_names():
+        if name != initialization_collection.name and not name.startswith("system."):
+            db.drop_collection(name)
+    initialization_collection.delete_many({"_id": {"$ne": "init_lock"}})
+    logger.info("Database deleted successfully.")
+
+    # Wipe orphaned S3 files after MongoDB wipe
+    from depictio.api.v1.endpoints.utils_endpoints.core_functions import (
+        cleanup_orphaned_s3_files,
+    )
+
+    logger.info("Cleaning up S3 after MongoDB wipe")
+    try:
+        # Whatever its age: nothing writes yet, since this worker holds the
+        # init lock and seeding only starts once initialization is done.
+        result = await cleanup_orphaned_s3_files(dry_run=False, force=True, min_age_seconds=0)
+        logger.info(f"S3 cleanup: {result['deleted_count']} objects deleted")
+    except Exception as e:
+        logger.error(f"S3 cleanup failed: {e}")
+        # Don't fail initialization if S3 cleanup fails
+        logger.warning("Continuing with initialization despite S3 cleanup failure")
+
+
+async def initialize_db() -> UserBeanie | None:
     """Initialize the database with default users and groups."""
 
     _ensure_mongodb_connection()
 
-    if wipe:
-        logger.info("Wipe is enabled. Deleting the database...")
-        from depictio.api.v1.db import client, initialization_collection
-
-        # Preserve the init_lock before wiping to prevent other workers from acquiring lock
-        init_lock = initialization_collection.find_one({"_id": "init_lock"})
-
-        client.drop_database(settings.mongodb.db_name)
-        logger.info("Database deleted successfully.")
-
-        # Restore the init_lock to prevent race conditions with other workers
-        if init_lock:
-            initialization_collection.insert_one(init_lock)
-            logger.info("Restored initialization lock after database wipe")
-
-        # Wipe orphaned S3 files after MongoDB wipe
-        from depictio.api.v1.endpoints.utils_endpoints.core_functions import (
-            cleanup_orphaned_s3_files,
-        )
-
-        logger.info("Cleaning up S3 after MongoDB wipe")
-        try:
-            result = await cleanup_orphaned_s3_files(dry_run=False, force=True)
-            logger.info(f"S3 cleanup: {result['deleted_count']} objects deleted")
-        except Exception as e:
-            logger.error(f"S3 cleanup failed: {e}")
-            # Don't fail initialization if S3 cleanup fails
-            logger.warning("Continuing with initialization despite S3 cleanup failure")
-
     logger.info("Running initial database setup...")
+
+    # Indexes come after the (optional) wipe: dropping the database drops them.
+    from depictio.api.v1.db import ensure_project_storage_indexes
+
+    ensure_project_storage_indexes()
 
     # ── Groups (idempotent; non-credential bootstrap) ────────────────────────
     for group_config in (
@@ -818,9 +989,15 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
         from depictio.api.v1.db_init_reference_datasets import create_reference_datasets
 
         seed_filter = settings.seed_projects_filter
+        # Additive, and separate from the allowlist above: an optional project is
+        # a test fixture, so asking for one must not drop the default set.
+        seed_extra = settings.seed_extra_projects_filter
 
         created_projects = await create_reference_datasets(
-            admin_user=admin_user, token_payload=token_payload, only=seed_filter
+            admin_user=admin_user,
+            token_payload=token_payload,
+            only=seed_filter,
+            extra=seed_extra,
         )
 
         # Note: ampliseq-base shell project removed — only the extended (full) variant is loaded
@@ -842,9 +1019,19 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
 
         # Create dashboards for all reference datasets (same allowlist filter)
         dashboard_payloads = await create_initial_dashboards(
-            admin_user=admin_user, only=seed_filter
+            admin_user=admin_user, only=seed_filter, extra=seed_extra
         )
         logger.info(f"Created {len([p for p in dashboard_payloads if p])} dashboards")
+
+    # Visibility is project-driven: converge any dashboard whose `is_public`
+    # flag drifted from its project (pre-existing deployments, older seeds).
+    from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
+        reconcile_dashboard_visibility,
+    )
+
+    corrected = reconcile_dashboard_visibility()
+    if corrected:
+        logger.info(f"Synced is_public with parent project for {corrected} dashboards")
 
     logger.info("Database initialization completed successfully.")
 

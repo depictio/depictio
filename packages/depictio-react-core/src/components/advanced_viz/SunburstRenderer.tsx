@@ -1,14 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  NumberInput,
-  Select,
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
-import Plot from 'react-plotly.js';
+import { Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
+import Plot from './LegendAwarePlot';
 
 import {
   fetchAdvancedVizData,
@@ -16,9 +8,14 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { stableColorMap, TAB10_PALETTE } from '../../colors';
+import { brandColorway, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { useCategoryColorSource } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { isUnassigned, lineageShade, surfaceColour, unassignedGrey } from './hierarchyColors';
+import { pinnedPalette } from './phylo/palette';
+import { VizControlGroup, VizFullRow, VizNumberInput, VizSelect, VizSwitch } from './controls/VizControls';
 import { applyDataTheme, applyLayoutTheme, plotlyThemeFragment } from './plotlyTheme';
+import { usePersistedVizControl } from './usePersistedVizControl';
 
 interface SunburstConfig {
   rank_cols: string[];
@@ -57,28 +54,36 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
   // `startRankIdx` picks which rank is the innermost ring. Choosing a deeper
   // start (e.g. Kingdom instead of Habitat) collapses the outer split — useful
   // for "all habitats mixed" taxonomy views.
-  const [startRankIdx, setStartRankIdx] = useState<number>(0);
-  const [colourByIdx, setColourByIdx] = useState<number>(0);
-  const [maxDepth, setMaxDepth] = useState<number>(DEFAULT_DEPTH);
-  const [palette, setPalette] = useState<'tab10' | 'tab20'>('tab20');
-  const [showCounts, setShowCounts] = useState<boolean>(true);
-  const [minPercent, setMinPercent] = useState<number>(0.5);
+  // The two rank pickers are stored as rank *names*, not indices. rank_cols can
+  // be re-bound in the builder, and a stored index would then quietly point at a
+  // different rank than the author chose. Names also make the index a derived
+  // value, and deriving it is what clamps it: the two effects that used to reset
+  // these on a rank change are gone, which matters because an effect that
+  // corrects persisted state would write to the store on every data change.
+  const [startRank, setStartRank] = usePersistedVizControl<string | null>(metadata, 'start_rank', null);
+  const [colourByRank, setColourByRank] = usePersistedVizControl<string | null>(metadata, 'colour_by_rank', null);
+  const [maxDepth, setMaxDepth] = usePersistedVizControl<number>(metadata, 'max_depth', DEFAULT_DEPTH);
+  // The instance (or dashboard) brand colorway, when there is one. It
+  // becomes an option here and the default, so a branded deployment's
+  // figures match its chrome without the viewer having to pick.
+  const brandPalette = brandColorway(theme);
+  const [palette, setPalette] = usePersistedVizControl<'brand' | 'tab10' | 'tab20'>(
+    metadata,
+    'palette',
+    brandPalette ? 'brand' : 'tab20',
+  );
+  const [showCounts, setShowCounts] = usePersistedVizControl<boolean>(metadata, 'show_counts', true);
+  const [minPercent, setMinPercent] = usePersistedVizControl<number>(metadata, 'min_percent', 0.5);
 
-  useEffect(() => {
-    setMaxDepth(Math.min(3, ranks.length));
-    setStartRankIdx((prev) => (prev >= ranks.length ? 0 : prev));
-    setColourByIdx((prev) => (prev >= ranks.length ? 0 : prev));
-  }, [ranks.length]);
-
-  // Keep colour-by inside the visible window when start/depth changes.
-  useEffect(() => {
+  // An unset or no-longer-present name falls back to the outermost rank.
+  const startRankIdx = Math.max(0, ranks.indexOf(startRank ?? ''));
+  // Colour-by has to stay inside the visible window; anything outside it reads
+  // as the innermost visible ring.
+  const colourByIdx = (() => {
+    const idx = ranks.indexOf(colourByRank ?? '');
     const end = Math.min(ranks.length, startRankIdx + maxDepth);
-    setColourByIdx((prev) => {
-      if (prev < startRankIdx) return startRankIdx;
-      if (prev >= end) return Math.max(startRankIdx, end - 1);
-      return prev;
-    });
-  }, [startRankIdx, maxDepth, ranks.length]);
+    return idx < startRankIdx || idx >= end ? startRankIdx : idx;
+  })();
 
   const requiredCols = useMemo(
     () => [...ranks, config.abundance_col].filter(Boolean) as string[],
@@ -142,6 +147,17 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
     };
   }, [metadata.dc_id, ranks[colourByIdx]]);
 
+  // The colour-by rank's values wear the dashboard's colours for that column
+  // (a Kingdom pinned in its category colours keeps that colour here too),
+  // then the component's own `category_palette`, then the palette.
+  const categorySource = useCategoryColorSource();
+  const colourCol = ranks[colourByIdx] ?? null;
+  const pinned = useMemo(() => {
+    const dashboard = pinnedPalette(categorySource, null, colourCol);
+    const own = config.category_palette ?? null;
+    return dashboard || own ? { ...(dashboard ?? {}), ...(own ?? {}) } : null;
+  }, [categorySource, colourCol, config.category_palette]);
+
   const figure = useMemo(() => {
     if (!rows) return null;
     const start = Math.max(0, Math.min(ranks.length - 1, startRankIdx));
@@ -159,171 +175,232 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
       label: string;
       parent: string;
       value: number;
-      colourKey: string;
       depth: number;
+      /** The colour-by rank's value on this path; null above that rank. */
+      colourKey: string | null;
+      /** Names no group, or sits under one that does. */
+      unassigned: boolean;
+      children: string[];
     }
+    const ROOT = '__all__';
     const nodes = new Map<string, NodeRec>();
+    const tops: string[] = [];
     for (let i = 0; i < abundance.length; i++) {
       const v = Number(abundance[i]) || 0;
       let pathId = '';
       let parentId = '';
-      let colourKey = '';
+      let colourKey: string | null = null;
+      let unassigned = false;
       for (let r = 0; r < depth; r++) {
         const raw = rankValues[r][i];
         if (raw == null || raw === '') break;
         const label = String(raw);
         pathId = pathId ? `${pathId} | ${label}` : label;
-        // Remember the value of the selected "colour by" rank seen on this path.
         if (r === localColourIdx) colourKey = label;
+        unassigned = unassigned || isUnassigned(label);
         const existing = nodes.get(pathId);
         if (existing) {
           existing.value += v;
         } else {
           nodes.set(pathId, {
             label,
-            parent: parentId,
+            parent: parentId || ROOT,
             value: v,
-            colourKey: colourKey || label,
             depth: r,
+            colourKey: r >= localColourIdx ? colourKey : null,
+            unassigned,
+            children: [],
           });
+          if (parentId) nodes.get(parentId)!.children.push(pathId);
+          else tops.push(pathId);
         }
         parentId = pathId;
       }
     }
 
-    // Drop any node whose value is below the user-set minimum-visibility floor.
-    // We compute the floor against the root total so the unit is "% of total".
-    const total = Array.from(nodes.values())
-      .filter((n) => n.parent === '')
-      .reduce((s, n) => s + n.value, 0);
+    const total = tops.reduce((s, id) => s + nodes.get(id)!.value, 0);
     const floor = total > 0 ? total * (minPercent / 100) : 0;
 
-    const ids: string[] = [];
-    const labels: string[] = [];
-    const parents: string[] = [];
-    const values: number[] = [];
-    const colourKeys: string[] = [];
-    nodes.forEach((n, k) => {
-      if (n.value < floor) return;
-      ids.push(k);
-      labels.push(n.label);
-      parents.push(n.parent);
-      values.push(n.value);
-      colourKeys.push(n.colourKey);
-    });
+    // Siblings under the floor are folded into one grey "Other" per parent
+    // rather than dropped: dropped, they left gaps in their parent's ring and
+    // a fringe of slivers too thin to read or hover.
+    const kept: Array<NodeRec & { id: string }> = [];
+    const keep = (ids: string[], parentId: string) => {
+      const byValue = ids.map((id) => ({ id, n: nodes.get(id)! })).sort((a, b) => b.n.value - a.n.value);
+      const small = byValue.filter((c) => c.n.value < floor);
+      const folded = small.length >= 2 ? new Set(small.map((c) => c.id)) : new Set<string>();
+      for (const { id, n } of byValue) {
+        if (folded.has(id)) continue;
+        kept.push({ ...n, id });
+        // Below the floor itself: its own children are smaller still.
+        if (n.value >= floor) keep(n.children, id);
+      }
+      if (folded.size) {
+        const first = nodes.get(small[0].id)!;
+        kept.push({
+          id: `${parentId} | __other__`,
+          label: `Other (${folded.size})`,
+          parent: parentId,
+          value: small.reduce((s, c) => s + c.n.value, 0),
+          depth: first.depth,
+          colourKey: first.colourKey,
+          unassigned: true,
+          children: [],
+        });
+      }
+    };
+    keep(tops, ROOT);
 
-    const paletteArr = palette === 'tab10' ? TAB10_PALETTE : TAB20_PALETTE;
-    const colourSource = stableColorMap(
-      colourRankUniverse ?? Array.from(new Set(colourKeys)),
+    const paletteArr =
+      palette === 'brand' ? (brandPalette ?? TAB20_PALETTE)
+      : palette === 'tab10' ? TAB10_PALETTE
+      : TAB20_PALETTE;
+    const colourMap = stableColorMap(
+      colourRankUniverse ?? kept.map((n) => n.colourKey).filter((k): k is string => Boolean(k)),
       paletteArr as readonly string[],
-      config.category_palette ?? null,
+      pinned,
     );
-    const colors = colourKeys.map((k) => colourSource.get(k) ?? (isDark ? '#888' : '#aaa'));
+    const grey = unassignedGrey(isDark);
+    // Rings above the colour-by rank carry no hue of their own: a neutral
+    // tone, so the colour starts where the grouping the viewer chose does.
+    const context = isDark ? '#4a4d52' : '#9aa1a8';
+    const siblingIndex = new Map<string, number>();
+    const seen = new Map<string, number>();
+    for (const n of kept) {
+      const i = seen.get(n.parent) ?? 0;
+      siblingIndex.set(n.id, i);
+      seen.set(n.parent, i + 1);
+    }
+    const colourOf = (n: NodeRec & { id: string }): string => {
+      if (n.unassigned) return grey;
+      if (n.colourKey == null) return context;
+      return lineageShade(colourMap.get(n.colourKey), n.depth - localColourIdx, siblingIndex.get(n.id) ?? 0, isDark);
+    };
 
-    const labelText = showCounts && values.length > 0
-      ? labels.map((l, i) => {
-          const pct = total > 0 ? (values[i] / total) * 100 : 0;
-          return pct >= 1 ? `${l}\n${pct.toFixed(1)}%` : l;
-        })
-      : labels;
+    const surface = surfaceColour(isDark);
+    const ids = [ROOT, ...kept.map((n) => n.id)];
+    const labels = ['All', ...kept.map((n) => n.label)];
+    const parents = ['', ...kept.map((n) => n.parent)];
+    const values = [total, ...kept.map((n) => n.value)];
+    const colors = [surface, ...kept.map(colourOf)];
+    const parentLabel = (id: string) => (id === ROOT ? 'all' : nodes.get(id)?.label ?? 'all');
+    const customdata = ['', ...kept.map((n) => parentLabel(n.parent))];
+    const leafText = showCounts ? '%{label}<br>%{percentRoot:.1%}' : '%{label}';
 
     return {
       data: [
         {
           type: 'sunburst' as const,
           ids,
-          labels: labelText,
+          labels,
           parents,
           values,
+          customdata,
           branchvalues: 'total' as const,
-          marker: { colors, line: { color: isDark ? '#222' : '#fff', width: 0.5 } },
+          // The centre: the whole, and the way back up after a click zooms in.
+          texttemplate: ['<b>%{label}</b>', ...kept.map(() => leafText)],
+          marker: { colors, line: { color: surface, width: 1.5 } },
+          // Plotly fades leaves to 0.7 by default, which turned every outer
+          // ring into a washed-out copy of its parent's colour.
+          leaf: { opacity: 1 },
           hovertemplate:
-            `<b>%{label}</b><br>${config.abundance_col}: %{value}<br>` +
-            `share: %{percentRoot:.2%}<extra></extra>`,
+            '<b>%{label}</b><br>%{percentRoot:.1%} of all<br>' +
+            '%{percentParent:.1%} of %{customdata}<extra></extra>',
+          // Each label turned whichever way fits it largest: radial text
+          // could not fit a wide, shallow outer slice such as a phylum's.
           insidetextorientation: 'auto' as const,
           maxdepth: depth + 1,
         },
       ],
       layout: {
         ...plotlyThemeFragment(isDark, theme),
-        margin: { l: 0, r: 0, t: 20, b: 0 },
+        margin: { l: 4, r: 4, t: 4, b: 4 },
+        // Labels that would not fit their slice at a legible size are hidden
+        // rather than shrunk to a smudge.
+        uniformtext: { minsize: 10, mode: 'hide' as const },
         autosize: true,
       },
     };
-  }, [rows, config, ranks, startRankIdx, maxDepth, colourByIdx, palette, showCounts, minPercent, colorScheme, theme, colourRankUniverse, isDark]);
+  }, [rows, config, ranks, startRankIdx, maxDepth, colourByIdx, palette, showCounts, minPercent, colorScheme, theme, colourRankUniverse, isDark, pinned]);
 
-  const controls = useMemo(
+  // Encoding tier: which ranks the rings are built from and which one carries
+  // the colour. The palette, the minimum arc and the labels are paint on the
+  // same hierarchy.
+  const primaryControls = useMemo(
     () => {
       const visibleEnd = Math.min(ranks.length, startRankIdx + maxDepth);
-      const colourOptions = ranks
-        .map((r, i) => ({ value: String(i), label: r, idx: i }))
-        .filter((o) => o.idx >= startRankIdx && o.idx < visibleEnd);
+      const colourOptions = ranks.filter((_, i) => i >= startRankIdx && i < visibleEnd);
       const maxDepthAllowed = Math.max(1, ranks.length - startRankIdx);
+      // Most used first: a docked panel shows the first few (DockedControls).
       return (
-      <Stack gap="xs">
-        <Select
-          size="xs"
+      <VizControlGroup title="Hierarchy">
+        <VizSelect
           label="Start from rank"
-          description="Innermost ring — pick a deeper rank to collapse outer splits"
-          value={String(startRankIdx)}
-          onChange={(v) => v != null && setStartRankIdx(Number(v))}
-          data={ranks.map((r, i) => ({ value: String(i), label: r }))}
+          value={ranks[startRankIdx] ?? null}
+          onChange={(v) => v != null && setStartRank(v)}
+          data={ranks}
           allowDeselect={false}
         />
-        <Select
-          size="xs"
-          label="Colour by rank"
-          value={String(colourByIdx)}
-          onChange={(v) => v != null && setColourByIdx(Number(v))}
-          data={colourOptions.map(({ value, label }) => ({ value, label }))}
-          allowDeselect={false}
-        />
-        <NumberInput
-          size="xs"
+        <VizNumberInput
           label="Max depth"
-          description={`1–${maxDepthAllowed}; 3 keeps rings readable`}
           value={maxDepth}
           onChange={(v) => setMaxDepth(Math.max(1, Math.min(maxDepthAllowed, Number(v) || 1)))}
           min={1}
           max={maxDepthAllowed}
         />
-        <Select
-          size="xs"
-          label="Palette"
-          value={palette}
-          onChange={(v) => v && setPalette(v as 'tab10' | 'tab20')}
-          data={[
-            { value: 'tab20', label: 'tab20 (20 colours)' },
-            { value: 'tab10', label: 'tab10 (10 colours)' },
-          ]}
+        <VizSelect
+          label="Colour by rank"
+          value={ranks[colourByIdx] ?? null}
+          onChange={(v) => v != null && setColourByRank(v)}
+          data={colourOptions}
           allowDeselect={false}
         />
-        <NumberInput
-          size="xs"
-          label="Min arc (% of root)"
-          description="Hide slices below this share"
-          value={minPercent}
-          onChange={(v) => setMinPercent(Math.max(0, Math.min(50, Number(v) || 0)))}
-          min={0}
-          max={50}
-          step={0.5}
-          decimalScale={1}
-        />
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Show
-          </Text>
-          <Switch
-          size="xs"
-          checked={showCounts}
-          onChange={(e) => setShowCounts(e.currentTarget.checked)}
-          label="Show % on arcs"
-        />
-        </Stack>
-      </Stack>
+      </VizControlGroup>
       );
     },
-    [colourByIdx, ranks, startRankIdx, maxDepth, palette, minPercent, showCounts],
+    [colourByIdx, ranks, startRankIdx, maxDepth],
+  );
+
+  const controls = useMemo(
+    () => (
+      <>
+        <VizControlGroup title="Colour">
+          <VizSelect
+            label="Palette"
+            value={palette}
+            onChange={(v) => v && setPalette(v as 'brand' | 'tab10' | 'tab20')}
+            data={[
+              ...(brandPalette ? [{ value: 'brand', label: 'Brand colours' }] : []),
+              { value: 'tab20', label: 'tab20 (20 colours)' },
+              { value: 'tab10', label: 'tab10 (10 colours)' },
+            ]}
+            allowDeselect={false}
+          />
+        </VizControlGroup>
+        <VizControlGroup title="Arcs">
+          <VizNumberInput
+            label="Min arc (% of root)"
+            value={minPercent}
+            onChange={(v) => setMinPercent(Math.max(0, Math.min(50, Number(v) || 0)))}
+            min={0}
+            max={50}
+            step={0.5}
+            decimalScale={1}
+          />
+          <VizFullRow>
+            <Text size="xs" c="dimmed">
+              Fold slices below this share into Other
+            </Text>
+          </VizFullRow>
+          <VizSwitch
+            checked={showCounts}
+            onChange={(e) => setShowCounts(e.currentTarget.checked)}
+            label="Show % on arcs"
+          />
+        </VizControlGroup>
+      </>
+    ),
+    [palette, minPercent, showCounts, brandPalette],
   );
 
   return (
@@ -331,6 +408,7 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
       estimated={estimated}
       title={metadata.title || 'Sunburst'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}

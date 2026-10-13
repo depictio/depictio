@@ -19,10 +19,13 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from depictio.api.v1.configs.config import settings
+from depictio.api.v1.configs.security_headers import SECURITY_HEADERS
 from depictio.api.v1.endpoints.routers import router
 from depictio.api.v1.json_response import CustomJSONResponse
 from depictio.api.v1.middleware.analytics_middleware import AnalyticsMiddleware
+from depictio.api.v1.remote_fetch import RemoteFetchFailed, RemoteURLRejected
 from depictio.api.v1.services.lifespan import lifespan
+from depictio.models.s3_access import S3AccessError
 from depictio.version import get_api_version, get_version
 
 
@@ -127,49 +130,21 @@ _logger = logging.getLogger(__name__)
 # defaults. The viewer SPA also sets equivalents at the nginx edge — these
 # are a defence-in-depth fallback for direct backend-port access.
 # ---------------------------------------------------------------------------
-_SECURITY_HEADERS: dict[str, str] = {
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "SAMEORIGIN",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
-    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()",
-    # CSP: the React SPA bundle requires its own assets only; ag-grid / Mantine
-    # ship CSS-in-JS so 'unsafe-inline' is required for style-src. WebSockets to
-    # the same origin are needed for the realtime events stream.
-    #
-    # 'unsafe-eval' is required for WebGL: Plotly draws `scattergl` / `scatter3d`
-    # through regl, which compiles each draw command at runtime via the Function
-    # constructor (`Function.apply(null, ...)` in the vendor-plotly chunk).
-    # Without it every gl trace throws EvalError at first draw, so Volcano,
-    # Manhattan, DotPlot, QQ, Lollipop and Embedding render nothing. The Vite
-    # dev server only appears to work because it sends no CSP at all.
-    # 'wasm-unsafe-eval' covers the Pyodide runtime behind figure Code Mode.
-    #
-    # connect-src also has to name the basemap CDNs, because maplibre fetches a
-    # map's style, glyphs, sprite and vector tiles with fetch/XHR rather than as
-    # images — `img-src https:` does not cover them. Without these a map
-    # component renders its legend over blank white and logs "Style is not done
-    # loading". The three styles Depictio offers (see MAP_STYLES in
-    # depictio/models/components/constants.py) resolve to:
-    #   carto-positron / carto-darkmatter → basemaps.cartocdn.com (style.json),
-    #     which in turn points at tiles.basemaps.cartocdn.com (glyphs, sprite,
-    #     TileJSON) and tiles-{a,b,c,d}.basemaps.cartocdn.com (the .mvt tiles)
-    #   open-street-map → tile.openstreetmap.org
-    # The bare apex is listed separately: a `*.` wildcard does not match it.
-    "Content-Security-Policy": (
-        "default-src 'self'; "
-        "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; "
-        "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data: blob: https:; "
-        "font-src 'self' data:; "
-        "connect-src 'self' ws: wss: "
-        "https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com "
-        "https://tile.openstreetmap.org; "
-        "frame-ancestors 'self'; "
-        "object-src 'none'; "
-        "base-uri 'self'; "
-        "form-action 'self'"
-    ),
-}
+# The policy itself lives in `depictio.api.v1.configs.security_headers` so a
+# route can derive a nonce-bearing variant without importing this module (which
+# imports every router). Re-exported here under its historical name.
+_SECURITY_HEADERS = SECURITY_HEADERS
+
+
+# Component-embed HTML is the one response that must escape the baseline above:
+# it is meant to be framed cross-origin, and `X-Frame-Options: SAMEORIGIN` has no
+# "allow these origins" form, so it cannot be loosened — only omitted. `setdefault`
+# lets a handler override a header but never remove one, so the exemption has to
+# live here. The embed handler sets its own CSP (with explicit frame-ancestors and
+# per-script hashes); see services/export/embed.py::build_embed_csp.
+_EMBED_PATH_RE = re.compile(r"^/depictio/api/v\d+/export/")
+
+_EMBED_OWNED_HEADERS = ("X-Frame-Options", "Content-Security-Policy")
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -177,7 +152,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Any) -> Response:
         response = await call_next(request)
+        # Scoped to HTML so the JSON export format keeps the strict defaults.
+        embed_html = bool(_EMBED_PATH_RE.match(request.url.path)) and response.headers.get(
+            "content-type", ""
+        ).startswith("text/html")
         for header, value in _SECURITY_HEADERS.items():
+            if embed_html and header in _EMBED_OWNED_HEADERS:
+                continue
             response.headers.setdefault(header, value)
         # HSTS only meaningful behind TLS; relying on X-Forwarded-Proto from
         # the nginx viewer / ingress to avoid emitting it on plain-HTTP dev.
@@ -231,6 +212,49 @@ if not _cors_origins:
         "Set DEPICTIO_FASTAPI_CORS_ALLOWED_ORIGINS to allow specific origins."
     )
 
+
+class EmbedPreflightMiddleware(BaseHTTPMiddleware):
+    """Answer CORS preflights for the export routes from the *embed* allowlist.
+
+    ``CORSMiddleware`` above reads ``DEPICTIO_FASTAPI_CORS_ALLOWED_ORIGINS``, is
+    credentialed, and is empty by default, so it answers 400 to a preflight from an
+    origin that is allow-listed only for embedding. Embeds deliberately use a
+    separate, uncredentialed allowlist
+    (``DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS``), and preflights never reach a
+    route handler, so this is the only place that grant can be applied.
+
+    Concretely, it is what makes a conditional GET work: ``If-None-Match`` is not
+    CORS-safelisted, so revalidating against the ETag every export already returns
+    is preflighted. Without this the ETag is served, exposed, and unusable.
+
+    Registered *after* ``CORSMiddleware`` because Starlette runs the most recently
+    added middleware outermost — this must see OPTIONS first. Anything it does not
+    recognise as an allow-listed embed preflight falls through to the global policy
+    untouched.
+    """
+
+    async def dispatch(self, request: Request, call_next: Any) -> Response:
+        if _EMBED_PATH_RE.match(request.url.path):
+            from depictio.api.v1.services.export.cors import preflight_response
+
+            handled = preflight_response(request)
+            if handled is not None:
+                return handled
+        return await call_next(request)
+
+
+app.add_middleware(cast(Any, EmbedPreflightMiddleware))
+
+
+# Local folders are a single-user feature: on a shared server, reading the
+# server's own disk for whoever asks is never right, so the roots are ignored.
+if settings.local_data.root_list and not settings.auth.is_single_user_mode:
+    _logger.warning(
+        "DEPICTIO_LOCAL_DATA_ROOTS is set but single-user mode is off, so local folders "
+        "stay disabled. Set DEPICTIO_AUTH_SINGLE_USER_MODE=true (as `depictio local` "
+        "does) or unset DEPICTIO_LOCAL_DATA_ROOTS."
+    )
+
 # Add analytics middleware if enabled
 if settings.analytics.enabled:
     app.add_middleware(cast(Any, AnalyticsMiddleware), enabled=settings.analytics.enabled)
@@ -259,12 +283,34 @@ _VIEWER_INDEX = _VIEWER_DIST / "index.html"
 # as /static/screenshots/{id}_{light|dark}.png. The path is the canonical
 # screenshot output for both the worker (Playwright writes here) and the
 # React viewer (reads via this mount).
-_SCREENSHOTS_DIR = Path(__file__).resolve().parent / "static" / "screenshots"
+_SCREENSHOTS_DIR = settings.performance.screenshots_path
 _SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 app.mount(
     "/static/screenshots",
     StaticFiles(directory=str(_SCREENSHOTS_DIR)),
     name="dashboard-screenshots",
+)
+
+# Dashboard logos — legacy mount. Uploads now go to MongoDB
+# (services/branding.py) and are served by /dashboards/logo/{id}; this stays so
+# that `logo_url`s written before that move still resolve on deployments where
+# the files happen to have survived. Removable once no stored URL points here.
+_DASHBOARD_LOGOS_DIR = Path(__file__).resolve().parent / "static" / "dashboard_logos"
+_DASHBOARD_LOGOS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount(
+    "/static/dashboard_logos",
+    StaticFiles(directory=str(_DASHBOARD_LOGOS_DIR)),
+    name="dashboard-logos",
+)
+
+# Instance branding logos — legacy mount, same story as the dashboard logos
+# above: uploads live in MongoDB and are served by /utils/branding/logo/{variant}.
+_BRANDING_DIR = Path(__file__).resolve().parent / "static" / "branding"
+_BRANDING_DIR.mkdir(parents=True, exist_ok=True)
+app.mount(
+    "/static/branding",
+    StaticFiles(directory=str(_BRANDING_DIR)),
+    name="instance-branding",
 )
 
 # Workflow logos / icons referenced by the React viewer as ``/assets/images/...``.
@@ -386,8 +432,9 @@ if _VIEWER_DIST.is_dir() and _VIEWER_ASSETS.is_dir() and _VIEWER_INDEX.is_file()
 
     # /profile and /cli-agents → React-based replacements for the
     # Dash /profile and /cli_configs management pages. Same SPA bundle;
-    # main.tsx detects the path prefix and renders <ProfileApp/> or
-    # <CliAgentsApp/>. Coexists with the Dash routes during rollout.
+    # main.tsx detects the path prefix and renders <ProfileApp/>. /cli-agents is
+    # served the same way and redirects client-side to /profile#cli-agents.
+    # Coexists with the Dash routes during rollout.
     @app.get("/profile")
     async def _serve_profile_spa_root() -> FileResponse:
         return _spa_index()
@@ -408,8 +455,8 @@ else:
     logger.warning(
         "⚠️  React viewer bundle not built at %s (missing index.html or "
         "assets/) — /dashboard/ and /dashboard-edit/ routes will "
-        "404 until `cd depictio/viewer && npm install && npm run build` "
-        "is executed.",
+        "404 until it is built: `pnpm install` at the repository root, then "
+        "`pnpm run build` in depictio/viewer (`depictio local up` does both).",
         _VIEWER_DIST,
     )
 
@@ -433,5 +480,49 @@ async def health_check() -> dict[str, str]:
 async def validation_exception_handler(
     _request: object, exc: RequestValidationError
 ) -> JSONResponse:
-    """Handle request validation errors with formatted error details."""
-    return JSONResponse(status_code=422, content={"detail": [str(error) for error in exc.errors()]})
+    """Handle request validation errors with formatted error details.
+
+    The rejected input is left out of each error: for a missing field it is
+    the whole body, storage secrets included, and the caller sent it anyway.
+    """
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": [
+                str({key: value for key, value in error.items() if key != "input"})
+                for error in exc.errors()
+            ]
+        },
+    )
+
+
+@app.exception_handler(S3AccessError)
+async def s3_access_exception_handler(_request: object, exc: S3AccessError) -> JSONResponse:
+    """S3 reads refused by the configuration, or failed at the store.
+
+    ``detail`` is the sanitized message (kind, bucket and prefix, never the
+    instance endpoint, keys or request ids) and ``code`` lets the viewer tell
+    a refusal from a denial or an outage: ``s3_refused`` and the access
+    errors are 422, a wrong region or an unreachable store 502.
+    """
+    return JSONResponse(
+        status_code=exc.status_code, content={"detail": exc.detail, "code": exc.code}
+    )
+
+
+@app.exception_handler(RemoteURLRejected)
+async def remote_url_exception_handler(_request: object, exc: RemoteURLRejected) -> JSONResponse:
+    """User-supplied URLs the fetch gateway refused, or could not fetch.
+
+    What reaches here is raised past a route by the remote reads the API runs
+    in-process (``create_from_url``, the scan and process helpers). ``detail``
+    is the gateway's message, written to be shown to clients. ``code`` is
+    ``remote_url_rejected`` (400) for a refusal by scheme, host, address range
+    or allow/deny list, and ``remote_fetch_failed`` (502) for a URL that passed
+    the checks but answered with an error or not at all.
+    """
+    if isinstance(exc, RemoteFetchFailed):
+        status_code, code = 502, "remote_fetch_failed"
+    else:
+        status_code, code = 400, "remote_url_rejected"
+    return JSONResponse(status_code=status_code, content={"detail": str(exc), "code": code})

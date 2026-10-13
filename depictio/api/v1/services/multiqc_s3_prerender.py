@@ -28,7 +28,7 @@ from depictio.cli.cli.utils.multiqc_figures import figure_cache_key_sha
 
 def _dc_prefix_uri(dc_id: str) -> str:
     """``s3://{bucket}/{dc_id}/prerender/`` — where the CLI uploads this DC's figures."""
-    return f"s3://{settings.minio.bucket}/{dc_id}/prerender/"
+    return f"s3://{settings.s3.bucket}/{dc_id}/prerender/"
 
 
 def _figure_uri(dc_id: str, cache_key: str) -> str:

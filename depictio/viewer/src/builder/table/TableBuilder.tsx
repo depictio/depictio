@@ -9,18 +9,12 @@
  * depictio/models/validation/ag_grid.py.
  */
 import React, { useEffect, useMemo } from 'react';
-import {
-  Accordion,
-  Checkbox,
-  NumberInput,
-  ScrollArea,
-  Stack,
-  Switch,
-  Table,
-} from '@mantine/core';
+import { Checkbox, NumberInput, ScrollArea, Stack, Table } from '@mantine/core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import CrossFilterSection from '../shared/CrossFilterSection';
 import DesignShell from '../shared/DesignShell';
+import { BuilderSection, BuilderSections, SwitchField } from '../shared/BuilderSections';
+import PlacementSection from '../shared/PlacementSection';
 import TablePreview from './TablePreview';
 
 type ColCfg = { hide?: boolean; pinned?: 'left' | 'right' | null };
@@ -61,107 +55,106 @@ const TableBuilder: React.FC = () => {
   );
 
   const form = (
-    <Stack gap="md">
-      <Accordion multiple defaultValue={['display']} variant="separated">
-        <Accordion.Item value="display">
-          <Accordion.Control>Display options</Accordion.Control>
-          <Accordion.Panel>
-            <Stack gap="sm">
-              <Switch
-                label="Striped rows"
-                checked={config.striped ?? true}
-                onChange={(e) =>
-                  patchConfig({ striped: e.currentTarget.checked })
-                }
-              />
-              <Switch
-                label="Compact rows"
-                checked={config.compact ?? false}
-                onChange={(e) =>
-                  patchConfig({ compact: e.currentTarget.checked })
-                }
-              />
-              <Switch
-                label="CSV export"
-                checked={config.export_csv ?? true}
-                onChange={(e) =>
-                  patchConfig({ export_csv: e.currentTarget.checked })
-                }
-              />
-              <NumberInput
-                label="Rows per page"
-                description="Server-paged; larger pages fetch more rows per request"
-                min={1}
-                max={500}
-                clampBehavior="strict"
-                value={config.page_size ?? 100}
-                onChange={(v) =>
-                  patchConfig({ page_size: typeof v === 'number' ? v : 100 })
-                }
-              />
-            </Stack>
-          </Accordion.Panel>
-        </Accordion.Item>
+    <BuilderSections builder="table" required={[]}>
+      <BuilderSection
+        value="display"
+        icon="mdi:table-cog"
+        title="Display options"
+        subtitle="Row striping, density, CSV export and page size"
+      >
+        <Stack gap="md">
+          <SwitchField
+            label="Striped rows"
+            description="Alternate row shading, easier to follow across wide tables."
+            checked={config.striped ?? true}
+            onChange={(checked) => patchConfig({ striped: checked })}
+          />
+          <SwitchField
+            label="Compact rows"
+            description="Tighter rows, more of them on screen."
+            checked={config.compact ?? false}
+            onChange={(checked) => patchConfig({ compact: checked })}
+          />
+          <SwitchField
+            label="CSV export"
+            description="Lets viewers download the table as CSV."
+            checked={config.export_csv ?? true}
+            onChange={(checked) => patchConfig({ export_csv: checked })}
+          />
+          <NumberInput
+            label="Rows per page"
+            description="Server-paged; larger pages fetch more rows per request"
+            min={1}
+            max={500}
+            clampBehavior="strict"
+            value={config.page_size ?? 100}
+            onChange={(v) =>
+              patchConfig({ page_size: typeof v === 'number' ? v : 100 })
+            }
+          />
+        </Stack>
+      </BuilderSection>
 
-        <CrossFilterSection
-          enabled={Boolean(config.row_selection_enabled)}
-          onEnabledChange={(checked) =>
-            patchConfig({ row_selection_enabled: checked })
-          }
-          column={config.row_selection_column}
-          onColumnChange={(name) =>
-            patchConfig({ row_selection_column: name })
-          }
-          columnLabel="Row column"
-          columnDescription="Column to extract from selected rows"
-        />
-
-        <Accordion.Item value="columns">
-          <Accordion.Control>
-            Columns visibility ({visibleCount}/{cols.length} visible)
-          </Accordion.Control>
-          <Accordion.Panel>
-            <ScrollArea h={320} type="auto" offsetScrollbars>
-              <Table withTableBorder withColumnBorders verticalSpacing={4}>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th w={120}>Visible</Table.Th>
-                    <Table.Th>Column</Table.Th>
-                    <Table.Th>Type</Table.Th>
+      <BuilderSection
+        value="columns"
+        icon="mdi:table-column"
+        title={`Columns visibility (${visibleCount}/${cols.length} visible)`}
+        subtitle="Which of the data collection's columns the table shows"
+      >
+        <ScrollArea h={320} type="auto" offsetScrollbars>
+          <Table withTableBorder withColumnBorders verticalSpacing={4}>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th w={120}>Visible</Table.Th>
+                <Table.Th>Column</Table.Th>
+                <Table.Th>Type</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {cols.map((c) => {
+                const cfg = colsJson[c.name] ?? { hide: false };
+                return (
+                  <Table.Tr key={c.name}>
+                    <Table.Td>
+                      <Checkbox
+                        checked={!cfg.hide}
+                        onChange={(e) => {
+                          const next = {
+                            ...colsJson,
+                            [c.name]: {
+                              ...cfg,
+                              hide: !e.currentTarget.checked,
+                            },
+                          };
+                          patchConfig({ cols_json: next });
+                        }}
+                      />
+                    </Table.Td>
+                    <Table.Td>{c.name}</Table.Td>
+                    <Table.Td>{c.type}</Table.Td>
                   </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {cols.map((c) => {
-                    const cfg = colsJson[c.name] ?? { hide: false };
-                    return (
-                      <Table.Tr key={c.name}>
-                        <Table.Td>
-                          <Checkbox
-                            checked={!cfg.hide}
-                            onChange={(e) => {
-                              const next = {
-                                ...colsJson,
-                                [c.name]: {
-                                  ...cfg,
-                                  hide: !e.currentTarget.checked,
-                                },
-                              };
-                              patchConfig({ cols_json: next });
-                            }}
-                          />
-                        </Table.Td>
-                        <Table.Td>{c.name}</Table.Td>
-                        <Table.Td>{c.type}</Table.Td>
-                      </Table.Tr>
-                    );
-                  })}
-                </Table.Tbody>
-              </Table>
-            </ScrollArea>
-          </Accordion.Panel>
-        </Accordion.Item>
-      </Accordion>
-    </Stack>
+                );
+              })}
+            </Table.Tbody>
+          </Table>
+        </ScrollArea>
+      </BuilderSection>
+
+      <CrossFilterSection
+        enabled={Boolean(config.row_selection_enabled)}
+        onEnabledChange={(checked) =>
+          patchConfig({ row_selection_enabled: checked })
+        }
+        column={config.row_selection_column}
+        onColumnChange={(name) =>
+          patchConfig({ row_selection_column: name })
+        }
+        columnLabel="Row column"
+        columnDescription="Column to extract from selected rows"
+      />
+
+      <PlacementSection />
+    </BuilderSections>
   );
 
   return <DesignShell formSlot={form} previewSlot={<TablePreview />} />;

@@ -29,18 +29,22 @@ from depictio.cli.cli.utils.multiqc_figures import figure_cache_key_sha
 
 
 def prerender_dir() -> Path:
-    """Resolve and create the configured prerender directory."""
+    """Resolve the configured prerender directory. Does not create it."""
     raw = settings.multiqc_prerender.prerender_dir
-    path = Path(os.path.expanduser(raw)).resolve()
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+    return Path(os.path.expanduser(raw)).resolve()
 
 
 def dc_dir(dc_id: str) -> Path:
-    """Per-DC directory; created on demand."""
-    path = prerender_dir() / str(dc_id)
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+    """Per-DC directory. Path arithmetic only — no filesystem writes.
+
+    The read paths go through here, and they must never fail on a cache
+    directory the process cannot write to (a read-only mount, or a bind mount
+    Docker created root-owned under a non-root container user). Creation is the
+    writer's job: ``write_figure`` makes the directory it is about to write
+    into, so an unwritable cache degrades to a miss + a logged write failure
+    instead of raising out of the render endpoint.
+    """
+    return prerender_dir() / str(dc_id)
 
 
 def figure_path(dc_id: str, cache_key: str) -> Path:

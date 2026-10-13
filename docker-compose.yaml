@@ -38,19 +38,32 @@ services:
       retries: 5
     restart: unless-stopped
 
-  minio:
-    image: minio/minio:RELEASE.2025-01-20T14-49-07Z
-    container_name: minio
-    # Bundled local object storage (internal-only, no host port). For external
-    # S3, point DEPICTIO_MINIO_* at your endpoint and `docker compose up -d --scale minio=0`.
+  s3:
+    # Bundled local object storage = SeaweedFS (`weed mini`), S3 API on :9000.
+    # The `minio` network alias keeps `http://minio:9000` in existing CLI
+    # configs resolving. Legacy DEPICTIO_MINIO_* variables are still read as a
+    # fallback for DEPICTIO_S3_*. Internal-only, no host port. For external S3,
+    # point DEPICTIO_S3_* at your endpoint and `docker compose up -d --scale s3=0`.
+    image: chrislusf/seaweedfs:4.46
+    container_name: s3
+    networks:
+      default:
+        aliases:
+          - minio
     volumes:
-      - minio_data:/data
+      # New volume name: a pre-existing `minio_data` volume holds MinIO's own
+      # on-disk layout and cannot be reused — see docs/migrate-minio-to-seaweedfs.md.
+      - seaweedfs_data:/data
     environment:
-      MINIO_ROOT_USER: ${DEPICTIO_MINIO_ROOT_USER:-minio}
-      MINIO_ROOT_PASSWORD: ${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}
-    command: server /data --console-address :9001
+      # Static admin identity re-applied on every start (rotate via .env + restart).
+      AWS_ACCESS_KEY_ID: ${DEPICTIO_S3_ROOT_USER:-${DEPICTIO_MINIO_ROOT_USER:-minio}}
+      AWS_SECRET_ACCESS_KEY: ${DEPICTIO_S3_ROOT_PASSWORD:-${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}}
+      # Bucket is created at boot (idempotent) so the API's create_bucket() is a no-op.
+      S3_BUCKET: ${DEPICTIO_S3_BUCKET:-${DEPICTIO_MINIO_BUCKET:-depictio-bucket}}
+    # Admin UI (unauthenticated upstream by default) and WebDAV are switched off.
+    command: ["mini", "-dir=/data", "-s3.port=9000", "-admin.ui=false", "-webdav=false"]
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:9000/healthz || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -58,7 +71,7 @@ services:
     restart: unless-stopped
 
   depictio-backend:
-    image: ghcr.io/depictio/depictio-api:${DEPICTIO_VERSION:-1.5.1}
+    image: ghcr.io/depictio/depictio-api:${DEPICTIO_VERSION:-1.17.4}
     container_name: depictio-backend
     ports:
       # Loopback-only: front with a TLS proxy for external access.
@@ -72,19 +85,52 @@ services:
         required: false
     environment:
       DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
-      DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:-minio}"
-      DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
+      DEPICTIO_S3_ROOT_USER: "${DEPICTIO_S3_ROOT_USER:-${DEPICTIO_MINIO_ROOT_USER:-minio}}"
+      DEPICTIO_S3_ROOT_PASSWORD: "${DEPICTIO_S3_ROOT_PASSWORD:-${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}}"
       DEPICTIO_BOOTSTRAP_ADMIN_EMAIL: "${DEPICTIO_BOOTSTRAP_ADMIN_EMAIL:-}"
       DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD: "${DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD:-}"
       DEPICTIO_BOOTSTRAP_SEED_TEST_USER: "${DEPICTIO_BOOTSTRAP_SEED_TEST_USER:-false}"
       DEPICTIO_BOOTSTRAP_TEST_USER_EMAIL: "${DEPICTIO_BOOTSTRAP_TEST_USER_EMAIL:-test_user@example.com}"
       DEPICTIO_BOOTSTRAP_TEST_USER_PASSWORD: "${DEPICTIO_BOOTSTRAP_TEST_USER_PASSWORD:-test_pwd}"
+      # Remote data sources (URL / manifest scan modes) go through an SSRF
+      # gateway; see .env.example. Defaults are the safe ones (https only, no
+      # host lists, 500 MiB cap) and a value in .env wins. The worker reads the
+      # same variables below and must agree. The allowlist is EXCLUSIVE while set.
+      DEPICTIO_REMOTE_ALLOW_HTTP: "${DEPICTIO_REMOTE_ALLOW_HTTP:-false}"
+      DEPICTIO_REMOTE_URL_ALLOWLIST: "${DEPICTIO_REMOTE_URL_ALLOWLIST:-}"
+      DEPICTIO_REMOTE_URL_DENYLIST: "${DEPICTIO_REMOTE_URL_DENYLIST:-}"
+      DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS: "${DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS:-}"
+      DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS: "${DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS:-}"
+      DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES: "${DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES:-524288000}"
+      DEPICTIO_REMOTE_TIMEOUT_S: "${DEPICTIO_REMOTE_TIMEOUT_S:-30}"
+      DEPICTIO_REMOTE_MAX_REDIRECTS: "${DEPICTIO_REMOTE_MAX_REDIRECTS:-3}"
+      # Component export / embed API, off by default; see .env.example.
+      DEPICTIO_FASTAPI_EMBED_ENABLED: "${DEPICTIO_FASTAPI_EMBED_ENABLED:-false}"
+      DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS: "${DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS:-}"
       # Anonymous installation telemetry — see .env.example and docs/telemetry.md.
       # Set DEPICTIO_TELEMETRY_ENABLED=false (or DO_NOT_TRACK=1) in .env to opt out.
       # The kind is stated rather than guessed: a Compose container and a Helm pod
       # look identical from the inside.
       DEPICTIO_TELEMETRY_ENABLED: "${DEPICTIO_TELEMETRY_ENABLED:-true}"
       DEPICTIO_TELEMETRY_DEPLOYMENT_KIND: "${DEPICTIO_TELEMETRY_DEPLOYMENT_KIND:-docker-compose}"
+      # Release check: admins are told when a newer Depictio exists. Deliberately
+      # NO default: unset (empty) means "on, and the admin may toggle it from
+      # /admin"; any value here wins and locks that toggle. See .env.example.
+      DEPICTIO_VERSION_CHECK_ENABLED: "${DEPICTIO_VERSION_CHECK_ENABLED:-}"
+      # Which view /dashboards opens in for someone who never picked one, and
+      # the geometry of the thumbnails it shows. See .env.example.
+      DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW: "${DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW:-table}"
+      DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_WIDTH: "${DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_WIDTH:-1440}"
+      DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_HEIGHT: "${DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_HEIGHT:-900}"
+      DEPICTIO_PERFORMANCE_SCREENSHOT_SCALE: "${DEPICTIO_PERFORMANCE_SCREENSHOT_SCALE:-2.0}"
+      # Dashboard feedback link, served to the SPA through /utils/public-config.
+      # Off unless both halves are set: the flag alone renders nothing, and so
+      # does a URL without it. The URL is a template whose {dashboard},
+      # {dashboard_id}, {tab} and {url} are filled in the browser, so the link
+      # arrives carrying what the reader was looking at.
+      DEPICTIO_FEEDBACK_ENABLED: "${DEPICTIO_FEEDBACK_ENABLED:-false}"
+      DEPICTIO_FEEDBACK_URL: "${DEPICTIO_FEEDBACK_URL:-}"
+      DEPICTIO_FEEDBACK_LABEL: "${DEPICTIO_FEEDBACK_LABEL:-Feedback}"
       # Forwarded so the automatic CI suppression works through the container
       # boundary. These are set on the machine running Compose, not inside the
       # container, so without this a pipeline that brings Depictio up on every
@@ -106,16 +152,21 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
-        # required:false so external-S3 mode (minio scaled to 0) still boots.
+      s3:
+        # required:false so external-S3 mode (s3 scaled to 0) still boots.
         condition: service_healthy
         required: false
 
   depictio-viewer:
-    image: ghcr.io/depictio/depictio-viewer:${DEPICTIO_VERSION:-1.5.1}
+    image: ghcr.io/depictio/depictio-viewer:${DEPICTIO_VERSION:-1.17.4}
     container_name: depictio-viewer
     ports:
       - 5080:8080
+    environment:
+      # S3 origin (scheme://host[:port]) the browser reads genome_view file
+      # tracks from, added to the CSP connect-src. Defaults to the public S3
+      # URL the backend signs presigned URLs for; empty adds nothing.
+      DEPICTIO_CSP_S3_ORIGIN: "${DEPICTIO_CSP_S3_ORIGIN:-${DEPICTIO_S3_PUBLIC_URL:-${DEPICTIO_MINIO_PUBLIC_URL:-}}}"
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
       interval: 30s
@@ -130,7 +181,7 @@ services:
   depictio-celery-worker:
     container_name: depictio-celery-worker
     # Always enabled — the dashboard editor (stepper / design mode) needs it.
-    image: ghcr.io/depictio/depictio-worker:${DEPICTIO_VERSION:-1.5.1}
+    image: ghcr.io/depictio/depictio-worker:${DEPICTIO_VERSION:-1.17.4}
     volumes:
       - depictio_keys:/app/depictio/keys
       # Shared with the backend (see above) — worker writes screenshots here.
@@ -141,11 +192,74 @@ services:
     environment:
       DEPICTIO_CONTEXT: "server"
       DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
-      DEPICTIO_MINIO_ROOT_USER: "${DEPICTIO_MINIO_ROOT_USER:-minio}"
-      DEPICTIO_MINIO_ROOT_PASSWORD: "${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}"
+      DEPICTIO_S3_ROOT_USER: "${DEPICTIO_S3_ROOT_USER:-${DEPICTIO_MINIO_ROOT_USER:-minio}}"
+      DEPICTIO_S3_ROOT_PASSWORD: "${DEPICTIO_S3_ROOT_PASSWORD:-${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}}"
+      # Remote data source policy: must match the backend block above.
+      DEPICTIO_REMOTE_ALLOW_HTTP: "${DEPICTIO_REMOTE_ALLOW_HTTP:-false}"
+      DEPICTIO_REMOTE_URL_ALLOWLIST: "${DEPICTIO_REMOTE_URL_ALLOWLIST:-}"
+      DEPICTIO_REMOTE_URL_DENYLIST: "${DEPICTIO_REMOTE_URL_DENYLIST:-}"
+      DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS: "${DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS:-}"
+      DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS: "${DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS:-}"
+      DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES: "${DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES:-524288000}"
+      DEPICTIO_REMOTE_TIMEOUT_S: "${DEPICTIO_REMOTE_TIMEOUT_S:-30}"
+      DEPICTIO_REMOTE_MAX_REDIRECTS: "${DEPICTIO_REMOTE_MAX_REDIRECTS:-3}"
     command: ["/app/run_celery_worker.sh"]
     healthcheck:
       test: ["CMD-SHELL", "celery -A depictio.api.celery_worker:celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      depictio-backend:
+        condition: service_healthy
+
+  # Dedicated worker for offloaded ingestion (the "ingestion" queue).
+  #
+  # Separate from depictio-celery-worker on purpose: an ingestion task can hold
+  # a worker for 20+ minutes reading a large Delta table, and sharing a pool
+  # with the dashboard editor would make design mode hang behind it.
+  #
+  # Reuses the SAME prebuilt image (only the environment differs), so bringing
+  # it up requires no rebuild. Idle unless both DEPICTIO_JOBS_ENABLED and
+  # DEPICTIO_INGESTION_ASYNC_DELTATABLE_UPSERT are true; nothing is published
+  # to its queue otherwise.
+  #
+  # Behind a profile, like its dev counterpart, so the default `up` is
+  # unchanged: `docker compose --profile ingestion up -d`. An image older than
+  # the release that taught run_celery_worker.sh DEPICTIO_CELERY_NODENAME
+  # registers as celery@ and never passes the ingestion@ healthcheck below.
+  depictio-ingestion-worker:
+    container_name: depictio-ingestion-worker
+    profiles: ["ingestion"]
+    image: ghcr.io/depictio/depictio-worker:${DEPICTIO_VERSION:-1.14.0}
+    volumes:
+      - depictio_keys:/app/depictio/keys
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DEPICTIO_CONTEXT: "server"
+      DEPICTIO_AUTH_SINGLE_USER_MODE: "${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}"
+      DEPICTIO_S3_ROOT_USER: "${DEPICTIO_S3_ROOT_USER:-${DEPICTIO_MINIO_ROOT_USER:-minio}}"
+      DEPICTIO_S3_ROOT_PASSWORD: "${DEPICTIO_S3_ROOT_PASSWORD:-${DEPICTIO_MINIO_ROOT_PASSWORD:-minio123}}"
+      DEPICTIO_CELERY_QUEUES: "ingestion"
+      # Low concurrency: profiling a table's columns holds whole columns in
+      # memory (order statistics, distinct counts), so RAM binds before CPU does.
+      DEPICTIO_CELERY_WORKERS: "${DEPICTIO_INGESTION_WORKER_CONCURRENCY:-2}"
+      DEPICTIO_CELERY_PREFETCH: "1"
+      DEPICTIO_CELERY_MAX_TASKS_PER_CHILD: "10"
+      DEPICTIO_CELERY_NODENAME: "ingestion@%h"
+    command: ["/app/run_celery_worker.sh"]
+    healthcheck:
+      # Must target ingestion@, not celery@: the node name is set above, and
+      # pinging the wrong one reports this container permanently unhealthy.
+      test: ["CMD-SHELL", "celery -A depictio.api.celery_worker:celery_app inspect ping -d ingestion@$$HOSTNAME || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -164,7 +278,7 @@ volumes:
     driver: local
   redis_data:
     driver: local
-  minio_data:
+  seaweedfs_data:
     driver: local
   depictio_keys:
     driver: local

@@ -4,9 +4,14 @@ Pydantic models for Google OAuth authentication.
 These models define the data structures used for Google OAuth 2.0 authentication flow.
 """
 
+from datetime import datetime
 from typing import Any
 
+from beanie import Document
 from pydantic import BaseModel, EmailStr, Field, field_validator
+from pymongo import IndexModel
+
+from depictio.models.models.base import MongoModel
 
 
 class GoogleOAuthRequest(BaseModel):
@@ -78,3 +83,30 @@ class GoogleOAuthLoginResponse(BaseModel):
 
     authorization_url: str = Field(..., description="Google OAuth authorization URL")
     state: str = Field(..., description="State parameter for CSRF protection")
+
+
+class OAuthState(MongoModel):
+    """A short-lived, single-use CSRF state for the Google OAuth round-trip.
+
+    The state minted by ``/auth/google/login`` has to still be recognisable
+    when Google redirects the browser to ``/auth/google/callback`` — a
+    separate request that a multi-worker (and multi-replica) deployment is
+    free to route to a different process. Storing it in MongoDB is what makes
+    both halves of the flow agree; process-local storage only ever worked on a
+    single worker.
+    """
+
+    state: str  # the opaque nonce echoed back by Google
+    expire_datetime: datetime
+
+
+class OAuthStateBeanie(OAuthState, Document):
+    class Settings:
+        name = "oauth_states"  # Collection name
+        indexes = [
+            # States are looked up by their nonce and must be unique.
+            IndexModel([("state", 1)], unique=True),
+            # TTL index: MongoDB drops a state once it passes ``expire_datetime``,
+            # so abandoned login attempts never accumulate — no cleanup job needed.
+            IndexModel([("expire_datetime", 1)], expireAfterSeconds=0),
+        ]

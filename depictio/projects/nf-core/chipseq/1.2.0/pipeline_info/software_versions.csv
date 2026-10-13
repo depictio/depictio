@@ -1,0 +1,16 @@
+nf-core/chipseq	v1.2.0
+Nextflow	v20.11.0-edge
+FastQC	v0.11.9
+Trim Galore!	v0.6.4_dev
+BWA	v0.7.17-r1188
+Samtools	v1.10
+BEDTools	v2.29.2
+BamTools	v2.5.1
+deepTools	v3.4.3
+Picard	v2.23.1
+R	v3.6.2
+Pysam	v0.15.3
+MACS2	v2.2.7.1
+featureCounts	v2.0.1
+Preseq	v2.0.3
+MultiQC	v1.9

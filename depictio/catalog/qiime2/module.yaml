@@ -1,7 +1,6 @@
-# QIIME 2 — multi-output tool → a folder. module.yaml holds the tool fields;
+# QIIME 2: multi-output tool, so a folder. module.yaml holds the tool fields;
 # each sibling *.yaml is one output. QIIME 2 has NO single nf-core module, so
-# `nf_core_url` is per-output and identity cannot be derived from a meta.yml —
-# this is the documented exception where identity stays declared in full here.
+# `nf_core_url` is per-output.
 id: qiime2
 name: QIIME 2
 description: >-
@@ -12,3 +11,4 @@ biotools_url: https://bio.tools/qiime2
 edam_topics:
   - http://edamontology.org/topic_3174 # Metagenomics
   - http://edamontology.org/topic_0080 # Sequence analysis
+stage: taxonomy
