@@ -154,6 +154,7 @@ export const TabList: React.FC<{
           }}
           className="hy-tablist-item hy-tablist-quiet"
           data-active={nav.guide.open || undefined}
+          data-tour-id="guide"
         >
           <span className="hy-tablist-icon">
             <BookOpenText size={20} strokeWidth={1.9} aria-hidden />
@@ -186,8 +187,10 @@ export const SideRow: React.FC<{
   active?: boolean;
   tooltip?: string;
   testId?: string;
+  /** `data-tour-id`, for a hint anchored on this row. */
+  tourId?: string;
   ariaExpanded?: boolean;
-}> = ({ icon, label, open, href, onClick, active, tooltip, testId, ariaExpanded }) => {
+}> = ({ icon, label, open, href, onClick, active, tooltip, testId, tourId, ariaExpanded }) => {
   const body = (
     <>
       <span className="hy-row-icon">{icon}</span>
@@ -199,6 +202,7 @@ export const SideRow: React.FC<{
     'data-active': active || undefined,
     'aria-label': label,
     'data-testid': testId,
+    'data-tour-id': tourId,
   };
   const el = href ? (
     <a href={href} onClick={onClick} {...shared}>
@@ -432,6 +436,7 @@ const HomeMark: React.FC<{ home: string; height: number; markSize: number }> = (
         className={cn('hy-top-brand', markOnly && 'hy-top-brand--mark')}
         aria-label="depictio: all dashboards"
         data-testid={markOnly ? 'glass-logo' : undefined}
+        data-tour-id="home-mark"
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
@@ -490,7 +495,7 @@ export const TopBar: React.FC<{
     <span className="hy-flex" />
     {/* The title has the left, so depictio is credited here, always. */}
     {!compact && (
-      <span className="hy-top-powered">
+      <span className="hy-top-powered" data-tour-id="powered-by">
         <PoweredBy always />
       </span>
     )}
