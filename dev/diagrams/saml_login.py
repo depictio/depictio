@@ -132,6 +132,7 @@ def build_login_flow() -> Sketch:
             "magic-link ticket, 2 min, single use",
             "303 -> /auth/magic#ticket=...&next=/path",
             "fragment: never sent to servers or logs",
+            "(PR #972: group + profile sync hooks in here)",
         ),
     )
     s.box(user)
