@@ -116,7 +116,11 @@ const GroupsApp: React.FC = () => {
             >
               <Icon icon="mdi:menu" width={22} />
             </ActionIcon>
-            <Icon icon="mdi:account-multiple-outline" width={22} color="var(--mantine-color-grape-6)" />
+            <Icon
+              icon="mdi:account-multiple-outline"
+              width={22}
+              color="var(--mantine-color-grape-6)"
+            />
             <Title order={3} c="grape">
               My Groups
             </Title>

@@ -2,9 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { Autocomplete, Button, Group, Modal, Stack, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
+import { Plus } from 'lucide-react';
 
 import { createGroup, listAllUsers } from 'depictio-react-core';
 import type { GroupDetail } from 'depictio-react-core';
+
+import { STROKE, useGlassPages } from '../chrome/variants/glass/pages';
 
 interface CreateGroupModalProps {
   opened: boolean;
@@ -14,6 +17,7 @@ interface CreateGroupModalProps {
 }
 
 const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ opened, onClose, onCreated }) => {
+  const glass = useGlassPages();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   /** Free text on purpose: a P.I. who has no account yet is designated by
@@ -65,10 +69,9 @@ const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ opened, onClose, on
       notifications.show({
         color: 'teal',
         title: 'Group created',
-        message:
-          created.pending_pi_email
-            ? `Group "${trimmed}" created — ${created.pending_pi_email} becomes P.I. at first sign-in.`
-            : `Group "${trimmed}" created.`,
+        message: created.pending_pi_email
+          ? `Group "${trimmed}" created — ${created.pending_pi_email} becomes P.I. at first sign-in.`
+          : `Group "${trimmed}" created.`,
         autoClose: 3500,
       });
       onCreated(created);
@@ -117,8 +120,14 @@ const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ opened, onClose, on
             Cancel
           </Button>
           <Button
-            color="teal"
-            leftSection={<Icon icon="mdi:plus" width={14} />}
+            color={glass ? undefined : 'teal'}
+            leftSection={
+              glass ? (
+                <Plus size={15} strokeWidth={STROKE} aria-hidden />
+              ) : (
+                <Icon icon="mdi:plus" width={14} />
+              )
+            }
             onClick={handleCreate}
             loading={submitting}
             disabled={!name.trim()}

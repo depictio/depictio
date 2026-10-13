@@ -22,9 +22,9 @@ import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import SignInProviders from '../auth/components/SignInProviders';
 import { useGuestSignIn } from '../hooks/useGuestSignIn';
-import { Camera, Compass } from 'lucide-react';
+import { Camera, Compass, Crown, ShieldCheck } from 'lucide-react';
 import { Icon } from '@iconify/react';
-import { GlassPage, useGlassPages } from '../chrome/variants/glass/pages';
+import { GlassPage, STROKE, useGlassPages } from '../chrome/variants/glass/pages';
 
 import {
   clearSession,
@@ -667,7 +667,9 @@ const UserInfoRow: React.FC<{ label: string; value: string }> = ({ label, value 
  *  Crown marks the groups the user is P.I. of, shield the ones they
  *  administer. Each badge deep-links into /groups, which is the only entry
  *  point to the personal groups page (the sidebar entry lives in /admin). */
-const GroupsInfoRow: React.FC<{ groups: MyGroup[] }> = ({ groups }) => (
+const GroupsInfoRow: React.FC<{ groups: MyGroup[] }> = ({ groups }) => {
+  const glass = useGlassPages();
+  return (
   <Paper p="xs" px="sm" radius="md" withBorder data-testid="profile-info-groups">
     <Group justify="space-between" wrap="nowrap" align="flex-start">
       <Text fw={500} size="sm">
@@ -691,9 +693,17 @@ const GroupsInfoRow: React.FC<{ groups: MyGroup[] }> = ({ groups }) => (
               radius="sm"
               leftSection={
                 group.is_pi ? (
-                  <Icon icon="mdi:crown-outline" width={12} />
+                  glass ? (
+                    <Crown size={12} strokeWidth={STROKE} aria-hidden />
+                  ) : (
+                    <Icon icon="mdi:crown-outline" width={12} />
+                  )
                 ) : group.is_group_admin ? (
-                  <Icon icon="mdi:shield-account-outline" width={12} />
+                  glass ? (
+                    <ShieldCheck size={12} strokeWidth={STROKE} aria-hidden />
+                  ) : (
+                    <Icon icon="mdi:shield-account-outline" width={12} />
+                  )
                 ) : undefined
               }
             >
@@ -704,6 +714,7 @@ const GroupsInfoRow: React.FC<{ groups: MyGroup[] }> = ({ groups }) => (
       )}
     </Group>
   </Paper>
-);
+  );
+};
 
 export default ProfileApp;

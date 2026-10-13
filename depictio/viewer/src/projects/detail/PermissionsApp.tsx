@@ -39,6 +39,7 @@ import {
   TriangleAlert,
   UserMinus,
   UserPlus,
+  Trash2,
   UserRound,
   Users,
   UsersRound,
@@ -1026,7 +1027,7 @@ const PermissionsApp: React.FC = () => {
                       aria-label={`Remove ${r.name}`}
                       onClick={() => handleDeleteGroup(r)}
                     >
-                      <UserMinus size={17} strokeWidth={STROKE} />
+                      <Trash2 size={17} strokeWidth={STROKE} />
                     </ActionIcon>
                   )}
                 </div>

@@ -17,8 +17,20 @@ import {
   Tooltip,
   useComputedColorScheme,
 } from '@mantine/core';
+import { useElementSize } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
+import {
+  Cloud,
+  Crown,
+  Plus,
+  Save,
+  Search,
+  Trash2,
+  UserPlus,
+  UserRound,
+  UsersRound,
+} from 'lucide-react';
 import { AgGridReact } from 'ag-grid-react';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
@@ -35,6 +47,8 @@ import {
 } from 'depictio-react-core';
 import type { GroupDetail, GroupMember } from 'depictio-react-core';
 
+import { STROKE, useGlassPages } from '../chrome/variants/glass/pages';
+import '../chrome/variants/glass/pages/groups.css';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 
 interface GroupDetailPanelProps {
@@ -60,6 +74,9 @@ interface DirectoryUser {
 
 const ROW_HEIGHT = 36;
 
+/** Below this grid width the members' display-name column is hidden. */
+const NAME_COLUMN_MIN_GRID_WIDTH = 580;
+
 const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
   group,
   canManage,
@@ -68,6 +85,10 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
   onDelete,
 }) => {
   const { user: currentUser } = useCurrentUser();
+  // Paper (Glass) look: the page language comes from pages.css / groups.css;
+  // here only what Mantine props and the cell renderers decide.
+  const glass = useGlassPages();
+  const ctl = glass ? 'sm' : 'xs';
   const colorScheme = useComputedColorScheme('light', { getInitialValueInEffect: true });
   const isDark = colorScheme === 'dark';
 
@@ -321,6 +342,7 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
 
   // ---- members grid --------------------------------------------------------
   const [memberFilter, setMemberFilter] = useState('');
+  const { ref: gridRef, width: gridWidth } = useElementSize();
 
   useEffect(() => {
     setMemberFilter('');
@@ -333,20 +355,38 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
         field: 'email',
         headerName: 'Member',
         flex: 2,
-        minWidth: 220,
+        // Paper's detail pane is narrower (the page keeps a sidebar): shave the
+        // minimums so P.I. and the remove key stay in view without scrolling.
+        minWidth: glass ? 160 : 220,
         editable: false,
         cellRenderer: (params: ICellRendererParams<GroupMember>) => (
           <Group gap="xs" h="100%" wrap="nowrap">
-            <Icon
-              icon="mdi:account-circle-outline"
-              width={16}
-              color="var(--mantine-color-gray-6)"
-            />
+            {glass ? (
+              <UserRound
+                size={16}
+                strokeWidth={STROKE}
+                color="var(--gl-muted)"
+                aria-hidden
+                style={{ flex: 'none' }}
+              />
+            ) : (
+              <Icon
+                icon="mdi:account-circle-outline"
+                width={16}
+                color="var(--mantine-color-gray-6)"
+              />
+            )}
             <Text size="sm" truncate>
               {params.value as string}
             </Text>
             {params.data && isSelf(params.data) && (
-              <Badge color="orange" variant="light" size="xs" radius="sm">
+              <Badge
+                color={glass ? 'gray' : 'orange'}
+                variant="light"
+                size="xs"
+                radius="sm"
+                className={glass ? 'gp-tag-plain' : undefined}
+              >
                 You
               </Badge>
             )}
@@ -357,18 +397,23 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
         field: 'display_name',
         headerName: 'Name',
         flex: 1,
-        minWidth: 120,
+        minWidth: glass ? 90 : 120,
+        // Gives way first when the pane is narrow, so the role and the
+        // actions stay in view without a horizontal scroll.
+        hide: gridWidth > 0 && gridWidth < NAME_COLUMN_MIN_GRID_WIDTH,
         editable: false,
         cellRenderer: (params: ICellRendererParams<GroupMember>) => (
-          <Text size="sm" c="dimmed" truncate>
-            {(params.value as string) || '—'}
-          </Text>
+          <Group h="100%" wrap="nowrap">
+            <Text size="sm" c="dimmed" truncate>
+              {(params.value as string) || '—'}
+            </Text>
+          </Group>
         ),
       },
       {
         field: 'is_group_admin',
         headerName: 'Group admin',
-        width: 130,
+        width: glass ? 120 : 130,
         cellRenderer: 'agCheckboxCellRenderer',
         cellStyle: { textAlign: 'center' },
         // The backend rejects self-demotion — lock the current user's own
@@ -380,7 +425,7 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
       {
         field: 'is_pi',
         headerName: 'P.I.',
-        width: 90,
+        width: glass ? 80 : 90,
         editable: false,
         sortable: true,
         cellRenderer: (params: ICellRendererParams<GroupMember>) => {
@@ -393,7 +438,13 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
                   variant="light"
                   size="sm"
                   radius="sm"
-                  leftSection={<Icon icon="mdi:crown-outline" width={12} />}
+                  leftSection={
+                    glass ? (
+                      <Crown size={12} strokeWidth={STROKE} aria-hidden />
+                    ) : (
+                      <Icon icon="mdi:crown-outline" width={12} />
+                    )
+                  }
                 >
                   P.I.
                 </Badge>
@@ -407,12 +458,16 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
                 <ActionIcon
                   size="sm"
                   variant="subtle"
-                  color="yellow"
+                  color={glass ? 'gray' : 'yellow'}
                   aria-label={`Designate ${params.data.email} as P.I.`}
                   onClick={() => handleSetPI(params.data!)}
                   data-testid="group-set-pi-btn"
                 >
-                  <Icon icon="mdi:crown-outline" width={16} />
+                  {glass ? (
+                    <Crown size={16} strokeWidth={STROKE} aria-hidden />
+                  ) : (
+                    <Icon icon="mdi:crown-outline" width={16} />
+                  )}
                 </ActionIcon>
               </Tooltip>
             </Center>
@@ -422,7 +477,7 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
       {
         headerName: '',
         colId: 'actions',
-        width: 70,
+        width: glass ? 56 : 70,
         sortable: false,
         filter: false,
         editable: false,
@@ -440,14 +495,18 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
                 onClick={() => setRemoveTarget(params.data!)}
                 data-testid="group-remove-member-btn"
               >
-                <Icon icon="mdi:delete" width={16} />
+                {glass ? (
+                  <Trash2 size={16} strokeWidth={STROKE} aria-hidden />
+                ) : (
+                  <Icon icon="mdi:delete" width={16} />
+                )}
               </ActionIcon>
             </Center>
           );
         },
       },
     ],
-    [canManage, canEditPI, handleSetPI, isSelf],
+    [canManage, canEditPI, handleSetPI, isSelf, glass, gridWidth],
   );
 
   const handleMemberCellChange = useCallback(
@@ -458,12 +517,28 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
     [handleToggleAdmin],
   );
 
+  const addLeft = glass ? (
+    <UserPlus size={16} strokeWidth={STROKE} aria-hidden />
+  ) : (
+    <Icon icon="mdi:account-plus-outline" width={16} />
+  );
+
   return (
-    <Stack gap="md" data-testid="group-management-card">
+    <Stack gap="md" className={glass ? 'gg-detail' : undefined} data-testid="group-management-card">
       {/* Header: identity + destructive action */}
       <Group justify="space-between" align="flex-start" wrap="nowrap">
         <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
-          <Icon icon="mdi:account-multiple-outline" width={22} color="var(--mantine-color-grape-6)" />
+          {glass ? (
+            <span className="gg-chip">
+              <UsersRound size={18} strokeWidth={STROKE} aria-hidden />
+            </span>
+          ) : (
+            <Icon
+              icon="mdi:account-multiple-outline"
+              width={22}
+              color="var(--mantine-color-grape-6)"
+            />
+          )}
           <Title order={4} lineClamp={1}>
             {group.name}
           </Title>
@@ -474,7 +549,13 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
               </Badge>
             </Tooltip>
           )}
-          <Badge color="gray" variant="light" size="sm" radius="sm">
+          <Badge
+            color="gray"
+            variant="light"
+            size="sm"
+            radius="sm"
+            className={glass ? 'gp-tag-plain' : undefined}
+          >
             {group.members.length} member{group.members.length === 1 ? '' : 's'}
           </Badge>
         </Group>
@@ -482,8 +563,14 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
           <Button
             color="red"
             variant="light"
-            size="xs"
-            leftSection={<Icon icon="tabler:trash" width={14} />}
+            size={ctl}
+            leftSection={
+              glass ? (
+                <Trash2 size={15} strokeWidth={STROKE} aria-hidden />
+              ) : (
+                <Icon icon="tabler:trash" width={14} />
+              )
+            }
             onClick={onDelete}
             data-testid="admin-delete-group-btn"
           >
@@ -499,7 +586,7 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
             label="Name"
             value={name}
             onChange={(e) => setName(e.currentTarget.value)}
-            size="xs"
+            size={ctl}
             style={{ flex: 1, minWidth: 160 }}
             data-testid="group-rename-input"
           />
@@ -508,14 +595,20 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
             placeholder="No description"
             value={description}
             onChange={(e) => setDescription(e.currentTarget.value)}
-            size="xs"
+            size={ctl}
             style={{ flex: 2, minWidth: 220 }}
             data-testid="group-description-input"
           />
           <Button
-            size="xs"
+            size={ctl}
             variant="light"
-            leftSection={<Icon icon="mdi:content-save-outline" width={14} />}
+            leftSection={
+              glass ? (
+                <Save size={15} strokeWidth={STROKE} aria-hidden />
+              ) : (
+                <Icon icon="mdi:content-save-outline" width={14} />
+              )
+            }
             onClick={handleSaveMeta}
             loading={savingMeta}
             disabled={!metaDirty}
@@ -533,7 +626,18 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
       )}
 
       {group.sso_managed && canManage && (
-        <Alert color="grape" variant="light" icon={<Icon icon="mdi:cloud-sync-outline" />} py="xs">
+        <Alert
+          color={glass ? 'gray' : 'grape'}
+          variant="light"
+          icon={
+            glass ? (
+              <Cloud size={18} strokeWidth={STROKE} aria-hidden />
+            ) : (
+              <Icon icon="mdi:cloud-sync-outline" />
+            )
+          }
+          py="xs"
+        >
           Synced from SSO — manual changes may be overwritten at next login.
         </Alert>
       )}
@@ -543,9 +647,15 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
           crown action instead. */}
       {group.pending_pi_email ? (
         <Alert
-          color="yellow"
+          color={glass ? 'gray' : 'yellow'}
           variant="light"
-          icon={<Icon icon="mdi:crown-outline" />}
+          icon={
+            glass ? (
+              <Crown size={18} strokeWidth={STROKE} aria-hidden />
+            ) : (
+              <Icon icon="mdi:crown-outline" />
+            )
+          }
           py="xs"
           data-testid="group-pending-pi"
         >
@@ -558,7 +668,7 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
               <Button
                 size="compact-xs"
                 variant="subtle"
-                color="yellow"
+                color={glass ? 'gray' : 'yellow'}
                 onClick={handleClearPendingPI}
                 loading={pendingBusy}
                 data-testid="group-clear-pending-pi"
@@ -574,7 +684,7 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
           <Group align="flex-end" gap="xs" wrap="nowrap">
             <TextInput
               flex={1}
-              size="xs"
+              size={ctl}
               label="Principal Investigator"
               description="Email of the P.I. — applied at their first sign-in when they have no account yet."
               placeholder="pi@example.com"
@@ -583,13 +693,19 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !pendingBusy) handleSetPendingPI();
               }}
-              leftSection={<Icon icon="mdi:crown-outline" width={14} />}
+              leftSection={
+                glass ? (
+                  <Crown size={15} strokeWidth={STROKE} aria-hidden />
+                ) : (
+                  <Icon icon="mdi:crown-outline" width={14} />
+                )
+              }
               data-testid="group-pending-pi-input"
             />
             <Button
-              size="xs"
+              size={ctl}
               variant="light"
-              color="yellow"
+              color={glass ? undefined : 'yellow'}
               onClick={handleSetPendingPI}
               loading={pendingBusy}
               disabled={!pendingEmail.trim()}
@@ -602,27 +718,44 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
       )}
 
       {/* Members */}
-      <Stack gap="xs">
+      <Stack gap="xs" className={glass ? 'gg-section' : undefined}>
         <Group justify="space-between" gap="xs" wrap="nowrap">
-          <Group gap="xs">
-            <Text fw={600} size="sm">
-              Members
-            </Text>
-            <Badge color="blue" variant="light" size="sm" radius="sm">
-              {group.members.length}
-            </Badge>
-          </Group>
+          {glass ? (
+            <div className="gg-head">
+              <UsersRound size={18} strokeWidth={STROKE} aria-hidden />
+              <Title order={5} className="gg-head-title">
+                Members
+              </Title>
+              <span className="gg-count">{group.members.length}</span>
+            </div>
+          ) : (
+            <Group gap="xs">
+              <Text fw={600} size="sm">
+                Members
+              </Text>
+              <Badge color="blue" variant="light" size="sm" radius="sm">
+                {group.members.length}
+              </Badge>
+            </Group>
+          )}
           <TextInput
-            size="xs"
+            size={ctl}
             w={220}
             placeholder="Filter members…"
             value={memberFilter}
             onChange={(e) => setMemberFilter(e.currentTarget.value)}
-            leftSection={<Icon icon="mdi:magnify" width={14} />}
+            leftSection={
+              glass ? (
+                <Search size={15} strokeWidth={STROKE} aria-hidden />
+              ) : (
+                <Icon icon="mdi:magnify" width={14} />
+              )
+            }
             data-testid="group-member-filter"
           />
         </Group>
         <Box
+          ref={gridRef}
           className={isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
           style={{
             height: Math.min(520, Math.max(140, 44 + group.members.length * ROW_HEIGHT)),
@@ -658,7 +791,7 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !adding) handleAddMember();
                 }}
-                leftSection={<Icon icon="mdi:account-plus-outline" width={16} />}
+                leftSection={addLeft}
                 data-testid="group-add-member-input"
               />
             ) : (
@@ -674,14 +807,20 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
                 data={addCandidates}
                 limit={20}
                 comboboxProps={{ withinPortal: true }}
-                leftSection={<Icon icon="mdi:account-plus-outline" width={16} />}
+                leftSection={addLeft}
                 data-testid="group-add-member-input"
               />
             )}
             <Button
               size="sm"
-              color="teal"
-              leftSection={<Icon icon="mdi:plus" width={14} />}
+              color={glass ? undefined : 'teal'}
+              leftSection={
+                glass ? (
+                  <Plus size={15} strokeWidth={STROKE} aria-hidden />
+                ) : (
+                  <Icon icon="mdi:plus" width={14} />
+                )
+              }
               onClick={handleAddMember}
               loading={adding}
               disabled={!addEmail.trim()}
@@ -728,17 +867,28 @@ const GroupDetailPanel: React.FC<GroupDetailPanelProps> = ({
 };
 
 /** Placeholder for the detail pane before a group is picked. */
-export const GroupDetailPlaceholder: React.FC<{ message: string }> = ({ message }) => (
-  <Paper withBorder radius="md" p="xl" h="100%">
-    <Center h="100%" mih={200}>
-      <Stack align="center" gap="xs">
-        <Icon icon="mdi:account-multiple-outline" width={40} color="var(--mantine-color-dimmed)" />
-        <Text c="dimmed" size="sm" ta="center">
-          {message}
-        </Text>
-      </Stack>
-    </Center>
-  </Paper>
-);
+export const GroupDetailPlaceholder: React.FC<{ message: string }> = ({ message }) => {
+  const glass = useGlassPages();
+  return (
+    <Paper withBorder radius="md" p="xl" h="100%">
+      <Center h="100%" mih={200}>
+        <Stack align="center" gap="xs" className={glass ? 'gg-empty' : undefined}>
+          {glass ? (
+            <UsersRound size={40} strokeWidth={STROKE} aria-hidden />
+          ) : (
+            <Icon
+              icon="mdi:account-multiple-outline"
+              width={40}
+              color="var(--mantine-color-dimmed)"
+            />
+          )}
+          <Text c="dimmed" size="sm" ta="center">
+            {message}
+          </Text>
+        </Stack>
+      </Center>
+    </Paper>
+  );
+};
 
 export default GroupDetailPanel;

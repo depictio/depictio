@@ -17,6 +17,7 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
+import { Crown, Plus, Search, ShieldCheck, UsersRound } from 'lucide-react';
 import { AgGridReact } from 'ag-grid-react';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
@@ -30,6 +31,8 @@ import {
 } from 'depictio-react-core';
 import type { GroupDetail, GroupSummary, MyGroup } from 'depictio-react-core';
 
+import { STROKE, useGlassPages } from '../chrome/variants/glass/pages';
+import '../chrome/variants/glass/pages/groups.css';
 import CreateGroupModal from './CreateGroupModal';
 import DeleteGroupModal from './DeleteGroupModal';
 import GroupDetailPanel, { GroupDetailPlaceholder } from './GroupDetailPanel';
@@ -80,6 +83,10 @@ function readGroupIdFromQuery(): string | null {
 }
 
 const GroupsWorkspace: React.FC<GroupsWorkspaceProps> = ({ scope }) => {
+  // Paper (Glass) look: the page language comes from pages.css / groups.css;
+  // here only what Mantine props and the cell renderers decide.
+  const glass = useGlassPages();
+  const paneStyle = glass ? undefined : { height: PANE_HEIGHT, minHeight: PANE_MIN_HEIGHT };
   const colorScheme = useComputedColorScheme('light', { getInitialValueInEffect: true });
   const isDark = colorScheme === 'dark';
 
@@ -222,50 +229,79 @@ const GroupsWorkspace: React.FC<GroupsWorkspaceProps> = ({ scope }) => {
         flex: 2,
         minWidth: 150,
         sort: 'asc',
-        cellRenderer: (params: ICellRendererParams<GroupRow>) => (
-          <Group gap={6} h="100%" wrap="nowrap">
-            <Icon
-              icon="mdi:account-multiple-outline"
-              width={16}
-              color="var(--mantine-color-gray-6)"
-            />
-            <Text size="sm" truncate style={{ minWidth: 0 }}>
-              {params.value as string}
-            </Text>
-            {params.data?.is_pi && (
-              <Icon icon="mdi:crown-outline" width={14} color="var(--mantine-color-yellow-6)" />
-            )}
-            {!params.data?.is_pi && params.data?.is_group_admin && scope === 'mine' && (
+        cellRenderer: (params: ICellRendererParams<GroupRow>) =>
+          glass ? (
+            <div className="gg-name">
+              <UsersRound size={16} strokeWidth={STROKE} className="gg-name-icon" aria-hidden />
+              <span className="gg-name-text">{params.value as string}</span>
+              {params.data?.is_pi && (
+                <Crown size={14} strokeWidth={STROKE} className="gg-name-mark" aria-label="P.I." />
+              )}
+              {!params.data?.is_pi && params.data?.is_group_admin && scope === 'mine' && (
+                <ShieldCheck
+                  size={14}
+                  strokeWidth={STROKE}
+                  className="gg-name-mark"
+                  aria-label="Group admin"
+                />
+              )}
+              {params.data?.sso_managed && (
+                <Badge color="grape" size="xs" className="gp-tag-plain">
+                  SSO
+                </Badge>
+              )}
+            </div>
+          ) : (
+            <Group gap={6} h="100%" wrap="nowrap">
               <Icon
-                icon="mdi:shield-account-outline"
-                width={14}
-                color="var(--mantine-color-blue-6)"
+                icon="mdi:account-multiple-outline"
+                width={16}
+                color="var(--mantine-color-gray-6)"
               />
-            )}
-            {params.data?.sso_managed && (
-              <Badge color="grape" variant="light" size="xs" radius="sm">
-                SSO
-              </Badge>
-            )}
-          </Group>
-        ),
+              <Text size="sm" truncate style={{ minWidth: 0 }}>
+                {params.value as string}
+              </Text>
+              {params.data?.is_pi && (
+                <Icon icon="mdi:crown-outline" width={14} color="var(--mantine-color-yellow-6)" />
+              )}
+              {!params.data?.is_pi && params.data?.is_group_admin && scope === 'mine' && (
+                <Icon
+                  icon="mdi:shield-account-outline"
+                  width={14}
+                  color="var(--mantine-color-blue-6)"
+                />
+              )}
+              {params.data?.sso_managed && (
+                <Badge color="grape" variant="light" size="xs" radius="sm">
+                  SSO
+                </Badge>
+              )}
+            </Group>
+          ),
       },
       {
         field: 'member_count',
         headerName: 'Members',
-        width: 110,
+        width: glass ? 84 : 110,
         cellStyle: { textAlign: 'right' },
       },
     ],
-    [scope],
+    [scope, glass],
   );
 
+  // Classic paints the selection with a Mantine tint; Paper with its accent
+  // wash (groups.css), through a class so the theme tokens stay in the CSS.
   const getRowStyle = useCallback(
     (params: RowClassParams<GroupRow>) =>
-      params.data?.id === selectedId
+      !glass && params.data?.id === selectedId
         ? { backgroundColor: 'var(--mantine-color-blue-light)' }
         : undefined,
-    [selectedId],
+    [selectedId, glass],
+  );
+  const getRowClass = useCallback(
+    (params: RowClassParams<GroupRow>) =>
+      glass && params.data?.id === selectedId ? 'gg-row-selected' : undefined,
+    [selectedId, glass],
   );
 
   if (loading) {
@@ -297,30 +333,43 @@ const GroupsWorkspace: React.FC<GroupsWorkspaceProps> = ({ scope }) => {
 
   return (
     <>
-      <Grid gutter="md" align="stretch">
+      <Grid gutter="md" align="stretch" className={glass ? 'gg-workspace' : undefined}>
         <Grid.Col span={{ base: 12, md: 5, lg: 4 }}>
           <Paper
             withBorder
             radius="md"
             p="sm"
-            style={{ height: PANE_HEIGHT, minHeight: PANE_MIN_HEIGHT }}
+            className={glass ? 'gg-pane' : undefined}
+            style={paneStyle}
           >
             <Stack gap="xs" h="100%">
               <Group gap="xs" wrap="nowrap">
                 <TextInput
                   flex={1}
-                  size="xs"
+                  size={glass ? 'sm' : 'xs'}
                   placeholder="Search groups…"
                   value={search}
                   onChange={(e) => setSearch(e.currentTarget.value)}
-                  leftSection={<Icon icon="mdi:magnify" width={14} />}
+                  leftSection={
+                    glass ? (
+                      <Search size={15} strokeWidth={STROKE} aria-hidden />
+                    ) : (
+                      <Icon icon="mdi:magnify" width={14} />
+                    )
+                  }
                   data-testid="groups-search"
                 />
                 {scope === 'admin' && (
                   <Button
-                    size="xs"
-                    color="teal"
-                    leftSection={<Icon icon="mdi:account-multiple-plus-outline" width={14} />}
+                    size={glass ? 'sm' : 'xs'}
+                    color={glass ? undefined : 'teal'}
+                    leftSection={
+                      glass ? (
+                        <Plus size={15} strokeWidth={STROKE} aria-hidden />
+                      ) : (
+                        <Icon icon="mdi:account-multiple-plus-outline" width={14} />
+                      )
+                    }
                     onClick={() => setCreateOpened(true)}
                     data-testid="admin-create-group-btn"
                   >
@@ -333,6 +382,7 @@ const GroupsWorkspace: React.FC<GroupsWorkspaceProps> = ({ scope }) => {
                 <SegmentedControl
                   size="xs"
                   fullWidth
+                  className={glass ? 'gg-seg' : undefined}
                   value={ssoFilter}
                   onChange={(v) => setSsoFilter(v as 'all' | 'manual' | 'sso')}
                   data={[
@@ -359,6 +409,7 @@ const GroupsWorkspace: React.FC<GroupsWorkspaceProps> = ({ scope }) => {
                   quickFilterText={search}
                   rowSelection="single"
                   getRowStyle={getRowStyle}
+                  getRowClass={getRowClass}
                   onRowClicked={(e) => e.data && setSelectedId(e.data.id)}
                   overlayNoRowsTemplate={
                     '<span style="color:var(--mantine-color-dimmed);font-size:12px">No groups match.</span>'
@@ -396,7 +447,8 @@ const GroupsWorkspace: React.FC<GroupsWorkspaceProps> = ({ scope }) => {
               withBorder
               radius="md"
               p="md"
-              style={{ height: PANE_HEIGHT, minHeight: PANE_MIN_HEIGHT }}
+              className={glass ? 'gg-pane' : undefined}
+              style={paneStyle}
             >
               <Center h="100%">
                 <Loader size="sm" />
@@ -407,7 +459,8 @@ const GroupsWorkspace: React.FC<GroupsWorkspaceProps> = ({ scope }) => {
               withBorder
               radius="md"
               p="md"
-              style={{ height: PANE_HEIGHT, minHeight: PANE_MIN_HEIGHT, overflowY: 'auto' }}
+              className={glass ? 'gg-pane' : undefined}
+              style={{ ...paneStyle, overflowY: 'auto' }}
               data-testid="group-detail-pane"
             >
               <Box style={{ opacity: detailLoading ? 0.6 : 1 }}>
