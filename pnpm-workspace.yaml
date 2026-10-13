@@ -18,3 +18,6 @@ onlyBuiltDependencies:
 # 6.3.3 satisfies both @gmod/bam (^6.2.0) and @gmod/tabix (^6.0.9). The override
 # lives in the root package.json (pnpm 9 reads `pnpm.overrides` there); drop it
 # once @genome-spy/core moves to a @gmod/tabix that passes two args.
+
+patchedDependencies:
+  "@jbrowse/plugin-data-management@4.3.0": patches/@jbrowse__plugin-data-management@4.3.0.patch

@@ -328,7 +328,10 @@
       "initial_tracks": 10,
       "default_tracks": [],
       "show_annotation": false,
-      "ucsc_tracks": [],
+      "ucsc_tracks": [
+        "mane",
+        "encodeCcreCombined"
+      ],
       "selection_enabled": true,
       "selection_column": "cell",
       "selection_mode": "feature_click",

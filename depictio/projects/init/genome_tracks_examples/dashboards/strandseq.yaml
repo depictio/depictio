@@ -142,6 +142,9 @@ components:
     initial_tracks: 10
     # Mb-scale SV calls: a gene track would only say "zoom in" here.
     show_annotation: false
+    # UCSC tracks opened next to the SV calls, resolved from hg38 (see
+    # docs/design/jbrowse-genome-tracks.md): MANE transcripts and ENCODE cCREs.
+    ucsc_tracks: [mane, encodeCcreCombined]
     selection_enabled: true
     selection_column: cell
     show_overview: false
