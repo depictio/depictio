@@ -20,6 +20,9 @@ export interface CommentsControl {
   /** Opens the comments drawer on one component, or on the whole tab (null). */
   openDrawer: (componentIndex?: string | null) => void;
   canComment: boolean;
+  /** Resolve, reopen and publish annotations: editors and owners. Absent
+   *  means not known, read as no. */
+  canModerate?: boolean;
 }
 
 export const CommentsContext = createContext<CommentsControl | null>(null);

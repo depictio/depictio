@@ -15,7 +15,15 @@
  * carries the ring with it.
  */
 
-export type GuideTarget = 'tabs' | 'sections' | 'filters' | 'actions' | 'analysis' | 'settings';
+export type GuideTarget =
+  | 'tabs'
+  | 'sections'
+  | 'filters'
+  | 'actions'
+  | 'analysis'
+  | 'comments'
+  | 'versions'
+  | 'settings';
 
 const RING_MS = 2200;
 const RING_PAD = 4;
@@ -71,6 +79,18 @@ export function findDemoTargets(target: GuideTarget, demo: ParentNode): HTMLElem
     case 'analysis':
       // The step to take now, which the demo lights.
       return one(first(demo, '[data-testid^="guide-analysis-step-"][data-active]'));
+    case 'comments': {
+      // The header's own button rings with the demo's icon, when it is on
+      // screen (it sits outside the Guide's layer, beside it).
+      const header = first(document, '[data-tour-id="comments-header"]');
+      // The real figure's own comments icon, or the stand-in's.
+      const icon = demo.querySelectorAll<HTMLElement>(
+        '[data-guide-comments-icon] button[aria-label*="omment" i], button[aria-label="Comments"]',
+      );
+      return [...icon, ...(header ? [header] : [])].filter(hasBox);
+    }
+    case 'versions':
+      return one(first(demo, '[data-guide-version-preview]'));
     case 'settings':
       return [...demo.querySelectorAll<HTMLElement>('[data-guide-show]')].filter(hasBox);
   }
