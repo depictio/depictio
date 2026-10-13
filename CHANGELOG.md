@@ -3,6 +3,36 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.17.3
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.17.3</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.17.2 → 1.17.3 [b9d77a772]
+* feat(auth): let a public-mode guest sign in from where they would comment [2e72e446d]
+* fix(viewer): centre the depictio mark in the top bar [f70d2fc57]
+* fix(viewer): keep the actions column of the Dashboards and Projects tables in view [7d1ec7404]
+* Update CHANGELOG.md for v1.17.2 [82146a20f]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.17.2
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
