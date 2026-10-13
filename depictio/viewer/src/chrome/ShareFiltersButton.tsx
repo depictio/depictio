@@ -9,8 +9,8 @@
  * exceed what survives chat apps and proxies — those refuse to copy and say
  * why instead of producing a link that breaks in transit.
  *
- * Rendered as a full-width button inside the dashboard settings drawer's
- * Share section.
+ * Rendered as a full-width button in the "Your filters" section of the
+ * dashboard settings.
  */
 
 import React, { useState } from 'react';

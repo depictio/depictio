@@ -25,6 +25,9 @@ from depictio.api.v1.endpoints.comments_endpoints.cascade import delete_threads_
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     cascade_project_visibility,
 )
+from depictio.api.v1.endpoints.dashboards_endpoints.filter_state_cascade import (
+    delete_filter_states_for_project,
+)
 from depictio.api.v1.endpoints.dashboards_endpoints.version_store import (
     delete_project_versions,
 )
@@ -199,6 +202,8 @@ def _cascade_delete_project(project_id: PyObjectId, project_name: str) -> None:
             {"workflow_id": {"$in": wf_ids + [str(wf_id) for wf_id in wf_ids]}}
         )
 
+    # Before the dashboards go: a saved filter state only knows its dashboard id.
+    delete_filter_states_for_project(project_id)
     dashboards_collection.delete_many({"project_id": ObjectId(project_id)})
     delete_threads_for_project(project_id)
     # The dashboards went without the dashboard delete route, so their version

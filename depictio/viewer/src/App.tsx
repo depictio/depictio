@@ -881,7 +881,10 @@ const App: React.FC = () => {
     if (!restored || restored.size === 0) return;
     const known = new Set(summaryMetadata.map((m) => m.index));
     setFilters((prev) =>
-      prev.filter((f) => !restored.has(f.index) || hydratedIndicesRef.current?.has(f.index) || known.has(f.index)),
+      prev.filter(
+        (f) =>
+          !restored.has(f.index) || hydratedIndicesRef.current?.has(f.index) || known.has(f.index),
+      ),
     );
   }, [dashboard, crossTab.resolved, summaryMetadata]);
 
@@ -2029,6 +2032,24 @@ interface InitialFilterHydration {
  *  (index, source) key while the entries it does not mention survive. A
  *  version preview restores nothing of its own: it is a view of the past. */
 function hydrateInitialFilters(
+  dashboardId: string | null,
+  previewVersionId: string | null,
+): InitialFilterHydration {
+  // Once per page load. React's dev StrictMode renders the component body
+  // twice on mount and keeps the second pass; reading the share-link fragment
+  // strips it from the address bar, so a second read would find nothing and
+  // the link would silently apply no filters.
+  const key = `${dashboardId ?? ''}|${previewVersionId ?? ''}`;
+  const cached = hydrationCache.get(key);
+  if (cached) return cached;
+  const hydration = readInitialFilters(dashboardId, previewVersionId);
+  hydrationCache.set(key, hydration);
+  return hydration;
+}
+
+const hydrationCache = new Map<string, InitialFilterHydration>();
+
+function readInitialFilters(
   dashboardId: string | null,
   previewVersionId: string | null,
 ): InitialFilterHydration {

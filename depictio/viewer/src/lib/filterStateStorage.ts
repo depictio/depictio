@@ -7,7 +7,7 @@
  * the server-side copy (`fetchDashboardFilterState`) reconciles asynchronously
  * for the returning-from-another-device case.
  *
- * The "Remember filters" toggle is stored separately from the state itself so
+ * The "Remember my filters" switch is stored separately from the state itself so
  * turning it off can drop the saved filters without forgetting the choice.
  * Absent key = ON: persistence is the default behavior.
  */

@@ -30,7 +30,7 @@ class DashboardFilterState(MongoModel):
     user_id: PydanticObjectId
     dashboard_id: PydanticObjectId
     filters: list[dict[str, Any]] = Field(default_factory=list)
-    # Mirrors the client's "Remember filters" toggle so the OFF preference
+    # Mirrors the client's "Remember my filters" switch so the OFF preference
     # roams across browsers; ``filters`` is kept empty while disabled.
     enabled: bool = True
     updated_at: datetime
