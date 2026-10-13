@@ -243,6 +243,7 @@ const CommentsProvider: React.FC<CommentsProviderProps> = ({
             staleCounts,
             openDrawer: (componentIndex) => openComments(componentIndex ?? null),
             canComment: true,
+            canModerate: isEditor,
           }
         : guestPrompt
           ? {
@@ -254,7 +255,7 @@ const CommentsProvider: React.FC<CommentsProviderProps> = ({
               canComment: false,
             }
           : null,
-    [canDiscuss, guestPrompt, counts, staleCounts, openComments],
+    [canDiscuss, isEditor, guestPrompt, counts, staleCounts, openComments],
   );
 
   // ── Annotation layer ──────────────────────────────────────────────────────

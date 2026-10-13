@@ -215,6 +215,11 @@ describe('buildGuideModel: actions', () => {
     expect(model.editActions.some((a) => a.key === 'history')).toBe(false);
   });
 
+  it('says whether the family has a saved version', () => {
+    expect(buildGuideModel(base).versions.saved).toBe(true);
+    expect(buildGuideModel({ ...base, mode: 'edit', hasVersions: false }).versions.saved).toBe(false);
+  });
+
   it('draws each action in the colour its control uses', () => {
     const model = buildGuideModel({ ...base, mode: 'edit' });
     const colour = (key: string) =>
