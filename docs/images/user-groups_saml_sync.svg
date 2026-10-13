@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1560" height="820" viewBox="0 0 1560 820">
   <rect width="1560" height="820" fill="#ffffff"/>
   <text x="40.0" y="52.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="25" fill="#1e1e1e" text-anchor="start" font-weight="normal">SSO group sync &amp; group governance</text>
-  <text x="40.0" y="78.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal">SAML attributes provision groups and profile on every login - compatible with PR #968, wired by 3 lines</text>
+  <text x="40.0" y="78.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal">SAML attributes provision groups and profile on every login - built on the ACS of PR #968, hooked in by 3 lines once both PRs are merged</text>
   <rect x="40.0" y="140.0" width="230.0" height="96.0" rx="6" fill="#e7f5ff"/>
   <path d="M39.3,140.6 C117.6,139.3 194.9,141.2 269.9,139.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M40.8,140.6 C116.9,138.8 192.8,139.8 269.8,140.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
@@ -27,6 +27,8 @@
   <text x="550.0" y="194.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">/auth/saml/callback</text>
   <text x="550.0" y="216.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">create_or_get_sso_user(email)</text>
   <text x="550.0" y="238.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">-&gt; magic-link ticket -&gt; viewer</text>
+  <text x="550.0" y="282.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="middle" font-weight="normal">AuthnRequest ids: shared one-shot</text>
+  <text x="550.0" y="300.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="middle" font-weight="normal">store (Redis), replay-safe</text>
   <path d="M270.4,187.6 C313.2,188.2 354.8,186.1 399.4,188.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M270.4,188.8 C313.1,189.1 356.5,188.2 399.7,187.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M400.4,187.7 C396.5,185.7 391.8,184.5 387.3,181.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
@@ -53,9 +55,9 @@
   <path d="M700.2,200.0 C744.3,201.7 784.7,204.5 830.1,204.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
   <path d="M829.8,205.2 C826.7,203.3 821.5,201.0 817.9,197.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M829.5,205.1 C826.2,207.4 820.7,209.4 817.3,210.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <text x="765.0" y="140.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#c92a2a" text-anchor="middle" font-weight="normal">+3 lines</text>
-  <text x="765.0" y="158.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="middle" font-weight="normal">when #968</text>
-  <text x="765.0" y="174.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="middle" font-weight="normal">merges</text>
+  <text x="765.0" y="134.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#c92a2a" text-anchor="middle" font-weight="normal">+3 lines</text>
+  <text x="765.0" y="152.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="middle" font-weight="normal">once #968 and</text>
+  <text x="765.0" y="168.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="middle" font-weight="normal">#972 are merged</text>
   <rect x="1250.0" y="110.0" width="270.0" height="130.0" rx="6" fill="#f3f0ff"/>
   <path d="M1249.5,109.8 C1340.7,110.6 1430.2,109.8 1519.5,109.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M1249.7,110.4 C1340.2,110.9 1429.1,110.7 1519.3,109.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
@@ -164,8 +166,9 @@
   <text x="1375.0" y="587.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">where</text>
   <text x="1375.0" y="611.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">/groups page (self-service)</text>
   <text x="1375.0" y="632.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">Admin -&gt; Groups tab</text>
-  <text x="1375.0" y="653.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">project permissions page:</text>
-  <text x="1375.0" y="674.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">Groups card</text>
+  <text x="1375.0" y="653.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">project permissions:</text>
+  <text x="1375.0" y="674.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">Groups section</text>
+  <text x="1375.0" y="695.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">(Paper look)</text>
   <path d="M319.2,631.3 C352.7,631.6 387.2,632.6 420.1,630.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M319.3,631.6 C355.0,629.5 388.0,629.3 420.7,630.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M420.0,630.6 C415.3,628.5 410.9,626.2 408.0,624.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>

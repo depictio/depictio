@@ -160,23 +160,30 @@ def build_sharing_model() -> Sketch:
         1290,
         150,
         230,
-        354,
+        474,
         ORANGE,
         "every gate",
         (
             "projects list/get",
             "dashboards",
-            "workflows",
+            "workflows / runs",
             "files / deltatables",
+            "catalog / project export",
             "multiqc / advanced viz",
             "events (websocket)",
             "screenshots (Celery,",
             "own Mongo client)",
+            "ingestion trigger",
             "",
             "update_project_",
             "permissions: group",
             "admin of a group",
             "owner acts as owner",
+            "",
+            "still direct-owner:",
+            "project create / update /",
+            "delete, data-collection",
+            "rename / delete",
         ),
     )
     s.box(sites)
@@ -213,7 +220,7 @@ def build_saml_sync() -> Sketch:
         40,
         52,
         "SSO group sync & group governance",
-        "SAML attributes provision groups and profile on every login - compatible with PR #968, wired by 3 lines",
+        "SAML attributes provision groups and profile on every login - built on the ACS of PR #968, hooked in by 3 lines once both PRs are merged",
     )
 
     # -- login flow --------------------------------------------------------
@@ -226,6 +233,8 @@ def build_saml_sync() -> Sketch:
     s.text(acs.cx, acs.y + 54, "/auth/saml/callback", size=14, colour=DIM)
     s.text(acs.cx, acs.y + 76, "create_or_get_sso_user(email)", size=14, colour=DIM)
     s.text(acs.cx, acs.y + 98, "-> magic-link ticket -> viewer", size=14, colour=DIM)
+    s.text(acs.cx, acs.bottom + 22, "AuthnRequest ids: shared one-shot", size=13, colour=DIM)
+    s.text(acs.cx, acs.bottom + 40, "store (Redis), replay-safe", size=13, colour=DIM)
 
     s.arrow(idp.right, idp.cy, acs.x, idp.cy)
     s.text(335, 132, "assertion:", size=13, colour=DIM)
@@ -249,9 +258,9 @@ def build_saml_sync() -> Sketch:
     )
     s.box(sync)
     s.arrow(acs.right, acs.cy, sync.x, sync.cy, dashed=True)
-    s.text(765, 140, "+3 lines", size=14, colour=RED)
-    s.text(765, 158, "when #968", size=13, colour=DIM)
-    s.text(765, 174, "merges", size=13, colour=DIM)
+    s.text(765, 134, "+3 lines", size=14, colour=RED)
+    s.text(765, 152, "once #968 and", size=13, colour=DIM)
+    s.text(765, 168, "#972 are merged", size=13, colour=DIM)
 
     # -- what the sync touches --------------------------------------------
     sso_group = Box(
@@ -356,8 +365,9 @@ def build_saml_sync() -> Sketch:
         (
             "/groups page (self-service)",
             "Admin -> Groups tab",
-            "project permissions page:",
-            "Groups card",
+            "project permissions:",
+            "Groups section",
+            "(Paper look)",
         ),
     )
     for b in (sysadmin, pi, gadmin, surfaces):
