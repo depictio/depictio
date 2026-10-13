@@ -1,6 +1,5 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActionIcon,
   Badge,
   Box,
   Group,
@@ -38,13 +37,18 @@ import {
   selectionValuesFor,
   toggleValue,
 } from './jbrowse/trackSync';
-import { hideAllIds, manifestTrackIds } from './jbrowse/trackMenu';
+import { hideAllIds, manifestTrackIds, withSectionCategory } from './jbrowse/trackMenuModel';
 import {
   hasLiftedLimits,
   liftDisplayLimits,
   planForceLoadReset,
 } from './jbrowse/forceLoad';
 import TrackMenu from './jbrowse/TrackMenu';
+import ViewMenu, { type ViewMenuItem } from './jbrowse/ViewMenu';
+
+/** Hidden for now: JBrowse's own track selector (the toolbar burger) is the
+ *  only track picker, so the two never disagree. Flip to re-enable the menu. */
+const SHOW_TRACK_MENU = false;
 
 type ViewState = ReturnType<typeof createViewState>;
 
@@ -56,6 +60,8 @@ interface LgvTrack {
 interface LgvView {
   tracks: LgvTrack[];
   bpPerPx: number;
+  /** The visible locus as a string ("chr8:1..2"), or '' before the blocks exist. */
+  visibleLocStrings: string;
   showTrack: (trackId: string) => unknown;
   hideTrack: (trackId: string) => unknown;
 }
@@ -105,6 +111,41 @@ function readToggle(key: string, fallback: boolean): boolean {
     return v == null ? fallback : v === '1';
   } catch {
     return fallback;
+  }
+}
+
+/** The locus the user last looked at, per viewer (a string, unlike the toggles). */
+function readString(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+/** The ordered ids of the open tracks, per viewer; [] when nothing is stored. */
+function readTrackIds(key: string): string[] {
+  try {
+    const v = JSON.parse(window.localStorage.getItem(key) ?? '[]');
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeTrackIds(key: string, ids: string[]): void {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(ids));
+  } catch {
+    // Private mode / blocked storage: the track choice just won't persist.
+  }
+}
+
+function writeString(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Private mode / blocked storage: the locus just won't persist.
   }
 }
 
@@ -219,10 +260,16 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewState, setViewState] = useState<ViewState | null>(null);
-  const viewMeta = useRef<{ assembly: string; createdAt: number; location: string | null }>({
+  const viewMeta = useRef<{
+    assembly: string;
+    createdAt: number;
+    location: string | null;
+    filtersKey: string;
+  }>({
     assembly: '',
     createdAt: 0,
     location: null,
+    filtersKey: '',
   });
   // Track ids this component manages (the manifest's): user-opened tracks
   // outside this set (annotation, UCSC, from the track selector or the track
@@ -313,11 +360,18 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
   useEffect(() => {
     if (!payload) return;
     const assemblyName = String(payload.assembly.name ?? '');
-    const tracks = absolutize(payload.tracks);
+    const tracks = withSectionCategory(absolutize(payload.tracks), payload.track_rows);
     for (const id of manifestTrackIds(payload.track_rows)) managedIds.current.add(id);
 
     const stale = Date.now() - viewMeta.current.createdAt > VIEW_MAX_AGE_MS;
     if (!viewState || viewMeta.current.assembly !== assemblyName || stale) {
+      // The open tracks and their order as the user left them (per viewer),
+      // restricted to tracks this payload still knows about.
+      const savedIds = readTrackIds(`${storageKey}.tracks`);
+      const known = new Set(payload.track_rows.map((r) => r.track_id));
+      const openAtStart = savedIds.length
+        ? savedIds.filter((id) => known.has(id))
+        : payload.shown_track_ids;
       const state = createViewState({
         assembly: absolutize(payload.assembly),
         tracks,
@@ -336,8 +390,8 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
             hideHeaderOverview: !toolbar.showOverview,
             init: {
               assembly: assemblyName,
-              loc: payload.location ?? undefined,
-              tracks: payload.shown_track_ids,
+              loc: readString(`${storageKey}.loc`) || payload.location || undefined,
+              tracks: openAtStart,
             },
           },
         },
@@ -346,6 +400,7 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
         assembly: assemblyName,
         createdAt: Date.now(),
         location: payload.location,
+        filtersKey,
       };
       setViewState(state);
       return;
@@ -365,13 +420,20 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     const open = (view.tracks as Array<{ configuration: { trackId: string } }>).map(
       (t) => t.configuration.trackId,
     );
-    const plan = planTrackSync(open, payload.shown_track_ids, managedIds.current);
-    for (const id of plan.hide) view.hideTrack(id);
-    for (const id of plan.show) {
-      try {
-        view.showTrack(id);
-      } catch (err) {
-        console.warn(`jbrowse: cannot show track ${id}`, err);
+    // The filtered set is re-applied only when the filters changed: a refetch
+    // with the same filters (refresh, the restored set on load) keeps the
+    // tracks the user has open, and their order.
+    const filtersChanged = viewMeta.current.filtersKey !== filtersKey;
+    viewMeta.current.filtersKey = filtersKey;
+    if (filtersChanged) {
+      const plan = planTrackSync(open, payload.shown_track_ids, managedIds.current);
+      for (const id of plan.hide) view.hideTrack(id);
+      for (const id of plan.show) {
+        try {
+          view.showTrack(id);
+        } catch (err) {
+          console.warn(`jbrowse: cannot show track ${id}`, err);
+        }
       }
     }
     if (payload.location && payload.location !== viewMeta.current.location) {
@@ -382,6 +444,48 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload]);
+
+  // Remember which tracks are open, in order: a refresh reopens the same set.
+  useEffect(() => {
+    if (!viewState) return;
+    const view = viewState.session.view as unknown as LgvView;
+    let timer: number | undefined;
+    const dispose = reaction(
+      () => (aliveNode(view) ? openTrackIds(view) : null),
+      (ids) => {
+        if (ids == null) return;
+        window.clearTimeout(timer);
+        timer = window.setTimeout(() => writeTrackIds(`${storageKey}.tracks`, ids), 400);
+      },
+      { equals: comparer.structural },
+    );
+    return () => {
+      window.clearTimeout(timer);
+      dispose();
+    };
+  }, [viewState, storageKey]);
+
+  // Remember the locus the user is looking at, so a refresh (or a rebuilt view)
+  // reopens there instead of at the YAML default. Debounced: panning fires a lot.
+  useEffect(() => {
+    if (!viewState) return;
+    const view = viewState.session.view as unknown as LgvView;
+    let timer: number | undefined;
+    const dispose = reaction(
+      () => (aliveNode(view) ? view.visibleLocStrings : ''),
+      (locus) => {
+        window.clearTimeout(timer);
+        timer = window.setTimeout(() => {
+          if (locus) writeString(`${storageKey}.loc`, locus);
+        }, 400);
+      },
+      { equals: comparer.structural },
+    );
+    return () => {
+      window.clearTimeout(timer);
+      dispose();
+    };
+  }, [viewState, storageKey]);
 
   // Theme follows the Mantine colour scheme without rebuilding the view.
   useEffect(() => {
@@ -641,80 +745,56 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
   const trackRows = payload?.track_rows ?? EMPTY_ROWS;
   useEffect(() => {
     if (!onToolbarNode) return;
-    const item = (
-      key: string,
-      label: string,
-      icon: string,
-      active: boolean,
-      onClick: () => void,
-    ) => (
-      <Tooltip key={key} label={label} withinPortal={false}>
-        <ActionIcon
-          variant={active ? 'light' : 'subtle'}
-          size="sm"
-          aria-pressed={active}
-          aria-label={label}
-          data-testid={`jbrowse-toggle-${key}`}
-          onClick={onClick}
-        >
-          <Icon icon={icon} width={16} />
-        </ActionIcon>
-      </Tooltip>
-    );
+    const toggles: ViewMenuItem[] = [
+      {
+        key: 'forceload',
+        label: 'Force load',
+        checked: toolbar.forceLoad,
+        onChange: () => setToggle('forceLoad', 'forceLoad'),
+      },
+      {
+        key: 'header',
+        label: 'Navigation header',
+        checked: toolbar.showHeader,
+        onChange: () => setToggle('showHeader', 'header'),
+      },
+      {
+        key: 'overview',
+        label: 'Overview ruler',
+        checked: toolbar.showOverview,
+        onChange: () => setToggle('showOverview', 'overview'),
+      },
+      {
+        key: 'status',
+        label: 'Status bar',
+        checked: toolbar.showStatus,
+        onChange: () => setToggle('showStatus', 'status'),
+      },
+    ];
+    if (selectionEnabled && selectionMode === 'feature_click') {
+      toggles.push({
+        key: 'click',
+        label: 'Click filters the dashboard',
+        checked: toolbar.clickFilters,
+        onChange: () => setToggle('clickFilters', 'clickFilters'),
+      });
+    }
     onToolbarNode(
       <React.Fragment key="jbrowse-toolbar">
-        <TrackMenu
-          key="tracks"
-          rows={trackRows}
-          openIds={openIds}
-          portalTarget={fullscreenEl}
-          disabled={!viewState}
-          onToggle={onToggleTrack}
-          onShowAll={showTracks}
-          onHideAll={onHideAll}
-          onBackToFilters={onBackToFilters}
-        />
-        {item(
-          'forceload',
-          toolbar.forceLoad
-            ? 'Normal loading limits'
-            : 'Force load: fetch every track even when the region holds a lot of data (may be slow)',
-          'mdi:download-multiple',
-          toolbar.forceLoad,
-          () => setToggle('forceLoad', 'forceLoad'),
+        {SHOW_TRACK_MENU && (
+          <TrackMenu
+            key="tracks"
+            rows={trackRows}
+            openIds={openIds}
+            portalTarget={fullscreenEl}
+            disabled={!viewState}
+            onToggle={onToggleTrack}
+            onShowAll={showTracks}
+            onHideAll={onHideAll}
+            onBackToFilters={onBackToFilters}
+          />
         )}
-        {item(
-          'header',
-          toolbar.showHeader ? 'Hide navigation header' : 'Show navigation header',
-          'mdi:dock-top',
-          toolbar.showHeader,
-          () => setToggle('showHeader', 'header'),
-        )}
-        {item(
-          'overview',
-          toolbar.showOverview ? 'Hide overview ruler' : 'Show overview ruler',
-          'mdi:ruler',
-          toolbar.showOverview,
-          () => setToggle('showOverview', 'overview'),
-        )}
-        {item(
-          'status',
-          toolbar.showStatus ? 'Hide status bar' : 'Show status bar',
-          'mdi:dock-bottom',
-          toolbar.showStatus,
-          () => setToggle('showStatus', 'status'),
-        )}
-        {selectionEnabled && selectionMode === 'feature_click'
-          ? item(
-              'click',
-              toolbar.clickFilters
-                ? 'Clicking a feature filters the dashboard (click to show details instead)'
-                : 'Clicking a feature shows its details (click to filter instead)',
-              toolbar.clickFilters ? 'mdi:filter-outline' : 'mdi:information-outline',
-              toolbar.clickFilters,
-              () => setToggle('clickFilters', 'clickFilters'),
-            )
-          : null}
+        <ViewMenu key="view" items={toggles} portalTarget={fullscreenEl} disabled={!viewState} />
       </React.Fragment>,
     );
   }, [

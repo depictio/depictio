@@ -15,7 +15,14 @@ import {
 import { Icon } from '@iconify/react';
 
 import type { JBrowseTrackRow } from '../../api';
-import { SHOW_ALL_CAP, countOpen, groupTrackRows, showAllPlan } from './trackMenu';
+import {
+  SECTION_LABELS,
+  SHOW_ALL_CAP,
+  countOpen,
+  groupTrackRows,
+  sectionsOf,
+  showAllPlan,
+} from './trackMenuModel';
 
 interface TrackMenuProps {
   rows: JBrowseTrackRow[];
@@ -82,7 +89,7 @@ const TrackMenu: React.FC<TrackMenuProps> = ({
         <Tooltip label="Tracks" withinPortal={false}>
           <ActionIcon
             variant={opened ? 'light' : 'subtle'}
-            size="sm"
+            size="md"
             aria-label="Tracks"
             aria-expanded={opened}
             data-testid="jbrowse-toggle-tracks"
@@ -92,7 +99,7 @@ const TrackMenu: React.FC<TrackMenuProps> = ({
               setOpened((o) => !o);
             }}
           >
-            <Icon icon="mdi:format-list-checks" width={16} />
+            <Icon icon="mdi:format-list-checks" width={18} />
           </ActionIcon>
         </Tooltip>
       </Popover.Target>
@@ -174,8 +181,15 @@ const TrackMenu: React.FC<TrackMenuProps> = ({
                 {rows.length ? 'No track matches the search.' : 'No tracks.'}
               </Text>
             ) : (
-              <Stack gap={8}>
-                {groups.map((g) => (
+              <Stack gap={10}>
+                {sectionsOf(groups).map((section) => (
+                  <Stack key={section} gap={6} data-testid={`jbrowse-section-${section}`}>
+                    <Text size="xs" fw={800}>
+                      {SECTION_LABELS[section]}
+                    </Text>
+                    {groups
+                      .filter((g) => g.section === section)
+                      .map((g) => (
                   <Stack key={g.key} gap={4}>
                     <Text size="xs" fw={700} c="dimmed" tt="uppercase">
                       {g.label} ({countOpen(g.rows, openIds)}/{g.rows.length})
@@ -211,6 +225,8 @@ const TrackMenu: React.FC<TrackMenuProps> = ({
                         styles={{ body: { alignItems: 'center' }, labelWrapper: { minWidth: 0 } }}
                       />
                     ))}
+                  </Stack>
+                      ))}
                   </Stack>
                 ))}
               </Stack>

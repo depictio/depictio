@@ -8,8 +8,10 @@ import {
   hideAllIds,
   manifestTrackIds,
   rowMatchesQuery,
+  sectionsOf,
   showAllPlan,
-} from './trackMenu';
+  withSectionCategory,
+} from './trackMenuModel';
 
 const row = (
   track_id: string,
@@ -34,17 +36,47 @@ const rows: JBrowseTrackRow[] = [
 ];
 
 describe('groupTrackRows', () => {
-  it('groups manifest rows by category, then UCSC, then reference', () => {
+  it('groups reference first, then manifest categories, then UCSC by group', () => {
     const groups = groupTrackRows(rows);
     expect(groups.map((g) => g.label)).toEqual([
+      'Reference',
       'H3K27ac',
       'H3K4me3',
       'Other tracks',
-      'UCSC',
-      'Reference',
+      'UCSC · Other',
     ]);
-    expect(groups[0].rows.map((r) => r.track_id)).toEqual(['a', 'c']);
-    expect(groups[4].rows.map((r) => r.track_id)).toEqual(['genes', 'extra-1']);
+    expect(groups[0].rows.map((r) => r.track_id)).toEqual(['genes', 'extra-1']);
+    expect(groups[1].rows.map((r) => r.track_id)).toEqual(['a', 'c']);
+    expect(groups[4].rows.map((r) => r.track_id)).toEqual(['ucsc-cons']);
+  });
+
+  it('puts project tracks and external tracks in their own sections', () => {
+    const groups = groupTrackRows(rows);
+    expect(sectionsOf(groups)).toEqual(['external', 'project']);
+    expect(groups.filter((g) => g.section === 'project').map((g) => g.label)).toEqual([
+      'H3K27ac',
+      'H3K4me3',
+      'Other tracks',
+    ]);
+    expect(groups.filter((g) => g.section === 'external').map((g) => g.label)).toEqual([
+      'Reference',
+      'UCSC · Other',
+    ]);
+  });
+
+  it('splits UCSC tracks into one readable section per UCSC group', () => {
+    const groups = groupTrackRows([
+      row('k', { name: 'knownGene', source: 'ucsc', category: 'genes' }),
+      row('m', { name: 'rmsk', source: 'ucsc', category: 'rep' }),
+      row('g', { name: 'mane', source: 'ucsc', category: 'genes' }),
+      row('z', { name: 'odd', source: 'ucsc', category: 'zz' }),
+    ]);
+    expect(groups.map((g) => g.label)).toEqual([
+      'UCSC · Genes',
+      'UCSC · Repeats',
+      'UCSC · zz',
+    ]);
+    expect(groups[0].rows.map((r) => r.track_id)).toEqual(['k', 'g']);
   });
 
   it('calls uncategorised rows "Tracks" when no row has a category', () => {
@@ -59,7 +91,7 @@ describe('groupTrackRows', () => {
 
   it('keeps a category named like a fixed group apart from it', () => {
     const groups = groupTrackRows([row('x', { category: 'UCSC' }), row('y', { source: 'ucsc' })]);
-    expect(groups.map((g) => g.key)).toEqual(['category:UCSC', 'ucsc']);
+    expect(groups.map((g) => g.key)).toEqual(['category:UCSC', 'ucsc:']);
   });
 
   it('filters on every search term, across fields, and drops empty groups', () => {
@@ -81,7 +113,7 @@ describe('rowMatchesQuery', () => {
 describe('showAllPlan', () => {
   it('opens every matching row, in menu order, below the cap', () => {
     const plan = showAllPlan(groupTrackRows(rows));
-    expect(plan.ids).toEqual(['a', 'c', 'b', 'd', 'ucsc-cons', 'genes', 'extra-1']);
+    expect(plan.ids).toEqual(['genes', 'extra-1', 'a', 'c', 'b', 'd', 'ucsc-cons']);
     expect(plan).toMatchObject({ total: 7, capped: false });
   });
 
@@ -95,7 +127,7 @@ describe('showAllPlan', () => {
 
   it('honours a custom cap', () => {
     expect(showAllPlan(groupTrackRows(rows), 2)).toEqual({
-      ids: ['a', 'c'],
+      ids: ['genes', 'extra-1'],
       total: 7,
       capped: true,
     });
@@ -112,5 +144,30 @@ describe('countOpen', () => {
   it('counts the open rows', () => {
     expect(countOpen(rows, ['a', 'genes', 'not-a-row'])).toBe(2);
     expect(countOpen(rows, [])).toBe(0);
+  });
+});
+
+describe('withSectionCategory', () => {
+  it('puts manifest tracks under Project and the rest under External', () => {
+    const rows = [
+      row('sv_1', { source: 'manifest' }),
+      row('ucsc_mane', { source: 'ucsc' }),
+      row('annot', { source: 'annotation' }),
+    ];
+    const confs = [
+      { trackId: 'sv_1', category: ['GM18939x02'] },
+      { trackId: 'ucsc_mane', category: ['UCSC', 'genes'] },
+      { trackId: 'annot', category: ['Annotation'] },
+    ];
+    expect(withSectionCategory(confs, rows)).toEqual([
+      { trackId: 'sv_1', category: ['Project tracks', 'GM18939x02'] },
+      { trackId: 'ucsc_mane', category: ['External tracks', 'UCSC · Genes'] },
+      { trackId: 'annot', category: ['External tracks', 'Annotation'] },
+    ]);
+  });
+
+  it('treats a track with no row as external and keeps configs without category', () => {
+    const out = withSectionCategory([{ trackId: 'unknown' }], []);
+    expect(out).toEqual([{ trackId: 'unknown', category: ['External tracks'] }]);
   });
 });
