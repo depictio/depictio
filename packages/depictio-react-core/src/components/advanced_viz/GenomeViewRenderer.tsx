@@ -9,7 +9,13 @@ import {
 } from '@mantine/core';
 import type { RootSpec } from '@genome-spy/core/spec/root.js';
 
-import { fetchAdvancedVizData, fetchUniqueValues, InteractiveFilter, StoredMetadata } from '../../api';
+import {
+  authFetch,
+  fetchAdvancedVizData,
+  fetchUniqueValues,
+  InteractiveFilter,
+  StoredMetadata,
+} from '../../api';
 import { columnCategoryColors } from '../../categoryColors';
 import { resolveCategoricalPalette } from '../../colors';
 import { useCategoryColorSource } from '../../hooks/useCategoryColors';
@@ -283,9 +289,9 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     // The URLs in the manifest are presigned and expire (15 minutes), so this
     // re-runs on the refresh tick like any other fetch; a stale URL would
     // otherwise start 403ing mid-pan.
-    fetchIndexedFileManifest(String(metadata.dc_id ?? ''), (url) =>
-      fetch(url, { credentials: 'include' }),
-    )
+    // The API takes the bearer token, not a cookie: a plain fetch reached it
+    // as nobody and got a 401, so every file-backed tile failed to render.
+    fetchIndexedFileManifest(String(metadata.dc_id ?? ''), (url) => authFetch(url))
       .then((m) => {
         if (!cancelled) setManifest(m);
       })
