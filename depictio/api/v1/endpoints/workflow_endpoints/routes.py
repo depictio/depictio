@@ -8,7 +8,7 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import projects_collection, workflows_collection
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.endpoints.workflow_endpoints.utils import compare_models
-from depictio.api.v1.permissions import build_access_query, get_user_group_ids
+from depictio.api.v1.permissions import build_access_query, get_user_group_ids, has_permission
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.users import User, UserBase
 from depictio.models.models.workflows import Workflow
@@ -292,10 +292,11 @@ async def delete_workflow(workflow_id: str, current_user: User = Depends(get_cur
 
     # Owners are stored as UserBase entries keyed by ``_id`` (the previous code
     # read a non-existent ``user_id`` field and compared an ObjectId against
-    # strings, so the check never matched). Normalise both sides to ObjectId and
-    # let admins (incl. the anonymous-admin in single-user mode) bypass.
-    owner_ids = {ObjectId(owner["_id"]) for owner in existing_workflow["permissions"]["owners"]}
-    if not current_user.is_admin and user_oid not in owner_ids:
+    # strings, so the check never matched). The chokepoint normalises both sides
+    # to ObjectId, lets admins (incl. the anonymous-admin in single-user mode)
+    # bypass and accepts group owners.
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
+    if not has_permission(existing_workflow, current_user, "owner", group_ids):
         raise HTTPException(
             status_code=403,
             detail=f"User with ID '{user_oid}' is not authorized to delete workflow with ID '{workflow_id}'",

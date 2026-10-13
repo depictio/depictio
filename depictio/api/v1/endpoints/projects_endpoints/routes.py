@@ -105,7 +105,11 @@ from depictio.api.v1.endpoints.projects_endpoints.utils import (
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.ingestion_roots import roots_refusal
-from depictio.api.v1.permissions import get_administered_group_ids
+from depictio.api.v1.permissions import (
+    get_administered_group_ids,
+    get_user_group_ids,
+    has_permission,
+)
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.projects import Project, ProjectPermissionRequest, ProjectResponse
 from depictio.models.models.users import Permission, UserBase
@@ -566,13 +570,7 @@ def _may_trigger_ingestion(project: dict, current_user) -> bool:
     """
     if getattr(current_user, "is_admin", False):
         return True
-    permissions = project.get("permissions") or {}
-    user_id = str(current_user.id)
-    return any(
-        str(entry.get("_id")) == user_id
-        for group in ("owners", "editors")
-        for entry in (permissions.get(group) or [])
-    )
+    return has_permission(project, current_user, "editor", get_user_group_ids(current_user.id))
 
 
 @projects_endpoint_router.get("/ingestion/trigger-status/{project_id}")

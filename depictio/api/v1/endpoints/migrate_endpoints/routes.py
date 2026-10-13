@@ -40,6 +40,7 @@ from depictio.api.v1.endpoints.backup_endpoints.routes import _convert_complex_o
 from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_user_or_anonymous,
 )
+from depictio.api.v1.permissions import build_access_query, get_user_group_ids
 from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
 from depictio.models.models.users import User
 
@@ -375,13 +376,9 @@ async def export_project(
     if not current_user.is_admin:
         # Mirror _async_get_project_from_id: a non-admin may only reach projects
         # they own/edit/view or that are explicitly public.
-        user_oid = ObjectId(current_user.id)
-        query["$or"] = [
-            {"permissions.owners._id": user_oid},
-            {"permissions.editors._id": user_oid},
-            {"permissions.viewers._id": user_oid},
-            {"is_public": True},
-        ]
+        query.update(
+            build_access_query(current_user, "viewer", get_user_group_ids(current_user.id))
+        )
 
     project = projects_collection.find_one(query)
 

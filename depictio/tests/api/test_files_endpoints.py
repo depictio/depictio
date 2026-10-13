@@ -191,10 +191,10 @@ class TestListRegisteredFiles:
 
         from bson import ObjectId
 
-        reader = MagicMock(is_admin=False, id=ObjectId())
+        reader = MagicMock(is_admin=False, is_anonymous=False, id=ObjectId())
         result, match, _ = await self._list(reader, True, [self._file(ObjectId())])
 
-        assert "permissions.owners._id" not in match
+        assert "$or" not in match
         assert len(result) == 1
         assert result[0]["file_location"] == "/data/iris.csv"
         assert "permissions" not in result[0]
@@ -205,7 +205,7 @@ class TestListRegisteredFiles:
 
         from bson import ObjectId
 
-        owner = MagicMock(is_admin=False, id=ObjectId())
+        owner = MagicMock(is_admin=False, is_anonymous=False, id=ObjectId())
         result, _, _ = await self._list(owner, True, [self._file(owner.id)])
 
         assert "permissions" in result[0]
@@ -216,10 +216,10 @@ class TestListRegisteredFiles:
 
         from bson import ObjectId
 
-        outsider = MagicMock(is_admin=False, id=ObjectId())
+        outsider = MagicMock(is_admin=False, is_anonymous=False, id=ObjectId())
         _, match, projects = await self._list(outsider, False, [])
 
-        assert match["permissions.owners._id"] == ObjectId(outsider.id)
+        assert {"permissions.owners._id": ObjectId(outsider.id)} in match["$or"]
         assert "$or" in projects.find_one.call_args[0][0]
 
     @pytest.mark.asyncio
@@ -228,7 +228,7 @@ class TestListRegisteredFiles:
 
         from bson import ObjectId
 
-        admin = MagicMock(is_admin=True, id=ObjectId())
+        admin = MagicMock(is_admin=True, is_anonymous=False, id=ObjectId())
         result, match, projects = await self._list(admin, False, [self._file(ObjectId())])
 
         assert "permissions.owners._id" not in match

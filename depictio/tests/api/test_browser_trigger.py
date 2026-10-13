@@ -9,6 +9,7 @@ worth pinning down independently of the endpoint that calls them.
 from __future__ import annotations
 
 import pytest
+from bson import ObjectId
 
 from depictio.api.v1.endpoints.projects_endpoints.routes import (
     _may_trigger_ingestion,
@@ -60,34 +61,42 @@ class TestReachability:
         assert _unreachable_data_locations({"workflows": [{"name": "wf"}]}) == []
 
 
-def _permissions(owner: str = "u-owner", editor: str = "u-editor") -> dict:
+OWNER, EDITOR, VIEWER, NOBODY = (
+    "6a00000000000000000000a1",
+    "6a00000000000000000000a2",
+    "6a00000000000000000000a3",
+    "6a00000000000000000000a4",
+)
+
+
+def _permissions(owner: str = OWNER, editor: str = EDITOR) -> dict:
     return {
         "permissions": {
             "owners": [{"_id": owner}],
             "editors": [{"_id": editor}],
-            "viewers": [{"_id": "u-viewer"}],
+            "viewers": [{"_id": VIEWER}],
         }
     }
 
 
 class TestPermission:
-    @pytest.mark.parametrize("user_id", ["u-owner", "u-editor"])
+    @pytest.mark.parametrize("user_id", [OWNER, EDITOR])
     def test_owners_and_editors_may_trigger(self, user_id):
         assert _may_trigger_ingestion(_permissions(), _User(user_id)) is True
 
     def test_viewers_may_not(self):
         # Triggering rewrites data collections, so it takes write access, not
         # read access.
-        assert _may_trigger_ingestion(_permissions(), _User("u-viewer")) is False
+        assert _may_trigger_ingestion(_permissions(), _User(VIEWER)) is False
 
     def test_a_stranger_may_not(self):
-        assert _may_trigger_ingestion(_permissions(), _User("u-nobody")) is False
+        assert _may_trigger_ingestion(_permissions(), _User(NOBODY)) is False
 
     def test_admins_may(self):
-        assert _may_trigger_ingestion(_permissions(), _User("u-nobody", is_admin=True)) is True
+        assert _may_trigger_ingestion(_permissions(), _User(NOBODY, is_admin=True)) is True
 
     def test_a_project_with_no_permissions_block_denies(self):
-        assert _may_trigger_ingestion({}, _User("u-owner")) is False
+        assert _may_trigger_ingestion({}, _User(OWNER)) is False
 
 
 def _run_pipeline(
@@ -135,7 +144,6 @@ def _run_pipeline(
     )
 
     import mongomock
-    from bson import ObjectId
 
     files = mongomock.MongoClient().db.files
     monkeypatch.setattr(api_db, "files_collection", files)
@@ -482,7 +490,6 @@ def api(monkeypatch, roots):
     from types import SimpleNamespace
 
     import mongomock
-    from bson import ObjectId
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 

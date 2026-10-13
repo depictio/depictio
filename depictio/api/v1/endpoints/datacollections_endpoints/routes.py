@@ -24,6 +24,7 @@ from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.endpoints.validators import validate_workflow_and_collection
 from depictio.api.v1.endpoints.workflow_endpoints.routes import get_workflow_from_id
+from depictio.api.v1.permissions import build_access_query, get_user_group_ids
 from depictio.models.models.base import PyObjectId
 
 datacollections_endpoint_router = APIRouter()
@@ -211,18 +212,15 @@ async def get_tag_from_id(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)  # type: ignore[possibly-unbound-attribute]
+
     # Use MongoDB aggregation to directly retrieve the specific data collection
     pipeline = [
         # Match projects containing this collection and with appropriate permissions
         {
             "$match": {
                 "workflows.data_collections._id": data_collection_oid,
-                "$or": [
-                    {"permissions.owners._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
-                    {"permissions.viewers._id": current_user.id},  # type: ignore[possibly-unbound-attribute]
-                    {"permissions.viewers": "*"},
-                    {"is_public": True},
-                ],
+                **build_access_query(current_user, "viewer", group_ids),
             }
         },
         # Unwind the workflows array

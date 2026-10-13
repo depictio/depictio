@@ -11,7 +11,7 @@ from fastapi import HTTPException
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import projects_collection, tokens_collection
-from depictio.api.v1.permissions import get_user_group_ids, has_permission
+from depictio.api.v1.permissions import build_access_query, get_user_group_ids, has_permission
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.s3_access import ProjectS3Config
 
@@ -92,18 +92,15 @@ async def _get_data_collection_specs(data_collection_id: PyObjectId, current_use
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
+
     # Use MongoDB aggregation to directly retrieve the specific data collection
     pipeline = [
         # Match projects containing this collection and with appropriate permissions
         {
             "$match": {
                 "workflows.data_collections._id": data_collection_oid,
-                "$or": [
-                    {"permissions.owners._id": current_user.id},
-                    {"permissions.viewers._id": current_user.id},
-                    {"permissions.viewers": "*"},
-                    {"is_public": True},
-                ],
+                **build_access_query(current_user, "viewer", group_ids),
             }
         },
         # Unwind the workflows array

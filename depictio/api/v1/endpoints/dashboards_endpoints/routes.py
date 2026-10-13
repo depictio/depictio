@@ -45,7 +45,11 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
     oauth2_scheme_optional,
 )
 from depictio.api.v1.filter_links import extend_filters_via_links
-from depictio.api.v1.permissions import get_user_group_ids, has_permission
+from depictio.api.v1.permissions import (
+    get_user_group_ids,
+    has_permission,
+    resolve_effective_role,
+)
 from depictio.api.v1.services.branding import (
     LOGO_CACHE_CONTROL,
     dashboard_logo_key,
@@ -853,38 +857,22 @@ async def init_dashboard(
         user_permission_level = "owner"
         logger.info("✅ Single user mode: Granting owner permissions")
     else:
-        # Multi-user mode: Check actual permissions
-        permissions = project_data.get("permissions", {})
-        owner_ids = [str(owner.get("_id", "")) for owner in permissions.get("owners", [])]
-        editor_ids = [str(editor.get("_id", "")) for editor in permissions.get("editors", [])]
-        current_user_id_str = str(current_user.id)
-
-        if current_user_id_str in owner_ids:
-            user_permission_level = "owner"
-        elif current_user_id_str in editor_ids:
-            user_permission_level = "editor"
+        # Multi-user mode: highest of the direct and group role on the project
+        # (public / "*" only ever floor at viewer, which is the default).
+        group_ids = get_user_group_ids(current_user.id)
+        user_permission_level = (
+            resolve_effective_role(project_data, current_user, group_ids) or "viewer"
+        )
 
         # Fallback: check dashboard-level permissions (covers demo/public mode where
         # users own dashboards they created but are not project-level owners)
         if user_permission_level == "viewer":
-            dashboard_permissions = dashboard_data.get("permissions", {})
-            dashboard_owner_ids = [
-                str(o.get("_id", "")) if isinstance(o, dict) else str(o)
-                for o in dashboard_permissions.get("owners", [])
-            ]
-            dashboard_editor_ids = [
-                str(e.get("_id", "")) if isinstance(e, dict) else str(e)
-                for e in dashboard_permissions.get("editors", [])
-            ]
-            if current_user_id_str in dashboard_owner_ids:
-                user_permission_level = "owner"
+            dashboard_role = resolve_effective_role(dashboard_data, current_user, group_ids)
+            if dashboard_role in ("owner", "editor"):
+                user_permission_level = dashboard_role
                 logger.info(
-                    f"✅ Granting owner via dashboard-level permissions for user {current_user_id_str}"
-                )
-            elif current_user_id_str in dashboard_editor_ids:
-                user_permission_level = "editor"
-                logger.info(
-                    f"✅ Granting editor via dashboard-level permissions for user {current_user_id_str}"
+                    f"✅ Granting {dashboard_role} via dashboard-level permissions "
+                    f"for user {current_user.id}"
                 )
 
     dashboard_dict = dashboard.model_dump()

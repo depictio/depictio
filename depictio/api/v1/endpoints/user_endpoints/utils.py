@@ -14,7 +14,6 @@ from depictio.models.models.users import (
     Group,
     GroupBeanie,
     TokenData,
-    UserBeanie,
 )
 
 
