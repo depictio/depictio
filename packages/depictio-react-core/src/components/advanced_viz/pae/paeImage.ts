@@ -49,51 +49,10 @@ export function stopsSampler(stops: RampStops): RampSampler {
   };
 }
 
-function evenStops(colours: readonly string[]): RampStops {
-  const last = colours.length - 1;
-  return colours.map((c, k) => [last > 0 ? k / last : 0, cssToRgb(c)] as const);
-}
-
-/**
- * Stops for the `ColourScale` names `utils/colorScale.ts` does not hold (it
- * keeps Viridis and Spectral; any other name falls back to Blues there). The
- * Plotly Express sequences for the matplotlib maps, and plotly.js's own RdBu
- * (blue to red), the one the Plotly-drawn tiles get for the same name.
- * Promote to `utils/colorScale.ts` `SCALES` so every canvas tile shares them.
- */
-export const EXTRA_SCALE_STOPS: Readonly<Record<string, RampStops>> = {
-  Plasma: evenStops([
-    '#0d0887', '#46039f', '#7201a8', '#9c179e', '#bd3786',
-    '#d8576b', '#ed7953', '#fb9f3a', '#fdca26', '#f0f921',
-  ]),
-  Inferno: evenStops([
-    '#000004', '#1b0c41', '#4a0c6b', '#781c6d', '#a52c60',
-    '#cf4446', '#ed6925', '#fb9b06', '#f7d13d', '#fcffa4',
-  ]),
-  Magma: evenStops([
-    '#000004', '#180f3d', '#440f76', '#721f81', '#9e2f7f',
-    '#cd4071', '#f1605d', '#fd9668', '#feca8d', '#fcfdbf',
-  ]),
-  Cividis: evenStops([
-    '#00224e', '#123570', '#3b496c', '#575d6d', '#707173',
-    '#8a8678', '#a59c74', '#c3b369', '#e1cc55', '#fee838',
-  ]),
-  RdBu: [
-    [0, [5, 10, 172]],
-    [0.35, [106, 137, 247]],
-    [0.5, [190, 190, 190]],
-    [0.6, [220, 170, 132]],
-    [0.7, [230, 145, 90]],
-    [1, [178, 10, 28]],
-  ],
-};
-
-/** The sampler of a named colour scale: the shared `sampleColorscale` for the
- *  names it holds, the stops above for the others. Low error = scale start. */
+/** The sampler of a named colour scale (the shared stops in utils/colorScale.ts,
+ *  which hold every `ColourScale`). Low error = scale start. */
 export function colourScaleSampler(name: ColourScale): RampSampler {
-  if (COLORSCALE_NAMES.includes(name)) return (t) => sampleColorscale(name, t);
-  const stops = EXTRA_SCALE_STOPS[name];
-  return stops ? stopsSampler(stops) : (t) => sampleColorscale('Viridis', t);
+  return (t) => sampleColorscale(COLORSCALE_NAMES.includes(name) ? name : 'Viridis', t);
 }
 
 /**
