@@ -32,6 +32,7 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="samplesheet",
@@ -41,7 +42,8 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "track_id": pl.Utf8,
     "sample_id": pl.Utf8,
     "target": pl.Utf8,
@@ -141,4 +143,4 @@ def transform(sources: dict[str, pl.DataFrame], context=None) -> pl.DataFrame:
     # order explicit, the browser opens on the first `initial_tracks`.
     for i, row in enumerate(rows, start=1):
         row["order"] = i
-    return pl.DataFrame(rows, schema=EXPECTED_SCHEMA)
+    return pl.DataFrame(rows, schema=OUTPUT_SCHEMA)

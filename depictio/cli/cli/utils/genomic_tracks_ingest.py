@@ -304,7 +304,7 @@ def probe_https(uris: list[str], timeout: float = 5.0) -> list[str]:
 
 
 def _list_existing_keys(s3_client, bucket: str, prefix: str) -> set[str]:
-    from depictio.cli.cli.commands.images import _list_existing_keys as list_keys
+    from depictio.cli.cli.utils.image_upload import list_existing_keys as list_keys
 
     return list_keys(s3_client, bucket, prefix)
 
