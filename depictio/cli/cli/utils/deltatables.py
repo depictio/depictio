@@ -11,7 +11,7 @@ import polars as pl
 from pydantic import validate_call
 from rich.markup import escape
 
-from depictio.api.v1.configs.settings_models import local_data_policy
+from depictio.api.v1.configs.settings_models import local_data_policy, server_may_read_local_file
 from depictio.api.v1.remote_fetch import (
     RemoteURLRejected,
     bounded_download,
@@ -1681,17 +1681,34 @@ def process_phylogeny_data_collection(
     file_path = files[0].file_location
     logger.info(f"Phylogeny tree location: {file_path}")
 
-    if file_path.startswith("s3://"):
-        s3_location = file_path
+    bucket = CLI_config.s3_storage.bucket
+    s3_key = phylogeny_s3_key(dc_id)
+    if file_path[:5].lower() == "s3://":
+        # Copied, not referenced: the Newick endpoint reads the fixed key with the
+        # instance credentials, and a stored external URL would otherwise have to
+        # be read with them too. The source is read the way any remote data is.
+        try:
+            source = s3_read_target_in_region("s3://" + file_path[5:], CLI_config)
+            obj = source.client().get_object(Bucket=source.bucket, Key=source.key)
+            logger.info(f"Copying phylogeny tree to S3: {file_path} -> {s3_key}")
+            _s3_client(CLI_config).put_object(Bucket=bucket, Key=s3_key, Body=obj["Body"].read())
+        except Exception as e:
+            return {"result": "error", "message": f"Failed to copy phylogeny tree to S3: {e}"}
     else:
-        bucket = CLI_config.s3_storage.bucket
-        s3_key = phylogeny_s3_key(dc_id)
+        # On a server (the ingest worker), the path came from a project's
+        # configuration: uploaded as is, any file the process can read would be
+        # served back by the Newick endpoint.
+        if is_server_context() and not server_may_read_local_file(file_path):
+            return {
+                "result": "error",
+                "message": "The phylogeny tree's path is outside the folders this server reads.",
+            }
         try:
             logger.info(f"Uploading phylogeny tree to S3: {file_path} -> {s3_key}")
             _s3_client(CLI_config).upload_file(file_path, bucket, s3_key)
         except Exception as e:
             return {"result": "error", "message": f"Failed to upload phylogeny tree to S3: {e}"}
-        s3_location = f"s3://{bucket}/{s3_key}"
+    s3_location = f"s3://{bucket}/{s3_key}"
 
     rich_print_checked_statement(
         f"Phylogeny data collection processed: {escape(data_collection.data_collection_tag)}",

@@ -62,13 +62,25 @@ podDisruptionBudget:
   enabled: true
   minAvailable: 1
 
+# The EMBL S3 gateway rejects the checksums botocore >= 1.36 sends by default
+# (PutObject: "x-amz-content-sha256 must be UNSIGNED-PAYLOAD, ..."), which fails
+# the backend's startup write check and leaves the pods Running with a dead API.
+# EMBL's S3 docs recommend these two switches for every client. They are not in
+# the chart's configmap allowlist, hence extraEnv.
+#
 # Celery worker — same HA bump as prod.
 celery:
   replicas: 2
+  extraEnv: &s3ChecksumEnv
+    - name: AWS_REQUEST_CHECKSUM_CALCULATION
+      value: "when_required"
+    - name: AWS_RESPONSE_CHECKSUM_VALIDATION
+      value: "when_required"
 
 ## SecurityContext
 backend:
   replicas: 2  # Multiple replicas for high availability with anti-affinity
+  extraEnv: *s3ChecksumEnv
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000
@@ -101,6 +113,10 @@ backend:
     # Google OAuth Configuration
     DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED: "true"
 
+    # SAML SSO — off here; enable it from values-embl-secrets.yaml together with the
+    # IdP side (see the `auth:` block below).
+    DEPICTIO_AUTH_SAML_ENABLED: "false"
+
     # Celery Configuration - Disabled for now
     # DEPICTIO_CELERY_ENABLED: "false"
 
@@ -112,6 +128,23 @@ backend:
 auth:
   # Must be /auth/google/callback, not bare /auth — see values-embl-internal-prod.yaml
   DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI: "https://dev.depictio.embl.org/auth/google/callback"
+
+  # SAML SSO, service-provider side. The identity provider side (entity ID, SSO
+  # URL, signing certificate) is deployment-private: set
+  # DEPICTIO_AUTH_SAML_IDP_ENTITY_ID, DEPICTIO_AUTH_SAML_IDP_SSO_URL and
+  # DEPICTIO_AUTH_SAML_IDP_CERT in values-embl-secrets.yaml, merged into this block.
+  #
+  # IdP-side registration (a SAML client in the realm):
+  #   - Client ID            = DEPICTIO_AUTH_SAML_SP_ENTITY_ID below
+  #   - ACS / redirect URL   = https://dev.api.depictio.embl.org/depictio/api/v1/auth/saml/callback
+  #   - Sign assertions: ON, Client signature required: OFF
+  DEPICTIO_AUTH_SAML_SP_ENTITY_ID: "depictio-dev-datasci"
+  DEPICTIO_AUTH_SAML_SP_BASE_URL: "https://dev.api.depictio.embl.org"
+  DEPICTIO_AUTH_SAML_LOGIN_LABEL: "Sign in with EMBL"
+  # Attributes the IdP releases (matched ignoring case: "groups" also reads "Groups").
+  DEPICTIO_AUTH_SAML_ATTRIBUTE_GROUPS: "groups"
+  DEPICTIO_AUTH_SAML_ATTRIBUTE_DISPLAY_NAME: "displayName"
+  DEPICTIO_AUTH_SAML_ATTRIBUTE_LOGIN: "uid"
 
 mongo:
   useOperator: true     # Use Percona PSMDB Operator for HA replica set

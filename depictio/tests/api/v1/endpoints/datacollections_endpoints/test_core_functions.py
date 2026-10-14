@@ -258,6 +258,7 @@ class TestUpdateDataCollectionName:
         # Create mock project data that matches the expected structure
         mock_project = {
             "_id": test_data["project"].id,
+            "permissions": {"owners": [{"_id": user.id}], "editors": [], "viewers": []},
             "workflows": [
                 {
                     "_id": test_data["workflow"].id,
@@ -362,6 +363,7 @@ class TestDeleteDataCollectionById:
         # Create mock project data that matches the expected structure
         mock_project = {
             "_id": test_data["project"].id,
+            "permissions": {"owners": [{"_id": user.id}], "editors": [], "viewers": []},
             "workflows": [
                 {
                     "_id": test_data["workflow"].id,

@@ -503,6 +503,10 @@ export {
   fetchFigureVisualizationList,
   upsertComponent,
   saveDashboardNotes,
+  // Per-user dashboard filter state
+  fetchDashboardFilterState,
+  saveDashboardFilterState,
+  deleteDashboardFilterState,
   uploadDashboardLogo,
   updateDashboardAppearance,
   // Instance branding (admin panel)
@@ -579,6 +583,18 @@ export {
   deleteDataCollection,
   createDataCollectionFromUpload,
   createDataCollectionFromUrl,
+  // Groups (membership, group admins, project sharing)
+  listGroups,
+  listMyGroups,
+  fetchGroup,
+  createGroup,
+  updateGroup,
+  deleteGroup,
+  addGroupMember,
+  removeGroupMember,
+  setGroupAdmin,
+  setGroupPI,
+  setGroupPendingPI,
   // Admin
   listAllUsers,
   deleteUser,
@@ -685,6 +701,11 @@ export type {
   BreakdownPayloadDTO,
   CatalogSource,
   FigureStyleRequest,
+  PermissionsGroup,
+  GroupSummary,
+  MyGroup,
+  GroupMember,
+  GroupDetail,
 } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {
@@ -732,6 +753,14 @@ export {
   persistableCrossTabFilters,
 } from './crossTabFilters';
 export type { CrossTabFilterPayload } from './crossTabFilters';
+export {
+  encodeFiltersForHash,
+  decodeFiltersFromHash,
+  readFiltersFromLocation,
+  syncFiltersToLocation,
+  buildFilterShareUrl,
+  sanitizeRestoredFilters,
+} from './filterShare';
 export {
   readEditorFilters,
   writeEditorFilters,
@@ -903,6 +932,7 @@ export type {
   DashboardSummary,
   InteractiveFilter,
   InteractiveFilterSource,
+  DashboardFilterStateResponse,
   BulkComputeResponse,
   FigureResponse,
   TableResponse,

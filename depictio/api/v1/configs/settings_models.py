@@ -6,7 +6,14 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
-from pydantic import AliasChoices, Field, SecretStr, computed_field, model_validator
+from pydantic import (
+    AliasChoices,
+    Field,
+    SecretStr,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import (
     BaseSettings,
     EnvSettingsSource,
@@ -496,6 +503,88 @@ class AuthConfig(BaseSettings):
     google_oauth_redirect_uri: Optional[str] = Field(
         default=None, description="Google OAuth redirect URI"
     )
+
+    # SAML 2.0 SSO (SP-initiated, python3-saml). Provider-agnostic: validated
+    # against a Keycloak realm, but nothing here is specific to it.
+    saml_enabled: bool = Field(default=False, description="Enable SAML SSO authentication")
+    saml_idp_entity_id: Optional[str] = Field(
+        default=None,
+        description="IdP entityID, e.g. https://sso.example.org/realms/myrealm",
+    )
+    saml_idp_sso_url: Optional[str] = Field(
+        default=None,
+        description="IdP SSO endpoint (HTTP-Redirect binding), "
+        "e.g. https://sso.example.org/realms/myrealm/protocol/saml",
+    )
+    saml_idp_cert: Optional[str] = Field(
+        default=None,
+        description="IdP X.509 signing certificate: inline PEM "
+        "(-----BEGIN CERTIFICATE-----...) or a path to a PEM file",
+    )
+    saml_sp_entity_id: Optional[str] = Field(
+        default=None,
+        description="SP entityID / issuer registered with the IdP",
+    )
+    saml_sp_base_url: Optional[str] = Field(
+        default=None,
+        description="Public base URL of the API used to build the ACS URL; "
+        "defaults to the FastAPI service external URL",
+    )
+    saml_name_id_format: str = Field(
+        default="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress",
+        description="Requested NameID format",
+    )
+    saml_attribute_email: Optional[str] = Field(
+        default=None,
+        description="SAML attribute name carrying the email; unset → use NameID",
+    )
+    saml_attribute_username: Optional[str] = Field(
+        default=None, description="SAML attribute name carrying the username (informational)"
+    )
+    saml_login_label: str = Field(
+        default="Sign in with SSO",
+        description="Label for the SSO button in the login form (e.g. 'Sign in with your institution')",
+    )
+
+    # --- SAML attribute mappings (SSO attribute sync) -------------------------
+    # Which assertion attributes sso_sync.sync_sso_user reads, beside the SAML
+    # connection fields above.
+    saml_attribute_groups: Optional[str] = Field(
+        default=None,
+        description="SAML attribute name carrying group memberships (e.g. 'memberOf'). "
+        "When set, sso_managed groups are mirrored from the assertion on every login.",
+    )
+    saml_attribute_title: Optional[str] = Field(
+        default=None, description="SAML attribute name carrying the user's title"
+    )
+    saml_attribute_display_name: Optional[str] = Field(
+        default=None, description="SAML attribute name carrying the user's display name"
+    )
+    saml_attribute_login: Optional[str] = Field(
+        default=None, description="SAML attribute name carrying the user's login/username"
+    )
+    # --- end SAML attribute mappings ------------------------------------------
+
+    @field_validator(
+        "saml_idp_entity_id",
+        "saml_idp_sso_url",
+        "saml_idp_cert",
+        "saml_sp_entity_id",
+        "saml_sp_base_url",
+        "saml_attribute_email",
+        "saml_attribute_username",
+        "saml_attribute_groups",
+        "saml_attribute_title",
+        "saml_attribute_display_name",
+        "saml_attribute_login",
+        mode="before",
+    )
+    @classmethod
+    def _empty_saml_str_to_none(cls, v: Any) -> Any:
+        # Helm/compose render unset values as empty strings; treat them as unset.
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_AUTH_", case_sensitive=False)
 
@@ -1057,6 +1146,28 @@ def local_data_roots_enabled() -> bool:
     return local_data_policy() is not None
 
 
+#: The reference projects, which ship their data files inside the package.
+BUNDLED_PROJECTS_DIR: Path = Path(__file__).parents[3] / "projects"
+
+
+def server_may_read_local_file(path: str) -> bool:
+    """Whether the server may open a local path a user registered, as is.
+
+    Below the bundled reference projects, or wherever the local-data policy
+    lets the server read (``depictio local``). Anywhere else the path is only
+    a string from a project's configuration or a CLI scan, and opening it would
+    hand back whatever the server process can read, its own keys included.
+    """
+    if not isinstance(path, str) or "\x00" in path or not os.path.isabs(path):
+        return False
+    real = os.path.realpath(path)
+    bundled = os.path.realpath(BUNDLED_PROJECTS_DIR)
+    if real == bundled or real.startswith(bundled + os.sep):
+        return True
+    policy = local_data_policy()
+    return policy is not None and policy.allows_read(path)
+
+
 def remote_browse_enabled() -> bool:
     """Whether an administrator listed S3 locations every user may browse for a run
     folder: ``DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS`` or ``..._CREDENTIALED_S3_BUCKETS``.
@@ -1108,7 +1219,7 @@ def _local_data_policy_for(_env: tuple[str | None, ...]) -> "LocalDataPolicy | N
     # Read by the server itself: uploads are written to the temporary directory
     # and scanned from there, and the reference projects ship their data files
     # inside the package. Never browsable, never a data root.
-    server_dirs = [tempfile.gettempdir(), str(Path(__file__).parents[3] / "projects")]
+    server_dirs = [tempfile.gettempdir(), str(BUNDLED_PROJECTS_DIR)]
     return LocalDataPolicy.build(roots, denied=denied, server_dirs=server_dirs, home=home)
 
 

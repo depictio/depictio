@@ -4,7 +4,7 @@
 # an Overview tab). Unlike values-embl-demo*.yaml this instance is NOT an
 # ephemeral public demo: it must survive Helm upgrades with its data intact, so it deliberately leaves demo.autoWipeOnUpgrade and
 # DEPICTIO_MONGODB_WIPE at their values.yaml defaults (both "false"). Do not
-# copy those two toggles from values-embl-demo.yaml / values-embl-demo-dev.yaml
+# copy those two toggles from values-embl-demo.yaml / values-embl-trec-demo.yaml
 # — they delete PVCs / wipe MongoDB on every upgrade.
 #
 # Namespace: datasci-depictio-demo-showcases (TEMPORARY)

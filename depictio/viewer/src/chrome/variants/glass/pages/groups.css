@@ -1,0 +1,116 @@
+/* User groups in Glass (Paper): the master-detail workspace shared by
+ * Administration → Groups and the personal /groups page. Panels, fields,
+ * buttons and tags already take the page language from pages.css; what is
+ * here is the workspace's own: the list's selected row, the segmented source
+ * filter, the section heads of the detail panel. Every colour is a --gl-*
+ * token. Every rule hangs off `.gg-workspace` or `.gg-detail`, which only the
+ * Glass render carries, so Classic keeps its look. */
+
+/* The selected group in the list: the accent wash, like a selected nav row. */
+:root[data-chrome='glass'] .gp-main .gg-workspace .ag-row.gg-row-selected {
+  background: var(--gl-accent-soft);
+}
+:root[data-chrome='glass'] .gp-main .gg-workspace .ag-row.gg-row-selected:hover {
+  background: var(--gl-accent-soft);
+}
+:root[data-chrome='glass'] .gp-main .gg-workspace .ag-row {
+  cursor: pointer;
+}
+
+/* The list row's name: icon, name, a quiet mark for P.I. / group admin. */
+:root[data-chrome='glass'] .gp-main .gg-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 100%;
+}
+:root[data-chrome='glass'] .gp-main .gg-name-icon {
+  flex: none;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .gp-main .gg-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'] .gp-main .gg-name-mark {
+  flex: none;
+  color: var(--gl-accent-fg);
+}
+
+/* Section head inside the detail pane: icon, title, a quiet count. */
+:root[data-chrome='glass'] .gp-main .gg-detail .gg-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .gp-main .gg-detail .gg-head-title {
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'] .gp-main .gg-detail .gg-count {
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+/* The members' well, set off from the form above it by a hairline. */
+:root[data-chrome='glass'] .gp-main .gg-detail .gg-section {
+  padding-top: 14px;
+  border-top: 1px solid var(--gl-hair);
+}
+/* The pane's mark: a chip like the permissions page's. */
+:root[data-chrome='glass'] .gp-main .gg-detail .gg-chip {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: var(--gl-well);
+  color: var(--gl-muted);
+}
+
+/* The empty pane before a group is picked. */
+:root[data-chrome='glass'] .gp-main .gg-empty {
+  color: var(--gl-faint);
+}
+
+/* Source filter: the admin Users segmented well, a paper indicator. */
+:root[data-chrome='glass'] .gp-main .gg-seg.mantine-SegmentedControl-root {
+  padding: 3px;
+  border-radius: 11px;
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] .gp-main .gg-seg .mantine-SegmentedControl-indicator {
+  border-radius: 8px;
+  background: var(--gl-paper);
+  box-shadow:
+    0 0 0 1px var(--gl-hair),
+    0 1px 2px var(--gl-shade-a);
+}
+:root[data-chrome='glass'] .gp-main .gg-seg .mantine-SegmentedControl-label {
+  color: var(--gl-muted);
+  font-weight: 600;
+}
+:root[data-chrome='glass'] .gp-main .gg-seg .mantine-SegmentedControl-label:hover:not([data-disabled], [data-active]) {
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'] .gp-main .gg-seg .mantine-SegmentedControl-label[data-active] {
+  color: var(--gl-fg);
+}
+
+/* The panes track the viewport, under the page head. */
+:root[data-chrome='glass'] .gp-main .gg-pane {
+  height: calc(100dvh - var(--gp-top-h) - 210px);
+  min-height: 420px;
+}
+@media (max-width: 760px) {
+  :root[data-chrome='glass'] .gp-main .gg-pane {
+    height: auto;
+    min-height: 320px;
+  }
+}

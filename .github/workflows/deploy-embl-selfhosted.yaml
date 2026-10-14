@@ -1,36 +1,34 @@
 name: Deploy to EMBL (Self-Hosted)
 
 # SECURITY NOTE: This workflow uses self-hosted runners.
-# It triggers after the image build of a tag push (never after a PR build).
-# Only users with write access can push tags.
+# It only runs on a manual dispatch, so only users with write access can
+# deploy anything.
 #
-# Automatic: every release tag, beta or stable, deploys to dev
-# (dev.demo.depictio.embl.org) once its images are built.
-# Manual only: demo (demo.depictio.embl.org), through workflow_dispatch.
+# Nothing deploys on a tag any more. Both environments are persistent and
+# deployed by hand, through workflow_dispatch:
+#   - trec-demo: trec-demo.depictio.embl.org (the TREC AML 2024 demo)
+#   - demo:      demo.depictio.embl.org
 
 on:
-  # Trigger after the image build completes
-  workflow_run:
-    workflows:
-      - "Build images (api / worker / viewer / cli)"
-    types:
-      - completed
-
-  # Manual dispatch for any version
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag to deploy (without v prefix, e.g., 0.6.0-b18, 0.6.0, 0.6.1)'
+        description: 'Version tag to deploy (without v prefix, e.g., 1.17.4, 1.18.0-b1)'
         required: true
         type: string
       environment:
-        description: 'Target environment (dev for beta, demo for stable, both for dual deployment)'
+        description: 'Target environment (trec-demo, demo, or both)'
         required: true
         type: choice
         options:
-          - dev
+          - trec-demo
           - demo
           - both
+      wipe:
+        description: 'trec-demo only: wipe MongoDB and the config/keys volumes during this upgrade (one-off reset; deploy again without it right after)'
+        required: false
+        type: boolean
+        default: false
       register_projects:
         description: 'Register demo projects after a demo deployment'
         required: false
@@ -39,55 +37,27 @@ on:
 
 # Prevent concurrent deployments
 concurrency:
-  group: embl-deploy-${{ github.event.workflow_run.head_branch || github.ref }}
+  group: embl-deploy-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  # Version of the tag whose images were just built. The build also runs on
-  # pull requests, which must not deploy anything.
-  resolve-tag:
-    name: Resolve Tag
-    runs-on: ubuntu-latest
-    if: >-
-      github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      startsWith(github.event.workflow_run.head_branch, 'v')
-    outputs:
-      version: ${{ steps.resolve.outputs.version }}
-    steps:
-      - name: Resolve version from the tag
-        id: resolve
-        env:
-          TAG: ${{ github.event.workflow_run.head_branch }}
-        run: |
-          if [[ ! "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-b[0-9]+)?$ ]]; then
-            echo "::error::${TAG} is not a release tag (vX.Y.Z or vX.Y.Z-bN)"
-            exit 1
-          fi
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
-          echo "Deploying ${TAG#v} to dev"
-
-  # Dev environment - every tag (beta and stable) deploys here automatically
-  deploy-dev:
-    name: Deploy to Dev (dev.demo.depictio.embl.org)
+  # TREC demo - persistent, deployed by hand. Its data (the TREC project and
+  # dashboard, ingested from a laptop) survives upgrades; `wipe` is the only
+  # way to reset it.
+  deploy-trec-demo:
+    name: Deploy to TREC demo (trec-demo.depictio.embl.org)
     runs-on: [self-hosted, embl-deploy]
     environment: embl-demo-dev
-    needs: [resolve-tag]
-    if: |
-      always() &&
-      (
-        (github.event_name == 'workflow_run' && needs.resolve-tag.result == 'success') ||
-        (github.event_name == 'workflow_dispatch' && (github.event.inputs.environment == 'dev' || github.event.inputs.environment == 'both'))
-      )
+    if: github.event.inputs.environment == 'trec-demo' || github.event.inputs.environment == 'both'
     env:
-      VERSION: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || needs.resolve-tag.outputs.version }}
+      VERSION: ${{ github.event.inputs.version }}
+      WIPE: ${{ github.event.inputs.wipe }}
       NAMESPACE: datasci-depictio-demo-dev
       RELEASE: devdemo
-      API_URL: https://dev.api.demo.depictio.embl.org
+      API_URL: https://api.trec-demo.depictio.embl.org
     steps:
-      # The chart and values come from main (or the dispatched branch), not
-      # from the tag, so a chart fix reaches dev without waiting for a release.
+      # The chart and values come from the dispatched branch, not from the tag,
+      # so a chart fix does not wait for a release.
       - name: Checkout repository
         uses: actions/checkout@v7
 
@@ -107,27 +77,37 @@ jobs:
           done
 
       # values-embl-secrets-demodev.yaml goes after the shared secrets file and
-      # gives dev an S3 bucket of its own: dev wipes its data on every upgrade,
-      # and the orphan cleanup deletes S3 files that its own MongoDB does not
-      # know, so sharing demo's bucket would delete demo's data.
-      - name: Deploy to Dev environment
+      # gives this environment an S3 bucket of its own: the orphan cleanup
+      # deletes S3 files that its own MongoDB does not know, so sharing demo's
+      # bucket would delete demo's data. It also carries
+      # secrets.publicAccessCode, the shared code that gates public mode.
+      - name: Deploy to TREC demo
         run: |
-          echo "🚀 Deploying version ${VERSION} to dev.demo.depictio.embl.org"
+          echo "🚀 Deploying version ${VERSION} to trec-demo.depictio.embl.org"
+
+          # A reset is opt-in. Without it neither MongoDB nor the volumes are
+          # touched, so an upgrade keeps the ingested TREC project.
+          wipe_args=()
+          if [ "${WIPE}" = "true" ]; then
+            echo "⚠️  wipe requested: MongoDB and the config/keys volumes are reset"
+            wipe_args=(--set demo.autoWipeOnUpgrade=true --set backend.env.DEPICTIO_MONGODB_WIPE=true)
+          fi
 
           helm upgrade --install "${RELEASE}" ./helm-charts/depictio \
             --namespace "${NAMESPACE}" \
             -f helm-charts/depictio/values.yaml \
             -f helm-charts/depictio/values-embl-demo-base.yaml \
-            -f helm-charts/depictio/values-embl-demo-dev.yaml \
+            -f helm-charts/depictio/values-embl-trec-demo.yaml \
             -f ~/actions-runner-embl/secrets/values-embl-secrets.yaml \
             -f ~/actions-runner-embl/secrets/values-embl-secrets-demodev.yaml \
             --set backend.image.tag="${VERSION}" \
             --set celery.image.tag="${VERSION}" \
             --set viewer.image.tag="${VERSION}" \
+            "${wipe_args[@]}" \
             --wait --timeout 10m --atomic \
             --insecure-skip-tls-verify
 
-          echo "✅ Dev deployment complete"
+          echo "✅ TREC demo deployment complete"
 
       - name: Verify deployment
         run: |
@@ -161,7 +141,7 @@ jobs:
           echo "::error::${API_URL}/health does not report ${VERSION}"
           exit 1
 
-  # Demo environment - manual dispatch only, never deployed automatically
+  # Demo environment - manual dispatch only
   deploy-demo:
     name: Deploy to Demo (demo.depictio.embl.org)
     runs-on: [self-hosted, embl-deploy]
@@ -179,10 +159,10 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         run: |
           echo "📋 Recent available tags:"
-          echo "Beta tags (for dev environment):"
+          echo "Beta tags:"
           git tag -l 'v*-b*' --sort=-version:refname | head -10 | sed 's/^v/  - /'
           echo ""
-          echo "Stable tags (for demo environment):"
+          echo "Stable tags (for demo and trec-demo):"
           git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | grep -v '\-b' | head -10 | sed 's/^v/  - /'
 
       - name: Determine version

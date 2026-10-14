@@ -27,6 +27,7 @@ from depictio.api.v1.endpoints.deltatables_endpoints.utils import (
     previous_column_types,
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
+from depictio.api.v1.permissions import build_access_query, get_user_group_ids, has_permission
 from depictio.api.v1.s3 import polars_s3_config
 from depictio.api.v1.services.card_breakdown import compute_breakdown
 from depictio.api.v1.services.card_metrics import NUMERIC_LAYOUTS, numeric_layout_payload
@@ -530,7 +531,8 @@ def _owned_or_admin_query(current_user: User, base: dict) -> dict:
     """
     if current_user.is_admin:
         return base
-    return {**base, "permissions.owners._id": current_user.id}
+    group_ids = get_user_group_ids(current_user.id)
+    return {**base, **build_access_query(current_user, "owner", group_ids)}
 
 
 def _build_permission_pipeline(data_collection_id: PyObjectId, current_user: User) -> list[dict]:
@@ -540,14 +542,11 @@ def _build_permission_pipeline(data_collection_id: PyObjectId, current_user: Use
     owner/viewer filter — they wouldn't appear in the project's permissions
     list, so the explicit-membership check would otherwise reject them.
     """
-    match_clause: dict = {"workflows.data_collections._id": ObjectId(data_collection_id)}
-    if not current_user.is_admin:
-        match_clause["$or"] = [
-            {"permissions.owners._id": current_user.id},
-            {"permissions.viewers._id": current_user.id},
-            {"permissions.viewers": "*"},
-            {"is_public": True},
-        ]
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
+    match_clause: dict = {
+        "workflows.data_collections._id": ObjectId(data_collection_id),
+        **build_access_query(current_user, "viewer", group_ids),
+    }
     return [
         {"$match": match_clause},
         {"$unwind": "$workflows"},
@@ -624,12 +623,8 @@ async def batch_check_deltatables_exist(
     object_ids = [ObjectId(dc_id) for dc_id in data_collection_ids]
     accessible_match: dict = {"workflows.data_collections._id": {"$in": object_ids}}
     if not current_user.is_admin:
-        accessible_match["$or"] = [
-            {"permissions.owners._id": current_user.id},
-            {"permissions.viewers._id": current_user.id},
-            {"permissions.viewers": "*"},
-            {"is_public": True},
-        ]
+        group_ids = get_user_group_ids(current_user.id)
+        accessible_match.update(build_access_query(current_user, "viewer", group_ids))
     accessible_pipeline = [
         {"$match": accessible_match},
         {"$unwind": "$workflows"},
@@ -729,13 +724,7 @@ def _caller_is_project_operator(data_collection_id: PyObjectId, current_user: Us
         {"workflows.data_collections._id": ObjectId(data_collection_id)},
         {"permissions": 1},
     )
-    permissions = (project or {}).get("permissions") or {}
-    user_id = str(current_user.id)
-    return any(
-        str(entry.get("_id")) == user_id
-        for group in ("owners", "editors")
-        for entry in (permissions.get(group) or [])
-    )
+    return has_permission(project, current_user, "editor", get_user_group_ids(current_user.id))
 
 
 @deltatables_endpoint_router.get("/history/{data_collection_id}")

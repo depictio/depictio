@@ -1,18 +1,25 @@
-# EMBL Dev Environment - dev.demo.depictio.embl.org
-# Every tag (beta and stable) deploys here automatically
+# EMBL TREC demo - trec-demo.depictio.embl.org
+# The TREC AML 2024 project and dashboard, as a persistent demo. Deployed by
+# hand (deploy-embl-selfhosted.yaml, workflow_dispatch), never on a tag.
+#
+# This is the former dev demo (dev.demo.depictio.embl.org): same Helm release
+# (`devdemo`), namespace and S3 bucket, new hosts. Unlike the dev demo it keeps
+# its data across upgrades: the TREC project is ingested from a laptop, so a
+# wipe means re-ingesting it. Reset on purpose with the workflow's `wipe` input.
 #
 # Layered on top of:
 #   - values.yaml (base configuration)
 #   - values-embl-demo-base.yaml (EMBL infrastructure + demo mode)
 #   - values-embl-secrets.yaml (shared secrets), then
-#     values-embl-secrets-demodev.yaml (dev's own S3 bucket); both kept on the
-#     self-hosted runner, outside the repo
+#     values-embl-secrets-demodev.yaml (this env's own S3 bucket, and
+#     secrets.publicAccessCode, the shared code that gates public mode); both
+#     kept on the self-hosted runner, outside the repo
 #
 # Tenant quota: 32 CPU / 64 GiB / 30 pods, shared between this env and
 # values-embl-demo.yaml. Budget with MongoDB Community Operator HA (3 replicas
 # × 2 envs = 6 pods, ~4.2 CPU / 9 GiB limits for all MongoDB):
 #
-#   Component         dev-demo limits    demo limits    Both envs
+#   Component         trec-demo limits   demo limits    Both envs
 #   Backend ×2        4 CPU / 8 GiB      4 CPU / 8 GiB  8 CPU / 16 GiB
 #   Celery            8 CPU / 16 GiB     5 CPU / 10 GiB 13 CPU / 26 GiB
 #   Viewer ×2         1 CPU / 512 Mi     1 CPU / 512 Mi  2 CPU / 1 GiB
@@ -23,9 +30,10 @@
 # Pods are also capped at 10 per namespace (Capsule quota, seen 2026-10-05),
 # which is what limits the viewer to one replica below.
 
-# Demo environment configuration - auto-wipe on upgrades
+# Persistent: an upgrade keeps the config/keys volumes and MongoDB. The workflow
+# turns this on (with DEPICTIO_MONGODB_WIPE) for a one-off reset.
 demo:
-  autoWipeOnUpgrade: true  # Delete PVCs before each upgrade for fresh demo state
+  autoWipeOnUpgrade: false
 
 # Viewer (nginx SPA) — stateless and tiny: one replica, rolled with a surge
 # pod so a deploy has no downtime (no PVC, so RollingUpdate is safe here).
@@ -43,8 +51,7 @@ podDisruptionBudget:
   minAvailable: 1
 
 # Celery worker — advanced-viz compute bottleneck (Playwright screenshots,
-# polars C-extension). dev validates multi-replica celery before promoting to
-# stable. 4 CPU / 8 GiB limits per pod × 2 pods = 8 CPU / 16 GiB total.
+# polars C-extension). 4 CPU / 8 GiB limits per pod × 2 pods = 8 CPU / 16 GiB total.
 celery:
   enabled: true
   replicas: 2
@@ -71,7 +78,7 @@ celery:
 # (render_figure, bulk_compute_cards, …). 2 replicas for HA + tail latency;
 # budget-neutral (per-pod halved, aggregate 2 CPU / 4 Gi req, 4 CPU / 8 Gi
 # limit, 4 gunicorn workers unchanged). Safe across pods via the Mongo
-# `init_lock`. Kept on Recreate — this env auto-wipes PVCs on upgrade.
+# `init_lock`. Kept on Recreate: the config/keys volumes are shared ReadWriteMany.
 backend:
   replicas: 2
   resources:
@@ -82,9 +89,23 @@ backend:
       memory: "4Gi"
       cpu: "2"
   env:
-    # Demo mode with guided tour tooltips
-    DEPICTIO_AUTH_DEMO_MODE: "true"
+    # Public mode, link-shareable: visitors get a throwaway guest account once
+    # they pass the shared access code (secrets.publicAccessCode in the
+    # runner's secrets file). Without that code, this line alone would open the
+    # instance to the whole internet. No guided tour (the base file turns demo
+    # mode on).
+    DEPICTIO_AUTH_DEMO_MODE: "false"
     DEPICTIO_AUTH_PUBLIC_MODE: "true"
+
+    # Guests can read; a Google account is what lets someone comment. Google is
+    # the only way to sign in (client id/secret come from the shared secrets
+    # file, the redirect URI is set under `auth:` below). Registration stays
+    # enabled on purpose: DEPICTIO_AUTH_REGISTRATION_DISABLED would also stop
+    # the OAuth callback from creating the account of a first-time commenter.
+    # Public mode already refuses /register, so the password form has no door.
+    DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED: "true"
+    DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED: "true"
+    DEPICTIO_COMMENTS_VIEWERS_CAN_COMMENT: "true"
     # Anonymous user configuration
     DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
     DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
@@ -92,14 +113,36 @@ backend:
     # the 2-CPU per-pod limit.
     DEPICTIO_FASTAPI_WORKERS: "2"  # Gunicorn workers for API
     DEPICTIO_DEV_MODE: "false"
-    DEPICTIO_MONGODB_WIPE: "true"
+    DEPICTIO_MONGODB_WIPE: "false"
     DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "true"
     DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-MCC33FDF2Z"
-    # Explicit API URL to match ingress host (for browser-based requests)
-    DEPICTIO_FASTAPI_PUBLIC_URL: "https://dev.api.demo.depictio.embl.org"
-  extraEnv: *s3ChecksumEnv
+    # Explicit URLs to match the ingress hosts. The viewer URL is spelled out
+    # because global.urlPattern below would derive another host from it.
+    DEPICTIO_FASTAPI_PUBLIC_URL: "https://api.trec-demo.depictio.embl.org"
+    DEPICTIO_VIEWER_PUBLIC_URL: "https://trec-demo.depictio.embl.org"
 
-# Ingress - Dev Environment
+    # TREC skin, same as devinternal (values-embl-internal-dev-trec.yaml).
+    # Deployment defaults only: /admin -> Branding overrides any of this live.
+    DEPICTIO_BRANDING_PRESET: "trec"
+    DEPICTIO_BRANDING_APP_NAME: "Depictio for TREC"
+    DEPICTIO_BRANDING_LOGO_URL: "https://www.embl.org/about/info/trec/wp-content/uploads/2023/02/20230126_TREC_Tag_RGB-s.jpg"
+  extraEnv:
+    - name: AWS_REQUEST_CHECKSUM_CALCULATION
+      value: "when_required"
+    - name: AWS_RESPONSE_CHECKSUM_VALIDATION
+      value: "when_required"
+    # Only the TREC project lives here: no iris/penguins/ampliseq/... reference
+    # projects on API startup. Not in the configmap allowlist, hence extraEnv.
+    - name: DEPICTIO_DISABLE_EXAMPLE_DASHBOARDS
+      value: "true"
+
+# Google OAuth redirect URI, read from the top-level `auth:` map (not
+# backend.env). Must be registered in the Google console for the shared client,
+# and must be /auth/google/callback.
+auth:
+  DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI: "https://trec-demo.depictio.embl.org/auth/google/callback"
+
+# Ingress
 ingress:
   enabled: true
   ingressClassName: "external-users"
@@ -109,14 +152,14 @@ ingress:
     # Traefik automatically handles WebSocket upgrades
 
   hosts:
-    - host: "dev.demo.depictio.embl.org"
+    - host: "trec-demo.depictio.embl.org"
       paths:
         - path: /
           pathType: Prefix
           service:
             name: depictio-viewer
             portName: http
-    - host: "dev.api.demo.depictio.embl.org"
+    - host: "api.trec-demo.depictio.embl.org"
       paths:
         - path: /
           pathType: Prefix
@@ -126,8 +169,8 @@ ingress:
 
   tls:
     - hosts:
-        - "dev.demo.depictio.embl.org"
-        - "dev.api.demo.depictio.embl.org"
+        - "trec-demo.depictio.embl.org"
+        - "api.trec-demo.depictio.embl.org"
       secretName: devdemo-depictio-tls
 
 # Global domain settings

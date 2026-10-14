@@ -17,11 +17,11 @@
 # upgrade. The API now refuses to boot if no admin exists in MongoDB AND
 # bootstrapAdminPassword is unset — that's the fail-fast contract.
 #
-# Tenant quota: 32 CPU / 64 GiB / 30 pods, shared with values-embl-demo-dev.yaml
+# Tenant quota: 32 CPU / 64 GiB / 30 pods, shared with values-embl-trec-demo.yaml
 # With MongoDB HA via Community Operator (3 replicas × 2 envs = 6 pods):
 #   MongoDB limits: 6 × (0.5 CPU + 0.2 agent) = 4.2 CPU / 9 GiB
 #   Both envs combined limits: ~28 CPU / ~53 GiB — within 32/64 quota.
-# See values-embl-demo-dev.yaml header for full budget breakdown.
+# See values-embl-trec-demo.yaml header for full budget breakdown.
 
 # Demo environment configuration - auto-wipe on upgrades
 demo:

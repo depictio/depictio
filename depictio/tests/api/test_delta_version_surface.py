@@ -13,6 +13,7 @@ feature — "show people what changed and when":
 from __future__ import annotations
 
 import pytest
+from bson import ObjectId
 
 from depictio.api.v1.endpoints.projects_endpoints.ingestion_report import _aggregate_run_stats
 
@@ -37,7 +38,6 @@ def _run(run_tag: str, dc_stats: dict) -> dict:
 
 @pytest.fixture
 def project() -> dict:
-    from bson import ObjectId
 
     return {"workflows": [{"_id": str(ObjectId())}]}
 
@@ -139,12 +139,21 @@ class _User:
         self.is_admin = is_admin
 
 
-def _project_with(owner: str = "u-owner", editor: str = "u-editor") -> dict:
+# The access chokepoint compares ObjectIds, so the fixture identities are real ids.
+OWNER, EDITOR, VIEWER, NOBODY = (
+    "6a00000000000000000000a1",
+    "6a00000000000000000000a2",
+    "6a00000000000000000000a3",
+    "6a00000000000000000000a4",
+)
+
+
+def _project_with(owner: str = OWNER, editor: str = EDITOR) -> dict:
     return {
         "permissions": {
             "owners": [{"_id": owner}],
             "editors": [{"_id": editor}],
-            "viewers": [{"_id": "u-viewer"}],
+            "viewers": [{"_id": VIEWER}],
         }
     }
 
@@ -162,44 +171,38 @@ class TestOperatorVisibility:
         )
 
     def test_owner_sees_operators(self):
-        from bson import ObjectId
 
         self.set_project(_project_with())
-        assert self.routes._caller_is_project_operator(ObjectId(), _User("u-owner")) is True
+        assert self.routes._caller_is_project_operator(ObjectId(), _User(OWNER)) is True
 
     def test_editor_sees_operators(self):
-        from bson import ObjectId
 
         self.set_project(_project_with())
-        assert self.routes._caller_is_project_operator(ObjectId(), _User("u-editor")) is True
+        assert self.routes._caller_is_project_operator(ObjectId(), _User(EDITOR)) is True
 
     def test_viewer_does_not(self):
-        from bson import ObjectId
 
         self.set_project(_project_with())
-        assert self.routes._caller_is_project_operator(ObjectId(), _User("u-viewer")) is False
+        assert self.routes._caller_is_project_operator(ObjectId(), _User(VIEWER)) is False
 
     def test_stranger_on_a_public_project_does_not(self):
         """The case this gate exists for: read access via `is_public`."""
-        from bson import ObjectId
 
         self.set_project(_project_with())
-        assert self.routes._caller_is_project_operator(ObjectId(), _User("u-nobody")) is False
+        assert self.routes._caller_is_project_operator(ObjectId(), _User(NOBODY)) is False
 
     def test_admin_always_does(self):
-        from bson import ObjectId
 
         self.set_project(_project_with())
         assert (
-            self.routes._caller_is_project_operator(ObjectId(), _User("u-nobody", is_admin=True))
+            self.routes._caller_is_project_operator(ObjectId(), _User(NOBODY, is_admin=True))
             is True
         )
 
     def test_a_missing_project_denies_rather_than_raising(self):
-        from bson import ObjectId
 
         self.set_project(None)
-        assert self.routes._caller_is_project_operator(ObjectId(), _User("u-owner")) is False
+        assert self.routes._caller_is_project_operator(ObjectId(), _User(OWNER)) is False
 
 
 @pytest.fixture
@@ -247,8 +250,6 @@ class TestHistoryWindow:
         from datetime import datetime
         from types import SimpleNamespace
 
-        from bson import ObjectId
-
         import depictio.api.v1.endpoints.deltatables_endpoints.routes as routes
 
         dc_id = ObjectId()
@@ -289,7 +290,7 @@ class TestHistoryWindow:
 
             monkeypatch.setattr(routes, "_read_delta_history", read)
             return asyncio.run(
-                routes.get_delta_history(dc_id, limit=limit, current_user=_User("u-owner"))
+                routes.get_delta_history(dc_id, limit=limit, current_user=_User(OWNER))
             )
 
         return SimpleNamespace(call=call, reads=reads)

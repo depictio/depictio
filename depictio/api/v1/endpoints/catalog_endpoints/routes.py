@@ -21,6 +21,7 @@ from fastapi.responses import HTMLResponse
 from depictio.api.v1.configs.security_headers import csp_with_script_nonce
 from depictio.api.v1.db import files_collection, multiqc_collection, projects_collection
 from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
+from depictio.api.v1.permissions import build_access_query, get_user_group_ids
 from depictio.api.v1.source_links import github_blob_url
 from depictio.catalog.payload import (
     CatalogPayloadError,
@@ -294,18 +295,11 @@ async def compose_project(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid project_id")
 
-    current_user_id = ObjectId(current_user.id)
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
     permission_query: dict[str, Any] = {
         "_id": oid,
-        "$or": [
-            {"permissions.owners._id": current_user_id},
-            {"permissions.editors._id": current_user_id},
-            {"permissions.viewers._id": current_user_id},
-            {"is_public": True},
-        ],
+        **build_access_query(current_user, "viewer", group_ids),
     }
-    if current_user.is_admin:
-        permission_query = {"_id": oid}
 
     project = projects_collection.find_one(permission_query)
     if not project:

@@ -1,8 +1,11 @@
+from types import SimpleNamespace
+
 from bson import ObjectId
 from fastapi import HTTPException
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import projects_collection
+from depictio.api.v1.permissions import build_access_query, get_user_group_ids
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.data_collections import DataCollection
 from depictio.models.models.workflows import Workflow
@@ -25,13 +28,10 @@ def return_project_object(user_id: str, project_id: str, permissions: dict | Non
         raise HTTPException(status_code=400, detail=str(e))
 
     if not permissions:
-        permissions = {
-            "$or": [
-                {"permissions.owners._id": user_id},
-                {"permissions.viewers._id": user_id},
-                {"permissions.viewers": "*"},  # This makes projects with "*" publicly accessible
-            ],
-        }
+        # Only the raw user_id string reaches this helper, so wrap it in a shim
+        # for the query builder.
+        access_user = SimpleNamespace(id=user_oid, is_admin=False, is_anonymous=False)
+        permissions = build_access_query(access_user, "viewer", get_user_group_ids(user_oid))
 
     project = projects_collection.find_one(
         {"_id": project_oid, **permissions},
@@ -72,13 +72,10 @@ def validate_workflow_and_collection(
     # )
 
     if not permissions:
-        permissions = {
-            "$or": [
-                {"permissions.owners._id": user_id},
-                {"permissions.viewers._id": user_id},
-                {"permissions.viewers": "*"},  # This makes workflows with "*" publicly accessible
-            ],
-        }
+        # Only the raw user_id string reaches this helper, so wrap it in a shim
+        # for the query builder.
+        access_user = SimpleNamespace(id=user_oid, is_admin=False, is_anonymous=False)
+        permissions = build_access_query(access_user, "viewer", get_user_group_ids(user_oid))
 
     query = {
         "_id": ObjectId(workflow_id),

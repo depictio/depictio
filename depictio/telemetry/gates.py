@@ -12,8 +12,9 @@ saying no, and they win unconditionally.
 signals; they suppress sends because the resulting numbers would be wrong.
 Depictio's own CI boots the API on nearly every workflow and users' pipelines run
 ``depictio-cli`` on every commit, so automation would otherwise dominate the
-install count, and a wiped database has just thrown away the instance identity
-that makes an install countable in the first place.
+install count, and a deployment that wipes its database on boot is a developer's
+or a test rig's, whose numbers describe nobody's use. (The wipe itself keeps the
+instance identity, see ``api/v1/telemetry/identity.py``.)
 """
 
 import os

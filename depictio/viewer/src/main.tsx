@@ -46,6 +46,7 @@ const PermissionsApp = React.lazy(() => import('./projects/detail/PermissionsApp
 const AboutApp = React.lazy(() => import('./about/AboutApp'));
 const AdminApp = React.lazy(() => import('./admin/AdminApp'));
 const ProfileApp = React.lazy(() => import('./profile/ProfileApp'));
+const GroupsApp = React.lazy(() => import('./groups/GroupsApp'));
 const CreateComponentPage = React.lazy(() => import('./builder/CreateComponentPage'));
 const EditComponentPage = React.lazy(() => import('./builder/EditComponentPage'));
 import { matchEditorRoute } from './builder/routeMatch';
@@ -105,6 +106,9 @@ function resolveTree(): React.ReactElement {
   }
   if (window.location.pathname.startsWith('/profile')) {
     return <ProfileApp />;
+  }
+  if (window.location.pathname.startsWith('/groups')) {
+    return <GroupsApp />;
   }
   if (window.location.pathname.startsWith('/cli-agents')) {
     // CLI agents became a section of the account settings page. Rewrite the

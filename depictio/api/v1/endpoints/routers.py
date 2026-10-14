@@ -15,11 +15,13 @@ from depictio.api.v1.endpoints.analytics_data_endpoints.routes import (
 )
 from depictio.api.v1.endpoints.analytics_endpoints.routes import router as analytics_router
 from depictio.api.v1.endpoints.auth_endpoints.google_oauth_routes import google_oauth_router
+from depictio.api.v1.endpoints.auth_endpoints.saml_routes import saml_router
 from depictio.api.v1.endpoints.backup_endpoints.routes import backup_endpoint_router
 from depictio.api.v1.endpoints.catalog_endpoints.routes import catalog_endpoint_router
 from depictio.api.v1.endpoints.celery_endpoints.routes import celery_endpoint_router
 from depictio.api.v1.endpoints.cli_endpoints.routes import cli_endpoint_router
 from depictio.api.v1.endpoints.comments_endpoints.routes import comments_endpoint_router
+from depictio.api.v1.endpoints.dashboards_endpoints.filter_state_routes import filter_state_router
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import dashboards_endpoint_router
 from depictio.api.v1.endpoints.dashboards_endpoints.versions_routes import (
     dashboard_versions_endpoint_router,
@@ -32,6 +34,7 @@ from depictio.api.v1.endpoints.events_endpoints.routes import events_router
 from depictio.api.v1.endpoints.export_endpoints.routes import export_endpoint_router
 from depictio.api.v1.endpoints.figure_endpoints.routes import figure_endpoint_router
 from depictio.api.v1.endpoints.files_endpoints.routes import files_endpoint_router
+from depictio.api.v1.endpoints.groups_endpoints.routes import groups_endpoint_router
 from depictio.api.v1.endpoints.jbrowse_endpoints.routes import jbrowse_endpoints_router
 from depictio.api.v1.endpoints.jobs_endpoints.routes import jobs_endpoint_router
 from depictio.api.v1.endpoints.links_endpoints.routes import links_endpoint_router
@@ -132,6 +135,14 @@ router.include_router(
     tags=["Dashboards"],
 )
 
+# Registered before nothing in particular — its own prefix keeps it clear of the
+# dashboards router's parameterized routes (/get/{id}, /{id}/yaml, ...).
+router.include_router(
+    filter_state_router,
+    prefix="/dashboards/filter_state",
+    tags=["Dashboards"],
+)
+
 router.include_router(
     comments_endpoint_router,
     prefix="/comments",
@@ -191,6 +202,12 @@ if settings.jobs.enabled:
 
 
 router.include_router(
+    groups_endpoint_router,
+    prefix="/groups",
+    tags=["groups"],
+)
+
+router.include_router(
     auth_endpoint_router,
     prefix="/auth",
     tags=["Authentication"],
@@ -201,6 +218,12 @@ router.include_router(
     google_oauth_router,
     prefix="/auth/google",
     tags=["Google OAuth"],
+)
+
+router.include_router(
+    saml_router,
+    prefix="/auth/saml",
+    tags=["SAML SSO"],
 )
 
 # Include Analytics routes

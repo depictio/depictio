@@ -903,7 +903,7 @@ async def _bootstrap_admin_and_test_user() -> tuple[UserBeanie | None, dict | No
 
 
 async def wipe_database() -> None:
-    """Empty the database but for the init lock, then the S3 tables it registered.
+    """Empty the database but for the init lock and telemetry, then the S3 tables it registered.
 
     Must run before any worker initialises Beanie (see ``handle_initialization``
     in ``services/lifespan.py``): Beanie creates its indexes then, and a drop
@@ -914,14 +914,19 @@ async def wipe_database() -> None:
     lock this worker holds never disappears. Dropping the database and restoring
     the lock left a gap in which a sibling worker took the lock too, and the
     restore then failed on a duplicate key.
+
+    ``telemetry`` holds the anonymous installation identity (and the send guards):
+    dropped, the next boot would mint a new identity and count the same
+    installation again (see ``telemetry/identity.py``).
     """
     _ensure_mongodb_connection()
 
     logger.info("Wipe is enabled. Deleting the database...")
-    from depictio.api.v1.db import db, initialization_collection
+    from depictio.api.v1.db import db, initialization_collection, telemetry_collection
 
+    kept = {initialization_collection.name, telemetry_collection.name}
     for name in db.list_collection_names():
-        if name != initialization_collection.name and not name.startswith("system."):
+        if name not in kept and not name.startswith("system."):
             db.drop_collection(name)
     initialization_collection.delete_many({"_id": {"$ne": "init_lock"}})
     logger.info("Database deleted successfully.")
@@ -962,12 +967,16 @@ async def initialize_db() -> UserBeanie | None:
             "name": "admin",
             "description": "Admin group",
             "users_ids": [_ADMIN_USER_STATIC_ID],
+            "admin_ids": [_ADMIN_USER_STATIC_ID],
+            "sso_managed": False,
         },
         {
             "id": _USERS_GROUP_STATIC_ID,
             "name": "users",
             "description": "Users group",
             "users_ids": [_TEST_USER_STATIC_ID, _ADMIN_USER_STATIC_ID],
+            "admin_ids": [_ADMIN_USER_STATIC_ID],
+            "sso_managed": False,
         },
     ):
         group = GroupBeanie(**group_config)  # type: ignore[missing-argument]

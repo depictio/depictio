@@ -26,6 +26,7 @@ import {
   ScrollText,
   Settings,
   Users,
+  UsersRound,
   Wrench,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -36,6 +37,7 @@ import '../chrome/variants/glass/pages/admin.css';
 import { AppSidebar } from '../chrome';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import AdminUsersPanel from './AdminUsersPanel';
+import AdminGroupsPanel from './AdminGroupsPanel';
 import AdminProjectsPanel from './AdminProjectsPanel';
 import AdminDashboardsPanel from './AdminDashboardsPanel';
 import AdminBrandingPanel from './AdminBrandingPanel';
@@ -43,6 +45,7 @@ import AdminBackupsPanel from './AdminBackupsPanel';
 import AdminMaintenancePanel from './AdminMaintenancePanel';
 import AdminMonitoringPanel from './AdminMonitoringPanel';
 import AdminSettingsPanel from './AdminSettingsPanel';
+import { canSeeBackups, canSeeMonitoring } from './access';
 import { usePageTitle } from '../branding';
 
 /** A page of the Glass admin: a plain tab, or one of the Log & Task panes
@@ -67,7 +70,13 @@ interface AdminNavGroup {
 /** Who has access, what they made, what the instance has been doing, and how
  *  it is set up: the four questions an admin comes with. */
 const NAV_GROUPS: AdminNavGroup[] = [
-  { label: 'People', items: [{ view: 'users', label: 'Users', icon: Users }] },
+  {
+    label: 'People',
+    items: [
+      { view: 'users', label: 'Users', icon: Users },
+      { view: 'groups', label: 'Groups', icon: UsersRound },
+    ],
+  },
   {
     label: 'Content',
     items: [
@@ -134,19 +143,21 @@ function writeAdminUrl(route: AdminRoute, mode: 'push' | 'replace'): void {
 
 const AdminApp: React.FC = () => {
   const { user, loading, isPublicMode, isDemoMode, isSingleUserMode } = useCurrentUser();
-  // Monitoring is for single- & multi-user (trusted) deployments. Single-user
-  // always wins — it's a personal admin instance even if public_mode is also
-  // set; only pure public/demo instances hide it.
-  const showMonitoring = isSingleUserMode || (!isPublicMode && !isDemoMode);
-  // Full-DB backup/restore is likewise a trusted-deployment tool.
-  const showBackups = showMonitoring;
+  // Monitoring is for single- & multi-user (trusted) deployments, and for a
+  // signed-in admin of a public one. Single-user always wins — it's a personal
+  // admin instance even if public_mode is also set; demo instances and guests
+  // never see it.
+  const modes = { user, isPublicMode, isDemoMode, isSingleUserMode };
+  const showMonitoring = canSeeMonitoring(modes);
+  // Full-DB backup/restore is a trusted-deployment tool only.
+  const showBackups = canSeeBackups(modes);
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
   const [route, setRoute] = useState<AdminRoute>(readAdminRoute);
-  // Monitoring and Backups aren't rendered in public/demo mode; a URL naming
-  // them falls back to Users instead of an empty panel.
+  // A tab that isn't rendered here; a URL naming it falls back to Users
+  // instead of an empty panel.
   const activeTab: AdminTab =
-    !showMonitoring && (route.tab === 'monitoring' || route.tab === 'backups')
+    (!showMonitoring && route.tab === 'monitoring') || (!showBackups && route.tab === 'backups')
       ? 'users'
       : route.tab;
 
@@ -225,7 +236,9 @@ const AdminApp: React.FC = () => {
         >
           <Tabs.List className="ga-nav" aria-label="Administration">
             {NAV_GROUPS.map((group) => {
-              const items = group.items.filter((item) => showMonitoring || !item.trusted);
+              const items = group.items.filter((item) =>
+                item.view === 'backups' ? showBackups : showMonitoring || !item.trusted,
+              );
               if (items.length === 0) return null;
               return (
                 <React.Fragment key={group.label}>
@@ -255,6 +268,7 @@ const AdminApp: React.FC = () => {
           </Tabs.List>
           <Tabs.Panel value={view} className="ga-content">
             {view === 'users' && <AdminUsersPanel currentUserEmail={user.email} />}
+            {view === 'groups' && <AdminGroupsPanel />}
             {view === 'projects' && <AdminProjectsPanel />}
             {view === 'dashboards' && <AdminDashboardsPanel />}
             {view === 'branding' && <AdminBrandingPanel />}
@@ -285,6 +299,12 @@ const AdminApp: React.FC = () => {
         <Tabs.List>
           <Tabs.Tab value="users" leftSection={<Icon icon="mdi:account-group" width={16} />}>
             Users
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="groups"
+            leftSection={<Icon icon="mdi:account-multiple-outline" width={16} />}
+          >
+            Groups
           </Tabs.Tab>
           <Tabs.Tab value="projects" leftSection={<Icon icon="mdi:jira" width={16} />}>
             Projects
@@ -329,6 +349,9 @@ const AdminApp: React.FC = () => {
 
         <Tabs.Panel value="users" pt="md">
           <AdminUsersPanel currentUserEmail={user.email} />
+        </Tabs.Panel>
+        <Tabs.Panel value="groups" pt="md">
+          <AdminGroupsPanel />
         </Tabs.Panel>
         <Tabs.Panel value="projects" pt="md">
           <AdminProjectsPanel />

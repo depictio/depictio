@@ -39,12 +39,20 @@ from depictio.api.v1.endpoints.dashboards_endpoints.data_versions import (
     referenced_dc_ids,
     resolve_data_versions,
 )
+from depictio.api.v1.endpoints.dashboards_endpoints.filter_state_cascade import (
+    delete_filter_states_for_dashboards,
+)
 from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_current_user,
     get_user_or_anonymous,
     oauth2_scheme_optional,
 )
 from depictio.api.v1.filter_links import extend_filters_via_links
+from depictio.api.v1.permissions import (
+    get_user_group_ids,
+    has_permission,
+    resolve_effective_role,
+)
 from depictio.api.v1.services.branding import (
     LOGO_CACHE_CONTROL,
     dashboard_logo_key,
@@ -528,34 +536,12 @@ def check_project_permission(
     if not project:
         return False
 
-    # A public project grants READ access only. Editor/owner must come from
-    # explicit permissions below — otherwise any signed-in visitor of a public
-    # (e.g. demo) project could edit or delete its dashboards.
-    if hasattr(user, "is_anonymous") and user.is_anonymous:
-        return required_permission == "viewer" and project.get("is_public", False)
-
-    if project.get("is_public", False) and required_permission == "viewer":
-        return True
-
-    user_id = ObjectId(user.id)
-    permissions = project.get("permissions", {})
-
-    # Check based on required permission level
-    if required_permission == "owner":
-        return any(owner.get("_id") == user_id for owner in permissions.get("owners", []))
-    elif required_permission == "editor":
-        # Editors can also access if they are owners
-        return any(owner.get("_id") == user_id for owner in permissions.get("owners", [])) or any(
-            editor.get("_id") == user_id for editor in permissions.get("editors", [])
-        )
-    else:  # viewer
-        # Viewers can access if they are owners, editors, or viewers
-        return (
-            any(owner.get("_id") == user_id for owner in permissions.get("owners", []))
-            or any(editor.get("_id") == user_id for editor in permissions.get("editors", []))
-            or any(viewer.get("_id") == user_id for viewer in permissions.get("viewers", []))
-            or "*" in permissions.get("viewers", [])
-        )
+    # A public project grants READ access only (viewer floor in the chokepoint).
+    # Editor/owner must come from explicit direct or group permissions —
+    # otherwise any signed-in visitor of a public (e.g. demo) project could
+    # edit or delete its dashboards.
+    group_ids = get_user_group_ids(user.id)
+    return has_permission(project, user, required_permission, group_ids)
 
 
 def is_dashboard_owner(dashboard_doc: dict, user: User) -> bool:
@@ -874,38 +860,22 @@ async def init_dashboard(
         user_permission_level = "owner"
         logger.info("✅ Single user mode: Granting owner permissions")
     else:
-        # Multi-user mode: Check actual permissions
-        permissions = project_data.get("permissions", {})
-        owner_ids = [str(owner.get("_id", "")) for owner in permissions.get("owners", [])]
-        editor_ids = [str(editor.get("_id", "")) for editor in permissions.get("editors", [])]
-        current_user_id_str = str(current_user.id)
-
-        if current_user_id_str in owner_ids:
-            user_permission_level = "owner"
-        elif current_user_id_str in editor_ids:
-            user_permission_level = "editor"
+        # Multi-user mode: highest of the direct and group role on the project
+        # (public / "*" only ever floor at viewer, which is the default).
+        group_ids = get_user_group_ids(current_user.id)
+        user_permission_level = (
+            resolve_effective_role(project_data, current_user, group_ids) or "viewer"
+        )
 
         # Fallback: check dashboard-level permissions (covers demo/public mode where
         # users own dashboards they created but are not project-level owners)
         if user_permission_level == "viewer":
-            dashboard_permissions = dashboard_data.get("permissions", {})
-            dashboard_owner_ids = [
-                str(o.get("_id", "")) if isinstance(o, dict) else str(o)
-                for o in dashboard_permissions.get("owners", [])
-            ]
-            dashboard_editor_ids = [
-                str(e.get("_id", "")) if isinstance(e, dict) else str(e)
-                for e in dashboard_permissions.get("editors", [])
-            ]
-            if current_user_id_str in dashboard_owner_ids:
-                user_permission_level = "owner"
+            dashboard_role = resolve_effective_role(dashboard_data, current_user, group_ids)
+            if dashboard_role in ("owner", "editor"):
+                user_permission_level = dashboard_role
                 logger.info(
-                    f"✅ Granting owner via dashboard-level permissions for user {current_user_id_str}"
-                )
-            elif current_user_id_str in dashboard_editor_ids:
-                user_permission_level = "editor"
-                logger.info(
-                    f"✅ Granting editor via dashboard-level permissions for user {current_user_id_str}"
+                    f"✅ Granting {dashboard_role} via dashboard-level permissions "
+                    f"for user {current_user.id}"
                 )
 
     dashboard_dict = dashboard.model_dump()
@@ -1432,6 +1402,7 @@ async def delete_dashboard(
         # it rather than sitting in `branding_assets` forever.
         delete_logo_asset(dashboard_logo_key(dashboard_id))
         delete_threads_for_dashboards(tab_ids_for_threads)
+        delete_filter_states_for_dashboards(tab_ids_for_threads)
         # Drop the version ledger with the dashboard. Versions are keyed on the
         # family id, so without this every deleted dashboard leaves its whole
         # history — and its sequence counter — behind with nothing able to
@@ -1642,6 +1613,7 @@ async def delete_tab(
 
     if result.deleted_count > 0:
         delete_threads_for_dashboards([dashboard_id])
+        delete_filter_states_for_dashboards([dashboard_id])
         # Anchored on the *parent*: the tab is gone, so it can no longer resolve
         # its own family, and a capture addressed to it would find nothing.
         #

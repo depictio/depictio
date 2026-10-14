@@ -189,7 +189,7 @@ def build_heartbeat_properties() -> tuple[str, ServerHeartbeatProperties]:
         ``distinct_id`` rather than one of its properties, so it is returned
         alongside instead of being embedded.
     """
-    instance_id, created_at = get_or_create_instance_id()
+    instance_id, created_at, preexisting_data = get_or_create_instance_id()
 
     platform = platform_info()
     override = settings.telemetry.deployment_kind
@@ -202,6 +202,7 @@ def build_heartbeat_properties() -> tuple[str, ServerHeartbeatProperties]:
         arch=platform["arch"],
         python_version=platform["python_version"],
         boot_id=BOOT_ID,
+        preexisting_data=preexisting_data,
         api_version=get_api_version(),
         install_age_days=install_age_days(created_at),
         workers=settings.fastapi.workers,
