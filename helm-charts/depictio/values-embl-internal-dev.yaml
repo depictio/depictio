@@ -101,6 +101,10 @@ backend:
     # Google OAuth Configuration
     DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED: "true"
 
+    # SAML SSO — off here; enable it from values-embl-secrets.yaml together with the
+    # IdP side (see the `auth:` block below).
+    DEPICTIO_AUTH_SAML_ENABLED: "false"
+
     # Celery Configuration - Disabled for now
     # DEPICTIO_CELERY_ENABLED: "false"
 
@@ -112,6 +116,19 @@ backend:
 auth:
   # Must be /auth/google/callback, not bare /auth — see values-embl-internal-prod.yaml
   DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI: "https://dev.depictio.embl.org/auth/google/callback"
+
+  # SAML SSO, service-provider side. The identity provider side (entity ID, SSO
+  # URL, signing certificate) is deployment-private: set
+  # DEPICTIO_AUTH_SAML_IDP_ENTITY_ID, DEPICTIO_AUTH_SAML_IDP_SSO_URL and
+  # DEPICTIO_AUTH_SAML_IDP_CERT in values-embl-secrets.yaml, merged into this block.
+  #
+  # IdP-side registration (a SAML client in the realm):
+  #   - Client ID            = DEPICTIO_AUTH_SAML_SP_ENTITY_ID below
+  #   - ACS / redirect URL   = https://dev.api.depictio.embl.org/depictio/api/v1/auth/saml/callback
+  #   - Sign assertions: ON, Client signature required: OFF
+  DEPICTIO_AUTH_SAML_SP_ENTITY_ID: "depictio-dev-datasci"
+  DEPICTIO_AUTH_SAML_SP_BASE_URL: "https://dev.api.depictio.embl.org"
+  DEPICTIO_AUTH_SAML_LOGIN_LABEL: "Sign in with EMBL"
 
 mongo:
   useOperator: true     # Use Percona PSMDB Operator for HA replica set
