@@ -143,8 +143,10 @@ WebGL slot and one set of chrome, which is the reason for the layout rather than
 The protein tabs put the 3D tile on half the section width, about 520 px high (`w: 4, h: 5`),
 beside the selector that drives it (a scatter or a lollipop whose click names one entity or one
 residue range), with the sequence track and the alignment full width below and the tables
-collapsed under them. At that size the tile keeps its controls in the header
-(`controls_placement: header`), and below 560 by 440 px of body the colour legend flows its
+collapsed under them. At that size the tile keeps its controls behind the settings icon at
+both levels: `controls_placement: popover` on the component (else the frame docks them above
+the canvas, `controlsDock.ts`) and in the config (else the header strip draws them there, about
+200 px of a 520 px tile). Below 560 by 440 px of body the colour legend flows its
 swatches in rows in the bottom-left corner and lets the pointer through. The written sequence
 wraps to the pane width, so nothing overflows sideways.
 
@@ -381,8 +383,10 @@ does not resolve tags, so a showcase seed binds companions by id.
   workflow_tag: <workflow>
   data_collection_tag: <pipeline>_residues
   viz_kind: molecule_3d
+  controls_placement: popover
   config:
     viz_kind: molecule_3d
+    controls_placement: popover
     structure_source: file
     structure_dc_tag: <pipeline>_structures
     entity_col: entity
@@ -391,7 +395,6 @@ does not resolve tags, so a showcase seed binds companions by id.
     msa_dc_tag: <pipeline>_msa
     color_mode: plddt
     highlight_site: true
-    controls_placement: header
   layout: {x: 4, y: 0, w: 4, h: 5}
 - component_type: advanced_viz
   tag: <prefix>-sequence

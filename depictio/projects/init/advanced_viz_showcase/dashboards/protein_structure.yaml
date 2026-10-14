@@ -69,13 +69,14 @@ components:
     description: 'The model coloured by per-residue confidence, variants as spheres coloured by consequence, the picked site in red ball and stick, over its written sequence with the variant letters in red. One variant is numbered one residue off and is listed as a numbering mismatch instead of being drawn.'
     section: 'Structure, sequence and alignment'
     viz_kind: 'molecule_3d'
+    # Half-width tile: docked (the component default) or in the header strip,
+    # the controls take about 200 px above the canvas of a 3D view that already
+    # shares the tile with its written sequence. Behind the settings icon at
+    # both levels, the structure gets the tile's height.
+    controls_placement: popover
     config:
       viz_kind: "molecule_3d"
-      # Half-width tile: `popover` would dock the controls above the canvas
-      # (controlsDock.ts), taking height from a 3D view that already shares
-      # the tile with its written sequence. The strip under the title is
-      # smaller and keeps the cosmetic controls behind the icon.
-      controls_placement: header
+      controls_placement: popover
       structure_source: "file"
       structure_wf_id: "646b0f3c1e4a2d7f8e5b8d01"
       structure_dc_id: "646b0f3c1e4a2d7f8e5b8dd1"

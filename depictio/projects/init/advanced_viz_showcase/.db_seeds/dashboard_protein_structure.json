@@ -67,7 +67,7 @@
       "section": "Structure, sequence and alignment",
       "viz_kind": "molecule_3d",
       "config": {
-        "controls_placement": "header",
+        "controls_placement": "popover",
         "viz_kind": "molecule_3d",
         "structure_source": "file",
         "structure_wf_id": "646b0f3c1e4a2d7f8e5b8d01",
@@ -102,6 +102,7 @@
         "selection_enabled": true,
         "follow_selection": true
       },
+      "controls_placement": "popover",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
