@@ -1284,20 +1284,25 @@ async def create_project(project: Project, current_user=Depends(get_user_or_anon
 @projects_endpoint_router.put("/update")
 async def update_project(project: Project, current_user=Depends(get_current_user)):
     """Update an existing project."""
-    if (
-        current_user.id not in [owner.id for owner in project.permissions.owners]
-        and not current_user.is_admin
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="User does not have permission to update this project.",
-        )
-
+    # Authorise against the STORED project, never the request body: the body
+    # carries its own `permissions`, so naming oneself an owner there would pass a
+    # check made on it. The lookup is read-level and answers 404 to someone who
+    # cannot see the project at all.
     existing_project_dict = _async_get_project_from_id(
         project.id, current_user, projects_collection
     )
     if not existing_project_dict:
         raise HTTPException(status_code=404, detail="Project not found.")
+
+    stored_owner_ids = {
+        str(owner.get("_id"))
+        for owner in (existing_project_dict.get("permissions") or {}).get("owners", []) or []
+    }
+    if str(current_user.id) not in stored_owner_ids and not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="User does not have permission to update this project.",
+        )
 
     validate_workflow_uniqueness_in_project(project)
     update_payload = project.mongo()
@@ -1312,6 +1317,11 @@ async def update_project(project: Project, current_user=Depends(get_current_user
     # the whole project document, so honoring `is_public` here would flip
     # visibility silently without the cascade.
     update_payload["is_public"] = existing_project_dict.get("is_public", False)
+    # Sharing has its own owner-gated path (`/update_project_permissions`, which
+    # also checks that referenced users and groups exist and keeps an owner). The
+    # client round-trips the whole project, so honouring its `permissions` here
+    # would let a plain update rewrite who owns the project.
+    update_payload.pop("permissions", None)
     # The browser appends workflows straight onto the stored document while the
     # client round-trips the whole project through here, so a plain `$set` lets
     # whoever saves last delete the other surface's work. Same reasoning as the
