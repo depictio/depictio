@@ -7,7 +7,7 @@ Two illustrated diagrams, built on the shared sketch toolkit:
   project folder (lock, direct and group permission blocks) in the middle, the
   one permissions gate and the resources behind it on the right, plus bob's
   role ladder, the live membership lookup, the floors and the bypasses.
-- ``user-groups_saml_sync`` - a SAML assertion through the ACS of PR #968 into
+- ``user-groups_saml_sync`` - a SAML assertion through the SAML ACS into
   ``sync_sso_user`` (groups re-synced both ways, profile, pending P.I. claim),
   then who runs a group and where it happens in the UI.
 
@@ -743,22 +743,21 @@ def build_saml_sync() -> Sketch:
 
     acs = Box(722, 140, 250, 190, WHITE, "", ())
     s.rect(acs)
-    sticker(s, 738, 124, 84, "PR #968", ORANGE)
+    sticker(s, 738, 124, 84, "SAML", ORANGE)
     s.text(acs.cx, 176, "ACS callback", size=18, weight="bold")
     s.text(acs.cx, 204, "`create_or_get_sso_user`", size=12.5, colour=DIM)
     s.text(acs.cx, 232, "then a magic-link ticket", size=13, colour=DIM)
     s.text(acs.cx, 252, "and the user lands in", size=13, colour=DIM)
     s.text(acs.cx, 272, "the viewer", size=13, colour=DIM)
 
-    # the 3-line hook, drawn as a link that is not there yet
-    s.arrow(978, 235, 1060, 235, dashed=True, colour=RED)
-    hourglass(s, 1019, 212, size=9)
-    s.rect(Box(1060, 140, 671, 190, WHITE, "", ()), colour=RED, dashed=True)
-    sticker(s, 1076, 124, 330, "lands once #968 and #972 are merged", PINK)
+    # the hook, called in the ACS handler
+    s.arrow(978, 235, 1060, 235)
+    s.rect(Box(1060, 140, 671, 190, WHITE, "", ()))
+    sticker(s, 1076, 124, 200, "called by the ACS", ORANGE)
     s.text(
         1080,
         176,
-        "the whole hook in the ACS handler: 3 lines",
+        "the hook in the ACS handler",
         size=15,
         weight="bold",
         anchor="start",
@@ -776,11 +775,16 @@ def build_saml_sync() -> Sketch:
         anchor="start",
     )
     s.text(
-        1080, 316, "each missing mapping simply skips its step", size=13, colour=DIM, anchor="start"
+        1080,
+        316,
+        "a failed sync is logged and never blocks the sign-in",
+        size=13,
+        colour=DIM,
+        anchor="start",
     )
 
     # -- 2. the sync band ----------------------------------------------------
-    s.arrow(1395, 334, 1395, 412, dashed=True, colour=RED)
+    s.arrow(1395, 334, 1395, 412)
     _shift(s, 30)
     s.rect(Box(40, 386, 1691, 108, YELLOW, "", ()))
     s.text(60, 412, "sync_sso_user(user, attributes)", size=18, weight="bold", anchor="start")

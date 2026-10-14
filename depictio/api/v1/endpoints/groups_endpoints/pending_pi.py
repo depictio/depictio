@@ -4,8 +4,8 @@ A sysadmin can name a group's Principal Investigator before that person has
 ever signed in: the address is parked on the group as ``pending_pi_email``
 (``Group.pending_pi_email``). Every path that materialises a user document —
 password registration and pipeline provisioning (``_create_user_in_db``),
-Google OAuth (``create_or_get_google_user``) and SAML logins
-(``sso_sync.sync_sso_user``) — calls :func:`claim_pending_pi_groups`, which
+SSO sign-ups (``create_or_get_sso_user``, shared by Google OAuth and SAML) and
+SAML logins (``sso_sync.sync_sso_user``) — calls :func:`claim_pending_pi_groups`, which
 promotes the matching account to P.I. + group admin and clears the parked
 email.
 

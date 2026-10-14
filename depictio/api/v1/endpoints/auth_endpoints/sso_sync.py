@@ -22,13 +22,8 @@ from depictio.models.models.users import GroupBeanie, UserBeanie
 async def sync_sso_user(user: UserBeanie, attributes: dict[str, list[str]] | None) -> None:
     """Synchronise a user's groups and profile from SAML assertion attributes.
 
-    INTEGRATION (PR #968): in saml_routes.py's ACS handler, after
-    ``user, created = await create_or_get_sso_user(...)`` and before
-    ``_create_magic_link_ticket(...)``, add:
-
-        from depictio.api.v1.endpoints.auth_endpoints.sso_sync import sync_sso_user
-
-        await sync_sso_user(user, auth.get_attributes())
+    Called from the ACS handler in saml_routes.py, after ``create_or_get_sso_user``
+    and before the magic-link ticket is minted.
 
     Idempotent and safe to run on every login. When ``attributes`` is None or
     empty the whole sync is a no-op (a broken/attribute-less assertion never
