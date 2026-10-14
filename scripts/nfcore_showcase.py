@@ -246,6 +246,14 @@ SCENARIOS: list[Scenario] = [
         note="MultiQC reprocessed, vendored design; 3.1.0 megatest is empty",
         vars=(_DESIGN_IN_DATA_ROOT,),
     ),
+    # The samplesheet is vendored and copied into input/ by download_test_data.sh;
+    # only the top-ranked PAE matrix of each engine and target is fetched.
+    Scenario(
+        "proteinfold",
+        "2.1.0",
+        "megatest",
+        note="2.1.0dev run a414fd13 (2.0.0 run empty), vendored samplesheet, top-ranked PAE only",
+    ),
     Scenario(
         "riboseq",
         "2.0.0",

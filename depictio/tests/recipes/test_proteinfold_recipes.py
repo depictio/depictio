@@ -4,8 +4,8 @@ The tree mimics the pipeline's layout (an engine with a mode level, one
 without, a complex and a monomer, 0- and 1-based model numbering, an empty
 ipTM file) so every recipe runs through the same glob sources the CLI reads.
 
-The project recipes of the template (``targets``, ``structures``) and the checks
-that read the template itself run only once the template is shipped.
+The project recipes of the template (``targets``, ``structures``) are tested here
+too, and so is the template itself (its sample regexes and its scores scan).
 """
 
 from __future__ import annotations
@@ -39,12 +39,8 @@ TEMPLATE = REPO / "depictio" / "projects" / "nf-core" / "proteinfold" / "2.1.0" 
 HUB = REPO / "depictio" / "projects" / "nf-core" / "proteinfold" / "recipes" / "targets.py"
 STRUCTURES = HUB.parent / "structures.py"
 
-needs_template = pytest.mark.skipif(
-    not TEMPLATE.is_file(), reason="the proteinfold template is not shipped yet"
-)
-
-#: The ``proteinfold_scores_raw`` scan the template declares (checked against it
-#: once the template exists): one ``model`` / ``score`` row per line of the files.
+#: The ``proteinfold_scores_raw`` scan the template declares (checked against it):
+#: one ``model`` / ``score`` row per line of the files.
 SCORES_PATTERN = r"^(?!.*_chainwise_).*_(?:ptm|iptm|ipsae)\.tsv$"
 SCORES_KWARGS: dict[str, object] = {
     "separator": "\t",
@@ -155,7 +151,6 @@ def _template_dc(tag: str) -> dict:
     )
 
 
-@needs_template
 def test_template_sample_regex_is_the_recipes_regex() -> None:
     structures = _template_dc("proteinfold_structures")
     assert structures["config"]["dc_specific_properties"]["sample_regex"] == STRUCTURE_SAMPLE_REGEX
@@ -164,7 +159,6 @@ def test_template_sample_regex_is_the_recipes_regex() -> None:
     assert pae["config"]["scan"]["scan_parameters"]["regex_config"]["pattern"] == PAE_SCAN_PATTERN
 
 
-@needs_template
 def test_template_scores_scan_is_the_one_the_tests_read() -> None:
     dc = _template_dc("proteinfold_scores_raw")
     assert dc["config"]["scan"]["scan_parameters"]["regex_config"]["pattern"] == SCORES_PATTERN
@@ -338,7 +332,6 @@ def test_pae_leaves_out_a_file_that_is_not_a_square_matrix(run_dir: Path) -> Non
     assert set(out["entity"]) == {ENTITY_MONO}
 
 
-@needs_template
 def test_targets_hub_keeps_sheet_columns_and_derives_assembly(run_dir: Path) -> None:
     out = _run("targets", run_dir)
     rows = {r["target"]: r for r in out.to_dicts()}
@@ -362,7 +355,6 @@ def test_chain_layout_refuses_what_would_not_line_up() -> None:
     assert chain_layout_from_residues(residues.filter(pl.col("chain") == "A")) is None
 
 
-@needs_template
 def test_structures_one_row_per_uploaded_pdb(run_dir: Path) -> None:
     out = _run("structures", run_dir, {"scores": _scores_scan(run_dir)})
     rows = {r["entity"]: r for r in out.to_dicts()}

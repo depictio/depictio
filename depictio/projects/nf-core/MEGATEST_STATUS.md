@@ -58,6 +58,7 @@ and are lower bounds for the big runs.
 | mhcquant | 3.2.0 | `6ec12c97` | ok | `.` | yes (`multiqc/multiqc_data/`) | **Templated (wave 3).** `test_full` profile. MultiQC 1.33 parquet with mhcquant custom content only. 71 MB of tables fetched with `--max-file-mb 300`; the samplesheet is not published and is vendored under `input/`. |
 | proteinfamilies | 2.5.0 | `f8c0b183` | ok | `.` | yes (`multiqc/multiqc_data/`) | **Templated.** `test_full` profile, release run. MultiQC 1.35 parquet with custom content only (family metadata; SeqFu and cluster-size sections named after each sample). 59 files / 0.42 MB fetched with `--max-file-mb 5`, the hmmalign alignments (`full_msa/raw/hmmer_hmmalign/*/*.sto.gz`, 10 of 12 families kept) included for the profile logo; the samplesheet is not published and is vendored under `input/`. |
 | demultiplex | 1.8.0 | `daade37c` | ok | `.` | yes (`multiqc/multiqc_data/`) | **Templated (wave 3).** bcl2fastq route; 183 files / 34.6 MB without the FASTQ. The run-level `multiqcsav/` report holds no SAV sections (the MultiQC `sav` module found no `RunInfo.xml` next to `InterOp/`). |
+| proteinfold | 2.1.0 | `a414fd13` | ok (dev) | `.` | per engine, custom content only | **Templated (lot 3, reworked).** Development run `v2.1.0dev-ga414fd1` (the 2.0.0 release run is empty): 11 test_full runs under one prefix (AlphaFold2 standard and split-MSA, ColabFold, ESMFold, RoseTTAFold All-Atom; 2 monomers + 1 heterodimer). 79 files / 10 MB fetched, with the top-ranked PAE matrix of each engine only (`_0_`; `_1_` for ColabFold); samplesheet vendored under `input/`. |
 | rnasplice | 1.0.4 | `1d0494ae` | partial | `.` | no | **Pending.** 494 objects, only 80 with data (95.9 GB, mostly alignments); no MultiQC and none of the differential splicing directories. The template waits for an EMBL cluster `test_full` run. |
 | seqinspector | 1.1.2 | `6aa08aab` | ok | `.` | yes (`multiqc/global_report/multiqc_data/`, plus one per group under `multiqc/group_reports/`) | Fallback for rnasplice if its cluster run fails twice. 1899 objects / 678 MB, every data file under 50 MB. |
 
@@ -189,6 +190,7 @@ template lint, CLI dry run 8/8).
 | mhcquant | 3.2.0 | `6ec12c97f7889a3e1f09ab89930723045c6bac68` | `.` | 1.33, custom content only |
 | proteinfamilies | 2.5.0 | `f8c0b183e59df3d87c38d0f7c4acc6918593f4f5` | `.` | 1.35, custom content only |
 | demultiplex | 1.8.0 | `daade37c4a75a4c1709ccf12434deb3424141319` | `.` | 1.35 native parquet |
+| proteinfold | 2.1.0 (dev run) | `a414fd1368009500b66761e37e7cde80366a45e9` | `.` | per-engine custom content (per-target pLDDT plots), not bound |
 
 rnasplice 1.0.4 is built from a cluster `test_full` run rather than the megatest: its megatest
 prefix `1d0494ae` holds 494 objects of which only 80 carry data, with no MultiQC and no
