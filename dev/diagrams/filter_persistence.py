@@ -420,12 +420,13 @@ def _home_c(s: Sketch, x: float, y: float, h: float) -> None:
 
 
 def _home_d(s: Sketch, x: float, y: float, w: float) -> None:
-    """Share link: the copy button, and the URL with the fragment highlighted."""
+    """Share link: the copy icon beside the count, and the URL with the fragment highlighted."""
     window(s, x + 12, y + 18, 164, 84)
-    s.text(x + 22, y + 54, "Settings > Filters", size=10, anchor="start", colour=DIM)
-    panel(s, x + 20, y + 62, 148, 32, GREEN, colour=INK)
-    s.text(x + 94, y + 76, "Copy link with", size=10.5, weight="bold")
-    s.text(x + 94, y + 89, "current filters", size=10.5, weight="bold")
+    s.text(x + 22, y + 52, "2 filters active", size=10.5, anchor="start", colour=DIM)
+    panel(s, x + 134, y + 40, 34, 18, GREEN, colour=INK)
+    s.text(x + 151, y + 53, "link", size=10, weight="bold")
+    s.text(x + 94, y + 78, "one click in the summary,", size=10, colour=DIM)
+    s.text(x + 94, y + 92, "or Settings > Filters", size=10, colour=DIM)
     # URL bar with the fragment in gold
     bx, by, bw = x + 12, y + 118, w - 24
     panel(s, bx, by, bw, 28, LIGHT_GREY, colour=GREY)

@@ -30,7 +30,7 @@ import {
   type LogoMode,
 } from 'depictio-react-core';
 import DashboardInfoBody from './DashboardInfoBody';
-import ShareFiltersButton from './ShareFiltersButton';
+import ShareFiltersField from './ShareFiltersField';
 import {
   SECTION_ICON_STYLE,
   SettingsNavModal,
@@ -202,9 +202,9 @@ const YourFiltersBlock: React.FC<{ filters: FilterSettings }> = ({ filters }) =>
     />
     <Field
       label="Share this view"
-      description="A link that opens this dashboard with the filters you have applied now. With none applied, it is the plain dashboard link."
+      description="The dashboard's address, with the filters you have applied now written after #filters=. Anyone who opens it sees the same view; with none applied it is the plain link."
     >
-      <ShareFiltersButton filters={filters.current} activeCount={filters.activeCount} />
+      <ShareFiltersField filters={filters.current} activeCount={filters.activeCount} />
     </Field>
   </Stack>
 );

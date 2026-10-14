@@ -940,18 +940,19 @@
   <circle cx="832.0" cy="696.0" r="3" fill="#ff8787"/>
   <circle cx="842.0" cy="696.0" r="3" fill="#ffd43b"/>
   <circle cx="852.0" cy="696.0" r="3" fill="#69db7c"/>
-  <text x="832.0" y="722.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="10" fill="#5c5c5c" text-anchor="start" font-weight="normal">Settings &gt; Filters</text>
-  <rect x="830.0" y="730.0" width="148.0" height="32.0" rx="6" fill="#ebfbee"/>
-  <path d="M829.9,730.3 C879.3,729.3 927.1,728.5 978.8,730.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <path d="M829.7,729.6 C879.1,731.6 928.5,729.4 977.2,729.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <path d="M978.5,729.9 C978.2,741.0 977.0,752.7 978.6,761.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <path d="M978.7,730.0 C976.7,741.4 978.2,751.4 977.3,762.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <path d="M978.4,762.6 C930.2,761.6 879.5,763.4 830.2,761.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <path d="M978.0,762.7 C928.0,762.1 878.8,763.2 830.5,761.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <path d="M829.7,761.5 C828.9,752.6 829.4,742.1 830.7,730.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <path d="M829.5,762.6 C829.5,752.0 831.0,740.3 830.4,730.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <text x="904.0" y="744.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="10.5" fill="#1e1e1e" text-anchor="middle" font-weight="bold">Copy link with</text>
-  <text x="904.0" y="757.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="10.5" fill="#1e1e1e" text-anchor="middle" font-weight="bold">current filters</text>
+  <text x="832.0" y="720.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="10.5" fill="#5c5c5c" text-anchor="start" font-weight="normal">2 filters active</text>
+  <rect x="944.0" y="708.0" width="34.0" height="18.0" rx="6" fill="#ebfbee"/>
+  <path d="M943.9,708.3 C955.3,707.3 965.1,706.5 978.8,708.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M943.7,707.6 C955.1,709.6 966.5,707.4 977.2,707.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M978.5,707.9 C978.2,714.3 977.0,721.4 978.6,725.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M978.7,708.0 C976.7,714.7 978.2,720.1 977.3,726.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M978.4,726.6 C968.2,725.6 955.5,727.4 944.2,725.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M978.0,726.7 C966.0,726.1 954.8,727.2 944.5,725.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M943.7,725.5 C942.9,721.2 943.4,715.5 944.7,708.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M943.5,726.6 C943.5,720.6 945.0,713.7 944.4,708.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="961.0" y="721.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="10" fill="#1e1e1e" text-anchor="middle" font-weight="bold">link</text>
+  <text x="904.0" y="746.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="10" fill="#5c5c5c" text-anchor="middle" font-weight="normal">one click in the summary,</text>
+  <text x="904.0" y="760.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="10" fill="#5c5c5c" text-anchor="middle" font-weight="normal">or Settings &gt; Filters</text>
   <rect x="822.0" y="786.0" width="476.0" height="28.0" rx="6" fill="#f1f3f5"/>
   <path d="M822.6,785.5 C980.3,785.6 1138.2,785.7 1298.3,786.4" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M821.4,785.6 C982.1,786.4 1138.4,784.9 1298.1,785.7" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round"/>

@@ -1493,6 +1493,7 @@ const App: React.FC = () => {
         filters={filters}
         onFilterChange={handleFilterChange}
         onResetAllFilters={handleResetAllFilters}
+        shareLink={remembering}
         layoutData={dashboard.left_panel_layout_data}
         filterSections={panelFilterSections}
         dashboardId={dashboardId}
