@@ -1186,8 +1186,10 @@ distinct architectures.
 residues are red ball and stick in 3D and marked in the written sequence); a
 `secondary_structure` comparing a synthetic S4PRED-style prediction (`reference_source: S4PRED`,
 with probabilities and `confidence_col`) with the call from the structure's own geometry, with two
-deliberate disagreements for the agreement lane to show; a `ramachandran` of the same model,
-coloured by pLDDT; and a `sequence_track`. A left-panel residue-range slider narrows every tile.
+deliberate disagreements for the agreement lane to show; a full-width `sequence_track`; then a
+`ramachandran` of the same model, coloured by pLDDT, beside a `profile` of pLDDT on the residue
+axis (`residue_axis: true`), which shades a pick and marks a hover. A left-panel residue-range
+slider narrows every tile.
 The secondary-structure table (`protein_ss_demo`) is a separate collection whose columns are named
 for it (`ss_source`, `ss_code`, `ss_probability`, `p_helix`, `p_strand`, `p_coil`, no `residue`) and
 shares only `entity` and `position` with the residue table, which is what carries a pick from one
