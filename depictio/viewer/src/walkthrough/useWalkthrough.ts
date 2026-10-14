@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { WalkthroughDefinition, WalkthroughState } from './types';
 
 const STORAGE_PREFIX = 'depictio.walkthrough.';
-/** Custom event used by the user-menu "Take the tour" item to restart a
- *  walkthrough from anywhere in the app without lifting state. */
+/** Custom event used by the manual tour triggers (the header tour button and
+ *  the Account settings "Getting started" section) to restart a walkthrough
+ *  from anywhere in the app without lifting state. */
 export const RESTART_EVENT = 'depictio:walkthrough:restart';
 
 function storageKey(id: string): string {
@@ -180,7 +181,7 @@ function matchesRoute(route: RegExp | undefined, pathname: string): boolean {
 }
 
 /** Fires a restart event for the walkthrough with the given id. Called by
- *  the ProfileBadge menu item. Without an id, restarts whichever walkthrough
+ *  the manual tour triggers (`useTourLauncher`). Without an id, restarts whichever walkthrough
  *  the host currently exposes. */
 export function dispatchWalkthroughRestart(id?: 'public' | 'builder'): void {
   window.dispatchEvent(new CustomEvent(RESTART_EVENT, { detail: { id } }));

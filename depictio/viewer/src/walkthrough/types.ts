@@ -36,11 +36,11 @@ export interface WalkthroughStep {
 }
 
 export interface WalkthroughDefinition {
-  /** Identifies the walkthrough in localStorage and the user menu. */
+  /** Identifies the walkthrough in localStorage and in restart events. */
   id: 'public' | 'builder';
   /** Bump to force re-show after editing steps. */
   version: string;
-  /** Human label for the user menu "Take the tour" item. */
+  /** Human label for the manual triggers (header tour button, Account settings). */
   label: string;
   steps: WalkthroughStep[];
 }

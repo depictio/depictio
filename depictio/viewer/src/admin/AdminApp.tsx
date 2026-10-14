@@ -14,8 +14,24 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { Icon } from '@iconify/react';
-import { ADMIN_TABS, adminUrl, parseAdminUrl } from 'depictio-react-core';
-import type { AdminRoute, AdminTab } from 'depictio-react-core';
+import { ADMIN_TABS, MONITORING_PANES, adminUrl, parseAdminUrl } from 'depictio-react-core';
+import type { AdminRoute, AdminTab, MonitoringPane } from 'depictio-react-core';
+import {
+  ArchiveRestore,
+  Database,
+  Eye,
+  HeartPulse,
+  ListChecks,
+  Palette,
+  ScrollText,
+  Settings,
+  Users,
+  Wrench,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { GlassPage, STROKE, useGlassPages } from '../chrome/variants/glass/pages';
+import { SECTION_ICON } from '../chrome/variants/glass/pages/GlassPage';
+import '../chrome/variants/glass/pages/admin.css';
 
 import { AppSidebar } from '../chrome';
 import { useCurrentUser } from '../hooks/useCurrentUser';
@@ -26,7 +42,63 @@ import AdminBrandingPanel from './AdminBrandingPanel';
 import AdminBackupsPanel from './AdminBackupsPanel';
 import AdminMaintenancePanel from './AdminMaintenancePanel';
 import AdminMonitoringPanel from './AdminMonitoringPanel';
+import AdminSettingsPanel from './AdminSettingsPanel';
+import { canSeeBackups, canSeeMonitoring } from './access';
 import { usePageTitle } from '../branding';
+
+/** A page of the Glass admin: a plain tab, or one of the Log & Task panes
+ *  (which the address bar names directly, `/admin/tasks`). */
+type AdminView = Exclude<AdminTab, 'monitoring'> | MonitoringPane;
+
+interface AdminNavItem {
+  view: AdminView;
+  label: string;
+  icon: LucideIcon;
+  /** Projects and Dashboards wear their section's colour, as in the sidebar. */
+  hue?: 'projects' | 'dashboards';
+  /** Hidden in public / demo mode, like the monitoring panes they open. */
+  trusted?: boolean;
+}
+
+interface AdminNavGroup {
+  label: string;
+  items: AdminNavItem[];
+}
+
+/** Who has access, what they made, what the instance has been doing, and how
+ *  it is set up: the four questions an admin comes with. */
+const NAV_GROUPS: AdminNavGroup[] = [
+  { label: 'People', items: [{ view: 'users', label: 'Users', icon: Users }] },
+  {
+    label: 'Content',
+    items: [
+      { view: 'projects', label: 'Projects', icon: SECTION_ICON.projects, hue: 'projects' },
+      { view: 'dashboards', label: 'Dashboards', icon: SECTION_ICON.dashboards, hue: 'dashboards' },
+    ],
+  },
+  {
+    label: 'Activity',
+    items: [
+      { view: 'tasks', label: 'Tasks', icon: ListChecks, trusted: true },
+      { view: 'ingestion', label: 'Ingestion', icon: Database, trusted: true },
+      { view: 'watchers', label: 'Watchers', icon: Eye, trusted: true },
+      { view: 'logs', label: 'Logs', icon: ScrollText, trusted: true },
+      { view: 'health', label: 'Health', icon: HeartPulse, trusted: true },
+    ],
+  },
+  {
+    label: 'Instance',
+    items: [
+      { view: 'branding', label: 'Branding', icon: Palette },
+      { view: 'backups', label: 'Backups', icon: ArchiveRestore, trusted: true },
+      { view: 'maintenance', label: 'Maintenance', icon: Wrench },
+      { view: 'settings', label: 'Settings', icon: Settings },
+    ],
+  },
+];
+
+const isPane = (view: string): view is MonitoringPane =>
+  (MONITORING_PANES as readonly string[]).includes(view);
 
 /** Remember the last tab, so a bare `/admin` reopens where the admin left off.
  *  A tab or pane named in the URL always wins. */
@@ -63,23 +135,26 @@ function writeAdminUrl(route: AdminRoute, mode: 'push' | 'replace'): void {
 
 const AdminApp: React.FC = () => {
   const { user, loading, isPublicMode, isDemoMode, isSingleUserMode } = useCurrentUser();
-  // Monitoring is for single- & multi-user (trusted) deployments. Single-user
-  // always wins — it's a personal admin instance even if public_mode is also
-  // set; only pure public/demo instances hide it.
-  const showMonitoring = isSingleUserMode || (!isPublicMode && !isDemoMode);
-  // Full-DB backup/restore is likewise a trusted-deployment tool.
-  const showBackups = showMonitoring;
+  // Monitoring is for single- & multi-user (trusted) deployments, and for a
+  // signed-in admin of a public one. Single-user always wins — it's a personal
+  // admin instance even if public_mode is also set; demo instances and guests
+  // never see it.
+  const modes = { user, isPublicMode, isDemoMode, isSingleUserMode };
+  const showMonitoring = canSeeMonitoring(modes);
+  // Full-DB backup/restore is a trusted-deployment tool only.
+  const showBackups = canSeeBackups(modes);
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
   const [route, setRoute] = useState<AdminRoute>(readAdminRoute);
-  // Monitoring and Backups aren't rendered in public/demo mode; a URL naming
-  // them falls back to Users instead of an empty panel.
+  // A tab that isn't rendered here; a URL naming it falls back to Users
+  // instead of an empty panel.
   const activeTab: AdminTab =
-    !showMonitoring && (route.tab === 'monitoring' || route.tab === 'backups')
+    (!showMonitoring && route.tab === 'monitoring') || (!showBackups && route.tab === 'backups')
       ? 'users'
       : route.tab;
 
   usePageTitle('Administration');
+  const glass = useGlassPages();
 
   // Canonicalise the arrival URL (a bare `/admin` gains the remembered tab,
   // `/admin/monitoring` becomes `/admin/tasks`) and follow Back/Forward.
@@ -136,6 +211,76 @@ const AdminApp: React.FC = () => {
         </Center>
       );
     }
+    if (glass) {
+      const view: AdminView = activeTab === 'monitoring' ? route.pane : activeTab;
+      const open = (next: string) =>
+        isPane(next)
+          ? navigate({ ...route, tab: 'monitoring', pane: next }, 'push')
+          : navigate({ ...route, tab: next as AdminTab }, 'push');
+      return (
+        <Tabs
+          value={view}
+          onChange={(v) => v && open(v)}
+          orientation="vertical"
+          variant="unstyled"
+          keepMounted={false}
+          className="ga-admin"
+        >
+          <Tabs.List className="ga-nav" aria-label="Administration">
+            {NAV_GROUPS.map((group) => {
+              const items = group.items.filter((item) =>
+                item.view === 'backups' ? showBackups : showMonitoring || !item.trusted,
+              );
+              if (items.length === 0) return null;
+              return (
+                <React.Fragment key={group.label}>
+                  <div className="ga-nav-group" role="presentation">
+                    {group.label}
+                  </div>
+                  {items.map(({ view: value, label, icon: NavIcon, hue }) => (
+                    <Tabs.Tab
+                      key={value}
+                      value={value}
+                      className="ga-tab"
+                      data-hue={hue}
+                      leftSection={<NavIcon size={17} strokeWidth={STROKE} aria-hidden />}
+                      data-testid={
+                        value === 'backups' || value === 'settings' ? `admin-tab-${value}` : undefined
+                      }
+                      // The Log & Task tab of old: the e2e suite and anyone
+                      // searching the docs still look for it by that name.
+                      aria-label={value === 'tasks' ? 'Log & Task: Tasks' : undefined}
+                    >
+                      {label}
+                    </Tabs.Tab>
+                  ))}
+                </React.Fragment>
+              );
+            })}
+          </Tabs.List>
+          <Tabs.Panel value={view} className="ga-content">
+            {view === 'users' && <AdminUsersPanel currentUserEmail={user.email} />}
+            {view === 'projects' && <AdminProjectsPanel />}
+            {view === 'dashboards' && <AdminDashboardsPanel />}
+            {view === 'branding' && <AdminBrandingPanel />}
+            {isPane(view) && (
+              <AdminMonitoringPanel
+                pane={route.pane}
+                onPaneChange={(pane) => navigate({ ...route, pane }, 'push')}
+                ingestionFilters={route.ingestion}
+                onIngestionFiltersChange={(ingestion) =>
+                  navigate({ ...route, ingestion }, 'replace')
+                }
+                showPaneSwitch={false}
+              />
+            )}
+            {view === 'backups' && <AdminBackupsPanel />}
+            {view === 'maintenance' && <AdminMaintenancePanel />}
+            {view === 'settings' && <AdminSettingsPanel />}
+          </Tabs.Panel>
+        </Tabs>
+      );
+    }
     return (
       <Tabs
         value={activeTab}
@@ -178,6 +323,13 @@ const AdminApp: React.FC = () => {
           <Tabs.Tab value="maintenance" leftSection={<Icon icon="mdi:broom" width={16} />}>
             Maintenance
           </Tabs.Tab>
+          <Tabs.Tab
+            value="settings"
+            leftSection={<Icon icon="mdi:cog-outline" width={16} />}
+            data-testid="admin-tab-settings"
+          >
+            Settings
+          </Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="users" pt="md">
@@ -210,12 +362,34 @@ const AdminApp: React.FC = () => {
         <Tabs.Panel value="maintenance" pt="md">
           <AdminMaintenancePanel />
         </Tabs.Panel>
+        <Tabs.Panel value="settings" pt="md">
+          <AdminSettingsPanel />
+        </Tabs.Panel>
       </Tabs>
     );
   };
 
+  const body = (
+    <>
+      {renderBody()}
+    </>
+  );
+
+  if (glass) {
+    return (
+      <GlassPage
+        section="admin"
+        title="Administration"
+        description="Users, content, branding and the health of this instance."
+      >
+        {body}
+      </GlassPage>
+    );
+  }
+
   return (
     <AppShell
+      data-testid="app-shell"
       layout="alt"
       header={{ height: 64 }}
       navbar={{
@@ -266,7 +440,7 @@ const AdminApp: React.FC = () => {
 
       <AppShell.Main>
         <Box px="lg" py="md">
-          {renderBody()}
+          {body}
         </Box>
       </AppShell.Main>
     </AppShell>

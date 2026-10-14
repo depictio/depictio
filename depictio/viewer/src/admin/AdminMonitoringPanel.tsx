@@ -18,6 +18,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { CodeHighlight } from '@mantine/code-highlight';
+import '@mantine/code-highlight/styles.css';
 import { Icon } from '@iconify/react';
 
 import {
@@ -40,15 +41,18 @@ import {
 } from 'depictio-react-core';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { canSeeMonitoring } from './access';
 import { formatDateTimeVerbose } from '../lib/datetime';
 import {
   absTime,
   clockTime,
   formatDuration,
   matchesQuery,
+  prettyRepr,
   spanMs,
   stepTally,
 } from '../monitoring/format';
+import { usePrettyPrint } from '../monitoring/usePrettyPrint';
 import {
   DetailBlock,
   Field,
@@ -76,6 +80,7 @@ import { applyIngestionEvent, routeMonitoringEvent, runOrigin } from '../monitor
 import { AgentsPane } from '../monitoring/AgentsPane';
 import { IngestionStepTimeline } from '../monitoring/IngestionStepTimeline';
 import { TriggerBadge } from '../monitoring/TriggerBadge';
+import { useQuietTags, useTone } from '../monitoring/useTone';
 
 /**
  * Admin > Monitoring ("Log & Task") tab.
@@ -89,8 +94,9 @@ import { TriggerBadge } from '../monitoring/TriggerBadge';
  * live in `../monitoring/` so the project-scoped panels reuse them rather than
  * growing near-copies.
  *
- * Hidden in public/demo mode (no real admin surface) — the parent AdminApp
- * already gates on `is_admin`, and we additionally bail in those modes here.
+ * Hidden in demo mode and from a public instance's guests (no real admin
+ * surface) — the parent AdminApp already gates on `is_admin`, and we
+ * additionally bail in those cases here.
  *
  * The open pane and the Ingestion filters are owned by AdminApp, which keeps
  * them in the URL (`/admin/<pane>?status=...`) so a refresh, Back/Forward or a
@@ -100,6 +106,8 @@ import { TriggerBadge } from '../monitoring/TriggerBadge';
 // ── Tasks pane ────────────────────────────────────────────────────────────
 
 const TasksPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
+  const tone = useTone();
+  const [pretty] = usePrettyPrint();
   const [auto, setAuto] = useState(true);
   const [status, setStatus] = useState<string | null>(null);
   const [kind, setKind] = useState<string | null>(null);
@@ -125,6 +133,7 @@ const TasksPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
   return (
     <Stack gap="sm">
       <PaneHeader
+        prettyPrint
         title="Celery tasks"
         loading={loading}
         auto={auto}
@@ -179,7 +188,7 @@ const TasksPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
               <Accordion.Control>
                 <Group gap="sm" wrap="nowrap">
                   <Box w={84} style={{ flexShrink: 0 }}>
-                    <Badge size="xs" fullWidth color={statusColor(t.status)} variant="filled">
+                    <Badge size="xs" fullWidth color={tone(statusColor(t.status))} variant="filled">
                       {t.status}
                     </Badge>
                   </Box>
@@ -187,7 +196,7 @@ const TasksPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
                     <Badge
                       size="xs"
                       fullWidth
-                      color={KIND_COLORS[t.kind] || 'gray'}
+                      color={tone(KIND_COLORS[t.kind] || 'gray')}
                       variant="light"
                     >
                       {t.kind}
@@ -235,7 +244,7 @@ const TasksPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
                   {t.args_repr && (
                     <DetailBlock label="Arguments">
                       <CodeHighlight
-                        code={t.args_repr}
+                        code={pretty ? prettyRepr(t.args_repr) : t.args_repr}
                         language="python"
                         copyLabel="Copy"
                         styles={CODE_STYLES}
@@ -245,7 +254,7 @@ const TasksPane: React.FC<{ liveSignal: number }> = ({ liveSignal }) => {
                   {t.result_summary && (
                     <DetailBlock label="Result">
                       <CodeHighlight
-                        code={t.result_summary}
+                        code={pretty ? prettyRepr(t.result_summary) : t.result_summary}
                         language="python"
                         copyLabel="Copy"
                         styles={CODE_STYLES}
@@ -358,6 +367,8 @@ const IngestionPane: React.FC<{
   filters: IngestionFilters;
   onFiltersChange: (next: IngestionFilters) => void;
 }> = ({ feed, filters, onFiltersChange }) => {
+  const tone = useTone();
+  const quiet = useQuietTags();
   const { status, instance, projectId, q } = filters;
   const [auto, setAuto] = useState(true);
   // Controlled open rows: only the expanded run mounts its field grid + steps
@@ -519,10 +530,10 @@ const IngestionPane: React.FC<{
                     <Badge
                       size="xs"
                       fullWidth
-                      color={statusColor(r.status)}
+                      color={tone(statusColor(r.status))}
                       variant="filled"
                       leftSection={
-                        r.status === 'running' ? <Loader size={8} color="white" /> : undefined
+                        r.status === 'running' ? <Loader size={8} color={quiet ? 'yellow' : 'white'} /> : undefined
                       }
                     >
                       {r.status}
@@ -530,7 +541,7 @@ const IngestionPane: React.FC<{
                   </Box>
                   {/* Fits "upload" and "server"; the full label is in the details. */}
                   <Box w={56} style={{ flexShrink: 0 }}>
-                    <Badge size="xs" fullWidth color={runOrigin(r).color} variant="light">
+                    <Badge size="xs" fullWidth color={tone(runOrigin(r).color)} variant="light">
                       {runOrigin(r).badge}
                     </Badge>
                   </Box>
@@ -538,7 +549,7 @@ const IngestionPane: React.FC<{
                       widens it; a longer one truncates and the tooltip has it whole. */}
                   <Box w={190} style={{ flexShrink: 0 }}>
                     <Tooltip label={runInstance(r) ?? 'unknown'} openDelay={400}>
-                      <Badge size="xs" fullWidth tt="none" color="blue" variant="outline">
+                      <Badge size="xs" fullWidth tt="none" color={tone('blue')} variant="outline">
                         {runInstance(r) ?? 'unknown'}
                       </Badge>
                     </Tooltip>
@@ -719,6 +730,8 @@ const IngestionPane: React.FC<{
 // ── Logs pane ────────────────────────────────────────────────────────────────
 
 const LogsPane: React.FC = () => {
+  const tone = useTone();
+  const [pretty] = usePrettyPrint();
   const [auto, setAuto] = useState(true);
   const [level, setLevel] = useState<string | null>(null);
   const [source, setSource] = useState<string | null>(null);
@@ -760,6 +773,7 @@ const LogsPane: React.FC = () => {
   return (
     <Stack gap="sm">
       <PaneHeader
+        prettyPrint
         title="Application logs"
         loading={loading}
         auto={auto}
@@ -833,7 +847,7 @@ const LogsPane: React.FC = () => {
                       <Badge
                         size="xs"
                         fullWidth
-                        color={LOG_LEVEL_COLORS[l.level] || 'gray'}
+                        color={tone(LOG_LEVEL_COLORS[l.level] || 'gray')}
                         variant="filled"
                       >
                         {l.level}
@@ -874,7 +888,7 @@ const LogsPane: React.FC = () => {
                       )}
                     </Group>
                     <CodeHighlight
-                      code={l.message}
+                      code={pretty ? prettyRepr(l.message) : l.message}
                       language="text"
                       copyLabel="Copy"
                       styles={CODE_STYLES}
@@ -972,6 +986,8 @@ interface AdminMonitoringPanelProps {
   /** Ingestion pane filters; AdminApp mirrors them in the query string. */
   ingestionFilters: IngestionFilters;
   onIngestionFiltersChange: (filters: IngestionFilters) => void;
+  /** Show the pane switch. Off when the page's own navigation lists the panes. */
+  showPaneSwitch?: boolean;
 }
 
 const AdminMonitoringPanel: React.FC<AdminMonitoringPanelProps> = ({
@@ -979,14 +995,15 @@ const AdminMonitoringPanel: React.FC<AdminMonitoringPanelProps> = ({
   onPaneChange,
   ingestionFilters,
   onIngestionFiltersChange,
+  showPaneSwitch = true,
 }) => {
-  const { isPublicMode, isDemoMode, isSingleUserMode } = useCurrentUser();
+  const { user, isPublicMode, isDemoMode, isSingleUserMode } = useCurrentUser();
   const [taskSignal, setTaskSignal] = useState(0);
   const [watcherSignal, setWatcherSignal] = useState(0);
   const [ingestionFeed] = useState(() => createLiveFeed<MonitoringLiveEvent>());
 
-  // Match AdminApp's gate: single-user always allowed; only pure public/demo hides.
-  const visible = isSingleUserMode || (!isPublicMode && !isDemoMode);
+  // Match AdminApp's gate (see `canSeeMonitoring`).
+  const visible = canSeeMonitoring({ user, isPublicMode, isDemoMode, isSingleUserMode });
 
   // Probe whether real-time events are enabled server-side before opening the
   // socket. When they're disabled the WS handshake is rejected (403) and the
@@ -1058,25 +1075,29 @@ const AdminMonitoringPanel: React.FC<AdminMonitoringPanelProps> = ({
 
   return (
     <Stack gap="md">
-      <Group justify="space-between" wrap="nowrap">
-        <SegmentedControl
-          size="xs"
-          value={pane}
-          onChange={(v) => onPaneChange(v as MonitoringPane)}
-          data={[
-            { value: 'tasks', label: 'Tasks' },
-            { value: 'ingestion', label: 'Ingestion' },
-            { value: 'watchers', label: 'Watchers' },
-            { value: 'logs', label: 'Logs' },
-            { value: 'health', label: 'Health' },
-          ]}
-        />
-        {liveStatus === 'connected' && (
-          <Badge size="xs" color="green" variant="dot">
-            Live
-          </Badge>
-        )}
-      </Group>
+      {(showPaneSwitch || liveStatus === 'connected') && (
+        <Group justify={showPaneSwitch ? 'space-between' : 'flex-end'} wrap="nowrap">
+          {showPaneSwitch && (
+            <SegmentedControl
+              size="xs"
+              value={pane}
+              onChange={(v) => onPaneChange(v as MonitoringPane)}
+              data={[
+                { value: 'tasks', label: 'Tasks' },
+                { value: 'ingestion', label: 'Ingestion' },
+                { value: 'watchers', label: 'Watchers' },
+                { value: 'logs', label: 'Logs' },
+                { value: 'health', label: 'Health' },
+              ]}
+            />
+          )}
+          {liveStatus === 'connected' && (
+            <Badge size="xs" color="green" variant="dot">
+              Live
+            </Badge>
+          )}
+        </Group>
+      )}
       <Card withBorder radius="md" p="md">
         {body}
       </Card>

@@ -1,8 +1,9 @@
 import React from 'react';
-import { Badge, Group, Stack, Stepper, Text } from '@mantine/core';
+import { Badge, Group, Stepper } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { useGroupingColor } from '../../selectionGroups';
+import GuideBullets from './GuideBullets';
 import { groupingActiveStep, selectionCapableSummary } from './groupingGuide';
 
 /**
@@ -18,7 +19,8 @@ import { groupingActiveStep, selectionCapableSummary } from './groupingGuide';
  * Three steps instead, with the one the user is on marked current (see
  * `groupingActiveStep`). Step 1 quotes how many tiles on *this* dashboard can
  * emit a selection, so the guide is about the dashboard in front of the user
- * rather than about the feature in the abstract.
+ * rather than about the feature in the abstract. Steps 2 and 3 are icon-led
+ * bullets, not sentences: the panel is read while acting on the dashboard.
  */
 const GroupingSteps: React.FC<{
   /** Tiles on this dashboard a selection can be saved from. */
@@ -32,6 +34,7 @@ const GroupingSteps: React.FC<{
 
   return (
     <Stepper
+      className="dc-ap-steps"
       active={active}
       orientation="vertical"
       size="sm"
@@ -40,11 +43,15 @@ const GroupingSteps: React.FC<{
       mt={8}
       // The theme's own sizes, matching the panel's other labels: the guide is
       // the first thing a new user reads here and 11px made it work to read.
+      //
+      // One type scale for every step: Mantine gives the description a
+      // line-height of 1, which the plain-text steps inherited while the lasso
+      // step's own <Text> did not, so the current step read larger than the
+      // others. Size and line-height are set once here instead.
       styles={{
-        stepLabel: { fontSize: 14, fontWeight: 600 },
-        stepDescription: { fontSize: 13 },
+        stepLabel: { fontSize: 14, fontWeight: 600, lineHeight: 1.35 },
+        stepDescription: { fontSize: 13, lineHeight: 1.45, marginTop: 2 },
         stepBody: { marginLeft: 10 },
-        verticalSeparator: { marginLeft: 12 },
       }}
     >
       <Stepper.Step
@@ -52,6 +59,7 @@ const GroupingSteps: React.FC<{
         // on: the step is not "pending", it cannot be completed here at all,
         // and its description says why.
         color={blocked ? 'orange' : undefined}
+        className={blocked ? 'dc-ap-step--blocked' : undefined}
         icon={
           <Icon
             icon={blocked ? 'mdi:alert-circle-outline' : 'mdi:select-group'}
@@ -59,47 +67,65 @@ const GroupingSteps: React.FC<{
             height={15}
           />
         }
-        label="Find a tile you can select on"
+        label="Find a selectable tile"
         description={selectionCapableSummary(selectableCount)}
       />
       <Stepper.Step
         icon={<Icon icon="mdi:lasso" width={15} height={15} />}
-        label="Lasso or box-select on it"
+        label="Select points on it"
         description={
-          <Stack gap={4}>
-            <Text size="sm" c="dimmed">
-              On a chart, hover it and pick either selection tool from the toolbar in its top
-              right, then drag over the points. Ticking rows in a table, drawing on a map or
-              clicking thumbnails in a gallery all count the same.
-            </Text>
-            {/* Both drags are equally valid — spelling them out is the whole
-                point: the old copy said "lasso" and left box-select looking
-                like it would be ignored. */}
-            <Group gap={4}>
-              <Badge
-                size="sm"
-                variant="light"
-                color={groupingColor}
-                leftSection={<Icon icon="mdi:vector-square" width={13} height={13} />}
-              >
-                Box select
-              </Badge>
-              <Badge
-                size="sm"
-                variant="light"
-                color={groupingColor}
-                leftSection={<Icon icon="mdi:lasso" width={13} height={13} />}
-              >
-                Lasso
-              </Badge>
-            </Group>
-          </Stack>
+          <GuideBullets
+            items={[
+              {
+                icon: 'mdi:chart-scatter-plot',
+                label: 'Chart',
+                // Both drags are equally valid: the old copy said "lasso" and
+                // left box-select looking like it would be ignored.
+                text: (
+                  <Group gap={6} className="dc-ap-chips">
+                    <Badge
+                      component="span"
+                      className="dc-ap-chip"
+                      size="sm"
+                      variant="light"
+                      color={groupingColor}
+                      leftSection={<Icon icon="mdi:vector-square" width={13} height={13} />}
+                    >
+                      Box select
+                    </Badge>
+                    <Badge
+                      component="span"
+                      className="dc-ap-chip"
+                      size="sm"
+                      variant="light"
+                      color={groupingColor}
+                      leftSection={<Icon icon="mdi:lasso" width={13} height={13} />}
+                    >
+                      Lasso
+                    </Badge>
+                  </Group>
+                ),
+              },
+              { icon: 'mdi:table-check', label: 'Table', text: 'tick rows' },
+              { icon: 'mdi:vector-polygon', label: 'Map', text: 'draw a shape' },
+              { icon: 'mdi:image-multiple-outline', label: 'Gallery', text: 'click thumbnails' },
+            ]}
+          />
         }
       />
       <Stepper.Step
         icon={<Icon icon="mdi:tag-outline" width={15} height={15} />}
         label="Name it and save"
-        description="The panel shows what you picked; name it, keep or change the color, save. Saving frees the selection, so the next cohort starts clean."
+        description={
+          <GuideBullets
+            inline
+            items={[
+              { icon: 'mdi:tag-outline', label: 'Name' },
+              { icon: 'mdi:palette-outline', label: 'Color' },
+              { icon: 'mdi:content-save-outline', label: 'Save' },
+            ]}
+          />
+        }
       />
     </Stepper>
   );

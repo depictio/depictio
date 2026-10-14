@@ -477,12 +477,13 @@ tabs:
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
-  # Bound to multiqc_data and the sample sheet, both present on every route.
+  # The read layout is bound to the sample sheet; samples are narrowed by the
+  # pinned Sample filters through the link to multiqc_data.
   filter_sections:
   - name: MultiQC report
     icon: mdi:file-document-outline
     color: orange
-    description: Samples as the MultiQC report names them, and the read layout
+    description: The read layout behind the MultiQC panels
   grid_sections:
   - name: Read quality
     icon: mdi:chart-bell-curve
@@ -515,20 +516,6 @@ tabs:
     layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: interactive
     workflow_tag: riboseq
-    data_collection_tag: multiqc_data
-    interactive_component_type: MultiSelect
-    column_name: sample
-    column_type: object
-    display:
-      icon_name: mdi:flask-outline
-      custom_color: teal
-    section: MultiQC report
-    tag: rb-mqc-filter-sample
-    index: mqc-sample-filter
-    title: Sample ID
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    workflow_tag: riboseq
     data_collection_tag: samples
     interactive_component_type: MultiSelect
     column_name: read_type
@@ -540,7 +527,7 @@ tabs:
     tag: rb-mqc-filter-read-type
     index: mqc-read-type-filter
     title: Read layout
-    layout: {x: 0, y: 3, w: 1, h: 2}
+    layout: {x: 0, y: 0, w: 1, h: 2}
   - component_type: multiqc
     workflow_tag: riboseq
     data_collection_tag: multiqc_data

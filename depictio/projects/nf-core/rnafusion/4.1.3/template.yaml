@@ -231,7 +231,7 @@ workflows:
                 - "Gene Coverage"
 
       - data_collection_tag: "samplesheet"
-        description: "Run samplesheet (sample identifiers and library strandedness); drives the MultiQC sample filter"
+        description: "Run samplesheet (sample identifiers and library strandedness); drives the sample filters"
         config:
           type: "Table"
           metatype: "Metadata"

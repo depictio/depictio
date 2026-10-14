@@ -1,3 +1,4 @@
+import asyncio
 import hmac
 import os
 from datetime import datetime, timedelta
@@ -5,7 +6,18 @@ from typing import Annotated, Any
 
 from beanie import PydanticObjectId
 from bson import ObjectId
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    File,
+    Header,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
 
@@ -45,6 +57,7 @@ from depictio.api.v1.endpoints.user_endpoints.rate_limit import enforce_rate_lim
 from depictio.api.v1.endpoints.user_endpoints.utils import (
     create_access_token,
 )
+from depictio.api.v1.services import avatars as avatar_service
 from depictio.models.models.users import (
     RequestEditPassword,
     RequestUserRegistration,
@@ -563,6 +576,26 @@ async def api_fetch_user_from_id(
     return user
 
 
+def _avatar_payload(user_id: Any) -> dict:
+    """The profile-picture keys the SPA reads next to the user's identity.
+
+    ``avatar_updated_at`` is null when the user has no picture, and otherwise
+    the naive-UTC ISO stamp the SPA uses to decide whether to fetch the bytes
+    and to bust its cache. Added to the response dict rather than to the shared
+    ``User`` model: the picture lives in its own collection.
+    """
+    try:
+        doc = avatar_service.get_avatar_meta(user_id) or {}
+    except Exception as exc:  # noqa: BLE001 - /auth/me/optional is the SPA boot call
+        logger.warning(f"Could not read the profile picture metadata of {user_id}: {exc}")
+        doc = {}
+    return {
+        "avatar_updated_at": avatar_service.avatar_updated_at_iso(doc),
+        "avatar_source": doc.get("source"),
+        "avatar_provider": doc.get("provider"),
+    }
+
+
 @auth_endpoint_router.get("/me", include_in_schema=True)
 async def get_current_user_info(current_user: User = Depends(get_user_or_anonymous)) -> User:
     """Get current user information for the React profile page.
@@ -624,6 +657,9 @@ async def get_current_user_info_optional(
                 "id": str(user.id),
                 "email": user.email,
                 "is_admin": getattr(user, "is_admin", False),
+                # A public-mode guest: the SPA offers it a way to sign in.
+                "is_temporary": bool(getattr(user, "is_temporary", False)),
+                **_avatar_payload(user.id),
             }
 
     # Single-user mode: the data endpoints (`get_user_or_anonymous`) auto-resolve
@@ -638,6 +674,7 @@ async def get_current_user_info_optional(
                 "id": str(admin_user.id),
                 "email": admin_user.email,
                 "is_admin": True,
+                **_avatar_payload(admin_user.id),
             }
 
     # DEPICTIO_DEV_MODE is consumed by the React viewer to suppress the
@@ -692,7 +729,93 @@ async def get_current_user_info_optional(
         # folder. Only the flag, for the same reason: the bucket names are
         # listed by GET /projects/s3_dirs, to a signed-in user.
         "remote_browse_enabled": remote_browse_enabled(),
+        # Whether the component export API (`/export/...`) answers, which puts an
+        # "Export / embed" action on every tile. And whether any site may frame
+        # an embed: the allowlist itself is not sent, only that it is non-empty,
+        # so the dialog can warn that an iframe snippet would be refused.
+        "embed_enabled": bool(getattr(settings.fastapi, "embed_enabled", False)),
+        "embed_framing_enabled": bool(getattr(settings.fastapi, "embed_allowed_origins", None)),
     }
+
+
+def _require_avatar_editor(user: Any) -> None:
+    """403 unless ``user`` is a real, persistent account on a mode that allows it.
+
+    Anonymous and temporary users have no lasting identity to attach a picture
+    to (a temporary account expires and its data is purged), and a demo
+    instance is shared and read-only by design.
+    """
+    if settings.auth.is_demo_mode:
+        raise HTTPException(
+            status_code=403, detail="Profile pictures cannot be changed in demo mode."
+        )
+    if getattr(user, "is_anonymous", False):
+        raise HTTPException(status_code=403, detail="Sign in to set a profile picture.")
+    if getattr(user, "is_temporary", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Temporary accounts cannot have a profile picture. Create an account to set one.",
+        )
+
+
+@auth_endpoint_router.get("/me/avatar", include_in_schema=True)
+async def get_my_avatar(current_user: UserBeanie = Depends(get_current_user)) -> Response:
+    """The current user's profile picture as image bytes, 404 when there is none.
+
+    ``private`` so a shared proxy never serves one user's picture to another;
+    the SPA keys its own copy on ``avatar_updated_at`` instead of relying on it.
+    """
+    doc = avatar_service.get_avatar(current_user.id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="No profile picture.")
+    return Response(
+        content=avatar_service.avatar_bytes(doc),
+        media_type=doc.get("content_type") or "image/webp",
+        headers={"Cache-Control": "private, max-age=300"},
+    )
+
+
+@auth_endpoint_router.put("/me/avatar", include_in_schema=True)
+async def put_my_avatar(
+    file: UploadFile = File(...),
+    current_user: UserBeanie = Depends(get_current_user),
+) -> dict:
+    """Replace the current user's profile picture with an upload.
+
+    The image is decoded and re-encoded (cropped square, 256 px, WebP) before
+    anything is stored, so the bytes served later are never the uploaded ones.
+    413 over 5 MB, 415 when the file is not a decodable image.
+    """
+    _require_avatar_editor(current_user)
+
+    # Refuse on the declared size first; the read below caps what is buffered.
+    declared = file.size
+    if declared is not None and declared > avatar_service.MAX_INPUT_BYTES:
+        raise HTTPException(status_code=413, detail=avatar_service.AvatarTooLarge().args[0])
+    raw = await file.read(avatar_service.MAX_INPUT_BYTES + 1)
+    try:
+        # Decoding is CPU-bound and the store blocks: keep both off the event loop.
+        doc = await asyncio.to_thread(avatar_service.set_uploaded_avatar, current_user.id, raw)
+    except avatar_service.AvatarError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc))
+
+    return {
+        "source": doc["source"],
+        "provider": doc["provider"],
+        "updated_at": avatar_service.avatar_updated_at_iso(doc),
+    }
+
+
+@auth_endpoint_router.delete("/me/avatar", include_in_schema=True)
+async def delete_my_avatar(current_user: UserBeanie = Depends(get_current_user)) -> dict:
+    """Remove the current user's profile picture (idempotent).
+
+    The next login through an identity provider that supplies a picture may set
+    one again; see ``services/avatars.py``.
+    """
+    _require_avatar_editor(current_user)
+    removed = avatar_service.delete_avatar(current_user.id)
+    return {"success": True, "removed": removed}
 
 
 @auth_endpoint_router.get("/get_anonymous_user_session", include_in_schema=True, deprecated=True)
@@ -1309,6 +1432,12 @@ def delete_user(user_id: str, current_user=Depends(get_current_user)):
     # Delete the user from the database
     result = users_collection.delete_one({"_id": user_id})
     if result.deleted_count == 1:
+        # The picture lives in its own collection; without this it would
+        # outlive the account it belongs to.
+        try:
+            avatar_service.delete_avatar(user_id)
+        except Exception as exc:  # noqa: BLE001 - the user is already gone
+            logger.warning(f"Could not delete the profile picture of {user_id}: {exc}")
         return {"success": True}
     else:
         return {"success": False}

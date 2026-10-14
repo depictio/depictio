@@ -89,6 +89,8 @@ export interface GuideEditAction extends TileActionStyle {
 const MEANING: Record<TileActionStyleKey, string> = {
   group: 'Marks a tile a selection can be made on; with a selection, saves it as a group.',
   inspect: 'Opens the component in the inspector beside the page.',
+  export:
+    'The link that serves this component to another site: a Plotly spec, or a page to embed.',
   catalog: 'The tools-catalog recipe the component came from.',
   description: "The author's note on what the component shows.",
   metadata: 'Where the data comes from: data collection, columns and settings.',
@@ -151,16 +153,21 @@ const action = (key: TileActionStyleKey, when?: string, meaning = MEANING[key]):
  * server has the inspector on, and the Guide describes the dashboard it is
  * read on, where the chrome then never draws it. Without, every action is
  * listed, each with when it shows.
+ *
+ * `embed: true` adds the export action, which exists only where the server's
+ * export API is on. Off by default, unlike the inspector: it is new, and a
+ * deployment that never turned it on should read a Guide that never mentions it.
  */
 export function rowActionsFor(
   type: GuideTileType,
-  opts: { inspector?: boolean } = {},
+  opts: { inspector?: boolean; embed?: boolean } = {},
 ): GuideRowAction[] {
-  const { inspector = true } = opts;
+  const { inspector = true, embed = false } = opts;
   const selection = SELECTION_WHEN[type];
   const out: GuideRowAction[] = [];
   if (selection) out.push(action('group', `With Analysis on · ${selection.toLowerCase()}`));
   if (inspector) out.push(action('inspect', 'With the inspector on'));
+  if (embed) out.push(action('export', 'With the export API on'));
   out.push(action('catalog', 'Tiles added from the tools catalog'));
   // An advanced view prints its description under its title; only the minimal
   // style's header, which shows the short subtitle there, leaves it to the icon.

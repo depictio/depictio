@@ -105,6 +105,19 @@ data:
   DEPICTIO_TELEMETRY_MEMORY_LIMIT: {{ .Values.backend.env.DEPICTIO_TELEMETRY_MEMORY_LIMIT | default .Values.backend.resources.limits.memory | quote }}
   DEPICTIO_TELEMETRY_INCLUDE_USAGE_METRICS: {{ .Values.backend.env.DEPICTIO_TELEMETRY_INCLUDE_USAGE_METRICS | default "true" | quote }}
   DEPICTIO_TELEMETRY_DEBUG: {{ .Values.backend.env.DEPICTIO_TELEMETRY_DEBUG | default "false" | quote }}
+  # Release check (admins are told when a newer Depictio exists). Each key is
+  # rendered only when set: an unset ENABLED leaves the /admin toggle usable, and
+  # any value forces it and locks the toggle. `hasKey`, not `with`, for the
+  # boolean, since `with` would skip a literal `false`.
+  {{- if hasKey .Values.backend.env "DEPICTIO_VERSION_CHECK_ENABLED" }}
+  DEPICTIO_VERSION_CHECK_ENABLED: {{ .Values.backend.env.DEPICTIO_VERSION_CHECK_ENABLED | quote }}
+  {{- end }}
+  {{- with .Values.backend.env.DEPICTIO_VERSION_CHECK_INTERVAL_HOURS }}
+  DEPICTIO_VERSION_CHECK_INTERVAL_HOURS: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.backend.env.DEPICTIO_VERSION_CHECK_REPOSITORY }}
+  DEPICTIO_VERSION_CHECK_REPOSITORY: {{ . | quote }}
+  {{- end }}
   # Which view /dashboards opens in for someone who never picked one, and the
   # geometry of the thumbnails it shows. See .env.example.
   DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW: {{ .Values.backend.env.DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW | default "table" | quote }}
@@ -124,6 +137,9 @@ data:
   {{- else }}
   DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: {{ .Values.backend.env.DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID | default "G-XXXXXXXXXX" | quote }}
   {{- end }}
+  # Comment threads are for editors and owners unless this is "true": then anyone
+  # with viewer access to a project can read and write them (not moderate).
+  DEPICTIO_COMMENTS_VIEWERS_CAN_COMMENT: {{ .Values.backend.env.DEPICTIO_COMMENTS_VIEWERS_CAN_COMMENT | default "false" | quote }}
   # YAML Dashboard Sync configuration (disabled for K8s by default)
   DEPICTIO_DASHBOARD_YAML_ENABLED: {{ .Values.backend.env.DEPICTIO_DASHBOARD_YAML_ENABLED | default "false" | quote }}
   DEPICTIO_DASHBOARD_YAML_WATCHER_AUTO_START: {{ .Values.backend.env.DEPICTIO_DASHBOARD_YAML_WATCHER_AUTO_START | default "false" | quote }}
@@ -141,6 +157,11 @@ data:
   DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES: {{ .Values.backend.env.DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES | default "524288000" | quote }}
   DEPICTIO_REMOTE_TIMEOUT_S: {{ .Values.backend.env.DEPICTIO_REMOTE_TIMEOUT_S | default "30" | quote }}
   DEPICTIO_REMOTE_MAX_REDIRECTS: {{ .Values.backend.env.DEPICTIO_REMOTE_MAX_REDIRECTS | default "3" | quote }}
+  # Component export / embed API (/depictio/api/v1/export). Off by default:
+  # serving embeds relaxes X-Frame-Options and CSP frame-ancestors on that path.
+  # Backend only — the worker never serves these routes.
+  DEPICTIO_FASTAPI_EMBED_ENABLED: {{ .Values.backend.env.DEPICTIO_FASTAPI_EMBED_ENABLED | default "false" | quote }}
+  DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS: {{ .Values.backend.env.DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS | default "" | quote }}
   # S3 storage configuration.
   # NOTE: DEPICTIO_S3_ROOT_USER and DEPICTIO_S3_ROOT_PASSWORD (and their
   # legacy DEPICTIO_MINIO_* names) are

@@ -3,6 +3,236 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.17.4
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.17.4</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.17.3 → 1.17.4 [33bb41467]
+* fix(guide): ring the header comments button only when it is visible [7913a2481]
+* feat(guide): Comments and Versions parts, with real components [4478780ee]
+* fix(walkthrough): keep the public tour to the dashboards list [b1ff98487]
+* feat(viewer): a landing hint on a dashboard replaces the tour there [46ffbfbfc]
+* Update CHANGELOG.md for v1.17.3 [d23eb3f39]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
+ghcr.io/depictio/depictio:1.17.3
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.17.3</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.17.2 → 1.17.3 [b9d77a772]
+* feat(auth): let a public-mode guest sign in from where they would comment [2e72e446d]
+* fix(viewer): centre the depictio mark in the top bar [f70d2fc57]
+* fix(viewer): keep the actions column of the Dashboards and Projects tables in view [7d1ec7404]
+* Update CHANGELOG.md for v1.17.2 [82146a20f]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
+ghcr.io/depictio/depictio:1.17.2
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.17.2</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.17.1 → 1.17.2 [f7b1fae91]
+* fix(comments): a temporary account cannot comment when viewers may [e20b75806]
+* test(templates): a pinned filter must reach the MultiQC panels [d64c92a36]
+* chore(templates): drop the tab-local MultiQC sample filters the pinned filters replace [a1827f1c0]
+* feat(scripts): report how many MultiQC names each hub id claims [0d670e92f]
+* fix(multiqc): pool every link of a source table and claim infix sample ids [f0bc3b0c4]
+* feat(comments): let viewers comment, behind an opt-in setting [52a858f7e]
+* fix(multiqc): scope the family lookup and cover its edges [6a423ea81]
+* fix(multiqc): let a pinned filter from another tab narrow the MultiQC panels [3ae7976a8]
+* fix(viewer): list every nf-core dashboard in the nf-core section [9df24f74c]
+* fix(viewer): show a readable message when Google sign-in is refused [9abbb5966]
+* chore(helm): track the EMBL showcases values file [9fa902b50]
+* fix(viewer): the open sidebar's foot centres its rows [70e5d2fb2]
+* Update CHANGELOG.md for v1.17.1 [7cb65175e]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
+ghcr.io/depictio/depictio:1.17.1
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.17.1</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.17.0 → 1.17.1 [e7d53c173]
+* fix(viewer): a section's filter bar shares its width between the filters [4d32715f9]
+* Update CHANGELOG.md for v1.17.0 [086b49d4d]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
+ghcr.io/depictio/depictio:1.17.0
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.17.0</summary>
+
+### Changes 📜
+
+#### Improvements 🚀
+
+* style: pre-commit formatting (ruff format, nbstripout on the showcase notebook) [28fc92a94]
+
+#### Documentation Updates 📚
+
+* docs: server info and Account settings screenshots [c2dcecb47]
+* docs: Glass chrome screenshots [040f011a4]
+
+#### Other Changes 📝
+
+* Bump version: 1.16.0 → 1.17.0 [4161aac4c]
+* feat(viewer): CLI configuration dialogs on the default theme [2bc60abaa]
+* feat(viewer): server info popover, Account settings and profile pictures [3c2845c38]
+* feat(api): profile pictures with an identity-provider hook [f6ca9b5d6]
+* feat(api): server-side release check with an admin toggle [012e8c71b]
+* test(tool-studio): the interactive preview shows the dashboard's default title [4ab5ca8f0]
+* fix(viewer): selects and the other controls wear the component's own colour [22bb1858a]
+* feat(sliders): the builder previews what the dashboard draws; tick labels optional [e1b0dd114]
+* fix(viewer): picked options read by their mark, not a tinted block [7a1347973]
+* feat(listings): density and columns in one Table display menu [ef8266648]
+* feat(auth): sign-in leads with SSO and Google, its rose and petals keep moving [c9f5ed6a1]
+* feat(projects): a connections map replaces the cytoscape graph [5a4c4533d]
+* feat(projects): roles and permissions in the page style [f322ea3a6]
+* feat(editor): dashboard branding in collapsible sections [faa60046a]
+* fix(viewer): card icons stay inside their card; picked options read at a glance [ef757f617]
+* feat(viewer): the dock names its keys in one gliding label; the rose only moves its petals [c7e2bf2f1]
+* feat(viewer): the dock can move, and introduces itself once [366bb5a04]
+* feat(admin): a sectioned admin page and feeds that read like a log [112745e5b]
+* feat(viewer): listings read as text and tags, in their page's colour [8520d57bd]
+* feat(projects): the project page leads with its workflow and one switch [78e14fe50]
+* feat(viewer): pick the look in Profile, its default in Admin; Glass shows as Paper [75053030e]
+* feat(viewer): pages wear depictio's colours, tags replace pills [2aae65210]
+* feat(viewer): the Analysis guide as icon bullets instead of paragraphs [cad3e2276]
+* feat(viewer): Analysis panel in the paper style [56a26fa75]
+* feat(projects): data collections and ingestion report as centred cards [d399ebdf9]
+* feat(viewer): the dashboard bar leads with the dashboard's title [fbfeda171]
+* feat(builder): add-component page and catalog in the new chrome [772abe611]
+* feat(viewer): paper surfaces, the real logo and a larger chrome [da2f44f33]
+* test(e2e): chrome-neutral hooks so the suite runs on Glass and Classic [acfa459c5]
+* feat(viewer): Glass chrome as the default look, Classic kept in Settings [e98d5bb89]
+* feat(devcontainer): a smaller Try Depictio image, and the server's start-up on screen [ce87f2326]
+* docs(export): nine of the 43 offline pages, and local up in the configuration notes [001af2861]
+* fix(export): phylogeny tip metadata and live embeddings, found by exporting all 43 views [8a7940d91]
+* docs(export): screenshots of the tile action, the dialog and two embeds [d9f8b6d66]
+* feat(local): `depictio local up` passes the export API settings through [4c82657d8]
+* fix(viewer): readable export URLs, wrapped snippets, the dialog by its role [43131ab00]
+* docs(export): the tile action, views, revisions and access, redrawn on sketch.py [189856087]
+* chore(helm,compose): wire DEPICTIO_FASTAPI_EMBED_ENABLED and _ALLOWED_ORIGINS [9871814b6]
+* feat(viewer): export a component from its tile, in the mode you pick [44f9c20c4]
+* fix(export): public-only anonymous callers, and a revision that tracks content and data [d0eb4bc61]
+* fix(export): follow main's kinds, views, loaders and render signatures [12773f0d6]
+* docs(showcase): make the site shareable as static files [fe3ed786c]
+* docs(showcase): capture every page, after the fixes [42396b30c]
+* fix(export): ship the DC schema instead of letting an embed fetch it [d00729c3e]
+* fix(showcase): resolve dashboards by title, not by a pinned ObjectId [70a679f09]
+* fix(export): let an embedder actually use the ETag it is handed [5ffa00318]
+* fix(export): give an embedded control its value universe [1223f70fc]
+* showcase: QC report with per-section filters, and a portal-shaped surveillance page [7b24cf068]
+* export: bind manifest-shaped filters so they reach every render path [27292aa24]
+* fix(export): serve MultiQC General Statistics as its violin figure [b6d12c8c0]
+* fix(advanced-viz): export colourscales as explicit stops [d7bd47f24]
+* feat(export): serve filter option values so a host page can build its own controls [9edd791b0]
+* feat(export): publish the filter contract in the component manifest [e60bf1f0c]
+* feat(export): select intra-viz state from the URL via ?controls= [27ef58fa2]
+* feat(export): cache validation, version pinning, and builders for four benchmarking kinds [41400f09d]
+* docs(export): make the showcase JSON-first, iframes as fallback [88ae9d9d5]
+* feat(export): port six advanced-viz kinds to Python figure builders [387310d68]
+* docs(export): end-to-end showcase for the component export API [bfe4be48e]
+* docs(export): schema diagram for the component export flow [9559b7603]
+* feat(export): embed dashboard components in external sites [6146fe0b4]
+* Update CHANGELOG.md for v1.15.1 [b7cd2fcad]
+* Update CHANGELOG.md for v1.15.1-b3 [f8bab753b]
+* Update CHANGELOG.md for v1.15.1-b2 [86738a568]
+* Update CHANGELOG.md for v1.15.1-b1 [b29383319]
+* Update CHANGELOG.md for v1.15.0 [fe5037ea1]
+* Update CHANGELOG.md for v1.16.0 [e38b091a5]
+* Update CHANGELOG.md for v1.14.1 [6eaf2cd13]
+* fix(ci): resolve the previous release tag from history, make manual dispatch work [d6e424cf9]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.15.1
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable

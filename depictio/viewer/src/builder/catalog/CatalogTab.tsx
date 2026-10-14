@@ -32,6 +32,7 @@ import { useBuilderStore } from '../store/useBuilderStore';
 import type { ComponentType } from '../store/useBuilderStore';
 import { buildMetadata } from '../buildMetadata';
 import { rolesFromConfigBlob } from '../advanced_viz/configBlob';
+import { useCatalogGlass } from './useCatalogGlass';
 import CatalogPreviewPanel, {
   catalogUseRef,
   matchTitle,
@@ -281,6 +282,8 @@ const MatchRow: React.FC<MatchRowProps> = ({ match, selected, vizKinds, onClick 
     <Tooltip label={detail} withArrow position="right" openDelay={350} multiline maw={340}>
       <UnstyledButton
         onClick={onClick}
+        className="bgl-cat-row"
+        data-selected={selected || undefined}
         data-testid="catalog-match"
         data-output-id={match.output_id}
         data-dc-tag={match.dc_tag}
@@ -351,6 +354,7 @@ const TOOL_MODES_SHOWN = 3;
 // own hammer on every row carried no information while costing a column of a
 // narrow panel.
 const ToolLabel: React.FC<{ module: CatalogModule; count: number }> = ({ module, count }) => {
+  const { tone } = useCatalogGlass();
   // The second line used to repeat `tool_id`, which for most tools is the name
   // again in lowercase ("QIIME 2" / "qiime2"). What is worth the line is which
   // parts of the tool this project actually has.
@@ -370,7 +374,7 @@ const ToolLabel: React.FC<{ module: CatalogModule; count: number }> = ({ module,
           {subtitle}
         </Text>
       </Stack>
-      <Badge size="xs" variant="light" color="violet" ml="auto" style={{ flexShrink: 0 }}>
+      <Badge size="xs" variant="light" color={tone} ml="auto" style={{ flexShrink: 0 }}>
         {count}
       </Badge>
     </Group>
@@ -415,6 +419,7 @@ interface FacetProps {
 }
 
 const Facet: React.FC<FacetProps> = ({ label, options, selected, onChange }) => {
+  const { tone } = useCatalogGlass();
   if (options.length <= 1) return null; // nothing to filter on
   return (
     <Box>
@@ -424,7 +429,7 @@ const Facet: React.FC<FacetProps> = ({ label, options, selected, onChange }) => 
       <Chip.Group multiple value={selected} onChange={onChange}>
         <Group gap={6}>
           {options.map((o) => (
-            <Chip key={o.value} value={o.value} size="xs" variant="outline" color="violet" radius="sm">
+            <Chip key={o.value} value={o.value} size="xs" variant="outline" color={tone} radius="sm">
               {o.label} <Text span c="dimmed" fz={10}>({o.count})</Text>
             </Chip>
           ))}
@@ -439,6 +444,7 @@ const Facet: React.FC<FacetProps> = ({ label, options, selected, onChange }) => 
 // ---------------------------------------------------------------------------
 
 const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
+  const { glass, tone } = useCatalogGlass();
   const [modules, setModules] = useState<CatalogModule[] | null>(null);
   // Labels + descriptions for advanced-viz renders. The catalog only stores the
   // `viz_kind` string, and "stacked_taxonomy" is not what the viz is called.
@@ -643,6 +649,7 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
         <Box
           maw={480}
           w="100%"
+          className="bgl-cat-empty"
           style={{
             border: '1px solid var(--mantine-color-default-border)',
             borderRadius: 12,
@@ -651,7 +658,9 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
           }}
         >
           <Stack align="center" gap="lg">
-            <Icon icon="mdi:archive-off-outline" width={56} color="var(--mantine-color-gray-5)" />
+            <span className="bgl-cat-empty-icon">
+              <Icon icon="mdi:archive-off-outline" width={glass ? 36 : 56} color="var(--mantine-color-gray-5)" />
+            </span>
             <Title order={2} fw={700}>No catalog matches</Title>
             <Text size="md" c="dimmed">
               None of the ingested data collections matched a known catalog tool. Make sure the
@@ -669,6 +678,7 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
       align="flex-start"
       gap={0}
       wrap="nowrap"
+      className="bgl-cat"
       style={{
         height: '100%',
         minHeight: 520,
@@ -683,6 +693,7 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
         miw={300}
         maw={420}
         h="100%"
+        className="bgl-cat-side"
         style={{
           borderRight: '1px solid var(--mantine-color-default-border)',
           flexShrink: 0,
@@ -691,7 +702,7 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
         }}
       >
         {/* Search + facets */}
-        <Box px="md" py="sm" style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
+        <Box px="md" py="sm" className="bgl-cat-search" style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
           <TextInput
             data-testid="catalog-search"
             placeholder="Search tools, outputs, files…"
@@ -718,11 +729,11 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
                   <Button
                     size="compact-xs"
                     variant={activeFacetCount ? 'light' : 'subtle'}
-                    color={activeFacetCount ? 'violet' : 'gray'}
+                    color={activeFacetCount ? tone : 'gray'}
                     leftSection={<Icon icon="mdi:filter-variant" width={14} />}
                     rightSection={
                       activeFacetCount ? (
-                        <Badge size="xs" circle variant="filled" color="violet">
+                        <Badge size="xs" circle variant="filled" color={tone}>
                           {activeFacetCount}
                         </Badge>
                       ) : null
@@ -742,8 +753,8 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
               {anyFilterActive && (
                 <UnstyledButton onClick={clearFilters}>
                   <Group gap={4}>
-                    <Icon icon="mdi:filter-remove-outline" width={13} color="var(--mantine-color-violet-6)" />
-                    <Text size="xs" c="violet" fw={600}>Clear</Text>
+                    <Icon icon="mdi:filter-remove-outline" width={13} color={glass ? 'var(--gl-accent-fg)' : 'var(--mantine-color-violet-6)'} />
+                    <Text size="xs" c={glass ? undefined : 'violet'} fw={600} style={glass ? { color: 'var(--gl-accent-fg)' } : undefined}>Clear</Text>
                   </Group>
                 </UnstyledButton>
               )}
@@ -802,7 +813,7 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
       </Box>
 
       {/* ── Right panel (≈3/4) — per-render preview cards ── */}
-      <Box style={{ flex: 1, minWidth: 0, overflow: 'hidden' }} h="100%">
+      <Box className="bgl-cat-main" style={{ flex: 1, minWidth: 0, overflow: 'hidden' }} h="100%">
         {selectedMatch ? (
           <CatalogPreviewPanel
             match={selectedMatch}
@@ -813,7 +824,7 @@ const CatalogTab: React.FC<CatalogTabProps> = ({ projectId }) => {
             onDirectAdd={handleDirectAdd(selectedMatch, selectedToolId, selectedToolName)}
           />
         ) : (
-          <Center h="100%">
+          <Center h="100%" className="bgl-cat-hint">
             <Text c="dimmed">Select an output on the left to preview</Text>
           </Center>
         )}

@@ -15,15 +15,18 @@ import {
 import { Icon } from '@iconify/react';
 
 import type { DashboardListEntry, ProjectListEntry } from 'depictio-react-core';
-import { parseTemplateOrigin, useBrandAccents } from 'depictio-react-core';
+import { parseTemplateOrigin } from 'depictio-react-core';
+import { useListingAccents } from '../lib/useListingAccents';
+import { useGlassPages } from '../chrome/variants/glass/pages';
 
 import DashboardsToolbar from './DashboardsToolbar';
 import SharedViewBanner from '../components/listing/SharedViewBanner';
 import type { SharedViewScope } from '../components/listing/SharedViewBanner';
 import { listingUrl } from '../lib/listingUrl';
 import DashboardThumbnailView from './views/DashboardThumbnailView';
-import DashboardTableView from './views/DashboardTableView';
-import { useDashboardViewPrefs } from './hooks/useDashboardViewPrefs';
+import DashboardTableView, { useDashboardTableColumns } from './views/DashboardTableView';
+import TableDisplayMenu from '../components/TableDisplayMenu';
+import { DEFAULT_DENSITY, useDashboardViewPrefs } from './hooks/useDashboardViewPrefs';
 import type { ViewMode } from './hooks/useDashboardViewPrefs';
 import { useDashboardFilters } from './hooks/useDashboardFilters';
 import { useDashboardPinsAndRecents } from './hooks/useDashboardPinsAndRecents';
@@ -61,6 +64,17 @@ export interface CategoryInfo {
   label: string;
   color: string;
 }
+
+/** The default sections' hues on a Glass page. The page's own colour goes to
+ *  the dashboards you own, the rest take calm, distinct hues; Public matches
+ *  the globe on the Visibility tag, and no section borrows the Projects teal. */
+const GLASS_SECTION_INK: Record<string, string> = {
+  owned: 'var(--mantine-primary-color-filled)',
+  accessed: 'var(--mantine-color-indigo-5)',
+  public: 'var(--mantine-color-cyan-6)',
+  nfcore: 'var(--mantine-color-green-6)',
+  demo: 'var(--mantine-color-pink-5)',
+};
 
 const SectionHeader: React.FC<{
   icon: string;
@@ -150,7 +164,8 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
   onBulkExport,
   onBulkDelete,
 }) => {
-  const accent = useBrandAccents();
+  const accent = useListingAccents('dashboards');
+  const glass = useGlassPages();
   const projectNames = useMemo(() => projectNameLookup(projects), [projects]);
   // Per-project template_origin so the cards can render a TemplateChip
   // without re-fetching the project. Only populated for projects that were
@@ -174,14 +189,29 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
     clearFilters,
   } = useDashboardViewPrefs(defaultView);
   const { pinnedIds, recents, togglePin } = useDashboardPinsAndRecents();
+  // Table mode always passes the section mapping, so Category is offered.
+  const tableColumns = useDashboardTableColumns(true);
 
   const filterCtx = useMemo(
     () => ({ projectNames, projectTemplates, currentUserEmail }),
     [projectNames, projectTemplates, currentUserEmail],
   );
 
-  const { sections, totalAfterSearch, totalMatching, totalDashboards } =
-    useDashboardFilters(dashboards, prefs, filterCtx);
+  const {
+    sections: rawSections,
+    totalAfterSearch,
+    totalMatching,
+    totalDashboards,
+  } = useDashboardFilters(dashboards, prefs, filterCtx);
+  const sections = useMemo(
+    () =>
+      glass
+        ? rawSections.map((s) =>
+            GLASS_SECTION_INK[s.key] ? { ...s, iconColor: GLASS_SECTION_INK[s.key] } : s,
+          )
+        : rawSections,
+    [glass, rawSections],
+  );
 
   // A link can name a project by id (what the share button emits) or by name
   // (what a person types). Swap any name that resolves onto its id once the
@@ -574,6 +604,15 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
         setCardsPerRow={setCardsPerRow}
         setCardBadges={setCardBadges}
         clearFilters={clearFilters}
+        tableDisplay={
+          <TableDisplayMenu
+            section="dashboards"
+            density={prefs.density}
+            defaultDensity={DEFAULT_DENSITY}
+            onDensityChange={setDensity}
+            columns={tableColumns}
+          />
+        }
       />
 
       {showBanner && (
@@ -604,7 +643,7 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
               </Anchor>
               .
             </Text>
-            <Badge variant="light" color="gray">
+            <Badge variant="light" color="gray" className="gp-tag-plain">
               Searched: <strong>"{prefs.search}"</strong>
             </Badge>
           </Stack>
@@ -636,6 +675,7 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
           pinnedIds={pinnedIds}
           pinDisabled={pinDisabled}
           density={prefs.density}
+          columns={tableColumns}
           categoryById={categoryById}
           recents={recents}
           onView={onView}
@@ -644,7 +684,6 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
           onDuplicate={onDuplicate}
           onExport={onExport}
           onTogglePin={togglePin}
-          onSetDensity={setDensity}
           onBulkExport={(ids) => {
             const targets = ids
               .map((id) => allGroupedById.get(id)?.parent)

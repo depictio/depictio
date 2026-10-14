@@ -81,8 +81,8 @@ collapsed.
 samtools percent mapped (the unfiltered merged libraries, `samtools-1`), then the deepTools
 fingerprint, FRiP scores and the NSC and RSC strand coefficients. Collapsed `QC details`:
 per-base quality, Trim Galore kept reads, Picard duplicates, featureCounts assignments and
-the strand shift correlation curve. Its own `Library scope` filter narrows the panels by
-sequencing library (`<sample>_REP<n>_T<n>`, the `samplesheet` collection). A regenerated
+the strand shift correlation curve. The pinned sample filters narrow the panels, down to
+the sequencing libraries behind them (`<sample>_REP<n>_T<n>`). A regenerated
 report has no `samtools-1`, so that tile drops out there and FastQC takes the row.
 
 **Signal.** 2.x runs plotFingerprint without a JSD sample, so it writes no Jensen-Shannon

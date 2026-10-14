@@ -479,13 +479,6 @@ tabs:
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
-  # Bound to multiqc_data, not the sample hub: the report names its libraries
-  # with read suffixes, and this filter lists them as the panels do.
-  filter_sections:
-  - name: MultiQC report
-    icon: mdi:file-document-outline
-    color: orange
-    description: Libraries as the MultiQC report names them
   grid_sections:
   - name: QC overview
     icon: mdi:chart-box-outline
@@ -513,20 +506,6 @@ tabs:
     tag: rs-mqc-intro
     index: mqc-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: interactive
-    workflow_tag: rnasplice
-    data_collection_tag: multiqc_data
-    interactive_component_type: MultiSelect
-    column_name: sample
-    column_type: object
-    display:
-      icon_name: mdi:flask-outline
-      custom_color: teal
-    section: MultiQC report
-    tag: rs-mqc-filter-sample
-    index: mqc-sample-filter
-    title: Sample ID
-    layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: multiqc
     workflow_tag: rnasplice
     data_collection_tag: multiqc_data

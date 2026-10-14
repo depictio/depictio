@@ -31,3 +31,107 @@
   min-width: 0;
   overflow: hidden;
 }
+
+/* ------------------------------------------------------------------------
+ * Chrome style hooks (see depictio-react-core `chromeStyle.ts`).
+ *
+ * Every chrome control is a `.dc-action[data-role]`. The structural pieces
+ * carry `dc-*` classes so a chrome style's own CSS (chrome/variants/<id>/)
+ * can restyle them under `[data-chrome='<id>']` on <html>. What follows is
+ * the behaviour every style shares: responsive visibility, label collapse,
+ * the icon rail and the mobile bottom bar.
+ * ---------------------------------------------------------------------- */
+
+:root {
+  --dc-header-h-current: var(--dc-header-h, 50px);
+}
+@media (max-width: 47.99em) {
+  :root {
+    --dc-header-h-current: var(--dc-header-h-mobile, var(--dc-header-h, 50px));
+  }
+}
+
+@media (min-width: 48em) {
+  .dc-only-mobile {
+    display: none !important;
+  }
+}
+@media (max-width: 47.99em) {
+  .dc-only-desktop {
+    display: none !important;
+  }
+}
+
+.dc-header-title-extras {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.dc-header-actions > .dc-header-powered {
+  display: inline-flex;
+  align-items: center;
+}
+
+.dc-action[data-collapse] {
+  position: relative;
+  overflow: visible;
+}
+
+/* `collapse`: labelled above `sm`, a square icon button below it, with the
+ * count moved to a corner bubble. */
+@media (max-width: 47.99em) {
+  .dc-action[data-collapse] {
+    width: var(--button-height);
+    padding-inline: 0;
+  }
+  .dc-action[data-collapse] .mantine-Button-label,
+  .dc-action[data-collapse] .dc-action-label {
+    /* !important: a style's own label class must not bring it back. */
+    display: none !important;
+  }
+  .dc-action[data-collapse] .mantine-Button-section[data-position='left'] {
+    margin-inline-end: 0;
+  }
+  .dc-action[data-collapse] .mantine-Button-section[data-position='right'] {
+    position: absolute;
+    top: -5px;
+    inset-inline-end: -5px;
+    margin: 0;
+  }
+  .dc-action[data-collapse] .mantine-Button-section[data-position='right'] > svg {
+    display: none;
+  }
+  .dc-header-title {
+    font-size: var(--mantine-font-size-md);
+  }
+  /* A phone has room for the tab's name, not the whole breadcrumb. */
+  .dc-header-title-parent,
+  .dc-header-title-sep,
+  .dc-header-title-extras {
+    display: none;
+  }
+  .dc-header-inner {
+    padding-inline: 8px !important;
+  }
+  .dc-header-actions {
+    gap: 4px !important;
+  }
+  .dc-header-tab-icon {
+    display: none;
+  }
+}
+
+.dc-sidebar-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* A run of related chrome actions (ChromeButtonGroup). */
+.dc-action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}

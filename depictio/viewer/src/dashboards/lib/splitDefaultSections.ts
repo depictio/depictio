@@ -23,11 +23,12 @@ export const DEMO_DASHBOARD_IDS: readonly string[] = [
   '6824cb3b89d2b72169309737', // Iris Species Comparison
 ];
 
-/** nf-core dashboards: ampliseq + viralrecon main tabs. Viralrecon's
- *  dashboard_id is reserved in `db_init_reference_datasets.STATIC_IDS`
- *  but its seed JSONs are generated locally — see
- *  `depictio/projects/nf-core/viralrecon/3.0.0/CLAUDE.md`. The entry stays
- *  in this list so once seeds exist the dashboard slots in automatically. */
+/** Canonical display order of the nf-core dashboards seeded at boot (ampliseq,
+ *  viralrecon). Their dashboard_id values are reserved in
+ *  `db_init_reference_datasets.STATIC_IDS`; viralrecon's seed JSONs are
+ *  generated locally — see `depictio/projects/nf-core/viralrecon/3.0.0/CLAUDE.md`.
+ *  Membership of the section is NOT decided here (see `isNfcoreDashboard`);
+ *  this list only puts these two first. */
 export const NFCORE_DASHBOARD_IDS: readonly string[] = [
   '646b0f3c1e4a2d7f8e5b8ca2', // nf-core/ampliseq
   '746b0f3c1e4a2d7f8e5b9ca2', // nf-core/viralrecon
@@ -37,8 +38,16 @@ export function isDemoDashboard(d: DashboardListEntry): boolean {
   return DEMO_DASHBOARD_IDS.includes(String(d.dashboard_id));
 }
 
+/** A dashboard belongs to the nf-core section when its workflow system says
+ *  so. Every nf-core template dashboard (seeded or imported with
+ *  `dashboard import`) carries `workflow_system: "nf-core"`, so a template
+ *  added later lands here without anyone editing an id list. The reserved ids
+ *  stay as a fallback for a seed that predates the field. */
 export function isNfcoreDashboard(d: DashboardListEntry): boolean {
-  return NFCORE_DASHBOARD_IDS.includes(String(d.dashboard_id));
+  return (
+    String(d.workflow_system ?? '').toLowerCase() === 'nf-core' ||
+    NFCORE_DASHBOARD_IDS.includes(String(d.dashboard_id))
+  );
 }
 
 export function isOwnedByEmail(
@@ -103,14 +112,21 @@ export function splitDefaultSections(
   return { owned, accessed, public_: publicList, nfcore, demo };
 }
 
+/** Canonical ids first, in the order listed; everything else after them,
+ *  alphabetically by title (an unlisted id would otherwise sort before them,
+ *  `indexOf` being -1). */
 function sortByCanonicalIds(
   groups: GroupedDashboards[],
   canonicalIds: readonly string[],
 ): void {
+  const rank = (g: GroupedDashboards): number => {
+    const i = canonicalIds.indexOf(String(g.parent.dashboard_id));
+    return i === -1 ? canonicalIds.length : i;
+  };
   groups.sort(
     (a, b) =>
-      canonicalIds.indexOf(String(a.parent.dashboard_id)) -
-      canonicalIds.indexOf(String(b.parent.dashboard_id)),
+      rank(a) - rank(b) ||
+      String(a.parent.title ?? '').localeCompare(String(b.parent.title ?? '')),
   );
 }
 

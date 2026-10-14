@@ -15,6 +15,9 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
+import { GlassPage, useGlassPages } from '../chrome/variants/glass/pages';
+import { Plus } from 'lucide-react';
+import '../chrome/variants/glass/pages/listing.css';
 
 import {
   createProject,
@@ -38,6 +41,7 @@ import type {
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useAuthMode } from '../auth/hooks/useAuthMode';
+import TourButton from '../walkthrough/TourButton';
 import { AppSidebar } from '../chrome';
 import ProjectsList from './ProjectsList';
 import CreateProjectModal, {
@@ -117,6 +121,7 @@ const ProjectsApp: React.FC = () => {
   const createDisabled = isPublic && !user?.is_admin;
 
   usePageTitle('Projects');
+  const glass = useGlassPages();
 
   useEffect(() => {
     setLoading(true);
@@ -246,8 +251,121 @@ const ProjectsApp: React.FC = () => {
     [refresh],
   );
 
+  const body = (
+    <>
+      {loading ? (
+        <Center mih={200}>
+          <Loader />
+        </Center>
+      ) : loadError ? (
+        <Center mih={200}>
+          <Stack align="center" gap="xs">
+            <Icon
+              icon="mdi:alert-circle"
+              width={32}
+              color="var(--mantine-color-red-6)"
+            />
+            <Text c="red">{loadError}</Text>
+            <Button variant="light" onClick={refresh}>
+              Try again
+            </Button>
+          </Stack>
+        </Center>
+      ) : (
+        <ProjectsList
+          projects={projects}
+          currentUserId={user?.id ?? null}
+          isAdmin={Boolean(user?.is_admin)}
+          createDisabled={createDisabled}
+          onCreateClick={openCreate}
+          onView={handleView}
+          onEdit={(p) => setEditTarget(p)}
+          onDelete={(p) => setDeleteTarget(p)}
+        />
+      )}
+    </>
+  );
+
+  const modals = (
+    <>
+      <CreateProjectModal
+        opened={createOpened}
+        existingNames={projects.map((p) => p.name).filter(Boolean) as string[]}
+        onClose={closeCreate}
+        onCreate={handleCreate}
+        onImport={handleImport}
+        onCreateFromManifest={handleCreateFromManifest}
+        onCreateFromRun={handleCreateFromRun}
+        localDataRootsEnabled={localDataRootsEnabled}
+        remoteBrowseEnabled={remoteBrowseEnabled}
+        // Mirrored server-side: a call carrying a private bucket's details
+        // is refused to non-admins in public mode.
+        privateBucketDisabledReason={
+          createDisabled
+            ? 'Private buckets are disabled in public/demo mode for non-admin users.'
+            : null
+        }
+      />
+      <ManifestCreatedModal report={createdReport} onClose={() => setCreatedReport(null)} />
+      <RunCreatedModal
+        report={createdRun?.report ?? null}
+        context={createdRun?.context ?? null}
+        onClose={() => setCreatedRun(null)}
+      />
+      <EditProjectModal
+        opened={Boolean(editTarget)}
+        project={editTarget}
+        onClose={() => setEditTarget(null)}
+        onSubmit={handleEdit}
+      />
+      <DeleteProjectModal
+        opened={Boolean(deleteTarget)}
+        project={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+      />
+    </>
+  );
+
+  if (glass) {
+    return (
+      <>
+        <GlassPage
+          section="projects"
+          title="Projects"
+          description="The data behind your dashboards: workflows, data collections and who can use them."
+          titleProps={{ 'data-tour-id': 'projects-header' }}
+          actions={
+            <>
+              <TourButton />
+              <Tooltip
+                label="Project creation is disabled in public or demo mode for non-admin users"
+                disabled={!createDisabled}
+                withArrow
+              >
+                <Button
+                  leftSection={<Plus size={17} strokeWidth={2} aria-hidden />}
+                  onClick={openCreate}
+                  disabled={createDisabled}
+                  data-disabled={createDisabled ? true : undefined}
+                  data-tour-id="projects-create"
+                >
+                  New project
+                </Button>
+              </Tooltip>
+            </>
+          }
+        >
+          {body}
+        </GlassPage>
+        {modals}
+      </>
+    );
+  }
+
   return (
     <AppShell
+      data-testid="app-shell"
       layout="alt"
       header={{ height: 64 }}
       navbar={{
@@ -289,29 +407,32 @@ const ProjectsApp: React.FC = () => {
               Projects
             </Title>
           </Group>
-          {/* Visitors in public/demo mode see the button visibly disabled
-              rather than hidden — keeps the affordance discoverable while
-              making it obvious that login/elevated permissions are needed.
-              Admins bypass the gate. Mirrors
-              `app_layout.return_create_project_button` in Dash. */}
-          <Tooltip
-            label="Project creation is disabled in public/demo mode for non-admin users"
-            disabled={!createDisabled}
-            withArrow
-          >
-            <Button
-              color={accent.secondary}
-              variant="filled"
-              size="md"
-              onClick={openCreate}
-              disabled={createDisabled}
-              data-disabled={createDisabled ? true : undefined}
-              style={{ fontFamily: 'Virgil' }}
-              data-tour-id="projects-create"
+          <Group gap="sm" wrap="nowrap">
+            <TourButton />
+            {/* Visitors in public/demo mode see the button visibly disabled
+                rather than hidden — keeps the affordance discoverable while
+                making it obvious that login/elevated permissions are needed.
+                Admins bypass the gate. Mirrors
+                `app_layout.return_create_project_button` in Dash. */}
+            <Tooltip
+              label="Project creation is disabled in public/demo mode for non-admin users"
+              disabled={!createDisabled}
+              withArrow
             >
-              + New Project
-            </Button>
-          </Tooltip>
+              <Button
+                color={accent.secondary}
+                variant="filled"
+                size="md"
+                onClick={openCreate}
+                disabled={createDisabled}
+                data-disabled={createDisabled ? true : undefined}
+                style={{ fontFamily: 'Virgil' }}
+                data-tour-id="projects-create"
+              >
+                + New Project
+              </Button>
+            </Tooltip>
+          </Group>
         </Group>
       </AppShell.Header>
 
@@ -321,75 +442,10 @@ const ProjectsApp: React.FC = () => {
 
       <AppShell.Main>
         <Box px="lg" py="md">
-          {loading ? (
-            <Center mih={200}>
-              <Loader />
-            </Center>
-          ) : loadError ? (
-            <Center mih={200}>
-              <Stack align="center" gap="xs">
-                <Icon
-                  icon="mdi:alert-circle"
-                  width={32}
-                  color="var(--mantine-color-red-6)"
-                />
-                <Text c="red">{loadError}</Text>
-                <Button variant="light" onClick={refresh}>
-                  Try again
-                </Button>
-              </Stack>
-            </Center>
-          ) : (
-            <ProjectsList
-              projects={projects}
-              currentUserId={user?.id ?? null}
-              isAdmin={Boolean(user?.is_admin)}
-              createDisabled={createDisabled}
-              onCreateClick={openCreate}
-              onView={handleView}
-              onEdit={(p) => setEditTarget(p)}
-              onDelete={(p) => setDeleteTarget(p)}
-            />
-          )}
+          {body}
         </Box>
       </AppShell.Main>
-
-      <CreateProjectModal
-        opened={createOpened}
-        existingNames={projects.map((p) => p.name).filter(Boolean) as string[]}
-        onClose={closeCreate}
-        onCreate={handleCreate}
-        onImport={handleImport}
-        onCreateFromManifest={handleCreateFromManifest}
-        onCreateFromRun={handleCreateFromRun}
-        localDataRootsEnabled={localDataRootsEnabled}
-        remoteBrowseEnabled={remoteBrowseEnabled}
-        // Mirrored server-side: a call carrying a private bucket's details
-        // is refused to non-admins in public mode.
-        privateBucketDisabledReason={
-          createDisabled
-            ? 'Private buckets are disabled in public/demo mode for non-admin users.'
-            : null
-        }
-      />
-      <ManifestCreatedModal report={createdReport} onClose={() => setCreatedReport(null)} />
-      <RunCreatedModal
-        report={createdRun?.report ?? null}
-        context={createdRun?.context ?? null}
-        onClose={() => setCreatedRun(null)}
-      />
-      <EditProjectModal
-        opened={Boolean(editTarget)}
-        project={editTarget}
-        onClose={() => setEditTarget(null)}
-        onSubmit={handleEdit}
-      />
-      <DeleteProjectModal
-        opened={Boolean(deleteTarget)}
-        project={deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={handleDelete}
-      />
+      {modals}
     </AppShell>
   );
 };

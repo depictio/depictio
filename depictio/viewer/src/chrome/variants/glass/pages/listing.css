@@ -1,0 +1,141 @@
+/*
+ * Glass listings (Dashboards, Projects): how each column and card row reads.
+ * The tag chip itself is pages.css; this is what goes around it. A place is a
+ * glyph and a name, a count or a date is quiet text, a template is mono text,
+ * and the title keeps the room the tags used to take.
+ */
+
+/* Title first: it keeps a floor and ellipsises past a ceiling; the columns
+ * after it stay on one line instead of wrapping it. */
+:root[data-chrome='glass'] .gp-main .mantine-Table-td[data-col]:not([data-col='title'], [data-col='subtitle']) {
+  white-space: nowrap;
+}
+:root[data-chrome='glass'] .gp-main .mantine-Table-td[data-col='title'],
+:root[data-chrome='glass'] .gp-main .mantine-Table-td[data-col='name'] {
+  min-width: 220px;
+}
+/* The owner's address gives way first, so the default columns fit a laptop
+ * width without a horizontal scroll. */
+:root[data-chrome='glass'] .gp-main .mantine-Table-td[data-col='owner'] {
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:root[data-chrome='glass'] .gp-main .mantine-Table-td[data-col='subtitle'] {
+  min-width: 160px;
+  max-width: 280px;
+}
+:root[data-chrome='glass'] .gp-main .dc-title-cell {
+  max-width: 420px;
+}
+:root[data-chrome='glass'] .gp-main .dc-title-link {
+  display: block;
+  min-width: 0;
+  max-width: 420px;
+  overflow: hidden;
+}
+:root[data-chrome='glass'] .gp-main .dc-title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'] .gp-main .dc-title-link:hover .dc-title-text {
+  color: var(--gl-accent-fg);
+}
+
+/* A project is a place: the Projects glyph (inked inline in its own palette)
+ * and the name, plain. */
+:root[data-chrome='glass'] .gp-main .dc-project {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--gl-fg);
+  text-decoration: none;
+}
+:root[data-chrome='glass'] .gp-main .mantine-Table-td[data-col='project'] .dc-project {
+  max-width: 180px;
+}
+:root[data-chrome='glass'] .gp-main .dc-project > svg {
+  flex: none;
+}
+:root[data-chrome='glass'] .gp-main .dc-project > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:root[data-chrome='glass'] .gp-main a.dc-project:hover > span {
+  text-decoration: underline;
+  text-decoration-color: var(--gl-line);
+  text-underline-offset: 3px;
+}
+
+/* A template is its brand mark and a mono name, its version fainter still. */
+:root[data-chrome='glass'] .gp-main .dc-template {
+  min-width: 0;
+}
+:root[data-chrome='glass'] .gp-main .dc-template-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 12px;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .gp-main .dc-template-version {
+  color: var(--gl-faint);
+}
+
+/* The card's quiet facts: a small glyph and plain text. */
+:root[data-chrome='glass'] .gp-main .dc-card-meta {
+  row-gap: 4px;
+  column-gap: 12px !important;
+  min-width: 0;
+}
+:root[data-chrome='glass'] .gp-main .dc-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--gl-muted);
+  white-space: nowrap;
+}
+:root[data-chrome='glass'] .gp-main .dc-meta > svg {
+  flex: none;
+  color: var(--gl-faint);
+}
+
+/* Row actions are neutral until hovered, then lit in the page colour. */
+:root[data-chrome='glass'] .gp-main .dc-row-action {
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .gp-main .dc-row-action:hover {
+  background: var(--gl-accent-soft);
+  color: var(--gl-accent-fg);
+}
+
+/* The create-project modal's modes stay on one line: tighter tabs, and a
+ * strip that scrolls inside itself when the modal is narrower than they are. */
+:root[data-chrome='glass'][data-gp-page] .mantine-Modal-content .dc-modal-modes {
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  gap: 2px;
+  padding: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+:root[data-chrome='glass'][data-gp-page] .mantine-Modal-content .dc-modal-modes::-webkit-scrollbar {
+  display: none;
+}
+:root[data-chrome='glass'][data-gp-page] .mantine-Modal-content .dc-modal-modes .mantine-Tabs-tab {
+  flex: 1 0 auto;
+  padding-inline: 12px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+:root[data-chrome='glass'][data-gp-page] .mantine-Modal-content .dc-modal-modes .mantine-Tabs-tabSection {
+  margin-inline-end: 6px;
+}

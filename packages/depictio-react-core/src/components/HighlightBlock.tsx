@@ -5,6 +5,7 @@ import { Icon } from '@iconify/react';
 import { fetchDashboard } from '../api';
 import type { DashboardData, FigureStyleRequest, StoredMetadata } from '../api';
 import { wrapWithChrome } from './chrome';
+import { ChromeSourceProvider, useChromeSource } from './chrome/ExportContext';
 import ComponentSkeleton from './ComponentSkeleton';
 import { useReportLoadStatus } from './DashboardLoadingProvider';
 import {
@@ -148,7 +149,24 @@ const HighlightBlock: React.FC<{
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, metadata, link?.href, link?.label]);
 
-  if (resolved) return <>{children(resolved)}</>;
+  // The tile draws another tab's component under its own index, so anything
+  // the chrome does with "this component" (Export) has to name the source.
+  const parentSource = useChromeSource();
+  const chromeSource = useMemo(
+    () =>
+      resolved
+        ? {
+            dashboardId: resolved.renderSource.dashboardId,
+            componentId: resolved.renderSource.componentId,
+            filters: parentSource?.filters ?? [],
+          }
+        : null,
+    [resolved, parentSource?.filters],
+  );
+
+  if (resolved && chromeSource) {
+    return <ChromeSourceProvider value={chromeSource}>{children(resolved)}</ChromeSourceProvider>;
+  }
   return wrapWithChrome(
     'highlight',
     metadata,

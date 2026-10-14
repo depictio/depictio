@@ -52,7 +52,7 @@ const TabIntro: React.FC<TabIntroProps> = ({ dashboard, activeTab }) => {
   const showIcon = Boolean(iconRaw);
 
   return (
-    <Box px={0} pt={4} pb={10}>
+    <Box px={0} pt={4} pb={10} className="dc-tab-intro">
       <Group gap={10} align="center" wrap="nowrap">
         {iconImageSrc ? (
           <img

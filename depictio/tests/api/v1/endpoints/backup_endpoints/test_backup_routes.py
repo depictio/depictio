@@ -184,8 +184,10 @@ class TestBackupEndpoints:
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.branding_assets_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.comment_threads_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.project_storage_collection")
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.user_avatars_collection")
     def test_create_backup_success(
         self,
+        mock_user_avatars,
         mock_project_storage,
         mock_comment_threads,
         mock_branding_assets,
@@ -227,6 +229,7 @@ class TestBackupEndpoints:
         mock_groups.find.return_value = []
         mock_instance_settings.find.return_value = []
         mock_branding_assets.find.return_value = []
+        mock_user_avatars.find.return_value = []
         mock_comment_threads.find.return_value = []
         mock_versions.find.return_value = []
         mock_version_counters.find.return_value = []
@@ -265,8 +268,10 @@ class TestBackupEndpoints:
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.branding_assets_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.comment_threads_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.project_storage_collection")
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.user_avatars_collection")
     def test_create_backup_with_temporary_users_exclusion(
         self,
+        mock_user_avatars,
         mock_project_storage,
         mock_comment_threads,
         mock_branding_assets,
@@ -318,6 +323,8 @@ class TestBackupEndpoints:
         mock_instance_settings.count_documents.return_value = 0
         mock_branding_assets.find.return_value = []
         mock_branding_assets.count_documents.return_value = 0
+        mock_user_avatars.find.return_value = []
+        mock_user_avatars.count_documents.return_value = 0
         mock_comment_threads.find.return_value = []
         mock_comment_threads.count_documents.return_value = 0
         for mock_collection in (mock_versions, mock_version_counters):
@@ -356,8 +363,10 @@ class TestBackupEndpoints:
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.branding_assets_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.comment_threads_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.project_storage_collection")
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.user_avatars_collection")
     async def test_backup_metadata_records_real_version(
         self,
+        mock_user_avatars,
         mock_project_storage,
         mock_comment_threads,
         mock_branding_assets,
@@ -395,6 +404,7 @@ class TestBackupEndpoints:
             mock_groups,
             mock_instance_settings,
             mock_branding_assets,
+            mock_user_avatars,
             mock_comment_threads,
             mock_versions,
             mock_version_counters,
@@ -856,6 +866,7 @@ class TestBackupKeepsOnlyVersionsWorthKeeping:
         "groups_collection",
         "instance_settings_collection",
         "branding_assets_collection",
+        "user_avatars_collection",
         "comment_threads_collection",
         "dashboard_versions_collection",
         "dashboard_version_counters_collection",

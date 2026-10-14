@@ -18,6 +18,7 @@ import {
   useMantineColorScheme,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { Clock, FolderKanban, Globe, Layers, Lock, User } from 'lucide-react';
 
 import type { DashboardListEntry } from 'depictio-react-core';
 import MultiTabPreview from './MultiTabPreview';
@@ -36,7 +37,10 @@ import { CARD_BADGES } from './hooks/useDashboardViewPrefs';
 import type { CardBadge } from './hooks/useDashboardViewPrefs';
 import { formatRelative } from '../lib/datetime';
 import { parseTemplateOrigin, TemplateChip } from '../projects/template';
-import { useBrandAccents } from 'depictio-react-core';
+import { useListingAccents } from '../lib/useListingAccents';
+import { useGlassPages } from '../chrome/variants/glass/pages';
+import { useSectionPalettes } from '../chrome/variants/glass/pages/GlassPage';
+import { placeholderBackground } from './thumbnailPlaceholder';
 
 interface DashboardCardProps {
   dashboard: DashboardListEntry;
@@ -67,7 +71,7 @@ const SingleThumbnail: React.FC<{
   dashboard: DashboardListEntry;
   theme: 'light' | 'dark';
 }> = ({ dashboard, theme }) => {
-  const accent = useBrandAccents();
+  const accent = useListingAccents('dashboards');
   // No real screenshot yet (freshly created dashboard, or capture failed) →
   // fall straight back to the dashboard's own colored icon. No generic
   // placeholder image in between.
@@ -83,7 +87,7 @@ const SingleThumbnail: React.FC<{
     // though a perfectly good logo was available — render the logo instead.
     if (isImagePath(icon)) {
       return (
-        <Center h="100%" w="100%" bg="var(--mantine-color-default-hover)">
+        <Center h="100%" w="100%" style={{ background: placeholderBackground(color) }}>
           <img
             src={resolveAssetUrl(icon)}
             alt={dashboard.title || dashboard.dashboard_id}
@@ -100,7 +104,7 @@ const SingleThumbnail: React.FC<{
       );
     }
     return (
-      <Center h="100%" w="100%" bg="var(--mantine-color-default-hover)">
+      <Center h="100%" w="100%" style={{ background: placeholderBackground(color) }}>
         <ThemeIcon size={64} variant="light" color={color} radius="md">
           <Icon icon={icon} width={36} />
         </ThemeIcon>
@@ -162,7 +166,9 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
   onDuplicate,
   onExport,
 }) => {
-  const accent = useBrandAccents();
+  const accent = useListingAccents('dashboards');
+  const glass = useGlassPages();
+  const projectInk = `var(--mantine-color-${useSectionPalettes().projects}-filled)`;
   const parsedTemplate = parseTemplateOrigin(projectTemplateOrigin);
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
@@ -376,7 +382,77 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
         />
       </Group>
 
-      {hasBadges && (
+      {hasBadges && glass && (
+        <>
+          <Space h={10} />
+
+          {/* Glass: one tag (visibility), the template as quiet mono text, and
+              the rest as plain text behind a small glyph, so the card carries
+              a single chip rather than a row of coloured pills. */}
+          <Group gap={8} wrap="wrap" align="center" className="dc-card-meta">
+            {showVisibility && (
+              <Tooltip label={`Visibility: ${isPublic ? 'Public' : 'Private'}`} withinPortal>
+                <Badge
+                  color={isPublic ? 'cyan' : 'gray'}
+                  variant="light"
+                  size="sm"
+                  leftSection={
+                    isPublic ? (
+                      <Globe size={12} strokeWidth={2} aria-hidden />
+                    ) : (
+                      <Lock size={12} strokeWidth={2} aria-hidden />
+                    )
+                  }
+                >
+                  {isPublic ? 'Public' : 'Private'}
+                </Badge>
+              </Tooltip>
+            )}
+            {showProject && (
+              <Tooltip
+                label={projectId ? `Open project: ${projectName}` : `Project: ${projectName}`}
+                withinPortal
+              >
+                <Text
+                  size="xs"
+                  className="dc-project"
+                  component={projectId ? 'a' : 'span'}
+                  href={projectId ? `/projects/${projectId}` : undefined}
+                  onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                >
+                  <FolderKanban size={13} strokeWidth={1.9} color={projectInk} aria-hidden />
+                  <span>{projectName}</span>
+                </Text>
+              </Tooltip>
+            )}
+            {showTemplate && parsedTemplate && <TemplateChip parsed={parsedTemplate} plain />}
+            {showOwner && (
+              <Tooltip label={`Owner: ${ownerEmail}`} withinPortal>
+                <span className="dc-meta">
+                  <User size={13} strokeWidth={1.9} aria-hidden />
+                  {ownerShort}
+                </span>
+              </Tooltip>
+            )}
+            {showModified && (
+              <Tooltip label={`Last modified: ${lastSaved}`} withinPortal>
+                <span className="dc-meta">
+                  <Clock size={13} strokeWidth={1.9} aria-hidden />
+                  {lastSavedRelative}
+                </span>
+              </Tooltip>
+            )}
+            {showTabs && (
+              <span className="dc-meta">
+                <Layers size={13} strokeWidth={1.9} aria-hidden />
+                {totalTabs} tabs
+              </span>
+            )}
+          </Group>
+        </>
+      )}
+
+      {hasBadges && !glass && (
         <>
           <Space h={10} />
 

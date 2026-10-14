@@ -1,0 +1,216 @@
+/* The project's Roles & permissions page in Glass (Paper): a visibility row
+ * and a member list, both opaque panels with a hairline ring. People are
+ * rows (icon, email, role), the role a segmented well for owners and a tag
+ * for everyone else. The accent is the page's primary (the Projects teal). */
+
+:root[data-chrome='glass'] .gp-main .pm-page {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* Section head: icon, title, a quiet count. */
+:root[data-chrome='glass'] .gp-main .pm-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-bottom: 12px;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .gp-main .pm-count {
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+:root[data-chrome='glass'] .gp-main .pm-hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .gp-main .pm-hint b {
+  font-weight: 650;
+  color: var(--gl-fg);
+}
+
+/* ------------------------------------------------------------- visibility */
+
+:root[data-chrome='glass'] .gp-main .pm-visibility {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: var(--gl-paper);
+  box-shadow: 0 0 0 1px var(--gl-hair);
+}
+:root[data-chrome='glass'] .gp-main .pm-chip {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--gl-well);
+  color: var(--gl-muted);
+}
+/* A public project lights its chip: the one place the page spends the accent. */
+:root[data-chrome='glass'] .gp-main .pm-visibility[data-public] .pm-chip {
+  background: var(--gl-accent-soft);
+  color: var(--gl-accent-fg);
+}
+:root[data-chrome='glass'] .gp-main .pm-visibility-body {
+  flex: 1;
+  min-width: 0;
+}
+:root[data-chrome='glass'] .gp-main .pm-visibility-title {
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.3;
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'] .gp-main .pm-visibility-text {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--gl-muted);
+}
+
+/* ---------------------------------------------------------------- members */
+
+:root[data-chrome='glass'] .gp-main .pm-members {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: 16px;
+  background: var(--gl-paper);
+  box-shadow: 0 0 0 1px var(--gl-hair);
+  overflow: hidden;
+}
+:root[data-chrome='glass'] .gp-main .pm-member {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 14px 10px 18px;
+}
+:root[data-chrome='glass'] .gp-main .pm-member + .pm-member {
+  border-top: 1px solid var(--gl-hair);
+}
+:root[data-chrome='glass'] .gp-main .pm-member-icon {
+  flex: none;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .gp-main .pm-member-who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+:root[data-chrome='glass'] .gp-main .pm-member-email {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 550;
+  color: var(--gl-fg);
+}
+/* Keeps the remove key's column when a read-only page hides it. */
+:root[data-chrome='glass'] .gp-main .pm-member-end {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 28px;
+}
+:root[data-chrome='glass'] .gp-main .pm-empty {
+  padding: 22px 18px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--gl-muted);
+}
+
+/* The add row: a well at the foot of the list. */
+:root[data-chrome='glass'] .gp-main .pm-add {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px 12px 18px;
+  border-top: 1px solid var(--gl-hair);
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] .gp-main .pm-add .mantine-Input-input {
+  background: var(--gl-paper);
+}
+
+/* Role control: the admin Users segmented well, a paper indicator. */
+:root[data-chrome='glass'] .gp-main .pm-role.mantine-SegmentedControl-root {
+  padding: 3px;
+  border-radius: 11px;
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] .gp-main .pm-role .mantine-SegmentedControl-indicator {
+  border-radius: 8px;
+  background: var(--gl-paper);
+  box-shadow:
+    0 0 0 1px var(--gl-hair),
+    0 1px 2px var(--gl-shade-a);
+}
+:root[data-chrome='glass'] .gp-main .pm-role .mantine-SegmentedControl-label {
+  color: var(--gl-muted);
+  font-weight: 600;
+}
+:root[data-chrome='glass'] .gp-main .pm-role .mantine-SegmentedControl-label:hover:not([data-disabled], [data-active]) {
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'] .gp-main .pm-role .mantine-SegmentedControl-label[data-active] {
+  color: var(--gl-fg);
+}
+
+/* On a phone the role drops under the email, the remove key stays right. */
+@media (max-width: 560px) {
+  :root[data-chrome='glass'] .gp-main .pm-member {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    row-gap: 8px;
+  }
+  :root[data-chrome='glass'] .gp-main .pm-member > .pm-role,
+  :root[data-chrome='glass'] .gp-main .pm-member > .mantine-Badge-root {
+    grid-column: 2 / 4;
+    grid-row: 2;
+    justify-self: start;
+  }
+  :root[data-chrome='glass'] .gp-main .pm-add {
+    flex-wrap: wrap;
+  }
+  :root[data-chrome='glass'] .gp-main .pm-add .mantine-Autocomplete-root {
+    flex: 1 1 100%;
+  }
+}
+
+/* ------------------------------------------- the confirm modal's two states */
+
+:root[data-chrome='glass'] .pm-vis {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  min-width: 124px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: var(--gl-paper);
+  box-shadow: 0 0 0 1px var(--gl-hair);
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .pm-vis[data-role='from'] {
+  opacity: 0.65;
+}
+:root[data-chrome='glass'] .pm-vis[data-role='to'] {
+  box-shadow: 0 0 0 2px var(--gl-accent);
+  color: var(--gl-accent-fg);
+}
+:root[data-chrome='glass'] .pm-vis-label {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gl-faint);
+}

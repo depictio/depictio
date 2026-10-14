@@ -7,6 +7,7 @@ import { Alert, Button, Center, Group, Paper, Stack, Text, ThemeIcon, Title } fr
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
 import { fetchSpecs, upsertComponent } from 'depictio-react-core';
+import { useGlassPages } from '../../chrome/variants/glass/pages';
 import { useBuilderStore } from '../store/useBuilderStore';
 import type { ColumnSpec } from '../store/useBuilderStore';
 import ComponentBuilder from '../ComponentBuilder';
@@ -17,6 +18,7 @@ import { SwitchField } from '../shared/BuilderSections';
 const StepDesign: React.FC = () => {
   const state = useBuilderStore();
   const [savedRedirect, setSavedRedirect] = useState(false);
+  const glass = useGlassPages();
 
   // Filters the previews can apply: the dashboard's active ones minus any this
   // component emitted itself (mirrors useBuilderPreviewFilters, but unhooked
@@ -159,13 +161,14 @@ const StepDesign: React.FC = () => {
       <Center mt="xl">
         <Button
           variant="filled"
-          color="green"
-          size="xl"
-          leftSection={<Icon icon="mdi:content-save" width={24} />}
+          // Glass: the page's one filled action is the accent, like its siblings.
+          color={glass ? undefined : 'green'}
+          size={glass ? 'lg' : 'xl'}
+          leftSection={<Icon icon="mdi:content-save" width={glass ? 20 : 24} />}
           loading={state.saving}
           disabled={!ready || savedRedirect || !state.previewReady}
           onClick={handleSave}
-          style={{ height: 60, fontSize: 18, fontWeight: 700 }}
+          style={glass ? { height: 52, paddingInline: 28 } : { height: 60, fontSize: 18, fontWeight: 700 }}
           data-tour-id="component-save"
           title={
             !state.previewReady

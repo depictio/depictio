@@ -26,6 +26,7 @@ import {
   Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { BrandScope, fetchDashboard } from 'depictio-react-core';
 import type { BrandTheme } from 'depictio-react-core';
 import { useBuilderStore } from './store/useBuilderStore';
@@ -36,6 +37,8 @@ import StepDesign from './steps/StepDesign';
 import ChoiceScreen from './ChoiceScreen';
 import CatalogTab from './catalog/CatalogTab';
 import BrandMark from '../chrome/BrandMark';
+import { useGlassPages } from '../chrome/variants/glass/pages';
+import GlassBuilderShell from './glass/GlassBuilderShell';
 import { COMPONENT_SOURCE } from './componentSource';
 
 export interface CreateComponentPageProps {
@@ -65,11 +68,15 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
   // The dashboard's brand, so previews draw in the colours the component will
   // have on the dashboard rather than the instance defaults.
   const [brandTheme, setBrandTheme] = useState<BrandTheme | null>(null);
+  // Named in the Glass top bar's trail.
+  const [dashboardTitle, setDashboardTitle] = useState<string | null>(null);
+  const glass = useGlassPages();
 
   useEffect(() => {
     init({ mode: 'create', dashboardId, componentId: newComponentId });
     fetchDashboard(dashboardId)
       .then((dash) => {
+        setDashboardTitle(dash.title ?? null);
         setProjectId(dash.project_id ?? null);
         setBrandTheme(dash.brand_theme ?? dash.inherited_brand_theme ?? null);
       })
@@ -199,9 +206,231 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
       ? 'Customize catalog component'
       : headerSource.label;
 
+  // Glass: the same back control as a pill in the page head (the Classic header
+  // keeps its subtle button), and the head's own copy.
+  const glassBack = (() => {
+    if (showChoice) return null;
+    const toCatalog = !(showCatalogBrowser || sourceMode === 'manual');
+    return (
+      <Button
+        variant="default"
+        size="sm"
+        leftSection={<ArrowLeft size={16} strokeWidth={1.9} aria-hidden />}
+        onClick={toCatalog ? backToCatalogBrowser : backToChoice}
+      >
+        {toCatalog ? 'Back to catalog' : 'Methods'}
+      </Button>
+    );
+  })();
+  const headerDescription = (() => {
+    if (sourceMode === 'manual') return 'Choose a type, connect your data, then design the component.';
+    if (showCatalogBrowser) {
+      return 'Ready-made visualizations Depictio recognized from the tools behind your data.';
+    }
+    return 'Adjust the catalog component before it joins the dashboard.';
+  })();
+
+  // The three surfaces, shared by both shells.
+  const choiceSurface = (
+    <ChoiceScreen
+      onManual={() => setSourceMode('manual')}
+      onCatalog={() => setSourceMode('catalog')}
+    />
+  );
+
+  const stepperSurface = (
+    <Stepper
+      active={stepperActive}
+      onStepClick={(n) => {
+        if (isText) {
+          // 2-step stepper for text: 0 → Type, 1 → Design (internal step=2)
+          if (n === 0) setStep(0);
+          else if (n === 1 && canAdvanceFromZero) setStep(2);
+          return;
+        }
+        if (n < step) setStep(n);
+        else if (n === 1 && canAdvanceFromZero) setStep(1);
+        else if (n === 2 && canAdvanceFromZero && canAdvanceFromOne)
+          setStep(2);
+      }}
+      allowNextStepsSelect={false}
+      // Glass takes the instance's primary for the steps already done.
+      color={glass ? undefined : 'gray'}
+      size="lg"
+      iconSize={glass ? 38 : 42}
+      className="bgl-stepper"
+      data-tour-id="component-wizard-stepper"
+      styles={{
+        stepLabel: { fontSize: '16px', fontWeight: 700 },
+        stepDescription: {
+          fontSize: '14px',
+          color: 'var(--mantine-color-dimmed)',
+        },
+      }}
+    >
+      <Stepper.Step
+        label="Component Type"
+        description="Choose the type of dashboard component to create"
+      >
+        <StepType />
+      </Stepper.Step>
+      {!isText && (
+        <Stepper.Step
+          label="Data Source"
+          description="Connect your component to data"
+        >
+          <StepData />
+        </Stepper.Step>
+      )}
+      <Stepper.Step
+        label="Component Design"
+        description="Customize the appearance and behavior of your component"
+      >
+        <StepDesign />
+      </Stepper.Step>
+      <Stepper.Completed>
+        <Stack gap="md" align="center" mt="xl">
+          <Title order={2} ta="center" fw={700} c="green">
+            Component Ready!
+          </Title>
+          <Text size="md" ta="center" c="gray" mb="xl">
+            Your component has been configured and is ready to be added to
+            your dashboard.
+          </Text>
+          <Center>
+            <Button
+              color="green"
+              variant="filled"
+              size="xl"
+              onClick={handleAddToDashboard}
+              leftSection={<Icon icon="bi:check-circle" width={24} />}
+              style={{
+                height: 60,
+                fontSize: 18,
+                fontWeight: 700,
+              }}
+            >
+              Add to Dashboard
+            </Button>
+          </Center>
+        </Stack>
+      </Stepper.Completed>
+    </Stepper>
+  );
+
+  const goBack = () => {
+    // Text components skip Step 1 in both directions.
+    if (isText && step === 2) setStep(0);
+    else setStep(Math.max(0, step - 1));
+  };
+  const goNext = () => {
+    // Text jumps 0 → 2 directly (no data binding required).
+    if (isText && step === 0) setStep(2);
+    else setStep(step + 1);
+  };
+  const backDisabled = step === 0 || (step >= 2 && !isText);
+  const nextDisabled =
+    (step === 0 && !canAdvanceFromZero) ||
+    (step === 1 && !canAdvanceFromOne) ||
+    step >= 2;
+
+  // The catalog browser is hidden rather than unmounted (see below), so both
+  // shells hold it in a box whose display follows the surface.
+  const catalogBody =
+    projectId === undefined ? (
+      <Center style={{ flex: 1 }}>
+        <Loader size="sm" />
+      </Center>
+    ) : projectId === null ? (
+      <Center style={{ flex: 1 }}>
+        <Text c="dimmed">This dashboard is not linked to a project, so no catalog is available.</Text>
+      </Center>
+    ) : (
+      <CatalogTab projectId={projectId} />
+    );
+
+  if (glass) {
+    const stepNames = isText ? ['Component type', 'Design'] : ['Component type', 'Data source', 'Design'];
+    const tint = `var(--mantine-color-${headerSource.accent}-6)`;
+    const crumbs = [
+      { label: dashboardTitle || 'Dashboard', href: `/dashboard-edit/${dashboardId}` },
+      { label: 'New component' },
+    ];
+    return (
+      <BrandScope theme={brandTheme}>
+        <GlassBuilderShell
+          crumbs={sourceMode === 'catalog' ? [...crumbs, { label: 'Pick from catalog' }] : crumbs}
+          onCancel={cancel}
+          fill={showCatalogBrowser}
+          head={
+            showChoice
+              ? undefined
+              : {
+                  icon: headerSource.image ? (
+                    <img
+                      src={headerSource.image}
+                      alt=""
+                      style={{ width: 28, height: 28, objectFit: 'contain', display: 'block' }}
+                    />
+                  ) : (
+                    <Icon icon={headerSource.icon} width={24} />
+                  ),
+                  tint,
+                  title: headerTitle,
+                  description: headerDescription,
+                  actions: glassBack,
+                }
+          }
+          footer={
+            showStepper ? (
+              <div className="bgl-foot-inner">
+                <span className="bgl-foot-step">
+                  Step {stepperActive + 1} of {stepNames.length}
+                  <span className="bgl-foot-name"> · {stepNames[stepperActive]}</span>
+                </span>
+                <div className="bgl-foot-actions">
+                  <Button
+                    variant="default"
+                    size="md"
+                    leftSection={<ArrowLeft size={18} strokeWidth={1.9} aria-hidden />}
+                    disabled={backDisabled}
+                    onClick={goBack}
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    variant="filled"
+                    size="md"
+                    rightSection={<ArrowRight size={18} strokeWidth={1.9} aria-hidden />}
+                    disabled={nextDisabled}
+                    onClick={goNext}
+                  >
+                    Next Step
+                  </Button>
+                </div>
+              </div>
+            ) : undefined
+          }
+        >
+          {showChoice && choiceSurface}
+          {sourceMode === 'catalog' && (
+            <div
+              className="bgl-catalog"
+              style={{ display: showCatalogBrowser ? 'flex' : 'none', flexDirection: 'column' }}
+            >
+              {catalogBody}
+            </div>
+          )}
+          {showStepper && stepperSurface}
+        </GlassBuilderShell>
+      </BrandScope>
+    );
+  }
+
   return (
     <BrandScope theme={brandTheme}>
     <AppShell
+      data-testid="app-shell"
       padding="md"
       header={{ height: 50 }}
       footer={showStepper ? { height: 80 } : { height: 0 }}
@@ -231,10 +460,7 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
       <AppShell.Main>
         {showChoice && (
           <Container size="xl" px="md" py="xl">
-            <ChoiceScreen
-              onManual={() => setSourceMode('manual')}
-              onCatalog={() => setSourceMode('catalog')}
-            />
+            {choiceSurface}
           </Container>
         )}
 
@@ -271,97 +497,13 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
               flexDirection: 'column',
             }}
           >
-            {projectId === undefined ? (
-              <Center style={{ flex: 1 }}>
-                <Loader size="sm" />
-              </Center>
-            ) : projectId === null ? (
-              <Center style={{ flex: 1 }}>
-                <Text c="dimmed">This dashboard is not linked to a project, so no catalog is available.</Text>
-              </Center>
-            ) : (
-              <CatalogTab projectId={projectId} />
-            )}
+            {catalogBody}
           </Container>
         )}
 
         {showStepper && (
           <Container size="xl" px="md" py="xl">
-            <Stepper
-              active={stepperActive}
-              onStepClick={(n) => {
-                if (isText) {
-                  // 2-step stepper for text: 0 → Type, 1 → Design (internal step=2)
-                  if (n === 0) setStep(0);
-                  else if (n === 1 && canAdvanceFromZero) setStep(2);
-                  return;
-                }
-                if (n < step) setStep(n);
-                else if (n === 1 && canAdvanceFromZero) setStep(1);
-                else if (n === 2 && canAdvanceFromZero && canAdvanceFromOne)
-                  setStep(2);
-              }}
-              allowNextStepsSelect={false}
-              color="gray"
-              size="lg"
-              iconSize={42}
-              data-tour-id="component-wizard-stepper"
-              styles={{
-                stepLabel: { fontSize: '16px', fontWeight: 700 },
-                stepDescription: {
-                  fontSize: '14px',
-                  color: 'var(--mantine-color-dimmed)',
-                },
-              }}
-            >
-              <Stepper.Step
-                label="Component Type"
-                description="Choose the type of dashboard component to create"
-              >
-                <StepType />
-              </Stepper.Step>
-              {!isText && (
-                <Stepper.Step
-                  label="Data Source"
-                  description="Connect your component to data"
-                >
-                  <StepData />
-                </Stepper.Step>
-              )}
-              <Stepper.Step
-                label="Component Design"
-                description="Customize the appearance and behavior of your component"
-              >
-                <StepDesign />
-              </Stepper.Step>
-              <Stepper.Completed>
-                <Stack gap="md" align="center" mt="xl">
-                  <Title order={2} ta="center" fw={700} c="green">
-                    Component Ready!
-                  </Title>
-                  <Text size="md" ta="center" c="gray" mb="xl">
-                    Your component has been configured and is ready to be added to
-                    your dashboard.
-                  </Text>
-                  <Center>
-                    <Button
-                      color="green"
-                      variant="filled"
-                      size="xl"
-                      onClick={handleAddToDashboard}
-                      leftSection={<Icon icon="bi:check-circle" width={24} />}
-                      style={{
-                        height: 60,
-                        fontSize: 18,
-                        fontWeight: 700,
-                      }}
-                    >
-                      Add to Dashboard
-                    </Button>
-                  </Center>
-                </Stack>
-              </Stepper.Completed>
-            </Stepper>
+            {stepperSurface}
           </Container>
         )}
       </AppShell.Main>
@@ -380,12 +522,8 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
                 color="gray"
                 size="lg"
                 leftSection={<Icon icon="mdi:arrow-left" width={20} />}
-                disabled={step === 0 || (step >= 2 && !isText)}
-                onClick={() => {
-                  // Text components skip Step 1 in both directions.
-                  if (isText && step === 2) setStep(0);
-                  else setStep(Math.max(0, step - 1));
-                }}
+                disabled={backDisabled}
+                onClick={goBack}
               >
                 Back
               </Button>
@@ -394,16 +532,8 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
                 color="gray"
                 size="lg"
                 rightSection={<Icon icon="mdi:arrow-right" width={20} />}
-                disabled={
-                  (step === 0 && !canAdvanceFromZero) ||
-                  (step === 1 && !canAdvanceFromOne) ||
-                  step >= 2
-                }
-                onClick={() => {
-                  // Text jumps 0 → 2 directly (no data binding required).
-                  if (isText && step === 0) setStep(2);
-                  else setStep(step + 1);
-                }}
+                disabled={nextDisabled}
+                onClick={goNext}
               >
                 Next Step
               </Button>

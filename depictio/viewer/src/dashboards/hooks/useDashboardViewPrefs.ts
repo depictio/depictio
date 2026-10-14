@@ -14,8 +14,8 @@ export type SortBy = 'recent' | 'name' | 'owner';
 export type Density = 'compact' | 'cozy';
 export type VisibilityFilter = 'all' | 'public' | 'private';
 /** Thumbnail grid columns at the widest breakpoint. A number caps the grid at
- *  that many cards per row; `auto` never asks for more columns than a section
- *  has cards, so a lone dashboard spans the whole width. */
+ *  that many cards per row; `auto` fits as many fixed-size columns as the
+ *  width allows. Neither lets a lone dashboard stretch across the section. */
 export type CardsPerRow = 'auto' | 2 | 3 | 4 | 5 | 6;
 /** The metadata badges a thumbnail card can show under its title. */
 export type CardBadge =
@@ -27,8 +27,8 @@ export type CardBadge =
   | 'tabs';
 
 export const CARDS_PER_ROW_OPTIONS: readonly CardsPerRow[] = ['auto', 2, 3, 4, 5, 6];
-/** Five keeps a short section, or a single dashboard, at thumbnail size. */
-export const DEFAULT_CARDS_PER_ROW: CardsPerRow = 5;
+/** Four keeps a short section, or a single dashboard, at thumbnail size. */
+export const DEFAULT_CARDS_PER_ROW: CardsPerRow = 4;
 /** Every card badge, in the order the card renders them. Selections are kept
  *  in this order too, so toggling one off and on again never reshuffles the
  *  row. */
@@ -81,6 +81,9 @@ export interface DashboardViewPrefs {
    *  URL: a shared link carries what is listed, not how the sender likes
    *  their cards laid out. */
   cardsPerRow: CardsPerRow;
+  /** True once the person picked a column count, so the default (4) may move
+   *  without overriding it. Same idea as `viewChosen`. */
+  cardsPerRowChosen: boolean;
   cardBadges: CardBadge[];
 }
 
@@ -110,6 +113,10 @@ export const DASHBOARD_SCOPE_PARAMS = [
   'pinned',
 ] as const;
 
+/** A fresh browser's table density, which the Table display menu's Reset
+ *  returns to. */
+export const DEFAULT_DENSITY: Density = 'cozy';
+
 const DEFAULT_PREFS: DashboardViewPrefs = {
   view: 'table',
   viewChosen: false,
@@ -117,9 +124,10 @@ const DEFAULT_PREFS: DashboardViewPrefs = {
   sortBy: 'recent',
   search: '',
   filters: emptyDashboardFilters(),
-  density: 'cozy',
+  density: DEFAULT_DENSITY,
   onlyPinned: false,
   cardsPerRow: DEFAULT_CARDS_PER_ROW,
+  cardsPerRowChosen: false,
   cardBadges: [...CARD_BADGES],
 };
 
@@ -133,6 +141,20 @@ function sanitizeView(raw: unknown): ViewMode {
 
 function sanitizeCardsPerRow(raw: unknown): CardsPerRow {
   return CARDS_PER_ROW_OPTIONS.find((v) => v === raw) ?? DEFAULT_PREFS.cardsPerRow;
+}
+
+/** What an earlier build left behind stored every field, chosen or not, so a
+ *  stored count with no `cardsPerRowChosen` is either a pick or an old default
+ *  (`auto`, then 5). The old defaults give way to today's; any other count was
+ *  a pick and stays one. */
+function loadedCardsPerRow(parsed: Record<string, unknown> | null) {
+  const stored = sanitizeCardsPerRow(parsed?.cardsPerRow);
+  const chosen =
+    parsed?.cardsPerRowChosen === true ||
+    (parsed?.cardsPerRowChosen === undefined && stored !== 'auto' && stored !== 5);
+  return chosen
+    ? { cardsPerRow: stored, cardsPerRowChosen: true }
+    : { cardsPerRow: DEFAULT_PREFS.cardsPerRow, cardsPerRowChosen: false };
 }
 
 function sanitizeCardBadges(raw: unknown): CardBadge[] {
@@ -149,9 +171,10 @@ function loadPrefs(): DashboardViewPrefs {
       ...DEFAULT_PREFS,
       ...parsed,
       filters: { ...DEFAULT_PREFS.filters, ...(parsed?.filters ?? {}) },
-      view: sanitizeView(parsed?.view),
+      // A view nobody picked is the default, whatever an older build stored.
+      view: parsed?.viewChosen === true ? sanitizeView(parsed?.view) : DEFAULT_PREFS.view,
       viewChosen: parsed?.viewChosen === true,
-      cardsPerRow: sanitizeCardsPerRow(parsed?.cardsPerRow),
+      ...loadedCardsPerRow(parsed),
       cardBadges: sanitizeCardBadges(parsed?.cardBadges),
     };
   } catch {
@@ -293,7 +316,8 @@ export function useDashboardViewPrefs(
     [],
   );
   const setCardsPerRow = useCallback(
-    (cardsPerRow: CardsPerRow) => setPrefs((p) => ({ ...p, cardsPerRow })),
+    (cardsPerRow: CardsPerRow) =>
+      setPrefs((p) => ({ ...p, cardsPerRow, cardsPerRowChosen: true })),
     [],
   );
   const setCardBadges = useCallback(

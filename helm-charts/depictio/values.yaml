@@ -262,7 +262,7 @@ s3:
 backend:
   image:
     repository: ghcr.io/depictio/depictio-api # FastAPI backend image (post-Dash split)
-    tag: "1.16.0"
+    tag: "1.17.4"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
   # Raw container env entries (name/value or valueFrom), appended after the
@@ -351,6 +351,14 @@ backend:
     # Set true to log the payload instead of sending it.
     DEPICTIO_TELEMETRY_DEBUG: "false"
 
+    # Release check: admins are told when a newer Depictio release exists (outbound
+    # GET to the GitHub Releases API, nothing about this installation is sent).
+    # On by default; admins can toggle it from /admin. Uncomment to override.
+    # Setting ENABLED (true or false) forces it and locks the /admin toggle.
+    # DEPICTIO_VERSION_CHECK_ENABLED: "false"
+    # DEPICTIO_VERSION_CHECK_INTERVAL_HOURS: "6"
+    # DEPICTIO_VERSION_CHECK_REPOSITORY: "depictio/depictio"
+
     # Dashboard feedback link, served to the SPA through /utils/public-config.
     # Both halves are required: the flag alone renders nothing, and so does a URL
     # without it. The URL is a template whose {dashboard}, {dashboard_id}, {tab}
@@ -374,6 +382,10 @@ backend:
     # Get your tracking ID from Google Analytics dashboard (Property → Data Streams)
     DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "false"
     DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-XXXXXXXXXX"
+
+    # Let viewers read and write comment threads (editors and owners only otherwise).
+    # They still cannot resolve a thread, publish an annotation or review an agent's proposal.
+    DEPICTIO_COMMENTS_VIEWERS_CAN_COMMENT: "false"
 
     # Dashboard YAML Sync Feature (disabled by default in K8s)
     # When enabled, dashboards are synced to/from YAML files for version control
@@ -418,6 +430,16 @@ backend:
     # covered by the project's storage settings is refused, and the instance's
     # own S3 keys are never used for one. Any user can read what is listed.
     DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS: ""
+    # Component export / embed API (/depictio/api/v1/export): serves one
+    # dashboard component to another site, as a Plotly spec or a self-contained
+    # page, and puts "Export / embed" on every tile. Off by default, because it
+    # relaxes framing protections on that path. While on, anyone may export
+    # components of PUBLIC projects without a token; private ones need one.
+    DEPICTIO_FASTAPI_EMBED_ENABLED: "false"
+    # Comma-separated origins allowed to frame an embed (CSP frame-ancestors),
+    # e.g. "https://lab.example.org". Empty: embeds open standalone but no site
+    # can iframe them. "*" is rejected.
+    DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS: ""
     # Per-download size cap in bytes (500 MiB).
     DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES: "524288000"
     # Per-request timeout in seconds.
@@ -457,7 +479,7 @@ celery:
   image:
     # Distinct worker image (Celery + Playwright/chromium for screenshots).
     repository: ghcr.io/depictio/depictio-worker
-    tag: "1.16.0"
+    tag: "1.17.4"
     pullPolicy: Always
   replicas: 1
   # Same as backend.extraEnv, for the worker container.
@@ -494,7 +516,7 @@ celery:
 viewer:
   image:
     repository: ghcr.io/depictio/depictio-viewer # nginx + built React SPA
-    tag: "1.16.0"
+    tag: "1.17.4"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
   # Deployment update strategy. Default "Recreate" matches the other

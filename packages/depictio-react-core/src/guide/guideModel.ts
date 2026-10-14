@@ -222,6 +222,10 @@ export interface GuideModel<T extends DashboardSummary = DashboardSummary> {
     /** Tiles here a group can be made from (the ones Analysis outlines). */
     selectable: number;
   };
+  versions: {
+    /** The family has a saved version (see `hasVersions`). */
+    saved: boolean;
+  };
 }
 
 export interface GuideModelInput<T extends DashboardSummary = DashboardSummary> {
@@ -574,5 +578,6 @@ export function buildGuideModel<T extends DashboardSummary>(
       available: analysisAvailable,
       selectable: tiles.filter((m) => supportsSelectionGrouping(m, true)).length,
     },
+    versions: { saved: hasVersions },
   };
 }

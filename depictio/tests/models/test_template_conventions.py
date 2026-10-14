@@ -16,7 +16,11 @@ f. (warn only) no average / median of a percentage or fraction column unless the
    card is scoped by a ``filter_expr`` (review P10);
 g. a record card's ``linked_component`` names a component that emits a selection,
    on the card's ``id_col`` when both read the same data collection;
-h. (warn only) a record card declares a ``linked_component``.
+h. (warn only) a record card declares a ``linked_component``;
+i. a persistent (pinned) filter reaches the MultiQC panels: the data collection
+   hosting it has an enabled link to the MultiQC collection, unless it is listed
+   in ``PINNED_FILTER_DCS_NOT_SAMPLE_LEVEL`` with a reason (latest version of
+   each pipeline only).
 
 Run ``pytest depictio/tests/models/test_template_conventions.py -rxX`` to see
 which templates still fail which rule, or call ``collect_violations()``.
@@ -333,6 +337,179 @@ def check_record_card_linked(template_id: str) -> list[Violation]:
     ]
 
 
+# ---- i. persistent filters reach MultiQC ----------------------------------
+#
+# A persistent filter section on the Overview applies to every tab, MultiQC
+# included. A filter only narrows a MultiQC panel through an enabled project
+# link from the filter's data collection (DC) to the MultiQC DC (template.yaml
+# ``links:``, ``resolver: sample_mapping``); without it the filter is silently
+# ignored on the MultiQC tab. The rule is vacuous for a template without a
+# MultiQC panel.
+#
+# DCs that legitimately hold no sample-level rows (cells, bins, fusions,
+# contrasts, genes, per-library QC thresholds on a metrics DC) are listed here,
+# per pipeline, with the reason. A listed DC that no longer hosts a pinned
+# filter, or that gained a link, is reported as stale.
+PINNED_FILTER_DCS_NOT_SAMPLE_LEVEL: dict[str, dict[str, str]] = {
+    "atacseq": {
+        "ataqv_metrics": "QC threshold slider (TSS enrichment) on a per-library metrics DC; "
+        "only a forward link sample_design -> ataqv_metrics exists, so it does not narrow "
+        "MultiQC today (a link ataqv_metrics -> multiqc_data would)",
+        "macs2_peak_summary": "QC threshold sliders (FRiP, peak count) on a per-library peak "
+        "metrics DC; only a forward link sample_design -> macs2_peak_summary exists, so it "
+        "does not narrow MultiQC today (a link macs2_peak_summary -> multiqc_data would)",
+    },
+    "chipseq": {
+        "macs2_peak_summary": "QC threshold sliders (FRiP, peak count) on a per-library peak "
+        "metrics DC; only a forward link design -> macs2_peak_summary exists, so it does not "
+        "narrow MultiQC today (a link macs2_peak_summary -> multiqc_data would)",
+    },
+    "eager": {
+        "qualimap_bamqc_genome_results": "QC floors (coverage, duplication rate) on a per-library "
+        "metrics DC; reverse link qualimap_bamqc_genome_results -> samples narrows the hub, "
+        "which is linked to MultiQC",
+        "endorspy_endogenous": "QC floor (endogenous DNA) on a per-library metrics DC; reverse "
+        "link endorspy_endogenous -> samples narrows the hub, which is linked to MultiQC",
+    },
+    "mag": {
+        "bin_summary": "bin-level filters (assembler, binner): a bin is not a MultiQC sample",
+    },
+    "rnafusion": {
+        "fusion_consensus": "fusion-level filters (fusion, caller agreement), not sample-level",
+    },
+    "rnasplice": {
+        "contrasts": "contrast filter: a contrast is a comparison between groups, not a sample",
+        "splicing_genes": "gene-level filter on splicing results, not sample-level",
+    },
+    "scrnaseq": {
+        "cellranger_cell_qc": "cell-level filters (cluster, QC status, UMI and gene counts), "
+        "not sample-level",
+    },
+}
+
+
+def _is_persistent(section: dict[str, Any]) -> bool:
+    return bool(section.get("persistent") or section.get("pin"))
+
+
+def _pinned_filter_components(dashboards: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """``{dc_tag: [component labels]}`` of interactive components in a persistent section."""
+    out: dict[str, list[str]] = {}
+    for dashboard in dashboards:
+        for tab in _tabs(dashboard):
+            pinned = {
+                s["name"]
+                for s in [*(tab.get("filter_sections") or []), *(tab.get("grid_sections") or [])]
+                if s.get("name") and _is_persistent(s)
+            }
+            for c in _components(tab, "interactive"):
+                if c.get("section") in pinned and c.get("data_collection_tag"):
+                    out.setdefault(str(c["data_collection_tag"]), []).append(_label(c))
+    return out
+
+
+def _multiqc_dcs_with_panels(
+    template: dict[str, Any], dashboards: list[dict[str, Any]]
+) -> set[str]:
+    """Tags of the template's MultiQC DCs that at least one multiqc panel reads."""
+    declared = {
+        str(dc.get("data_collection_tag"))
+        for wf in template.get("workflows") or []
+        for dc in wf.get("data_collections") or []
+        if str((dc.get("config") or {}).get("type")).lower() == "multiqc"
+    }
+    used = {
+        str(c.get("data_collection_tag"))
+        for dashboard in dashboards
+        for tab in _tabs(dashboard)
+        for c in _components(tab, "multiqc")
+    }
+    return declared & used
+
+
+def persistent_filter_problems(
+    template_id: str,
+    template: dict[str, Any],
+    dashboards: list[dict[str, Any]],
+    allowlist: dict[str, str],
+) -> tuple[list[Violation], list[Violation]]:
+    """``(unreached, stale_allowlist)`` for one parsed template. Pure: no files read.
+
+    ``unreached``: a DC hosts a pinned filter, the template draws MultiQC panels,
+    and no enabled link goes from that DC to the MultiQC DC. ``stale_allowlist``:
+    an allowlisted DC that is no longer a violation (no pinned filter, or linked).
+    """
+    mqc = _multiqc_dcs_with_panels(template, dashboards)
+    if not mqc:
+        return [], []
+    linked = {
+        str(link.get("source_dc_tag"))
+        for link in template.get("links") or []
+        if link.get("enabled", True) and link.get("target_dc_tag") in mqc
+    }
+    pinned = _pinned_filter_components(dashboards)
+    pipeline = template_id.split("/")[0]
+    target = " or ".join(sorted(mqc))
+    unreached: list[Violation] = []
+    for dc_tag, labels in sorted(pinned.items()):
+        if dc_tag in mqc or dc_tag in linked or dc_tag in allowlist:
+            continue
+        unreached.append(
+            f"{template_id}: DC '{dc_tag}' hosts the pinned filter(s) {sorted(set(labels))} "
+            f"but has no enabled link to the MultiQC DC '{target}', so the filter is ignored "
+            f"on the MultiQC tab. Add to template.yaml links: (source_dc_tag: {dc_tag}, "
+            f"source_column: <sample id column>, target_dc_tag: {target}, target_type: "
+            f"multiqc, link_config: {{resolver: sample_mapping}}, enabled: true), or add "
+            f"PINNED_FILTER_DCS_NOT_SAMPLE_LEVEL[{pipeline!r}][{dc_tag!r}] with the reason "
+            f"it is not sample-level."
+        )
+    stale = [
+        f"{template_id}: PINNED_FILTER_DCS_NOT_SAMPLE_LEVEL[{pipeline!r}][{dc_tag!r}] is stale "
+        f"({'no pinned filter on it' if dc_tag not in pinned else 'it is linked to MultiQC now'})"
+        f": remove the entry"
+        for dc_tag in sorted(allowlist)
+        if dc_tag not in pinned or dc_tag in linked or dc_tag in mqc
+    ]
+    return unreached, stale
+
+
+def _load_template_and_dashboards(template_id: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    template_path = NF_CORE_DIR / template_id / "template.yaml"
+    template = yaml.safe_load(template_path.read_text()) or {} if template_path.is_file() else {}
+    dashboards = [yaml.safe_load(p.read_text()) or {} for p in _dashboard_files(template_id)]
+    return template, dashboards
+
+
+def check_persistent_filters_reach_multiqc(template_id: str) -> list[Violation]:
+    template, dashboards = _load_template_and_dashboards(template_id)
+    allowlist = PINNED_FILTER_DCS_NOT_SAMPLE_LEVEL.get(template_id.split("/")[0], {})
+    unreached, _ = persistent_filter_problems(template_id, template, dashboards, allowlist)
+    return unreached
+
+
+def check_persistent_filter_allowlist_not_stale(template_id: str) -> list[Violation]:
+    template, dashboards = _load_template_and_dashboards(template_id)
+    allowlist = PINNED_FILTER_DCS_NOT_SAMPLE_LEVEL.get(template_id.split("/")[0], {})
+    _, stale = persistent_filter_problems(template_id, template, dashboards, allowlist)
+    return stale
+
+
+def _version_key(version: str) -> tuple[int, ...]:
+    return tuple(int(n) for n in re.findall(r"\d+", version))
+
+
+def _latest_template_ids() -> list[str]:
+    """The highest version dir of each pipeline, as seeding and the CLI resolve it."""
+    best: dict[str, str] = {}
+    for tid in _template_ids():
+        pipeline, version = tid.split("/")
+        if pipeline not in best or _version_key(version) > _version_key(
+            best[pipeline].split("/")[1]
+        ):
+            best[pipeline] = tid
+    return sorted(best.values())
+
+
 RULES: dict[str, Callable[[str], list[Violation]]] = {
     "pinned_table_not_repeated": check_pinned_table_not_repeated,
     "top_n_only_under_sum": check_top_n_only_under_sum,
@@ -343,6 +520,7 @@ RULES: dict[str, Callable[[str], list[Violation]]] = {
     "no_mean_of_percentages": check_no_mean_of_percentages,
     "record_card_linked_source": check_record_card_linked_source,
     "record_card_linked": check_record_card_linked,
+    "persistent_filters_reach_multiqc": check_persistent_filters_reach_multiqc,
 }
 
 
@@ -355,6 +533,7 @@ def collect_violations() -> dict[str, dict[str, list[Violation]]]:
 
 
 TEMPLATE_IDS = _template_ids()
+LATEST_TEMPLATE_IDS = _latest_template_ids()
 
 
 def _assert_clean(violations: list[Violation]) -> None:
@@ -408,6 +587,24 @@ def test_record_card_linked_warn_only(template_id: str) -> None:
     """Warn level: a card following ``any`` selection still works, just less precisely."""
     for violation in check_record_card_linked(template_id):
         warnings.warn(f"{template_id} {violation}", UserWarning, stacklevel=1)
+
+
+@pytest.mark.parametrize("template_id", LATEST_TEMPLATE_IDS)
+def test_persistent_filters_reach_multiqc(template_id: str) -> None:
+    _assert_clean(check_persistent_filters_reach_multiqc(template_id))
+
+
+@pytest.mark.parametrize("template_id", LATEST_TEMPLATE_IDS)
+def test_persistent_filter_allowlist_not_stale(template_id: str) -> None:
+    _assert_clean(check_persistent_filter_allowlist_not_stale(template_id))
+
+
+def test_persistent_filter_allowlist_names_shipped_pipelines() -> None:
+    pipelines = {tid.split("/")[0] for tid in LATEST_TEMPLATE_IDS}
+    assert set(PINNED_FILTER_DCS_NOT_SAMPLE_LEVEL) <= pipelines
+    assert all(
+        r.strip() for dcs in PINNED_FILTER_DCS_NOT_SAMPLE_LEVEL.values() for r in dcs.values()
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -611,3 +808,113 @@ def test_record_card_rules_catch_synthetic_violations(
     assert check_record_card_linked(tid) == [
         "base.yaml:Demo unlinked: record card without linked_component"
     ]
+
+
+def _synthetic_pinned_filter_template(
+    links: list[dict[str, Any]], panel: bool = True
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    template = {
+        "workflows": [
+            {
+                "data_collections": [
+                    {"data_collection_tag": "samples", "config": {"type": "Table"}},
+                    {"data_collection_tag": "metrics", "config": {"type": "Table"}},
+                    {"data_collection_tag": "multiqc_data", "config": {"type": "MultiQC"}},
+                ]
+            }
+        ],
+        "links": links,
+    }
+
+    def interactive(tag: str, dc: str, section: str) -> Component:
+        return {
+            "component_type": "interactive",
+            "tag": tag,
+            "section": section,
+            "data_collection_tag": dc,
+        }
+
+    mqc_panel = {
+        "component_type": "multiqc",
+        "tag": "fastqc",
+        "data_collection_tag": "multiqc_data",
+    }
+    dashboard = {
+        "main_dashboard": {
+            "title": "Overview",
+            "filter_sections": [
+                {"name": "Sample filters", "persistent": True, "pin": "top"},
+                {"name": "Local", "icon": "mdi:filter"},
+            ],
+            "components": [
+                interactive("pick-sample", "samples", "Sample filters"),
+                interactive("min-frip", "metrics", "Sample filters"),
+                # Not pinned: a tab-local filter needs no link.
+                interactive("local-metric", "metrics", "Local"),
+            ],
+        },
+        "tabs": [{"title": "MultiQC", "components": [mqc_panel] if panel else []}],
+    }
+    return template, [dashboard]
+
+
+def _mqc_link(source: str, enabled: bool = True) -> dict[str, Any]:
+    return {
+        "source_dc_tag": source,
+        "source_column": "sample",
+        "target_dc_tag": "multiqc_data",
+        "target_type": "multiqc",
+        "link_config": {"resolver": "sample_mapping"},
+        "enabled": enabled,
+    }
+
+
+def test_persistent_filter_on_unlinked_dc_is_reported() -> None:
+    template, dashboards = _synthetic_pinned_filter_template([_mqc_link("samples")])
+    unreached, stale = persistent_filter_problems("demo/1.0.0", template, dashboards, {})
+    assert stale == []
+    [problem] = unreached
+    # Names the template, the DC, the component and both ways out.
+    assert problem.startswith("demo/1.0.0: DC 'metrics' hosts the pinned filter(s) ['min-frip']")
+    assert "local-metric" not in problem
+    assert "template.yaml links:" in problem
+    assert "PINNED_FILTER_DCS_NOT_SAMPLE_LEVEL['demo']['metrics']" in problem
+
+
+def test_persistent_filter_on_linked_dcs_is_clean() -> None:
+    template, dashboards = _synthetic_pinned_filter_template(
+        [_mqc_link("samples"), _mqc_link("metrics")]
+    )
+    assert persistent_filter_problems("demo/1.0.0", template, dashboards, {}) == ([], [])
+
+
+def test_persistent_filter_disabled_link_does_not_count() -> None:
+    template, dashboards = _synthetic_pinned_filter_template(
+        [_mqc_link("samples"), _mqc_link("metrics", enabled=False)]
+    )
+    [problem] = persistent_filter_problems("demo/1.0.0", template, dashboards, {})[0]
+    assert "DC 'metrics'" in problem
+
+
+def test_persistent_filter_allowlist_silences_and_goes_stale() -> None:
+    template, dashboards = _synthetic_pinned_filter_template([_mqc_link("samples")])
+    allow = {"metrics": "QC thresholds on a metrics DC"}
+    assert persistent_filter_problems("demo/1.0.0", template, dashboards, allow) == ([], [])
+    # Once the DC is linked, the entry has no reason left to exist.
+    linked, dashboards = _synthetic_pinned_filter_template(
+        [_mqc_link("samples"), _mqc_link("metrics")]
+    )
+    unreached, stale = persistent_filter_problems("demo/1.0.0", linked, dashboards, allow)
+    assert unreached == []
+    assert len(stale) == 1
+    assert "['metrics'] is stale" in stale[0]
+    # An entry for a DC that hosts no pinned filter is stale too.
+    _, stale = persistent_filter_problems("demo/1.0.0", template, dashboards, {"nowhere": "x"})
+    assert len(stale) == 1
+
+
+def test_persistent_filter_rule_is_vacuous_without_multiqc_panels() -> None:
+    template, dashboards = _synthetic_pinned_filter_template([], panel=False)
+    assert persistent_filter_problems("demo/1.0.0", template, dashboards, {}) == ([], [])
+    # A declared MultiQC DC that no panel reads does not count either.
+    assert persistent_filter_problems("demo/1.0.0", {**template, "links": []}, [], {}) == ([], [])

@@ -63,8 +63,8 @@ describe('selectionCapableSummary', () => {
   });
 
   it('agrees in number with the count it quotes', () => {
-    expect(selectionCapableSummary(1)).toMatch(/^1 tile here can\./);
-    expect(selectionCapableSummary(4)).toMatch(/^4 tiles here can\./);
+    expect(selectionCapableSummary(1)).toMatch(/^1 tile here,/);
+    expect(selectionCapableSummary(4)).toMatch(/^4 tiles here,/);
   });
 });
 

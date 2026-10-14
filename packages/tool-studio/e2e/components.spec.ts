@@ -112,9 +112,10 @@ test('an interactive control previews as depictio renders it', async ({ page }) 
   await selectByLabel(page, 'Select your interactive component').click();
   await page.getByRole('option', { name: 'Range slider' }).click();
 
-  // depictio's own RangeSliderRenderer: its default title, and marks built by
-  // `buildNumericScale` off the column's real bounds.
-  await expect(page.getByText('RangeSlider on coverage')).toBeVisible();
+  // depictio's own RangeSliderRenderer, fed the metadata a save writes: the
+  // default title the dashboard shows, and marks built by `buildNumericScale`
+  // off the column's real bounds.
+  await expect(page.getByText('Range on coverage')).toBeVisible();
   await expect(page.getByText('12.5', { exact: true })).toBeVisible();
   await expect(page.getByText('250', { exact: true })).toBeVisible();
 

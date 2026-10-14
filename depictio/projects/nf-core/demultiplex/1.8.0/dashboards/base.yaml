@@ -432,13 +432,13 @@ tabs:
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
-  # Bound to multiqc_data and the hub, so the tab keeps a filter of its own
-  # whatever the sample filters hold.
+  # The read-share band is bound to the hub and reaches the MultiQC panels
+  # through its link to multiqc_data.
   filter_sections:
   - name: MultiQC report
     icon: mdi:file-document-outline
     color: orange
-    description: Libraries as MultiQC names them, or inside a read-share band
+    description: Libraries inside a read-share band
   grid_sections:
   - name: CheckQC verdicts
     icon: mdi:shield-check-outline
@@ -470,21 +470,6 @@ tabs:
     layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: interactive
     workflow_tag: demultiplex
-    data_collection_tag: multiqc_data
-    interactive_component_type: MultiSelect
-    column_name: sample
-    column_type: object
-    display:
-      icon_name: mdi:test-tube
-      custom_color: teal
-    section: MultiQC report
-    group: Libraries
-    tag: dm-mqc-filter-sample
-    index: mqc-sample-filter
-    title: Library or FASTQ file
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    workflow_tag: demultiplex
     data_collection_tag: libraries
     interactive_component_type: RangeSlider
     column_name: pct_of_expected
@@ -497,7 +482,7 @@ tabs:
     tag: dm-mqc-filter-expected
     index: mqc-expected-range
     title: Reads, % of an even share
-    layout: {x: 0, y: 3, w: 1, h: 3}
+    layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: multiqc
     workflow_tag: demultiplex
     data_collection_tag: multiqc_data

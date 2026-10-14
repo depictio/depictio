@@ -9,7 +9,12 @@ import {
   InteractiveFilter,
   StoredMetadata,
 } from '../../api';
-import { INTERACTIVE_FRAME, InteractiveFrame, InteractiveTitle } from './frame';
+import {
+  INTERACTIVE_FRAME,
+  InteractiveFrame,
+  InteractiveTitle,
+  interactiveAccent,
+} from './frame';
 
 /**
  * DatePicker (range) interactive filter — selects a [start, end] date range.
@@ -198,6 +203,7 @@ const DatePickerRenderer: React.FC<{
   // above) or the current in-progress picks. Either way, it's the single
   // source of truth that Mantine reads from.
   const value: [Date | null, Date | null] = pickerValue;
+  const accent = interactiveAccent(metadata);
 
   const picker = (
     <DatePickerInput
@@ -244,7 +250,7 @@ const DatePickerRenderer: React.FC<{
         });
       }}
       styles={{
-        input: metadata.icon_color ? { borderColor: metadata.icon_color } : undefined,
+        input: accent ? { borderColor: accent } : undefined,
       }}
     />
   );

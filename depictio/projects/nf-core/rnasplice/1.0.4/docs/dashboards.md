@@ -70,8 +70,8 @@ share), then at most three open sections; tables and details follow, collapsed.
 sequence counts beside the reads Trim Galore kept, STAR's summary beside samtools' percent
 mapped, then featureCounts assignments (the exon-level tests' input) beside Salmon's
 fragment lengths (the transcript-level tests' input). Collapsed: adapter content, quality,
-duplication and status from FastQC, STAR alignment scores, samtools stats and flagstat. Its
-own sample filter reads the MultiQC report, whose library names carry read suffixes.
+duplication and status from FastQC, STAR alignment scores, samtools stats and flagstat. The
+pinned sample filters narrow its panels, though the report's library names carry read suffixes.
 
 **Sample Space.** Strip: libraries in the TPM matrix (a ring by group), genes expressed
 with their spread, genes detected with their distribution and the median TPM (ranked by

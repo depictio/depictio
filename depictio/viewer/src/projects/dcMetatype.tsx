@@ -2,6 +2,7 @@ import React from 'react';
 import { Badge, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+import { useGlassPages } from '../chrome/variants/glass/pages';
 import type { DcClassifiable } from './dcTypeIcon';
 
 /** The metatype axis of a data collection: what the table IS within its
@@ -50,8 +51,11 @@ export const DcMetatypeBadge: React.FC<{
   dc: DcClassifiable;
   projectType: 'basic' | 'advanced';
 }> = ({ dc, projectType }) => {
+  const glass = useGlassPages();
   const meta = dcMetatypeMeta(dc, projectType);
   if (!meta) return null;
+  // Glass spends no hue here: the aggregate is the page's teal, metadata grey.
+  const color = glass ? (meta.label === 'Metadata' ? 'gray' : undefined) : meta.color;
   return (
     <Tooltip
       label={
@@ -63,7 +67,7 @@ export const DcMetatypeBadge: React.FC<{
       withinPortal
     >
       <Badge
-        color={meta.color}
+        color={color}
         variant="light"
         size="sm"
         radius="sm"

@@ -80,13 +80,16 @@ const SliderRenderer: React.FC<{
     typeof metadata.show_marks === 'boolean'
       ? metadata.show_marks
       : !compact || Boolean(scale?.discrete);
+  // `show_mark_labels: false` keeps the ticks and drops their text; unset labels
+  // every tick, as it always has.
+  const labelsVisible = marksVisible && metadata.show_mark_labels !== false;
   // A restricted slider still needs its marks passed even when their labels are
   // suppressed — they are what it snaps to.
   const marks = !scale
     ? undefined
-    : marksVisible
+    : labelsVisible
       ? scale.marks
-      : scale.discrete
+      : marksVisible || scale.discrete
         ? scale.marks.map((m) => ({ value: m.value }))
         : undefined;
 
@@ -181,7 +184,7 @@ const SliderRenderer: React.FC<{
           label={readout}
           // Mark labels hang below the track, so they need the room a compact
           // slider otherwise gives away.
-          mb={compact ? (marksVisible ? 'sm' : 0) : 'xs'}
+          mb={compact ? (labelsVisible ? 'sm' : 0) : 'xs'}
         />
       </CompactControlSlot>
     </InteractiveFrame>

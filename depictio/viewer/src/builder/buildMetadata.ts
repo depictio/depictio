@@ -248,7 +248,9 @@ function buildFigure(
   };
 }
 
-function buildInteractive(
+/** Exported so the interactive builder's live preview is fed the metadata the
+ *  save will write, not a look-alike. */
+export function buildInteractive(
   state: BuilderState,
   base: StoredMetadata,
   existing: Record<string, unknown>,
@@ -264,6 +266,7 @@ function buildInteractive(
     group?: string;
     placement?: string;
     show_marks?: boolean;
+    show_mark_labels?: boolean;
     strip_label?: string;
     strip_icon?: boolean;
     show_histogram?: boolean;
@@ -291,6 +294,13 @@ function buildInteractive(
     column_type: c.column_type,
     title,
     color: c.color ?? '',
+    // The renderers read `icon_color`, then `color`, then `custom_color` (see
+    // `interactiveAccentRaw`), so a stale one of the other two would outrank
+    // the colour picked here. Writing all three keeps the saved dashboard on
+    // the colour the preview showed; `custom_color` is also the key a YAML
+    // export carries.
+    icon_color: c.color || undefined,
+    custom_color: c.color || undefined,
     icon_name: c.icon_name ?? 'bx:slider-alt',
     // Empty string from a cleared Autocomplete means "no group", which must
     // persist as undefined so the panel treats it as ungrouped. (`section` is
@@ -298,6 +308,7 @@ function buildInteractive(
     group: c.group?.trim() || undefined,
     placement,
     show_marks: c.show_marks,
+    show_mark_labels: c.show_mark_labels,
     // Filter-bar display: both stored only when they differ from the default
     // (the title; the badge shown), so components outside a bar stay clean.
     strip_label: c.strip_label?.trim() || undefined,

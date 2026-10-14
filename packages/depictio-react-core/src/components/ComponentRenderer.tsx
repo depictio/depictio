@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useContext, useRef } from 'react';
+import React, { lazy, Suspense, useContext, useMemo, useRef } from 'react';
 import { ActionIcon, Tooltip, useMantineTheme } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { DepictioCard } from 'depictio-components';
@@ -29,6 +29,7 @@ import SecondaryMetrics, {
 } from './card/SecondaryMetrics';
 import { cardNumberFormat, explicitCardFormat, formatNumber } from './card/metrics/format';
 import { wrapWithChrome } from './chrome';
+import { ChromeSourceProvider } from './chrome/ExportContext';
 import { resolveFigureStyle } from './figureStyle';
 import LoadAllButton, { LoadAllState } from './chrome/LoadAllButton';
 import { TILE_ACTION_STYLE } from './chrome/actionStyles';
@@ -97,8 +98,22 @@ interface ComponentRendererProps {
 /**
  * Renders ONE component based on metadata.component_type, wrapped in a
  * `ComponentChrome` that adds metadata/fullscreen/download/reset action icons.
+ *
+ * Also tells that chrome where the component comes from (`ChromeSource`): the
+ * dashboard it is drawn against and the filters it is drawn with, which an
+ * action such as Export needs and `metadata` does not carry.
  */
-const ComponentRenderer: React.FC<ComponentRendererProps> = ({
+const ComponentRenderer: React.FC<ComponentRendererProps> = (props) => {
+  const { dashboardId, filters } = props;
+  const source = useMemo(() => ({ dashboardId, filters }), [dashboardId, filters]);
+  return (
+    <ChromeSourceProvider value={source}>
+      <ComponentRendererBody {...props} />
+    </ChromeSourceProvider>
+  );
+};
+
+const ComponentRendererBody: React.FC<ComponentRendererProps> = ({
   metadata,
   filters,
   onFilterChange,

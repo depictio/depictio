@@ -259,6 +259,7 @@ const RangeSliderRenderer: React.FC<{
             ? metadata.show_marks
             : !compact || scale.discrete
         }
+        show_mark_labels={metadata.show_mark_labels !== false}
         compact={compact}
         onChange={(next) =>
           onChange?.({

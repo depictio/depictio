@@ -30,7 +30,7 @@ import {
   Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { TextRenderer } from 'depictio-react-core';
+import { TextRenderer, useCommentsControl } from 'depictio-react-core';
 import type {
   DashboardData,
   DashboardSummary,
@@ -42,8 +42,10 @@ import type {
 import { DemoFrame, TabPillsDemo, YourViewDemo } from './GuideDemos';
 import { ActionsDemo } from './demos/ActionsDemo';
 import { AnalysisDemo } from './demos/AnalysisDemo';
+import { CommentsDemo, type CommentsRole } from './demos/CommentsDemo';
 import { LiveFilterDemo, LiveFilterDemoSkeleton } from './demos/LiveFilterDemo';
 import { SectionsDemo } from './demos/SectionsDemo';
+import { VersionsDemo } from './demos/VersionsDemo';
 import { findDemoTargets, showDemoTarget, type GuideTarget } from './showMe';
 import { useGuideSources } from './useGuideSources';
 
@@ -65,6 +67,9 @@ export interface DashboardGuideProps {
   /** The author's note (markdown), '' for none. */
   intro: string;
   mode: 'view' | 'edit';
+  /** The reader can edit this dashboard (owners and editors). Defaults to
+   *  `mode === 'edit'`; the viewer passes its own check. */
+  canEdit?: boolean;
   onClose: () => void;
   /** Opens the dashboard settings on "Your view". */
   onOpenYourView: () => void;
@@ -321,6 +326,7 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
   tabName,
   intro,
   mode,
+  canEdit,
   onClose,
   onOpenYourView,
 }) => {
@@ -363,6 +369,20 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
 
   const { tabs, sections, filters, selection, actions, analysis } = model;
   const isEdit = mode === 'edit';
+  // The comments context is mounted for whoever has comments here: editors,
+  // viewers where the instance lets them comment, and guests who could by
+  // signing in. Without it the dashboard has no comments to describe.
+  const commentsControl = useCommentsControl();
+  const commentsRole: CommentsRole | null = !commentsControl
+    ? null
+    : !commentsControl.canComment
+      ? 'guest'
+      : commentsControl.canModerate
+        ? 'moderator'
+        : 'commenter';
+  // The viewer cannot list versions, so its signal is the role: history and
+  // restore belong to whoever can edit.
+  const showVersions = (canEdit ?? isEdit) && model.versions.saved;
   const foldableNames = sections.foldable.map((s) => s.name);
   const pinnedNames = sections.pinned.map((s) => s.name);
   const persistentFilters = filters.persistent.map((s) => s.name);
@@ -605,7 +625,116 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
     });
   }
 
-  // 6. Your settings
+  // 6. Comments and annotations: only where the dashboard has comments.
+  if (commentsRole) {
+    const guest = commentsRole === 'guest';
+    const moderator = commentsRole === 'moderator';
+    parts.push({
+      id: 'comments',
+      navLabel: 'Comments',
+      icon: 'mdi:comment-text-multiple-outline',
+      title: 'Comment and annotate',
+      subtitle: 'Talk about a figure where it is, or about the whole tab',
+      points: guest
+        ? [
+            <>
+              <Kbd icon="mdi:comment-plus-outline">Comments</Kbd> in a component's corner opens a
+              thread on it; in the header it opens every thread of the tab. To write on the
+              dashboard, sign in first: the icon asks you to.
+            </>,
+            <>
+              An annotation is a note drawn on a chart, over a range or a group of points. The ones
+              an editor has published are visible to you on the chart.
+            </>,
+          ]
+        : [
+            <>
+              <Kbd icon="mdi:comment-plus-outline">Comments</Kbd> in a component's corner opens a
+              thread on it; in the header it opens every thread of the tab. A thread stays open
+              until it is resolved. A comment keeps the filters and the selection it was written
+              with, and clicking the thread brings them back.
+            </>,
+            moderator ? (
+              <>
+                <Kbd icon="mdi:draw">Annotate</Kbd>, on a figure that supports it, draws a range, a
+                line, a note or a group of points on the chart. It stays with editors until you
+                switch on Visible to viewers.
+              </>
+            ) : (
+              <>
+                An annotation is a note drawn on a chart. The ones an editor has published are
+                drawn on the chart for everyone; resolving a thread is for editors.
+              </>
+            ),
+          ],
+      demoLabel: 'An example · click the comments icon, then reply',
+      demo: <CommentsDemo role={commentsRole} family={sources.family} />,
+      showMe: { target: 'comments', label: 'Show me the comments button' },
+    });
+  }
+
+  // 7. Versions: whoever opens the Guide learns the dashboard keeps its history.
+  if (model.versions.saved) {
+    parts.push({
+      id: 'versions',
+      navLabel: 'Versions',
+      icon: 'mdi:history',
+      title: 'Go back to an earlier version',
+      subtitle: 'Every save is kept: for one component or for the whole dashboard',
+      points: [
+        <>
+          Every save records the whole dashboard: its layout, its components and the version of
+          each data collection it showed. Autosaves made close together fold into one version.
+        </>,
+        showVersions ? (
+          <>
+            A component keeps its id from save to save, so it has a history of its own:{' '}
+            <Kbd icon="mdi:history">History</Kbd> in its menu{isEdit ? '' : ', in the editor,'}{' '}
+            lists its versions, newest first. Preview one, read only, compare two, or restore just
+            that component.
+          </>
+        ) : (
+          <>
+            The dashboard's editors can look back at a single component, preview an earlier
+            version of it read only, compare two, or restore just that component.
+          </>
+        ),
+        showVersions ? (
+          <>
+            The same works for the whole dashboard:{' '}
+            <Kbd icon="ic:baseline-settings">Settings → History</Kbd>
+            {isEdit ? '' : ', in the editor,'} lists every version. Preview opens one in a new tab,
+            read only; Restore brings the dashboard back to it, after a confirmation; a bookmark
+            names a version and keeps it from being pruned. Deleting a version is for the owner.
+          </>
+        ) : (
+          <>
+            The same goes for the whole dashboard. A link to a version opens it for you, read
+            only, with nothing to change.
+          </>
+        ),
+        <>
+          A preview is this same page drawn from a past version. A bar at the top says which one,
+          and whether each data collection is on that version's data or on its latest.
+        </>,
+        ...(showVersions
+          ? [
+              <>
+                {isEdit ? '' : 'In the editor, '}
+                <Kbd icon="ic:baseline-settings">Settings → Data version</Kbd> looks at the
+                dashboard as of a version, or puts one data collection back on an earlier version
+                of its data. It is only a view: nothing is saved, and it is gone on reload.
+              </>,
+            ]
+          : []),
+      ],
+      demoLabel: 'An example · one component, its history',
+      demo: <VersionsDemo family={sources.family} />,
+      ...(showVersions ? { showMe: { target: 'versions', label: 'Show me Preview' } } : {}),
+    });
+  }
+
+  // 8. Your settings
   parts.push({
     id: 'settings',
     navLabel: 'Settings',

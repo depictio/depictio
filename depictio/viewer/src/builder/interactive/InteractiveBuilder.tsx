@@ -32,6 +32,7 @@ import {
   CheckboxSwitchRenderer,
   DatePickerRenderer,
   fetchDashboard,
+  interactiveAccentRaw,
   MultiSelectRenderer,
   RangeSliderRenderer,
   SegmentedControlRenderer,
@@ -39,6 +40,8 @@ import {
 } from 'depictio-react-core';
 import type { StoredMetadata } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
+import type { BuilderState } from '../store/useBuilderStore';
+import { buildInteractive } from '../buildMetadata';
 import { useBuilderPreviewFilters } from '../useBuilderPreviewFilters';
 import ColumnSelect from '../shared/ColumnSelect';
 import DesignShell from '../shared/DesignShell';
@@ -117,6 +120,12 @@ interface InteractiveConfig {
   group?: string;
   placement?: string;
   show_marks?: boolean;
+  /** Slider / RangeSlider: ticks keep their labels unless this is false. */
+  show_mark_labels?: boolean;
+  // The other two names a stored colour has carried (see `interactiveAccentRaw`):
+  // only read, to seed `color` when an existing component is opened.
+  icon_color?: string;
+  custom_color?: string;
   // Only read when the control sits in a filter bar (a grid section shown as
   // a strip): a shorter name than the title, and whether the icon badge shows.
   strip_label?: string;
@@ -127,6 +136,8 @@ interface InteractiveConfig {
 
 /** Variants whose renderers read `show_marks`. */
 const MARKS_VARIANTS = ['Slider', 'RangeSlider', 'Timeline'];
+/** Variants whose renderers read `show_mark_labels`. */
+const MARK_LABEL_VARIANTS = ['Slider', 'RangeSlider'];
 /** Variants whose renderers read `show_histogram`. */
 const HISTOGRAM_VARIANTS = ['RangeSlider'];
 /** Mirrors TOP_PANEL_INTERACTIVE_TYPES in depictio/models/components/constants.py. */
@@ -146,10 +157,10 @@ const InteractivePreview: React.FC = () => {
   const config = useBuilderStore((s) => s.config) as InteractiveConfig;
   const dcId = useBuilderStore((s) => s.dcId);
   const wfId = useBuilderStore((s) => s.wfId);
+  const existing = useBuilderStore((s) => s.existing);
   const previewFilters = useBuilderPreviewFilters();
 
-  const { interactive_component_type, column_name, column_type, title, color, icon_name } =
-    config;
+  const { interactive_component_type, column_name } = config;
 
   if (!column_name || !interactive_component_type || !dcId) {
     return (
@@ -161,33 +172,25 @@ const InteractivePreview: React.FC = () => {
     );
   }
 
-  // Synthesize the same StoredMetadata shape the live dashboard would feed
-  // into the renderer. `index` is a stable preview key so renderer-internal
-  // caches dedupe correctly across rerenders. Sliders need scale + marks
-  // inside default_state — that's where the renderer reads them, mirroring
-  // the seeded defaults.
-  const metadata: StoredMetadata = {
-    index: `__preview__:${dcId}:${column_name}:${interactive_component_type}`,
-    component_type: 'interactive',
-    interactive_component_type,
-    column_name,
-    column_type,
-    wf_id: wfId || undefined,
-    dc_id: dcId,
-    title: title?.trim() || `${interactive_component_type} on ${column_name}`,
-    icon_name: icon_name || 'bx:slider-alt',
-    icon_color: color && color.length > 0 ? color : undefined,
-    color: color || '',
-    // The two per-control switches the form exposes: the renderers read them
-    // off the metadata, so a preview without them showed the defaults.
-    show_marks: config.show_marks,
-    show_histogram: config.show_histogram,
-    default_state: {
-      scale: 'linear',
-      marks_number: 5,
-    } as StoredMetadata['default_state'],
-  };
+  // The metadata the save would write, from the same function: colour, marks,
+  // icon and title therefore come from one place for the preview and the
+  // dashboard, and an existing component keeps the stored keys the form does
+  // not edit (`default_state`'s scale and mark count, `title_color`, ...).
+  // Only `index` is a stable preview key, so renderer-internal caches dedupe
+  // correctly across rerenders.
+  const metadata = buildInteractive(
+    { config } as BuilderState,
+    {
+      index: `__preview__:${dcId}:${column_name}:${interactive_component_type}`,
+      component_type: 'interactive',
+      wf_id: wfId || undefined,
+      dc_id: dcId,
+    },
+    existing ? { ...existing } : {},
+  );
 
+  // A grouped control renders compact inside its group's card, so preview it so.
+  const grouped = Boolean(config.group?.trim());
   // The dashboard's active filters (minus this component's own) so the
   // control previews the option sets / ranges viewers will actually see.
   let renderer: React.ReactNode;
@@ -197,10 +200,14 @@ const InteractivePreview: React.FC = () => {
       renderer = <MultiSelectRenderer metadata={metadata} filters={previewFilters} />;
       break;
     case 'RangeSlider':
-      renderer = <RangeSliderRenderer metadata={metadata} filters={previewFilters} />;
+      renderer = (
+        <RangeSliderRenderer metadata={metadata} filters={previewFilters} compact={grouped} />
+      );
       break;
     case 'Slider':
-      renderer = <SliderRenderer metadata={metadata} filters={previewFilters} />;
+      renderer = (
+        <SliderRenderer metadata={metadata} filters={previewFilters} compact={grouped} />
+      );
       break;
     case 'DateRangePicker':
     case 'DatePicker':
@@ -304,7 +311,10 @@ const InteractiveBuilder: React.FC = () => {
   useEffect(() => {
     patchConfig({
       icon_name: config.icon_name ?? 'bx:slider-alt',
-      color: config.color ?? '',
+      // An existing component may carry its colour under `icon_color` or
+      // `custom_color` (YAML-authored); the renderers read those too, so the
+      // field has to show what the dashboard draws.
+      color: config.color || interactiveAccentRaw(config as StoredMetadata) || '',
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -313,6 +323,10 @@ const InteractiveBuilder: React.FC = () => {
   const supportsTop = TOP_PLACEMENT_VARIANTS.includes(selected ?? '');
   const supportsMarks = MARKS_VARIANTS.includes(selected ?? '');
   const supportsHistogram = HISTOGRAM_VARIANTS.includes(selected ?? '');
+  const supportsMarkLabels = MARK_LABEL_VARIANTS.includes(selected ?? '');
+  // What the renderer does with `show_marks` unset: ticks for a control on its
+  // own, none inside a group's compact card.
+  const ticksShown = config.show_marks ?? !config.group?.trim();
 
   // Switching an existing top-placed Timeline to another variant would leave
   // `placement: 'top'` on a type the model rejects, so drop it here as well as
@@ -502,9 +516,19 @@ const InteractiveBuilder: React.FC = () => {
           {supportsMarks && (
             <SwitchField
               label="Show tick marks"
-              description="Leave off inside a group for a denser panel"
-              checked={config.show_marks === true}
+              description="On by default; off by default inside a group for a denser panel"
+              checked={ticksShown}
               onChange={(checked) => patchConfig({ show_marks: checked })}
+            />
+          )}
+
+          {supportsMarkLabels && (
+            <SwitchField
+              label="Show tick labels"
+              description="The values written under the ticks. Off keeps the ticks alone."
+              checked={ticksShown && config.show_mark_labels !== false}
+              disabled={!ticksShown}
+              onChange={(checked) => patchConfig({ show_mark_labels: checked })}
             />
           )}
 

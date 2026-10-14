@@ -97,8 +97,8 @@ threshold, the Undetermined share against its limit) and the general statistics,
 read counts, per-read quality and adapter content with the fastp insert sizes. Collapsed: the
 Falco status checks and the remaining Falco and fastp panels. The bcl2fastq panels, fastp
 Filtered Reads and fastp Sequence Quality are not placed: the other tabs read the same numbers
-from the reports themselves. Filters: a library or FASTQ file as MultiQC names it, and the
-reads of a library as a share of an even split.
+from the reports themselves. Filter: the reads of a library as a share of an even split; the pinned sample filters
+narrow the panels by library.
 
 **Run health.** The demultiplexer's lane and read statistics and the per-cycle quality of the
 fastp reports. Strip: clusters passing filter (then those assigned to a library), the lowest

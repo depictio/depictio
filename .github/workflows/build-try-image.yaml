@@ -53,6 +53,15 @@ jobs:
             version=$(curl -sf https://pypi.org/pypi/depictio/json \
               | python3 -c 'import json, sys; print(json.loads(sys.stdin.read(), strict=False)["info"]["version"])')
           fi
+          # A release reaches PyPI's simple index (what uv reads) a little after the
+          # upload: wait for it rather than fail the build.
+          for i in $(seq 1 30); do
+            curl -sf -H 'Accept: application/vnd.pypi.simple.v1+json' https://pypi.org/simple/depictio/ \
+              | python3 -c 'import json, sys; sys.exit(sys.argv[1] not in json.loads(sys.stdin.read(), strict=False)["versions"])' "$version" \
+              && break
+            echo "depictio $version is not on PyPI's index yet"
+            sleep 30
+          done
           echo "Building depictio $version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
@@ -86,6 +95,9 @@ jobs:
         run: |
           docker run -d --name try "$IMAGE:$TAG" sleep infinity
           docker exec try test -f /home/vscode/.depictio/local/env/.depictio-specs.json
+          # Polars falls back to its default runtime once the compat one is removed.
+          docker exec try /home/vscode/.local/share/uv/tools/depictio/bin/python -c \
+            'import polars as pl; assert pl.DataFrame({"a": [1, 2]})["a"].sum() == 3; print("polars", pl.__version__)'
           docker exec try depictio local up --no-open --port 8058
           docker exec try curl -sf -o /dev/null http://127.0.0.1:8058/dashboards
           docker exec try depictio local status

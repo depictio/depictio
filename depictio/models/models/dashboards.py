@@ -1431,6 +1431,7 @@ class DashboardDataLite(BaseModel):
                 "section",
                 "timescale",
                 "show_marks",
+                "show_mark_labels",
                 "show_histogram",
             ):
                 val = comp.get(field)
@@ -1965,6 +1966,7 @@ class DashboardDataLite(BaseModel):
                         "group": comp_dict.get("group"),
                         "timescale": comp_dict.get("timescale"),
                         "show_marks": comp_dict.get("show_marks"),
+                        "show_mark_labels": comp_dict.get("show_mark_labels"),
                         "show_histogram": comp_dict.get("show_histogram"),
                         # Slider comparison (gte when absent); read by
                         # deltatables_utils when the filter is applied.

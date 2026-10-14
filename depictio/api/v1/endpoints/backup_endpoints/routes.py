@@ -30,6 +30,7 @@ from depictio.api.v1.db import (
     project_storage_collection,
     projects_collection,
     runs_collection,
+    user_avatars_collection,
     users_collection,
     workflows_collection,
 )
@@ -568,6 +569,9 @@ async def _create_mongodb_backup(created_by: str, *, automatic: bool = False) ->
         # themes inherit from.
         "instance_settings": {"collection": instance_settings_collection, "exclude_filter": {}},
         "branding_assets": {"collection": branding_assets_collection, "exclude_filter": {}},
+        # Profile pictures, keyed by user id. A temporary user cannot have one,
+        # so there is nothing to exclude.
+        "user_avatars": {"collection": user_avatars_collection, "exclude_filter": {}},
         # Comment threads and annotations live apart from `dashboards`, so a
         # dashboard restore alone would bring the tiles back without them.
         "comment_threads": {"collection": comment_threads_collection, "exclude_filter": {}},
@@ -1410,6 +1414,15 @@ def _restore_dashboard_version(doc: dict) -> dict:
     return restored
 
 
+def _restore_user_avatar(doc: dict) -> dict:
+    """Re-hydrate a profile picture: its ``_id`` (the user's) and its date.
+
+    ``provider_url`` and the base64 payload are strings that must stay strings,
+    so the generic ObjectId re-hydration is not used.
+    """
+    return _with_parsed_datetimes(_restore_own_id(doc), ("updated_at",))
+
+
 def _with_parsed_datetimes(doc: dict, keys: tuple[str, ...]) -> dict:
     """``doc`` with each of ``keys`` it holds parsed back into a datetime."""
     return {**doc, **{key: _parse_backup_datetime(doc[key]) for key in keys if key in doc}}
@@ -1423,6 +1436,7 @@ _STRING_ID_RESTORERS: dict[str, Callable[[dict], dict]] = {
     "comment_threads": _restore_comment_thread,
     "dashboard_versions": _restore_dashboard_version,
     "dashboard_version_counters": _restore_own_id,
+    "user_avatars": _restore_user_avatar,
 }
 
 
@@ -1495,6 +1509,7 @@ async def restore_backup(
             "groups": groups_collection,
             "instance_settings": instance_settings_collection,
             "branding_assets": branding_assets_collection,
+            "user_avatars": user_avatars_collection,
             "comment_threads": comment_threads_collection,
             "dashboard_versions": dashboard_versions_collection,
             "dashboard_version_counters": dashboard_version_counters_collection,

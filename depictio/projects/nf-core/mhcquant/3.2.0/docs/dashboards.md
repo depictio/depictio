@@ -93,8 +93,8 @@ that reads it, then at most three open sections; tables and record cards follow,
 
 **MultiQC.** MultiQC panels only. Open: identification counts, q-value and Xcorr
 distributions, then precursor m/z, retention time and peptide intensity. Collapsed: the
-total ion chromatograms, the fragment mass error and the Percolator feature weights. Its
-own sample filter reads the MultiQC report.
+total ion chromatograms, the fragment mass error and the Percolator feature weights. The
+pinned sample filters narrow its panels.
 
 **Reproducibility.** Strip: replicates per peptide (its distribution), peptide detections
 split by replicate (a ring), the median log10 intensity (its spread) and the peptides

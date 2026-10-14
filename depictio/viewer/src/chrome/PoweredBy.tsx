@@ -21,13 +21,17 @@ import { useBrandLogoMode } from './useBrandLogoMode';
 interface PoweredByProps {
   /** When true, renders the right-border + right-padding seen in the header. */
   withRightBorder?: boolean;
+  /** Shown under depictio's own brand too: for a surface that gives its left
+   *  to something else (the Glass dashboard bar leads with the dashboard's
+   *  title and keeps only the rose there). */
+  always?: boolean;
 }
 
-const PoweredBy: React.FC<PoweredByProps> = ({ withRightBorder = false }) => {
+const PoweredBy: React.FC<PoweredByProps> = ({ withRightBorder = false, always = false }) => {
   const logoMode = useBrandLogoMode();
 
   // `'inherit'` is exactly when BrandLogo shows the depictio wordmark.
-  if (logoMode === 'inherit') return null;
+  if (logoMode === 'inherit' && !always) return null;
 
   const groupStyle: React.CSSProperties = withRightBorder
     ? {

@@ -4,13 +4,16 @@ This codespace runs the published `depictio[local]` package, without Docker.
 Its image already holds the package, MongoDB, Redis and SeaweedFS, and the Iris
 and Penguins examples. It is rebuilt for each stable release.
 
-Each time the codespace starts, it runs:
+Each time the editor connects, a terminal runs:
 
 ```bash
 depictio local up --no-open --port 8058
 ```
 
-That takes a few seconds.
+It starts the server in a few seconds, or says it is already running.
+
+To follow the creation of the codespace itself, click **View logs** on the
+loading page, or run **Codespaces: View Creation Log** from the Command Palette.
 
 ## Open the dashboards
 

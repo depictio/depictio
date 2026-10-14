@@ -473,11 +473,6 @@ tabs:
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
-  filter_sections:
-  - name: MultiQC report
-    icon: mdi:file-document-outline
-    color: orange
-    description: Samples as the MultiQC report names them
   grid_sections:
   - name: Identification yield
     icon: mdi:chart-box-outline
@@ -503,20 +498,6 @@ tabs:
     tag: mq-mqc-intro
     index: mqc-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: interactive
-    workflow_tag: mhcquant
-    data_collection_tag: multiqc_data
-    interactive_component_type: MultiSelect
-    column_name: sample
-    column_type: object
-    display:
-      icon_name: mdi:flask-outline
-      custom_color: teal
-    section: MultiQC report
-    tag: mq-mqc-filter-report-sample
-    index: mqc-report-sample-filter
-    title: Report sample
-    layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: multiqc
     workflow_tag: mhcquant
     data_collection_tag: multiqc_data

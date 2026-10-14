@@ -6,7 +6,12 @@ import { InteractiveFilter, StoredMetadata } from '../../api';
 import { useAvailableSet, useFunnelState } from '../../availableValues';
 import { orderCategoricalOptions } from './categoricalOptions';
 import { FunnelAvailabilityBadge, FunnelOptionMarker } from './funnelDecorations';
-import { INTERACTIVE_FRAME, InteractiveFrame, InteractiveTitle } from './frame';
+import {
+  INTERACTIVE_FRAME,
+  InteractiveFrame,
+  InteractiveTitle,
+  interactiveAccent,
+} from './frame';
 import { useUniqueValues } from './useInteractiveData';
 
 const MultiSelectRenderer: React.FC<{
@@ -72,6 +77,7 @@ const MultiSelectRenderer: React.FC<{
           bare
           size={compact ? 'xs' : INTERACTIVE_FRAME.controlSize}
           column_name={metadata.column_name}
+          accent={interactiveAccent(metadata)}
           options={optionItems}
           value={selected}
           placeholder={`Select ${metadata.column_name || 'values'}…`}

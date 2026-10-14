@@ -10,7 +10,7 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { useBrandAccents } from 'depictio-react-core';
+import { useListingAccents } from '../lib/useListingAccents';
 import type { CardBadge, CardsPerRow } from './hooks/useDashboardViewPrefs';
 import {
   CARD_BADGES,
@@ -53,7 +53,7 @@ const CardDisplayMenu: React.FC<CardDisplayMenuProps> = ({
   onCardsPerRowChange,
   onCardBadgesChange,
 }) => {
-  const accent = useBrandAccents();
+  const accent = useListingAccents('dashboards');
   const customised =
     cardsPerRow !== DEFAULT_CARDS_PER_ROW ||
     CARD_BADGES.some((b) => !cardBadges.includes(b));
@@ -108,7 +108,7 @@ const CardDisplayMenu: React.FC<CardDisplayMenuProps> = ({
         <Menu.Label>Show on cards</Menu.Label>
         {CARD_BADGES.map((badge) => (
           <Menu.Item key={badge} onClick={() => toggleBadge(badge)}>
-            {/* Presentational, as in ColumnPicker: the row's onClick owns the
+            {/* Presentational, as in TableDisplayMenu: the row's onClick owns the
                 toggle, and swallowing the input's own click stops the label's
                 re-dispatched click from toggling a second time. */}
             <Checkbox

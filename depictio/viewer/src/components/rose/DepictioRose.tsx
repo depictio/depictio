@@ -4,7 +4,7 @@ import React, { useEffect, useRef } from 'react';
 // and no id coupling between the markup and the CSS.
 import './depictio-rose.js';
 
-export type RoseMode = 'loading' | 'fan' | 'intro' | 'live' | 'sweep' | 'logo';
+export type RoseMode = 'loading' | 'petals' | 'fan' | 'intro' | 'live' | 'sweep' | 'logo';
 
 export interface DepictioRoseProps {
   /** loading never rests (use it for spinners); logo is the static mark. */

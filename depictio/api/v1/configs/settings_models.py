@@ -165,6 +165,33 @@ class FastAPIConfig(ServiceConfig):
         default=True,
         description="Whether the CORS layer attaches credentials (cookies / Authorization).",
     )
+    embed_enabled: bool = Field(
+        default=False,
+        description=(
+            "Enable the component export/embed API (/depictio/api/v1/export). Off by "
+            "default because serving embeds relaxes X-Frame-Options and CSP "
+            "frame-ancestors on that path, and lets anonymous callers read PUBLIC "
+            "projects even on instances that are not in public mode."
+        ),
+    )
+    embed_allowed_origins: list[str] | str = Field(
+        default_factory=list,
+        description=(
+            "Origins permitted to frame an exported component, as a comma-separated "
+            "list in DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS (e.g. "
+            "'https://lab.example.org'). Becomes the CSP frame-ancestors list. Empty "
+            "means frame-ancestors 'none' — embeds render standalone but cannot be "
+            "iframed. The wildcard '*' is rejected; list explicit origins."
+        ),
+    )
+    embed_csp_unsafe_inline: bool = Field(
+        default=False,
+        description=(
+            "Fall back to script-src 'unsafe-inline' for embed HTML instead of "
+            "per-script SHA-256 hashes. Escape hatch for when a bundled dependency "
+            "injects a script tag we cannot hash ahead of time."
+        ),
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_FASTAPI_")
 
@@ -173,11 +200,20 @@ class FastAPIConfig(ServiceConfig):
         # Pydantic-settings parses lists from env via JSON by default; accept the
         # friendlier comma-separated form so deployments can set
         # DEPICTIO_FASTAPI_CORS_ALLOWED_ORIGINS=https://a,https://b
-        if isinstance(self.cors_allowed_origins, str):
-            object.__setattr__(
-                self,
-                "cors_allowed_origins",
-                [o.strip() for o in self.cors_allowed_origins.split(",") if o.strip()],
+        for field in ("cors_allowed_origins", "embed_allowed_origins"):
+            value = getattr(self, field)
+            if isinstance(value, str):
+                object.__setattr__(
+                    self,
+                    field,
+                    [o.strip() for o in value.split(",") if o.strip()],
+                )
+        # A wildcard frame-ancestors would let any site frame a public dashboard's
+        # component; that is a decision to make per-origin, never implicitly.
+        if "*" in self.embed_allowed_origins:
+            raise ValueError(
+                "DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS contains '*'. Frame-ancestors "
+                "must list explicit origins (e.g. https://lab.example.org)."
             )
         return self
 
@@ -266,6 +302,11 @@ class MongoDBConfig(ServiceConfig):
         # than one that kept neither.
         instance_settings_collection: str = Field(default="instance_settings")
         branding_assets_collection: str = Field(default="branding_assets")
+        # Profile pictures: one document per user, keyed by the user's own id.
+        # Apart from `users` so the picture bytes never ride along on a user
+        # read (every auth check loads that document), and so a user delete or
+        # a backup reaches them by name like the branding assets.
+        user_avatars_collection: str = Field(default="user_avatars")
         # Holds the anonymous installation identity and the per-day send guards.
         # Deliberately its own collection: the wipe path in lifespan.py clears
         # everything except the init lock out of `initialization`, so an identity
@@ -1326,6 +1367,26 @@ class DashboardVersionsConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_DASHBOARD_VERSIONS_")
 
 
+class CommentsConfig(BaseSettings):
+    """Who may use the comment threads of a dashboard.
+
+    Threads are internal to a project's editors and owners by default: the
+    discussion can name people and unreleased results. A showcase instance
+    wants the opposite: reviewers who can open a dashboard should be able to
+    comment on it without being able to edit it.
+    """
+
+    viewers_can_comment: bool = Field(
+        default=False,
+        description="Let anyone with viewer access to a project read and write its comment "
+        "threads. They still cannot resolve or reopen a thread, edit or publish an "
+        "annotation, or see an agent's proposals; those stay with editors and owners. "
+        "Anonymous visitors never comment (outside single-user mode).",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_COMMENTS_")
+
+
 class IngestionConfig(BaseSettings):
     """Server-side limits and opt-ins for the data-ingestion path.
 
@@ -1835,6 +1896,56 @@ class TelemetryConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_TELEMETRY_")
 
 
+class VersionCheckConfig(BaseSettings):
+    """Configuration for the "is a newer Depictio release out?" check.
+
+    The API asks the GitHub Releases API of ``repository`` every
+    ``interval_hours`` and tells *admins* (never other users) when a newer
+    version exists. Nothing about the installation is sent: it is a plain
+    unauthenticated GET, outbound only.
+
+    ``enabled`` is deliberately tri-state. ``None`` means the operator did not
+    say, so the check is ON and an admin may switch it off from /admin (the
+    choice lives in MongoDB). An explicit ``true``/``false`` in the environment
+    wins over the admin and locks the toggle: an operator who forbids outbound
+    calls (air-gapped, regulated) must not have that undone from a web form.
+    A default of ``True`` here would make the two cases indistinguishable.
+    """
+
+    enabled: bool | None = Field(
+        default=None,
+        description=(
+            "Force the release check on or off. Unset: on by default and admins "
+            "can toggle it at runtime. Set: the environment wins and the admin "
+            "toggle is locked."
+        ),
+    )
+    interval_hours: int = Field(
+        default=6,
+        description="Hours between checks (cluster-wide, not per worker).",
+        ge=1,
+        le=168,
+    )
+    repository: str = Field(
+        default="depictio/depictio",
+        description="GitHub repository (owner/name) whose releases are checked.",
+    )
+    timeout_seconds: float = Field(
+        default=10.0,
+        description="HTTP timeout for the GitHub request.",
+        gt=0,
+    )
+
+    # Compose always passes DEPICTIO_VERSION_CHECK_ENABLED (as "" when the
+    # operator set nothing, so the variable survives the env allowlist without
+    # inventing a value). An empty string must therefore read as "unset", for
+    # every field, not fail bool/int parsing at boot.
+    model_config = SettingsConfigDict(
+        env_prefix="DEPICTIO_VERSION_CHECK_",
+        env_ignore_empty=True,
+    )
+
+
 class GoogleAnalyticsConfig(BaseSettings):
     """Configuration for Google Analytics tracking."""
 
@@ -2162,6 +2273,7 @@ class Settings(BaseSettings):
     events: EventsConfig = Field(default_factory=EventsConfig)
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
     dashboard_versions: DashboardVersionsConfig = Field(default_factory=DashboardVersionsConfig)
+    comments: CommentsConfig = Field(default_factory=CommentsConfig)
     ingestion: IngestionConfig = Field(default_factory=IngestionConfig)
     jobs: JobsConfig = Field(default_factory=JobsConfig)
     dashboard_yaml: DashboardYAMLConfig = Field(default_factory=DashboardYAMLConfig)
@@ -2170,6 +2282,7 @@ class Settings(BaseSettings):
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
     analytics: AnalyticsConfig = Field(default_factory=AnalyticsConfig)
     telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
+    version_check: VersionCheckConfig = Field(default_factory=VersionCheckConfig)
     google_analytics: GoogleAnalyticsConfig = Field(default_factory=GoogleAnalyticsConfig)
     branding: BrandingConfig = Field(default_factory=BrandingConfig)
     feedback: FeedbackConfig = Field(default_factory=FeedbackConfig)
