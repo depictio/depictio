@@ -20,6 +20,7 @@ import {
   Textarea,
   TextInput,
   Title,
+  Tooltip,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
@@ -39,12 +40,14 @@ import type {
 
 import IngestionResultTable from './IngestionResultTable';
 import { useStepSettling } from './hooks/useStepSettling';
-import { DisabledReason, GatedButton } from '../components/settings/SettingsSections';
+import { KIND_ACCENT, kindBadgeProps, PROJECT_KINDS } from './projectTypes';
+import type { ProjectKind } from './projectTypes';
+import { DisabledReason } from '../components/settings/SettingsSections';
 import { RunFolderTab } from './fromRun';
 import type { RunCreatedContext } from './fromRun';
 
 type Tab = 'create' | 'import' | 'manifest' | 'run';
-type ProjectType = 'basic' | 'advanced';
+type ProjectType = ProjectKind;
 
 /** A required template variable with a declared default is filled in
  *  server-side, so only the ones without a default must be typed here. */
@@ -75,6 +78,9 @@ interface CreateProjectModalProps {
   /** Why the run tab may not take a private bucket's connection details
    *  (public mode, non-admin); null when it may. */
   privateBucketDisabledReason?: string | null;
+  /** Why the Project Builder may not be opened (project creation disabled
+   *  for this user); null when it may. */
+  builderDisabledReason?: string | null;
 }
 
 const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
@@ -88,6 +94,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   localDataRootsEnabled = false,
   remoteBrowseEnabled = false,
   privateBucketDisabledReason = null,
+  builderDisabledReason = null,
 }) => {
   const accent = useListingAccents('projects');
   const [tab, setTab] = useState<Tab>('create');
@@ -164,9 +171,15 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     [templates],
   );
 
-  // Step-1 card click also auto-advances (matches Dash UX).
+  // Step-1 card click also auto-advances (matches Dash UX). The advanced
+  // card is the run-folder tab: one door for a folder of results, which
+  // recognises the pipeline first and hands over to the Project Builder only
+  // when the reader asks for it.
   const handleSelectType = (type: ProjectType) => {
-    if (type === 'advanced') return; // disabled card
+    if (type === 'advanced') {
+      if (!builderDisabledReason) setTab('run');
+      return;
+    }
     setProjectType(type);
     setActiveStep(1);
   };
@@ -401,22 +414,15 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                       <ProjectTypeCard
                         active={projectType === 'basic'}
                         type="basic"
-                        title="Basic Project"
-                        description="Perfect for simple data visualization and exploration. No workflows required: upload data collections directly through the UI. Best for individual datasets and quick analysis."
-                        icon="mdi:view-dashboard-outline"
-                        tag="UI Creation Only"
-                        tagColor="cyan"
                         onClick={() => handleSelectType('basic')}
                       />
                       <ProjectTypeCard
                         active={false}
                         type="advanced"
-                        title="Advanced Project"
-                        description="Designed for complex bioinformatics runs, processing workflows, and data ingestion pipelines. Requires depictio-CLI for project design and workflow management. Best for bioinformatics and computational analysis."
-                        icon="mdi:sitemap"
-                        tag="Depictio-CLI Only"
-                        tagColor="orange"
-                        disabled
+                        disabled={Boolean(builderDisabledReason)}
+                        disabledReason={builderDisabledReason}
+                        onClick={() => handleSelectType('advanced')}
+                        testId="create-project-builder-card"
                       />
                     </SimpleGrid>
                   </Stack>
@@ -896,7 +902,6 @@ export const ManifestCreatedModal: React.FC<{
   const accent = useListingAccents('projects');
   const dashboardId =
     report?.dashboards.find((d) => d.success && d.dashboard_id)?.dashboard_id ?? null;
-  const openDashboardReason = dashboardId ? null : 'No dashboard was imported for this project.';
 
   return (
     <Modal
@@ -930,21 +935,35 @@ export const ManifestCreatedModal: React.FC<{
           <Stack gap={6} align="flex-end">
             <Group justify="flex-end" gap="xs">
               <Button variant="default" onClick={onClose} data-testid="manifest-created-stay">
-                Stay on projects
+                Close
               </Button>
-              <GatedButton
-                color={accent.secondary}
-                leftSection={<Icon icon="mdi:view-dashboard-outline" width={16} />}
-                reason={openDashboardReason}
-                onClick={() => {
-                  if (dashboardId) window.location.assign(`/dashboard/${dashboardId}`);
-                }}
-                data-testid="manifest-created-open-dashboard"
-              >
-                Open dashboard
-              </GatedButton>
+              {dashboardId ? (
+                <Button
+                  color={accent.secondary}
+                  leftSection={<Icon icon="mdi:view-dashboard-outline" width={16} />}
+                  onClick={() => window.location.assign(`/dashboard/${dashboardId}`)}
+                  data-testid="manifest-created-open-dashboard"
+                >
+                  Open dashboard
+                </Button>
+              ) : (
+                report.project_id && (
+                  <Button
+                    color={accent.secondary}
+                    leftSection={<Icon icon="mdi:folder-open-outline" width={16} />}
+                    onClick={() => window.location.assign(`/projects/${report.project_id}`)}
+                    data-testid="manifest-created-open-project"
+                  >
+                    Open the project
+                  </Button>
+                )
+              )}
             </Group>
-            <DisabledReason reason={openDashboardReason} />
+            {!dashboardId && (
+              <Text size="xs" c="dimmed" ta="right">
+                No dashboard was imported: the project page lists its collections and ingestion.
+              </Text>
+            )}
           </Stack>
         </Stack>
       )}
@@ -955,42 +974,46 @@ export const ManifestCreatedModal: React.FC<{
 interface ProjectTypeCardProps {
   active: boolean;
   type: ProjectType;
-  title: string;
-  description: string;
-  icon: string;
-  tag: string;
-  tagColor: string;
   disabled?: boolean;
+  /** Shown on hover of a disabled card. */
+  disabledReason?: string | null;
   onClick?: () => void;
+  testId?: string;
 }
 
 const ProjectTypeCard: React.FC<ProjectTypeCardProps> = ({
   active,
   type,
-  title,
-  description,
-  icon,
-  tag,
-  tagColor,
   disabled,
+  disabledReason = null,
   onClick,
+  testId,
 }) => {
-  // Project-type taxonomy, not a brand role — basic and advanced have to stay
-  // told apart, so these keep their own hues.
+  const { title, summary, facts, icon, tag } = PROJECT_KINDS[type];
+  // Both kinds stay in the teal family (a lighter and a deeper shade); the glass
+  // look takes the primary colour and a neutral gray instead.
   const glass = useGlassPages();
   const typeAccent = glass
     ? type === 'basic'
       ? 'var(--mantine-primary-color-filled)'
       : 'var(--mantine-color-gray-6)'
-    : type === 'basic'
-      ? 'var(--mantine-color-teal-6)'
-      : 'var(--mantine-color-orange-6)';
-  return (
+    : KIND_ACCENT[type];
+  const card = (
     <Paper
       withBorder
       radius="md"
       p="lg"
       onClick={disabled ? undefined : onClick}
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled || undefined}
+      onKeyDown={(e) => {
+        if (!disabled && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          onClick?.();
+        }
+      }}
+      data-testid={testId}
       style={{
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.55 : 1,
@@ -999,19 +1022,45 @@ const ProjectTypeCard: React.FC<ProjectTypeCardProps> = ({
         transition: 'border-color 120ms ease',
       }}
     >
-      <Stack gap="sm" align="center">
+      <Stack gap="sm" align="center" h="100%">
         <Icon icon={icon} width={42} height={42} color={typeAccent} />
         <Title order={4} ta="center">
           {title}
         </Title>
-        <Text size="xs" c="dimmed" ta="center" lh={1.4}>
-          {description}
+        <Text size="sm" ta="center" lh={1.4}>
+          {summary}
         </Text>
-        <Badge color={glass ? 'gray' : tagColor} variant="light" radius="sm">
+        <Stack gap={8} w="100%" mt={4} data-testid={`project-type-facts-${type}`}>
+          {facts.map((fact) => (
+            <Group key={fact.label} gap="xs" wrap="nowrap" align="flex-start">
+              <Icon icon={fact.icon} width={16} style={{ flexShrink: 0, marginTop: 2 }} color={typeAccent} />
+              <Text size="xs" lh={1.35}>
+                <Text span fw={600} inherit>
+                  {fact.label}:
+                </Text>{' '}
+                <Text span c="dimmed" inherit>
+                  {fact.value}
+                </Text>
+              </Text>
+            </Group>
+          ))}
+        </Stack>
+        <Badge
+          {...(glass ? { color: 'gray', variant: 'light' } : kindBadgeProps(type))}
+          radius="sm"
+          mt="auto"
+        >
           {tag}
         </Badge>
       </Stack>
     </Paper>
+  );
+  return disabled && disabledReason ? (
+    <Tooltip label={disabledReason} withArrow multiline maw={280} zIndex={Z_LAYERS.tooltip}>
+      {card}
+    </Tooltip>
+  ) : (
+    card
   );
 };
 

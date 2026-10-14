@@ -1,5 +1,13 @@
 /**
- * The template choice of the run tab, in two fields:
+ * The template choice of the run tab, in a block of its own. A template says
+ * how Depictio reads a folder: which pipeline made it and which version of the
+ * template for that pipeline to use. Two ways to give it:
+ *
+ *  - "Detect from the folder" (the default): nothing to choose, the block says
+ *    what was recognised.
+ *  - "Choose myself": two fields.
+ *
+ * The two fields:
  *
  *  - Pipeline: one entry per pipeline, grouped by source, with the source's
  *    mark. Empty means "let Depictio recognise it from the folder".
@@ -12,10 +20,23 @@
  * Detection fills both and marks each "Detected" until the reader changes it.
  */
 import React, { useMemo } from 'react';
-import { Combobox, Group, Input, InputBase, Select, Stack, Text, useCombobox } from '@mantine/core';
+import {
+  Button,
+  Combobox,
+  Group,
+  Input,
+  InputBase,
+  Paper,
+  SegmentedControl,
+  Select,
+  Stack,
+  Text,
+  ThemeIcon,
+  useCombobox,
+} from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { compareVersions, formatVersion, sameVersion, Z_LAYERS } from 'depictio-react-core';
+import { compareVersions, formatVersion, sameVersion, useBrandAccents, Z_LAYERS } from 'depictio-react-core';
 import type { RunPipeline, RunPipelineGroup, RunTemplateVersion } from 'depictio-react-core';
 
 import { TemplateSourceLogo } from '../template';
@@ -23,7 +44,7 @@ import { FlowBadge } from './FlowBadge';
 import { plural } from './plural';
 
 const VERSION_DESCRIPTION =
-  "The pipeline version the Depictio template was written for. The run's own version is shown above.";
+  "Which version of Depictio's template for this pipeline to read the run with. The run's own version is shown above.";
 
 interface TemplatePickerProps {
   groups: RunPipelineGroup[];
@@ -35,6 +56,10 @@ interface TemplatePickerProps {
   closestTemplateId?: string | null;
   pipelineDetected: boolean;
   versionDetected: boolean;
+  /** The reader switched to choosing; detection never switches it back. Held by
+   *  the parent so it survives a step change (the stepper unmounts the step). */
+  forced: boolean;
+  onForcedChange: (forced: boolean) => void;
   onPipelineChange: (key: string | null) => void;
   onVersionChange: (templateId: string) => void;
   error?: string | null;
@@ -153,8 +178,7 @@ const VersionField: React.FC<VersionFieldProps> = ({
     return (
       <Input.Wrapper label={label} description={VERSION_DESCRIPTION}>
         <Text size="sm" c="dimmed" mt={6} data-testid="run-version-empty">
-          Pick a pipeline first, or leave both empty and Depictio picks the template that
-          matches the folder.
+          Pick a pipeline first.
         </Text>
       </Input.Wrapper>
     );
@@ -247,10 +271,13 @@ export const TemplatePicker: React.FC<TemplatePickerProps> = ({
   closestTemplateId = null,
   pipelineDetected,
   versionDetected,
+  forced,
+  onForcedChange,
   onPipelineChange,
   onVersionChange,
   error,
 }) => {
+  const accent = useBrandAccents();
   const byKey = useMemo(() => {
     const map = new Map<string, RunPipeline>();
     for (const group of groups) for (const p of group.pipelines) map.set(p.key, p);
@@ -266,16 +293,15 @@ export const TemplatePicker: React.FC<TemplatePickerProps> = ({
     [groups],
   );
 
-  return (
+  const fields = (
     <Stack gap="md">
       <Select
         label={<FieldLabel text="Pipeline" detected={pipelineDetected} testId="run-pipeline-detected" />}
-        description="The pipeline that made the run. Leave it empty and Depictio recognises it from the folder."
-        placeholder="Detect from the folder"
+        description="The software that produced the run, for example nf-core/rnaseq."
+        placeholder="Pick a pipeline"
         data={data}
         value={pipeline?.key ?? null}
         onChange={onPipelineChange}
-        clearable
         searchable
         nothingFoundMessage="No pipeline matches"
         maxDropdownHeight={320}
@@ -316,5 +342,118 @@ export const TemplatePicker: React.FC<TemplatePickerProps> = ({
         onVersionChange={onVersionChange}
       />
     </Stack>
+  );
+
+  const detectedVersion = pipeline?.versions.find((v) => v.templateId === templateId) ?? null;
+  const manual = forced || Boolean(pipeline && !pipelineDetected);
+
+  return (
+    <Paper withBorder radius="md" p="md" data-testid="run-template-block" data-mode={manual ? 'manual' : 'auto'}>
+      <Stack gap="sm">
+        <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm">
+          <Group gap="sm" wrap="nowrap" align="flex-start" style={{ flex: 1, minWidth: 220 }}>
+            <ThemeIcon variant="light" color={accent.secondary} size="lg" radius="md">
+              <Icon icon="mdi:file-document-multiple-outline" width={20} />
+            </ThemeIcon>
+            <div>
+              <Text fw={600}>Template</Text>
+              <Text size="xs" c="dimmed">
+                How Depictio reads this folder: the pipeline that made it, and the version of Depictio&apos;s
+                template for that pipeline.
+              </Text>
+            </div>
+          </Group>
+          <SegmentedControl
+            size="xs"
+            color={accent.secondary}
+            value={manual ? 'manual' : 'auto'}
+            data={[
+              {
+                value: 'auto',
+                label: (
+                  <Group gap={6} wrap="nowrap" justify="center">
+                    <Icon icon="mdi:auto-fix" width={14} />
+                    <span>Detect from the folder</span>
+                  </Group>
+                ),
+              },
+              {
+                value: 'manual',
+                label: (
+                  <Group gap={6} wrap="nowrap" justify="center">
+                    <Icon icon="mdi:format-list-bulleted" width={14} />
+                    <span>Choose myself</span>
+                  </Group>
+                ),
+              },
+            ]}
+            onChange={(value) => {
+              if (value === 'auto') {
+                onForcedChange(false);
+                onPipelineChange(null);
+              } else {
+                onForcedChange(true);
+              }
+            }}
+            data-testid="run-template-mode"
+          />
+        </Group>
+
+        {manual && fields}
+        {!manual && pipeline && (
+          <Group gap="sm" wrap="nowrap" align="flex-start" data-testid="run-template-detected">
+            <TemplateSourceLogo source={pipeline.source} size={28} />
+            <Stack gap={4} style={{ minWidth: 0 }}>
+              <Group gap={6} wrap="wrap">
+                <Text fw={600}>{pipeline.title}</Text>
+                {pipelineDetected && (
+                  <FlowBadge
+                    status="detected"
+                    tooltip="Filled in from what Depictio read in the folder."
+                    testId="run-pipeline-detected"
+                  />
+                )}
+              </Group>
+              {detectedVersion && (
+                <Group gap={6} wrap="wrap" align="center">
+                  <Text size="xs" c="dimmed">
+                    Template version
+                  </Text>
+                  <VersionLine
+                    version={detectedVersion}
+                    runVersion={runVersion}
+                    closestTemplateId={closestTemplateId}
+                  />
+                  {versionDetected && (
+                    <FlowBadge
+                      status="detected"
+                      tooltip="Filled in from what Depictio read in the folder."
+                      testId="run-version-detected"
+                    />
+                  )}
+                </Group>
+              )}
+              {error && (
+                <Text size="xs" c="red">
+                  {error}
+                </Text>
+              )}
+            </Stack>
+          </Group>
+        )}
+        {!manual && !pipeline && (
+          <Group gap="sm" wrap="nowrap" align="center" data-testid="run-template-none">
+            <Icon icon="mdi:help-circle-outline" width={20} style={{ flexShrink: 0 }} />
+            <Text size="sm" c="dimmed" style={{ flex: 1 }}>
+              No template recognised for this folder. Choose one yourself, or build the data collections in the
+              Project Builder.
+            </Text>
+            <Button size="xs" variant="light" color={accent.secondary} onClick={() => onForcedChange(true)}>
+              Choose myself
+            </Button>
+          </Group>
+        )}
+      </Stack>
+    </Paper>
   );
 };

@@ -32,6 +32,7 @@ import {
   formatRelative,
   timestampSortKey,
 } from '../../lib/datetime';
+import { kindBadgeProps } from '../projectTypes';
 
 export interface ProjectTableViewProps {
   projects: ProjectListEntry[];
@@ -418,8 +419,7 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
         }
         return (
           <Badge
-            color={r.isAdvanced ? 'orange' : 'cyan'}
-            variant="light"
+            {...kindBadgeProps(r.isAdvanced ? 'advanced' : 'basic')}
             size="sm"
             // Mantine clamps the INNER `.mantine-Badge-label` with
             // overflow:hidden + text-overflow:ellipsis, so styling the root

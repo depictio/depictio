@@ -2,9 +2,11 @@ import collections
 import hashlib
 import os
 import re
+from collections.abc import Iterable
 from functools import lru_cache
 from typing import Any, DefaultDict, NamedTuple
 
+from depictio.cli.cli.utils.scan_walk import ScanBounds, ScannedPath
 from depictio.cli.cli_logging import logger
 from depictio.models.models.data_collections import Regex
 from depictio.models.models.files import File
@@ -99,6 +101,30 @@ def file_matches_data_collection(file_location: str, run_location: str, full_reg
     if "/" not in full_regex:
         return False
     return regex_match(os.path.relpath(file_location, run_location), full_regex)[0]
+
+
+def select_run_files(
+    scanned: Iterable[ScannedPath],
+    run_location: str,
+    full_regex: str,
+    bounds: ScanBounds | None = None,
+) -> list[ScannedPath]:
+    """The walked files of one run that a data collection scans, in walk order.
+
+    The single selection rule: the data collection's own bounds first (the walk
+    is shared across collections, so it is only pruned to what they all
+    exclude), then :func:`file_matches_data_collection` on the walked path.
+    The scan uses it, and so does every preview of a scan
+    (``LocalDataRoot.match``), so the two cannot drift apart.
+    """
+    if bounds is not None and bounds.is_unbounded:
+        bounds = None
+    return [
+        entry
+        for entry in scanned
+        if (bounds is None or bounds.allows(entry))
+        and file_matches_data_collection(entry.walk_path, run_location, full_regex)
+    ]
 
 
 def wildcard_values(

@@ -28,6 +28,7 @@ import {
   setProjectStorage,
   testProjectStorage,
   Z_LAYERS,
+  useBrandAccents,
 } from 'depictio-react-core';
 import type { ProjectStorageConfig, ProjectStorageTestResult } from 'depictio-react-core';
 
@@ -182,6 +183,7 @@ const StorageForm: React.FC<{
   onSaved: (config: ProjectStorageConfig) => void;
   onCancel: () => void;
 }> = ({ projectId, existing, onSaved, onCancel }) => {
+  const accent = useBrandAccents();
   const [endpointUrl, setEndpointUrl] = useState(existing?.endpoint_url ?? '');
   const [bucket, setBucket] = useState(existing?.bucket ?? '');
   const [region, setRegion] = useState(existing?.region ?? 'us-east-1');
@@ -359,6 +361,7 @@ const StorageForm: React.FC<{
           Cancel
         </Button>
         <Button
+          color={accent.secondary}
           size="xs"
           data-testid="storage-save-button"
           leftSection={<Icon icon="mdi:content-save-outline" width={14} />}
@@ -379,6 +382,7 @@ const StorageForm: React.FC<{
  * displays or re-populates it.
  */
 const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => {
+  const accent = useBrandAccents();
   const [config, setConfig] = useState<ProjectStorageConfig | null>(null);
   // Nothing to load for non-owners (see the effect below), so don't flash the
   // loading row at them.
@@ -543,6 +547,7 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
         <Stack gap={6}>
           <Group gap="xs">
             <GatedButton
+              color={accent.secondary}
               size="xs"
               variant="light"
               data-testid="storage-test-button"
@@ -554,6 +559,7 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
               Test connection
             </GatedButton>
             <GatedButton
+              color={accent.secondary}
               size="xs"
               variant="light"
               data-testid="storage-edit-button"
@@ -639,6 +645,7 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
         <Stack gap={6}>
           <Group>
             <GatedButton
+              color={accent.secondary}
               size="xs"
               data-testid="storage-configure-button"
               leftSection={<Icon icon="mdi:plus" width={14} />}

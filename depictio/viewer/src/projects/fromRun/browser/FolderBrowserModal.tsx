@@ -39,10 +39,12 @@ import { Icon } from '@iconify/react';
 import {
   folderSource,
   isPrivateBucketRefusal,
+  parentFolder,
   s3BucketOf,
   shortenFolder,
   storageForLocation,
   Z_LAYERS,
+  useBrandAccents,
 } from 'depictio-react-core';
 import type {
   FolderInspection,
@@ -126,6 +128,8 @@ interface FolderBrowserModalProps {
   onCredentialsNeeded?: (location: string) => void;
   /** For the names of the templates recognised in folders. */
   templates: TemplateInfo[];
+  /** The modal's title; the builder's folder is not always a run. */
+  title?: string;
 }
 
 const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
@@ -140,7 +144,9 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
   credentialsForm,
   onCredentialsNeeded,
   templates,
+  title = 'Choose the run folder',
 }) => {
+  const accent = useBrandAccents();
   const folderTree = useFolderTree({ opened, localEnabled, s3Enabled, privateBucket });
   const s3Shown = s3Enabled || Boolean(privateBucket);
   const tree = useTree({ initialExpandedState: GROUPS_EXPANDED });
@@ -156,6 +162,8 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
   /** Run markers read by the detail pane, by location. */
   const [inspected, setInspected] = useState<Record<string, boolean>>({});
   const treeRef = useRef<HTMLUListElement>(null);
+  /** The folders visited, as an explorer keeps them: back and forward walk it. */
+  const [history, setHistory] = useState<{ stack: string[]; index: number }>({ stack: [], index: -1 });
   /** Bumped by every new selection, revealed or clicked: a reveal answering
    *  after a newer one is dropped, so the latest selection wins. */
   const selectionRun = useRef(0);
@@ -167,11 +175,19 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
   /** The dialog fills the window; remembered while it stays mounted. */
   const [expanded, setExpanded] = useState(false);
 
+  /** `record` false when the move comes from the history itself. */
   const selectFolder = useCallback(
-    (path: string) => {
+    (path: string, record = true) => {
       tree.select(path);
       setPathInput(path);
       setPathError(null);
+      if (record) {
+        setHistory((h) => {
+          if (h.stack[h.index] === path) return h;
+          const stack = [...h.stack.slice(0, h.index + 1), path];
+          return { stack, index: stack.length - 1 };
+        });
+      }
     },
     [tree],
   );
@@ -191,7 +207,7 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
   );
 
   const goTo = useCallback(
-    async (location: string, quiet = false) => {
+    async (location: string, quiet = false, record = true) => {
       selectionRun.current += 1;
       const run = selectionRun.current;
       setRevealing(true);
@@ -215,7 +231,7 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
         for (const key of result.expand) next[key] = true;
         return next;
       });
-      selectFolder(result.path);
+      selectFolder(result.path, record);
       setRevealTarget(result.path);
     },
     [folderTree, tree, selectFolder, credentialsForm, onCredentialsNeeded],
@@ -234,6 +250,7 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
     setRevealTarget(null);
     setCredentialsFor(null);
     setInspected({});
+    setHistory({ stack: [], index: -1 });
     setRecent(readRecentRunFolders());
     const start = (initialLocation ?? '').trim();
     if (start) {
@@ -297,6 +314,17 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
   const selectedInspected = selected ? selected in inspected : false;
   const selectReason = selected ? null : 'Select a folder first.';
 
+  const canBack = history.index > 0;
+  const canForward = history.index >= 0 && history.index < history.stack.length - 1;
+  const up = selected ? parentFolder(selected) : null;
+  const canUp = Boolean(up && folderTree.nodes[up]);
+  const walk = (index: number) => {
+    const target = history.stack[index];
+    if (!target) return;
+    setHistory((h) => ({ ...h, index }));
+    void goTo(target, true, false);
+  };
+
   const confirm = () => {
     if (!selected) return;
     setRecent(rememberRunFolder(selected));
@@ -347,7 +375,7 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
         <Group gap="xs" wrap="nowrap" justify="space-between">
           <Group gap="xs" wrap="nowrap">
             <Icon icon="mdi:folder-open-outline" width={20} />
-            <Text fw={600}>Choose the run folder</Text>
+            <Text fw={600}>{title}</Text>
           </Group>
           <Tooltip label={expanded ? 'Restore the size' : 'Fill the window'} withArrow zIndex={Z_LAYERS.tooltip}>
             <ActionIcon
@@ -364,10 +392,28 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
         </Group>
       }
     >
-      <Stack gap="sm" data-testid="browse-modal">
+      <Stack
+        gap="sm"
+        data-testid="browse-modal"
+        onKeyDown={(event) => {
+          // As in a file explorer: Alt+Left goes back, Alt+Right forward.
+          if (!event.altKey) return;
+          // Option+Arrow moves by word in a text field: leave it to the field.
+          const tag = (event.target as HTMLElement).tagName;
+          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          if (event.key === 'ArrowLeft' && canBack) {
+            event.preventDefault();
+            walk(history.index - 1);
+          } else if (event.key === 'ArrowRight' && canForward) {
+            event.preventDefault();
+            walk(history.index + 1);
+          }
+        }}
+      >
         <Text size="sm" c="dimmed">
-          Pick the output folder of one pipeline run. Folders marked &ldquo;Run folder&rdquo;
-          hold the run&rsquo;s own records.
+          Click a folder to select it: the selected folder is highlighted, shown on the right and
+          confirmed at the bottom. Browse freely, then use Back to return to an earlier one. Folders
+          marked &ldquo;Run folder&rdquo; hold the run&rsquo;s own records.
         </Text>
 
         <PathBar
@@ -419,6 +465,50 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
           </Grid.Col>
           <Grid.Col span={{ base: 12, md: 8 }}>
             <Paper withBorder radius="md" p="md">
+              <Group
+                gap={4}
+                pb="xs"
+                mb="xs"
+                data-testid="browse-navigation"
+                style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}
+              >
+                <Tooltip label="Back to the previous folder" withArrow zIndex={Z_LAYERS.tooltip}>
+                  <ActionIcon
+                    variant="default"
+                    size="md"
+                    disabled={!canBack}
+                    onClick={() => walk(history.index - 1)}
+                    aria-label="Back to the previous folder"
+                    data-testid="browse-back"
+                  >
+                    <Icon icon="mdi:arrow-left" width={18} />
+                  </ActionIcon>
+                </Tooltip>
+                <Tooltip label="Forward" withArrow zIndex={Z_LAYERS.tooltip}>
+                  <ActionIcon
+                    variant="default"
+                    size="md"
+                    disabled={!canForward}
+                    onClick={() => walk(history.index + 1)}
+                    aria-label="Forward"
+                    data-testid="browse-forward"
+                  >
+                    <Icon icon="mdi:arrow-right" width={18} />
+                  </ActionIcon>
+                </Tooltip>
+                <Tooltip label="Up one folder" withArrow zIndex={Z_LAYERS.tooltip}>
+                  <ActionIcon
+                    variant="default"
+                    size="md"
+                    disabled={!canUp}
+                    onClick={() => up && pickFolder(up)}
+                    aria-label="Up one folder"
+                    data-testid="browse-up"
+                  >
+                    <Icon icon="mdi:arrow-up" width={18} />
+                  </ActionIcon>
+                </Tooltip>
+              </Group>
               <ScrollArea h={paneHeight.detail} type="auto" offsetScrollbars>
                 <FolderDetailPane
                   location={selected}
@@ -443,13 +533,31 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
                 </Text>
               </Group>
             )}
-            <DisabledReason reason={selectReason} icon="mdi:information-outline" />
+            {selected ? (
+              <Group gap={6} wrap="nowrap" data-testid="browse-selected">
+                <Icon
+                  icon="mdi:check-circle"
+                  width={16}
+                  color={`var(--mantine-color-${accent.secondary}-6)`}
+                  style={{ flexShrink: 0 }}
+                />
+                <Text size="sm" fw={600} style={{ flexShrink: 0 }}>
+                  Selected:
+                </Text>
+                <Text size="sm" ff="monospace" truncate title={selected}>
+                  {shortenFolder(selected, { maxLength: 70 })}
+                </Text>
+              </Group>
+            ) : (
+              <DisabledReason reason={selectReason} icon="mdi:information-outline" />
+            )}
           </Stack>
           <Group gap="xs" wrap="nowrap">
             <Button variant="default" onClick={onClose} data-testid="browse-cancel">
               Cancel
             </Button>
             <GatedButton
+              color={accent.secondary}
               leftSection={<Icon icon="mdi:folder-check-outline" width={16} />}
               reason={selectReason}
               onClick={confirm}

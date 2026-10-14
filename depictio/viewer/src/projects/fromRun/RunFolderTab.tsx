@@ -14,7 +14,7 @@
  * `privateBucket.ts`.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Box, Button, Group, Stack, Stepper, TextInput } from '@mantine/core';
+import { Alert, Box, Button, Group, Paper, Stack, Stepper, Text, TextInput } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import {
@@ -35,6 +35,7 @@ import {
   s3BucketOf,
   storageForLocation,
   useBrandAccents,
+  writeBuilderHandoff,
 } from 'depictio-react-core';
 import type {
   FromRunReport,
@@ -44,6 +45,7 @@ import type {
 } from 'depictio-react-core';
 
 import { DisabledReason, GatedButton } from '../../components/settings/SettingsSections';
+import { PROJECT_BUILDER_ROUTE } from '../builder/mode';
 import { useStepSettling } from '../hooks/useStepSettling';
 import FolderBrowserModal from './browser/FolderBrowserModal';
 import { DetectionCard } from './DetectionCard';
@@ -59,9 +61,12 @@ import type { OpenPrivateBucketOptions, PrivateBucketState } from './privateBuck
 import { PrivateBucketSection } from './PrivateBucketSection';
 import { rememberRunFolder } from './recentFolders';
 import type { RunCreatedContext } from './RunCreatedModal';
+import { NextStepChoice } from './NextStepChoice';
+import type { NextStep } from './NextStepChoice';
 import { RunCreateStep, RunPreviewStep } from './RunFolderSteps';
 import { TemplatePicker } from './TemplatePicker';
 import { TemplateSettingsSection } from './TemplateSettings';
+import { useTemplateDraft } from './useTemplateDraft';
 
 /** Stack id of the folder browser, which opens above the create dialog. */
 const BROWSE_STACK_ID = 'run-folder-browser';
@@ -122,6 +127,10 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   const [inspectTarget, setInspectTarget] = useState('');
   const [detection, setDetection] = useState<DetectionState>({ status: 'idle' });
   const [choice, setChoice] = useState<Choice>(NO_CHOICE);
+  /** The reader chose to pick the template themselves (kept across steps). */
+  const [chooseMyself, setChooseMyself] = useState(false);
+  /** What to do with the folder once a template is known (see `NextStepChoice`). */
+  const [nextStep, setNextStep] = useState<NextStep>('use');
   const [projectName, setProjectName] = useState('');
   const [variables, setVariables] = useState<Record<string, string>>({});
   const [preview, setPreview] = useState<FromRunReport | null>(null);
@@ -152,6 +161,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     setInspectTarget('');
     setDetection({ status: 'idle' });
     setChoice(NO_CHOICE);
+    setNextStep('use');
     setProjectName('');
     setVariables({});
     setPreview(null);
@@ -383,6 +393,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   // The card shows the template that would be used: the one chosen, else the
   // one detection picked.
   const usedTemplateId = choice.templateId ?? detectedId;
+  const templateDraft = useTemplateDraft(usedTemplateId);
   const match = runTemplateMatch({
     runPipeline: detected?.pipeline,
     runVersion: detected?.version,
@@ -395,11 +406,13 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     setDataRoot(value);
     // A template detection picked belongs to the folder it was detected in.
     setChoice((prev) => (prev.from === 'detected' ? NO_CHOICE : prev));
+    setNextStep('use');
   };
 
   const handlePipelineChange = (key: string | null) => {
     if (!key) {
-      setChoice(NO_CHOICE);
+      // Back to detection: the template read from the folder, if any.
+      setChoice(detectedId ? { templateId: detectedId, from: 'detected' } : NO_CHOICE);
       return;
     }
     const picked = groups.flatMap((g) => g.pipelines).find((p) => p.key === key);
@@ -483,6 +496,39 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   const noTemplateForFolder =
     step === 0 && !choice.templateId && inspection !== null && !detectedId;
 
+  // The Project Builder takes the folder (and the private bucket's details,
+  // read once there and removed), and what the reader chose to do with it:
+  // define the collections by hand, or start from the template that fits.
+  const openBuilder = (intent: 'edit-template' | 'scratch') => {
+    if (!trimmedRoot || prefixInvalid) return;
+    const templateId = intent === 'edit-template' ? usedTemplateId : null;
+    writeBuilderHandoff({
+      dataRoot: trimmedRoot,
+      storage: rootStorage,
+      intent,
+      templateId,
+      detected: detected?.pipeline
+        ? {
+            pipeline: detected.pipeline ?? null,
+            version: detected.version ?? null,
+            engine: detected.engine ?? null,
+            templateId: usedTemplateId,
+            templateTitle: titleOf(usedTemplateId),
+          }
+        : null,
+    });
+    window.location.assign(PROJECT_BUILDER_ROUTE);
+  };
+  // No template fits: the same door, with nothing to start from.
+  const defineYourself = trimmedRoot && !prefixInvalid ? () => openBuilder('scratch') : null;
+  // The choice leaves this dialog for the builder; "use as it is" stays here.
+  // With no template the only open choice is the builder, selected for the
+  // reader: the way forward is the footer button, as with a template.
+  const scratchOnly = noTemplateForFolder && Boolean(defineYourself);
+  const shownStep: NextStep = scratchOnly ? 'scratch' : nextStep;
+  const leavesForBuilder =
+    step === 0 && (scratchOnly || (Boolean(usedTemplateId) && nextStep !== 'use'));
+
   // Disabled with a visible reason rather than hidden (project convention).
   let disabledReason: string | null = null;
   if (trimmedRoot.length === 0) {
@@ -493,7 +539,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     disabledReason = localDataRootsEnabled
       ? 'The run folder must be a folder path or an s3:// location.'
       : 'The run folder must be an s3:// location.';
-  } else if (nameUsed) {
+  } else if (nameUsed && !leavesForBuilder) {
     disabledReason = 'A project with this name already exists.';
   } else if (
     step === 0 &&
@@ -503,8 +549,20 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     storageProblem
   ) {
     disabledReason = `Private bucket: ${storageProblem}`;
-  } else if (noTemplateForFolder) {
-    disabledReason = 'No template matches this folder: pick the pipeline below.';
+  } else if (leavesForBuilder && shownStep === 'edit' && templateDraft.status === 'loading') {
+    disabledReason = 'Reading the template.';
+  } else if (
+    leavesForBuilder &&
+    shownStep === 'edit' &&
+    (templateDraft.status === 'error' ||
+      (templateDraft.status === 'ready' && !templateDraft.result.editable))
+  ) {
+    disabledReason =
+      templateDraft.status === 'error'
+        ? `The builder cannot open this template: ${templateDraft.error}`
+        : templateDraft.result.reason || 'The builder cannot express anything of this template.';
+  } else if (noTemplateForFolder && !scratchOnly) {
+    disabledReason = 'No template matches this folder: pick the pipeline above.';
   } else if (
     step === 1 &&
     (previewLoading || (!preview && !previewError && !notDetected))
@@ -528,6 +586,10 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   const handleSubmit = async () => {
     if (disabledReason || stepSettling) return;
     if (step === 0) rememberRunFolder(trimmedRoot);
+    if (leavesForBuilder) {
+      openBuilder(shownStep === 'edit' ? 'edit-template' : 'scratch');
+      return;
+    }
     if (step < 2) {
       setStep(step + 1);
       return;
@@ -629,6 +691,8 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
               errorMessage={detectionErrorMessage}
             />
 
+            {/* Which template, then what to do with it: the picker changes the
+                template the three choices below act on. */}
             <TemplatePicker
               groups={groups}
               pipeline={pipeline}
@@ -637,31 +701,59 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
               closestTemplateId={detected?.match === 'closest' ? detectedId : null}
               pipelineDetected={Boolean(pipeline && detectedPipeline && pipeline.key === detectedPipeline.key)}
               versionDetected={Boolean(choice.templateId && choice.templateId === detectedId)}
+              forced={chooseMyself}
+              onForcedChange={setChooseMyself}
               onPipelineChange={handlePipelineChange}
               onVersionChange={(templateId) => setChoice({ templateId, from: 'user' })}
               error={templatesError}
             />
 
-            <TextInput
-              label="Project Name (Optional)"
-              description="Defaults to a name derived from the template"
-              placeholder="Enter project name"
-              value={projectName}
-              onChange={(e) => {
-                setProjectName(e.currentTarget.value);
-                // A refusal of the previous name (taken already) no longer applies.
-                setError(null);
-              }}
-              leftSection={<Icon icon="mdi:folder-outline" width={16} />}
-              error={nameUsed ? 'A project with this name already exists.' : undefined}
-              data-testid="run-project-name-input"
-            />
-            {extraVariables.length > 0 && (
-              <TemplateSettingsSection
-                variables={extraVariables}
-                values={variables}
-                onChange={(name, value) => setVariables((prev) => ({ ...prev, [name]: value }))}
+            {usedTemplateId && (
+              <NextStepChoice
+                value={nextStep}
+                onChange={setNextStep}
+                templateTitle={titleOf(usedTemplateId)}
+                engine={engineOf(usedTemplateId)}
+                draft={templateDraft}
               />
+            )}
+
+            {scratchOnly && (
+              <NextStepChoice
+                value="scratch"
+                onChange={() => undefined}
+                templateTitle={null}
+                draft={{ status: 'idle' }}
+                noTemplate
+              />
+            )}
+
+            {/* Name and settings belong to creating the project here; the
+                builder asks for its own. */}
+            {!leavesForBuilder && (
+              <>
+              <TextInput
+                label="Project Name (Optional)"
+                description="Defaults to a name derived from the template"
+                placeholder="Enter project name"
+                value={projectName}
+                onChange={(e) => {
+                  setProjectName(e.currentTarget.value);
+                  // A refusal of the previous name (taken already) no longer applies.
+                  setError(null);
+                }}
+                leftSection={<Icon icon="mdi:folder-outline" width={16} />}
+                error={nameUsed ? 'A project with this name already exists.' : undefined}
+                data-testid="run-project-name-input"
+              />
+              {extraVariables.length > 0 && (
+                <TemplateSettingsSection
+                  variables={extraVariables}
+                  values={variables}
+                  onChange={(name, value) => setVariables((prev) => ({ ...prev, [name]: value }))}
+                />
+              )}
+              </>
             )}
           </Stack>
         </Stepper.Step>
@@ -672,6 +764,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
             detecting={!choice.templateId}
             notDetected={notDetected}
             onPickTemplate={() => setStep(0)}
+            onDefineYourself={defineYourself}
             error={previewError}
             onGiveBucketDetails={giveBucketDetails}
             foundNothing={foundNothing}
@@ -725,7 +818,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
             reason={disabledReason}
             data-testid="create-from-run-submit"
           >
-            {step === 2 ? 'Create Project' : 'Next'}
+            {step === 2 ? 'Create Project' : leavesForBuilder ? 'Open the Project Builder' : 'Next'}
           </GatedButton>
           <DisabledReason
             reason={disabledReason}

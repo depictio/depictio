@@ -520,7 +520,51 @@ def _run_dc_ingest(
     )
     if (process_result or {}).get("result") != "success":
         return False, f"Processing failed: {(process_result or {}).get('message', 'unknown error')}"
+    if target is not None:
+        image_error = _upload_collection_images(target, cli_config)
+        if image_error is not None:
+            return False, image_error
     return True, None
+
+
+def _upload_collection_images(dc, cli_config) -> str | None:
+    """Upload an image collection's ``local_images_path`` after its table, as
+    ``depictio ingest`` does; the error message, or None (also for any other type).
+
+    The server reads that folder from its own disk, so only under ``depictio
+    local`` and only inside the folders it may read (``LocalDataPolicy``),
+    every image file included: a symlink in the folder cannot pull in another.
+    """
+    from depictio.api.v1.configs.settings_models import local_data_policy
+    from depictio.cli.cli.utils.image_upload import (
+        ImageUploadError,
+        resolve_local_images_path,
+        scan_directory_for_images,
+        upload_collection_images,
+    )
+    from depictio.models.local_access import LocalPathRefused
+
+    properties = dc.config.dc_specific_properties
+    if dc.config.type != "image" or not getattr(properties, "local_images_path", None):
+        return None
+    policy = local_data_policy()
+    if policy is None:
+        return "This server does not read folders on its own disk, so it cannot upload images."
+    source = resolve_local_images_path(properties.local_images_path)
+    if source.is_dir():
+        refused = 0
+        for image in scan_directory_for_images(source):
+            try:
+                policy.confine(str(image), want="file")
+            except LocalPathRefused:
+                refused += 1
+        if refused:
+            return f"{refused} image file(s) are outside the folders this server may read."
+    try:
+        upload_collection_images(dc, cli_config, overwrite=False)
+    except ImageUploadError as exc:
+        return f"Image upload failed: {exc}"
+    return None
 
 
 def _run_dc_ingest_or_fail(

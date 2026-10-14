@@ -17,6 +17,7 @@ import { exportProjectZip, useBrandAccents } from 'depictio-react-core';
 import type { ProjectListEntry } from 'depictio-react-core';
 
 import { parseTemplate, TemplateChip, type ParsedTemplate } from './template';
+import { kindBadgeProps } from './projectTypes';
 
 /** Single-line row that navigates on click. Replaces the previous
  *  collapsible Workflows & Data / Roles and permissions accordion items —
@@ -123,8 +124,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
            *  Dash visual. */}
           <Box style={{ width: 100, flexShrink: 0, textAlign: 'center' }}>
             <Badge
-              color={isAdvanced ? 'orange' : 'cyan'}
-              variant="light"
+              {...kindBadgeProps(isAdvanced ? 'advanced' : 'basic')}
               radius="sm"
               size="sm"
             >
@@ -330,8 +330,7 @@ const ProjectDetailsPanel: React.FC<{
           Project type:
         </Text>
         <Badge
-          color={project.project_type === 'advanced' ? 'orange' : 'cyan'}
-          variant="light"
+          {...kindBadgeProps(project.project_type === 'advanced' ? 'advanced' : 'basic')}
           radius="sm"
           size="sm"
         >

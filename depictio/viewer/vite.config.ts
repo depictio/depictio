@@ -24,6 +24,11 @@ const SPA_ROUTE_RE = new RegExp(
   `^/(?:${SPA_ROUTE_PREFIXES.join('|')})(/|$|\\?)`,
 );
 
+// `VITE_PROJECT_BUILDER_STANDALONE=1 pnpm dev` stands in for `depictio
+// project-builder <dir>`: the bare root then serves the builder instead of
+// bouncing to the dashboards list (see src/projects/builder/mode.ts).
+const STANDALONE_BUILDER = process.env.VITE_PROJECT_BUILDER_STANDALONE === '1';
+
 const authDevFallback = (): Plugin => ({
   name: 'depictio-spa-dev-fallback',
   apply: 'serve',
@@ -40,6 +45,11 @@ const authDevFallback = (): Plugin => ({
         req.url === '/dashboard' ||
         req.url === '/dashboard/'
       ) {
+        if (STANDALONE_BUILDER) {
+          req.url = '/dashboard/';
+          next();
+          return;
+        }
         res.statusCode = 302;
         res.setHeader('Location', '/dashboards');
         res.end();

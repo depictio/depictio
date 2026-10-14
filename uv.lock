@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'emscripten'",
@@ -918,6 +918,10 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+builder = [
+    { name = "fastapi" },
+    { name = "uvicorn" },
+]
 dev = [
     { name = "bandit" },
     { name = "bcrypt" },
@@ -1037,6 +1041,7 @@ requires-dist = [
     { name = "depictio", extras = ["multiqc"], marker = "extra == 'server'" },
     { name = "depictio", extras = ["server"], marker = "extra == 'dev'" },
     { name = "depictio", extras = ["server"], marker = "extra == 'local'" },
+    { name = "fastapi", marker = "extra == 'builder'", specifier = "==0.141.1" },
     { name = "fastapi", marker = "extra == 'server'", specifier = "==0.141.1" },
     { name = "fsspec", marker = "extra == 'server'", specifier = "==2026.4.0" },
     { name = "gunicorn", marker = "extra == 'server'", specifier = "==26.0.0" },
@@ -1079,11 +1084,12 @@ requires-dist = [
     { name = "types-boto3", marker = "extra == 'dev'", specifier = "==1.43.62" },
     { name = "types-requests", marker = "extra == 'dev'", specifier = "==2.33.0.20260712" },
     { name = "umap-learn", marker = "extra == 'server'", specifier = "==0.5.12" },
+    { name = "uvicorn", marker = "extra == 'builder'", specifier = "==0.52.1" },
     { name = "uvicorn", marker = "extra == 'server'", specifier = "==0.52.1" },
     { name = "watchdog", marker = "extra == 'watch'", specifier = "==6.0.0" },
     { name = "websockets", marker = "extra == 'server'", specifier = "==17.0.1" },
 ]
-provides-extras = ["multiqc", "watch", "server", "local", "dev"]
+provides-extras = ["multiqc", "watch", "server", "builder", "local", "dev"]
 
 [package.metadata.requires-dev]
 worker-reload = [{ name = "watchdog", specifier = "==6.0.0" }]

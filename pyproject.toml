@@ -86,6 +86,8 @@ server = [
   "uvicorn==0.52.1",
   "websockets==17.0.1",
 ]
+# `depictio project-builder <dir>`: the builder's small local server, without the stack.
+builder = ["fastapi==0.141.1", "uvicorn==0.52.1"]
 local = ["depictio[server]", "py-rattler==0.26.0"]
 dev = [
   # The test suite covers the server too.

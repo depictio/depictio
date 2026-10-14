@@ -18,6 +18,8 @@ from fnmatch import translate
 from pathlib import Path
 from typing import Any, Literal
 
+from pydantic import BaseModel, Field
+
 from depictio.cli.cli.utils.data_root import (
     DataRoot,
     LocalDataRoot,
@@ -190,6 +192,40 @@ def _scan_match_regex(mode: str, parameters: dict) -> str:
     return translate(pattern)
 
 
+def scan_dc_hits(dc_config: dict, root: DataRoot, runs: list[str]) -> list[str] | None:
+    """Every root-relative file a ``recursive`` or ``s3_prefix`` collection scans.
+
+    One pass per run directory when the workflow has them, the way the scan
+    scopes its walk; otherwise a single pass over the root. A recursive scan's
+    ``max_depth``/``ignore`` apply, counted from each pass's folder as the scan
+    counts them. None for another mode, or for an ``s3_prefix`` on a prefix this
+    root did not list (another bucket).
+    """
+    scan = dc_config.get("scan") or {}
+    mode = str(scan.get("mode") or "").lower()
+    parameters = scan.get("scan_parameters") or {}
+    if mode not in ("recursive", "s3_prefix"):
+        return None
+    regex = _scan_match_regex(mode, parameters)
+    within = ""
+    bounds: dict[str, Any] = {}
+    if mode == "s3_prefix":
+        relative = root.relative_of(parameters.get("prefix") or "")
+        if relative is None:
+            return None
+        within = relative
+    else:
+        bounds = {
+            "max_depth": parameters.get("max_depth"),
+            "ignore": list(parameters.get("ignore") or []) or None,
+        }
+    scopes = [f"{run}/{within}".strip("/") for run in runs] if runs else [within]
+    hits: list[str] = []
+    for scope in scopes:
+        hits.extend(root.match(regex, within=scope, **bounds))
+    return hits
+
+
 def _preview_scan_dc(
     tag: str,
     dc_config: dict,
@@ -245,40 +281,25 @@ def _preview_scan_dc(
         )
 
     if mode in ("recursive", "s3_prefix"):
-        regex = _scan_match_regex(mode, parameters)
         if mode == "recursive":
             rule = (parameters.get("regex_config") or {}).get("pattern")
+            location = root.url("")
         else:
             rule = parameters.get("pattern")
-        within = ""
-        location = root.url("")
-        if mode == "s3_prefix":
-            prefix = parameters.get("prefix") or ""
-            location = prefix
-            relative = root.relative_of(prefix)
-            if relative is None:
-                # A prefix on another bucket: outside what this root listed.
-                return DataCollectionPreview(
-                    tag=tag,
-                    kind="scan",
-                    mode=mode,
-                    location=prefix,
-                    matched=0,
-                    optional=optional,
-                    rule=rule,
-                )
-            within = relative
-        # One pass per run directory when the workflow has them, the way the
-        # scan itself scopes its walk; otherwise a single pass over the root.
-        scopes = [f"{run}/{within}".strip("/") for run in runs] if runs else [within]
-        matched = 0
-        samples: list[str] = []
-        every_hit: list[str] = []
-        for scope in scopes:
-            hits = root.match(regex, within=scope)
-            matched += len(hits)
-            every_hit.extend(hits)
-            samples.extend(root.url(rel) for rel in hits[: PREVIEW_SAMPLES - len(samples)])
+            location = parameters.get("prefix") or ""
+        every_hit = scan_dc_hits(dc_config, root, runs)
+        if every_hit is None:
+            # A prefix on another bucket: outside what this root listed.
+            return DataCollectionPreview(
+                tag=tag,
+                kind="scan",
+                mode=mode,
+                location=location,
+                matched=0,
+                optional=optional,
+                rule=rule,
+            )
+        matched = len(every_hit)
         return DataCollectionPreview(
             tag=tag,
             kind="scan",
@@ -288,13 +309,119 @@ def _preview_scan_dc(
             optional=optional,
             status="ok" if matched else "empty",
             rule=rule,
-            samples=samples,
+            samples=[root.url(rel) for rel in every_hit[:PREVIEW_SAMPLES]],
             found_in=_common_folder(every_hit),
         )
 
     return DataCollectionPreview(
         tag=tag, kind="scan", mode=mode or None, location=root.url(""), matched=0, optional=optional
     )
+
+
+# ── wire shapes ──────────────────────────────────────────────────────────────
+# The rows above as POST /projects/from_run reports them, here rather than with
+# the route so a server without Mongo (the Project Builder's standalone mode)
+# reports a plan in the very same shape.
+
+
+class FromRunRecipeSource(BaseModel):
+    """What one source of a recipe found under the data root.
+
+    The wire shape of ``template_preview.RecipeSourcePreview``: ``kind`` is
+    ``collection`` for a source read from another data collection, ``file``
+    for a glob or a path, and ``url`` for a URL outside the data root, which
+    is read at ingest and so is neither found nor missing here (``found`` is
+    None).
+    """
+
+    ref: str
+    kind: Literal["file", "collection", "url"]
+    pattern: str | None = None
+    dc_ref: str | None = None
+    optional: bool = False
+    matched: int = 0
+    samples: list[str] = Field(default_factory=list)
+    found: bool | None = None
+    found_in: str | None = None
+
+
+class FromRunRecipePreview(BaseModel):
+    """The recipe a data collection is built with, and what each of its sources found."""
+
+    name: str
+    summary: str | None = None
+    sources: list[FromRunRecipeSource] = Field(default_factory=list)
+
+
+class FromRunDCPreview(BaseModel):
+    """What one data collection would find under the data root.
+
+    The wire shape of ``template_preview.DataCollectionPreview``: ``status`` is
+    one of ``ok`` / ``empty`` / ``missing`` / ``pruned`` and ``kind`` is
+    ``scan`` or ``recipe``. ``rule`` is what a scanning collection looks for,
+    as the template wrote it, ``samples`` the first few locations it matched,
+    ``found_in`` the deepest folder (relative to the data root) holding every
+    location it matched, and ``recipe`` is set for a recipe collection.
+    """
+
+    data_collection_tag: str
+    kind: str
+    mode: str | None = None
+    location: str = ""
+    matched: int = 0
+    missing_sources: list[str] = Field(default_factory=list)
+    optional: bool = False
+    status: str = "ok"
+    rule: str | None = None
+    samples: list[str] = Field(default_factory=list)
+    found_in: str | None = None
+    recipe: FromRunRecipePreview | None = None
+
+
+def report_recipe(recipe) -> FromRunRecipePreview | None:
+    """A ``template_preview.RecipePreview`` in the report's shape, None for none."""
+    if recipe is None:
+        return None
+    return FromRunRecipePreview(
+        name=recipe.name,
+        summary=recipe.summary,
+        sources=[
+            FromRunRecipeSource(
+                ref=source.ref,
+                kind=source.kind,
+                pattern=source.pattern,
+                dc_ref=source.dc_ref,
+                optional=source.optional,
+                matched=source.matched,
+                samples=list(source.samples),
+                found=source.found,
+                found_in=source.found_in,
+            )
+            for source in recipe.sources
+        ],
+    )
+
+
+def report_rows(preview_rows) -> list[FromRunDCPreview]:
+    """``template_preview.DataCollectionPreview`` rows in the report's shape, one per tag."""
+    rows = {
+        row.tag: FromRunDCPreview(
+            data_collection_tag=row.tag,
+            kind=row.kind,
+            mode=row.mode,
+            location=row.location,
+            matched=row.matched,
+            missing_sources=list(row.missing_sources),
+            optional=row.optional,
+            status=row.status,
+            rule=row.rule,
+            samples=list(row.samples),
+            found_in=row.found_in,
+            recipe=report_recipe(row.recipe),
+        )
+        for row in preview_rows
+    }
+    return list(rows.values())
 
 
 def _override_binding(override: Any, attribute: str) -> str | None:

@@ -48,7 +48,9 @@ const AdminApp = React.lazy(() => import('./admin/AdminApp'));
 const ProfileApp = React.lazy(() => import('./profile/ProfileApp'));
 const CreateComponentPage = React.lazy(() => import('./builder/CreateComponentPage'));
 const EditComponentPage = React.lazy(() => import('./builder/EditComponentPage'));
+const ProjectBuilderPage = React.lazy(() => import('./projects/builder/ProjectBuilderPage'));
 import { matchEditorRoute } from './builder/routeMatch';
+import { isProjectBuilderPath, isStandaloneBuilder } from './projects/builder/mode';
 import {
   ErrorBoundary,
   clearSession,
@@ -75,10 +77,18 @@ import { setFeedback } from './feedback';
 import { initGoogleAnalytics } from './googleAnalytics';
 import { WalkthroughHost } from './walkthrough';
 
+/** Served by `depictio project-builder <dir>` (or `vite dev` with
+ *  VITE_PROJECT_BUILDER_STANDALONE=1): every route is the builder, and none
+ *  of the server's auth, config or onboarding exists. */
+const STANDALONE_BUILDER = isStandaloneBuilder();
+
 // Client-side route resolution. FastAPI serves index.html for all paths under
 // /dashboard/, /dashboard-edit/, /auth, /dashboards,
 // /about, and /admin — we pick the right tree at boot.
 function resolveTree(): React.ReactElement {
+  if (STANDALONE_BUILDER) {
+    return <ProjectBuilderPage mode="standalone" />;
+  }
   if (window.location.pathname.startsWith('/auth')) {
     return <AuthApp />;
   }
@@ -87,8 +97,12 @@ function resolveTree(): React.ReactElement {
   }
   if (window.location.pathname.startsWith('/projects')) {
     // /projects                  → list page
+    // /projects/build            → project builder (before the detail match)
     // /projects/{id}             → data-collections detail
     // /projects/{id}/permissions → permissions editor
+    if (isProjectBuilderPath(window.location.pathname)) {
+      return <ProjectBuilderPage mode="server" />;
+    }
     if (
       /\/projects\/[^/]+\/permissions(\/|$)/.test(window.location.pathname)
     ) {
@@ -176,7 +190,14 @@ function ParentColorSchemeBridge() {
  * variables rather than theme fields: a brand needs a light *and* a dark value
  * for each, which is exactly what `cssVariablesResolver` is for.
  */
-function ThemeRoot({ children }: { children: React.ReactNode }) {
+function ThemeRoot({
+  children,
+  walkthrough = true,
+}: {
+  children: React.ReactNode;
+  /** Off for the standalone builder: no onboarding to run there. */
+  walkthrough?: boolean;
+}) {
   const { scale } = useUiScalePref();
   const branding = React.useSyncExternalStore(subscribeBranding, getBranding);
   const chrome = useChromeStyle().themeOverrides;
@@ -207,7 +228,7 @@ function ThemeRoot({ children }: { children: React.ReactNode }) {
             <ErrorBoundary>
               <Suspense fallback={<BootSplash />}>{children}</Suspense>
             </ErrorBoundary>
-            <WalkthroughHost />
+            {walkthrough && <WalkthroughHost />}
           </DatesProvider>
         </MantineProvider>
       </BrandingContext.Provider>
@@ -362,7 +383,15 @@ function bootstrapPublicConfig(): void {
 // isn't logged in, `bootstrapSession` on the next load routes them through
 // `/auth`, and `AuthApp.POST_AUTH_REDIRECT` brings them back here.
 const isBareRoot = /^\/(dashboard\/?)?$/.test(window.location.pathname);
-if (isBareRoot) {
+if (STANDALONE_BUILDER) {
+  // No session, public config or keep-alive: the standalone server has no
+  // auth, and every route (`/` included) renders the builder.
+  ReactDOM.createRoot(document.getElementById('root')!).render(
+    <React.StrictMode>
+      <ThemeRoot walkthrough={false}>{resolveTree()}</ThemeRoot>
+    </React.StrictMode>,
+  );
+} else if (isBareRoot) {
   // The query rides along so a `?chrome=` look-and-feel pick survives the hop.
   window.location.replace(`/dashboards${window.location.search}`);
 } else {

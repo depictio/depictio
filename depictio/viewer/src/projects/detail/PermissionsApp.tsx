@@ -687,7 +687,12 @@ const PermissionsApp: React.FC = () => {
               />
             )}
             <Text c="red">{loadError}</Text>
-            <Button component="a" href="/projects" variant={glass ? 'default' : 'light'}>
+            <Button
+              color={accent.secondary}
+              component="a"
+              href="/projects"
+              variant={glass ? 'default' : 'light'}
+            >
               Back to projects
             </Button>
           </Stack>

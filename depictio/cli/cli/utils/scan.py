@@ -44,14 +44,14 @@ from depictio.cli.cli.utils.scan_utils import (
     data_collection_full_regex,
     describe_empty_scan_outcome,
     describe_unmatched_run_scan,
-    file_matches_data_collection,
     generate_file_hash,
     generate_run_hash,
     regex_match,
+    select_run_files,
 )
 from depictio.cli.cli.utils.scan_walk import (
+    ScanBounds,
     ScannedPath,
-    is_ignored,
     iter_run_files,
     run_signature,
 )
@@ -107,21 +107,8 @@ SCAN_FILE_ID_BUCKETS: tuple[str, ...] = (
 )
 
 
-@dataclass(frozen=True, slots=True)
-class _ScanBounds:
-    """A data collection's ``max_depth``/``ignore`` restrictions."""
-
-    max_depth: int | None
-    ignore: tuple[str, ...]
-
-    @property
-    def is_unbounded(self) -> bool:
-        return self.max_depth is None and not self.ignore
-
-    def allows(self, scanned: ScannedPath) -> bool:
-        if self.max_depth is not None and scanned.rel_path.count("/") > self.max_depth:
-            return False
-        return not is_ignored(scanned.match_name, scanned.rel_path, self.ignore)
+# Moved to scan_walk so previews share it; the old name stays for its callers.
+_ScanBounds = ScanBounds
 
 
 def _dc_scan_bounds(dc: DataCollection) -> _ScanBounds:
@@ -544,19 +531,12 @@ def scan_run_for_multiple_data_collections(
         # Process files that match this data collection's regex
         # The shared walk is pruned only to what every data collection excludes,
         # so each one re-applies its own bounds here.
+        # Matched on the walked path rather than the symlink-resolved one, which
+        # is what this loop has always compared (select_run_files).
         dc_bounds = _dc_scan_bounds(dc) if honor_scan_bounds else None
-        if dc_bounds is not None and dc_bounds.is_unbounded:
-            dc_bounds = None
 
         dc_file_scan_results = []
-        for scanned in all_files_in_run:
-            if dc_bounds is not None and not dc_bounds.allows(scanned):
-                continue
-            # Matched on the walked path rather than the symlink-resolved one,
-            # which is what this loop has always compared.
-            if not file_matches_data_collection(scanned.walk_path, run_location, full_regex):
-                continue
-
+        for scanned in select_run_files(all_files_in_run, run_location, full_regex, dc_bounds):
             logger.debug(f"File {scanned.match_name} matches DC {dc.data_collection_tag}")
 
             # skip_regex=True because we already matched in the loop above

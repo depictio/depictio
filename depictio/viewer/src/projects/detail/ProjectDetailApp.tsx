@@ -101,6 +101,7 @@ import {
 } from '../dcMetatype';
 import { usePageTitle } from '../../branding';
 import { UnrecognisedFilesPanel } from './UnrecognisedFilesPanel';
+import { kindBadgeProps, PROJECT_KINDS } from '../projectTypes';
 
 interface DataCollectionShape {
   _id?: string;
@@ -1901,6 +1902,7 @@ const CreateDataCollectionModal: React.FC<{
                     {(multiqcDropzone.totalBytes / (1024 * 1024)).toFixed(1)} MB
                   </Text>
                   <Button
+                    color={accent.secondary}
                     size="xs"
                     variant="subtle"
                     onClick={multiqcDropzone.clear}
@@ -2289,9 +2291,21 @@ const ProjectHeader: React.FC<{
                 Template
               </Text>
               <TemplateChip parsed={tmpl} verbose plain />
-              <Anchor href={templateDocsUrl(tmpl)} target="_blank" rel="noreferrer" size="sm" fw={600}>
-                Documentation
-              </Anchor>
+              {templateDocsUrl(tmpl) ? (
+                <Anchor
+                  href={templateDocsUrl(tmpl) ?? undefined}
+                  target="_blank"
+                  rel="noreferrer"
+                  size="sm"
+                  fw={600}
+                >
+                  Documentation
+                </Anchor>
+              ) : (
+                <Text size="sm" c="dimmed">
+                  Defined with the Project Builder
+                </Text>
+              )}
             </Group>
           )}
         </Group>
@@ -2324,12 +2338,7 @@ const ProjectHeader: React.FC<{
             <Text fw={600} size="sm">
               Project Type:
             </Text>
-            <Badge
-              color={projectType === 'advanced' ? 'orange' : 'cyan'}
-              variant="light"
-              radius="sm"
-              size="md"
-            >
+            <Badge {...kindBadgeProps(projectType)} radius="sm" size="md">
               {projectType === 'advanced' ? 'Advanced' : 'Basic'}
             </Badge>
           </Group>
@@ -2350,14 +2359,20 @@ const ProjectHeader: React.FC<{
               Template:
             </Text>
             <TemplateChip parsed={tmpl} verbose />
-            <Anchor
-              href={templateDocsUrl(tmpl)}
-              target="_blank"
-              rel="noreferrer"
-              size="sm"
-            >
-              View documentation →
-            </Anchor>
+            {templateDocsUrl(tmpl) ? (
+              <Anchor
+                href={templateDocsUrl(tmpl) ?? undefined}
+                target="_blank"
+                rel="noreferrer"
+                size="sm"
+              >
+                View documentation →
+              </Anchor>
+            ) : (
+              <Text size="sm" c="dimmed">
+                Defined with the Project Builder
+              </Text>
+            )}
           </Group>
         )}
         {project.name && (
@@ -2758,14 +2773,16 @@ const DataCollectionsManagerSection: React.FC<{
               color="var(--mantine-color-dark-6)"
             />
             <Title order={4}>Data Collections Manager</Title>
-            <Badge
-              color={projectType === 'advanced' ? 'orange' : 'cyan'}
-              variant="light"
-              radius="sm"
-              size="sm"
-            >
-              {projectType === 'advanced' ? 'Advanced Project' : 'Basic Project'}
-            </Badge>
+            <Tooltip label={PROJECT_KINDS[projectType].summary} withArrow multiline maw={300}>
+              <Badge
+                {...kindBadgeProps(projectType)}
+                radius="sm"
+                size="sm"
+                data-testid="project-kind-badge"
+              >
+                {PROJECT_KINDS[projectType].title}
+              </Badge>
+            </Tooltip>
             <Badge variant="light" color="dark" size="sm">
               {dataCollections.length}
             </Badge>
@@ -4010,7 +4027,7 @@ const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
           <Text size="sm" c="red">
             {error}
           </Text>
-          <Button size="xs" variant="subtle" onClick={handleLoad}>
+          <Button color={accent.secondary} size="xs" variant="subtle" onClick={handleLoad}>
             Retry
           </Button>
         </Stack>

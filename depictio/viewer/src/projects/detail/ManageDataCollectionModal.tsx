@@ -341,7 +341,7 @@ const ManageDataCollectionModal: React.FC<ManageDataCollectionModalProps> = ({
                       {files.length} file{files.length === 1 ? '' : 's'} ·{' '}
                       {formatBytes(totalBytes)}
                     </Text>
-                    <Button size="xs" variant="subtle" onClick={clear} disabled={submitting}>
+                    <Button color={accent.secondary} size="xs" variant="subtle" onClick={clear} disabled={submitting}>
                       Clear list
                     </Button>
                   </Group>

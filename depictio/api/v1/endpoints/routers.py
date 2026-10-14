@@ -38,6 +38,7 @@ from depictio.api.v1.endpoints.links_endpoints.routes import links_endpoint_rout
 from depictio.api.v1.endpoints.migrate_endpoints.routes import migrate_endpoint_router
 from depictio.api.v1.endpoints.monitoring_endpoints.routes import monitoring_endpoint_router
 from depictio.api.v1.endpoints.multiqc_endpoints.routes import router as multiqc_router
+from depictio.api.v1.endpoints.projects_endpoints.builder import builder_endpoint_router
 from depictio.api.v1.endpoints.projects_endpoints.routes import projects_endpoint_router
 from depictio.api.v1.endpoints.runs_endpoints.routes import runs_endpoint_router
 from depictio.api.v1.endpoints.user_endpoints.routes import auth_endpoint_router
@@ -46,6 +47,13 @@ from depictio.api.v1.endpoints.workflow_endpoints.routes import workflows_endpoi
 
 router = APIRouter()
 
+# Before the projects router, whose `/{project_id}/...` routes would otherwise
+# be tried first for `/projects/builder/...`.
+router.include_router(
+    builder_endpoint_router,
+    prefix="/projects/builder",
+    tags=["Project Builder"],
+)
 router.include_router(
     projects_endpoint_router,
     prefix="/projects",
