@@ -7,7 +7,7 @@ every dashboard and tab actually renders. Run this after a deployment.
 
 1. **Parse arguments** to pick the target:
    - `demo` -> `demo.depictio.embl.org`
-   - `dev` -> `dev.demo.depictio.embl.org`
+   - `trec-demo` -> `trec-demo.depictio.embl.org`
    - no args -> run both, `demo` first
    - anything else -> treat it as an explicit host (works for a local stack too)
 
@@ -64,7 +64,7 @@ Pass `--token-file` only to also cover **private** dashboards, which switches en
 `/dashboards/list_all`. Mint a token with `/depictio-embl-admin-login`, or directly:
 
 ```bash
-NS=datasci-depictio-project-demo-dev
+NS=datasci-depictio-demo-dev
 POD=$(kubectl -n $NS get pods -o name | grep -m1 depictio-backend | sed 's|pod/||')
 kubectl -n $NS exec $POD -c depictio-backend -- python3 -c \
   "import yaml;print(yaml.safe_load(open('/app/depictio/.depictio/thomas.weber_config.yaml'))['user']['token']['access_token'])" \
@@ -94,11 +94,11 @@ Not covered:
 
 ## Usage Examples
 
-`/check-deployment` - check both demo and dev.demo
+`/check-deployment` - check both demo and trec-demo
 
 `/check-deployment demo` - check demo only
 
-`/check-deployment dev` - check dev.demo only
+`/check-deployment trec-demo` - check trec-demo only
 
 `/check-deployment localhost:5080` - check a local stack (add `--scheme http`)
 

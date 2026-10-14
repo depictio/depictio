@@ -9,17 +9,17 @@ Auth: pass a long-lived admin bearer token via ``--token-file`` (one line).
 On an EMBL K8s deployment you can mint one from the backend pod's per-admin
 config, e.g.::
 
-    NS=datasci-depictio-project-demo-dev
+    NS=datasci-depictio-demo-dev
     POD=$(kubectl -n $NS get pods -o name | grep -m1 depictio-backend | sed 's|pod/||')
     kubectl -n $NS exec $POD -c depictio-backend -- python3 -c \
       "import yaml;print(yaml.safe_load(open('/app/depictio/.depictio/thomas.weber_config.yaml'))['user']['token']['access_token'])" \
-      > /tmp/devdemo_admin_token
+      > /tmp/trecdemo_admin_token
 
 Example::
 
     python dev/regenerate_dashboard_thumbnails.py \
-        --host dev.api.demo.depictio.embl.org \
-        --token-file /tmp/devdemo_admin_token \
+        --host api.trec-demo.depictio.embl.org \
+        --token-file /tmp/trecdemo_admin_token \
         --concurrency 3
 """
 
@@ -95,8 +95,8 @@ def regenerate_one(host: str, token: str, dashboard_id: str, timeout: float) -> 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--host", default="dev.api.demo.depictio.embl.org", help="API hostname (no scheme)")
-    ap.add_argument("--token-file", default="/tmp/devdemo_admin_token", help="File holding the admin bearer token")
+    ap.add_argument("--host", default="api.trec-demo.depictio.embl.org", help="API hostname (no scheme)")
+    ap.add_argument("--token-file", default="/tmp/trecdemo_admin_token", help="File holding the admin bearer token")
     ap.add_argument("--concurrency", type=int, default=3, help="Parallel in-flight requests (keep near worker count)")
     ap.add_argument("--timeout", type=float, default=210.0, help="Per-request client timeout in seconds")
     ap.add_argument("--include-private", action="store_true", help="Also regenerate non-public dashboards")

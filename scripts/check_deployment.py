@@ -9,7 +9,7 @@ Run it after a deployment. No browser needed. The only dependency is rich, which
 is already pinned in pyproject, so use the project interpreter:
 
     ./depictio-venv-dash-v3/bin/python scripts/check_deployment.py --host demo.depictio.embl.org
-    uv run python scripts/check_deployment.py --host dev.demo.depictio.embl.org --strict
+    uv run python scripts/check_deployment.py --host trec-demo.depictio.embl.org --strict
     uv run python scripts/check_deployment.py --host localhost:5080 --scheme http
 
 Auth defaults to sending no Authorization header. On a deployment running in
