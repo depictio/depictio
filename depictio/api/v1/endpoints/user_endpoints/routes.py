@@ -200,7 +200,7 @@ async def login(
     if settings.auth.is_password_login_disabled:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Password sign-in is disabled on this instance. Use Google sign-in.",
+            detail="Password sign-in is disabled on this instance. Use single sign-on.",
         )
 
     password_valid = await _check_password(login_request.username, login_request.password)
@@ -1044,6 +1044,16 @@ async def register(
         raise HTTPException(
             status_code=403,
             detail="User registration is disabled on this instance.",
+        )
+
+    # A password account on an SSO-only instance could never sign in (/login
+    # refuses it), so the form would only fill the user table with dead rows.
+    # SSO provisions accounts itself on first login, which is why this is not
+    # `registration_disabled`: that flag stops SSO from creating them too.
+    if settings.auth.is_password_login_disabled:
+        raise HTTPException(
+            status_code=403,
+            detail="Registration is disabled on this instance. Use single sign-on.",
         )
 
     # Redis-backed per-IP rate limit to slow automated enumeration / spam

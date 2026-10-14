@@ -338,6 +338,7 @@ async def test_register_collapses_duplicate_email_to_generic_error():
     mock_settings.auth.is_single_user_mode = False
     mock_settings.auth.is_public_mode = False
     mock_settings.auth.registration_disabled = False
+    mock_settings.auth.is_password_login_disabled = False
 
     with (
         patch.object(user_routes, "settings", mock_settings),
@@ -418,9 +419,9 @@ async def test_login_blocked_when_password_login_disabled():
     check_password.assert_not_awaited()
 
 
-def test_password_login_disabled_is_ignored_without_oauth():
+def test_password_login_disabled_is_ignored_without_sso():
     """The flag alone would leave a deployment with no way in, so the computed
-    property only reports it as disabled once Google OAuth is configured."""
+    property only reports it as disabled once Google OAuth or SAML is configured."""
     from depictio.api.v1.configs.settings_models import AuthConfig
 
     assert AuthConfig(password_login_disabled=True).is_password_login_disabled is False
@@ -430,6 +431,9 @@ def test_password_login_disabled_is_ignored_without_oauth():
         ).is_password_login_disabled
         is True
     )
+    # SAML alone is an SSO door too: turning Google off must not hand the
+    # password form back.
+    assert AuthConfig(password_login_disabled=True, saml_enabled=True).is_password_login_disabled
 
 
 @pytest.mark.asyncio
@@ -578,3 +582,31 @@ def test_export_project_rejects_unlisted_s3_endpoint():
         with pytest.raises(HTTPException) as exc_info:
             migrate_routes._validate_target_s3_endpoint({"endpoint_url": ""})
         assert exc_info.value.status_code == 400  # type: ignore[unresolved-attribute]
+
+
+@pytest.mark.asyncio
+async def test_register_blocked_when_password_login_disabled():
+    """On an SSO-only instance /register must 403: a password account could
+    never sign in. registration_disabled stays off so SSO can still create
+    accounts on first login."""
+    from unittest.mock import MagicMock, patch
+
+    from fastapi import HTTPException
+
+    from depictio.api.v1.endpoints.user_endpoints import routes as user_routes
+
+    mock_settings = MagicMock()
+    mock_settings.auth.is_single_user_mode = False
+    mock_settings.auth.is_public_mode = False
+    mock_settings.auth.registration_disabled = False
+    mock_settings.auth.is_password_login_disabled = True
+
+    registration = MagicMock(email="someone@example.com")
+    with (
+        patch.object(user_routes, "settings", mock_settings),
+        patch.object(user_routes, "enforce_rate_limit"),
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await user_routes.register(registration, MagicMock())
+
+    assert exc_info.value.status_code == 403  # type: ignore[unresolved-attribute]

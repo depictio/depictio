@@ -463,10 +463,11 @@ class AuthConfig(BaseSettings):
         default=False,
         description="Block email + password sign-in. When True the /auth/login "
         "endpoint returns 403 and the password form is hidden, leaving Google "
-        "OAuth as the only door in. Pairs with registration_disabled for an "
-        "instance whose accounts all come from one identity provider. Ignored "
-        "unless google_oauth_enabled is set, so a half-done configuration "
-        "cannot lock every user out.",
+        "OAuth and/or SAML as the only door in. /auth/register is refused too: "
+        "a password account could never sign in, while SSO still creates "
+        "accounts on first login (unlike registration_disabled, which stops "
+        "that as well). Ignored unless google_oauth_enabled or saml_enabled is "
+        "set, so a half-done configuration cannot lock every user out.",
     )
     public_access_code: Optional[SecretStr] = Field(
         default=None,
@@ -686,12 +687,13 @@ class AuthConfig(BaseSettings):
     def is_password_login_disabled(self) -> bool:
         """Returns True if email + password sign-in should be refused.
 
-        Conditioned on Google OAuth actually being configured: the flag on its
-        own would leave a deployment with no way in at all, and an operator who
-        sets it while forgetting the OAuth vars should get their password form
-        back rather than a locked front door. Read this, not the raw flag.
+        Conditioned on an SSO door (Google OAuth or SAML) actually being
+        configured: the flag on its own would leave a deployment with no way in
+        at all, and an operator who sets it while forgetting the SSO vars should
+        get their password form back rather than a locked front door. Read this,
+        not the raw flag.
         """
-        return self.password_login_disabled and self.google_oauth_enabled
+        return self.password_login_disabled and (self.google_oauth_enabled or self.saml_enabled)
 
     @computed_field
     @property
