@@ -37,18 +37,24 @@ async function isGlass(page: Page): Promise<boolean> {
   return page.evaluate(() => document.documentElement.dataset.chrome === "glass");
 }
 
+/** Classic markup: the members ag-grid. Scoped to the users grid container —
+ *  the page renders a second (groups) ag-grid below it. */
+function usersGridRows(page: Page) {
+  return page.locator("[data-testid='permissions-users-grid']").locator(".ag-row");
+}
+
 /** Every member row on the page, whichever markup renders. */
 function memberRows(page: Page) {
   return page
     .locator("[data-testid='permissions-member-row']")
-    .or(page.locator(".ag-row"));
+    .or(usersGridRows(page));
 }
 
 /** Row for a given member email (substring match, like ag-grid's hasText). */
 function gridRow(page: Page, email: string) {
   return page
     .locator(`[data-testid='permissions-member-row'][data-email*="${email}"]`)
-    .or(page.locator(".ag-row", { hasText: email }));
+    .or(usersGridRows(page).filter({ hasText: email }));
 }
 
 /** Assert whether `role` is the one set on a member's row. */

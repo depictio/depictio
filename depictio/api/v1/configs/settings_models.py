@@ -546,6 +546,25 @@ class AuthConfig(BaseSettings):
         description="Label for the SSO button in the login form (e.g. 'Sign in with your institution')",
     )
 
+    # --- SAML attribute mappings (SSO attribute sync) -------------------------
+    # Which assertion attributes sso_sync.sync_sso_user reads, beside the SAML
+    # connection fields above.
+    saml_attribute_groups: Optional[str] = Field(
+        default=None,
+        description="SAML attribute name carrying group memberships (e.g. 'memberOf'). "
+        "When set, sso_managed groups are mirrored from the assertion on every login.",
+    )
+    saml_attribute_title: Optional[str] = Field(
+        default=None, description="SAML attribute name carrying the user's title"
+    )
+    saml_attribute_display_name: Optional[str] = Field(
+        default=None, description="SAML attribute name carrying the user's display name"
+    )
+    saml_attribute_login: Optional[str] = Field(
+        default=None, description="SAML attribute name carrying the user's login/username"
+    )
+    # --- end SAML attribute mappings ------------------------------------------
+
     @field_validator(
         "saml_idp_entity_id",
         "saml_idp_sso_url",
@@ -554,6 +573,10 @@ class AuthConfig(BaseSettings):
         "saml_sp_base_url",
         "saml_attribute_email",
         "saml_attribute_username",
+        "saml_attribute_groups",
+        "saml_attribute_title",
+        "saml_attribute_display_name",
+        "saml_attribute_login",
         mode="before",
     )
     @classmethod

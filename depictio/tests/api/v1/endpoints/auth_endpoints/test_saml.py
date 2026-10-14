@@ -186,6 +186,7 @@ class TestSamlAcs:
         ticket.ticket = "one-shot-secret"
 
         create_user = AsyncMock(return_value=(user, True))
+        sync_user = AsyncMock()
         create_ticket = AsyncMock(return_value=ticket)
         with (
             _configure_saml(),
@@ -205,6 +206,10 @@ class TestSamlAcs:
                 "depictio.api.v1.endpoints.auth_endpoints.saml_routes._create_magic_link_ticket",
                 new=create_ticket,
             ),
+            patch(
+                "depictio.api.v1.endpoints.auth_endpoints.saml_routes.sync_sso_user",
+                new=sync_user,
+            ),
         ):
             response = self._post_acs(client)
 
@@ -217,6 +222,43 @@ class TestSamlAcs:
         # Email is lowercased before the user lookup.
         create_user.assert_awaited_once()
         assert create_user.await_args.args[0] == "user@example.org"
+        # The assertion's attributes are mirrored into groups/profile for this user.
+        sync_user.assert_awaited_once_with(user, auth.get_attributes())
+
+    def test_acs_sync_failure_never_blocks_sign_in(self, client):
+        state_store.store_auth_state("saml", "ONELOGIN_id_1", value="/dashboards")
+        auth = _mock_auth()
+        user = MagicMock()
+        user.id = "507f1f77bcf86cd799439011"
+        ticket = MagicMock()
+        ticket.ticket = "one-shot-secret"
+        with (
+            _configure_saml(),
+            patch(
+                "depictio.api.v1.endpoints.auth_endpoints.saml_routes.extract_in_response_to",
+                return_value="ONELOGIN_id_1",
+            ),
+            patch(
+                "depictio.api.v1.endpoints.auth_endpoints.saml_routes.init_saml_auth",
+                new=AsyncMock(return_value=auth),
+            ),
+            patch(
+                "depictio.api.v1.endpoints.auth_endpoints.saml_routes.create_or_get_sso_user",
+                new=AsyncMock(return_value=(user, False)),
+            ),
+            patch(
+                "depictio.api.v1.endpoints.auth_endpoints.saml_routes._create_magic_link_ticket",
+                new=AsyncMock(return_value=ticket),
+            ),
+            patch(
+                "depictio.api.v1.endpoints.auth_endpoints.saml_routes.sync_sso_user",
+                new=AsyncMock(side_effect=RuntimeError("mongo down")),
+            ),
+        ):
+            response = self._post_acs(client)
+
+        assert response.status_code == 303
+        assert "/auth/magic#ticket=one-shot-secret" in response.headers["location"]
 
     def test_acs_replay_rejected(self, client):
         """A second POST with the same InResponseTo must not mint a ticket."""
@@ -236,6 +278,7 @@ class TestSamlAcs:
     def test_acs_registration_disabled_unknown_email(self, client):
         state_store.store_auth_state("saml", "ONELOGIN_id_1", value="/dashboards")
         auth = _mock_auth()
+        sync_user = AsyncMock()
         with (
             _configure_saml(),
             patch.object(settings.auth, "registration_disabled", True),
@@ -251,12 +294,17 @@ class TestSamlAcs:
                 "depictio.api.v1.endpoints.auth_endpoints.saml_routes.create_or_get_sso_user",
                 new=AsyncMock(return_value=(None, False)),
             ) as create_user,
+            patch(
+                "depictio.api.v1.endpoints.auth_endpoints.saml_routes.sync_sso_user",
+                new=sync_user,
+            ),
         ):
             response = self._post_acs(client)
 
         assert response.status_code == 303
         assert "/auth?error=registration_disabled" in response.headers["location"]
         assert create_user.await_args.kwargs == {"allow_create": False}
+        sync_user.assert_not_awaited()
 
 
 class TestSamlHelpers:

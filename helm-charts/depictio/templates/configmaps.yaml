@@ -83,6 +83,12 @@ data:
   DEPICTIO_AUTH_SAML_SP_BASE_URL: {{ .Values.auth.DEPICTIO_AUTH_SAML_SP_BASE_URL | default "" | quote }}
   DEPICTIO_AUTH_SAML_ATTRIBUTE_EMAIL: {{ .Values.auth.DEPICTIO_AUTH_SAML_ATTRIBUTE_EMAIL | default "" | quote }}
   DEPICTIO_AUTH_SAML_LOGIN_LABEL: {{ .Values.auth.DEPICTIO_AUTH_SAML_LOGIN_LABEL | default "Sign in with SSO" | quote }}
+  # Which assertion attributes feed the group and profile sync. Each one left empty
+  # disables its part of the sync.
+  DEPICTIO_AUTH_SAML_ATTRIBUTE_GROUPS: {{ .Values.auth.DEPICTIO_AUTH_SAML_ATTRIBUTE_GROUPS | default "" | quote }}
+  DEPICTIO_AUTH_SAML_ATTRIBUTE_TITLE: {{ .Values.auth.DEPICTIO_AUTH_SAML_ATTRIBUTE_TITLE | default "" | quote }}
+  DEPICTIO_AUTH_SAML_ATTRIBUTE_DISPLAY_NAME: {{ .Values.auth.DEPICTIO_AUTH_SAML_ATTRIBUTE_DISPLAY_NAME | default "" | quote }}
+  DEPICTIO_AUTH_SAML_ATTRIBUTE_LOGIN: {{ .Values.auth.DEPICTIO_AUTH_SAML_ATTRIBUTE_LOGIN | default "" | quote }}
   {{- end }}
 
   # Instance branding (issue #397) — see examples/values-branding.yaml.

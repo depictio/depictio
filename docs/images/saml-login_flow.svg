@@ -649,18 +649,18 @@
   <path d="M94.2,842.5 C93.9,832.1 94.9,824.5 93.3,815.8" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round"/>
   <text x="106.0" y="834.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12.5" fill="#c92a2a" text-anchor="start" font-weight="normal">303 <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11.0">/auth?error=registration_disabled</tspan></text>
   <rect x="60.0" y="866.0" width="410.0" height="66.0" rx="6" fill="none"/>
-  <path d="M60.3,865.4 C197.8,865.3 332.0,864.5 469.4,865.9" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
-  <path d="M59.4,865.6 C196.2,867.5 334.2,864.9 469.8,866.5" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
-  <path d="M469.7,866.3 C470.3,888.4 468.7,910.8 470.5,931.5" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
-  <path d="M470.3,865.4 C469.8,887.3 470.9,909.7 470.4,931.8" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
-  <path d="M470.4,932.2 C334.1,930.6 196.9,932.8 59.5,932.2" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
-  <path d="M469.3,931.3 C333.9,932.6 197.0,931.7 60.1,931.2" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
-  <path d="M60.3,931.8 C58.9,910.4 59.5,888.3 59.9,865.5" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
-  <path d="M60.6,932.0 C60.2,909.7 60.8,888.0 59.9,866.0" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M60.3,865.4 C197.8,865.3 332.0,864.5 469.4,865.9" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M59.4,865.6 C196.2,867.5 334.2,864.9 469.8,866.5" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M469.7,866.3 C470.3,888.4 468.7,910.8 470.5,931.5" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M470.3,865.4 C469.8,887.3 470.9,909.7 470.4,931.8" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M470.4,932.2 C334.1,930.6 196.9,932.8 59.5,932.2" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M469.3,931.3 C333.9,932.6 197.0,931.7 60.1,931.2" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.3,931.8 C58.9,910.4 59.5,888.3 59.9,865.5" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M60.6,932.0 C60.2,909.7 60.8,888.0 59.9,866.0" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round"/>
   <circle cx="86.0" cy="899.0" r="11" fill="#ffffff" stroke="#adb5bd" stroke-width="1.5"/>
   <text x="86.0" y="905.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="17" fill="#5c5c5c" text-anchor="middle" font-weight="normal">+</text>
-  <text x="112.0" y="892.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13.5" fill="#5c5c5c" text-anchor="start" font-weight="normal">PR #972 later hooks group and profile</text>
-  <text x="112.0" y="914.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13.5" fill="#5c5c5c" text-anchor="start" font-weight="normal">sync in here, once the user is known</text>
+  <text x="112.0" y="892.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13.5" fill="#5c5c5c" text-anchor="start" font-weight="normal">sync_sso_user mirrors groups and profile</text>
+  <text x="112.0" y="914.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13.5" fill="#5c5c5c" text-anchor="start" font-weight="normal">in here, once the user is known</text>
   <circle cx="42.0" cy="558.0" r="14" fill="#ffd43b" stroke="#1e1e1e" stroke-width="1.8"/>
   <text x="42.0" y="563.5" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="16" fill="#1e1e1e" text-anchor="middle" font-weight="bold">4</text>
   <path d="M262.4,957.0 C263.6,983.7 261.7,1008.0 262.8,1033.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>

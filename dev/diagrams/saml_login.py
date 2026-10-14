@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hand-drawn schema of the SAML SSO login flow (PR #968).
+"""Hand-drawn schema of the SAML SSO login flow.
 
 SP-initiated login, drawn as the screens the user sees and the envelope that
 travels between them: the Depictio login page, the IdP page, the signed
@@ -352,11 +352,13 @@ def build_login_flow() -> Sketch:
         106, 834, "303 `/auth?error=registration_disabled`", size=12.5, anchor="start", colour=RED
     )
     # the muted forward pointer
-    s.rect(Box(60, 866, 410, 66, "none", "", ()), colour=GREY, dashed=True)
+    s.rect(Box(60, 866, 410, 66, "none", "", ()), colour=GREY)
     s.dot(86, 899, 11, fill=WHITE, colour=GREY, width=1.5)
     s.text(86, 905, "+", size=17, colour=DIM)
-    s.text(112, 892, "PR #972 later hooks group and profile", size=13.5, anchor="start", colour=DIM)
-    s.text(112, 914, "sync in here, once the user is known", size=13.5, anchor="start", colour=DIM)
+    s.text(
+        112, 892, "sync_sso_user mirrors groups and profile", size=13.5, anchor="start", colour=DIM
+    )
+    s.text(112, 914, "in here, once the user is known", size=13.5, anchor="start", colour=DIM)
     badge(s, 42, 558, 4)
 
     # ---- 5. the redirect: ticket in the fragment ---------------------------

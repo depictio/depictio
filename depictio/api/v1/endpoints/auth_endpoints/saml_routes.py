@@ -25,6 +25,7 @@ from depictio.api.v1.endpoints.auth_endpoints.saml_utils import (
     safe_relay_path,
     saml_configured,
 )
+from depictio.api.v1.endpoints.auth_endpoints.sso_sync import sync_sso_user
 from depictio.api.v1.endpoints.auth_endpoints.state_store import (
     consume_auth_state,
     store_auth_state,
@@ -119,6 +120,14 @@ async def saml_acs(request: Request) -> RedirectResponse:
         )
         if user is None:
             return _error_redirect("registration_disabled")
+
+        # Mirror the assertion's groups and profile attributes into Depictio. A
+        # failed sync must never turn a valid sign-in into an error: the user is
+        # authenticated, and the next login re-syncs.
+        try:
+            await sync_sso_user(user, auth.get_attributes())
+        except Exception as sync_error:
+            logger.error(f"SSO attribute sync failed for {email}: {sync_error}")
 
         # Short expiry: the browser redeems the ticket immediately on landing.
         ticket = await _create_magic_link_ticket(user.id, expiry_minutes=2)  # type: ignore[arg-type]

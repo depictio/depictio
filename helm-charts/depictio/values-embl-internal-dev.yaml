@@ -129,6 +129,10 @@ auth:
   DEPICTIO_AUTH_SAML_SP_ENTITY_ID: "depictio-dev-datasci"
   DEPICTIO_AUTH_SAML_SP_BASE_URL: "https://dev.api.depictio.embl.org"
   DEPICTIO_AUTH_SAML_LOGIN_LABEL: "Sign in with EMBL"
+  # Attributes the IdP releases (matched ignoring case: "groups" also reads "Groups").
+  DEPICTIO_AUTH_SAML_ATTRIBUTE_GROUPS: "groups"
+  DEPICTIO_AUTH_SAML_ATTRIBUTE_DISPLAY_NAME: "displayName"
+  DEPICTIO_AUTH_SAML_ATTRIBUTE_LOGIN: "uid"
 
 mongo:
   useOperator: true     # Use Percona PSMDB Operator for HA replica set
