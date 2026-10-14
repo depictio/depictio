@@ -49,7 +49,7 @@ import {
   clearCrossTabFilters,
   persistableCrossTabFilters,
   readFiltersFromLocation,
-  stripFilterHashFromLocation,
+  syncFiltersToLocation,
   sanitizeRestoredFilters,
   fetchDashboardFilterState,
   saveDashboardFilterState,
@@ -888,12 +888,36 @@ const App: React.FC = () => {
     );
   }, [dashboard, crossTab.resolved, summaryMetadata]);
 
+  // Whether the current filters are the viewer's own view rather than the
+  // dashboard's declared defaults, which are not worth remembering or writing
+  // into the address bar: they were changed, restored, or arrived in a link.
+  const viewIsTheirs = () =>
+    userTouchedRef.current ||
+    serverStateAppliedRef.current ||
+    Boolean(hydrationRef.current?.urlConsumed) ||
+    (hydrationRef.current?.restoredIndices.size ?? 0) > 0;
+
   // Local write, derived from `filters` on every change (like the cross-tab
   // write above), so "Reset all" empties the stored copy for free.
   useEffect(() => {
-    if (!remembering || !dashboardId || !rememberFilters) return;
+    if (!remembering || !dashboardId || !rememberFilters || !viewIsTheirs()) return;
     writeLocalFilterState(dashboardId, filters);
   }, [filters, dashboardId, rememberFilters, remembering]);
+
+  // The address bar carries the view: `#filters=` follows the filters, so the
+  // page's own URL can be copied and pasted as the link. Debounced, because
+  // browsers throttle history writes and a slider drag is a burst.
+  useEffect(() => {
+    if (!remembering) return;
+    if (!rememberFilters) {
+      // Not remembering: a fragment left from before would mislead.
+      syncFiltersToLocation([]);
+      return;
+    }
+    if (!viewIsTheirs()) return;
+    const timer = window.setTimeout(() => syncFiltersToLocation(filters), 300);
+    return () => window.clearTimeout(timer);
+  }, [filters, remembering, rememberFilters]);
 
   // Server write: debounced, and only once the viewer has changed a filter.
   const serverSaveTimer = useRef<number | null>(null);
@@ -2066,7 +2090,6 @@ function readInitialFilters(
     };
   }
   const url = readFiltersFromLocation();
-  if (url) stripFilterHashFromLocation();
   const local =
     dashboardId && readRememberToggle(dashboardId) ? readLocalFilterState(dashboardId) : null;
   const restored = [...(local?.filters ?? []), ...(url ?? [])];

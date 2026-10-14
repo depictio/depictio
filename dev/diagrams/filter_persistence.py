@@ -557,7 +557,7 @@ def build_one_array() -> Sketch:
     s.text(tx, hy + 88, "of the page, not in any storage", size=12, colour=DIM, anchor="start")
     lifetime(
         s, hx + 14, hy + 168,
-        (("read once on load", True), ("then stripped from the URL", True)),
+        (("read on load", True), ("kept in the address bar", True)),
         gap=170,
     )  # fmt: skip
     mark(s, hx + 14 + 8, hy + 192, False)

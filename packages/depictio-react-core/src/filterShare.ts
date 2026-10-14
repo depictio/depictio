@@ -4,8 +4,8 @@
  * A dashboard view is captured in the `#filters=` fragment of the dashboard's
  * own URL. The recipient's viewer decodes the fragment during state
  * initialization (so the very first fetch is already filtered), applies the
- * entries, and strips the fragment from the address bar — the URL is a
- * hand-off, not live state.
+ * entries; while filters change the viewer keeps the fragment in step
+ * (`syncFiltersToLocation`), so the address bar itself is the link.
  *
  * Two encodings coexist:
  *
@@ -241,15 +241,26 @@ export function readFiltersFromLocation(): InteractiveFilter[] | null {
   return decodeFiltersFromHash(window.location.hash);
 }
 
-/** Remove a consumed `#filters=` fragment from the address bar without
- *  touching other fragments (e.g. `#ingestion`). */
-export function stripFilterHashFromLocation(): void {
+/** Keep the address bar's `#filters=` in step with `filters`, so the page's
+ *  own URL is the shareable link. History is replaced, never pushed: filtering
+ *  is not navigation, and Back should leave the dashboard rather than step
+ *  through filter states. Other fragment params (`theme=`, ...) are left
+ *  alone. An empty selection, or one too large to encode, leaves no
+ *  `filters=` behind rather than a stale or truncated one. */
+export function syncFiltersToLocation(filters: InteractiveFilter[]): void {
   try {
-    if (!window.location.hash.includes(`${FILTER_HASH_PARAM}=`)) return;
-    const { pathname, search } = window.location;
-    window.history.replaceState(null, '', pathname + search);
+    const { pathname, search, hash } = window.location;
+    const others = hash
+      .replace(/^#/, '')
+      .split('&')
+      .filter((p) => p !== '' && !p.startsWith(`${FILTER_HASH_PARAM}=`));
+    const encoded = filters.length > 0 ? encodeFiltersForHash(filters) : null;
+    const params = encoded === null ? others : [...others, `${FILTER_HASH_PARAM}=${encoded}`];
+    const next = params.length > 0 ? `#${params.join('&')}` : '';
+    if (next === hash) return;
+    window.history.replaceState(window.history.state, '', pathname + search + next);
   } catch {
-    // A stale fragment in the address bar is cosmetic only.
+    // The address bar simply stays as it was; the link icon still works.
   }
 }
 

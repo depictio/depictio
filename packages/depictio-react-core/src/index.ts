@@ -740,7 +740,7 @@ export {
   encodeFiltersForHash,
   decodeFiltersFromHash,
   readFiltersFromLocation,
-  stripFilterHashFromLocation,
+  syncFiltersToLocation,
   buildFilterShareUrl,
   sanitizeRestoredFilters,
 } from './filterShare';

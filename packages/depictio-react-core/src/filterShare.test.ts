@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { InteractiveFilter } from './api';
 import {
   buildFilterShareUrl,
+  syncFiltersToLocation,
   decodeFiltersFromHash,
   encodeFiltersForHash,
   sanitizeRestoredFilters,
@@ -11,13 +12,24 @@ import {
 // The module reads `window.btoa` / `window.location`; vitest runs in node, so
 // stand a minimal window in front of node's own btoa / atob.
 const g = globalThis as unknown as { window?: unknown };
+const replaced: string[] = [];
 
 beforeEach(() => {
   g.window = {
     btoa: globalThis.btoa,
     atob: globalThis.atob,
-    location: { origin: 'https://depictio.test', pathname: '/dashboard/abc', hash: '' },
+    location: { origin: 'https://depictio.test', pathname: '/dashboard/abc', search: '', hash: '' },
+    history: {
+      state: null,
+      replaceState(_s: unknown, _t: string, url: string) {
+        const loc = (g.window as { location: { pathname: string; search: string; hash: string } })
+          .location;
+        loc.hash = url.includes('#') ? url.slice(url.indexOf('#')) : '';
+        replaced.push(url);
+      },
+    },
   };
+  replaced.length = 0;
 });
 afterEach(() => {
   delete g.window;
@@ -108,5 +120,45 @@ describe('sanitizeRestoredFilters', () => {
     expect(
       sanitizeRestoredFilters([kept, floatingMap, stale], new Set(['c1', 'm1'])),
     ).toEqual([kept, floatingMap]);
+  });
+});
+
+describe('syncFiltersToLocation', () => {
+  const loc = () => (g.window as { location: { hash: string } }).location;
+
+  it('writes the filters into the fragment and replaces history', () => {
+    syncFiltersToLocation([panel('c1', ['a'])]);
+    expect(loc().hash).toMatch(/^#filters=2;/);
+    expect(replaced).toHaveLength(1);
+  });
+
+  it('removes only its own param when the filters go away', () => {
+    loc().hash = '#theme=dark&filters=2;x';
+    syncFiltersToLocation([]);
+    expect(loc().hash).toBe('#theme=dark');
+  });
+
+  it('leaves other fragment params in place beside the filters', () => {
+    loc().hash = '#theme=dark';
+    syncFiltersToLocation([panel('c1', ['a'])]);
+    expect(loc().hash).toMatch(/^#theme=dark&filters=2;/);
+  });
+
+  it('does not touch history when nothing changed', () => {
+    syncFiltersToLocation([panel('c1', ['a'])]);
+    replaced.length = 0;
+    syncFiltersToLocation([panel('c1', ['a'])]);
+    expect(replaced).toHaveLength(0);
+  });
+
+  it('drops a selection too large to encode instead of leaving a stale one', () => {
+    syncFiltersToLocation([panel('c1', ['a'])]);
+    const big: InteractiveFilter = {
+      index: 't1',
+      value: Array.from({ length: 5000 }, (_, i) => `sample-${i}`),
+      source: 'table_selection',
+    };
+    syncFiltersToLocation([big]);
+    expect(loc().hash).toBe('');
   });
 });

@@ -202,7 +202,7 @@ const YourFiltersBlock: React.FC<{ filters: FilterSettings }> = ({ filters }) =>
     />
     <Field
       label="Share this view"
-      description="The dashboard's address, with the filters you have applied now written after #filters=. Anyone who opens it sees the same view; with none applied it is the plain link."
+      description="The address bar carries it as you filter, so you can copy it from there or from here. Anyone who opens it sees the same view; with no filters it is the plain link."
     >
       <ShareFiltersField filters={filters.current} activeCount={filters.activeCount} />
     </Field>
