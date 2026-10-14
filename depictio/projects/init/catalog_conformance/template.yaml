@@ -971,6 +971,20 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 320cbf5a5ee8764efc3c4fea
+    data_collection_tag: cmaple_tree_layout
+    description: 'Family tree segments: recipe output (cmaple/tree_layout.py), seeded from the catalog
+      fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: cmaple/tree_layout.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: af3563ea717c8054a3aaca9c
     data_collection_tag: cnvkit_cnv_profile
     description: 'Copy-number profile: recipe output (cnvkit/cnv_profile.py), seeded from the catalog
@@ -1672,6 +1686,33 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 16ce99d724042676dab5a0ff
+    data_collection_tag: famsa_alignment
+    description: 'Family alignment: recipe output (famsa/alignment.py), seeded from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: famsa/alignment.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 8cd283af60323565a8e97432
+    data_collection_tag: famsa_conservation
+    description: 'Residue conservation: recipe output (famsa/conservation.py), seeded from the catalog
+      fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: famsa/conservation.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 27f16c6cb818184c24636983
     data_collection_tag: funcscan_contig_annotation
     description: 'Contig annotation: recipe output (funcscan/contig_annotation.py), seeded from the catalog
@@ -1985,6 +2026,47 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: df9f87b739d5be7d6c224c27
+    data_collection_tag: hmmer_hmm_profile
+    description: 'Family profile HMM: recipe output (hmmer/hmm_profile.py), seeded from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: hmmer/hmm_profile.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 41b189ce654d95a6a4ba809a
+    data_collection_tag: hmmer_hmmalign_hits
+    description: 'Family member coverage of the HMM: recipe output (hmmer/hmmalign_hits.py), seeded from
+      the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: hmmer/hmmalign_hits.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 3b5dda7ca1ebc248a17e5904
+    data_collection_tag: hmmer_hmmsearch_domtbl
+    description: 'Domain hits (hmmsearch): recipe output (hmmer/hmmsearch_domtbl.py), seeded from the
+      catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: hmmer/hmmsearch_domtbl.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 82f223a5c7b53ddf6a7cfec1
     data_collection_tag: homer_annotated_peaks
     description: 'Peak annotation: recipe output (homer/annotate_peaks.py), seeded from the catalog fixture'
@@ -2022,6 +2104,20 @@ workflows:
       source: transformed
       transform:
         recipe: interop/summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: f1bd6d1ba446b475f394db8a
+    data_collection_tag: interproscan_matches
+    description: 'InterPro signature matches: recipe output (interproscan/matches.py), seeded from the
+      catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: interproscan/matches.py
       dc_specific_properties:
         format: TSV
         polars_kwargs:
@@ -2894,6 +2990,216 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 61390dc20359bd909ad6e765
+    data_collection_tag: proteinannotator_database_coverage
+    description: 'Protein x database coverage: recipe output (proteinannotator/database_coverage.py),
+      seeded from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinannotator/database_coverage.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: eab248add148a7622c9b5068
+    data_collection_tag: proteinannotator_database_sets
+    description: 'Database agreement per protein: recipe output (proteinannotator/database_sets.py), seeded
+      from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinannotator/database_sets.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 94a993e7836fde078db4463e
+    data_collection_tag: proteinannotator_domains
+    description: 'Protein domains, all databases: recipe output (proteinannotator/domains.py), seeded
+      from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinannotator/domains.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 3f14a1fff64937d8de191e06
+    data_collection_tag: proteinannotator_proteins
+    description: 'Protein annotation summary: recipe output (proteinannotator/proteins.py), seeded from
+      the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinannotator/proteins.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 0b6e0c4484bcd7a2d5cd8a63
+    data_collection_tag: proteinannotator_residues
+    description: 'Residue table (sequence, structure, domains): recipe output (proteinannotator/residues.py),
+      seeded from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinannotator/residues.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: b90b957a651cd621c9c0f797
+    data_collection_tag: proteinannotator_sample_summary
+    description: 'Sample summary: recipe output (proteinannotator/sample_summary.py), seeded from the
+      catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinannotator/sample_summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 0e3d888aafc5b093cfdd283e
+    data_collection_tag: proteinfamilies_cluster_size_distribution
+    description: 'Initial cluster sizes: recipe output (proteinfamilies/cluster_size_distribution.py),
+      seeded from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinfamilies/cluster_size_distribution.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: e3acdc01e421417f80b27a09
+    data_collection_tag: proteinfamilies_family_members
+    description: 'Family members: recipe output (proteinfamilies/family_members.py), seeded from the catalog
+      fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinfamilies/family_members.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 6d37a57f58d3f931b5bbc0ae
+    data_collection_tag: proteinfamilies_family_metadata
+    description: 'Protein families: recipe output (proteinfamilies/family_metadata.py), seeded from the
+      catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinfamilies/family_metadata.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: dc6b523cfc5bd7d50b0c4cb4
+    data_collection_tag: proteinfold_engine_plddt
+    description: 'Residue confidence per engine: recipe output (proteinfold/engine_plddt.py), seeded from
+      the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinfold/engine_plddt.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 136bfd15505fff0cc4670009
+    data_collection_tag: proteinfold_models
+    description: 'Model confidence scores: recipe output (proteinfold/models.py), seeded from the catalog
+      fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinfold/models.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 36098cbf8172ee7ea0be4077
+    data_collection_tag: proteinfold_msa
+    description: 'Multiple sequence alignments of the MSA-based engines: recipe output (proteinfold/msa.py),
+      seeded from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinfold/msa.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 3439444991c359592a07597e
+    data_collection_tag: proteinfold_pae
+    description: 'Predicted aligned error of the top-ranked models: recipe output (proteinfold/pae.py),
+      seeded from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinfold/pae.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 59d74ff5d0e61943516c3c6d
+    data_collection_tag: proteinfold_plddt_ranks
+    description: 'Residue confidence of each engine''s models: recipe output (proteinfold/plddt_ranks.py),
+      seeded from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinfold/plddt_ranks.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 1a46791bfa6ceaf3220fc1df
+    data_collection_tag: proteinfold_residues
+    description: 'Residue confidence of the top-ranked structures: recipe output (proteinfold/residues.py),
+      seeded from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: proteinfold/residues.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 228cea763825ecfbc77f047f
     data_collection_tag: qcatch_metrics_summary
     description: 'QC summary (QCatch): recipe output (qcatch/metrics_summary.py), seeded from the catalog
@@ -3312,6 +3618,20 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 832bc316c607e97f9f9df29b
+    data_collection_tag: s4pred_secondary_structure
+    description: 'Secondary structure per residue: recipe output (s4pred/secondary_structure.py), seeded
+      from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: s4pred/secondary_structure.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: da6655fbb8a7a51586f2b38d
     data_collection_tag: salmon_gene_expression
     description: 'Gene expression (long): recipe output (salmon/gene_expression_long.py), seeded from
@@ -3458,6 +3778,32 @@ workflows:
       source: transformed
       transform:
         recipe: seacr/peaks.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: fb84ae77659708af142c339f
+    data_collection_tag: seqfu_stats
+    description: 'Sequence file statistics: recipe output (seqfu/stats.py), seeded from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: seqfu/stats.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: df16fd65d9acfc2bdbaee067
+    data_collection_tag: seqkit_sequences
+    description: 'Sequences: recipe output (seqkit/sequences.py), seeded from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: seqkit/sequences.py
       dc_specific_properties:
         format: TSV
         polars_kwargs:

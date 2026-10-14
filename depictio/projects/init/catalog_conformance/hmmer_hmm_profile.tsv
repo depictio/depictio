@@ -1,0 +1,61 @@
+entity	position	hmm_name	hmm_acc	hmm_position	hmm_letter	emission	height_bits	info_bits	insert_prob	insert_length	occupancy	delete_prob	consensus	rf	cs	map_column	sample
+mgnifams_create_5		mgnifams_create_5		1	A	0.07199	0.0	0.13119	0.02425	1.85816	0.84608	0.15392	k			1	mgnifams_create
+mgnifams_create_5		mgnifams_create_5		1	C	0.01098	0.0	0.13119	0.02425	1.85816	0.84608	0.15392	k			1	mgnifams_create
+mgnifams_create_5		mgnifams_create_5		1	D	0.0393	0.0	0.13119	0.02425	1.85816	0.84608	0.15392	k			1	mgnifams_create
+mgnifams_create_5		mgnifams_create_5		1	E	0.06755	0.01712	0.13119	0.02425	1.85816	0.84608	0.15392	k			1	mgnifams_create
+mgnifams_create_5		mgnifams_create_5		1	F	0.02683	0.0	0.13119	0.02425	1.85816	0.84608	0.15392	k			1	mgnifams_create
+mgnifams_create_5		mgnifams_create_5		1	G	0.03122	0.0	0.13119	0.02425	1.85816	0.84608	0.15392	k			1	mgnifams_create
+mgnifams_create_5		mgnifams_create_5		1	H	0.02565	0.0065	0.13119	0.02425	1.85816	0.84608	0.15392	k			1	mgnifams_create
+mgnifams_create_5		mgnifams_create_5		1	I	0.05003	0.0	0.13119	0.02425	1.85816	0.84608	0.15392	k			1	mgnifams_create
+mgnifams_create_5		mgnifams_create_5		1	K	0.09511	0.02411	0.13119	0.02425	1.85816	0.84608	0.15392	k			1	mgnifams_create
+mgnifams_create_5		mgnifams_create_5		1	L	0.07655	0.0	0.13119	0.02425	1.85816	0.84608	0.15392	k			1	mgnifams_create
+mgnifams_create_5		mgnifams_create_5		1	M	0.06859	0.01739	0.13119	0.02425	1.85816	0.84608	0.15392	k			1	mgnifams_create
+mgnifams_create_5		mgnifams_create_5		1	N	0.04393	0.01114	0.13119	0.02425	1.85816	0.84608	0.15392	k			1	mgnifams_create
+mgnifams_create_5		mgnifams_create_5		1	P	0.02087	0.0	0.13119	0.02425	1.85816	0.84608	0.15392	k			1	mgnifams_create
+mgnifams_create_5		mgnifams_create_5		1	Q	0.07406	0.01877	0.13119	0.02425	1.85816	0.84608	0.15392	k			1	mgnifams_create
+mgnifams_create_5		mgnifams_create_5		1	R	0.08559	0.02169	0.13119	0.02425	1.85816	0.84608	0.15392	k			1	mgnifams_create
+mgnifams_create_5		mgnifams_create_5		1	S	0.06302	0.0	0.13119	0.02425	1.85816	0.84608	0.15392	k			1	mgnifams_create
+mgnifams_create_5		mgnifams_create_5		1	T	0.05707	0.01447	0.13119	0.02425	1.85816	0.84608	0.15392	k			1	mgnifams_create
+mgnifams_create_5		mgnifams_create_5		1	V	0.06153	0.0	0.13119	0.02425	1.85816	0.84608	0.15392	k			1	mgnifams_create
+mgnifams_create_5		mgnifams_create_5		1	W	0.00665	0.0	0.13119	0.02425	1.85816	0.84608	0.15392	k			1	mgnifams_create
+mgnifams_create_5		mgnifams_create_5		1	Y	0.02348	0.0	0.13119	0.02425	1.85816	0.84608	0.15392	k			1	mgnifams_create
+mgnifams_create_5	2	mgnifams_create_5		2	A	0.08984	0.00854	0.0591	0.02183	1.85816	0.93159	0.06841	a			2	mgnifams_create
+mgnifams_create_5	2	mgnifams_create_5		2	C	0.0125	0.0	0.0591	0.02183	1.85816	0.93159	0.06841	a			2	mgnifams_create
+mgnifams_create_5	2	mgnifams_create_5		2	D	0.04072	0.0	0.0591	0.02183	1.85816	0.93159	0.06841	a			2	mgnifams_create
+mgnifams_create_5	2	mgnifams_create_5		2	E	0.08356	0.00794	0.0591	0.02183	1.85816	0.93159	0.06841	a			2	mgnifams_create
+mgnifams_create_5	2	mgnifams_create_5		2	F	0.02797	0.0	0.0591	0.02183	1.85816	0.93159	0.06841	a			2	mgnifams_create
+mgnifams_create_5	2	mgnifams_create_5		2	G	0.05363	0.0	0.0591	0.02183	1.85816	0.93159	0.06841	a			2	mgnifams_create
+mgnifams_create_5	2	mgnifams_create_5		2	H	0.02431	0.00231	0.0591	0.02183	1.85816	0.93159	0.06841	a			2	mgnifams_create
+mgnifams_create_5	2	mgnifams_create_5		2	I	0.06856	0.00651	0.0591	0.02183	1.85816	0.93159	0.06841	a			2	mgnifams_create
+mgnifams_create_5	2	mgnifams_create_5		2	K	0.07221	0.00686	0.0591	0.02183	1.85816	0.93159	0.06841	a			2	mgnifams_create
+mgnifams_create_5	2	mgnifams_create_5		2	L	0.0738	0.0	0.0591	0.02183	1.85816	0.93159	0.06841	a			2	mgnifams_create
+mgnifams_create_5	2	mgnifams_create_5		2	M	0.0535	0.00508	0.0591	0.02183	1.85816	0.93159	0.06841	a			2	mgnifams_create
+mgnifams_create_5	2	mgnifams_create_5		2	N	0.04414	0.00419	0.0591	0.02183	1.85816	0.93159	0.06841	a			2	mgnifams_create
+mgnifams_create_5	2	mgnifams_create_5		2	P	0.02148	0.0	0.0591	0.02183	1.85816	0.93159	0.06841	a			2	mgnifams_create
+mgnifams_create_5	2	mgnifams_create_5		2	Q	0.05105	0.00485	0.0591	0.02183	1.85816	0.93159	0.06841	a			2	mgnifams_create
+mgnifams_create_5	2	mgnifams_create_5		2	R	0.04926	0.0	0.0591	0.02183	1.85816	0.93159	0.06841	a			2	mgnifams_create
+mgnifams_create_5	2	mgnifams_create_5		2	S	0.06785	0.0	0.0591	0.02183	1.85816	0.93159	0.06841	a			2	mgnifams_create
+mgnifams_create_5	2	mgnifams_create_5		2	T	0.06236	0.00593	0.0591	0.02183	1.85816	0.93159	0.06841	a			2	mgnifams_create
+mgnifams_create_5	2	mgnifams_create_5		2	V	0.07241	0.00688	0.0591	0.02183	1.85816	0.93159	0.06841	a			2	mgnifams_create
+mgnifams_create_5	2	mgnifams_create_5		2	W	0.00682	0.0	0.0591	0.02183	1.85816	0.93159	0.06841	a			2	mgnifams_create
+mgnifams_create_5	2	mgnifams_create_5		2	Y	0.02401	0.0	0.0591	0.02183	1.85816	0.93159	0.06841	a			2	mgnifams_create
+mgnifams_create_5	3	mgnifams_create_5		3	A	0.0847	0.02013	0.16822	0.02076	1.85816	0.96493	0.03507	k			3	mgnifams_create
+mgnifams_create_5	3	mgnifams_create_5		3	C	0.00896	0.0	0.16822	0.02076	1.85816	0.96493	0.03507	k			3	mgnifams_create
+mgnifams_create_5	3	mgnifams_create_5		3	D	0.04983	0.0	0.16822	0.02076	1.85816	0.96493	0.03507	k			3	mgnifams_create
+mgnifams_create_5	3	mgnifams_create_5		3	E	0.08433	0.02004	0.16822	0.02076	1.85816	0.96493	0.03507	k			3	mgnifams_create
+mgnifams_create_5	3	mgnifams_create_5		3	F	0.01908	0.0	0.16822	0.02076	1.85816	0.96493	0.03507	k			3	mgnifams_create
+mgnifams_create_5	3	mgnifams_create_5		3	G	0.03308	0.0	0.16822	0.02076	1.85816	0.96493	0.03507	k			3	mgnifams_create
+mgnifams_create_5	3	mgnifams_create_5		3	H	0.02721	0.00647	0.16822	0.02076	1.85816	0.96493	0.03507	k			3	mgnifams_create
+mgnifams_create_5	3	mgnifams_create_5		3	I	0.03503	0.0	0.16822	0.02076	1.85816	0.96493	0.03507	k			3	mgnifams_create
+mgnifams_create_5	3	mgnifams_create_5		3	K	0.12287	0.0292	0.16822	0.02076	1.85816	0.96493	0.03507	k			3	mgnifams_create
+mgnifams_create_5	3	mgnifams_create_5		3	L	0.05144	0.0	0.16822	0.02076	1.85816	0.96493	0.03507	k			3	mgnifams_create
+mgnifams_create_5	3	mgnifams_create_5		3	M	0.04583	0.01089	0.16822	0.02076	1.85816	0.96493	0.03507	k			3	mgnifams_create
+mgnifams_create_5	3	mgnifams_create_5		3	N	0.06378	0.01516	0.16822	0.02076	1.85816	0.96493	0.03507	k			3	mgnifams_create
+mgnifams_create_5	3	mgnifams_create_5		3	P	0.02214	0.0	0.16822	0.02076	1.85816	0.96493	0.03507	k			3	mgnifams_create
+mgnifams_create_5	3	mgnifams_create_5		3	Q	0.08358	0.01986	0.16822	0.02076	1.85816	0.96493	0.03507	k			3	mgnifams_create
+mgnifams_create_5	3	mgnifams_create_5		3	R	0.06712	0.01595	0.16822	0.02076	1.85816	0.96493	0.03507	k			3	mgnifams_create
+mgnifams_create_5	3	mgnifams_create_5		3	S	0.06987	0.0166	0.16822	0.02076	1.85816	0.96493	0.03507	k			3	mgnifams_create
+mgnifams_create_5	3	mgnifams_create_5		3	T	0.05861	0.01393	0.16822	0.02076	1.85816	0.96493	0.03507	k			3	mgnifams_create
+mgnifams_create_5	3	mgnifams_create_5		3	V	0.04728	0.0	0.16822	0.02076	1.85816	0.96493	0.03507	k			3	mgnifams_create
+mgnifams_create_5	3	mgnifams_create_5		3	W	0.00542	0.0	0.16822	0.02076	1.85816	0.96493	0.03507	k			3	mgnifams_create
+mgnifams_create_5	3	mgnifams_create_5		3	Y	0.01984	0.0	0.16822	0.02076	1.85816	0.96493	0.03507	k			3	mgnifams_create

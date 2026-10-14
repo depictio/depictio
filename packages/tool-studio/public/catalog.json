@@ -6892,6 +6892,61 @@
       "stage": "qc"
     },
     {
+      "biotools_url": null,
+      "description": "Maximum-likelihood phylogenetic trees of protein family members, laid out as rectangular tree segments per family.",
+      "dir": "depictio/catalog/cmaple",
+      "homepage": "https://github.com/iqtree/cmaple",
+      "id": "cmaple",
+      "name": "CMAPLE",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/cmaple",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Every family tree laid out rectangularly (x = distance from the root, tips one slot apart, families stacked) as line segments: two point rows and a null separator row per segment in draw order, the member id on the row that ends at a tip. One line trace sorted by draw_order draws the forest; a family filter draws one tree.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/phylogeny/cmaple/*/*.treefile",
+            "path_glob_alt": [
+              "**/*.treefile"
+            ]
+          },
+          "fixture": "tree_layout.tsv",
+          "fixtureContent": "family\tsample\tdraw_order\tx\ty\tnode\tis_tip\tn_tips\nmgnifams_create_1\tmgnifams_create\t0\t0.0\t7.548828125\t\"\"\tfalse\t20\nmgnifams_create_1\tmgnifams_create\t1\t0.0\t18.5\t\"\"\tfalse\t20\nmgnifams_create_1\tmgnifams_create\t2\t\t\t\"\"\tfalse\t20\nmgnifams_create_1\tmgnifams_create\t3\t0.0\t7.548828125\t\"\"\tfalse\t20\nmgnifams_create_1\tmgnifams_create\t4\t0.10000000149\t7.548828125\t\"\"\tfalse\t20\nmgnifams_create_1\tmgnifams_create\t5\t\t\t\"\"\tfalse\t20\nmgnifams_create_1\tmgnifams_create\t6\t0.0\t18.5\t\"\"\tfalse\t20\nmgnifams_create_1\tmgnifams_create\t7\t0.10000000149\t18.5\t\"\"\tfalse\t20\nmgnifams_create_1\tmgnifams_create\t8\t\t\t\"\"\tfalse\t20\nmgnifams_create_1\tmgnifams_create\t9\t0.10000000149\t18.0\t\"\"\tfalse\t20\nmgnifams_create_1\tmgnifams_create\t10\t0.10000000149\t19.0\t\"\"\tfalse\t20\nmgnifams_create_1\tmgnifams_create\t11\t\t\t\"\"\tfalse\t20\nmgnifams_create_1\tmgnifams_create\t12\t0.10000000149\t18.0\t\"\"\tfalse\t20\nmgnifams_create_1\tmgnifams_create\t13\t0.20000000298\t18.0\t1336010185_126_255/11-123\ttrue\t20\nmgnifams_create_1\tmgnifams_create\t14\t\t\t\"\"\tfalse\t20\nmgnifams_create_1\tmgnifams_create\t15\t0.10000000149\t19.0\t\"\"\tfalse\t20\nmgnifams_create_1\tmgnifams_create\t16\t0.20000000298\t19.0\t1015154437_431_579/10-126\ttrue\t20\nmgnifams_create_1\tmgnifams_create\t17\t\t\t\"\"\tfalse\t20\n",
+          "id": "cmaple_tree_layout",
+          "mode": "phylogeny/layout",
+          "name": "Family tree segments",
+          "path_glob": "**/phylogeny/cmaple/*/*.treefile",
+          "rawYaml": "id: cmaple_tree_layout\nname: Family tree segments\nmode: phylogeny/layout\ndescription: >-\n  Every family tree laid out rectangularly (x = distance from the root, tips\n  one slot apart, families stacked) as line segments: two point rows and a\n  null separator row per segment in draw order, the member id on the row that\n  ends at a tip. One line trace sorted by draw_order draws the forest; a\n  family filter draws one tree.\nfind:\n  path_glob: \"**/phylogeny/cmaple/*/*.treefile\"\n  path_glob_alt:\n    - \"**/*.treefile\"\nrecipe: cmaple/tree_layout.py\nfixture: tree_layout.tsv\nrenders_as:\n  - component: figure\n    code: |\n      d = df.sort('draw_order')\n      tips = d.filter(pl.col('is_tip'))\n      edges = go.Scatter(\n          x=d['x'].to_list(), y=d['y'].to_list(), mode='lines', connectgaps=False,\n          line={'width': 1}, hoverinfo='skip', showlegend=False,\n      )\n      tip_marks = go.Scatter(\n          x=tips['x'].to_list(), y=tips['y'].to_list(), mode='markers',\n          marker={'size': 6}, text=tips['node'].to_list(), customdata=tips['family'].to_list(),\n          hovertemplate='%{text}<br>%{customdata}<extra></extra>', showlegend=False,\n      )\n      fig = go.Figure(data=[edges, tip_marks])\n      fig.update_layout(xaxis_title='Substitutions per site from the root', margin={'t': 16, 'l': 16, 'r': 16, 'b': 48})\n      fig.update_yaxes(visible=False, autorange='reversed')\n  - { component: table }\n",
+          "recipe": "cmaple/tree_layout.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "code": "d = df.sort('draw_order')\ntips = d.filter(pl.col('is_tip'))\nedges = go.Scatter(\n    x=d['x'].to_list(), y=d['y'].to_list(), mode='lines', connectgaps=False,\n    line={'width': 1}, hoverinfo='skip', showlegend=False,\n)\ntip_marks = go.Scatter(\n    x=tips['x'].to_list(), y=tips['y'].to_list(), mode='markers',\n    marker={'size': 6}, text=tips['node'].to_list(), customdata=tips['family'].to_list(),\n    hovertemplate='%{text}<br>%{customdata}<extra></extra>', showlegend=False,\n)\nfig = go.Figure(data=[edges, tip_marks])\nfig.update_layout(xaxis_title='Substitutions per site from the root', margin={'t': 16, 'l': 16, 'r': 16, 'b': 48})\nfig.update_yaxes(visible=False, autorange='reversed')\n",
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "tree_layout",
+          "yamlPath": "depictio/catalog/cmaple/tree_layout.yaml"
+        }
+      ],
+      "stage": "alignment"
+    },
+    {
       "biotools_url": "https://bio.tools/cnvkit",
       "description": "Infers and visualises copy number from high-throughput DNA sequencing data.",
       "dir": "depictio/catalog/cnvkit",
@@ -11620,6 +11675,210 @@
       "stage": "qc"
     },
     {
+      "biotools_url": "https://bio.tools/famsa",
+      "description": "Progressive multiple sequence alignment for large protein families: the aligned rows of every family, and how conserved each residue of the family representative is across its members.",
+      "dir": "depictio/catalog/famsa",
+      "homepage": "https://github.com/refresh-bio/FAMSA",
+      "id": "famsa",
+      "name": "FAMSA",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/famsa/align",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "The protein module's MSA table: one row per aligned sequence of every family alignment, the family representative first (rank 0), with each row's identity to the representative and the share of the representative it covers. Capped at 500 rows per family in file order.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/full_msa/filtered/famsa_align/*/*.aln",
+            "path_glob_alt": [
+              "**/update_families/full_msa/famsa_align/*/*.aln",
+              "**/full_msa/filtered/mafft_align/*/*.fas"
+            ]
+          },
+          "fixture": "alignment.tsv",
+          "fixtureContent": "msa_id\tseq_id\trank\taligned_sequence\tidentity\tcoverage\tsample\nmgnifams_create_1\t190761241_322_438\t0\tRILDPRIVGEEHYKVARSVQEILQKYKELQDIIAILGMDELSEDDKLVVSRARKVQR--FLSQP-FFVAGQFTGLEGRYVPVSETIQGFKEIIE-GKYDDIPESYFLNCGGIDDVLAKVEK-\t1.0\t1.0\tmgnifams_create\nmgnifams_create_1\t5862852515_178_295\t1\tRILEADVVGEEHYRVAREVQETLQKYKELQDIIAILGMEELSDEDKQTVYRARKVQR--FLSQP-FHVAENFTNVKGVFVPVKETIRGFKAILD-GEMDAYPEAAFFNVGTIEDVKKKAETL\t0.6581196581196581\t1.0\tmgnifams_create\nmgnifams_create_1\t1248030292/5-122\t2\tRMLDPRIVGEEHYEVARRVQEILQAYKSLQDIIAILGMDELSEEDKLTVARARKIQR--FLSQP-FFVAEVFTGTAGKLVSLEDTIAGFKSICD-GECDDMPEASFYMIGDLDEAREKTKEM\t0.6581196581196581\t1.0\tmgnifams_create\nmgnifams_create_1\t5761321067_228_349/1-118\t3\tRILEAEIVGEEHYEVANKVIAILQKYTELQDIIAILGMEELSDEDKATVMRARKIQR--FLSQP-FFVAETFTGIPGKYVPLKETIRGFKMIID-GEMDEYPESAFFNVGTIDDVIEKAKAE\t0.6666666666666666\t1.0\tmgnifams_create\nmgnifams_create_1\t2632373804_177_299/1-118\t4\tRMLDPRIVGDEHYNIARRVQEVLQQYKSLQDIIAILGMDELSEEDKLVVTRARKIQR--FLSQP-FFVAEVFTGSPGVLVSLEDTIKGFKGITE-GKYDDLPEAAFYMVGTIEEAIEKSKKL\t0.6752136752136753\t1.0\tmgnifams_create\nmgnifams_create_1\t636412597_356_475/1-118\t5\tRILDPNILGKEHYEVARGVQAILQRYKELQDIIAILGMEELSDEDKVIVARARKIQR--FLSQP-FFVAEQFTGKPGQYVSLSDTIQGFKEILE-GKHDEIPEGMFLNAGNIEEVVERFAAR\t0.6923076923076923\t1.0\tmgnifams_create\nmgnifams_create_1\t3318779648/9-126\t6\tRQLDPLVVGAEHYEVARQVQGLLQRYKELRDIIAILGMDELSDEDKLVVARARKIQR--FLSQP-FFVAETFTNVPGKYVSLKETIASFKSIAD-GDMDEYPEQAFYMVGGLDEVVEKAKSL\t0.6239316239316239\t1.0\tmgnifams_create\nmgnifams_create_1\t787358001_386_511/1-118\t7\tRILDPLIIGEEHYQVAQSVKQLLQHYNELQDIIAILGVDELSDEDKLVVNRARRAQR--FLSQP-FHVAEQFTGVPGVMVPLEETIRGFKMILN-GEMDEYPEQAFMNVGTIDEVIVKGKKM\t0.6495726495726496\t1.0\tmgnifams_create\nmgnifams_create_1\t2603693830_362_480/1-118\t8\tRILEPDILGRRHYDTARAVQRVLQKYKDLQDIIAVLGMDELSVEDKAAVNRARRIQR--FLSQP-FHVAENFTGMAGKYVPLSETIRGFEAILG-GECDDIPEQAFLFCGSIDDVLRKRDAL\t0.6495726495726496\t1.0\tmgnifams_create\nmgnifams_create_1\t1298531797_77_200/1-118\t9\tRILDPLIVGKEHYDTAQRVKQILQRNKELQDIISILGMDELSDEDRLTVNRARRVQR--FLSQP-FAVAEQFTGVPGVMVSIEDTIKGFKMILD-GEVDDLPEQAFLNVGTIEDAIAKGKEL\t0.6239316239316239\t1.0\tmgnifams_create\nmgnifams_create_1\t6278924881_350_461\t10\tTILNPEIIGQEHYDVAREVQRILQRYKDLQDIIAILGMEELSDEDKKTVARARRIQR--FLTQP-FHVAEVFTGNPGKYVSLKDTIAGFREILD-GKHDDKSENAFYMVGTIKEVK------\t0.5982142857142857\t0.9572649572649573\tmgnifams_create\nmgnifams_create_1\t2789726661/5-122\t11\tRLMDPLVVGEEHYNVARSVQVTLQRYKELQDIIAILGMDELSEDDKKIVGRARRLQR--FMSQP-FAVAEQFTGIPGKYVKLEETISSFERICA-GEFDHLPEQAFFMAGGVEDVVANAKKL\t0.6324786324786325\t1.0\tmgnifams_create\n",
+          "id": "famsa_alignment",
+          "mode": "protein/msa",
+          "name": "Family alignment",
+          "path_glob": "**/full_msa/filtered/famsa_align/*/*.aln",
+          "rawYaml": "id: famsa_alignment\nname: Family alignment\nmode: protein/msa\ndescription: >-\n  The protein module's MSA table: one row per aligned sequence of every family\n  alignment, the family representative first (rank 0), with each row's\n  identity to the representative and the share of the representative it\n  covers. Capped at 500 rows per family in file order.\nfind:\n  path_glob: \"**/full_msa/filtered/famsa_align/*/*.aln\"\n  path_glob_alt:\n    - \"**/update_families/full_msa/famsa_align/*/*.aln\"\n    - \"**/full_msa/filtered/mafft_align/*/*.fas\"\nrecipe: famsa/alignment.py\nfixture: alignment.tsv\nrenders_as:\n  - { id: family_msa, component: advanced_viz, kind: msa,\n      roles: {msa_id: msa_id, seq_id: seq_id, sequence: aligned_sequence, rank: rank, identity: identity} }\n  - { id: aligned_rows, component: card, column: seq_id, aggregation: count,\n      secondary_layout: top_n, breakdown_col: msa_id, top_n_count: 3 }\n  - { id: aligned_identity, component: card, column: identity, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }\n  - { component: table }\n",
+          "recipe": "famsa/alignment.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "family_msa",
+              "kind": "msa",
+              "roles": {
+                "identity": "identity",
+                "msa_id": "msa_id",
+                "rank": "rank",
+                "seq_id": "seq_id",
+                "sequence": "aligned_sequence"
+              }
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "msa_id",
+              "column": "seq_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "aligned_rows",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "identity",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": true,
+              "id": "aligned_identity",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "alignment",
+          "yamlPath": "depictio/catalog/famsa/alignment.yaml"
+        },
+        {
+          "columns": {},
+          "description": "The protein module's residue table for every family: one row per residue of the family representative, numbered along its ungapped sequence, with a 0-1 conservation score (entropy of the alignment column over the 20 amino acids, discounted by gaps), its class (conserved, intermediate, variable), the column consensus and its occupancy. The representative sequence rides on every row, which is what a 3D tile folds in resolve mode.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/full_msa/filtered/famsa_align/*/*.aln",
+            "path_glob_alt": [
+              "**/update_families/full_msa/famsa_align/*/*.aln",
+              "**/full_msa/filtered/mafft_align/*/*.fas"
+            ]
+          },
+          "fixture": "conservation.tsv",
+          "fixtureContent": "entity\tsample\tposition\tresidue\tvalue\tcategory\tconsensus\tconsensus_share\toccupancy\tn_members\tsequence\nmgnifams_create_1\tmgnifams_create\t1\tR\t0.733\tconserved\tR\t0.833\t0.9\t20\tRILDPRIVGEEHYKVARSVQEILQKYKELQDIIAILGMDELSEDDKLVVSRARKVQRFLSQPFFVAGQFTGLEGRYVPVSETIQGFKEIIEGKYDDIPESYFLNCGGIDDVLAKVEK\nmgnifams_create_1\tmgnifams_create\t2\tI\t0.55\tintermediate\tI\t0.611\t0.9\t20\tRILDPRIVGEEHYKVARSVQEILQKYKELQDIIAILGMDELSEDDKLVVSRARKVQRFLSQPFFVAGQFTGLEGRYVPVSETIQGFKEIIEGKYDDIPESYFLNCGGIDDVLAKVEK\nmgnifams_create_1\tmgnifams_create\t3\tL\t0.795\tconserved\tL\t0.889\t0.9\t20\tRILDPRIVGEEHYKVARSVQEILQKYKELQDIIAILGMDELSEDDKLVVSRARKVQRFLSQPFFVAGQFTGLEGRYVPVSETIQGFKEIIEGKYDDIPESYFLNCGGIDDVLAKVEK\nmgnifams_create_1\tmgnifams_create\t4\tD\t0.558\tintermediate\tD\t0.579\t0.95\t20\tRILDPRIVGEEHYKVARSVQEILQKYKELQDIIAILGMDELSEDDKLVVSRARKVQRFLSQPFFVAGQFTGLEGRYVPVSETIQGFKEIIEGKYDDIPESYFLNCGGIDDVLAKVEK\nmgnifams_create_1\tmgnifams_create\t5\tP\t0.701\tconserved\tP\t0.75\t1.0\t20\tRILDPRIVGEEHYKVARSVQEILQKYKELQDIIAILGMDELSEDDKLVVSRARKVQRFLSQPFFVAGQFTGLEGRYVPVSETIQGFKEIIEGKYDDIPESYFLNCGGIDDVLAKVEK\nmgnifams_create_1\tmgnifams_create\t6\tR\t0.439\tintermediate\tR\t0.25\t1.0\t20\tRILDPRIVGEEHYKVARSVQEILQKYKELQDIIAILGMDELSEDDKLVVSRARKVQRFLSQPFFVAGQFTGLEGRYVPVSETIQGFKEIIEGKYDDIPESYFLNCGGIDDVLAKVEK\nmgnifams_create_1\tmgnifams_create\t7\tI\t0.576\tintermediate\tI\t0.6\t1.0\t20\tRILDPRIVGEEHYKVARSVQEILQKYKELQDIIAILGMDELSEDDKLVVSRARKVQRFLSQPFFVAGQFTGLEGRYVPVSETIQGFKEIIEGKYDDIPESYFLNCGGIDDVLAKVEK\nmgnifams_create_1\tmgnifams_create\t8\tV\t0.732\tconserved\tV\t0.7\t1.0\t20\tRILDPRIVGEEHYKVARSVQEILQKYKELQDIIAILGMDELSEDDKLVVSRARKVQRFLSQPFFVAGQFTGLEGRYVPVSETIQGFKEIIEGKYDDIPESYFLNCGGIDDVLAKVEK\nmgnifams_create_2\tmgnifams_create\t1\tA\t0.419\tintermediate\tA\t0.467\t0.833\t18\tAAMKGMLDPVYEEKVIGHAEIRQLFKASGVGTIAGSYVMDGTFQRDCKVRISREGKQIFEGQLASLKRFKDDVKEVKAGYECGLVFEGFNDIQELDQVEAYIMVEVPR\nmgnifams_create_2\tmgnifams_create\t2\tA\t0.533\tintermediate\tA\t0.667\t0.833\t18\tAAMKGMLDPVYEEKVIGHAEIRQLFKASGVGTIAGSYVMDGTFQRDCKVRISREGKQIFEGQLASLKRFKDDVKEVKAGYECGLVFEGFNDIQELDQVEAYIMVEVPR\nmgnifams_create_2\tmgnifams_create\t3\tM\t0.659\tintermediate\tM\t0.8\t0.833\t18\tAAMKGMLDPVYEEKVIGHAEIRQLFKASGVGTIAGSYVMDGTFQRDCKVRISREGKQIFEGQLASLKRFKDDVKEVKAGYECGLVFEGFNDIQELDQVEAYIMVEVPR\nmgnifams_create_2\tmgnifams_create\t4\tK\t0.508\tintermediate\tK\t0.6\t0.833\t18\tAAMKGMLDPVYEEKVIGHAEIRQLFKASGVGTIAGSYVMDGTFQRDCKVRISREGKQIFEGQLASLKRFKDDVKEVKAGYECGLVFEGFNDIQELDQVEAYIMVEVPR\nmgnifams_create_2\tmgnifams_create\t5\tG\t0.751\tconserved\tG\t0.875\t0.889\t18\tAAMKGMLDPVYEEKVIGHAEIRQLFKASGVGTIAGSYVMDGTFQRDCKVRISREGKQIFEGQLASLKRFKDDVKEVKAGYECGLVFEGFNDIQELDQVEAYIMVEVPR\nmgnifams_create_2\tmgnifams_create\t6\tM\t0.596\tintermediate\tM\t0.625\t0.889\t18\tAAMKGMLDPVYEEKVIGHAEIRQLFKASGVGTIAGSYVMDGTFQRDCKVRISREGKQIFEGQLASLKRFKDDVKEVKAGYECGLVFEGFNDIQELDQVEAYIMVEVPR\nmgnifams_create_2\tmgnifams_create\t7\tL\t0.71\tconserved\tL\t0.812\t0.889\t18\tAAMKGMLDPVYEEKVIGHAEIRQLFKASGVGTIAGSYVMDGTFQRDCKVRISREGKQIFEGQLASLKRFKDDVKEVKAGYECGLVFEGFNDIQELDQVEAYIMVEVPR\nmgnifams_create_2\tmgnifams_create\t8\tD\t0.38\tvariable\tA\t0.294\t0.944\t18\tAAMKGMLDPVYEEKVIGHAEIRQLFKASGVGTIAGSYVMDGTFQRDCKVRISREGKQIFEGQLASLKRFKDDVKEVKAGYECGLVFEGFNDIQELDQVEAYIMVEVPR\n",
+          "id": "famsa_conservation",
+          "mode": "protein/residues",
+          "name": "Residue conservation",
+          "path_glob": "**/full_msa/filtered/famsa_align/*/*.aln",
+          "rawYaml": "id: famsa_conservation\nname: Residue conservation\nmode: protein/residues\ndescription: >-\n  The protein module's residue table for every family: one row per residue of\n  the family representative, numbered along its ungapped sequence, with a\n  0-1 conservation score (entropy of the alignment column over the 20 amino\n  acids, discounted by gaps), its class (conserved, intermediate, variable),\n  the column consensus and its occupancy. The representative sequence rides on\n  every row, which is what a 3D tile folds in resolve mode.\nfind:\n  path_glob: \"**/full_msa/filtered/famsa_align/*/*.aln\"\n  path_glob_alt:\n    - \"**/update_families/full_msa/famsa_align/*/*.aln\"\n    - \"**/full_msa/filtered/mafft_align/*/*.fas\"\nrecipe: famsa/conservation.py\nfixture: conservation.tsv\nrenders_as:\n  # The representative's sequence with a conservation lane and a class lane;\n  # brushing it emits the residue_selection the structure and the MSA follow.\n  - { id: conservation_track, component: advanced_viz, kind: sequence_track,\n      roles: {position: position, entity: entity, residue: residue, value: value, category: category} }\n  # The representative folded on demand (resolve mode, by sequence) and\n  # coloured by the same score, so conserved patches read as surfaces.\n  - { id: conservation_structure, component: advanced_viz, kind: molecule_3d,\n      roles: {position: position, entity: entity, value: value, category: category, sequence: sequence} }\n  - { id: conservation_profile, component: advanced_viz, kind: profile,\n      roles: {series: entity, x: position, y: value} }\n  - { id: residue_conservation, component: card, column: value, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: figure, visu_type: histogram, dict_kwargs: {x: value, color: category} }\n  - { component: table }\n",
+          "recipe": "famsa/conservation.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "conservation_track",
+              "kind": "sequence_track",
+              "roles": {
+                "category": "category",
+                "entity": "entity",
+                "position": "position",
+                "residue": "residue",
+                "value": "value"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "conservation_structure",
+              "kind": "molecule_3d",
+              "roles": {
+                "category": "category",
+                "entity": "entity",
+                "position": "position",
+                "sequence": "sequence",
+                "value": "value"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "conservation_profile",
+              "kind": "profile",
+              "roles": {
+                "series": "entity",
+                "x": "position",
+                "y": "value"
+              }
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "value",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "residue_conservation",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "category",
+                "x": "value"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "conservation",
+          "yamlPath": "depictio/catalog/famsa/conservation.yaml"
+        }
+      ],
+      "stage": "alignment"
+    },
+    {
       "biotools_url": null,
       "description": "Run-level joins across the four nf-core/funcscan screens: a per-sample screening hub (ARG, AMP, BGC and CAZyme headline counts), a per-contig annotation summary that puts the four screens on the same locus, and the software versions the run recorded.",
       "dir": "depictio/catalog/funcscan",
@@ -14146,6 +14405,126 @@
       "stage": "alignment"
     },
     {
+      "biotools_url": "https://bio.tools/hmmer3",
+      "description": "Profile hidden Markov model searches: which protein families each sequence carries, where on the sequence each domain sits, and how confident the hit is.",
+      "dir": "depictio/catalog/hmmer",
+      "homepage": "http://hmmer.org/",
+      "id": "hmmer",
+      "name": "HMMER",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/hmmer/hmmsearch",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "One row per domain hit of an hmmsearch run: the sequence, the family HMM and the database it came from, the envelope span on the sequence, the independent E-value and bit score of the domain, and how much of the HMM the alignment covers. The envelope columns are the domain span a sequence track draws.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/domain_annotation/*/*.domtbl.gz",
+            "path_glob_alt": [
+              "**/*.domtbl.gz",
+              "**/*.domtbl"
+            ]
+          },
+          "fixture": "hmmsearch_domtbl.tsv",
+          "fixtureContent": "entity\tsample\tsource\tlabel\taccession\tdescription\tstart\tend\tprotein_length\thmm_length\tdomain_index\tdomain_count\tseq_evalue\tseq_score\tc_evalue\ti_evalue\tdom_score\tdom_bias\thmm_from\thmm_to\tali_from\tali_to\tacc\thmm_coverage\tneg_log10_evalue\nT1024\tT1024\tpfam\tMFS_1\tPF07690.22\tLmrP, , 408 residues|\t15\t366\t408\t347\t1\t2\t3.3e-35\t107.6\t1.4e-32\t1.4e-32\t98.9\t38.6\t4\t346\t17\t365\t0.78\t0.9884726224783862\t31.85387196432176\nT1024\tT1024\tpfam\tMFS_1\tPF07690.22\tLmrP, , 408 residues|\t257\t407\t408\t347\t2\t2\t3.3e-35\t107.6\t2.6e-9\t2.6e-9\t22.5\t11.4\t38\t174\t262\t399\t0.74\t0.39481268011527376\t8.58502665202918\nT1026\tT1026\tpfam\tNanovirus_coat\tPF04660.18\tFBNSV, , 172 residues|\t2\t172\t172\t177\t1\t1\t5.9e-55\t172.1\t6.7e-55\t6.7e-55\t172.0\t0.5\t3\t177\t4\t172\t0.94\t0.9887005649717514\t54.17392519729917\nT1026\tT1026\tpfam\tPUA_NSUN2\tPF25378.2\tFBNSV, , 172 residues|\t40\t116\t172\t87\t1\t1\t8.8e-6\t12.2\t0.000013\t0.000013\t11.6\t0.0\t40\t81\t68\t111\t0.89\t0.4827586206896552\t4.886056647693163\nT1024\tT1024\tfunfam\t1.20.1250.20-FF-000637\t\tLmrP, , 408 residues|\t24\t197\t408\t179\t1\t2\t5.2e-10\t25.7\t5.2e-10\t5.2e-10\t25.7\t6.6\t17\t173\t32\t191\t0.81\t0.8770949720670391\t9.2839966563652\nT1024\tT1024\tfunfam\t1.20.1250.20-FF-000637\t\tLmrP, , 408 residues|\t248\t402\t408\t179\t2\t2\t5.2e-10\t25.7\t0.046\t0.046\t-0.2\t5.0\t30\t137\t261\t367\t0.64\t0.6033519553072626\t1.337242168318426\nT1026\tT1026\tfunfam\t1.10.238.10-FF-000755\t\tFBNSV, , 172 residues|\t29\t90\t172\t78\t1\t2\t6.1e-6\t12.7\t0.000016\t0.000016\t11.3\t0.0\t16\t54\t39\t79\t0.73\t0.5\t4.795880017344074\nT1026\tT1026\tfunfam\t1.10.238.10-FF-000755\t\tFBNSV, , 172 residues|\t97\t123\t172\t78\t2\t2\t6.1e-6\t12.7\t0.3\t0.3\t-2.4\t0.0\t38\t49\t102\t113\t0.74\t0.15384615384615385\t0.5228787452803376\nT1024\tT1024\tnmpfams\tF093539\t\tLmrP, , 408 residues|\t6\t75\t408\t93\t1\t4\t0.000016\t11.0\t0.000016\t0.000016\t11.0\t0.1\t57\t75\t50\t68\t0.82\t0.20430107526881722\t4.795880017344074\nT1024\tT1024\tnmpfams\tF075270\t\tLmrP, , 408 residues|\t68\t98\t408\t57\t1\t3\t7.6e-7\t15.3\t0.00095\t0.00095\t5.3\t0.0\t6\t25\t72\t91\t0.85\t0.3508771929824561\t3.022276394711152\nT1024\tT1024\tnmpfams\tF075270\t\tLmrP, , 408 residues|\t135\t162\t408\t57\t2\t3\t7.6e-7\t15.3\t0.36\t0.36\t-2.9\t0.0\t42\t49\t148\t155\t0.68\t0.14035087719298245\t0.44369749923271273\nT1024\tT1024\tnmpfams\tF075270\t\tLmrP, , 408 residues|\t257\t311\t408\t57\t3\t3\t7.6e-7\t15.3\t0.00017\t0.00017\t7.8\t0.4\t10\t48\t266\t304\t0.89\t0.6842105263157895\t3.7695510786217254\nT1024\tT1024\tmetagroot\tF226054\t\tLmrP, , 408 residues|\t1\t408\t408\t421\t1\t1\t6.5e-14\t37.4\t8.6e-14\t8.6e-14\t37.0\t26.4\t2\t404\t2\t404\t0.73\t0.9572446555819477\t13.065501548756432\nT1024\tT1024\tmetagroot\tF433505\t\tLmrP, , 408 residues|\t2\t123\t408\t385\t1\t2\t1.5e-8\t20.0\t0.000014\t0.000014\t10.1\t2.8\t211\t288\t20\t94\t0.63\t0.2025974025974026\t4.853871964321761\nT1024\tT1024\tmetagroot\tF410208\t\tLmrP, , 408 residues|\t5\t407\t408\t391\t1\t1\t7.6e-20\t57.1\t1e-19\t1e-19\t56.7\t22.8\t27\t383\t27\t404\t0.72\t0.9130434782608695\t19.0\nT1024\tT1024\tmetagroot\tF240027\t\tLmrP, , 408 residues|\t6\t178\t408\t384\t1\t1\t4.2e-10\t25.0\t8e-10\t8e-10\t24.1\t5.2\t26\t163\t26\t160\t0.88\t0.359375\t9.096910013008054\n",
+          "id": "hmmer_hmmsearch_domtbl",
+          "mode": "protein/domains",
+          "name": "Domain hits (hmmsearch)",
+          "path_glob": "**/domain_annotation/*/*.domtbl.gz",
+          "rawYaml": "id: hmmer_hmmsearch_domtbl\nname: Domain hits (hmmsearch)\nmode: protein/domains\ndescription: >-\n  One row per domain hit of an hmmsearch run: the sequence, the family HMM and\n  the database it came from, the envelope span on the sequence, the\n  independent E-value and bit score of the domain, and how much of the HMM the\n  alignment covers. The envelope columns are the domain span a sequence track\n  draws.\nfind:\n  path_glob: \"**/domain_annotation/*/*.domtbl.gz\"\n  path_glob_alt:\n    - \"**/*.domtbl.gz\"\n    - \"**/*.domtbl\"\nrecipe: hmmer/hmmsearch_domtbl.py\nfixture: hmmsearch_domtbl.tsv\nrenders_as:\n  # Bit score against HMM coverage separates full-length family hits (right,\n  # high) from fragments that only touch a few HMM states (left).\n  - { id: domain_score_scatter, component: advanced_viz, kind: scatter_xy,\n      roles: {x: hmm_coverage, y: dom_score, label: label, color: source} }\n  - { id: domain_hits, component: card, column: entity, aggregation: count,\n      secondary_layout: top_n, breakdown_col: source, top_n_count: 4, headline: true }\n  - { id: domain_families, component: card, column: label, aggregation: nunique,\n      secondary_layout: donut, breakdown_col: source }\n  - { id: domain_score, component: card, column: dom_score, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: figure, visu_type: box, dict_kwargs: {x: source, y: dom_score, color: source} }\n  - { component: table }\n",
+          "recipe": "hmmer/hmmsearch_domtbl.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "domain_score_scatter",
+              "kind": "scatter_xy",
+              "roles": {
+                "color": "source",
+                "label": "label",
+                "x": "hmm_coverage",
+                "y": "dom_score"
+              }
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "source",
+              "column": "entity",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": true,
+              "id": "domain_hits",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 4
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "source",
+              "column": "label",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "domain_families",
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "dom_score",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "domain_score",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "source",
+                "x": "source",
+                "y": "dom_score"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "box"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "hmmsearch_domtbl",
+          "yamlPath": "depictio/catalog/hmmer/hmmsearch_domtbl.yaml"
+        }
+      ],
+      "stage": "annotation"
+    },
+    {
       "biotools_url": "https://bio.tools/homer",
       "description": "Suite of tools for motif discovery and next-generation sequencing analysis.",
       "dir": "depictio/catalog/homer",
@@ -14519,6 +14898,93 @@
         }
       ],
       "stage": "qc"
+    },
+    {
+      "biotools_url": null,
+      "description": "Protein signature matches from the InterPro member databases, with the integrated InterPro entry, GO terms and pathways of every match.",
+      "dir": "depictio/catalog/interproscan",
+      "homepage": "https://interproscan-docs.readthedocs.io/",
+      "id": "interproscan",
+      "name": "InterProScan",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/interproscan",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "One row per signature match: the protein, the member database (analysis), the signature and its description, the matched span, the match E-value or score, and the InterPro entry, GO terms and pathways it is integrated into. Spans follow the domain table convention (start, end, label, source), so a sequence track can draw them.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/interproscan/*/*.tsv",
+            "path_glob_alt": [
+              "**/interproscan/*.tsv"
+            ]
+          },
+          "fixture": "matches.tsv",
+          "fixtureContent": "entity\tsample\tsource\tlabel\tdescription\tstart\tend\tevalue\tprotein_length\tinterpro_accession\tinterpro_description\tgo_terms\tpathways\nGI_225038609_EFDID_719595_FULL\tl_arginase\tSFLD\tSFLDS00057\tGlutaminase/Asparaginase\t17\t347\t0.0\t350\t\t\t\t\n",
+          "id": "interproscan_matches",
+          "mode": "protein/domains",
+          "name": "InterPro signature matches",
+          "path_glob": "**/interproscan/*/*.tsv",
+          "rawYaml": "id: interproscan_matches\nname: InterPro signature matches\nmode: protein/domains\ndescription: >-\n  One row per signature match: the protein, the member database (analysis),\n  the signature and its description, the matched span, the match E-value or\n  score, and the InterPro entry, GO terms and pathways it is integrated into.\n  Spans follow the domain table convention (start, end, label, source), so a\n  sequence track can draw them.\nfind:\n  path_glob: \"**/interproscan/*/*.tsv\"\n  path_glob_alt:\n    - \"**/interproscan/*.tsv\"\nrecipe: interproscan/matches.py\nfixture: matches.tsv\nrenders_as:\n  - { id: signature_matches, component: card, column: entity, aggregation: count,\n      secondary_layout: top_n, breakdown_col: source, top_n_count: 4, headline: true }\n  - { id: interpro_entries, component: card, column: interpro_accession, aggregation: nunique,\n      secondary_layout: donut, breakdown_col: source }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: source, color: source} }\n  - { component: table }\n",
+          "recipe": "interproscan/matches.py",
+          "renders_as": [
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "source",
+              "column": "entity",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": true,
+              "id": "signature_matches",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 4
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "source",
+              "column": "interpro_accession",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "interpro_entries",
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "source",
+                "x": "source"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "matches",
+          "yamlPath": "depictio/catalog/interproscan/matches.yaml"
+        }
+      ],
+      "stage": "annotation"
     },
     {
       "biotools_url": "https://bio.tools/andersen-lab_ivar",
@@ -22213,6 +22679,1646 @@
       "stage": "annotation"
     },
     {
+      "biotools_url": null,
+      "description": "Protein annotation summaries of nf-core/proteinannotator: domains from every searched database in one table, per-residue secondary structure and domain cover, per-protein and per-sample annotation rates, and which databases annotate which proteins.",
+      "dir": "depictio/catalog/proteinannotator",
+      "homepage": "https://nf-co.re/proteinannotator",
+      "id": "proteinannotator",
+      "name": "nf-core/proteinannotator",
+      "nf_core_url": null,
+      "outputs": [
+        {
+          "columns": {},
+          "description": "Protein by database matrix: the fraction of each protein's residues covered by the domains of each database the pipeline searched (Pfam, FunFam, NMPFamsDB, MetagRoot, InterProScan). Clustered, proteins group by which databases describe them and how completely; a skipped database is a column of zeros.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/domain_annotation/*/*.domtbl.gz",
+            "path_glob_alt": []
+          },
+          "fixture": "database_coverage.tsv",
+          "fixtureContent": "entity\tsample\tpfam\tfunfam\tnmpfams\tmetagroot\tinterproscan\nGI_225038609_EFDID_719595_FULL\tl_arginase\t0.0\t0.0\t0.20285714285714285\t0.9942857142857143\t0.9457142857142857\nT1024\tT1024\t0.9632352941176471\t0.4264705882352941\t0.3627450980392157\t1.0\t0.0\nT1026\tT1026\t0.9941860465116279\t0.36046511627906974\t0.32558139534883723\t0.46511627906976744\t0.0\n",
+          "id": "proteinannotator_database_coverage",
+          "mode": "protein/database-matrix",
+          "name": "Protein x database coverage",
+          "path_glob": "**/domain_annotation/*/*.domtbl.gz",
+          "rawYaml": "id: proteinannotator_database_coverage\nname: Protein x database coverage\nmode: protein/database-matrix\ndescription: >-\n  Protein by database matrix: the fraction of each protein's residues covered\n  by the domains of each database the pipeline searched (Pfam, FunFam,\n  NMPFamsDB, MetagRoot, InterProScan). Clustered, proteins group by which\n  databases describe them and how completely; a skipped database is a column\n  of zeros.\nfind:\n  path_glob: \"**/domain_annotation/*/*.domtbl.gz\"\nrecipe: proteinannotator/database_coverage.py\nfixture: database_coverage.tsv\nrenders_as:\n  - { id: coverage_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: entity} }\n  - { component: table }\n",
+          "recipe": "proteinannotator/database_coverage.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "coverage_heatmap",
+              "kind": "complex_heatmap",
+              "roles": {
+                "index": "entity"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "database_coverage",
+          "yamlPath": "depictio/catalog/proteinannotator/database_coverage.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Protein by database membership: 1 when a database annotates at least one domain on the protein. The intersections read as agreement: proteins every database annotates are well-known families, proteins only one database reaches are where the annotation rests on a single source.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/domain_annotation/*/*.domtbl.gz",
+            "path_glob_alt": []
+          },
+          "fixture": "database_sets.tsv",
+          "fixtureContent": "entity\tsample\tpfam\tfunfam\tnmpfams\tmetagroot\tinterproscan\nGI_225038609_EFDID_719595_FULL\tl_arginase\t0\t0\t1\t1\t1\nT1024\tT1024\t1\t1\t1\t1\t0\nT1026\tT1026\t1\t1\t1\t1\t0\n",
+          "id": "proteinannotator_database_sets",
+          "mode": "protein/database-sets",
+          "name": "Database agreement per protein",
+          "path_glob": "**/domain_annotation/*/*.domtbl.gz",
+          "rawYaml": "id: proteinannotator_database_sets\nname: Database agreement per protein\nmode: protein/database-sets\ndescription: >-\n  Protein by database membership: 1 when a database annotates at least one\n  domain on the protein. The intersections read as agreement: proteins every\n  database annotates are well-known families, proteins only one database\n  reaches are where the annotation rests on a single source.\nfind:\n  path_glob: \"**/domain_annotation/*/*.domtbl.gz\"\nrecipe: proteinannotator/database_sets.py\nfixture: database_sets.tsv\nrenders_as:\n  - { id: database_upset, component: advanced_viz, kind: upset_plot }\n  - { component: table }\n",
+          "recipe": "proteinannotator/database_sets.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "database_upset",
+              "kind": "upset_plot",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "database_sets",
+          "yamlPath": "depictio/catalog/proteinannotator/database_sets.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per domain span from every database the run searched: the four HMM libraries through hmmsearch (domains passing HMMER's default inclusion E-value) and the InterProScan member databases. Spans follow the domain table convention (entity, start, end, label, source), so a sequence track draws them as a domain lane and a 3D structure colours by them.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/domain_annotation/*/*.domtbl.gz",
+            "path_glob_alt": [
+              "**/functional_annotation/interproscan/*/*.tsv"
+            ]
+          },
+          "fixture": "domains.tsv",
+          "fixtureContent": "domain_id\tentity\tsample\tdatabase\tsource\tlabel\tdescription\tstart\tend\tspan\tprotein_length\tevalue\tneg_log10_evalue\tscore\thmm_coverage\thmm_from\thmm_to\thmm_length\taccession\nT1024:pfam:MFS_1:15:366\tT1024\tT1024\tpfam\tpfam\tMFS_1\t\t15\t366\t352\t408\t1.4e-32\t31.85387196432176\t98.9\t0.9884726224783862\t4\t346\t347\tPF07690.22\nT1024:pfam:MFS_1:257:407\tT1024\tT1024\tpfam\tpfam\tMFS_1\t\t257\t407\t151\t408\t2.6e-9\t8.58502665202918\t22.5\t0.39481268011527376\t38\t174\t347\tPF07690.22\nT1026:pfam:Nanovirus_coat:2:172\tT1026\tT1026\tpfam\tpfam\tNanovirus_coat\t\t2\t172\t171\t172\t6.7e-55\t54.17392519729917\t172.0\t0.9887005649717514\t3\t177\t177\tPF04660.18\nT1026:pfam:PUA_NSUN2:40:116\tT1026\tT1026\tpfam\tpfam\tPUA_NSUN2\t\t40\t116\t77\t172\t0.000013\t4.886056647693163\t11.6\t0.4827586206896552\t40\t81\t87\tPF25378.2\nT1024:funfam:1.20.1250.20-FF-000637:24:197\tT1024\tT1024\tfunfam\tfunfam\t1.20.1250.20-FF-000637\t\t24\t197\t174\t408\t5.2e-10\t9.2839966563652\t25.7\t0.8770949720670391\t17\t173\t179\t\nT1026:funfam:1.10.238.10-FF-000755:29:90\tT1026\tT1026\tfunfam\tfunfam\t1.10.238.10-FF-000755\t\t29\t90\t62\t172\t0.000016\t4.795880017344074\t11.3\t0.5\t16\t54\t78\t\nT1024:nmpfams:F093539:6:75\tT1024\tT1024\tnmpfams\tnmpfams\tF093539\t\t6\t75\t70\t408\t0.000016\t4.795880017344074\t11.0\t0.20430107526881722\t57\t75\t93\t\nT1024:nmpfams:F075270:68:98\tT1024\tT1024\tnmpfams\tnmpfams\tF075270\t\t68\t98\t31\t408\t0.00095\t3.022276394711152\t5.3\t0.3508771929824561\t6\t25\t57\t\nT1024:nmpfams:F075270:257:311\tT1024\tT1024\tnmpfams\tnmpfams\tF075270\t\t257\t311\t55\t408\t0.00017\t3.7695510786217254\t7.8\t0.6842105263157895\t10\t48\t57\t\nT1026:nmpfams:F049289:33:88\tT1026\tT1026\tnmpfams\tnmpfams\tF049289\t\t33\t88\t56\t172\t9.8e-6\t5.008773924307505\t12.0\t0.4777777777777778\t34\t76\t90\t\nT1024:metagroot:F226054:1:408\tT1024\tT1024\tmetagroot\tmetagroot\tF226054\t\t1\t408\t408\t408\t8.6e-14\t13.065501548756432\t37.0\t0.9572446555819477\t2\t404\t421\t\nT1024:metagroot:F433505:2:123\tT1024\tT1024\tmetagroot\tmetagroot\tF433505\t\t2\t123\t122\t408\t0.000014\t4.853871964321761\t10.1\t0.2025974025974026\t211\t288\t385\t\nT1024:metagroot:F410208:5:407\tT1024\tT1024\tmetagroot\tmetagroot\tF410208\t\t5\t407\t403\t408\t1e-19\t19.0\t56.7\t0.9130434782608695\t27\t383\t391\t\nT1024:metagroot:F240027:6:178\tT1024\tT1024\tmetagroot\tmetagroot\tF240027\t\t6\t178\t173\t408\t8e-10\t9.096910013008054\t24.1\t0.359375\t26\t163\t384\t\nGI_225038609_EFDID_719595_FULL:interproscan:SFLDS00057:17:347\tGI_225038609_EFDID_719595_FULL\tl_arginase\tinterproscan\tSFLD\tSFLDS00057\tGlutaminase/Asparaginase\t17\t347\t331\t350\t0.0\t299.99999999999994\t\t\t\t\t\t\n",
+          "id": "proteinannotator_domains",
+          "mode": "protein/domains",
+          "name": "Protein domains, all databases",
+          "path_glob": "**/domain_annotation/*/*.domtbl.gz",
+          "rawYaml": "id: proteinannotator_domains\nname: Protein domains, all databases\nmode: protein/domains\ndescription: >-\n  One row per domain span from every database the run searched: the four HMM\n  libraries through hmmsearch (domains passing HMMER's default inclusion\n  E-value) and the InterProScan member databases. Spans follow the domain\n  table convention (entity, start, end, label, source), so a sequence track\n  draws them as a domain lane and a 3D structure colours by them.\nfind:\n  path_glob: \"**/domain_annotation/*/*.domtbl.gz\"\n  path_glob_alt:\n    - \"**/functional_annotation/interproscan/*/*.tsv\"\nrecipe: proteinannotator/domains.py\nfixture: domains.tsv\nrenders_as:\n  - { id: domain_record, component: advanced_viz, kind: record_card, roles: {id: domain_id, title: label} }\n  # Significance against span length: long confident spans are whole-protein\n  # families, short confident ones are motifs, weak ones of any length are\n  # borderline calls worth checking in a second database.\n  - { id: domain_significance, component: advanced_viz, kind: scatter_xy,\n      roles: {x: span, y: neg_log10_evalue, label: label, color: database} }\n  - { id: domain_count, component: card, column: domain_id, aggregation: count,\n      secondary_layout: top_n, breakdown_col: database, top_n_count: 5 }\n  - { id: domain_families, component: card, column: label, aggregation: nunique,\n      secondary_layout: donut, breakdown_col: database }\n  - { id: domain_span, component: card, column: span, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: figure, visu_type: box, dict_kwargs: {x: database, y: span, color: database} }\n  - { component: table, row_selection_enabled: true, row_selection_column: domain_id }\n",
+          "recipe": "proteinannotator/domains.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "domain_record",
+              "kind": "record_card",
+              "roles": {
+                "id": "domain_id",
+                "title": "label"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "domain_significance",
+              "kind": "scatter_xy",
+              "roles": {
+                "color": "database",
+                "label": "label",
+                "x": "span",
+                "y": "neg_log10_evalue"
+              }
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "database",
+              "column": "domain_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "domain_count",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 5
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "database",
+              "column": "label",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "domain_families",
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "span",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "domain_span",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "database",
+                "x": "database",
+                "y": "span"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "box"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {},
+              "row_selection_column": "domain_id",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "domains",
+          "yamlPath": "depictio/catalog/proteinannotator/domains.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per protein of the filtered FASTA: its length, domain hits per database and how many databases annotate it, the share of its residues covered by at least one domain, the best domain by E-value, and the helix, strand and coil shares S4PRED predicts. Unannotated proteins keep their row.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/qc/*/*.fasta",
+            "path_glob_alt": [
+              "**/qc/*/*.faa"
+            ]
+          },
+          "fixture": "proteins.tsv",
+          "fixtureContent": "entity\tsample\tdescription\tlength\tannotation_status\tdomain_hits\tdatabases_hit\tpfam_hits\tfunfam_hits\tnmpfams_hits\tmetagroot_hits\tinterproscan_hits\tannotated_residues\tannotated_pct\ttop_domain\ttop_domain_database\ttop_domain_evalue\thelix_pct\tstrand_pct\tcoil_pct\nGI_225038609_EFDID_719595_FULL\tl_arginase\t\t350\tannotated\t23\t3\t0\t0\t2\t20\t1\t348\t99.42857142857143\tSFLDS00057\tinterproscan\t0.0\t34.285714285714285\t12.857142857142856\t52.85714285714286\nT1024\tT1024\tLmrP, , 408 residues|\t408\tannotated\t51\t4\t2\t1\t3\t45\t0\t408\t100.0\tMFS_1\tpfam\t1.4e-32\t75.49019607843137\t0.0\t24.509803921568626\nT1026\tT1026\tFBNSV, , 172 residues|\t172\tannotated\t6\t4\t2\t1\t1\t2\t0\t171\t99.4186046511628\tNanovirus_coat\tpfam\t6.7e-55\t1.1627906976744187\t42.44186046511628\t56.395348837209305\n",
+          "id": "proteinannotator_proteins",
+          "mode": "protein/summary",
+          "name": "Protein annotation summary",
+          "path_glob": "**/qc/*/*.fasta",
+          "rawYaml": "id: proteinannotator_proteins\nname: Protein annotation summary\nmode: protein/summary\ndescription: >-\n  One row per protein of the filtered FASTA: its length, domain hits per\n  database and how many databases annotate it, the share of its residues\n  covered by at least one domain, the best domain by E-value, and the helix,\n  strand and coil shares S4PRED predicts. Unannotated proteins keep their row.\nfind:\n  path_glob: \"**/qc/*/*.fasta\"\n  path_glob_alt:\n    - \"**/qc/*/*.faa\"\nrecipe: proteinannotator/proteins.py\nfixture: proteins.tsv\nrenders_as:\n  - { id: protein_record, component: advanced_viz, kind: record_card, roles: {id: entity, title: top_domain} }\n  # Length against annotated share: short, fully covered proteins are single\n  # domain; long, poorly covered ones carry regions no database describes.\n  - { id: length_vs_cover, component: advanced_viz, kind: scatter_xy,\n      roles: {x: length, y: annotated_pct, label: entity, color: top_domain_database} }\n  - { id: protein_count, component: card, column: entity, aggregation: count,\n      secondary_layout: top_n, breakdown_col: annotation_status, top_n_count: 2 }\n  - { id: protein_length, component: card, column: length, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { id: annotated_cover, component: card, column: annotated_pct, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { id: databases_per_protein, component: card, column: databases_hit, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { id: helix_share, component: card, column: helix_pct, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { id: strand_share, component: card, column: strand_pct, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: figure, visu_type: histogram, dict_kwargs: {x: length, color: annotation_status} }\n  - { component: table, row_selection_enabled: true, row_selection_column: entity }\n",
+          "recipe": "proteinannotator/proteins.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "protein_record",
+              "kind": "record_card",
+              "roles": {
+                "id": "entity",
+                "title": "top_domain"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "length_vs_cover",
+              "kind": "scatter_xy",
+              "roles": {
+                "color": "top_domain_database",
+                "label": "entity",
+                "x": "length",
+                "y": "annotated_pct"
+              }
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "annotation_status",
+              "column": "entity",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "protein_count",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 2
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "length",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "protein_length",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "annotated_pct",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "annotated_cover",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "databases_hit",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "databases_per_protein",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "helix_pct",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "helix_share",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "strand_pct",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "strand_share",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "annotation_status",
+                "x": "length"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {},
+              "row_selection_column": "entity",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "proteins",
+          "yamlPath": "depictio/catalog/proteinannotator/proteins.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per residue of every protein: the amino acid, the S4PRED state as the category and its probability as the value, the best domain covering the residue and how many domains overlap there, and the protein's full sequence. The structure tile folds the shown protein from the sequence column and colours it by domain; the sequence track draws the state and domain lanes.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/qc/*/*.fasta",
+            "path_glob_alt": [
+              "**/s4pred/*/ss2/*.ss2"
+            ]
+          },
+          "fixture": "residues.tsv",
+          "fixtureContent": "entity\tsample\tposition\tresidue\tcategory\tvalue\tdomain\tdomain_database\tdomains_here\tsequence\nGI_225038609_EFDID_719595_FULL\tl_arginase\t11\tI\tCoil\t0.862\tF465379\tmetagroot\t7\tMDKLLWNKKEISVSERISMKRIVMINTGGTFSSQRGENGLSPKLTGTQIRNFLGEFEEDLELSTEDYCALDSSNITPEDWVQLADKISQIIYSCDGVVIIHGTDTMAYTASMLSFMLQNLPIPVVLTGSQLPIGVPMSDAVNNCRCAVQMAASGLGGVYVAFDHKLMLGCRTSKVRTVSFNAFESINYPYVGEVNALGMQLYPTRLSKPTGEFQLQTAYSDKIAVLKLFPGMRPDLFSFLQEKGYEGIYIEGFGLGGVPFVKNDITEEISKASKAGIPILVGSQCSYEGSNLGIYETGLRVLESGGIPVHDMTQEAIVTKLMWCLGQTKDREKIHQLFHTNLIQEVTLPY\nGI_225038609_EFDID_719595_FULL\tl_arginase\t12\tS\tCoil\t0.876\tF465379\tmetagroot\t7\tMDKLLWNKKEISVSERISMKRIVMINTGGTFSSQRGENGLSPKLTGTQIRNFLGEFEEDLELSTEDYCALDSSNITPEDWVQLADKISQIIYSCDGVVIIHGTDTMAYTASMLSFMLQNLPIPVVLTGSQLPIGVPMSDAVNNCRCAVQMAASGLGGVYVAFDHKLMLGCRTSKVRTVSFNAFESINYPYVGEVNALGMQLYPTRLSKPTGEFQLQTAYSDKIAVLKLFPGMRPDLFSFLQEKGYEGIYIEGFGLGGVPFVKNDITEEISKASKAGIPILVGSQCSYEGSNLGIYETGLRVLESGGIPVHDMTQEAIVTKLMWCLGQTKDREKIHQLFHTNLIQEVTLPY\nGI_225038609_EFDID_719595_FULL\tl_arginase\t13\tV\tCoil\t0.629\tF465379\tmetagroot\t8\tMDKLLWNKKEISVSERISMKRIVMINTGGTFSSQRGENGLSPKLTGTQIRNFLGEFEEDLELSTEDYCALDSSNITPEDWVQLADKISQIIYSCDGVVIIHGTDTMAYTASMLSFMLQNLPIPVVLTGSQLPIGVPMSDAVNNCRCAVQMAASGLGGVYVAFDHKLMLGCRTSKVRTVSFNAFESINYPYVGEVNALGMQLYPTRLSKPTGEFQLQTAYSDKIAVLKLFPGMRPDLFSFLQEKGYEGIYIEGFGLGGVPFVKNDITEEISKASKAGIPILVGSQCSYEGSNLGIYETGLRVLESGGIPVHDMTQEAIVTKLMWCLGQTKDREKIHQLFHTNLIQEVTLPY\nGI_225038609_EFDID_719595_FULL\tl_arginase\t14\tS\tCoil\t0.643\tF465379\tmetagroot\t8\tMDKLLWNKKEISVSERISMKRIVMINTGGTFSSQRGENGLSPKLTGTQIRNFLGEFEEDLELSTEDYCALDSSNITPEDWVQLADKISQIIYSCDGVVIIHGTDTMAYTASMLSFMLQNLPIPVVLTGSQLPIGVPMSDAVNNCRCAVQMAASGLGGVYVAFDHKLMLGCRTSKVRTVSFNAFESINYPYVGEVNALGMQLYPTRLSKPTGEFQLQTAYSDKIAVLKLFPGMRPDLFSFLQEKGYEGIYIEGFGLGGVPFVKNDITEEISKASKAGIPILVGSQCSYEGSNLGIYETGLRVLESGGIPVHDMTQEAIVTKLMWCLGQTKDREKIHQLFHTNLIQEVTLPY\nGI_225038609_EFDID_719595_FULL\tl_arginase\t15\tE\tCoil\t0.671\tF465379\tmetagroot\t8\tMDKLLWNKKEISVSERISMKRIVMINTGGTFSSQRGENGLSPKLTGTQIRNFLGEFEEDLELSTEDYCALDSSNITPEDWVQLADKISQIIYSCDGVVIIHGTDTMAYTASMLSFMLQNLPIPVVLTGSQLPIGVPMSDAVNNCRCAVQMAASGLGGVYVAFDHKLMLGCRTSKVRTVSFNAFESINYPYVGEVNALGMQLYPTRLSKPTGEFQLQTAYSDKIAVLKLFPGMRPDLFSFLQEKGYEGIYIEGFGLGGVPFVKNDITEEISKASKAGIPILVGSQCSYEGSNLGIYETGLRVLESGGIPVHDMTQEAIVTKLMWCLGQTKDREKIHQLFHTNLIQEVTLPY\nGI_225038609_EFDID_719595_FULL\tl_arginase\t16\tR\tCoil\t0.714\tF465379\tmetagroot\t10\tMDKLLWNKKEISVSERISMKRIVMINTGGTFSSQRGENGLSPKLTGTQIRNFLGEFEEDLELSTEDYCALDSSNITPEDWVQLADKISQIIYSCDGVVIIHGTDTMAYTASMLSFMLQNLPIPVVLTGSQLPIGVPMSDAVNNCRCAVQMAASGLGGVYVAFDHKLMLGCRTSKVRTVSFNAFESINYPYVGEVNALGMQLYPTRLSKPTGEFQLQTAYSDKIAVLKLFPGMRPDLFSFLQEKGYEGIYIEGFGLGGVPFVKNDITEEISKASKAGIPILVGSQCSYEGSNLGIYETGLRVLESGGIPVHDMTQEAIVTKLMWCLGQTKDREKIHQLFHTNLIQEVTLPY\nT1024\tT1024\t11\tL\tHelix\t0.717\tF410208\tmetagroot\t8\tMKEFWNLDKNLQLRLGIVFLGAFSYGTVFSSMTIYYNQYLGSAITGILLALSAVATFVAGILAGFFADRNGRKPVMVFGTIIQLLGAALAIASNLPGHVNPWSTFIAFLLISFGYNFVITAGNAMIIDASNAENRKVVFMLDYWAQNLSVILGAALGAWLFRPAFEALLVILLLTVLVSFFLTTFVMTETFKPTVKVDEKAENIFQAYKTVLQDKTYMIFMGANIATTFIIMQFDNFLPVHLSNSFKTITFWGFEIYGQRMLTIYLILACVLVVLLMTTLNRLTKDWSHQKGFIWGSLFMAIGMIFSFLTTTFTPIFIAGIVYTLGEIVYTPSVQTLGADLMNPEKIGSYNGVAAIKMPIASILAGLLVSISPMIKAIGVSLVLALTEVLAIILVLVAVNRHQKTKLN\nT1024\tT1024\t12\tQ\tHelix\t0.766\tF410208\tmetagroot\t9\tMKEFWNLDKNLQLRLGIVFLGAFSYGTVFSSMTIYYNQYLGSAITGILLALSAVATFVAGILAGFFADRNGRKPVMVFGTIIQLLGAALAIASNLPGHVNPWSTFIAFLLISFGYNFVITAGNAMIIDASNAENRKVVFMLDYWAQNLSVILGAALGAWLFRPAFEALLVILLLTVLVSFFLTTFVMTETFKPTVKVDEKAENIFQAYKTVLQDKTYMIFMGANIATTFIIMQFDNFLPVHLSNSFKTITFWGFEIYGQRMLTIYLILACVLVVLLMTTLNRLTKDWSHQKGFIWGSLFMAIGMIFSFLTTTFTPIFIAGIVYTLGEIVYTPSVQTLGADLMNPEKIGSYNGVAAIKMPIASILAGLLVSISPMIKAIGVSLVLALTEVLAIILVLVAVNRHQKTKLN\nT1024\tT1024\t13\tL\tHelix\t0.833\tF410208\tmetagroot\t9\tMKEFWNLDKNLQLRLGIVFLGAFSYGTVFSSMTIYYNQYLGSAITGILLALSAVATFVAGILAGFFADRNGRKPVMVFGTIIQLLGAALAIASNLPGHVNPWSTFIAFLLISFGYNFVITAGNAMIIDASNAENRKVVFMLDYWAQNLSVILGAALGAWLFRPAFEALLVILLLTVLVSFFLTTFVMTETFKPTVKVDEKAENIFQAYKTVLQDKTYMIFMGANIATTFIIMQFDNFLPVHLSNSFKTITFWGFEIYGQRMLTIYLILACVLVVLLMTTLNRLTKDWSHQKGFIWGSLFMAIGMIFSFLTTTFTPIFIAGIVYTLGEIVYTPSVQTLGADLMNPEKIGSYNGVAAIKMPIASILAGLLVSISPMIKAIGVSLVLALTEVLAIILVLVAVNRHQKTKLN\nT1024\tT1024\t14\tR\tHelix\t0.815\tF410208\tmetagroot\t10\tMKEFWNLDKNLQLRLGIVFLGAFSYGTVFSSMTIYYNQYLGSAITGILLALSAVATFVAGILAGFFADRNGRKPVMVFGTIIQLLGAALAIASNLPGHVNPWSTFIAFLLISFGYNFVITAGNAMIIDASNAENRKVVFMLDYWAQNLSVILGAALGAWLFRPAFEALLVILLLTVLVSFFLTTFVMTETFKPTVKVDEKAENIFQAYKTVLQDKTYMIFMGANIATTFIIMQFDNFLPVHLSNSFKTITFWGFEIYGQRMLTIYLILACVLVVLLMTTLNRLTKDWSHQKGFIWGSLFMAIGMIFSFLTTTFTPIFIAGIVYTLGEIVYTPSVQTLGADLMNPEKIGSYNGVAAIKMPIASILAGLLVSISPMIKAIGVSLVLALTEVLAIILVLVAVNRHQKTKLN\nT1024\tT1024\t15\tL\tHelix\t0.829\tMFS_1\tpfam\t13\tMKEFWNLDKNLQLRLGIVFLGAFSYGTVFSSMTIYYNQYLGSAITGILLALSAVATFVAGILAGFFADRNGRKPVMVFGTIIQLLGAALAIASNLPGHVNPWSTFIAFLLISFGYNFVITAGNAMIIDASNAENRKVVFMLDYWAQNLSVILGAALGAWLFRPAFEALLVILLLTVLVSFFLTTFVMTETFKPTVKVDEKAENIFQAYKTVLQDKTYMIFMGANIATTFIIMQFDNFLPVHLSNSFKTITFWGFEIYGQRMLTIYLILACVLVVLLMTTLNRLTKDWSHQKGFIWGSLFMAIGMIFSFLTTTFTPIFIAGIVYTLGEIVYTPSVQTLGADLMNPEKIGSYNGVAAIKMPIASILAGLLVSISPMIKAIGVSLVLALTEVLAIILVLVAVNRHQKTKLN\nT1024\tT1024\t16\tG\tHelix\t0.809\tMFS_1\tpfam\t16\tMKEFWNLDKNLQLRLGIVFLGAFSYGTVFSSMTIYYNQYLGSAITGILLALSAVATFVAGILAGFFADRNGRKPVMVFGTIIQLLGAALAIASNLPGHVNPWSTFIAFLLISFGYNFVITAGNAMIIDASNAENRKVVFMLDYWAQNLSVILGAALGAWLFRPAFEALLVILLLTVLVSFFLTTFVMTETFKPTVKVDEKAENIFQAYKTVLQDKTYMIFMGANIATTFIIMQFDNFLPVHLSNSFKTITFWGFEIYGQRMLTIYLILACVLVVLLMTTLNRLTKDWSHQKGFIWGSLFMAIGMIFSFLTTTFTPIFIAGIVYTLGEIVYTPSVQTLGADLMNPEKIGSYNGVAAIKMPIASILAGLLVSISPMIKAIGVSLVLALTEVLAIILVLVAVNRHQKTKLN\nT1026\tT1026\t11\tK\tCoil\t0.968\tNanovirus_coat\tpfam\t3\tMVSNWNWSGKKGRRTPRRGYTRPFKSAVPTTRVVVHQSAVLKKDDVSGSEIKPEGDVARYKIRKVMLSCTLRMRPGELVNYLIVKCSSPIVNWSAAFTAPALMVKESCQDMITIIGKGKVESNGVAGSDCTKSFNKFIRLGAGISQTQHLYVVMYTSEAVKTVLEHRVYIEV\nT1026\tT1026\t12\tG\tCoil\t0.977\tNanovirus_coat\tpfam\t3\tMVSNWNWSGKKGRRTPRRGYTRPFKSAVPTTRVVVHQSAVLKKDDVSGSEIKPEGDVARYKIRKVMLSCTLRMRPGELVNYLIVKCSSPIVNWSAAFTAPALMVKESCQDMITIIGKGKVESNGVAGSDCTKSFNKFIRLGAGISQTQHLYVVMYTSEAVKTVLEHRVYIEV\nT1026\tT1026\t13\tR\tCoil\t0.95\tNanovirus_coat\tpfam\t3\tMVSNWNWSGKKGRRTPRRGYTRPFKSAVPTTRVVVHQSAVLKKDDVSGSEIKPEGDVARYKIRKVMLSCTLRMRPGELVNYLIVKCSSPIVNWSAAFTAPALMVKESCQDMITIIGKGKVESNGVAGSDCTKSFNKFIRLGAGISQTQHLYVVMYTSEAVKTVLEHRVYIEV\nT1026\tT1026\t14\tR\tCoil\t0.955\tNanovirus_coat\tpfam\t3\tMVSNWNWSGKKGRRTPRRGYTRPFKSAVPTTRVVVHQSAVLKKDDVSGSEIKPEGDVARYKIRKVMLSCTLRMRPGELVNYLIVKCSSPIVNWSAAFTAPALMVKESCQDMITIIGKGKVESNGVAGSDCTKSFNKFIRLGAGISQTQHLYVVMYTSEAVKTVLEHRVYIEV\nT1026\tT1026\t15\tT\tCoil\t0.969\tNanovirus_coat\tpfam\t3\tMVSNWNWSGKKGRRTPRRGYTRPFKSAVPTTRVVVHQSAVLKKDDVSGSEIKPEGDVARYKIRKVMLSCTLRMRPGELVNYLIVKCSSPIVNWSAAFTAPALMVKESCQDMITIIGKGKVESNGVAGSDCTKSFNKFIRLGAGISQTQHLYVVMYTSEAVKTVLEHRVYIEV\nT1026\tT1026\t16\tP\tCoil\t0.98\tNanovirus_coat\tpfam\t3\tMVSNWNWSGKKGRRTPRRGYTRPFKSAVPTTRVVVHQSAVLKKDDVSGSEIKPEGDVARYKIRKVMLSCTLRMRPGELVNYLIVKCSSPIVNWSAAFTAPALMVKESCQDMITIIGKGKVESNGVAGSDCTKSFNKFIRLGAGISQTQHLYVVMYTSEAVKTVLEHRVYIEV\n",
+          "id": "proteinannotator_residues",
+          "mode": "protein/residues",
+          "name": "Residue table (sequence, structure, domains)",
+          "path_glob": "**/qc/*/*.fasta",
+          "rawYaml": "id: proteinannotator_residues\nname: Residue table (sequence, structure, domains)\nmode: protein/residues\ndescription: >-\n  One row per residue of every protein: the amino acid, the S4PRED state as\n  the category and its probability as the value, the best domain covering the\n  residue and how many domains overlap there, and the protein's full sequence.\n  The structure tile folds the shown protein from the sequence column and\n  colours it by domain; the sequence track draws the state and domain lanes.\nfind:\n  path_glob: \"**/qc/*/*.fasta\"\n  path_glob_alt:\n    - \"**/s4pred/*/ss2/*.ss2\"\nrecipe: proteinannotator/residues.py\nfixture: residues.tsv\nrenders_as:\n  - { id: residue_sequence_track, component: advanced_viz, kind: sequence_track,\n      roles: {position: position, entity: entity, residue: residue, category: category, value: value} }\n  - { id: predicted_structure, component: advanced_viz, kind: molecule_3d,\n      roles: {position: position, entity: entity, category: domain, sequence: sequence} }\n  - { id: residue_count, component: card, column: position, aggregation: count,\n      secondary_layout: top_n, breakdown_col: category, top_n_count: 3 }\n  - { component: figure, visu_type: histogram, dict_kwargs: {x: domains_here, color: category} }\n  - { component: table, columns: [entity, sample, position, residue, category, value, domain, domain_database, domains_here] }\n",
+          "recipe": "proteinannotator/residues.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "residue_sequence_track",
+              "kind": "sequence_track",
+              "roles": {
+                "category": "category",
+                "entity": "entity",
+                "position": "position",
+                "residue": "residue",
+                "value": "value"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "predicted_structure",
+              "kind": "molecule_3d",
+              "roles": {
+                "category": "domain",
+                "entity": "entity",
+                "position": "position",
+                "sequence": "sequence"
+              }
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "category",
+              "column": "position",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "residue_count",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "category",
+                "x": "domains_here"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [
+                "entity",
+                "sample",
+                "position",
+                "residue",
+                "category",
+                "value",
+                "domain",
+                "domain_database",
+                "domains_here"
+              ],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "residues",
+          "yamlPath": "depictio/catalog/proteinannotator/residues.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per sample of the run: sequences given and kept by the length and duplicate filter, residues kept, mean length and N50, and, once annotated, how many proteins carry at least one domain, the total domain hits and the median share of each protein a domain covers.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/qc/*/*_after.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "sample_summary.tsv",
+          "fixtureContent": "sample_id\tinput_sequences\tkept_sequences\tremoved_sequences\tkept_residues\tmean_length\tn50\tmin_length\tmax_length\tannotated_proteins\tannotated_protein_pct\tdomain_hits\tmedian_annotated_pct\nT1024\t1\t1\t0\t408\t408.0\t408\t408\t408\t1\t100.0\t51\t100.0\nT1026\t1\t1\t0\t172\t172.0\t172\t172\t172\t1\t100.0\t6\t99.4186046511628\nl_arginase\t1\t1\t0\t350\t350.0\t350\t350\t350\t1\t100.0\t23\t99.42857142857143\n",
+          "id": "proteinannotator_sample_summary",
+          "mode": "protein/sample-hub",
+          "name": "Sample summary",
+          "path_glob": "**/qc/*/*_after.tsv",
+          "rawYaml": "id: proteinannotator_sample_summary\nname: Sample summary\nmode: protein/sample-hub\ndescription: >-\n  One row per sample of the run: sequences given and kept by the length and\n  duplicate filter, residues kept, mean length and N50, and, once annotated,\n  how many proteins carry at least one domain, the total domain hits and the\n  median share of each protein a domain covers.\nfind:\n  path_glob: \"**/qc/*/*_after.tsv\"\nrecipe: proteinannotator/sample_summary.py\nfixture: sample_summary.tsv\nrenders_as:\n  - { id: kept_proteins, component: card, column: kept_sequences, aggregation: sum,\n      secondary_layout: top_n, breakdown_col: sample_id, top_n_count: 3, headline: true }\n  - { id: kept_residues, component: card, column: kept_residues, aggregation: sum,\n      secondary_layout: top_n, breakdown_col: sample_id, top_n_count: 3 }\n  - { id: removed_sequences, component: card, column: removed_sequences, aggregation: sum,\n      secondary_layout: top_n, breakdown_col: sample_id, top_n_count: 3 }\n  - { id: annotated_proteins, component: card, column: annotated_proteins, aggregation: sum,\n      secondary_layout: top_n, breakdown_col: sample_id, top_n_count: 3 }\n  - { id: annotated_share, component: card, column: annotated_protein_pct, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }\n  - { id: sample_mean_length, component: card, column: mean_length, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { id: sample_domain_hits, component: card, column: domain_hits, aggregation: sum,\n      secondary_layout: top_n, breakdown_col: sample_id, top_n_count: 3 }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: sample_id, y: kept_sequences} }\n  - { component: table, row_selection_enabled: true, row_selection_column: sample_id }\n",
+          "recipe": "proteinannotator/sample_summary.py",
+          "renders_as": [
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample_id",
+              "column": "kept_sequences",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": true,
+              "id": "kept_proteins",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample_id",
+              "column": "kept_residues",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "kept_residues",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample_id",
+              "column": "removed_sequences",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "removed_sequences",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample_id",
+              "column": "annotated_proteins",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "annotated_proteins",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "annotated_protein_pct",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": true,
+              "id": "annotated_share",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "mean_length",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "sample_mean_length",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample_id",
+              "column": "domain_hits",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "sample_domain_hits",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "x": "sample_id",
+                "y": "kept_sequences"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {},
+              "row_selection_column": "sample_id",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "sample_summary",
+          "yamlPath": "depictio/catalog/proteinannotator/sample_summary.yaml"
+        }
+      ],
+      "stage": "annotation"
+    },
+    {
+      "biotools_url": null,
+      "description": "Protein family generation summaries of nf-core/proteinfamilies: how the input sequences clustered, the families built from the clusters with their representative, seed and model statistics, and the member roster of every family with each member's identity to the representative.",
+      "dir": "depictio/catalog/proteinfamilies",
+      "homepage": "https://nf-co.re/proteinfamilies",
+      "id": "proteinfamilies",
+      "name": "nf-core/proteinfamilies",
+      "nf_core_url": null,
+      "outputs": [
+        {
+          "columns": {},
+          "description": "How the input sequences of each sample fell into MMseqs2 clusters before families are built: the number of clusters of every size, the sequences they hold and those sequences' share of the sample. Families are seeded from the clusters above the pipeline's size threshold, so the tail of this distribution is what the run can turn into families.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/mmseqs/initial_clustering/*_clustering_distribution_mqc.csv",
+            "path_glob_alt": [
+              "**/*_clustering_distribution_mqc.csv"
+            ]
+          },
+          "fixture": "cluster_size_distribution.tsv",
+          "fixtureContent": "sample\tcluster_size\tn_clusters\tn_sequences\tsequence_share\nmgnifams_create\t1\t49531\t49531\t0.991\nmgnifams_create\t2\t152\t304\t0.006\nmgnifams_create\t3\t29\t87\t0.002\nmgnifams_create\t4\t8\t32\t0.001\nmgnifams_create\t5\t4\t20\t0.0\nmgnifams_create\t8\t2\t16\t0.0\nmgnifams_create\t9\t1\t9\t0.0\nmgnifams_update\t1\t49548\t49548\t0.993\nmgnifams_update\t2\t127\t254\t0.005\nmgnifams_update\t3\t23\t69\t0.001\nmgnifams_update\t4\t3\t12\t0.0\nmgnifams_update\t5\t2\t10\t0.0\nmgnifams_update\t6\t1\t6\t0.0\n",
+          "id": "proteinfamilies_cluster_size_distribution",
+          "mode": "families/clustering",
+          "name": "Initial cluster sizes",
+          "path_glob": "**/mmseqs/initial_clustering/*_clustering_distribution_mqc.csv",
+          "rawYaml": "id: proteinfamilies_cluster_size_distribution\nname: Initial cluster sizes\nmode: families/clustering\ndescription: >-\n  How the input sequences of each sample fell into MMseqs2 clusters before\n  families are built: the number of clusters of every size, the sequences\n  they hold and those sequences' share of the sample. Families are seeded from\n  the clusters above the pipeline's size threshold, so the tail of this\n  distribution is what the run can turn into families.\nfind:\n  path_glob: \"**/mmseqs/initial_clustering/*_clustering_distribution_mqc.csv\"\n  path_glob_alt:\n    - \"**/*_clustering_distribution_mqc.csv\"\nrecipe: proteinfamilies/cluster_size_distribution.py\nfixture: cluster_size_distribution.tsv\nrenders_as:\n  - { id: cluster_size_profile, component: advanced_viz, kind: profile,\n      roles: {series: sample, x: cluster_size, y: n_clusters} }\n  - { id: clusters_total, component: card, column: n_clusters, aggregation: sum,\n      secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: cluster_size, y: sequence_share, color: sample, barmode: group} }\n  - { component: table }\n",
+          "recipe": "proteinfamilies/cluster_size_distribution.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "cluster_size_profile",
+              "kind": "profile",
+              "roles": {
+                "series": "sample",
+                "x": "cluster_size",
+                "y": "n_clusters"
+              }
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "n_clusters",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "clusters_total",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "barmode": "group",
+                "color": "sample",
+                "x": "cluster_size",
+                "y": "sequence_share"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "cluster_size_distribution",
+          "yamlPath": "depictio/catalog/proteinfamilies/cluster_size_distribution.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per member of every family roster: the family, the sample, whether the family is new or an extended existing one, whether the member is the representative, and from the full alignment its identity to the representative, the share of the representative it covers and its length.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/family_reps/*/*.tsv",
+            "path_glob_alt": [
+              "**/update_families/family_reps/*/*.tsv"
+            ]
+          },
+          "fixture": "family_members.tsv",
+          "fixtureContent": "family\tmember_id\tsample\torigin\tis_representative\tin_alignment\tidentity\tcoverage\tlength\nmgnifams_create_1\t1015154437_431_579/10-126\tmgnifams_create\tnew\tfalse\ttrue\t0.202\t0.974\t117\nmgnifams_create_1\t1248030292/5-122\tmgnifams_create\tnew\tfalse\ttrue\t0.658\t1.0\t118\nmgnifams_create_1\t1298531797_77_200/1-118\tmgnifams_create\tnew\tfalse\ttrue\t0.624\t1.0\t118\nmgnifams_create_1\t1336010185_126_255/11-123\tmgnifams_create\tnew\tfalse\ttrue\t0.2\t0.94\t113\nmgnifams_create_1\t1612234159/32-145\tmgnifams_create\tnew\tfalse\ttrue\t0.333\t0.974\t114\nmgnifams_create_1\t190761241_322_438\tmgnifams_create\tnew\ttrue\ttrue\t1.0\t1.0\t117\nmgnifams_create_1\t2603693830_362_480/1-118\tmgnifams_create\tnew\tfalse\ttrue\t0.65\t1.0\t118\nmgnifams_create_1\t2632373804_177_299/1-118\tmgnifams_create\tnew\tfalse\ttrue\t0.675\t1.0\t118\nmgnifams_create_1\t2789726661/5-122\tmgnifams_create\tnew\tfalse\ttrue\t0.632\t1.0\t118\nmgnifams_create_1\t3318779648/9-126\tmgnifams_create\tnew\tfalse\ttrue\t0.624\t1.0\t118\nmgnifams_create_1\t3572411709_347_468/1-118\tmgnifams_create\tnew\tfalse\ttrue\t0.615\t1.0\t118\nmgnifams_create_1\t3573189919_79_196\tmgnifams_create\tnew\tfalse\ttrue\t0.598\t1.0\t118\nmgnifams_create_1\t4452646341_348_471/1-118\tmgnifams_create\tnew\tfalse\ttrue\t0.615\t1.0\t118\nmgnifams_create_1\t4706047775/10-127\tmgnifams_create\tnew\tfalse\ttrue\t0.632\t1.0\t118\nmgnifams_create_1\t5761321067_228_349/1-118\tmgnifams_create\tnew\tfalse\ttrue\t0.667\t1.0\t118\nmgnifams_create_1\t5862852515_178_295\tmgnifams_create\tnew\tfalse\ttrue\t0.658\t1.0\t118\n",
+          "id": "proteinfamilies_family_members",
+          "mode": "families/members",
+          "name": "Family members",
+          "path_glob": "**/family_reps/*/*.tsv",
+          "rawYaml": "id: proteinfamilies_family_members\nname: Family members\nmode: families/members\ndescription: >-\n  One row per member of every family roster: the family, the sample, whether\n  the family is new or an extended existing one, whether the member is the\n  representative, and from the full alignment its identity to the\n  representative, the share of the representative it covers and its length.\nfind:\n  path_glob: \"**/family_reps/*/*.tsv\"\n  path_glob_alt:\n    - \"**/update_families/family_reps/*/*.tsv\"\nrecipe: proteinfamilies/family_members.py\nfixture: family_members.tsv\nrenders_as:\n  # Fragments sit left (low coverage), divergent members low (low identity).\n  - { id: member_scatter, component: advanced_viz, kind: scatter_xy,\n      roles: {x: coverage, y: identity, label: member_id, color: origin, size: length} }\n  - { id: members_count, component: card, column: member_id, aggregation: count,\n      secondary_layout: top_n, breakdown_col: family, top_n_count: 3 }\n  - { id: member_identity, component: card, column: identity, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { id: member_coverage, component: card, column: coverage, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { id: member_length, component: card, column: length, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: figure, visu_type: box, dict_kwargs: {x: family, y: identity, color: origin} }\n  - { component: table }\n",
+          "recipe": "proteinfamilies/family_members.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "member_scatter",
+              "kind": "scatter_xy",
+              "roles": {
+                "color": "origin",
+                "label": "member_id",
+                "size": "length",
+                "x": "coverage",
+                "y": "identity"
+              }
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "family",
+              "column": "member_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "members_count",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "identity",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "member_identity",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "coverage",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "member_coverage",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "length",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "member_length",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "origin",
+                "x": "family",
+                "y": "identity"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "box"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "family_members",
+          "yamlPath": "depictio/catalog/proteinfamilies/family_members.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per family of every sample: whether the run built it or extended an existing one, its member count and representative (id, length, sequence), the seed its HMM was built from and the members recruited beyond it, the HMM length and effective sequence number, and the full alignment's width, mean identity and coverage of the members to the representative and mean residue conservation.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/family_reps/*/*_meta_mqc.csv",
+            "path_glob_alt": [
+              "**/update_families/family_reps/*/*_meta_mqc.csv"
+            ]
+          },
+          "fixture": "family_metadata.tsv",
+          "fixtureContent": "family\tsample\torigin\tsize\trepresentative_id\trepresentative_length\tsequence\tseed_size\trecruited\teffective_sequences\tmodel_length\taligned_members\talignment_columns\tmean_identity\tmean_coverage\tmean_conservation\tconserved_share\nmgnifams_create_1\tmgnifams_create\tnew\t20\t190761241_322_438\t117\tRILDPRIVGEEHYKVARSVQEILQKYKELQDIIAILGMDELSEDDKLVVSRARKVQRFLSQPFFVAGQFTGLEGRYVPVSETIQGFKEIIEGKYDDIPESYFLNCGGIDDVLAKVEK\t5\t15\t0.50293\t118\t20\t122\t0.5784958770069574\t0.9919028340080972\t0.6771018087616374\t0.5213675213675214\nmgnifams_create_2\tmgnifams_create\tnew\t18\t1622851798_832_939\t108\tAAMKGMLDPVYEEKVIGHAEIRQLFKASGVGTIAGSYVMDGTFQRDCKVRISREGKQIFEGQLASLKRFKDDVKEVKAGYECGLVFEGFNDIQELDQVEAYIMVEVPR\t8\t10\t0.527344\t108\t18\t109\t0.5628987722797547\t0.9836601307189542\t0.6605819764183822\t0.37962962962962965\nmgnifams_create_3\tmgnifams_create\tnew\t31\t1546033206_1_127\t127\tMPKRTDIHSILIIGAGPIVIGQACEFDYSGAQACKALREEGFRVILVNSNPATIMTDPEMADATYIEPITWQTLERIIARERPDALLPTMGGQTALNTALDLVREGVLEQHGVELIGASRDAIDKAE\t5\t26\t0.512695\t127\t31\t137\t0.4716852137916534\t0.9614173228346454\t0.6356445302950514\t0.3937007874015748\nmgnifams_create_4\tmgnifams_create\tnew\t16\t4529851305_271_377/1-104\t104\tDVITGIIKANIPSRIAFAVSSQVDSRTILDQVGAEKLLGKGDMLFYPSGAPKPVRVQGAFVSDEEVEKIVSFVKSNGEATYSEDILESIENCNKTDKELAAETG\t5\t11\t0.581055\t104\t16\t110\t0.5462857930125684\t0.95\t0.6316256606063989\t0.4230769230769231\nmgnifams_create_5\tmgnifams_create\tnew\t30\t1446399400_1_131\t131\tMAKDKIIIRGARQHNLKNIDLEIPRDKLVVFTGLSGSGKSSLAFDTIYAEGQRRYVESLSAYARQFLGQMDKPDVDFIEGLSPAISIDQKTTSRNPRSTVGTVTEIYDYLRLLYARIGHPHCWQCGRPIQQ\t8\t22\t0.503906\t131\t30\t143\t0.5364396750033613\t0.9526191102921818\t0.6201208852414711\t0.33587786259541985\nmgnifams_test_1\tmgnifams_update\tupdated\t26\t1142194963_135_244/1-108\t108\tKAMEGMLSPEMKEEVTGTAEIRETFKISKIGTIAGCMVLSGKIFRNSKIRVIRDGVVVFDGELASLKRFKDDVKEVSKGYDCGLQVKNYNDIRVDDQIEAYQEVAVQK\t26\t0\t0.936279\t108\t26\t108\t0.509467469512636\t0.9714814814814813\t0.6568245414512186\t0.3888888888888889\nmgnifams_test_2\tmgnifams_update\tupdated\t63\t2473920823_1_138/14-138\t125\tMPKRTDIHTILLIGSGPIIIGQACEFDYSGTQAAKTLKSLGYKVILINSNPATIMTDPDFADRTYIEPITEEIIVDIIKKEKVDAILPTMGGQTALNVAMSMFEKGLLESITFLGAKPEAIKKGE\t63\t0\t0.972839\t125\t63\t136\t0.5023569415556915\t0.9412903225806453\t0.6210227014208811\t0.368\nmgnifams_test_4\tmgnifams_update\tupdated\t38\t1155489095_72_186\t115\tRILDPAVVGEEHYQVARDVQGILQRYKSLQDIIAILGMDELSEEDKLTVARARKIQRFLSQPFFVAEVFTGSPGKLVSLEDTIKGFKGLCAGEYDHLPEAAFYLVGSIEEAIEKA\t38\t0\t1.275635\t116\t38\t120\t0.6361935197343205\t0.9593419506462987\t0.6903895014833789\t0.5130434782608696\nmgnifams_test_5\tmgnifams_update\tupdated\t67\t3245658017_400_942/210-327\t118\tNGKSITIRGARGNNLKGVDVEFPLGKLIVVTGVSGSGKSTLINETLQPILSQHFYRSLKKPMPYDSIEGIENIDKVVNVDQSPIGRTPRSNPATYTGVFSDIRSLFVGLPEAKIRGYK\t67\t0\t1.378113\t120\t67\t134\t0.4725368467463374\t0.9634052388289677\t0.5947256239208508\t0.3050847457627119\nmgnifams_test_6\tmgnifams_update\tupdated\t27\t458453797_152_259/1-105\t105\tNVVTGLIKANIPSRIAFAVSSAIDSRTILDSGGAEKLLGQGDMLFSPVGAQKPLRIQGCFVSDSEIESVVDFVKNSRSVIYDDSIAQEIERSAVEGSKSSDSGSN\t27\t0\t0.97229\t94\t27\t110\t0.5221661898830504\t0.8857142857142861\t0.5743727918742759\t0.4\nmgnifams_update_1\tmgnifams_update\tnew\t6\t1336928202_73_229/1-148\t148\tYEENKRAVKNKYMGPLVSTIMTRCIHCTRCVRFATEVAGVNDLGLLGRGEEAEITSYLEKTIDSELSGNVIDLCPVGALTSKPYAFEARPWELKKTETIDVMDAVGSNIRVDTYGWEVKRILPRINEDINEEWISDKSRYACDGLLNQ\t5\t1\t0.522461\t148\t6\t153\t0.6564387917329094\t0.9837837837837838\t0.8020062234341455\t0.722972972972973\nmgnifams_update_2\tmgnifams_update\tnew\t15\t2239846553_114_291\t178\tASVKGAGKEGSVRAQSLDAEEALKDHETPVLKRRLWYSVGFLIVLMYFSMGHMMWGWPLPAFFDGNHVAMGLIQLILTAIVMVINQKFFISGFKSLWHKAPNMDTLVALGSMAAFTYSTYALFAMTDAQVKGNADAVMSYMHEFYFESAAMILTLITVGKMLEARSKGKTTDALKSLM\t5\t10\t0.50293\t178\t15\t204\t0.44027896465496486\t0.9394060995184593\t0.550885170862561\t0.2247191011235955\nmgnifams_update_3\tmgnifams_update\tnew\t27\t794522693_124_241/1-109\t109\tALDLKMRKDMQMELKEMHQKLGITFVYVTHDQEEALTLSDTIVVMSEGRIQQIGVPTDIYNEPINSFVADFIGESNILNGVMIKDKAVTFCGHEFECVDTGFGEQMQVD\t6\t21\t0.512695\t109\t27\t122\t0.4609269446583411\t0.9541284403669728\t0.5230095022346959\t0.26605504587155965\n",
+          "id": "proteinfamilies_family_metadata",
+          "mode": "families/summary",
+          "name": "Protein families",
+          "path_glob": "**/family_reps/*/*_meta_mqc.csv",
+          "rawYaml": "id: proteinfamilies_family_metadata\nname: Protein families\nmode: families/summary\ndescription: >-\n  One row per family of every sample: whether the run built it or extended an\n  existing one, its member count and representative (id, length, sequence),\n  the seed its HMM was built from and the members recruited beyond it, the HMM\n  length and effective sequence number, and the full alignment's width, mean\n  identity and coverage of the members to the representative and mean residue\n  conservation.\nfind:\n  path_glob: \"**/family_reps/*/*_meta_mqc.csv\"\n  path_glob_alt:\n    - \"**/update_families/family_reps/*/*_meta_mqc.csv\"\nrecipe: proteinfamilies/family_metadata.py\nfixture: family_metadata.tsv\nrenders_as:\n  # Big families spread left to right; a low point is a family whose members\n  # agree on few residues, a candidate for a second look or a split.\n  - { id: family_landscape, component: advanced_viz, kind: scatter_xy,\n      roles: {x: size, y: mean_conservation, label: family, color: origin, size: representative_length} }\n  - { id: families_total, component: card, column: family, aggregation: count,\n      secondary_layout: top_n, breakdown_col: sample, top_n_count: 3, headline: true }\n  - { id: members_total, component: card, column: size, aggregation: sum,\n      secondary_layout: top_n, breakdown_col: sample, top_n_count: 3, headline: true }\n  - { id: family_size, component: card, column: size, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { id: representative_length, component: card, column: representative_length, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { id: family_identity, component: card, column: mean_identity, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { id: family_conservation, component: card, column: mean_conservation, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { id: recruited_total, component: card, column: recruited, aggregation: sum,\n      secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }\n  - { component: figure, visu_type: box, dict_kwargs: {x: sample, y: size, color: origin} }\n  - { component: table }\n",
+          "recipe": "proteinfamilies/family_metadata.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "family_landscape",
+              "kind": "scatter_xy",
+              "roles": {
+                "color": "origin",
+                "label": "family",
+                "size": "representative_length",
+                "x": "size",
+                "y": "mean_conservation"
+              }
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "family",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": true,
+              "id": "families_total",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "size",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": true,
+              "id": "members_total",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "size",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "family_size",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "representative_length",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "representative_length",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "mean_identity",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "family_identity",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "mean_conservation",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "family_conservation",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "recruited",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "recruited_total",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "origin",
+                "x": "sample",
+                "y": "size"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "box"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "family_metadata",
+          "yamlPath": "depictio/catalog/proteinfamilies/family_metadata.yaml"
+        }
+      ],
+      "stage": "annotation"
+    },
+    {
+      "biotools_url": null,
+      "description": "Protein structure prediction summaries of nf-core/proteinfold: per-residue confidence of every top-ranked structure, per-model confidence scores (pLDDT, pTM, ipTM, ipSAE) across engines, predicted aligned error matrices and the multiple sequence alignments the MSA-based engines folded from.",
+      "dir": "depictio/catalog/proteinfold",
+      "homepage": "https://nf-co.re/proteinfold",
+      "id": "proteinfold",
+      "name": "nf-core/proteinfold",
+      "nf_core_url": null,
+      "outputs": [
+        {
+          "columns": {},
+          "description": "The per-residue pLDDT of each engine's top-ranked structure, one curve per engine (and per chain on a complex), averaged over windows past 200 residues. Kept apart from the residue table, with the engine only in the curve label, so that an engine picked on the residue table leaves every engine's curve for the same target on screen.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/top_ranked_structures/*.pdb",
+            "path_glob_alt": []
+          },
+          "fixture": "engine_plddt.tsv",
+          "fixtureContent": "target\tseries\tchain\tposition\tplddt\nT1024\tT1024 alphafold2\tA\t2\t81.99\nT1024\tT1024 alphafold2\tA\t4\t94.39\nT1024\tT1024 alphafold2\tA\t6\t96.64\nT1024\tT1024 alphafold2\tA\t8\t97.8\nT1024\tT1024 colabfold\tA\t2\t75.71\nT1024\tT1024 colabfold\tA\t4\t87.28\nT1024\tT1024 colabfold\tA\t6\t90.62\nT1024\tT1024 colabfold\tA\t8\t92.46\nT1024\tT1024 esmfold\tA\t2\t87.6\nT1024\tT1024 esmfold\tA\t4\t93.55\nT1024\tT1024 esmfold\tA\t6\t95.59\nT1024\tT1024 esmfold\tA\t8\t96.82\nT1024\tT1024 rosettafold_all_atom\tA\t2\t69.0\nT1024\tT1024 rosettafold_all_atom\tA\t4\t74.0\nT1024\tT1024 rosettafold_all_atom\tA\t6\t77.5\nT1024\tT1024 rosettafold_all_atom\tA\t8\t76.0\n",
+          "id": "proteinfold_engine_plddt",
+          "mode": "protein/residues",
+          "name": "Residue confidence per engine",
+          "path_glob": "**/top_ranked_structures/*.pdb",
+          "rawYaml": "id: proteinfold_engine_plddt\nname: Residue confidence per engine\nmode: protein/residues\ndescription: >-\n  The per-residue pLDDT of each engine's top-ranked structure, one curve per\n  engine (and per chain on a complex), averaged over windows past 200 residues.\n  Kept apart from the residue table, with the engine only in the curve label,\n  so that an engine picked on the residue table leaves every engine's curve\n  for the same target on screen.\nfind:\n  path_glob: \"**/top_ranked_structures/*.pdb\"\nrecipe: proteinfold/engine_plddt.py\nfixture: engine_plddt.tsv\nrenders_as:\n  - { id: plddt_by_engine, component: advanced_viz, kind: profile,\n      roles: {series: series, x: position, y: plddt} }\n  - { component: figure, visu_type: box, dict_kwargs: {x: series, y: plddt, color: series} }\n  - { component: table }\n",
+          "recipe": "proteinfold/engine_plddt.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "plddt_by_engine",
+              "kind": "profile",
+              "roles": {
+                "series": "series",
+                "x": "position",
+                "y": "plddt"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "series",
+                "x": "series",
+                "y": "plddt"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "box"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "engine_plddt",
+          "yamlPath": "depictio/catalog/proteinfold/engine_plddt.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per predicted model of every target and engine: its rank (1 is the top-ranked model), mean pLDDT, the share of residues placed confidently (pLDDT 70 or more) and likely disordered (under 50), and, when the engine writes them, the predicted TM score (pTM) and for a complex the interface TM score (ipTM) and ipSAE.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*_plddt.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "models.tsv",
+          "fixtureContent": "model_id\tstructure\tentity\tengine\ttarget\tmodel_rank\tis_top\tn_residues\tmean_plddt\tconfident_pct\tvery_low_pct\tptm\tiptm\tipsae\nalphafold2__H1065#1\talphafold2 / H1065\talphafold2__H1065\talphafold2\tH1065\t1\ttrue\t225\t50.057599999999994\t21.333333333333336\t67.11111111111111\t0.4\t0.112\t0.0\nalphafold2__H1065#2\talphafold2 / H1065\talphafold2__H1065\talphafold2\tH1065\t2\tfalse\t225\t49.34342222222222\t21.333333333333336\t67.11111111111111\t0.395\t0.111\t0.0\nalphafold2__H1065#3\talphafold2 / H1065\talphafold2__H1065\talphafold2\tH1065\t3\tfalse\t225\t47.083644444444445\t17.77777777777778\t69.77777777777779\t0.392\t0.109\t0.0\nalphafold2__H1065#4\talphafold2 / H1065\talphafold2__H1065\talphafold2\tH1065\t4\tfalse\t225\t51.04573333333334\t19.555555555555557\t58.666666666666664\t0.393\t0.106\t0.0\nalphafold2__H1065#5\talphafold2 / H1065\talphafold2__H1065\talphafold2\tH1065\t5\tfalse\t225\t46.95866666666667\t17.77777777777778\t69.77777777777779\t0.388\t0.104\t0.0\nalphafold2__H1065#6\talphafold2 / H1065\talphafold2__H1065\talphafold2\tH1065\t6\tfalse\t225\t45.278533333333336\t0.4444444444444444\t66.66666666666666\t0.274\t0.107\t0.0\nalphafold2__H1065#7\talphafold2 / H1065\talphafold2__H1065\talphafold2\tH1065\t7\tfalse\t225\t45.11071111111111\t0.4444444444444444\t68.0\t0.275\t0.104\t0.0\nalphafold2__H1065#8\talphafold2 / H1065\talphafold2__H1065\talphafold2\tH1065\t8\tfalse\t225\t44.74933333333333\t0.4444444444444444\t68.44444444444444\t0.271\t0.1\t0.0\nalphafold2__H1065#9\talphafold2 / H1065\talphafold2__H1065\talphafold2\tH1065\t9\tfalse\t225\t39.977288888888886\t0.0\t84.0\t0.252\t0.098\t0.0\nalphafold2__H1065#10\talphafold2 / H1065\talphafold2__H1065\talphafold2\tH1065\t10\tfalse\t225\t43.09537777777778\t1.3333333333333335\t69.33333333333334\t0.263\t0.092\t0.0\nalphafold2__H1065#11\talphafold2 / H1065\talphafold2__H1065\talphafold2\tH1065\t11\tfalse\t225\t42.3384\t0.0\t71.11111111111111\t0.259\t0.093\t0.0\nalphafold2__H1065#12\talphafold2 / H1065\talphafold2__H1065\talphafold2\tH1065\t12\tfalse\t225\t41.90355555555555\t0.0\t72.88888888888889\t0.258\t0.092\t0.0\nalphafold2__H1065#13\talphafold2 / H1065\talphafold2__H1065\talphafold2\tH1065\t13\tfalse\t225\t37.17084444444445\t0.0\t91.11111111111111\t0.237\t0.098\t0.0\nalphafold2__H1065#14\talphafold2 / H1065\talphafold2__H1065\talphafold2\tH1065\t14\tfalse\t225\t42.19586666666667\t0.0\t72.44444444444444\t0.261\t0.091\t0.0\nalphafold2__H1065#15\talphafold2 / H1065\talphafold2__H1065\talphafold2\tH1065\t15\tfalse\t225\t38.5952\t0.0\t84.44444444444444\t0.257\t0.091\t0.0\nalphafold2__H1065#16\talphafold2 / H1065\talphafold2__H1065\talphafold2\tH1065\t16\tfalse\t225\t39.44582222222222\t0.4444444444444444\t84.44444444444444\t0.251\t0.09\t0.0\n",
+          "id": "proteinfold_models",
+          "mode": "protein/models",
+          "name": "Model confidence scores",
+          "path_glob": "**/*_plddt.tsv",
+          "rawYaml": "id: proteinfold_models\nname: Model confidence scores\nmode: protein/models\ndescription: >-\n  One row per predicted model of every target and engine: its rank (1 is the\n  top-ranked model), mean pLDDT, the share of residues placed confidently\n  (pLDDT 70 or more) and likely disordered (under 50), and, when the engine\n  writes them, the predicted TM score (pTM) and for a complex the interface TM\n  score (ipTM) and ipSAE.\nfind:\n  path_glob: \"**/*_plddt.tsv\"\nrecipe: proteinfold/models.py\nfixture: models.tsv\nrenders_as:\n  - { id: plddt_vs_ptm, component: advanced_viz, kind: scatter_xy,\n      roles: {x: mean_plddt, y: ptm, label: model_id, color: engine, size: n_residues} }\n  - { id: model_plddt, component: card, column: mean_plddt, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }\n  - { id: model_confident_share, component: card, column: confident_pct, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { id: model_ptm, component: card, column: ptm, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { id: model_iptm, component: card, column: iptm, aggregation: max,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { id: model_count, component: card, column: model_id, aggregation: count,\n      secondary_layout: top_n, breakdown_col: engine, top_n_count: 3 }\n  - { component: figure, visu_type: box, dict_kwargs: {x: engine, y: mean_plddt, color: engine} }\n  - { component: figure, visu_type: line, dict_kwargs: {x: model_rank, y: mean_plddt, color: structure} }\n  - { component: interactive, interactive_type: MultiSelect, column_name: engine }\n  - { component: interactive, interactive_type: RangeSlider, column_name: model_rank }\n  - { component: table, row_selection_enabled: true, row_selection_column: model_id }\n",
+          "recipe": "proteinfold/models.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "plddt_vs_ptm",
+              "kind": "scatter_xy",
+              "roles": {
+                "color": "engine",
+                "label": "model_id",
+                "size": "n_residues",
+                "x": "mean_plddt",
+                "y": "ptm"
+              }
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "mean_plddt",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": true,
+              "id": "model_plddt",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "confident_pct",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "model_confident_share",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "ptm",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "model_ptm",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "iptm",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "model_iptm",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "engine",
+              "column": "model_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "model_count",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "engine",
+                "x": "engine",
+                "y": "mean_plddt"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "box"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "structure",
+                "x": "model_rank",
+                "y": "mean_plddt"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "line"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "engine",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "model_rank",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "RangeSlider",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {},
+              "row_selection_column": "model_id",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "models",
+          "yamlPath": "depictio/catalog/proteinfold/models.yaml"
+        },
+        {
+          "columns": {},
+          "description": "The alignment AlphaFold2, ColabFold and RoseTTAFold All-Atom folded each target from, one row per aligned sequence (the query first), decoded from the integer-coded tables and capped at 500 rows, with identity and coverage against the query. The alignment id is the id of the structure folded from it, so a column brush selects those residues on the structure.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*_msa.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "msa.tsv",
+          "fixtureContent": "msa_id\tseq_id\trank\taligned_sequence\tidentity\tcoverage\tchains\tentity\tengine\ttarget\tdepth\ncolabfold__T1024\tquery\t0\tMKEFWNLDKNLQLRLGIVFLGAFSYGTVFSSMTIYYNQYLGSAITGILLALSAVATFVAGILAGFFADRNGRKPVMVFGTIIQLLGAALAIASNLPGHVNPWSTFIAFLLISFGYNFVITAGNAMIIDASNAENRKVVFMLDYWAQNLSVILGAALGAWLFRPAFEALLVILLLTVLVSFFLTTFVMTETFKPTVKVDEKAENIFQAYKTVLQDKTYMIFMGANIATTFIIMQFDNFLPVHLSNSFKTITFWGFEIYGQRMLTIYLILACVLVVLLMTTLNRLTKDWSHQKGFIWGSLFMAIGMIFSFLTTTFTPIFIAGIVYTLGEIVYTPSVQTLGADLMNPEKIGSYNGVAAIKMPIASILAGLLVSISPMIKAIGVSLVLALTEVLAIILVLVAVNRHQKTKLN\t1.0\t1.0\t\tcolabfold__T1024\tcolabfold\tT1024\t578\ncolabfold__T1024\thit_1\t1\tMKEFWNLDKNLQLRLGIVFLGAFSYGTVFSSMTIYYNQYLGSAITGILLALSAVATFVAGILAGFFADRNGRKPVMVFGTIIQLLGAALAIASNLPGHVNPWSTFIAFLLISFGYNFVITAGNAMIIDASNAENRKVVFMLDYWAQNLSVILGAALGAWLFRPAFEALLVILLLTVLVSFFLTTFVMTETFKPTVKVDEKAENIFQAYKTVLQDKTYMIFMGANIATTFIIMQFDNFLPVHLSNSFKTITFWGFEIYGQRMLTIYLILACVLVVLLMTTLNRLTKDWSHQKGFIWGSLFMAIGMIFSFLTTTFTPIFIAGIVYTLGEIVYTPSVQTLGADLMNPEKIGSYNGVAAIKMPIASILAGLLVSISPMIKAIGVSLVLALTEVLAIILVLVAVNRHQKTKLN\t1.0\t1.0\t\tcolabfold__T1024\tcolabfold\tT1024\t578\ncolabfold__T1024\thit_2\t2\tMKAFWSLKRNIQIRILIVFLASFSYGTVFSSMTIYYNQHLGATITGIFLAISSVATFVSGLLAGFWADKFGRKPVMIWGTSIQVLGSVGALLANVPGHANPWLTFLGFLLISFGFNFDVTAGSAMIIDDSTPENRKTVFMLNYWAQNLSVIIGAALGAWLFKPAFFVLLLILVFTMVVTLLIVFFMLTESFYPQKSTDKKKESVFESYKMVLSDKTYVIFILANILTTMIIMQFDSFLPVHLSNSFKTITFFGFEIYGQRMLTIYLILACVLVVLLMTTLNRLTKDWSHKKGFILGSLFMAMGMIFSFLTTTFTPIFIAGIIYTLGEIVYTPSVQTLGADLMNPEKIGAYNGLGAIRMPIASILAGLLVSISPIIKATGVSLVLALTEILAIILVIIAVNRHQET---\t0.7604938271604939\t0.9926470588235294\t\tcolabfold__T1024\tcolabfold\tT1024\t578\ncolabfold__T1024\thit_3\t3\tMKEFWNLDKNLQLRLGIVFLGAFSYGTVFSSMTIYYNQHLGSAITGILLALSAVATFVAGILAGYFADRNGRKPVMVVGTVIQLLGSGLAIFSNLPSHVNAWTTFIAFLMISFGYNFVITAGNAMIIDASTAENRKVVFMLDYWAQNLSVILGAALGAWLFRPAFEALLGILLVTVLVSFFLTTFVMTETFKPSVSTDKPRENIFQAYKTVIRDKTYMIFMAANMGTTFIIMQFDNFLPVHLSNSFQTLEILGFEIYGQRMLTIFLILACVMVVVLMTTMNKLTKDWSHQKGFVLGSLFMAAGMIFAFMTTTFTPIFIAGVIYTLGEIVYTPSVQTLGADLMNPEKIGSYNGIGAIRTPIASILAALLVSISPIIKASGVSLILAFVELLAIILASIAVSRHQKETL-\t0.855036855036855\t0.9975490196078431\t\tcolabfold__T1024\tcolabfold\tT1024\t578\ncolabfold__T1024\thit_4\t4\tMNDFRKLHPAIQLRIFMVFVGTLTFSTVGSSMTIYYNQHLGAGITGFLLMVSSLVTFFVGLWAGHLSDRLGRRPIMLYATLLTSLGGLIAVYANSPWYFNPWLTYLGFLILGFGWGFYNTASMAMMVDLTDSDNRKIVYSLQYWVINVAILLGSAISGWFFKHYLFELLIAITLEEVLSFVLVFFFIDESFNPKTAEHKSESNIIKAYRFVARDHTFLYYCFGSIFTMMIFGQVDYYLPVHLSDHFITSHLFGFEIYGQRMLTIFLIINTALIVAFMGTVNRLTKHWSRSWGVGLGISIQGLGFILAILFRDFTGLVVASVIATLGEMIFVPFSQALRADLMDGDAVGTYSGAFSVVNPMASILGSLSVSASVFLGNTGMAGLLFVVVLLGLFPILTAVRRHER----\t0.41089108910891087\t0.9901960784313726\t\tcolabfold__T1024\tcolabfold\tT1024\t578\ncolabfold__T1024\thit_5\t5\tMKEFWNLDKNLQLRLGIVFLGAFSYGTVFSSMTIYYNLHLGSGITGILLALSAVATFIAGLLAGYFADRKGRKPVMVMGTMIQLLGSLVAIGSNLPHHVNPWTTFIAFLLISFGYNFVITAGNAMIIDASSAHNRKVVFMLDYWAQNLSVILGAALGAWLFKPAFEALLVILLLTVLVSFGLTTFVMTETFTPSLDEDTPKENIFQAYKTVVRDKTYMIFMAANIGTTFIIMQFDNFLPVHLSNSFQTVTFFGLEIYGQRMLTIYLILACVLVVVLMTSLNHLTRNWSHRKGFIWGSVFMALGMIFSFLTTTFTPIFIAGVVYTLGEIVYTPSVQTLGADLMDPEKIGSYNGMGAIRTPIASILAGLLVSISPIIKATGVSAVLALVEIMAIVLVSIAVARHKKEGL-\t0.8476658476658476\t0.9975490196078431\t\tcolabfold__T1024\tcolabfold\tT1024\t578\ncolabfold__T1024\thit_6\t6\tMRDFWNLKRNLQIRILIVFLASFSYGTVFSSMTIYYNQHLGATITGAFLATSSLATFVSGLLAGFWADKFGRKPVMTWGTTIQVIGSVIALLSNVPGHVNPWTTFLGFLLISFGFNFDVTAGSAMIIDDSMPENRKTVFMLNYWAQNLSVIIGAALGAWLFKPAFFLLLIILLVTILVTLMIVLFMLTETFTPLVRNDKEKESVFSSYKTVLADKTYVIFIIANVLTTMIIMQFDNFLPVHLSNSFRTVTIFGFQIYGQRMLTIYLILACVMVVTLMTTVNKWTHKWSHKKGFVLGSILMTMGMIFAFMTTTFSPIFVAGIIYTFGEIIYTPSVQSLGADLMNPEKIGAYNGLGAVRQPLASIIAAGLVSASPFIKATGVSIALLIAEICAILLCVLAVNRHQQERHN\t0.6740196078431373\t1.0\t\tcolabfold__T1024\tcolabfold\tT1024\t578\ncolabfold__T1024\thit_7\t7\tMKEFWKLHPAIRIRLLMNFLGTLCFSTVGGSMTIYYNKYMGAGVTGLLLIISSIVVFLVGLYAGHLTDMKGRRPVMLSATALTAVGAALATFSNSSFYFNPWLTFLGFLIENFGFGFFNTASQAMIVDLTTSENRRTVYSIQYWVINFAIMIGSGLSAWFFRDYLVWLLLAITVEEILSFIVIFFWIEESFDSQQQSKTKTPNIIQAYFFVAKDHIFMYYLFASVFISMIFNQVDYYLPVHLSDSFLSTRIFGVEIYGQRMLTMFLLINTLIIILFMGRINHLTRNWSRRTGIGLGILIQGLGFIIAFLGDNLIWEVVAAVVVTLGEMILIPFSQSLRADLMEGEHVGTYTGAFSVTQPVAAVLSGLLVSLSAIYGNIGMSLFMIVITLLGILPALRAIRMHE-----\t0.40198511166253104\t0.9877450980392157\t\tcolabfold__T1024\tcolabfold\tT1024\t578\ncolabfold__T1024\thit_8\t8\tMKEFWKLKRNIQVRILIVFLASFSYGTVFSSMTIYYNQHLGAVITGAFLAISSVATFVSGLLAGFWADKFGRKPVMTWGTCIQVLGSVIALLSNVPGHANPWTTFLGFLLISFGFNFDVTAGSAMIIDDSTPENRKVVFMLNYWAQNLSVIIGAALGAWLFKPAFFLLLIILLVMIVLTLFIVIFMLKESFTPSVSADKKKESVFSSYKTVLLDKTYVIFILANILTTMIVMQFDNFLPVHLSDSFQTVTFFGFEIYGQRMLTIYLILACVMVVTLMTTLNKWTHSWSHKKGFISGSILMTAGMIFAFMTTTFTPIFIAGMIYTFGEIIYTPSVQSLGAELMDSEKIGAYNGLGAVRQPLANIIAASMVSASPVIGAKGVSMGLAISEIIAITLCVIAVNRHQRK---\t0.671604938271605\t0.9926470588235294\t\tcolabfold__T1024\tcolabfold\tT1024\t578\ncolabfold__T1024\thit_9\t9\tMKEFWGLHPTIKIRLVMNFLGALCFSTVGGSMTIYYNKYMGAGITGLLLIVSSVMVFLVGLYAGHLTDIKGRRPVMLFSTAITALGAALATFANSSFYFNPWVTFLGFLIVNFGFGFFNTASQAMIVDLTTSENRRTVYSIQYWIINFAIMIGSGLSGWFFRDYLVWLLLVITIEEILSFIVVLFWIDESFDPEKKQEKKTPNIIQAYFFVAKDTVFMSYLFASVFIAMIFNQIDYYLPVHLSDSFSTTRILGFELYGQRMLTLFLLINTLIIVLFMSKMNHLTKNWSRRTGIGLGIILQGLGFIIAFLGHNLTWEVTAAVVATLGEMILVPFSQALRADLMEGEHVGTYTGAFSVTQPVAAVLSGVLVSLSAIYGNVGMALIMVVIILLGIVPSLRAIRMHE-----\t0.41687344913151364\t0.9877450980392157\t\tcolabfold__T1024\tcolabfold\tT1024\t578\ncolabfold__T1024\thit_10\t10\tMKDFFGLNRTIKIRLIMNFLGSLCFSTVGGSMTIYYNKYMGAGITGMLLIVSSVMVFLIGLYAGHLTDIQGRKPVMVFSTAVTSVGAALATFANSSFYFNPWVTFFGFLIVNFGFGFFNTASQAMIVDLTTSENRRVVYSIQYWIINFAIMIGSGLSGWFFRDHLVWLLLVITLEEILSCLVVIFWIDESFDPKAEHRKPETNIIKAYFTVAKDKVFMYYLFASVFIAMIFSQIDYYLPVHLSDSFRTTRLLGIEIYGQRMLTVFLMVNTLIIVLFMGRVNRWTKNWSRSHGIFWGVLLEGLGFIIAFLGRDLTWEIIAVIIASIGEMILVPVSQALRADLMEGDQVGTYTGAFSVTQPIASVLSGILVSLSGLYGNVGMAIFMFLIIVLSVFPSLRAIRMHEK----\t0.4158415841584158\t0.9901960784313726\t\tcolabfold__T1024\tcolabfold\tT1024\t578\ncolabfold__T1024\thit_11\t11\tMKEFWNLDKNLQLRLGIVFLGAFSYGTVFSSMTIYYNQYLGSAITGVLLALSAVATFVAGLLAGFFADRQGRKPVMVVGTLIQFGGAILAILANLPGHINPWLTFLAFLCISFGYNFVITAGNAMIIEASNAENRKIVFLLDYWAQNLSVILGAALGAWLFRPAFEALLAILLVTVLVSFFLTTFVMTETFNPEDGEPLAKENIFQAYRTVVKDRTYMVFMTASIGTTFIIMQFDNFLPVHLANSFQTVTFWGFEIYGQRMLTIFLILACVLVVALMTTLNRFTQNWSHQKGFVLGSLGMALGMIFAFLTTSFVPIFIAGIIYTLGEIIYTPSVQTLGADLMHPDKIGAYNGVGAVRTPIASVLAGLLVSVSPLIHAAGVSLVLGVVEIFAIVLVHYAAVRHQRE---\t0.8098765432098766\t0.9926470588235294\t\tcolabfold__T1024\tcolabfold\tT1024\t578\n",
+          "id": "proteinfold_msa",
+          "mode": "protein/msa",
+          "name": "Multiple sequence alignments of the MSA-based engines",
+          "path_glob": "**/*_msa.tsv",
+          "rawYaml": "id: proteinfold_msa\nname: Multiple sequence alignments of the MSA-based engines\nmode: protein/msa\ndescription: >-\n  The alignment AlphaFold2, ColabFold and RoseTTAFold All-Atom folded each\n  target from, one row per aligned sequence (the query first), decoded from\n  the integer-coded tables and capped at 500 rows, with identity and coverage\n  against the query. The alignment id is the id of the structure folded from\n  it, so a column brush selects those residues on the structure.\nfind:\n  path_glob: \"**/*_msa.tsv\"\nrecipe: proteinfold/msa.py\nfixture: msa.tsv\nrenders_as:\n  - { id: folding_msa, component: advanced_viz, kind: msa,\n      roles: {msa_id: msa_id, seq_id: seq_id, sequence: aligned_sequence, rank: rank, identity: identity} }\n  - { id: msa_depth, component: card, column: depth, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { id: msa_coverage, component: card, column: coverage, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: figure, visu_type: histogram, dict_kwargs: {x: identity, color: engine} }\n  - { component: table }\n",
+          "recipe": "proteinfold/msa.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "folding_msa",
+              "kind": "msa",
+              "roles": {
+                "identity": "identity",
+                "msa_id": "msa_id",
+                "rank": "rank",
+                "seq_id": "seq_id",
+                "sequence": "aligned_sequence"
+              }
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "depth",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "msa_depth",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "coverage",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "msa_coverage",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "engine",
+                "x": "identity"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "msa",
+          "yamlPath": "depictio/catalog/proteinfold/msa.yaml"
+        },
+        {
+          "columns": {},
+          "description": "The predicted aligned error matrix of every top-ranked model, averaged into at most 64 residue bins per axis: row k and column bNN with the same number cover the same residues. Low values off the diagonal mean two regions (two domains, or two chains of a complex) are confidently placed relative to each other. mean_pae is each row's mean error, so its average is the matrix mean.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/paes/*_pae.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "pae.tsv",
+          "fixtureContent": "entity\tengine\ttarget\tbin\tresidue_range\tmean_pae\tb01\tb02\tb03\tb04\tb05\tb06\tb07\tb08\tb09\tb10\tb11\tb12\tb13\tb14\tb15\tb16\tb17\tb18\tb19\tb20\tb21\tb22\tb23\tb24\tb25\tb26\tb27\tb28\tb29\tb30\tb31\tb32\tb33\tb34\tb35\tb36\tb37\tb38\tb39\tb40\tb41\tb42\tb43\tb44\tb45\tb46\tb47\tb48\tb49\tb50\tb51\tb52\tb53\tb54\tb55\tb56\tb57\tb58\tb59\tb60\tb61\tb62\tb63\tb64\ncolabfold__T1024\tcolabfold\tT1024\t1\t1-7\t9.516\t1.658\t3.945\t5.463\t7.958\t9.787\t12.191\t12.537\t11.894\t10.883\t9.447\t8.679\t7.802\t8.949\t10.362\t11.363\t12.167\t11.164\t9.551\t7.723\t6.365\t5.416\t5.052\t5.947\t7.22\t8.947\t10.611\t9.508\t8.14\t7.249\t6.906\t11.412\t12.14\t11.458\t10.802\t10.548\t10.561\t11.4\t12.15\t13.277\t12.374\t11.588\t9.176\t6.981\t5.693\t7.117\t8.424\t9.034\t10.742\t12.304\t10.629\t8.662\t7.61\t7.955\t8.511\t9.371\t9.9\t11.386\t12.75\t13.833\t13.231\t11.852\t10.71\t10.175\t10.955\ncolabfold__T1024\tcolabfold\tT1024\t2\t8-13\t4.129\t2.121\t0.844\t1.592\t2.59\t3.754\t5.101\t5.695\t5.111\t4.268\t3.449\t3.233\t2.484\t2.945\t3.576\t4.427\t5.207\t4.187\t3.174\t2.482\t2.136\t2.211\t2.089\t2.358\t2.85\t3.706\t4.344\t3.307\t2.451\t2.167\t2.427\t6.174\t6.317\t4.862\t4.682\t4.456\t4.565\t4.937\t6.023\t6.86\t6.919\t5.854\t4.544\t3.501\t3.356\t3.582\t3.663\t4.117\t5.105\t6.085\t5.497\t4.23\t3.337\t3.091\t3.418\t3.565\t4.098\t4.945\t6.215\t7.066\t6.471\t5.512\t4.872\t4.471\t5.904\ncolabfold__T1024\tcolabfold\tT1024\t3\t14-20\t3.086\t2.371\t1.253\t0.8\t1.327\t2.326\t3.129\t3.729\t3.44\t3.073\t2.678\t2.646\t1.992\t2.096\t2.348\t2.949\t3.359\t2.656\t2.127\t1.891\t1.827\t2.177\t1.728\t1.515\t1.611\t2.143\t2.625\t2.006\t1.625\t1.724\t2.275\t5.52\t5.235\t3.877\t3.77\t3.537\t3.509\t3.549\t4.311\t4.948\t4.967\t4.025\t3.089\t2.591\t2.78\t3.22\t3.118\t3.172\t3.74\t4.422\t3.936\t3.02\t2.547\t2.525\t2.933\t3.065\t3.379\t3.835\t4.641\t5.247\t4.813\t4.189\t3.824\t3.759\t5.369\ncolabfold__T1024\tcolabfold\tT1024\t4\t21-26\t4.004\t3.701\t2.539\t1.529\t0.875\t1.911\t2.968\t3.699\t3.558\t3.602\t3.552\t3.938\t3.046\t2.795\t2.81\t3.434\t3.764\t2.865\t2.591\t2.587\t3.011\t3.607\t2.879\t2.209\t1.731\t2.006\t2.659\t2.19\t2.223\t2.829\t3.67\t6.884\t6.578\t5.308\t5.334\t4.927\t4.584\t4.258\t5.219\t5.733\t5.759\t4.633\t3.79\t3.602\t3.903\t4.661\t4.684\t4.516\t5.022\t5.497\t5.053\t4.219\t3.728\t3.853\t4.582\t4.452\t4.326\t4.708\t5.582\t6.385\t6.091\t5.563\t5.395\t5.51\t7.478\ncolabfold__T1024\tcolabfold\tT1024\t5\t27-32\t7.063\t7.444\t6.398\t4.87\t3.081\t1.654\t3.372\t4.572\t4.564\t5.421\t6.627\t7.99\t6.785\t5.772\t4.904\t5.266\t5.282\t4.093\t4.684\t5.505\t6.808\t7.872\t6.379\t4.921\t3.789\t3.695\t4.461\t4.185\t5.31\t6.903\t8.063\t11.379\t10.407\t9.172\t9.469\t8.574\t7.653\t6.928\t8.168\t9.481\t9.501\t7.516\t6.085\t6.064\t6.76\t8.498\t8.527\t8.245\t8.575\t9.028\t8.502\t7.414\t6.983\t7.452\t8.627\t8.229\t7.215\t7.595\t8.739\t10.061\t9.944\t9.435\t9.413\t9.976\t12.295\ncolabfold__T1024\tcolabfold\tT1024\t6\t33-39\t4.981\t5.909\t4.818\t3.748\t2.767\t2.008\t0.918\t1.578\t2.116\t2.873\t3.673\t4.727\t4.332\t3.455\t2.87\t2.732\t2.381\t2.188\t2.772\t3.595\t4.784\t5.761\t4.939\t4.033\t3.27\t2.843\t2.648\t2.768\t3.509\t4.337\t5.356\t7.996\t6.988\t5.787\t6.289\t5.951\t5.375\t5.132\t5.787\t7.357\t7.435\t5.92\t4.928\t5.011\t5.793\t6.507\t6.472\t6.153\t6.612\t6.975\t6.553\t5.787\t5.63\t5.703\t6.042\t5.729\t4.965\t5.058\t6.059\t7.702\t7.925\t6.941\t6.756\t7.211\t9.169\ncolabfold__T1024\tcolabfold\tT1024\t7\t40-45\t5.748\t7.336\t5.93\t4.749\t3.722\t2.831\t1.667\t0.975\t1.567\t2.571\t3.593\t5.02\t4.738\t3.952\t3.364\t3.294\t2.729\t2.459\t3.121\t4.107\t5.37\t6.847\t6.156\t5.374\t4.531\t3.877\t3.564\t3.45\t4.428\t5.183\t6.171\t8.262\t7.124\t5.948\t6.744\t6.492\t5.864\t6.083\t7.026\t8.456\t9.282\t7.249\t6.171\t6.636\t7.29\t8.424\t7.73\t7.33\t7.674\t8.16\t8.025\t7.202\t6.832\t6.562\t6.806\t6.093\t5.381\t5.467\t6.519\t7.56\t8.218\t7.672\t7.376\t7.98\t10.091\ncolabfold__T1024\tcolabfold\tT1024\t8\t46-51\t4.492\t5.624\t4.272\t3.58\t3.109\t2.636\t1.793\t1.251\t0.786\t1.327\t2.139\t3.067\t3.131\t2.799\t2.798\t3.163\t2.716\t1.989\t2.225\t2.674\t3.617\t4.911\t4.349\t3.821\t3.784\t3.565\t3.332\t3.236\t3.558\t3.851\t4.341\t6.334\t5.336\t4.092\t4.859\t5.029\t5.048\t4.884\t5.849\t7.158\t7.586\t5.861\t5.051\t5.208\t5.728\t6.18\t5.798\t5.714\t6.345\t6.866\t6.588\t5.681\t5.006\t4.564\t4.74\t3.974\t3.871\t4.472\t5.566\t6.839\t7.369\t6.565\t6.019\t6.061\t8.311\ncolabfold__T1024\tcolabfold\tT1024\t9\t52-58\t4.55\t5.825\t4.167\t3.595\t3.346\t3.146\t2.616\t2.189\t1.4\t0.844\t1.462\t2.47\t2.821\t2.792\t3.231\t3.93\t3.526\t2.422\t2.273\t2.366\t3.379\t4.66\t4.342\t3.935\t4.086\t4.081\t4.065\t3.73\t3.697\t3.968\t4.019\t6.088\t5.21\t3.738\t4.66\t5.12\t5.257\t4.919\t5.767\t7.441\t8.292\t6.365\t5.405\t5.396\t5.9\t6.235\t5.626\t5.725\t6.085\t7.049\t6.898\t5.7\t4.943\t4.48\t4.364\t3.578\t3.694\t4.758\t5.675\t6.609\t6.624\t6.183\t5.948\t5.729\t7.885\ncolabfold__T1024\tcolabfold\tT1024\t10\t59-64\t3.863\t4.717\t3.152\t2.848\t2.966\t3.21\t3.27\t2.937\t2.224\t1.437\t0.864\t1.55\t2.006\t2.238\t2.865\t3.679\t3.663\t2.525\t2.041\t1.794\t2.312\t3.402\t3.325\t3.237\t3.644\t4.0\t4.024\t3.302\t2.998\t2.992\t3.073\t5.626\t4.483\t2.959\t3.778\t4.079\t4.336\t4.355\t5.177\t6.6\t7.61\t5.712\t4.81\t4.544\t4.759\t4.885\t4.274\t4.574\t5.236\t6.065\t5.849\t4.835\t3.93\t3.366\t3.245\t2.472\t2.976\t3.947\t4.831\t5.862\t5.695\t5.043\t4.617\t4.415\t6.44\ncolabfold__T1024\tcolabfold\tT1024\t11\t65-71\t3.929\t4.251\t2.826\t2.767\t3.246\t3.913\t4.343\t4.292\t3.489\t2.534\t1.628\t0.984\t1.619\t2.4\t3.185\t4.149\t4.423\t3.251\t2.57\t1.898\t2.065\t3.069\t3.116\t3.297\t3.846\t4.446\t4.545\t3.584\t3.041\t2.652\t2.423\t4.964\t4.158\t2.822\t3.562\t3.685\t4.008\t4.508\t5.475\t6.966\t7.92\t6.027\t4.976\t4.519\t4.567\t4.615\t4.011\t4.352\t5.06\t6.209\t5.917\t4.737\t3.801\t3.188\t2.977\t2.358\t3.092\t3.93\t5.037\t6.139\t5.67\t4.8\t4.224\t4.006\t5.776\ncolabfold__T1024\tcolabfold\tT1024\t12\t72-77\t3.098\t3.071\t1.948\t1.856\t2.302\t2.859\t3.171\t3.276\t2.811\t2.273\t1.686\t1.367\t0.751\t1.163\t1.775\t2.5\t2.812\t2.058\t1.547\t1.337\t1.533\t2.311\t2.355\t2.397\t2.686\t2.998\t3.001\t2.191\t1.721\t1.436\t1.695\t5.042\t4.419\t2.811\t3.077\t3.195\t3.46\t3.833\t4.744\t5.622\t6.065\t4.82\t3.829\t3.398\t3.39\t3.551\t3.273\t3.596\t4.283\t5.073\t4.704\t3.773\t3.057\t2.613\t2.408\t2.174\t2.954\t3.544\t4.518\t5.378\t5.001\t4.231\t3.679\t3.414\t4.796\n",
+          "id": "proteinfold_pae",
+          "mode": "protein/pae",
+          "name": "Predicted aligned error of the top-ranked models",
+          "path_glob": "**/paes/*_pae.tsv",
+          "rawYaml": "id: proteinfold_pae\nname: Predicted aligned error of the top-ranked models\nmode: protein/pae\ndescription: >-\n  The predicted aligned error matrix of every top-ranked model, averaged into\n  at most 64 residue bins per axis: row k and column bNN with the same number\n  cover the same residues. Low values off the diagonal mean two regions (two\n  domains, or two chains of a complex) are confidently placed relative to each\n  other. mean_pae is each row's mean error, so its average is the matrix mean.\nfind:\n  path_glob: \"**/paes/*_pae.tsv\"\nrecipe: proteinfold/pae.py\nfixture: pae.tsv\nrenders_as:\n  - { id: pae_heatmap, component: advanced_viz, kind: complex_heatmap,\n      roles: {index: residue_range} }\n  - { id: mean_pae, component: card, column: mean_pae, aggregation: average,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: interactive, interactive_type: Select, column_name: engine }\n  - { component: table }\n",
+          "recipe": "proteinfold/pae.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "pae_heatmap",
+              "kind": "complex_heatmap",
+              "roles": {
+                "index": "residue_range"
+              }
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "mean_pae",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "mean_pae",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "engine",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "Select",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "pae",
+          "yamlPath": "depictio/catalog/proteinfold/pae.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Per-residue pLDDT of each engine's models for a target, one curve per engine: the top-ranked model, with a band from the lowest to the highest model at each residue. Residues count from 1 over the chains in order. A wide band is where the engine's models disagree, and curves that part are where the engines do.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*_plddt.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "plddt_ranks.tsv",
+          "fixtureContent": "entity\tengine\ttarget\tn_models\tresidue_index\tplddt\tplddt_min\tplddt_max\nalphafold2__T1024\talphafold2\tT1024\t5\t2\t81.99\t31.63\t81.99\nalphafold2__T1024\talphafold2\tT1024\t5\t4\t94.39\t32.5\t94.39\nalphafold2__T1024\talphafold2\tT1024\t5\t6\t96.64\t33.62\t96.64\nalphafold2__split_msa_prediction__T1024\talphafold2 (split msa prediction)\tT1024\t5\t2\t81.99\t32.21\t81.99\nalphafold2__split_msa_prediction__T1024\talphafold2 (split msa prediction)\tT1024\t5\t4\t94.47\t30.14\t94.47\nalphafold2__split_msa_prediction__T1024\talphafold2 (split msa prediction)\tT1024\t5\t6\t96.67\t29.46\t96.67\ncolabfold__T1024\tcolabfold\tT1024\t5\t2\t75.71\t67.4\t75.71\ncolabfold__T1024\tcolabfold\tT1024\t5\t4\t87.28\t81.4\t87.28\ncolabfold__T1024\tcolabfold\tT1024\t5\t6\t90.62\t84.97\t90.62\nesmfold__T1024\tesmfold\tT1024\t1\t2\t82.5\t82.5\t82.5\nesmfold__T1024\tesmfold\tT1024\t1\t4\t88.93\t88.93\t88.93\nesmfold__T1024\tesmfold\tT1024\t1\t6\t94.58\t94.58\t94.58\nrosettafold_all_atom__T1024\trosettafold_all_atom\tT1024\t1\t2\t69.0\t69.0\t69.0\nrosettafold_all_atom__T1024\trosettafold_all_atom\tT1024\t1\t4\t74.0\t74.0\t74.0\nrosettafold_all_atom__T1024\trosettafold_all_atom\tT1024\t1\t6\t77.5\t77.5\t77.5\n",
+          "id": "proteinfold_plddt_ranks",
+          "mode": "protein/models",
+          "name": "Residue confidence of each engine's models",
+          "path_glob": "**/*_plddt.tsv",
+          "rawYaml": "id: proteinfold_plddt_ranks\nname: Residue confidence of each engine's models\nmode: protein/models\ndescription: >-\n  Per-residue pLDDT of each engine's models for a target, one curve per engine:\n  the top-ranked model, with a band from the lowest to the highest model at\n  each residue. Residues count from 1 over the chains in order. A wide band is\n  where the engine's models disagree, and curves that part are where the\n  engines do.\nfind:\n  path_glob: \"**/*_plddt.tsv\"\nrecipe: proteinfold/plddt_ranks.py\nfixture: plddt_ranks.tsv\nrenders_as:\n  - { id: plddt_model_spread, component: advanced_viz, kind: profile,\n      roles: {series: engine, x: residue_index, y: plddt, lower: plddt_min, upper: plddt_max} }\n  - { component: interactive, interactive_type: Select, column_name: target }\n  - { component: table }\n",
+          "recipe": "proteinfold/plddt_ranks.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "plddt_model_spread",
+              "kind": "profile",
+              "roles": {
+                "lower": "plddt_min",
+                "series": "engine",
+                "upper": "plddt_max",
+                "x": "residue_index",
+                "y": "plddt"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "target",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "Select",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "plddt_ranks",
+          "yamlPath": "depictio/catalog/proteinfold/plddt_ranks.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per residue of every top-ranked structure, one structure per engine and target: chain and residue number in the structure's own numbering, the amino acid, pLDDT (the model's per-residue confidence, 0 to 100, read from the B-factor column) and its AlphaFold confidence band (Very high, Confident, Low, Very low, as the pLDDT legend of the protein tiles). The entity is the id the structures collection gives the same PDB, so the 3D tile, the sequence track and the alignment of one structure select each other's residues.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/top_ranked_structures/*.pdb",
+            "path_glob_alt": []
+          },
+          "fixture": "residues.tsv",
+          "fixtureContent": "entity\tengine\ttarget\tchain\tposition\tresidue\tvalue\tcategory\tconfidently_placed\ncolabfold__T1024\tcolabfold\tT1024\tA\t1\tM\t67.12\tLow\t0.0\ncolabfold__T1024\tcolabfold\tT1024\tA\t2\tK\t77.69\tConfident\t100.0\ncolabfold__T1024\tcolabfold\tT1024\tA\t3\tE\t82.31\tConfident\t100.0\ncolabfold__T1024\tcolabfold\tT1024\tA\t4\tF\t86.31\tConfident\t100.0\ncolabfold__T1024\tcolabfold\tT1024\tA\t5\tW\t88.25\tConfident\t100.0\ncolabfold__T1024\tcolabfold\tT1024\tA\t6\tN\t89.5\tConfident\t100.0\ncolabfold__T1024\tcolabfold\tT1024\tA\t7\tL\t91.75\tVery high\t100.0\ncolabfold__T1024\tcolabfold\tT1024\tA\t8\tD\t92.31\tVery high\t100.0\ncolabfold__T1024\tcolabfold\tT1024\tA\t9\tK\t92.62\tVery high\t100.0\ncolabfold__T1024\tcolabfold\tT1024\tA\t10\tN\t93.44\tVery high\t100.0\ncolabfold__T1024\tcolabfold\tT1024\tA\t11\tL\t94.31\tVery high\t100.0\ncolabfold__T1024\tcolabfold\tT1024\tA\t12\tQ\t95.69\tVery high\t100.0\ncolabfold__T1024\tcolabfold\tT1024\tA\t13\tL\t95.69\tVery high\t100.0\ncolabfold__T1024\tcolabfold\tT1024\tA\t14\tR\t94.81\tVery high\t100.0\ncolabfold__T1024\tcolabfold\tT1024\tA\t15\tL\t95.38\tVery high\t100.0\n",
+          "id": "proteinfold_residues",
+          "mode": "protein/residues",
+          "name": "Residue confidence of the top-ranked structures",
+          "path_glob": "**/top_ranked_structures/*.pdb",
+          "rawYaml": "id: proteinfold_residues\nname: Residue confidence of the top-ranked structures\nmode: protein/residues\ndescription: >-\n  One row per residue of every top-ranked structure, one structure per engine\n  and target: chain and residue number in the structure's own numbering, the\n  amino acid, pLDDT (the model's per-residue confidence, 0 to 100, read from\n  the B-factor column) and its AlphaFold confidence band (Very high, Confident,\n  Low, Very low, as the pLDDT legend of the protein tiles). The entity is the id\n  the structures collection gives the same PDB, so the 3D tile, the sequence\n  track and the alignment of one structure select each other's residues.\nfind:\n  path_glob: \"**/top_ranked_structures/*.pdb\"\nrecipe: proteinfold/residues.py\nfixture: residues.tsv\nrenders_as:\n  - { id: structure_plddt, component: advanced_viz, kind: molecule_3d,\n      roles: {position: position, entity: entity, chain: chain, value: value, category: category} }\n  # No category lane: the pLDDT lane already colours each residue by its band.\n  - { id: plddt_sequence_track, component: advanced_viz, kind: sequence_track,\n      roles: {position: position, entity: entity, residue: residue, value: value} }\n  - { id: residue_plddt, component: card, column: value, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { id: confident_share, component: card, column: confidently_placed, aggregation: average,\n      aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }\n  - { id: residue_bands, component: card, column: position, aggregation: count,\n      secondary_layout: top_n, breakdown_col: category, top_n_count: 3 }\n  - { component: figure, visu_type: histogram, dict_kwargs: {x: value, color: engine} }\n  - { component: interactive, interactive_type: Select, column_name: engine }\n  - { component: interactive, interactive_type: RangeSlider, column_name: position }\n  - { component: table, row_selection_enabled: true, row_selection_column: position }\n",
+          "recipe": "proteinfold/residues.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "structure_plddt",
+              "kind": "molecule_3d",
+              "roles": {
+                "category": "category",
+                "chain": "chain",
+                "entity": "entity",
+                "position": "position",
+                "value": "value"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "plddt_sequence_track",
+              "kind": "sequence_track",
+              "roles": {
+                "entity": "entity",
+                "position": "position",
+                "residue": "residue",
+                "value": "value"
+              }
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "value",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "residue_plddt",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "confidently_placed",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": true,
+              "id": "confident_share",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "category",
+              "column": "position",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "residue_bands",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "engine",
+                "x": "value"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "engine",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "Select",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "position",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "RangeSlider",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {},
+              "row_selection_column": "position",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "residues",
+          "yamlPath": "depictio/catalog/proteinfold/residues.yaml"
+        }
+      ],
+      "stage": "other"
+    },
+    {
       "biotools_url": "https://bio.tools/qcatch",
       "description": "Quality control and cell filtering for single-cell RNA-seq data processed by alevin-fry.",
       "dir": "depictio/catalog/qcatch",
@@ -25367,6 +27473,111 @@
       "stage": "benchmarking"
     },
     {
+      "biotools_url": null,
+      "description": "Single-sequence protein secondary structure prediction: helix, strand or coil for every residue, with the probability of each state.",
+      "dir": "depictio/catalog/s4pred",
+      "homepage": "https://github.com/psipred/s4pred",
+      "id": "s4pred",
+      "name": "S4PRED",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/s4pred/runmodel",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "One row per residue: the protein, the residue number and amino acid, the predicted state (helix, strand or coil) as the residue table category, the probability of that state as its value, and the three state probabilities. A sequence track draws it as a coloured state lane over a confidence lane.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/s4pred/*/ss2/*.ss2",
+            "path_glob_alt": [
+              "**/*.ss2"
+            ]
+          },
+          "fixture": "secondary_structure.tsv",
+          "fixtureContent": "entity\tsample\tposition\tresidue\tss_code\tcategory\tvalue\tp_coil\tp_helix\tp_strand\nT1024\tT1024\t41\tG\tC\tCoil\t0.674\t0.674\t0.325\t0.0\nT1024\tT1024\t42\tS\tC\tCoil\t0.528\t0.528\t0.472\t0.0\nT1024\tT1024\t43\tA\tH\tHelix\t0.824\t0.176\t0.824\t0.0\nT1024\tT1024\t44\tI\tH\tHelix\t0.934\t0.066\t0.934\t0.0\nT1024\tT1024\t45\tT\tH\tHelix\t0.965\t0.035\t0.965\t0.0\nT1024\tT1024\t46\tG\tH\tHelix\t0.982\t0.018\t0.982\t0.0\nT1026\tT1026\t41\tL\tE\tStrand\t0.512\t0.46\t0.028\t0.512\nT1026\tT1026\t42\tK\tC\tCoil\t0.64\t0.64\t0.018\t0.343\nT1026\tT1026\t43\tK\tC\tCoil\t0.724\t0.724\t0.091\t0.185\nT1026\tT1026\t44\tD\tC\tCoil\t0.758\t0.758\t0.111\t0.131\nT1026\tT1026\t45\tD\tC\tCoil\t0.799\t0.799\t0.109\t0.093\nT1026\tT1026\t46\tV\tC\tCoil\t0.878\t0.878\t0.034\t0.088\nGI_225038609_EFDID_719595_FULL\tl_arginase\t41\tS\tC\tCoil\t0.879\t0.879\t0.068\t0.054\nGI_225038609_EFDID_719595_FULL\tl_arginase\t42\tP\tC\tCoil\t0.694\t0.694\t0.257\t0.049\nGI_225038609_EFDID_719595_FULL\tl_arginase\t43\tK\tC\tCoil\t0.652\t0.652\t0.25\t0.097\nGI_225038609_EFDID_719595_FULL\tl_arginase\t44\tL\tC\tCoil\t0.644\t0.644\t0.252\t0.103\nGI_225038609_EFDID_719595_FULL\tl_arginase\t45\tT\tC\tCoil\t0.716\t0.716\t0.218\t0.066\nGI_225038609_EFDID_719595_FULL\tl_arginase\t46\tG\tH\tHelix\t0.891\t0.099\t0.891\t0.01\n",
+          "id": "s4pred_secondary_structure",
+          "mode": "protein/residues",
+          "name": "Secondary structure per residue",
+          "path_glob": "**/s4pred/*/ss2/*.ss2",
+          "rawYaml": "id: s4pred_secondary_structure\nname: Secondary structure per residue\nmode: protein/residues\ndescription: >-\n  One row per residue: the protein, the residue number and amino acid, the\n  predicted state (helix, strand or coil) as the residue table category, the\n  probability of that state as its value, and the three state probabilities.\n  A sequence track draws it as a coloured state lane over a confidence lane.\nfind:\n  path_glob: \"**/s4pred/*/ss2/*.ss2\"\n  path_glob_alt:\n    - \"**/*.ss2\"\nrecipe: s4pred/secondary_structure.py\nfixture: secondary_structure.tsv\nrenders_as:\n  - { id: ss_sequence_track, component: advanced_viz, kind: sequence_track,\n      roles: {position: position, entity: entity, residue: residue, category: category, value: value} }\n  - { id: ss_confidence, component: card, column: value, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }\n  - { id: ss_residues, component: card, column: position, aggregation: count,\n      secondary_layout: top_n, breakdown_col: category, top_n_count: 3 }\n  - { component: figure, visu_type: histogram, dict_kwargs: {x: category, color: category} }\n  - { component: table }\n",
+          "recipe": "s4pred/secondary_structure.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "ss_sequence_track",
+              "kind": "sequence_track",
+              "roles": {
+                "category": "category",
+                "entity": "entity",
+                "position": "position",
+                "residue": "residue",
+                "value": "value"
+              }
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "value",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": true,
+              "id": "ss_confidence",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "category",
+              "column": "position",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "ss_residues",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "category",
+                "x": "category"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "secondary_structure",
+          "yamlPath": "depictio/catalog/s4pred/secondary_structure.yaml"
+        }
+      ],
+      "stage": "annotation"
+    },
+    {
       "biotools_url": "https://bio.tools/salmon",
       "description": "Salmon is a tool for wicked-fast transcript quantification from RNA-seq data.",
       "dir": "depictio/catalog/salmon",
@@ -26669,6 +28880,206 @@
         }
       ],
       "stage": "peaks"
+    },
+    {
+      "biotools_url": "https://bio.tools/seqfu",
+      "description": "Sequence length statistics of FASTA / FASTQ files, per file and per processing stage.",
+      "dir": "depictio/catalog/seqfu",
+      "homepage": "https://telatin.github.io/seqfu2/",
+      "id": "seqfu",
+      "name": "SeqFu",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/seqfu/stats",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "One row per summarised file: the sample and the stage the file was taken at (before or after filtering when the pipeline names it so), the sequence count, the total length, the mean, minimum and maximum length, N50, N75, N90 and auN.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/qc/*/*_after.tsv",
+            "path_glob_alt": [
+              "**/qc/*/*_before.tsv",
+              "**/seqfu/*.tsv"
+            ]
+          },
+          "fixture": "stats.tsv",
+          "fixtureContent": "sample\tstage\tfile\tsequences\ttotal_length\tmean_length\tn50\tn75\tn90\taun\tmin_length\tmax_length\nT1024\tafter\tT1024.fasta\t1\t408\t408.0\t408\t408\t408\t408.0\t408\t408\nT1024\tbefore\tT1024.fasta\t1\t408\t408.0\t408\t408\t408\t408.0\t408\t408\nT1026\tafter\tT1026.fasta\t1\t172\t172.0\t172\t172\t172\t172.0\t172\t172\nT1026\tbefore\tT1026.fasta\t1\t172\t172.0\t172\t172\t172\t172.0\t172\t172\nl_arginase\tafter\tl_arginase.fasta\t1\t350\t350.0\t350\t350\t350\t350.0\t350\t350\nl_arginase\tbefore\tl_arginase.faa\t1\t350\t350.0\t350\t350\t350\t350.0\t350\t350\n",
+          "id": "seqfu_stats",
+          "mode": "sequences/stats",
+          "name": "Sequence file statistics",
+          "path_glob": "**/qc/*/*_after.tsv",
+          "rawYaml": "id: seqfu_stats\nname: Sequence file statistics\nmode: sequences/stats\ndescription: >-\n  One row per summarised file: the sample and the stage the file was taken at\n  (before or after filtering when the pipeline names it so), the sequence\n  count, the total length, the mean, minimum and maximum length, N50, N75,\n  N90 and auN.\nfind:\n  path_glob: \"**/qc/*/*_after.tsv\"\n  path_glob_alt:\n    - \"**/qc/*/*_before.tsv\"\n    - \"**/seqfu/*.tsv\"\nrecipe: seqfu/stats.py\nfixture: stats.tsv\nrenders_as:\n  - { id: sequences_total, component: card, column: sequences, aggregation: sum,\n      secondary_layout: top_n, breakdown_col: sample, top_n_count: 3, headline: true }\n  - { id: mean_length, component: card, column: mean_length, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { id: n50_length, component: card, column: n50, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: sequences, color: stage, barmode: group} }\n  - { component: table }\n",
+          "recipe": "seqfu/stats.py",
+          "renders_as": [
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "sequences",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": true,
+              "id": "sequences_total",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "mean_length",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "mean_length",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "n50",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "n50_length",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "barmode": "group",
+                "color": "stage",
+                "x": "sample",
+                "y": "sequences"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "stats",
+          "yamlPath": "depictio/catalog/seqfu/stats.yaml"
+        }
+      ],
+      "stage": "qc"
+    },
+    {
+      "biotools_url": "https://bio.tools/seqkit",
+      "description": "FASTA and FASTQ toolkit; here the filtered sequence set a pipeline hands to its annotation steps, one row per sequence.",
+      "dir": "depictio/catalog/seqkit",
+      "homepage": "https://bioinf.shenwei.me/seqkit/",
+      "id": "seqkit",
+      "name": "SeqKit",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/seqkit/seq",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "One row per sequence of the FASTA a pipeline published after filtering: the sequence id (the first word of the header), the rest of the header as a description, the length and the sequence itself. For a protein FASTA the length is in residues and the sequence is the one-letter chain a structure predictor folds.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/qc/*/*.fasta",
+            "path_glob_alt": [
+              "**/qc/*/*.faa",
+              "**/qc/*/*.fa"
+            ]
+          },
+          "fixture": "sequences.tsv",
+          "fixtureContent": "entity\tsample\tdescription\tlength\tsequence\tsequence_id\nT1024\tT1024\tLmrP, , 408 residues|\t408\tMKEFWNLDKNLQLRLGIVFLGAFSYGTVFSSMTIYYNQYLGSAITGILLALSAVATFVAGILAGFFADRNGRKPVMVFGTIIQLLGAALAIASNLPGHVNPWSTFIAFLLISFGYNFVITAGNAMIIDASNAENRKVVFMLDYWAQNLSVILGAALGAWLFRPAFEALLVILLLTVLVSFFLTTFVMTETFKPTVKVDEKAENIFQAYKTVLQDKTYMIFMGANIATTFIIMQFDNFLPVHLSNSFKTITFWGFEIYGQRMLTIYLILACVLVVLLMTTLNRLTKDWSHQKGFIWGSLFMAIGMIFSFLTTTFTPIFIAGIVYTLGEIVYTPSVQTLGADLMNPEKIGSYNGVAAIKMPIASILAGLLVSISPMIKAIGVSLVLALTEVLAIILVLVAVNRHQKTKLN\tT1024\nT1026\tT1026\tFBNSV, , 172 residues|\t172\tMVSNWNWSGKKGRRTPRRGYTRPFKSAVPTTRVVVHQSAVLKKDDVSGSEIKPEGDVARYKIRKVMLSCTLRMRPGELVNYLIVKCSSPIVNWSAAFTAPALMVKESCQDMITIIGKGKVESNGVAGSDCTKSFNKFIRLGAGISQTQHLYVVMYTSEAVKTVLEHRVYIEV\tT1026\nGI_225038609_EFDID_719595_FULL\tl_arginase\t\t350\tMDKLLWNKKEISVSERISMKRIVMINTGGTFSSQRGENGLSPKLTGTQIRNFLGEFEEDLELSTEDYCALDSSNITPEDWVQLADKISQIIYSCDGVVIIHGTDTMAYTASMLSFMLQNLPIPVVLTGSQLPIGVPMSDAVNNCRCAVQMAASGLGGVYVAFDHKLMLGCRTSKVRTVSFNAFESINYPYVGEVNALGMQLYPTRLSKPTGEFQLQTAYSDKIAVLKLFPGMRPDLFSFLQEKGYEGIYIEGFGLGGVPFVKNDITEEISKASKAGIPILVGSQCSYEGSNLGIYETGLRVLESGGIPVHDMTQEAIVTKLMWCLGQTKDREKIHQLFHTNLIQEVTLPY\tGI|225038609|EFDID|719595|FULL\n",
+          "id": "seqkit_sequences",
+          "mode": "sequences/records",
+          "name": "Sequences",
+          "path_glob": "**/qc/*/*.fasta",
+          "rawYaml": "id: seqkit_sequences\nname: Sequences\nmode: sequences/records\ndescription: >-\n  One row per sequence of the FASTA a pipeline published after filtering: the\n  sequence id (the first word of the header), the rest of the header as a\n  description, the length and the sequence itself. For a protein FASTA the\n  length is in residues and the sequence is the one-letter chain a structure\n  predictor folds.\nfind:\n  path_glob: \"**/qc/*/*.fasta\"\n  path_glob_alt:\n    - \"**/qc/*/*.faa\"\n    - \"**/qc/*/*.fa\"\nrecipe: seqkit/sequences.py\nfixture: sequences.tsv\nrenders_as:\n  - { id: sequence_count, component: card, column: entity, aggregation: count,\n      secondary_layout: top_n, breakdown_col: sample, top_n_count: 3, headline: true }\n  - { id: sequence_length, component: card, column: length, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: figure, visu_type: histogram, dict_kwargs: {x: length, color: sample} }\n  - { component: table, columns: [entity, sample, description, length] }\n",
+          "recipe": "seqkit/sequences.py",
+          "renders_as": [
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "sample",
+              "column": "entity",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": true,
+              "id": "sequence_count",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "length",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "sequence_length",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "sample",
+                "x": "length"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [
+                "entity",
+                "sample",
+                "description",
+                "length"
+              ],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "sequences",
+          "yamlPath": "depictio/catalog/seqkit/sequences.yaml"
+        }
+      ],
+      "stage": "qc"
     },
     {
       "biotools_url": null,

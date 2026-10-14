@@ -1,0 +1,17 @@
+family	member_id	sample	origin	is_representative	in_alignment	identity	coverage	length
+mgnifams_create_1	1015154437_431_579/10-126	mgnifams_create	new	false	true	0.202	0.974	117
+mgnifams_create_1	1248030292/5-122	mgnifams_create	new	false	true	0.658	1.0	118
+mgnifams_create_1	1298531797_77_200/1-118	mgnifams_create	new	false	true	0.624	1.0	118
+mgnifams_create_1	1336010185_126_255/11-123	mgnifams_create	new	false	true	0.2	0.94	113
+mgnifams_create_1	1612234159/32-145	mgnifams_create	new	false	true	0.333	0.974	114
+mgnifams_create_1	190761241_322_438	mgnifams_create	new	true	true	1.0	1.0	117
+mgnifams_create_1	2603693830_362_480/1-118	mgnifams_create	new	false	true	0.65	1.0	118
+mgnifams_create_1	2632373804_177_299/1-118	mgnifams_create	new	false	true	0.675	1.0	118
+mgnifams_create_1	2789726661/5-122	mgnifams_create	new	false	true	0.632	1.0	118
+mgnifams_create_1	3318779648/9-126	mgnifams_create	new	false	true	0.624	1.0	118
+mgnifams_create_1	3572411709_347_468/1-118	mgnifams_create	new	false	true	0.615	1.0	118
+mgnifams_create_1	3573189919_79_196	mgnifams_create	new	false	true	0.598	1.0	118
+mgnifams_create_1	4452646341_348_471/1-118	mgnifams_create	new	false	true	0.615	1.0	118
+mgnifams_create_1	4706047775/10-127	mgnifams_create	new	false	true	0.632	1.0	118
+mgnifams_create_1	5761321067_228_349/1-118	mgnifams_create	new	false	true	0.667	1.0	118
+mgnifams_create_1	5862852515_178_295	mgnifams_create	new	false	true	0.658	1.0	118
