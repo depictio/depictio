@@ -24,6 +24,7 @@ import {
   filterColumn,
   filtersExcludingOwn,
   filtersExcludingOwnResidue,
+  pairedWithResiduePick,
   residueEntityFromFilters,
   residueRangeFilterIndex,
   residueRangeFilters,
@@ -512,10 +513,13 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
       emitRange(protein.entity, same ? null : hit.start, same ? null : hit.end);
       // The domain by name, beside its span: the raw label value, so a hit
       // shown under its accession (no label) selects nothing it does not hold.
+      // Paired with the span, so a later pick anywhere drops both.
       const label = stringOrNull(frame?.[labelCol]?.[hit.row]);
       if (labelSelection && labelSelectionColumn && label != null) {
         onFilterChange(
-          advancedVizSelectionFilter(metadata, labelSelectionColumn, same ? [] : [label]),
+          pairedWithResiduePick(
+            advancedVizSelectionFilter(metadata, labelSelectionColumn, same ? [] : [label]),
+          ),
         );
       } else {
         clearOwnPoint();

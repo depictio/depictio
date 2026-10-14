@@ -495,7 +495,8 @@ hit has a source.
   (`scatter_selection`) on `label_col` holding the raw label value. Both come from one click
   handler. A table without the position column skips that half of the pair, so residue tables, the
   structure and the sequence track narrow or move, and the profile logo follows the label. A
-  second click on the picked domain clears both.
+  second click on the picked domain clears both, and so does a residue pick in another tile (the
+  label is paired with the span, see §3 "Last gesture wins").
 - A click on a protein name emits `residue_selection(entity, 1 to length)`; again clears.
 - A click on a group (architectures view) emits a point selection on `entity_col` holding the
   group's member proteins, after clearing the residue pick; again clears.
@@ -816,7 +817,17 @@ change.
 **Last gesture wins.** `mergeFiltersBySource` replaces every `residue_selection` filter on the
 same column when a new one arrives, whichever tile emitted it. Without that, a click on one
 residue in 3D followed by a brush over another stretch in the alignment would intersect to
-nothing.
+nothing. The whole gesture of the replaced tile goes, not only its filters on the shared column:
+both halves, its `::chain` filter, and the point selection it emitted with the pick, which the
+emitter marks with `pairedWithResiduePick` (`paired_with: 'residue_selection'`, ignored by the
+server): the label of a `domain_architecture` domain, the point selection of a `lollipop` stem.
+Otherwise a 3D click after a domain click kept the logo and the hits table on the domain's
+family, and a pick after a PAE brush on a complex kept the residue tables on the brushed chain.
+A pick that a move of the entity column leaves behind goes the same way. A tile's own new pick
+drops its previous chain and paired selection (emitted after the pair, so a pick that has them
+puts them back), or a pick on a single-chain protein after one on a complex kept the old chain.
+Selections a tile makes on their own, an `msa` row or an architecture group, are unmarked and
+stay, like every other tile's selections and the sidebar's controls.
 
 **Cards and sidebar controls ignore it.** Like a genome region, a residue range is scoped out of
 cards, of figures that do not encode its column, and of interactive filters' option lists, on the

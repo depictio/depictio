@@ -21,6 +21,7 @@ import {
   advancedVizSelectionFilter,
   filtersExcludingOwn,
   filtersExcludingOwnResidue,
+  pairedWithResiduePick,
   residueRangeFilters,
   residueRangeFromFilters,
   withoutResidueRanges,
@@ -752,7 +753,10 @@ const LollipopRenderer: React.FC<Props> = ({
                   .map((v) => String(v)),
               ),
             );
-        onFilterChange(advancedVizSelectionFilter(metadata, pointSelectionColumn, values));
+        // Paired with the residue pick, so a later pick anywhere drops both.
+        onFilterChange(
+          pairedWithResiduePick(advancedVizSelectionFilter(metadata, pointSelectionColumn, values)),
+        );
       }
     },
     [

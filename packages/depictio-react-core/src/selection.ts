@@ -868,6 +868,28 @@ function residuePickIndex(index: string): string {
 }
 
 /**
+ * Mark a selection a tile emits in the same gesture as its residue pick: the
+ * label a `domain_architecture` domain click adds beside the domain's span,
+ * the point selection a `lollipop` stem click adds beside the residue. It then
+ * belongs to the pick, and `mergeFiltersBySource` drops it whenever the pick
+ * is replaced or left behind. A selection the tile makes on its own (an `msa`
+ * row click, an architecture group) stays unmarked and outlives the picks.
+ * The server ignores the field.
+ */
+export function pairedWithResiduePick(filter: InteractiveFilter): InteractiveFilter {
+  return { ...filter, paired_with: 'residue_selection' };
+}
+
+/** The tile whose residue gesture a filter belongs to: the emitting tile of a
+ *  residue half (entity, `::res` or `::chain`) or of a selection marked with
+ *  `pairedWithResiduePick`; null for every other filter. */
+function residueGestureTile(f: InteractiveFilter): string | null {
+  if (isResidueFilter(f)) return residuePickIndex(f.index);
+  if (f.paired_with === 'residue_selection') return f.index;
+  return null;
+}
+
+/**
  * Residue picks whose entity `next` no longer allows: `next` is another
  * source's pick of values on the entity column of the pick, and the pick's
  * entity is not among them. Returns their component indices.
@@ -908,6 +930,19 @@ function residuePicksLeftBehind(
  * A filter that moves the entity column elsewhere drops the residue picks made
  * on the old entity: after residue 30 of gene X, a click on gene Y in a gene
  * scatter would otherwise keep `gene=[X]` alongside `gene=[Y]` and match nothing.
+ *
+ * Either way the whole gesture of the tile goes, not only its filters on the
+ * shared column: the entity and range halves, the chain half, and the
+ * selection emitted with the pick (`pairedWithResiduePick`). A domain's label
+ * left behind would keep the logo on that family and the hits table narrowed
+ * to it; a chain left behind would narrow the next pick's tables to it.
+ *
+ * An entity or range half also starts its own tile's next pick: the chain
+ * half and the paired selection of the previous pick go. Tiles emit them
+ * after the pair, so a gesture that has them puts them back, and a pick on a
+ * single-chain protein after one on a complex does not keep the old chain.
+ * A tile's unmarked selections and the sidebar's filters (no source) are
+ * never part of a gesture and stay.
  */
 export function mergeFiltersBySource(
   filters: InteractiveFilter[],
@@ -918,11 +953,29 @@ export function mergeFiltersBySource(
     isResidueFilter(f) &&
     filterColumn(f) != null &&
     filterColumn(f) === filterColumn(next);
-  const stalePicks = residuePicksLeftBehind(filters, next);
+  const nextTile = isResidueFilter(next) ? residuePickIndex(next.index) : null;
+  const startsPick = nextTile != null && !next.index.endsWith(CHAIN_SELECTION_INDEX_SUFFIX);
+  // Tiles whose gesture ends whole: left behind by a move of the entity
+  // column, or replaced on a shared column by another tile's residue filter.
+  const ended = residuePicksLeftBehind(filters, next);
+  for (const f of filters) {
+    if (!sameResidueColumn(f)) continue;
+    const tile = residuePickIndex(f.index);
+    if (tile !== nextTile) ended.add(tile);
+  }
+  const inEndedGesture = (f: InteractiveFilter) => {
+    const tile = residueGestureTile(f);
+    if (tile == null) return false;
+    if (ended.has(tile)) return true;
+    // A new pick of the same tile: all but the pair halves, which the new
+    // pair replaces half by half.
+    const pairHalf = isResidueFilter(f) && !f.index.endsWith(CHAIN_SELECTION_INDEX_SUFFIX);
+    return startsPick && tile === nextTile && !pairHalf;
+  };
   const matches = (f: InteractiveFilter) =>
     (f.index === next.index && (f.source ?? null) === (next.source ?? null)) ||
     sameResidueColumn(f) ||
-    (isResidueFilter(f) && stalePicks.has(residuePickIndex(f.index)));
+    inEndedGesture(f);
 
   const cleared =
     next.value === null ||

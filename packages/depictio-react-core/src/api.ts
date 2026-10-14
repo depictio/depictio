@@ -1294,6 +1294,11 @@ export interface InteractiveFilter {
   column_name?: string;
   interactive_component_type?: string;
   source?: InteractiveFilterSource;
+  /** Set on a selection a tile emitted in the same gesture as its residue
+   *  pick (a domain's label beside its span): it is dropped with that pick
+   *  when another gesture replaces it (`pairedWithResiduePick` in
+   *  `selection.ts`). The server ignores it. */
+  paired_with?: 'residue_selection';
   /** Optional Polars filter expression carried with the user-supplied value.
    *  When set, the server ANDs it onto the value-based filter so the source's
    *  row scoping (e.g. `col('depth') >= 30`) propagates to downstream cards/
