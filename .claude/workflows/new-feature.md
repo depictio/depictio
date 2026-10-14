@@ -9,6 +9,7 @@ Checklist for a change that spans backend, viewer and data. Commands, convention
 5. **Viewer** (`depictio/viewer/`, `packages/`). Mantine 7, theme tokens only. Build with `cd depictio/viewer && pnpm run build`, run the relevant `pnpm run check:*`. Spawn `viewer-agent` for larger UI work.
 6. **Dashboard YAML and seeds.** If you changed a `depictio/projects/**/dashboards/*.yaml`, regenerate the matching `.db_seeds/*.json` (`depictio/dev_scripts/generate_dashboard_seeds.py`, or the project's `generate_seeds.sh`), then `/validate-dashboard` and `/reseed` a running instance.
 7. **Tests.** pytest next to the code (`depictio/tests/{api,models,cli,unit}`), plus a Playwright spec in `depictio/tests/e2e-playwright` for user-visible flows. `/test`.
-8. **Quality gates.** `/quality`, then `pre-commit run --all-files` (mandatory after any code change).
-9. **Docs.** After a significant PR, update depictio-docs and the Obsidian notes (CLAUDE.md, Documentation). Update `/CLAUDE.md` only if a convention changed.
-10. **Commit** with `/commit` (or `/commit-push-pr`).
+8. **Verify in a real browser.** `/dev-stack` starts the server and publishes it; check the changed screen in light and dark with realistic data, then give the user the URL and say what you did and did not check. In a cloud sandbox this replaces pulling the branch to look at it. Fix what the user reports in the same session.
+9. **Quality gates.** `/preflight` (ruff, `ty` on models, the registry tests, `pre-commit run --all-files`; mandatory after any code change).
+10. **Docs.** After a significant PR, update depictio-docs and the Obsidian notes (CLAUDE.md, Documentation). Update `/CLAUDE.md` only if a convention changed.
+11. **Commit** with `/commit` (or `/commit-push-pr`).

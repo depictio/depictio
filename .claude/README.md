@@ -18,7 +18,8 @@ Project instructions are in `/CLAUDE.md` (source of truth). This directory holds
 
 ## Slash commands
 
-- Quality: `/quality`, `/test`, `/review`
+- Quality: `/quality`, `/test`, `/review`, `/preflight`
+- Verify and report: `/dev-stack` (server + public tunnel, `scripts/dev_tunnel.sh`), `/status` (CI, mergeability, link), `/pr-stack` (rebase a stack of PRs)
 - Scaffolding: `/api-endpoint`, `/pydantic-model`, `/validate-dashboard`
 - Data and projects: `/import-project`, `/import-template`, `/reseed`
 - Inspection: `/arch`, `/logs`, `/db`, `/check-deployment`
