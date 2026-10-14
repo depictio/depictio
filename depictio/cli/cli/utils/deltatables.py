@@ -60,6 +60,7 @@ from depictio.models.models.data_collections_types.indexed_file import (
     sample_from_path,
 )
 from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
+from depictio.models.models.data_collections_types.table import SpatialDataTableSource
 from depictio.models.models.files import File
 from depictio.models.models.manifest import is_remote_url
 from depictio.models.models.s3 import PolarsStorageOptions
@@ -401,6 +402,7 @@ def read_single_file_lazy(
     file_format: str,
     polars_kwargs: dict,
     CLI_config: CLIConfig | None = None,
+    spatialdata: SpatialDataTableSource | dict | None = None,
 ) -> pl.LazyFrame:
     """
     Lazily scan a single file into a Polars LazyFrame according to the specified format.
@@ -411,6 +413,7 @@ def read_single_file_lazy(
         polars_kwargs (dict): Additional keyword arguments for the Polars scanner.
         CLI_config (CLIConfig | None): Configuration s3:// remote locations
             resolve their read target from.
+        spatialdata: format "spatialdata" only: which table to read from the store.
 
     Returns:
         pl.LazyFrame: The lazy DataFrame representation of the file.
@@ -426,6 +429,13 @@ def read_single_file_lazy(
     try:
         if is_remote_url(file_path):
             lf = _read_remote_file_lazy(file_path, file_format, polars_kwargs, CLI_config)
+        elif file_format == "spatialdata":
+            # The File is a SpatialData store; its AnnData table is extracted eagerly.
+            from depictio.cli.cli.utils.spatialdata_table import read_spatialdata_table
+
+            if spatialdata is None:
+                raise ValueError("format 'spatialdata' needs a spatialdata block")
+            lf = read_spatialdata_table(file_path, spatialdata).lazy()
         else:
             lf = _lazy_scan_path(file_path, file_format, polars_kwargs)
 
@@ -455,6 +465,7 @@ def read_files_lazy(
     file_format: str,
     polars_kwargs: dict,
     CLI_config: CLIConfig | None = None,
+    spatialdata: SpatialDataTableSource | dict | None = None,
 ) -> list:
     """
     Lazily read all files into Polars LazyFrames.
@@ -465,13 +476,14 @@ def read_files_lazy(
         polars_kwargs (dict): Additional keyword arguments for the Polars scanners.
         CLI_config (CLIConfig | None): Configuration s3:// remote locations
             resolve their read target from.
+        spatialdata: format "spatialdata" only: which table to read from each store.
 
     Returns:
         list: List of Polars LazyFrames.
     """
     lazy_frames = []
     for file_info in files:
-        lf = read_single_file_lazy(file_info, file_format, polars_kwargs, CLI_config)
+        lf = read_single_file_lazy(file_info, file_format, polars_kwargs, CLI_config, spatialdata)
         lazy_frames.append(lf)
     if not lazy_frames:
         error_msg = "No LazyFrames were generated from the files."
@@ -1190,7 +1202,13 @@ def client_aggregate_data(
             # only, the instance S3 config). The Delta write target below always
             # stays on the instance config: read and write are two different
             # credentials by design.
-            frames = read_files_lazy(collected, file_format, polars_kwargs, CLI_config=CLI_config)
+            frames = read_files_lazy(
+                collected,
+                file_format,
+                polars_kwargs,
+                CLI_config=CLI_config,
+                spatialdata=dc_props.get("spatialdata"),
+            )
             frames = add_wildcard_columns(frames, collected, data_collection_config.get("scan"))
         record("n_files", len(collected) if collected else 0)
         return collected, frames

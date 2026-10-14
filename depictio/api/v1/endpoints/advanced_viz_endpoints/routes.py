@@ -2495,6 +2495,87 @@ def _disk_response(
 # ---- Routes ------------------------------------------------------------------
 
 
+@advanced_viz_endpoint_router.get("/bioimage/{data_collection_id}/provenance")
+def get_bioimage_provenance(
+    data_collection_id: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """Where a bioimage DC's images come from, for the component's Info tab.
+
+    ``description`` is the collection's description in its project. ``scan_source``
+    is the path the project scanned (a store, or a folder of stores). ``stores``
+    lists each image store with the location it is registered at, when it was
+    created and registered, and its size; a remote store carries its URL as
+    ``location`` and ``remote: true``. A store with no File document (found on S3
+    only) has null times and size.
+    """
+    from depictio.api.v1.db import files_collection, projects_collection
+
+    dc_oid = _bioimage_parse_dc_id(data_collection_id)
+    _assert_dc_access_cached(dc_oid, current_user)
+
+    props, fname = _bioimage_dc_properties(dc_oid)
+    info = _bioimage_store_info(dc_oid)
+
+    description: str | None = None
+    project_doc = projects_collection.find_one(
+        {"workflows.data_collections._id": dc_oid},
+        {"workflows.data_collections": 1},
+    )
+    for wf in (project_doc or {}).get("workflows", []) or []:
+        for dc in wf.get("data_collections", []) or []:
+            if (dc.get("_id") or dc.get("id")) == dc_oid and dc.get("description"):
+                description = str(dc["description"])
+
+    by_location: dict[str, dict[str, Any]] = {}
+    for doc in files_collection.find(
+        {"data_collection_id": {"$in": [dc_oid, str(dc_oid)]}},
+        {"file_location": 1, "creation_time": 1, "registration_time": 1, "filesize": 1},
+    ):
+        if doc.get("file_location"):
+            by_location[str(doc["file_location"]).rstrip("/")] = doc
+
+    stores: list[dict[str, Any]] = []
+    for name, entry in sorted(info["stores"].items()):
+        doc = next((by_location[r] for r in entry["roots"] if r in by_location), None)
+        location = entry["roots"][0] if entry["roots"] else None
+        stores.append(
+            {
+                "name": name,
+                "location": location,
+                "creation_time": str(doc["creation_time"])
+                if doc and doc.get("creation_time")
+                else None,
+                "registration_time": str(doc["registration_time"])
+                if doc and doc.get("registration_time")
+                else None,
+                "filesize": int(doc["filesize"]) if doc and doc.get("filesize") else None,
+                "remote": False,
+            }
+        )
+    for name, url in sorted(info["remote"].items()):
+        stores.append(
+            {
+                "name": name,
+                "location": url,
+                "creation_time": None,
+                "registration_time": None,
+                "filesize": None,
+                "remote": True,
+            }
+        )
+
+    return {
+        "description": description,
+        "format": info["format"],
+        "ngff_version": props.get("ngff_version"),
+        "upload": info["upload"],
+        "image_path": info["image_path"],
+        "scan_source": None if fname is None or fname.startswith("s3://") else fname,
+        "stores": stores,
+    }
+
+
 @advanced_viz_endpoint_router.get("/bioimage/{data_collection_id}/stores")
 def list_bioimage_stores(
     data_collection_id: str,

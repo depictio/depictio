@@ -288,18 +288,22 @@ workflows:
 
       - id: "646b0f3c1e4a2d7f8e5b8f0e"
         data_collection_tag: "skin_spatialdata_spots"
-        description: "Visium-like spots of the SpatialData store (its AnnData table, exported), with synthetic counts"
+        description: "Visium-like spots of the SpatialData store, read from its AnnData table, with synthetic counts"
         config:
           type: "Table"
           metatype: "Aggregate"
           scan:
             mode: "single"
             scan_parameters:
-              filename: "/app/depictio/projects/init/bioimage_examples/data/skin_spatialdata_spots.csv"
+              filename: "/app/depictio/projects/init/bioimage_examples/data/skin_spatialdata.zarr"
           dc_specific_properties:
-            format: "CSV"
-            polars_kwargs:
-              separator: ","
+            # Read straight from the store: obs columns, x/y from obsm["spatial"]
+            # converted to images/he pixels, and the four genes from X.
+            format: "spatialdata"
+            spatialdata:
+              table: "tables/table"
+              image: "images/he"
+              genes: ["gene_A", "gene_B", "gene_C", "gene_D"]
             columns_description:
               spot_id: "Spot identifier (instance key of the store's table)"
               sample: "Store the spot belongs to (skin_spatialdata)"
@@ -307,7 +311,7 @@ workflows:
               y: "Spot centre row, level-0 pixels"
               cluster: "k-means cluster on hematoxylin, eosin and nuclear density (C1 = most hematoxylin)"
               n_nuclei: "Nuclei of the store's points element under the spot"
-              total_counts: "Sum of the four synthetic gene counts"
+              total_counts: "Sum of the four synthetic gene counts (obs)"
               gene_A: "Synthetic count, follows hematoxylin"
               gene_B: "Synthetic count, follows eosin"
               gene_C: "Synthetic count, follows nuclear density"
@@ -358,6 +362,45 @@ workflows:
               mean_ch2: "Mean Ch2 intensity (12-bit) over the lumen and its wall"
               mean_ch4: "Mean Ch4 intensity (12-bit) over the lumen and its wall"
               wall_type: "thick-walled (bright Ch2 wall) or thin-walled: a heuristic"
+
+      # ----------------------------------------------------------------
+      # 6. Remote: read in place from the EMBL-EBI IDR, not uploaded
+      # ----------------------------------------------------------------
+      - id: "646b0f3c1e4a2d7f8e5b8f17"
+        data_collection_tag: "idr_laminb1_image"
+        description: "IDR study idr0062A (nuclear segmentation), LaminB1 and Dapi, read from the EMBL-EBI IDR (OME-Zarr NGFF 0.4, 2 x 236 x 275 x 271)"
+        config:
+          type: "bioimage"
+          dc_specific_properties:
+            format: "ome-zarr"
+            ngff_version: "0.4"
+            upload: false
+            remote_stores:
+              - "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.4/idr0062A/6001240.zarr"
+
+      # One row per nucleus of the plane the remote viewer opens on (z=118, 0-based),
+      # from the store's labels/0 (dev/bioimage/make_idr_nuclei.py). Not read from the IDR.
+      - id: "646b0f3c1e4a2d7f8e5b8f19"
+        data_collection_tag: "idr_laminb1_nuclei"
+        description: "Nuclei of IDR idr0062A on the plane the viewer opens on: centroid, area, mean LaminB1 and Dapi"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/bioimage_examples/data/idr_laminb1_nuclei.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              nucleus_id: "Label value of the nucleus in the store's labels/0"
+              x: "Centroid column, level-0 pixels"
+              y: "Centroid row, level-0 pixels"
+              area_px: "Pixels of the nucleus on this plane"
+              lamin_b1_mean: "Mean LaminB1 intensity under the nucleus (raw counts)"
+              dapi_mean: "Mean Dapi intensity under the nucleus (raw counts)"
 
 # A sample picked in the sample sheet narrows the cells table, so the cards and
 # table of the multi-sample tab follow the store the viewer is showing.

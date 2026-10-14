@@ -46,8 +46,8 @@ components:
     body: >
       An H&E skin section (epidermis over dermis) saved as a SpatialData store, which also
       holds spot shapes, nucleus points and an AnnData table. The viewer shows the store's
-      image element; the spot table is exported to a CSV that the cards, filters and table
-      read. Clusters group spots by stain and nuclear density, so C1 is the most
+      image element, and the cards, filters and table read the store's AnnData table
+      directly (no CSV export). Clusters group spots by stain and nuclear density, so C1 is the most
       hematoxylin-rich. The four gene counts are synthetic. Lasso spots to filter.
     layout: { x: 0, y: 0, w: 8, h: 2 }
 

@@ -6,6 +6,7 @@ the scan, or the recipe reading it.
 """
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -24,11 +25,12 @@ def _write(tmp_path: Path) -> tuple[Path, Path]:
 
 def test_scan_registers_no_file_for_an_empty_output(tmp_path: Path) -> None:
     _, empty = _write(tmp_path)
-    # Returns before it touches the run, the collection or the permissions.
+    # Returns before it touches the run or the permissions; the collection is only
+    # asked whether it holds stores, to decide how a symlinked path is recorded.
     result = scan_single_file(
         str(empty),
         run=None,  # type: ignore[arg-type]
-        data_collection=None,  # type: ignore[arg-type]
+        data_collection=SimpleNamespace(config=SimpleNamespace(type="table")),  # type: ignore[arg-type]
         permissions=None,  # type: ignore[arg-type]
         existing_files={},
         update_files=False,

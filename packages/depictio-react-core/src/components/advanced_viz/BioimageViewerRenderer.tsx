@@ -46,6 +46,7 @@ import {
   type ConfigChannel,
   type Rgb,
 } from './bioimage/channels';
+import { clearImageInfo, publishImageInfo } from './bioimage/imageInfoRegistry';
 import { pointsInPolygon, scaleBarLength, type Polygon } from './bioimage/geometry';
 // Types only: the adapter module pulls deck.gl + viv and is imported lazily.
 import type {
@@ -246,6 +247,9 @@ const BioimageViewerRenderer: React.FC<Props> = ({
   const glGranted = useWebglSlot(true);
 
   const imageDcId = config.image_dc_id ?? null;
+  // Keys what the tile publishes for the component's Info tab (see imageInfoRegistry).
+  const componentKey = String(metadata.index);
+  useEffect(() => () => clearImageInfo(componentKey), [componentKey]);
   const pointsDcId = config.points_dc_id ?? null;
   const pointsWfId = config.points_wf_id ?? null;
   const cellIdCol = config.cell_id_col ?? null;
@@ -412,6 +416,7 @@ const BioimageViewerRenderer: React.FC<Props> = ({
       .then((loaded) => {
         if (cancelled) return;
         setInfo(loaded);
+        publishImageInfo(componentKey, { store: activeStoreName, info: loaded });
         if (refresh) {
           // Keep the reader's channel state, including an unsaved edit.
           setChannels((prev) => (prev.length === loaded.channels.length ? prev : loaded.channels));
