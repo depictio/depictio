@@ -53,8 +53,9 @@ LABEL org.opencontainers.image.licenses="MIT"
 
 WORKDIR /app
 
-# build-essential/pkg-config + libxml2/libxslt/xmlsec dev headers are needed to
-# build the `xmlsec` and `lxml` dependencies of python3-saml (the `saml` extra);
+# build-essential/pkg-config + libxml2/libxslt/zlib/xmlsec dev headers are needed
+# to build the `xmlsec` and `lxml` dependencies of python3-saml (the `saml` extra);
+# lxml links -lz, which libxml2-dev does not pull in;
 # libxmlsec1-openssl is the runtime crypto backend.
 RUN apt-get update && apt-get install --no-install-recommends -y \
         curl \
@@ -64,6 +65,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
         pkg-config \
         libxml2-dev \
         libxslt1-dev \
+        zlib1g-dev \
         libxmlsec1-dev \
         libxmlsec1-openssl \
     && apt-get clean \
