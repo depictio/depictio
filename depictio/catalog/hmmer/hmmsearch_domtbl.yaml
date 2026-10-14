@@ -19,6 +19,10 @@ renders_as:
   # high) from fragments that only touch a few HMM states (left).
   - { id: domain_score_scatter, component: advanced_viz, kind: scatter_xy,
       roles: {x: hmm_coverage, y: dom_score, label: label, color: source} }
+  # One backbone per protein with its domains by family; a zigzag edge marks a partial match
+  # of the HMM, drawn from hmm_from / hmm_to / hmm_length.
+  - { id: domain_architecture, component: advanced_viz, kind: domain_architecture,
+      roles: {entity: entity, start: start, end: end, label: label, protein_length: protein_length, hmm_from: hmm_from, hmm_to: hmm_to, hmm_length: hmm_length, hmm_coverage: hmm_coverage, evalue: i_evalue, source: source, description: description, accession: accession} }
   - { id: domain_hits, component: card, column: entity, aggregation: count,
       secondary_layout: top_n, breakdown_col: source, top_n_count: 4, headline: true }
   - { id: domain_families, component: card, column: label, aggregation: nunique,

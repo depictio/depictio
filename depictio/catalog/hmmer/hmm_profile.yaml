@@ -1,0 +1,40 @@
+id: hmmer_hmm_profile
+name: Family profile HMM
+mode: protein/profile
+description: >-
+  The profile HMM of every protein family as a long table, one row per match
+  state and letter: the emission probability, the letter height in bits, the
+  state's information content, insert and delete behaviour, occupancy and the
+  consensus, RF and CS annotation. Where the family's hmmalign alignment and
+  representative are known, each state also says which residue of the
+  representative it sits on, so a state selected in the logo selects that
+  residue in the family's residue table and structure.
+find:
+  path_glob: "**/hmm/filtered/*/*.hmm.gz"
+  path_glob_alt:
+    - "**/update_families/hmm/*/*.hmm.gz"
+    - "**/hmm/raw/*/*/*.hmm.gz"
+recipe: hmmer/hmm_profile.py
+fixture: hmm_profile.tsv
+renders_as:
+  - id: family_logo
+    component: advanced_viz
+    kind: hmm_logo
+    roles:
+      entity: entity
+      position: position
+      model: hmm_name
+      state: hmm_position
+      letter: hmm_letter
+      emission: emission
+      insert_prob: insert_prob
+      insert_length: insert_length
+      occupancy: occupancy
+      consensus: consensus
+      rf: rf
+      cs: cs
+  - { id: state_information, component: card, column: info_bits, aggregation: average,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: state_occupancy, component: card, column: occupancy, aggregation: average,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

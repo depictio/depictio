@@ -15,6 +15,10 @@ fixture: secondary_structure.tsv
 renders_as:
   - { id: ss_sequence_track, component: advanced_viz, kind: sequence_track,
       roles: {position: position, entity: entity, residue: residue, category: category, value: value} }
+  # The called state as a ribbon (helix, strand arrow, coil) shaded by the state probabilities.
+  - { id: ss_ribbon, component: advanced_viz, kind: secondary_structure,
+      roles: {position: position, entity: entity, residue: residue, state: ss_code,
+              p_helix: p_helix, p_strand: p_strand, p_coil: p_coil} }
   - { id: ss_confidence, component: card, column: value, aggregation: median,
       aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
   - { id: ss_residues, component: card, column: position, aggregation: count,
