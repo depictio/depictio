@@ -213,6 +213,16 @@ class TestClaim:
         assert vc._claim(now + timedelta(hours=5, minutes=59)) is False
         assert vc._claim(now + timedelta(hours=6, seconds=1)) is True
 
+    def test_an_upgrade_makes_a_check_due_before_the_interval(self, store, current):
+        now = utc_now_naive()
+        current("1.17.3")
+        assert vc._claim(now) is True
+        assert vc._claim(now + timedelta(minutes=1)) is False
+
+        current("1.17.4")
+        assert vc._claim(now + timedelta(minutes=2)) is True
+        assert vc._claim(now + timedelta(minutes=3)) is False
+
     def test_claim_works_on_a_document_that_only_holds_an_override(self, store):
         vc.set_override(False)
         assert vc._claim(utc_now_naive()) is True
