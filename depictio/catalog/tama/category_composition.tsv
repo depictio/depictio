@@ -1,0 +1,15 @@
+sample	level	structural_category	count	pct
+30dpf_Muscle	Isoforms	NNC	7932	31.71277786662402
+30dpf_Muscle	Isoforms	intergenic	4013	16.04429873660643
+30dpf_Muscle	Isoforms	genic	3969	15.868383176075485
+30dpf_Muscle	Isoforms	FSM	3789	15.148728610267073
+30dpf_Muscle	Isoforms	ISM	2952	11.802334879257955
+30dpf_Muscle	Isoforms	NIC	1740	6.956660802814649
+30dpf_Muscle	Isoforms	antisense	617	2.46681592835439
+30dpf_Muscle	FLNC reads	FSM	200150	60.302128274964446
+30dpf_Muscle	FLNC reads	NNC	76842	23.15131721661163
+30dpf_Muscle	FLNC reads	genic	18898	5.693677842319651
+30dpf_Muscle	FLNC reads	NIC	12426	3.743763407168165
+30dpf_Muscle	FLNC reads	intergenic	11451	3.450010846248403
+30dpf_Muscle	FLNC reads	ISM	11018	3.3195545807322424
+30dpf_Muscle	FLNC reads	antisense	1127	0.33954783195545807
