@@ -1146,6 +1146,28 @@ def local_data_roots_enabled() -> bool:
     return local_data_policy() is not None
 
 
+#: The reference projects, which ship their data files inside the package.
+BUNDLED_PROJECTS_DIR: Path = Path(__file__).parents[3] / "projects"
+
+
+def server_may_read_local_file(path: str) -> bool:
+    """Whether the server may open a local path a user registered, as is.
+
+    Below the bundled reference projects, or wherever the local-data policy
+    lets the server read (``depictio local``). Anywhere else the path is only
+    a string from a project's configuration or a CLI scan, and opening it would
+    hand back whatever the server process can read, its own keys included.
+    """
+    if not isinstance(path, str) or "\x00" in path or not os.path.isabs(path):
+        return False
+    real = os.path.realpath(path)
+    bundled = os.path.realpath(BUNDLED_PROJECTS_DIR)
+    if real == bundled or real.startswith(bundled + os.sep):
+        return True
+    policy = local_data_policy()
+    return policy is not None and policy.allows_read(path)
+
+
 def remote_browse_enabled() -> bool:
     """Whether an administrator listed S3 locations every user may browse for a run
     folder: ``DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS`` or ``..._CREDENTIALED_S3_BUCKETS``.
@@ -1197,7 +1219,7 @@ def _local_data_policy_for(_env: tuple[str | None, ...]) -> "LocalDataPolicy | N
     # Read by the server itself: uploads are written to the temporary directory
     # and scanned from there, and the reference projects ship their data files
     # inside the package. Never browsable, never a data root.
-    server_dirs = [tempfile.gettempdir(), str(Path(__file__).parents[3] / "projects")]
+    server_dirs = [tempfile.gettempdir(), str(BUNDLED_PROJECTS_DIR)]
     return LocalDataPolicy.build(roots, denied=denied, server_dirs=server_dirs, home=home)
 
 
