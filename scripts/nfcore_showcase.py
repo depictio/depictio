@@ -265,6 +265,15 @@ SCENARIOS: list[Scenario] = [
         note="test_full WGTS; 33 MB of tables from a 272 GB run, vendored samplesheet",
     ),
     # The samplesheet and the design table are vendored and copied into input/ by
+    # download_test_data.sh. The run has no PSL export, so the Synteny tab is pruned.
+    Scenario(
+        "pairgenomealign",
+        "3.0.4",
+        "megatest",
+        note="test_full profile, vendored samplesheet and design table; no PSL export, no Synteny tab",
+        vars=(("METADATA_FILE", "{data_root}/input/genome_metadata.tsv"),),
+    ),
+    # The samplesheet and the design table are vendored and copied into input/ by
     # download_test_data.sh. The run is a dev run (3 proteins, no MultiQC panel
     # read); the Structure tab folds a protein only when the server has
     # DEPICTIO_STRUCTURE_RESOLVER_ENABLED=true.

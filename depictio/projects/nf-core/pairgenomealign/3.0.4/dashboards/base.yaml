@@ -1,0 +1,1313 @@
+version: 1
+# nf-core/pairgenomealign 3.0.4, on the family rules of depictio/projects/nf-core/RULES.md
+# (ampliseq/2.18.0 is the reference implementation).
+#
+# Funnel: the MultiQC report and the query assemblies (Data & QC) -> how much of
+# the target each query aligns to, at what identity and with which fitted
+# parameters (Alignment) -> how far each genome has diverged and how its
+# substitutions differ (Divergence) -> where the long alignments land on the
+# target (Synteny). The genome hub (`genomes`, one row per query genome) is what
+# every filter starts from: the template's links carry a pick on a genome to
+# every per-pair and per-assembly collection.
+#
+# Routes: the design table is optional (METADATA_FILE; without it the group
+# filter, group colours and group splits fall away); --skip_assembly_qc drops the
+# assembly-scan collection and with it the Assemblies cards, the contiguity
+# scatter and the steps and findings lines that cite it; a run without the PSL
+# export (--export_aln_to psl) has no synteny collection, so the Synteny tab, its
+# step, its findings row and its tile in the tab list are pruned at import.
+main_dashboard:
+  title: nf-core/pairgenomealign
+  subtitle: Pairwise genome alignment, from the query assemblies to identity, divergence and synteny
+  project_tag: Pairwise Genome Alignment
+  main_tab_name: Overview
+  tab_icon: mdi:compass-outline
+  tab_icon_color: brandPrimary
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_panel_default: collapsed
+  content_width_default: compact
+  show_tab_header: false
+  # Declared once here, read by every tab of the family.
+  category_colors:
+    '{GROUP_COL}': auto
+  # Persistent: drawn in every tab's filter panel, picks kept across tabs. Both
+  # are bound to the genome hub, the source of every genome link.
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab
+    persistent: true
+    pin: top
+  grid_sections:
+  - name: Key figures
+    icon: mdi:counter
+    color: gray
+    appearance: plain
+    card_variant: headline
+    filter_bar: true
+    visible_filters: 2
+    description: The run in four numbers. The filters here narrow these four only.
+  - name: Findings
+    icon: mdi:star-outline
+    color: gray
+    appearance: plain
+    figure_style: minimal
+    filter_bar: true
+    visible_filters: 2
+    description: What the data says, each with the tab that shows it, then the figures behind it.
+  - name: How to read this dashboard
+    icon: mdi:information-outline
+    color: gray
+    appearance: plain
+    description: The tabs by group, each with the question it answers.
+  # Declared on the main tab, which no route removes.
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: gray
+    description: One row per query genome, narrowed by the sample filters
+    collapsed: true
+    persistent: true
+    pin: bottom
+    exclude_tabs:
+    - Overview
+  components:
+  # First in component order on purpose: the Guide demos the first categorical
+  # filter that shares a data collection with the first card (Query genomes, below).
+  - component_type: interactive
+    workflow_tag: pairgenomealign
+    data_collection_tag: genomes
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Key figures
+    tag: pg-ov-kf-group
+    index: ov-kf-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: pairgenomealign
+    data_collection_tag: genomes
+    interactive_component_type: MultiSelect
+    column_name: genome
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: teal
+      strip_label: Genome
+    section: Key figures
+    tag: pg-ov-kf-genome
+    index: ov-kf-genome
+    title: Query genome
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # The pipeline's wordmark, read from its repository; where it cannot load (no
+  # internet), the title is drawn as text.
+  - component_type: text
+    title: nf-core/pairgenomealign
+    logo: https://raw.githubusercontent.com/nf-core/pairgenomealign/master/docs/images/nf-core-pairgenomealign_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/pairgenomealign/master/docs/images/nf-core-pairgenomealign_logo_dark.png
+    order: 1
+    body: >
+      Pairwise genome alignment: how much of one target genome each query genome aligns to,
+      at what identity, and where. [Run parameters](params:)
+    tag: pg-ov-hero
+    index: ov-hero
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/pairgenomealign aligns each query genome to one target genome with LAST and keeps the one-to-one alignment of every pair. It reports how much of the target each query covers, at what identity, how far it has diverged and where its long alignments land. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The sample filters in the left panel apply to every tab: narrow the genomes once and the whole dashboard follows. A bar above a section narrows that section only.
+    tag: pg-ov-about
+    index: ov-about
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash.
+  - component_type: text
+    surface: card
+    values:
+      genomes: {dc: genomes, column: genome, aggregation: nunique, format: integer}
+    body: |
+      ### The run
+      - ![](icon:mdi:dna) **Genomes** {{genomes}} aligned to {{param:targetName}}
+      - ![](icon:mdi:magnify-scan) **Seeds** {{param:seed}}, soft-masked by {{param:softmask}}
+      - ![](icon:mdi:swap-horizontal) **Strand** {{param:strand}}
+      - ![](icon:mdi:filter-outline) **Mismap** at most {{param:last_split_mismap}}
+      - ![](icon:mdi:export) **Export** {{param:export_aln_to}}
+    tag: pg-ov-run
+    index: ov-run
+    layout: {x: 5, y: 1, w: 3, h: 3}
+  # The marks take the accent colour, not the theme's blue. The steps that lead
+  # to a route's tab cite a value from that route's collection: the import
+  # removes the line with its data, so a run shows only the steps it took.
+  - component_type: text
+    surface: card
+    accent: teal
+    values:
+      n_asm: {dc: assemblyscan_stats, column: genome, aggregation: nunique, format: integer}
+      n_links: {dc: last_synteny_links, column: label, aggregation: count, format: si}
+    body: |
+      ### Six steps from genomes to alignments
+      Each step names its settings and the tab that shows its result.
+
+      ::: steps
+      1. ![](icon:mdi:ruler) **Check** assembly-scan and seqtk profile {{n_asm}} query assemblies · [Settings](params:skip_assembly_qc) · [Assemblies](tab:Assemblies)
+      2. ![](icon:mdi:tune) **Train** last-train fits the scoring parameters of every pair · [Settings](params:seed) · [Alignment](tab:Alignment)
+      3. ![](icon:mdi:relation-many-to-many) **Align** lastal aligns each query, last-split keeps the one-to-one alignment · [Settings](params:lastal) · [Alignment](tab:Alignment)
+      4. ![](icon:mdi:scale-balance) **Compare** substitutions of the aligned columns give each pair its distance · [Settings](params:last_split) · [Divergence](tab:Divergence)
+      5. ![](icon:mdi:vector-link) **Link** the PSL export puts {{n_links}} long alignments on a ring · [Settings](params:export_aln_to) · [Synteny](tab:Synteny)
+      6. ![](icon:mdi:file-document-outline) **Report** MultiQC gathers the identity and parameter tables · [Settings](params:multiqc) · [MultiQC](tab:MultiQC)
+      :::
+    tag: pg-ov-steps
+    index: ov-steps
+    layout: {x: 0, y: 4, w: 8, h: 3}
+  # Key figures: one card per stage of the funnel, each opening the tab that
+  # explains it. All four read collections every route writes.
+  - component_type: card
+    workflow_tag: pairgenomealign
+    data_collection_tag: genomes
+    aggregation: nunique
+    column_name: genome
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: '{GROUP_COL}'
+    display:
+      icon_name: mdi:dna
+      icon_color: orange
+      caption: aligned to the target, by {GROUP_COL_DISPLAY}
+      link: tab:Assemblies
+    section: Key figures
+    tag: pg-ov-kf-genomes
+    index: ov-kf-genomes
+    title: Query genomes
+    description: Genomes aligned to the target. The bar splits them by {GROUP_COL_DISPLAY}.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_split_identity
+    use: last/genome_size
+    aggregation: median
+    column_name: query_length
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:ruler
+      icon_color: blue
+      caption: per query genome, with the spread
+      link: tab:Assemblies
+      format: si
+    section: Key figures
+    tag: pg-ov-kf-size
+    index: ov-kf-size
+    title: Genome size
+    description: Length of a query genome in base pairs. The box shows how much the genomes differ in size.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_split_identity
+    use: last/target_coverage
+    aggregation: median
+    column_name: target_aligned_pct
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:relation-many-to-many
+      icon_color: teal
+      caption: share of the target, per genome (%)
+      link: tab:Alignment
+      decimals: 1
+    section: Key figures
+    tag: pg-ov-kf-coverage
+    index: ov-kf-coverage
+    title: Target covered
+    description: Share of the target genome the one-to-one alignment covers. The histogram shows how the genomes spread.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_split_identity
+    use: last/identity_median
+    aggregation: median
+    column_name: percent_identity
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: violet
+      caption: median per genome, with the spread
+      link: tab:Alignment
+      decimals: 1
+    section: Key figures
+    tag: pg-ov-kf-identity
+    index: ov-kf-identity
+    title: Percent identity
+    description: Identical columns over all alignment columns, gaps included, in percent. The box shows the spread across genomes.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Findings filter bar: the group, then the genome.
+  - component_type: interactive
+    workflow_tag: pairgenomealign
+    data_collection_tag: genomes
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Findings
+    tag: pg-ov-findings-group
+    index: ov-findings-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: pairgenomealign
+    data_collection_tag: genomes
+    interactive_component_type: MultiSelect
+    column_name: genome
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: teal
+      strip_label: Genome
+    section: Findings
+    tag: pg-ov-findings-genome
+    index: ov-findings-genome
+    title: Query genome
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # One result row per finding, each citing one collection, so a route that
+  # lacks it loses that row alone.
+  - component_type: text
+    surface: card
+    values:
+      ident: {dc: last_split_identity, column: percent_identity, aggregation: median, format: 'decimals:1'}
+      cover: {dc: last_split_identity, column: target_aligned_pct, aggregation: median, format: 'decimals:1'}
+      k80: {dc: last_split_matrix, column: k80_distance, aggregation: median, format: 'decimals:3'}
+      tstv: {dc: last_split_matrix, column: ts_tv_ratio, aggregation: median, format: 'decimals:2'}
+      n50: {dc: assemblyscan_stats, column: n50, aggregation: median, format: si}
+      big: {dc: assemblyscan_stats, column: contigs_over_1mb_pct, aggregation: median, format: 'decimals:1'}
+      n_links: {dc: last_synteny_links, column: label, aggregation: count, format: si}
+      n_match: {dc: last_synteny_links, column: weight, aggregation: sum, format: si}
+    body: |
+      - **{{ident}}%** median identity of the one-to-one alignments – they cover {{cover}}% of the target at the median [Alignment](tab:Alignment)
+      - **{{k80}}** median K80 distance to the target – transitions outnumber transversions {{tstv}} to 1 [Divergence](tab:Divergence)
+      - **{{n50}}** median N50 of the query assemblies – {{big}}% of their sequences pass 1 Mb at the median [Assemblies](tab:Assemblies)
+      - **{{n_links}}** long alignments drawn as chords – together {{n_match}} matching bases [Synteny](tab:Synteny)
+    section: Findings
+    tag: pg-ov-findings
+    index: ov-findings
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # One highlight per analysis figure, in the order of the tabs. All four come
+  # from collections every route writes, so a run without the PSL export still
+  # fills two rows. The tiles of a row share a stored height.
+  - component_type: highlight
+    section: Findings
+    source_tab: Assemblies
+    source_component: asm-contiguity
+    caption: One point per assembly, by its sequences and N50 on log axes; chromosome-level assemblies sit top left.
+    tag: pg-ov-hl-contiguity
+    index: ov-hl-contiguity
+    layout: {x: 0, y: 2, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Alignment
+    source_component: aln-identity-coverage
+    caption: One point per genome, by the share of the target it covers and its identity; colour is the design group.
+    hide_legend: true
+    tag: pg-ov-hl-identity
+    index: ov-hl-identity
+    layout: {x: 4, y: 2, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Alignment
+    source_component: aln-fitted-costs
+    caption: One point per genome pair, by the identity of its training alignments and the gap opening cost fitted for it.
+    tag: pg-ov-hl-fitted
+    index: ov-hl-fitted
+    layout: {x: 0, y: 6, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Divergence
+    source_component: div-saturation
+    caption: One point per genome pair, by raw distance and transition bias; distant genomes sit low and right.
+    tag: pg-ov-hl-saturation
+    index: ov-hl-saturation
+    layout: {x: 4, y: 6, w: 4, h: 4}
+  # Link-only tab tiles: each tile prints its tab's subtitle, the question the
+  # tab answers. A tile whose tab a route pruned draws nothing.
+  - component_type: text
+    body: |
+      ### Data & QC
+      - [MultiQC](tab:MultiQC)
+      - [Assemblies](tab:Assemblies)
+
+      ### Genome alignment
+      - [Alignment](tab:Alignment)
+      - [Divergence](tab:Divergence)
+      - [Synteny](tab:Synteny)
+    section: How to read this dashboard
+    tag: pg-ov-how-to-read
+    index: ov-how-to-read
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Persistent sample filters, the group first.
+  - component_type: interactive
+    workflow_tag: pairgenomealign
+    data_collection_tag: genomes
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+    section: Sample filters
+    group: Genome scope
+    tag: pg-filter-group
+    index: sample-filters-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: pairgenomealign
+    data_collection_tag: genomes
+    interactive_component_type: MultiSelect
+    column_name: genome
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: teal
+    section: Sample filters
+    group: Genome scope
+    tag: pg-filter-genome
+    index: sample-filters-genome
+    title: Query genome
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  # Row selection feeds the Analysis panel.
+  - component_type: table
+    workflow_tag: pairgenomealign
+    data_collection_tag: genomes
+    row_selection_enabled: true
+    row_selection_column: genome
+    section: Sample sheet
+    tag: pg-sample-sheet
+    index: sample-sheet
+    title: Query genomes
+    description: One row per query genome, with its alignment, divergence, assembly and gap summary and its design columns.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+tabs:
+# ============================================================================
+# Data & QC
+# ============================================================================
+- title: MultiQC
+  subtitle: What does the MultiQC report say about the alignments?
+  tab_group: Data & QC
+  tab_order: 1
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Report scope
+    icon: mdi:tune
+    color: orange
+    description: Narrow the MultiQC panels to selected report rows
+  grid_sections:
+  - name: Alignment sections
+    icon: mdi:chart-box-outline
+    color: orange
+    description: One-to-one identity and the parameters fitted per genome pair
+  - name: Assembly sections
+    icon: mdi:chart-bar
+    color: orange
+    description: Contig length statistics and base content of the query assemblies
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      The [MultiQC](https://multiqc.info) report of the run carries the one-to-one identity and
+      the fitted parameters of every genome pair, and the contig lengths and base content of every
+      query assembly. A pair or assembly that stands out here is worth a look on the tabs behind it.
+    tag: pg-mqc-intro
+    index: mqc-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    workflow_tag: pairgenomealign
+    data_collection_tag: multiqc_data
+    selected_module: last_o2o
+    selected_plot: last_o2o-section
+    section: Alignment sections
+    tag: pg-mqc-identity
+    title: One-to-one alignment identity
+    description: Aligned length and percent identity, with and without gap columns, per genome pair.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: pairgenomealign
+    data_collection_tag: multiqc_data
+    selected_module: train
+    selected_plot: train-section
+    section: Alignment sections
+    tag: pg-mqc-train
+    title: Fitted alignment parameters
+    description: Training identity, score scale and gap costs last-train fitted per genome pair.
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: pairgenomealign
+    data_collection_tag: multiqc_data
+    selected_module: contigs_length_statistics
+    selected_plot: contigs_length_statistics-section
+    section: Assembly sections
+    tag: pg-mqc-contigs
+    title: Contig length statistics
+    description: Total, minimum and maximum contig length and contig counts of each query assembly.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: pairgenomealign
+    data_collection_tag: multiqc_data
+    selected_module: base_content_summary
+    selected_plot: base_content_summary-section
+    section: Assembly sections
+    tag: pg-mqc-bases
+    title: Base content
+    description: A, C, G, T and N content of each query assembly.
+    layout: {x: 0, y: 4, w: 8, h: 4}
+  - component_type: interactive
+    workflow_tag: pairgenomealign
+    data_collection_tag: multiqc_data
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:file-document-outline
+      custom_color: orange
+    section: Report scope
+    group: Report scope
+    tag: pg-mqc-filter-report-row
+    index: pg-mqc-report-row-filter
+    title: Report row
+    layout: {x: 0, y: 0, w: 1, h: 3}
+- title: Assemblies
+  subtitle: How contiguous is each query assembly, and where are its gaps?
+  tab_group: Data & QC
+  tab_order: 2
+  tab_icon: mdi:puzzle-outline
+  tab_icon_color: blue
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Assembly scope
+    icon: mdi:filter-variant
+    color: blue
+    description: Keep assemblies inside an N50 or sequence-count band
+  grid_sections:
+  - name: Assemblies at a glance
+    icon: mdi:counter
+    color: blue
+    description: Contiguity, size and composition across the query assemblies
+  - name: Contiguity
+    icon: mdi:chart-scatter-plot
+    color: blue
+    description: Sequences against N50 of each assembly, sized by its length
+  - name: Scaffolding gaps
+    icon: mdi:alert-outline
+    color: blue
+    description: One row per assembly, the lengths of its runs of N on a log scale
+  - name: Assembly tables
+    icon: mdi:table
+    color: gray
+    description: Assembly statistics and gap summary per genome
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [assembly-scan](https://github.com/rpetit3/assembly-scan) and
+      [seqtk cutN](https://github.com/lh3/seqtk) describe each query assembly: how many sequences,
+      how long, and where it has runs of N. A fragmented or gap-rich assembly covers less of the
+      target at the same identity, so read these numbers before comparing coverage. The gap length
+      matrix shows how each assembly was scaffolded.
+    tag: pg-asm-intro
+    index: asm-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: pairgenomealign
+    data_collection_tag: assemblyscan_stats
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: n50
+    column_type: int64
+    display:
+      icon_name: mdi:ruler
+      custom_color: blue
+    section: Assembly scope
+    group: Assemblies
+    tag: pg-asm-filter-n50
+    index: asm-n50-range
+    title: N50 (bp)
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: pairgenomealign
+    data_collection_tag: assemblyscan_stats
+    interactive_component_type: RangeSlider
+    column_name: contigs
+    column_type: int64
+    display:
+      icon_name: mdi:puzzle-outline
+      custom_color: pink
+    section: Assembly scope
+    group: Assemblies
+    tag: pg-asm-filter-contigs
+    index: asm-contigs-range
+    title: Sequences
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: pairgenomealign
+    data_collection_tag: assemblyscan_stats
+    use: assemblyscan/assembly_n50
+    aggregation: median
+    column_name: n50
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:ruler
+      icon_color: blue
+      caption: median per assembly, with the spread
+      format: si
+    section: Assemblies at a glance
+    tag: pg-asm-card-n50
+    index: asm-card-n50
+    title: N50
+    description: Length of the sequence at which half of the assembly is reached, longest first. The box shows the spread across assemblies.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: pairgenomealign
+    data_collection_tag: assemblyscan_stats
+    use: assemblyscan/assembly_large_share
+    aggregation: median
+    column_name: contigs_over_1mb_pct
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:puzzle-outline
+      icon_color: orange
+      caption: share of sequences, per assembly (%)
+      decimals: 1
+    section: Assemblies at a glance
+    tag: pg-asm-card-large
+    index: asm-card-large
+    title: Sequences over 1 Mb
+    description: Share of an assembly's sequences longer than 1 Mb. Chromosome-level and fragmented assemblies make two groups.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: pairgenomealign
+    data_collection_tag: assemblyscan_stats
+    use: assemblyscan/assembly_length
+    aggregation: median
+    column_name: total_length
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:dna
+      icon_color: teal
+      caption: median per assembly, with the spread
+      format: si
+    section: Assemblies at a glance
+    tag: pg-asm-card-length
+    index: asm-card-length
+    title: Assembly length
+    description: Total length of an assembly in base pairs, runs of N included.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: pairgenomealign
+    data_collection_tag: assemblyscan_stats
+    use: assemblyscan/assembly_gc
+    aggregation: median
+    column_name: gc_pct
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:percent-outline
+      icon_color: grape
+      caption: median per assembly, with the spread
+      decimals: 1
+    section: Assemblies at a glance
+    tag: pg-asm-card-gc
+    index: asm-card-gc
+    title: GC content
+    description: Share of G and C bases in the assembly, in percent.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: pairgenomealign
+    data_collection_tag: assemblyscan_stats
+    use: assemblyscan/contiguity_scatter
+    config:
+      x_title: Sequences in the assembly (log)
+      y_title: N50 in bp (log)
+      log_x: true
+      log_y: true
+      legend_pos: none
+      selection_enabled: true
+      selection_column: genome
+    section: Contiguity
+    tag: pg-asm-av-contiguity
+    index: asm-contiguity
+    title: Sequences against N50 per assembly
+    description: One point per assembly, sized by its length. Lasso a group to narrow every tab.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: pairgenomealign
+    data_collection_tag: seqtk_cutn_gap_lengths
+    use: seqtk/gap_length_matrix
+    config:
+      sort_by: none
+      show_profile: true
+      reference_position: 2
+      reference_label: 100 bp
+    section: Scaffolding gaps
+    tag: pg-asm-av-gap-lengths
+    index: asm-gap-lengths
+    title: Gap lengths per assembly
+    description: One row per assembly, the share of its runs of N in each length bin. One dark cell is a fixed filler, the dotted line marks the usual 100 bp one; a spread row comes from estimated sizes.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: pairgenomealign
+    data_collection_tag: assemblyscan_stats
+    use: assemblyscan/stats
+    row_selection_enabled: true
+    row_selection_column: genome
+    section: Assembly tables
+    tag: pg-asm-table-stats
+    index: asm-table-stats
+    title: Assembly statistics
+    description: Sequence counts, length statistics, N50, L50 and base composition of every query assembly.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: pairgenomealign
+    data_collection_tag: seqtk_cutn_gaps
+    use: seqtk/cutn_gaps
+    row_selection_enabled: true
+    row_selection_column: genome
+    section: Assembly tables
+    tag: pg-asm-table-gaps
+    index: asm-table-gaps
+    title: Assembly gaps
+    description: Runs of N per assembly, their total, median and longest length. A genome without gaps has no row.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+# ============================================================================
+# Genome alignment
+# ============================================================================
+- title: Alignment
+  subtitle: How much of the target does each genome cover, at what identity?
+  tab_group: Genome alignment
+  tab_order: 3
+  tab_icon: mdi:align-horizontal-left
+  tab_icon_color: violet
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Alignment scope
+    icon: mdi:filter-variant
+    color: violet
+    description: Keep genome pairs inside an identity or target coverage band
+  grid_sections:
+  - name: Alignment at a glance
+    icon: mdi:counter
+    color: violet
+    description: Identity, coverage, aligned length and fitted gap cost across the pairs
+  - name: Identity and coverage
+    icon: mdi:chart-scatter-plot
+    color: violet
+    description: Every genome by target coverage and identity, with the record of the picked one
+  - name: Fitted parameters
+    icon: mdi:tune
+    color: violet
+    description: The gap opening cost last-train fitted, against the identity it trained on
+  - name: Alignment tables
+    icon: mdi:table
+    color: gray
+    description: The one-to-one alignment and the fitted scoring parameters per genome pair
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [LAST](https://gitlab.com/mcfrith/last) aligns every query to the target, and last-split
+      keeps the one-to-one alignment. Identity falls with divergence, while coverage of the target
+      also falls with assembly gaps, so a genome low on coverage but not on identity points back to
+      the Assemblies tab. Click a point to open the record of its genome.
+    tag: pg-aln-intro
+    index: aln-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_split_identity
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: percent_identity
+    column_type: float64
+    display:
+      icon_name: mdi:check-decagram
+      custom_color: violet
+    section: Alignment scope
+    group: Alignment
+    tag: pg-aln-filter-identity
+    index: aln-identity-range
+    title: Percent identity
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_split_identity
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: target_aligned_pct
+    column_type: float64
+    display:
+      icon_name: mdi:relation-many-to-many
+      custom_color: teal
+    section: Alignment scope
+    group: Alignment
+    tag: pg-aln-filter-coverage
+    index: aln-coverage-range
+    title: Target covered (%)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_split_identity
+    use: last/identity_median
+    aggregation: median
+    column_name: percent_identity
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: violet
+      caption: median per genome, with the spread
+      decimals: 1
+    section: Alignment at a glance
+    tag: pg-aln-card-identity
+    index: aln-card-identity
+    title: Percent identity
+    description: Identical columns over all alignment columns, gaps included, in percent.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_split_identity
+    use: last/target_coverage
+    aggregation: median
+    column_name: target_aligned_pct
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:relation-many-to-many
+      icon_color: teal
+      caption: share of the target, per genome (%)
+      decimals: 1
+    section: Alignment at a glance
+    tag: pg-aln-card-coverage
+    index: aln-card-coverage
+    title: Target covered
+    description: Aligned length over the target genome length, in percent. Distant and fragmented genomes cover less.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_split_identity
+    use: last/aligned_length
+    aggregation: median
+    column_name: aligned_bp
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:arrow-expand-horizontal
+      icon_color: blue
+      caption: alignment columns, per genome
+      format: si
+    section: Alignment at a glance
+    tag: pg-aln-card-aligned
+    index: aln-card-aligned
+    title: Aligned length
+    description: Length of the one-to-one alignment in alignment columns.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_train_params
+    use: last/gap_open_cost
+    aggregation: median
+    column_name: deletion_open_cost
+    column_type: int64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:cog-outline
+      icon_color: orange
+      caption: fitted opening cost, per genome pair
+      decimals: 0
+    section: Alignment at a glance
+    tag: pg-aln-card-gapcost
+    index: aln-card-gapcost
+    title: Gap opening cost
+    description: Cost last-train fitted for opening a gap (lastal -a). A closer genome gets a higher cost.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Bound to the genome hub, which carries the design group the points take
+  # their colour from; the hub always has the identity columns.
+  - component_type: advanced_viz
+    workflow_tag: pairgenomealign
+    data_collection_tag: genomes
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: target_aligned_pct
+      y_col: percent_identity
+      label_col: genome
+      color_col: '{GROUP_COL}'
+      size_col: aligned_bp
+      x_title: Target covered by the one-to-one alignment (%)
+      y_title: Percent identity
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: genome
+    section: Identity and coverage
+    tag: pg-aln-av-identity-coverage
+    index: aln-identity-coverage
+    title: Target coverage against identity per genome
+    description: One point per genome, sized by its aligned length. Points low and left are the most divergent; one left of genomes of similar identity lost coverage to its assembly.
+    layout: {x: 0, y: 0, w: 5, h: 7}
+  - component_type: advanced_viz
+    workflow_tag: pairgenomealign
+    data_collection_tag: genomes
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: aln-identity-coverage
+      id_col: genome
+      title_col: genome
+      selection_source: scatter_selection
+      sections:
+        Genome: [genome, target, pair]
+        Alignment: [aligned_bp, percent_identity, target_aligned_pct, query_aligned_pct, blocks]
+        Divergence: [k80_distance, ts_tv_ratio]
+        Assembly: [contigs, total_length, n50, gc_pct, gaps, gap_bp]
+    section: Identity and coverage
+    tag: pg-aln-av-genome-record
+    index: aln-genome-record
+    title: Picked genome
+    description: The genome picked on the plot, with its alignment, divergence and assembly.
+    layout: {x: 5, y: 0, w: 3, h: 7}
+  - component_type: advanced_viz
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_train_params
+    use: last/gap_cost_vs_identity
+    config:
+      x_title: Identity of the training alignments (%)
+      y_title: Gap opening cost
+      legend_pos: none
+      selection_enabled: true
+      selection_column: query
+    section: Fitted parameters
+    tag: pg-aln-av-fitted-costs
+    index: aln-fitted-costs
+    title: Fitted gap cost against training identity
+    description: One point per genome pair. A pair off the trend was fitted on an unusual training sample.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_split_identity
+    use: last/split_identity
+    # The target and the pair key are the same on every row of a run.
+    columns: [query, aligned_bp, percent_identity, percent_identity_no_gaps, target_aligned_pct, query_aligned_pct, query_sequences, query_length]
+    row_selection_enabled: true
+    row_selection_column: query
+    section: Alignment tables
+    tag: pg-aln-table-identity
+    index: aln-table-identity
+    title: One-to-one alignment per query genome
+    description: Aligned length, identity with and without gaps, and the share of each genome covered.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_train_params
+    use: last/train_params
+    columns: [query, training_percent_identity, score_scale, deletion_open_cost, insertion_open_cost, deletion_extend_cost, insertion_extend_cost, strand_setting]
+    section: Alignment tables
+    tag: pg-aln-table-train
+    index: aln-table-train
+    title: Fitted scoring parameters per genome pair
+    description: Training identity, score scale, and opening and extension costs for deletions and insertions.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+- title: Divergence
+  subtitle: How far has each genome diverged from the target?
+  tab_group: Genome alignment
+  tab_order: 4
+  tab_icon: mdi:family-tree
+  tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Divergence scope
+    icon: mdi:filter-variant
+    color: indigo
+    description: Keep genome pairs inside a K80 distance band
+  grid_sections:
+  - name: Divergence at a glance
+    icon: mdi:counter
+    color: indigo
+    description: Distance, transition bias, alignment blocks and deletions across the pairs
+  - name: Saturation
+    icon: mdi:chart-scatter-plot
+    color: indigo
+    description: Transition bias against raw distance, one point per genome pair
+  - name: Substitution spectrum
+    icon: mdi:chart-box-outline
+    color: indigo
+    description: The share of each of the 12 directed substitutions, per genome
+  - name: Divergence tables
+    icon: mdi:table
+    color: gray
+    description: Substitution counts and the five distance estimates per genome pair
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      Distances are counted on the aligned A, C, G and T columns of the one-to-one alignment. The
+      K80 distance corrects the raw share of substituted columns for multiple hits, and the ratio
+      of transitions to transversions falls as they saturate. Genomes that cluster apart in the
+      spectrum have a different substitution process, not only a different distance.
+    tag: pg-div-intro
+    index: div-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_split_matrix
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: k80_distance
+    column_type: float64
+    display:
+      icon_name: mdi:family-tree
+      custom_color: indigo
+    section: Divergence scope
+    group: Divergence
+    tag: pg-div-filter-k80
+    index: div-k80-range
+    title: K80 distance
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_split_matrix
+    use: last/k80_median
+    aggregation: median
+    column_name: k80_distance
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:family-tree
+      icon_color: indigo
+      caption: median per genome, with the spread
+      decimals: 3
+    section: Divergence at a glance
+    tag: pg-div-card-k80
+    index: div-card-k80
+    title: K80 distance
+    description: Kimura two-parameter distance on the aligned A, C, G and T columns, substitutions per site.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_split_matrix
+    use: last/ts_tv_median
+    aggregation: median
+    column_name: ts_tv_ratio
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:scale-balance
+      icon_color: cyan
+      caption: median per genome, with the spread
+      decimals: 2
+    section: Divergence at a glance
+    tag: pg-div-card-tstv
+    index: div-card-tstv
+    title: Transitions over transversions
+    description: Transitions are purine to purine or pyrimidine to pyrimidine substitutions. The ratio falls as they saturate.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_split_matrix
+    use: last/blocks_median
+    aggregation: median
+    column_name: blocks
+    column_type: int64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:shape-outline
+      icon_color: pink
+      caption: blocks per genome, how they spread
+      format: si
+    section: Divergence at a glance
+    tag: pg-div-card-blocks
+    index: div-card-blocks
+    title: Alignment blocks
+    description: Blocks of the one-to-one alignment. A genome cut into more blocks is more rearranged or more fragmented.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_split_matrix
+    use: last/query_gap_median
+    aggregation: median
+    column_name: query_gap_columns
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:content-cut
+      icon_color: orange
+      caption: columns missing in the query, per genome
+      format: si
+    section: Divergence at a glance
+    tag: pg-div-card-deletions
+    index: div-card-deletions
+    title: Deletions in the query
+    description: Alignment columns with a target base against a gap in the query.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_split_matrix
+    use: last/saturation_scatter
+    config:
+      x_title: Raw distance (share of substituted columns)
+      y_title: Transitions over transversions
+      legend_pos: none
+      selection_enabled: true
+      selection_column: query
+    section: Saturation
+    tag: pg-div-av-saturation
+    index: div-saturation
+    title: Transition bias against divergence
+    description: One point per genome pair, sized by its alignment blocks. The ratio falls as multiple hits saturate the transitions.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_split_matrix
+    use: last/substitution_spectrum
+    config:
+      cluster_rows: true
+      cluster_cols: false
+      cluster_method: ward
+      normalize: col_z
+      colorscale: Blues
+    section: Substitution spectrum
+    tag: pg-div-av-spectrum
+    index: div-spectrum
+    title: Substitution spectrum per genome
+    description: Share of each of the 12 directed substitutions, target base first, scaled per column. Genomes that cluster apart substitute differently.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_split_matrix
+    use: last/split_matrix
+    columns: [query, blocks, columns_analyzed, p_distance, jc69_distance, f81_distance, k80_distance, t92_distance, identical_columns, substituted_columns, transitions, transversions, ts_tv_ratio, target_gap_columns, query_gap_columns]
+    row_selection_enabled: true
+    row_selection_column: query
+    section: Divergence tables
+    tag: pg-div-table-matrix
+    index: div-table-matrix
+    title: Substitutions and distances per genome pair
+    description: Blocks, identical and substituted columns, transitions and transversions, gap columns and the five distance estimates.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Synteny
+  subtitle: Where do the long alignments of each query land on the target?
+  tab_group: Genome alignment
+  tab_order: 5
+  tab_icon: mdi:vector-link
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Synteny scope
+    icon: mdi:filter-variant
+    color: grape
+    description: The query genome the ring shows, and the orientations kept
+  grid_sections:
+  - name: Synteny at a glance
+    icon: mdi:counter
+    color: grape
+    description: Links, matching bases, identity and span of the alignments in scope
+  - name: Synteny ring
+    icon: mdi:chart-donut
+    color: grape
+    description: Target and query sequences on one ring, one chord per alignment
+  - name: Link tables
+    icon: mdi:table
+    color: gray
+    description: The alignments behind the chords
+    collapsed: true
+  components:
+  # This tab needs the PSL export (--export_aln_to psl). Every component below
+  # reads last_synteny_links, which is optional: a run without the export has none
+  # of them, and the import drops the tab.
+  - component_type: text
+    order: 1
+    body: >
+      Each chord joins a target sequence to the query sequence it aligns to (prefixed `q:`),
+      weighted by matching bases. Pick a query genome on the left to read one ring; until then it
+      shows the heaviest links of every query. This tab needs a run started with
+      `--export_aln_to psl`.
+    tag: pg-syn-intro
+    index: syn-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_synteny_links
+    interactive_component_type: Select
+    column_name: query
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: grape
+    section: Synteny scope
+    group: Synteny
+    tag: pg-syn-filter-query
+    index: syn-query-filter
+    title: Query genome
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_synteny_links
+    interactive_component_type: MultiSelect
+    column_name: category
+    column_type: object
+    display:
+      icon_name: mdi:swap-horizontal
+      custom_color: pink
+    section: Synteny scope
+    group: Synteny
+    tag: pg-syn-filter-orientation
+    index: syn-orientation-filter
+    title: Orientation
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_synteny_links
+    use: last/links_total
+    aggregation: count
+    column_name: label
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: category
+    display:
+      icon_name: mdi:vector-link
+      icon_color: grape
+      caption: alignments kept, by orientation
+      format: si
+    section: Synteny at a glance
+    tag: pg-syn-card-links
+    index: syn-card-links
+    title: Links
+    description: Long alignments kept per genome pair. The bar splits them into same strand and inverted.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_synteny_links
+    use: last/links_weight
+    aggregation: sum
+    column_name: weight
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: chrom_a
+    top_n_count: 3
+    display:
+      icon_name: mdi:relation-many-to-many
+      icon_color: teal
+      caption: the target sequences with most
+      format: si
+    section: Synteny at a glance
+    tag: pg-syn-card-weight
+    index: syn-card-weight
+    title: Matching bases
+    description: Matching bases in the links, the weight of their chords.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_synteny_links
+    use: last/links_identity
+    aggregation: median
+    column_name: identity_pct
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: violet
+      caption: median per link, with the spread
+      decimals: 1
+    section: Synteny at a glance
+    tag: pg-syn-card-identity
+    index: syn-card-identity
+    title: Identity of the links
+    description: Matches over matches plus mismatches of an alignment, in percent.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_synteny_links
+    use: last/links_span
+    aggregation: median
+    column_name: aligned_bp
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:ruler
+      icon_color: blue
+      caption: span on the target, median with the spread
+      format: si
+    section: Synteny at a glance
+    tag: pg-syn-card-span
+    index: syn-card-span
+    title: Span of the links
+    description: Length of an alignment on the target in base pairs.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_synteny_links
+    use: last/synteny_ring
+    config:
+      max_links: 2000
+      colour_by: category
+      show_labels: true
+      intra_chromosomal: false
+      selection_enabled: true
+      selection_column: label
+    section: Synteny ring
+    tag: pg-syn-av-ring
+    index: syn-ring
+    title: Synteny between the target and the picked query
+    description: Target and query sequences share the ring; chord width is the matching bases and its colour the orientation. Click chords to select their alignments.
+    layout: {x: 0, y: 0, w: 8, h: 9}
+  - component_type: table
+    workflow_tag: pairgenomealign
+    data_collection_tag: last_synteny_links
+    use: last/synteny_links
+    columns: [label, chrom_a, start_a, end_a, chrom_b, start_b, end_b, weight, aligned_bp, identity_pct, category, rank]
+    row_selection_enabled: true
+    row_selection_column: label
+    section: Link tables
+    tag: pg-syn-table-links
+    index: syn-table-links
+    title: Alignments behind the chords
+    description: Target and query interval, matching bases, identity and orientation of the longest alignments of each pair.
+    layout: {x: 0, y: 0, w: 8, h: 6}

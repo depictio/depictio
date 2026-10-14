@@ -1,0 +1,34 @@
+ALIGNMENT_CRAM:
+  last: 1652
+ALIGNMENT_DOTPLOT_M2O:
+  last: 1652
+ALIGNMENT_DOTPLOT_O2O:
+  last: 1652
+ALIGNMENT_LASTAL_M2O:
+  last: 1652
+ALIGNMENT_LASTDB:
+  last: 1652
+ALIGNMENT_MERGE:
+  samtools: 1.24
+ALIGNMENT_SPLIT_O2O:
+  last: 1652
+ALIGNMENT_TRAIN:
+  last: 1652
+ASSEMBLYSCAN:
+  assemblyscan: 1.0.0
+CUTN_QUERY:
+  seqtk: 1.4-r122
+HTSLIB_BGZIPTABIX:
+  htslib: 1.24
+  xz: 5.8.3
+MULTIQC_ASSEMBLYSCAN_PLOT_DATA:
+  jq: 1.7.1
+SAMTOOLS_DICT:
+  samtools: 1.24
+SAMTOOLS_FAIDX:
+  samtools: 1.24
+TARGETGENOME_CUTN:
+  seqtk: 1.4-r122
+Workflow:
+    nf-core/pairgenomealign: v3.0.4-g8ee09a1
+    Nextflow: 26.04.6
