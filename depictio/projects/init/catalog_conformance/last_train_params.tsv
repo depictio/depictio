@@ -1,0 +1,13 @@
+pair	target	query	training_percent_identity	score_scale	deletion_open_cost	insertion_open_cost	deletion_extend_cost	insertion_extend_cost	strand_setting
+00_Homo_sapiens_GCF_009914755.1___00_Homo_sapiens_GCF_000001405.40	00_Homo_sapiens_GCF_009914755.1	00_Homo_sapiens_GCF_000001405.40	99.854	4.248	44	44	1	1	1
+00_Homo_sapiens_GCF_009914755.1___06_Pan_paniscus_GCF_029289425.2	00_Homo_sapiens_GCF_009914755.1	06_Pan_paniscus_GCF_029289425.2	98.505	4.291	37	37	1	1	1
+00_Homo_sapiens_GCF_009914755.1___06_Pan_troglodytes_GCF_028858775.2	00_Homo_sapiens_GCF_009914755.1	06_Pan_troglodytes_GCF_028858775.2	98.444	4.291	37	37	1	1	1
+00_Homo_sapiens_GCF_009914755.1___09_Gorilla_gorilla_gorilla_GCF_029281585.2	00_Homo_sapiens_GCF_009914755.1	09_Gorilla_gorilla_gorilla_GCF_029281585.2	98.21	4.304	36	36	1	1	1
+00_Homo_sapiens_GCF_009914755.1___15_Pongo_abelii_GCF_028885655.2	00_Homo_sapiens_GCF_009914755.1	15_Pongo_abelii_GCF_028885655.2	96.403	4.374	34	34	1	1	1
+00_Homo_sapiens_GCF_009914755.1___15_Pongo_pygmaeus_GCF_028885625.2	00_Homo_sapiens_GCF_009914755.1	15_Pongo_pygmaeus_GCF_028885625.2	96.434	4.369	34	34	1	1	1
+00_Homo_sapiens_GCF_009914755.1___19_Hoolock_leuconedys_GCA_047372625.1	00_Homo_sapiens_GCF_009914755.1	19_Hoolock_leuconedys_GCA_047372625.1	96.004	4.377	33	33	1	1	1
+00_Homo_sapiens_GCF_009914755.1___19_Hylobates_pileatus_GCA_021498465.1	00_Homo_sapiens_GCF_009914755.1	19_Hylobates_pileatus_GCA_021498465.1	95.79	4.401	33	33	1	1	1
+00_Homo_sapiens_GCF_009914755.1___19_Nomascus_leucogenys_GCF_006542625.1	00_Homo_sapiens_GCF_009914755.1	19_Nomascus_leucogenys_GCF_006542625.1	95.973	4.377	33	33	1	1	1
+00_Homo_sapiens_GCF_009914755.1___19_Symphalangus_syndactylus_GCF_028878055.3	00_Homo_sapiens_GCF_009914755.1	19_Symphalangus_syndactylus_GCF_028878055.3	95.85	4.401	33	33	1	1	1
+00_Homo_sapiens_GCF_009914755.1___29_Chlorocebus_sabaeus_GCF_047675955.1	00_Homo_sapiens_GCF_009914755.1	29_Chlorocebus_sabaeus_GCF_047675955.1	93.428	4.535	31	31	1	1	1
+00_Homo_sapiens_GCF_009914755.1___29_Colobus_guereza_GCA_030247045.1	00_Homo_sapiens_GCF_009914755.1	29_Colobus_guereza_GCA_030247045.1	93.323	4.535	31	31	1	1	1

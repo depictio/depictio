@@ -1,0 +1,17 @@
+sample	classification	clonality	class_confidence	total_reads	wt_pct	deletion_pct	insertion_pct	delins_pct	inframe_pct	frameshift_pct	indel_peaks	max_peak_pct	mean_peak_pct	peak_occupancy
+SRR3696654	Ambiguous	Clonal		11092	37.6	62.3	0.018	0.0	0.261	62.1	1	0.584	0.584	0.584
+SRR3696695	Ambiguous	Insufficient data for analysis	0.0	11	90.9	9.09	0.0	0.0	0.0	9.09	0	0.0	0.0	0.0
+SRR3696709	Ambiguous	Ambiguous		364	64.3	34.6	0.275	0.824	1.65	33.2	1	0.214	0.214	0.214
+SRR3696717	Ambiguous	Ambiguous		4739	32.3	66.7	0.633	0.38	66.7	0.654	3	0.311	0.171	0.514
+SRR3696718	Het NHEJ	Ambiguous	0.958	8368	41.6	40.7	16.0	1.7	12.1	44.6	1	0.126	0.126	0.126
+SRR3696719	Het NHEJ	Ambiguous	0.964	6731	42.7	38.5	17.0	1.84	11.6	43.8	1	0.137	0.137	0.137
+SRR3696720	Het NHEJ	Ambiguous	0.999	7074	49.7	33.9	15.0	1.4	10.8	38.1	1	0.118	0.118	0.118
+SRR3696730	Het NHEJ	Ambiguous	0.977	6949	45.4	46.0	5.58	2.96	14.8	36.8	0	0.0	0.0	0.0
+SRR3696724	Hom NHEJ	Ambiguous	0.836	9670	16.4	71.5	5.82	6.33	32.5	44.7	3	0.109	0.0851	0.255
+SRR3696725	Hom NHEJ	Ambiguous	0.828	8535	17.2	70.7	5.47	6.62	31.0	45.2	3	0.103	0.0792	0.237
+SRR3696727	Hom NHEJ	Ambiguous	0.94	9689	6.03	77.6	12.9	3.5	24.5	65.9	2	0.0746	0.0738	0.148
+SRR3696728	Hom NHEJ	Ambiguous	0.946	7792	5.36	79.0	12.7	2.87	25.8	65.9	2	0.0697	0.0691	0.138
+SRR3696622	Hom WT	Low editing activity	0.956	8524	95.6	4.29	0.0587	0.0235	0.0704	4.28	0	0.0	0.0	0.0
+SRR3696623	Hom WT	Low editing activity	0.964	12116	96.4	3.54	0.066	0.00825	0.066	3.54	0	0.0	0.0	0.0
+SRR3696624	Hom WT	Low editing activity	0.985	11606	98.5	1.4	0.0517	0.0	0.0431	1.41	0	0.0	0.0	0.0
+SRR3696625	Hom WT	Low editing activity	0.967	8767	96.7	3.23	0.0913	0.0	0.0684	3.25	0	0.0	0.0	0.0
