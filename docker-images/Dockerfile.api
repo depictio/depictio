@@ -53,9 +53,9 @@ LABEL org.opencontainers.image.licenses="MIT"
 
 WORKDIR /app
 
-# build-essential/pkg-config + libxml2/xmlsec dev headers are needed to build
-# the `xmlsec` dependency of python3-saml (the `saml` extra); libxmlsec1-openssl
-# is its runtime crypto backend.
+# build-essential/pkg-config + libxml2/libxslt/xmlsec dev headers are needed to
+# build the `xmlsec` and `lxml` dependencies of python3-saml (the `saml` extra);
+# libxmlsec1-openssl is the runtime crypto backend.
 RUN apt-get update && apt-get install --no-install-recommends -y \
         curl \
         netcat-openbsd \
@@ -63,6 +63,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
         build-essential \
         pkg-config \
         libxml2-dev \
+        libxslt1-dev \
         libxmlsec1-dev \
         libxmlsec1-openssl \
     && apt-get clean \
@@ -88,13 +89,18 @@ COPY --chown=depictio:depictio pyproject.toml uv.lock* ./
 # It lands with the source in the project layer instead.
 COPY --chown=depictio:depictio packages/plotly-complexheatmap ./packages/plotly-complexheatmap/
 COPY --chown=depictio:depictio packages/plotly-upset ./packages/plotly-upset/
-# xmlsec is built from source so it links against the same apt libxml2 as the
-# system, avoiding the "lxml & xmlsec libxml2 library version mismatch" crash
-# that mixed binary wheels can produce at import time.
-ENV UV_NO_BINARY_PACKAGE="xmlsec"
+# xmlsec AND lxml are built from source so both link against the same apt
+# libxml2. The lxml wheel bundles its own libxml2 (2.14), xmlsec built from
+# source links the system one (2.9), and `import xmlsec` then dies with
+# "lxml & xmlsec libxml2 library version mismatch", which breaks every SAML
+# route. The flags are on the command line rather than in UV_NO_BINARY_PACKAGE
+# so the same set applies to the project sync below, which would otherwise put
+# the wheel back.
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev --extra server --extra saml \
-    || uv sync --no-install-project --no-dev --extra server --extra saml
+        --no-binary-package xmlsec --no-binary-package lxml \
+    || uv sync --no-install-project --no-dev --extra server --extra saml \
+        --no-binary-package xmlsec --no-binary-package lxml
 
 # ---- Project layer (source + VERSION last) ----
 # Install the depictio project on top of the cached deps; cheap because every
@@ -105,7 +111,12 @@ COPY --chown=depictio:depictio depictio ./depictio/
 COPY --chown=depictio:depictio packages ./packages/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra server --extra saml \
-    || uv sync --no-dev --extra server --extra saml
+        --no-binary-package xmlsec --no-binary-package lxml \
+    || uv sync --no-dev --extra server --extra saml \
+        --no-binary-package xmlsec --no-binary-package lxml
+
+# Fail the build, not the first SAML login, if the two libraries disagree again.
+RUN /app/.venv/bin/python -c "import xmlsec; from onelogin.saml2.settings import OneLogin_Saml2_Settings"
 
 # Prebuilt offline bundles (self-contained HTMLs, several MB each). Copied after
 # the source layer so they land on top of depictio/viewer/, and last-but-one so a
