@@ -214,3 +214,54 @@
   text-transform: uppercase;
   color: var(--gl-faint);
 }
+
+/* Who a group brings in, above the add box; and a person's grants on the
+   "Everyone with access" list. */
+:root[data-chrome='glass'] .gp-main .pm-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 12px 18px;
+  border-top: 1px solid var(--gl-hair);
+  list-style: none;
+}
+.pm-preview-people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pm-sources {
+  flex-wrap: wrap;
+}
+
+/* Same lists under the other chrome styles, which have no glass rules. */
+.pm-plain ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pm-plain .pm-head,
+.pm-plain .pm-member,
+.pm-plain .pm-member-who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pm-plain .pm-member {
+  padding: 6px 0;
+}
+.pm-plain .pm-member-who {
+  flex: 1;
+  flex-wrap: wrap;
+}
+.pm-plain .pm-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0;
+}
+.pm-plain .pm-hint {
+  margin: 4px 0 8px;
+  font-size: 12px;
+  opacity: 0.7;
+}
