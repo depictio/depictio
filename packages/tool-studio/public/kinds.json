@@ -803,6 +803,265 @@
     },
     {
       "category": "plot",
+      "description": "Protein domains drawn on a backbone, coloured by family, with zigzag edges where the HMM match is partial, or proteins grouped by their ordered domains and counted.",
+      "heavy": false,
+      "icon": "tabler:timeline",
+      "label": "Domain architecture",
+      "legacy": false,
+      "required_roles": [
+        "entity",
+        "start",
+        "end",
+        "label"
+      ],
+      "role_names": {
+        "accession": [
+          "accession",
+          "hmm_acc",
+          "interpro_acc",
+          "pfam_acc"
+        ],
+        "description": [
+          "desc",
+          "description",
+          "domain_description"
+        ],
+        "end": [
+          "domain_end",
+          "end",
+          "env_end",
+          "env_to",
+          "stop"
+        ],
+        "entity": [
+          "entity",
+          "gene",
+          "protein",
+          "protein_id",
+          "query",
+          "seq_id",
+          "sequence_id",
+          "structure_id",
+          "target",
+          "uniprot"
+        ],
+        "evalue": [
+          "c_evalue",
+          "e_value",
+          "evalue",
+          "i_evalue",
+          "independent_evalue"
+        ],
+        "hmm_coverage": [
+          "coverage",
+          "domain_coverage",
+          "hmm_cov",
+          "hmm_coverage"
+        ],
+        "hmm_from": [
+          "hmm_from",
+          "hmm_start"
+        ],
+        "hmm_length": [
+          "hmm_len",
+          "hmm_length",
+          "model_length",
+          "qlen"
+        ],
+        "hmm_to": [
+          "hmm_end",
+          "hmm_to"
+        ],
+        "label": [
+          "domain",
+          "domain_name",
+          "family",
+          "hmm",
+          "hmm_name",
+          "label",
+          "name",
+          "pfam"
+        ],
+        "protein_length": [
+          "length",
+          "protein_length",
+          "seq_length",
+          "sequence_length",
+          "target_length",
+          "tlen"
+        ],
+        "source": [
+          "database",
+          "db",
+          "member_database",
+          "source"
+        ],
+        "start": [
+          "begin",
+          "domain_start",
+          "env_from",
+          "env_start",
+          "start"
+        ]
+      },
+      "roles": {
+        "accession": {
+          "description": "Optional accession of the family (for example PF00069).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "description": {
+          "description": "Optional free-text description of the family.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "end": {
+          "description": "Last residue of the domain on the protein (inclusive).",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "entity": {
+          "description": "Which protein a domain belongs to: one backbone per entity.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "evalue": {
+          "description": "Optional E-value of the hit, shown in the tooltip and used by the threshold.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": false
+        },
+        "hmm_coverage": {
+          "description": "Optional fraction of the HMM covered, from 0 to 1.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": false
+        },
+        "hmm_from": {
+          "description": "Optional first HMM state aligned; above 1 the left edge is zigzag.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "hmm_length": {
+          "description": "Optional length of the HMM the domain matched.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "hmm_to": {
+          "description": "Optional last HMM state aligned; below the HMM length the right edge is zigzag.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "label": {
+          "description": "Domain or family name: colours the domain and names it in the legend.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "protein_length": {
+          "description": "Optional length of the protein, to draw the backbone to scale.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "source": {
+          "description": "Optional annotation database of the hit (Pfam, SMART).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "start": {
+          "description": "First residue of the domain on the protein (1-based).",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "domain_architecture"
+    },
+    {
+      "category": "plot",
       "description": "scanpy / Seurat marker dot plot: cluster \u00d7 gene with size = fraction expressing, colour = mean expression.",
       "heavy": false,
       "icon": "tabler:circle-dot",
@@ -1772,6 +2031,217 @@
     },
     {
       "category": "plot",
+      "description": "The sequence logo of a profile HMM: a stack of letters per match state sized by information, with insert probability and length, and the hits that matched it. A brush selects residues on the linked tiles.",
+      "heavy": false,
+      "icon": "tabler:letter-case",
+      "label": "HMM logo",
+      "legacy": false,
+      "required_roles": [
+        "state",
+        "letter",
+        "emission"
+      ],
+      "role_names": {
+        "consensus": [
+          "consensus",
+          "consensus_residue",
+          "consensus_seq"
+        ],
+        "cs": [
+          "consensus_structure",
+          "cs"
+        ],
+        "emission": [
+          "emission",
+          "emission_prob",
+          "emission_probability",
+          "frequency",
+          "match_emission",
+          "probability"
+        ],
+        "entity": [
+          "entity",
+          "gene",
+          "protein",
+          "structure_id",
+          "target",
+          "uniprot"
+        ],
+        "insert_length": [
+          "expected_insert_length",
+          "ins_len",
+          "insert_len",
+          "insert_length"
+        ],
+        "insert_prob": [
+          "ins_prob",
+          "insert_occupancy",
+          "insert_p",
+          "insert_prob",
+          "insert_probability"
+        ],
+        "letter": [
+          "amino_acid",
+          "hmm_letter",
+          "letter",
+          "residue_letter",
+          "symbol"
+        ],
+        "model": [
+          "family",
+          "hmm",
+          "hmm_name",
+          "model",
+          "model_name",
+          "profile",
+          "profile_name"
+        ],
+        "occupancy": [
+          "match_occupancy",
+          "occ",
+          "occupancy"
+        ],
+        "position": [
+          "aa_pos",
+          "pos",
+          "position",
+          "protein_position",
+          "resi",
+          "residue_number",
+          "resnum"
+        ],
+        "rf": [
+          "reference_annotation",
+          "rf"
+        ],
+        "state": [
+          "hmm_node",
+          "hmm_pos",
+          "hmm_position",
+          "hmm_state",
+          "match_state",
+          "node",
+          "state"
+        ]
+      },
+      "roles": {
+        "consensus": {
+          "description": "Optional consensus residue of the state.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "cs": {
+          "description": "Optional consensus structure character of the state.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "emission": {
+          "description": "Match emission probability of the letter at the state, from 0 to 1.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        },
+        "entity": {
+          "description": "Optional reference sequence a state maps onto; the filtered entity is shown.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "insert_length": {
+          "description": "Optional expected length of an insert after the state.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": false
+        },
+        "insert_prob": {
+          "description": "Optional probability of an insert after the state.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": false
+        },
+        "letter": {
+          "description": "Residue letter an emission probability belongs to.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "model": {
+          "description": "Optional name of the profile HMM a row belongs to, one logo per model.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "occupancy": {
+          "description": "Optional fraction of sequences that visit the state.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": false
+        },
+        "position": {
+          "description": "Optional reference residue number of a state (null where it has none).",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "rf": {
+          "description": "Optional reference annotation character of the state.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "state": {
+          "description": "Match-state number along the HMM (1-based): one letter stack per state.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "hmm_logo"
+    },
+    {
+      "category": "plot",
       "description": "Barcode-rank curve, UMI count vs rank on log-log axes, one line per sample, cell-calling cutoff marked.",
       "heavy": false,
       "icon": "tabler:trending-down",
@@ -2566,6 +3036,99 @@
     },
     {
       "category": "plot",
+      "description": "The predicted aligned error of a structure as a residue-by-residue heatmap, with confidence strips on the axes. A brush selects residues on the linked tiles.",
+      "heavy": false,
+      "icon": "tabler:chart-grid-dots",
+      "label": "Predicted aligned error",
+      "legacy": false,
+      "required_roles": [
+        "position"
+      ],
+      "role_names": {
+        "chain": [
+          "auth_asym_id",
+          "chain",
+          "chain_id"
+        ],
+        "entity": [
+          "entity",
+          "gene",
+          "protein",
+          "structure_id",
+          "target",
+          "uniprot"
+        ],
+        "position": [
+          "aa_pos",
+          "pos",
+          "position",
+          "protein_position",
+          "resi",
+          "residue_number",
+          "resnum"
+        ],
+        "value": [
+          "b_factor",
+          "bfactor",
+          "plddt",
+          "score",
+          "value"
+        ]
+      },
+      "roles": {
+        "chain": {
+          "description": "Optional chain id, to mark chain boundaries on a complex.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "entity": {
+          "description": "Which protein a row belongs to; the filtered entity selects the PAE file shown.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "position": {
+          "description": "Residue number (1-based) of the matrix axes.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "value": {
+          "description": "Optional per-residue score (pLDDT) drawn as a strip along the axes.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        }
+      },
+      "viz_kind": "pae_matrix"
+    },
+    {
+      "category": "plot",
       "description": "One polyline per sample across N metric axes, each axis brushable. Reads a many-column QC table as a whole where a scatter would need one panel per pair.",
       "heavy": false,
       "icon": "tabler:chart-line",
@@ -2913,6 +3476,156 @@
         }
       },
       "viz_kind": "qq"
+    },
+    {
+      "category": "plot",
+      "description": "The phi and psi backbone angles of every residue of a structure, computed in the browser, with glycine and proline marked and the favoured regions outlined. A selection marks residues on the linked tiles.",
+      "heavy": false,
+      "icon": "tabler:angle",
+      "label": "Ramachandran plot",
+      "legacy": false,
+      "required_roles": [
+        "position"
+      ],
+      "role_names": {
+        "category": [
+          "category",
+          "domain",
+          "region",
+          "secondary_structure",
+          "ss"
+        ],
+        "chain": [
+          "auth_asym_id",
+          "chain",
+          "chain_id"
+        ],
+        "entity": [
+          "entity",
+          "gene",
+          "protein",
+          "structure_id",
+          "target",
+          "uniprot"
+        ],
+        "gene": [
+          "gene",
+          "gene_name",
+          "gene_symbol",
+          "symbol"
+        ],
+        "position": [
+          "aa_pos",
+          "pos",
+          "position",
+          "protein_position",
+          "resi",
+          "residue_number",
+          "resnum"
+        ],
+        "sequence": [
+          "aa_sequence",
+          "protein_sequence",
+          "seq",
+          "sequence"
+        ],
+        "uniprot": [
+          "accession",
+          "uniprot",
+          "uniprot_accession",
+          "uniprot_id"
+        ],
+        "value": [
+          "b_factor",
+          "bfactor",
+          "plddt",
+          "score",
+          "value"
+        ]
+      },
+      "roles": {
+        "category": {
+          "description": "Optional per-residue class, used by the category colour mode.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "chain": {
+          "description": "Optional chain id, for multi-chain structures.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "entity": {
+          "description": "Which structure a row belongs to; the filtered entity is the one shown.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "gene": {
+          "description": "Gene symbol used to fetch a predicted structure (resolve mode).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "position": {
+          "description": "Residue number in the structure numbering (1-based).",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "sequence": {
+          "description": "Protein sequence folded on demand when no accession resolves (resolve mode).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "uniprot": {
+          "description": "UniProt accession used to fetch a predicted structure (resolve mode).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "value": {
+          "description": "Optional per-residue score, used by the value colour mode.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        }
+      },
+      "viz_kind": "ramachandran"
     },
     {
       "category": "plot",
@@ -3376,6 +4089,170 @@
         }
       },
       "viz_kind": "scatter_xy"
+    },
+    {
+      "category": "plot",
+      "description": "The secondary structure of a protein as a ribbon of helices, strands and coil shaded by confidence, with the helix, strand and coil probabilities, several sources compared and the segment list.",
+      "heavy": false,
+      "icon": "tabler:wave-sine",
+      "label": "Secondary structure",
+      "legacy": false,
+      "required_roles": [
+        "position",
+        "state"
+      ],
+      "role_names": {
+        "confidence": [
+          "conf",
+          "confidence",
+          "score",
+          "ss_confidence",
+          "value"
+        ],
+        "entity": [
+          "entity",
+          "gene",
+          "protein",
+          "structure_id",
+          "target",
+          "uniprot"
+        ],
+        "p_coil": [
+          "coil_prob",
+          "coil_probability",
+          "p_coil",
+          "prob_coil"
+        ],
+        "p_helix": [
+          "helix_prob",
+          "helix_probability",
+          "p_helix",
+          "prob_helix"
+        ],
+        "p_strand": [
+          "p_sheet",
+          "p_strand",
+          "prob_strand",
+          "strand_prob",
+          "strand_probability"
+        ],
+        "position": [
+          "aa_pos",
+          "pos",
+          "position",
+          "protein_position",
+          "resi",
+          "residue_number",
+          "resnum"
+        ],
+        "residue": [
+          "aa",
+          "amino_acid",
+          "residue",
+          "residue_name",
+          "resn"
+        ],
+        "source": [
+          "database",
+          "method",
+          "predictor",
+          "source",
+          "ss_source",
+          "tool"
+        ],
+        "state": [
+          "dssp",
+          "dssp_code",
+          "sec_struct",
+          "secondary_structure",
+          "ss",
+          "ss_code",
+          "ss_state"
+        ]
+      },
+      "roles": {
+        "confidence": {
+          "description": "Optional confidence shading the ribbon, from 0 to 1.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": false
+        },
+        "entity": {
+          "description": "Which protein a row belongs to; the filtered entity is the one drawn.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "p_coil": {
+          "description": "Optional probability of coil at the residue, from 0 to 1.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": false
+        },
+        "p_helix": {
+          "description": "Optional probability of helix at the residue, from 0 to 1.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": false
+        },
+        "p_strand": {
+          "description": "Optional probability of strand at the residue, from 0 to 1.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": false
+        },
+        "position": {
+          "description": "Residue number (1-based) along the ribbon.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "residue": {
+          "description": "Optional one-letter amino acid written under the ribbon.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "source": {
+          "description": "Optional prediction source of a row; several sources are compared.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "state": {
+          "description": "Secondary-structure state called at the residue (a DSSP or S4PRED code).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "secondary_structure"
     },
     {
       "category": "plot",
