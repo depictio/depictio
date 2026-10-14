@@ -9,7 +9,13 @@ import {
 } from '@mantine/core';
 import type { RootSpec } from '@genome-spy/core/spec/root.js';
 
-import { fetchAdvancedVizData, fetchUniqueValues, InteractiveFilter, StoredMetadata } from '../../api';
+import {
+  authFetch,
+  fetchAdvancedVizData,
+  fetchUniqueValues,
+  InteractiveFilter,
+  StoredMetadata,
+} from '../../api';
 import { columnCategoryColors } from '../../categoryColors';
 import { resolveCategoricalPalette } from '../../colors';
 import { useCategoryColorSource } from '../../hooks/useCategoryColors';
@@ -282,10 +288,10 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     setFetchError(null);
     // The URLs in the manifest are presigned and expire (15 minutes), so this
     // re-runs on the refresh tick like any other fetch; a stale URL would
-    // otherwise start 403ing mid-pan.
-    fetchIndexedFileManifest(String(metadata.dc_id ?? ''), (url) =>
-      fetch(url, { credentials: 'include' }),
-    )
+    // otherwise start 403ing mid-pan. Through `authFetch`: the endpoint reads a
+    // bearer token, not the cookie, so a bare fetch is anonymous and 401s on
+    // any instance that is not in public / single-user mode.
+    fetchIndexedFileManifest(String(metadata.dc_id ?? ''), (url) => authFetch(url))
       .then((m) => {
         if (!cancelled) setManifest(m);
       })
