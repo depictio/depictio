@@ -512,6 +512,37 @@ class StackedTaxonomyConfig(_BaseVizConfig):
     show_legend: bool = Field(default=True, description="Show the taxon colour legend")
     log_y: bool = Field(default=False, description="Log-scale the abundance axis")
 
+    # The kind stacks any per-sample composition, not only taxa: CCS outcomes
+    # per library, structural categories per sample. The fields below let such
+    # a tile drop the taxonomy wording and the controls that mean nothing for
+    # it. All optional, so every taxonomy tile keeps its look. Colours stay with
+    # `category_colors` (keyed by `taxon_col`, or by the rank shown), then
+    # `taxon_palette`.
+    hidden_controls: list[Literal["rank", "sample_sort", "top_n", "normalise"]] | None = Field(
+        default=None,
+        description=(
+            "Controls the tile does not offer. The config value still applies: "
+            "hide `rank` when rank_col is constant, `top_n` when the categories "
+            "are few and fixed, `sample_sort` when the input order is the point."
+        ),
+    )
+    rank_label: str | None = Field(
+        default=None,
+        description="Label of the rank picker (default 'Rank'), e.g. 'Level' for a non-taxonomy split",
+    )
+    x_title: str | None = Field(
+        default=None,
+        description="Sample axis title. Unset shows 'Sample'; an empty string shows none.",
+    )
+    legend_pos: Literal["right", "bottom"] = Field(
+        default="right",
+        description=(
+            "Legend in a column right of the bars (default), or in rows under the "
+            "figure. Past 40 bars the sample labels are hidden (hover names each "
+            "bar) and a bottom legend moves above the bars."
+        ),
+    )
+
 
 class RarefactionConfig(_BaseVizConfig):
     """Multi-sample alpha-rarefaction curve.
@@ -1770,7 +1801,17 @@ class ScatterXyConfig(_BaseVizConfig):
     label_col: str | None = Field(
         default=None, description="Column naming each point, used in hover and for labels"
     )
-    color_col: str | None = Field(default=None, description="Column driving the marker colour")
+    # No per-tile palette: a categorical colour column takes the colours the
+    # dashboard pins for that column, so one category keeps one colour across
+    # the tiles of every tab.
+    color_col: str | None = Field(
+        default=None,
+        description=(
+            "Column driving the marker colour. A categorical column takes the "
+            "dashboard's `category_colors` for it (the tab's over the main tab's), "
+            "and the palette cycle for any value they do not pin."
+        ),
+    )
     size_col: str | None = Field(default=None, description="Numeric column driving marker size")
 
     log_x: bool = Field(default=False, description="Log-scale the x axis")

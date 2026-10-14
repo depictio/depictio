@@ -31,6 +31,7 @@ import {
   tableGridKey,
 } from './tableVersionFollow';
 import { LoadAllState } from './chrome/LoadAllButton';
+import { visibleTableColumns } from './tableColumns';
 import { extractRowSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
 import { enqueueFetch, isStaleFetch } from '../fetchQueue';
@@ -270,15 +271,10 @@ const TableRenderer: React.FC<TableRendererProps> = ({
           (metadata.cols_json as Record<string, { hide?: boolean }> | undefined) ?? {};
         // Optional YAML `columns` allowlist ("Columns to display"). When
         // non-empty, restrict the grid to exactly those columns (the
-        // /render_table endpoint still returns every column). Combined with
-        // the per-column cols_json[].hide flag from the builder.
-        const allowList =
-          Array.isArray(metadata.columns) && metadata.columns.length > 0
-            ? new Set(metadata.columns)
-            : null;
-        const visibleColumns = res.columns.filter(
-          (c) => colsJson[c.field]?.hide !== true && (!allowList || allowList.has(c.field)),
-        );
+        // /render_table endpoint still returns every column), in the
+        // allowlist's order, so authors list the key columns first. Combined
+        // with the per-column cols_json[].hide flag from the builder.
+        const visibleColumns = visibleTableColumns(res.columns, colsJson, metadata.columns);
         // Default sort: prefer whatever column the server picked (it does
         // its own ``acquisition*`` lookup so ingest order matches the image
         // grid). Fall back to the same heuristic client-side in case an
