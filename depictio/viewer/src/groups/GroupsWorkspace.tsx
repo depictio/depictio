@@ -9,7 +9,7 @@ import {
   Group,
   Loader,
   Paper,
-  SegmentedControl,
+  Select,
   Stack,
   Text,
   TextInput,
@@ -366,6 +366,24 @@ const GroupsWorkspace: React.FC<GroupsWorkspaceProps> = ({ scope }) => {
                   }
                   data-testid="groups-search"
                 />
+                {hasSsoGroups && (
+                  <Select
+                    w={glass ? 118 : 108}
+                    size={glass ? 'sm' : 'xs'}
+                    aria-label="Group source"
+                    allowDeselect={false}
+                    checkIconPosition="right"
+                    comboboxProps={{ withinPortal: true }}
+                    value={ssoFilter}
+                    onChange={(v) => setSsoFilter((v as 'all' | 'manual' | 'sso') ?? 'all')}
+                    data={[
+                      { label: 'All', value: 'all' },
+                      { label: 'Manual', value: 'manual' },
+                      { label: 'SSO', value: 'sso' },
+                    ]}
+                    data-testid="groups-source-filter"
+                  />
+                )}
                 {scope === 'admin' && (
                   <Button
                     size={glass ? 'sm' : 'xs'}
@@ -384,22 +402,6 @@ const GroupsWorkspace: React.FC<GroupsWorkspaceProps> = ({ scope }) => {
                   </Button>
                 )}
               </Group>
-
-              {hasSsoGroups && (
-                <SegmentedControl
-                  size="xs"
-                  fullWidth
-                  className={glass ? 'gg-seg' : undefined}
-                  value={ssoFilter}
-                  onChange={(v) => setSsoFilter(v as 'all' | 'manual' | 'sso')}
-                  data={[
-                    { label: 'All', value: 'all' },
-                    { label: 'Manual', value: 'manual' },
-                    { label: 'SSO', value: 'sso' },
-                  ]}
-                  data-testid="groups-source-filter"
-                />
-              )}
 
               <Box
                 className={isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}

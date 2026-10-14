@@ -79,30 +79,6 @@
   color: var(--gl-faint);
 }
 
-/* Source filter: the admin Users segmented well, a paper indicator. */
-:root[data-chrome='glass'] .gp-main .gg-seg.mantine-SegmentedControl-root {
-  padding: 3px;
-  border-radius: 11px;
-  background: var(--gl-well);
-}
-:root[data-chrome='glass'] .gp-main .gg-seg .mantine-SegmentedControl-indicator {
-  border-radius: 8px;
-  background: var(--gl-paper);
-  box-shadow:
-    0 0 0 1px var(--gl-hair),
-    0 1px 2px var(--gl-shade-a);
-}
-:root[data-chrome='glass'] .gp-main .gg-seg .mantine-SegmentedControl-label {
-  color: var(--gl-muted);
-  font-weight: 600;
-}
-:root[data-chrome='glass'] .gp-main .gg-seg .mantine-SegmentedControl-label:hover:not([data-disabled], [data-active]) {
-  color: var(--gl-fg);
-}
-:root[data-chrome='glass'] .gp-main .gg-seg .mantine-SegmentedControl-label[data-active] {
-  color: var(--gl-fg);
-}
-
 /* The panes track the viewport, under the page head. */
 :root[data-chrome='glass'] .gp-main .gg-pane {
   height: calc(100dvh - var(--gp-top-h) - 210px);
