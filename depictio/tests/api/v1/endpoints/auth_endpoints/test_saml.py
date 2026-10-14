@@ -388,3 +388,44 @@ class TestSamlMetadata:
         assert response.status_code == 200
         assert "EntityDescriptor" in response.text
         assert "https://api.example.org/depictio" in response.text
+
+
+class TestInitSamlAuthRequestData:
+    """`init_saml_auth` hands python3-saml the request as dicts.
+
+    The route tests above patch `init_saml_auth` out, which is how a list of
+    (key, value) pairs went unnoticed: python3-saml checks
+    `"SAMLResponse" in post_data`, which is False for a list of pairs, so every
+    real IdP POST failed with "SAML Response not found".
+    """
+
+    def test_post_and_query_data_are_dicts(self):
+        import sys
+        import types
+
+        from depictio.api.v1.endpoints.auth_endpoints import saml_utils
+
+        captured: dict = {}
+
+        class _FakeAuth:
+            def __init__(self, request_data, settings):
+                captured.update(request_data)
+
+        fake_module = types.SimpleNamespace(OneLogin_Saml2_Auth=_FakeAuth)
+        app = FastAPI()
+
+        @app.post("/acs")
+        async def acs(request: saml_utils.Request):  # type: ignore[name-defined]
+            await saml_utils.init_saml_auth(request)
+            return {}
+
+        with (
+            patch.dict(sys.modules, {"onelogin.saml2.auth": fake_module}),
+            patch.object(saml_utils, "get_saml_settings", return_value={}),
+        ):
+            TestClient(app).post(
+                "/acs?x=1", data={"SAMLResponse": "abc", "RelayState": "/dashboards"}
+            )
+
+        assert captured["post_data"] == {"SAMLResponse": "abc", "RelayState": "/dashboards"}
+        assert captured["get_data"] == {"x": "1"}
