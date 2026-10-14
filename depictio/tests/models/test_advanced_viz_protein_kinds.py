@@ -7,9 +7,11 @@ ramachandran are the second wave. All eight share the `residue_selection` link.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, get_args
 
 import pytest
+import yaml
 from pydantic import TypeAdapter, ValidationError
 
 from depictio.models.components.advanced_viz.configs import (
@@ -45,7 +47,8 @@ VIZ = TypeAdapter(VizConfig)
 
 #: Registered with the lot 3 template pass.
 FIRST_WAVE = ("molecule_3d", "msa", "sequence_track")
-#: Registered ahead of their renderer and showcase tab.
+#: Registered ahead of their renderer, bound by the protein families and structure
+#: confidence tabs of the advanced-viz showcase.
 SECOND_WAVE = (
     "hmm_logo",
     "secondary_structure",
@@ -54,6 +57,13 @@ SECOND_WAVE = (
     "ramachandran",
 )
 PROTEIN_KINDS = (*FIRST_WAVE, *SECOND_WAVE)
+SHOWCASE_DASHBOARDS = (
+    Path(__file__).resolve().parents[2]
+    / "projects"
+    / "init"
+    / "advanced_viz_showcase"
+    / "dashboards"
+)
 
 #: What a kind needs besides `viz_kind` to validate at all.
 MINIMAL: dict[str, dict[str, Any]] = {"pae_matrix": {"pae_dc_tag": "pae"}}
@@ -154,8 +164,18 @@ def test_selection_is_on_and_follows_by_default(kind: str):
 
 
 @pytest.mark.parametrize("kind", SECOND_WAVE)
-def test_second_wave_is_incubating_until_its_renderer_lands(kind: str):
-    assert kind in INCUBATING
+def test_second_wave_is_bound_by_a_showcase_tab(kind: str):
+    """The five kinds left INCUBATING when the showcase tabs bound them."""
+    assert kind not in INCUBATING
+    tabs = [
+        path.name
+        for path in sorted(SHOWCASE_DASHBOARDS.glob("*.yaml"))
+        if any(
+            component.get("viz_kind") == kind
+            for component in yaml.safe_load(path.read_text()).get("components", [])
+        )
+    ]
+    assert tabs, f"no showcase dashboard binds {kind}"
 
 
 @pytest.mark.parametrize("kind", PROTEIN_KINDS)

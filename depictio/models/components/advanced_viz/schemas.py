@@ -2623,14 +2623,6 @@ INCUBATING: frozenset[str] = frozenset(
         # showcase's synthetic fixture binds it. Kept and flagged rather than
         # deleted; revisit on a re-pin.
         "gsea_running_score",
-        # The five wave-2 protein kinds: registered ahead of its renderer and
-        # showcase tab in this PR, which bind each of them from the protein
-        # dashboard.
-        "hmm_logo",
-        "secondary_structure",
-        "domain_architecture",
-        "pae_matrix",
-        "ramachandran",
     }
 )
 

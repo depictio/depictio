@@ -49,15 +49,26 @@ from depictio.recipes.lib.dimreduction import (  # noqa: E402 (sys.path tweak mu
     run_tsne,
     run_umap,
 )
+from depictio.recipes.lib.hmm import (  # noqa: E402
+    AMINO_LETTERS,
+    BACKGROUND_AMINO,
+    HmmModel,
+    format_hmm,
+    parse_hmm,
+    profile_frame,
+    reference_positions_from_stockholm,
+)
 from depictio.recipes.lib.msa import (  # noqa: E402
     best_alphabet,
     decode_hhblits_rows,
     msa_frame,
 )
+from depictio.recipes.lib.pae import read_pae, write_pae_tsv  # noqa: E402
 from depictio.recipes.lib.protein_structure import (  # noqa: E402
     residues_from_pdb,
     sequence_from_pdb,
 )
+from depictio.recipes.lib.secondary_structure import parse_ss2  # noqa: E402
 
 OUT = Path(__file__).resolve().parent.parent / "data"
 OUT.mkdir(exist_ok=True)
@@ -3091,3 +3102,781 @@ def generate_protein_demo() -> None:
 
 
 generate_protein_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN+1. Protein families and structure confidence: the data behind the two
+#       tabs that sit beside the protein structure tab.
+# files:   protein_family_demo.hmm   a two-model HMMER3/f library (DemoFamA, DemoFamB)
+#          protein_family_demo.sto   one hmmalign-shaped Stockholm record per model
+#          demo_protein.ss2          PSIPRED VFORMAT secondary-structure prediction
+#          demo_protein.pae.tsv      172 x 172 predicted aligned error
+# columns: protein_family_hmm_demo   the long profile table of recipes/lib/hmm.py
+#                                    (entity, position, hmm_name, hmm_acc, hmm_position,
+#                                    hmm_letter, emission, height_bits, info_bits,
+#                                    insert_prob, insert_length, occupancy, delete_prob,
+#                                    consensus, rf, cs, map_column)
+#          protein_family_hits_demo  the hmmsearch domain table (domtbl) columns of the
+#                                    hmmer catalog recipe
+#          protein_ss_demo           entity, position, ss_source, ss_code,
+#                                    ss_probability, p_helix, p_strand, p_coil
+# ---------------------------------------------------------------------------
+# Nothing here is hmmbuild, hmmsearch, hmmalign, S4PRED or AlphaFold output: no
+# pipeline run is vendored for it, so the files are shaped like what those
+# programs write and built in Python from the demo alignment and structure.
+# Every number is seeded, so the script reproduces the committed files.
+#
+# The two profile HMMs are estimated from the rows of protein_msa_demo over
+# residues 30 to 101 (DemoFamA, the first two confident segments of the
+# structure) and 102 to 172 (DemoFamB, the third). A simple hmmbuild-like
+# estimate, not hmmbuild:
+# - match columns are the columns with fewer than half gaps, a row spanning less
+#   than half the alignment is a fragment whose flanking gaps are missing data;
+# - Henikoff position-based sequence weights, scaled to an effective number of
+#   sequences equal to the single-linkage clusters at 80% identity (hmmbuild
+#   entropy-weights down to 0.59 bits per match state, which on a set this close
+#   would flatten the logo into one height);
+# - match emissions with one background-weighted pseudocount, insert emissions at
+#   the background, transitions counted along each row's path with a small prior
+#   (HMMER3 has no d->i or i->d, so those paths count nothing);
+# - the reference annotation (RF) is the usual x per match column and the
+#   consensus structure (CS) the structure-derived H / E / C of the demo protein.
+#
+# The demo alignment has no insertions (they were dropped to line the rows up)
+# and almost no truncated members, which would leave an insert-probability lane
+# and the partial-match edges with nothing to show. Both are simulated on a
+# copy of the rows, and the committed protein_msa_demo.tsv is left alone:
+# - three loop insertions, each in three members, after alignment columns that
+#   sit in coil of the structure (see _FAM_INSERT_SITES): the inserted residues
+#   are drawn from loop-like letters and shift the member's numbering;
+# - six fragments (_FAM_FRAGMENTS): three lacking the N-terminal part, three the
+#   C-terminal part, so their domains match only part of the HMM. A fragment is
+#   a shorter protein, not just a shorter domain.
+# - the architecture view needs more than one architecture: a handful of members
+#   also carry a synthetic N- or C-terminal domain of three families (OtherFamC,
+#   OtherFamD, OtherFamE) that have no HMM in the library, so the extra residues
+#   exist only in the hits table (protein_length) and not as sequences.
+#
+# The hits table is what hmmsearch would report for the library plus those
+# extras. Coordinates (hmm_from / hmm_to, ali_from / ali_to) come from the
+# alignment above, the envelope is the alignment widened by a few residues and
+# kept clear of its neighbour. Scores, E-values and posterior accuracy are
+# synthetic: they are a monotone function of identity to the demo protein times
+# the share of the HMM covered, and the E-values follow HMMER's own tail
+# (2^-score times the database size), so ranking by any of them agrees.
+#
+# Secondary structure: demo_protein.ss2 is the structure-derived state (the CA
+# geometry call of protein_residues_demo) blurred along the sequence, mixed with
+# seeded noise and written as S4PRED would, with two deliberate disagreements
+# (the end of a helix called coil, a short coil between two strands called
+# strand). Away from them the called state is the structure's. The table holds
+# that prediction and the structure's own call as a second source.
+#
+# PAE: synthetic but plausible. Low inside each confident segment of
+# protein_domains_demo, higher between segments (the first two sit together, the
+# third is further), high around the low-confidence ends, rising with the scored
+# residue's pLDDT deficit, a symmetric core plus a little asymmetry, clipped to
+# AlphaFold's 0 to 31.75.
+_FAM_SEED = 20261014
+# Residue span (structure numbering, which is also the MSA column) of each model.
+_FAM_SPANS = {"DemoFamA": (30, 101), "DemoFamB": (102, 172)}
+_FAM_ACCESSIONS = {
+    "DemoFamA": "DEMO0001.1",
+    "DemoFamB": "DEMO0002.1",
+    "OtherFamC": "DEMO0003.1",
+    "OtherFamD": "DEMO0004.1",
+    "OtherFamE": "DEMO0005.1",
+}
+# Members cut to the MSA columns first..last (the rest of the protein is missing):
+# three lose their N-terminal part, three their C-terminal part. hit_14 keeps
+# only DemoFamB, hit_27 only DemoFamA.
+_FAM_FRAGMENTS = {
+    "hit_3": (48, 172),
+    "hit_8": (62, 172),
+    "hit_14": (108, 172),
+    "hit_20": (1, 140),
+    "hit_24": (1, 122),
+    "hit_27": (1, 90),
+}
+# Loop insertions: after this alignment column, these members carry this many
+# extra residues. All three columns sit inside a coil segment of the structure.
+_FAM_INSERT_SITES = {
+    44: {"hit_12": 3, "hit_25": 2, "hit_31": 1},
+    56: {"hit_4": 4, "hit_17": 2, "hit_28": 5},
+    126: {"hit_16": 3, "hit_29": 1, "hit_32": 2},
+}
+_FAM_LOOP_LETTERS = "GSNDPKTEQAR"
+_FAM_LOOP_WEIGHTS = (3.0, 3.0, 2.5, 2.5, 2.0, 1.5, 1.5, 1.5, 1.0, 1.0, 1.0)
+# Synthetic extra domains: family -> (HMM length, {member: ("N" or "C", residues
+# the member gains at that end)}). The residues exist only in protein_length.
+_FAM_EXTRA = {
+    "OtherFamC": (52, {"hit_5": ("N", 62), "hit_6": ("N", 66), "hit_7": ("N", 60)}),
+    "OtherFamD": (
+        64,
+        {"hit_2": ("C", 0), "hit_9": ("C", 0), "hit_10": ("C", 0), "hit_23": ("C", 0)},
+    ),
+    "OtherFamE": (78, {"hit_13": ("C", 0), "hit_30": ("C", 0), "hit_31": ("C", 0)}),
+}
+_FAM_MIN_STATES = 8  # fewest aligned states for a hit to be reported
+_FAM_PSEUDO_EMISSION = 1.0
+_FAM_DB_SIZE = 10_000  # sequences searched: the E-value multiplier
+_FAM_DOM_Z = 40  # sequences reported: the conditional E-value multiplier
+_FAM_SOURCE_LIBRARY = "demo_hmm_library"
+_FAM_SOURCE_SYNTHETIC = "synthetic"
+_FAM_SAMPLE = "demo_family_run"
+_FAM_BACKGROUND = np.array([BACKGROUND_AMINO[a] for a in AMINO_LETTERS])
+
+
+def _fam_entity_order(entity: str) -> tuple[int, int]:
+    return (0, 0) if entity == _PROTEIN_ENTITY else (1, int(entity.rsplit("_", 1)[1]))
+
+
+def _fam_members(msa: pl.DataFrame) -> dict[str, dict]:
+    """The MSA rows as members: fragments cut, loop residues inserted, residues numbered."""
+    rng = np.random.default_rng([_FAM_SEED, 1])
+    members: dict[str, dict] = {}
+    for seq_id, row in zip(msa["seq_id"].to_list(), msa["aligned_sequence"].to_list(), strict=True):
+        entity = _PROTEIN_ENTITY if seq_id == "query" else seq_id
+        cols = list(row)
+        if entity in _FAM_FRAGMENTS:
+            first, last = _FAM_FRAGMENTS[entity]
+            cols = [c if first <= i <= last else "-" for i, c in enumerate(cols, start=1)]
+        members[entity] = {"cols": cols, "inserts": {}, "n_ext": 0, "numbers": {}}
+    for site in sorted(_FAM_INSERT_SITES):
+        for entity, length in _FAM_INSERT_SITES[site].items():
+            cols = members[entity]["cols"]
+            if cols[site - 1] == "-" or cols[site] == "-":
+                raise ValueError(
+                    f"{entity}: an insertion after column {site} needs both sides aligned"
+                )
+            weights = np.array(_FAM_LOOP_WEIGHTS) / sum(_FAM_LOOP_WEIGHTS)
+            letters = rng.choice(list(_FAM_LOOP_LETTERS), size=length, p=weights)
+            members[entity]["inserts"][site] = "".join(str(c) for c in letters)
+    for family, (_, carriers) in _FAM_EXTRA.items():
+        for entity, (end, length) in carriers.items():
+            if end == "N":
+                members[entity]["n_ext"] = length
+    for member in members.values():
+        number = member["n_ext"]
+        for column in range(1, len(member["cols"]) + 1):
+            if member["cols"][column - 1] == "-":
+                continue
+            number += 1
+            member["numbers"][("m", column)] = number
+            for k in range(len(member["inserts"].get(column, ""))):
+                number += 1
+                member["numbers"][("i", column, k)] = number
+        member["body_end"] = number
+    return members
+
+
+def _fam_keys(span: tuple[int, int], members: dict[str, dict]) -> list[tuple]:
+    """Alignment columns of a span: every MSA column, then the insert columns after it."""
+    first, last = span
+    keys: list[tuple] = []
+    for column in range(first, last + 1):
+        keys.append(("m", column))
+        if column < last:
+            width = max((len(m["inserts"].get(column, "")) for m in members.values()), default=0)
+            keys += [("i", column, k) for k in range(width)]
+    return keys
+
+
+def _fam_raw_row(member: dict, keys: list[tuple]) -> str:
+    out = []
+    for key in keys:
+        if key[0] == "m":
+            out.append(member["cols"][key[1] - 1])
+        else:
+            inserted = member["inserts"].get(key[1], "")
+            out.append(inserted[key[2]] if key[2] < len(inserted) else "-")
+    return "".join(out)
+
+
+def _fam_estimate(
+    name: str,
+    desc: str,
+    aln: dict[str, str],
+    keys: list[tuple],
+    structure: dict[int, str],
+) -> tuple[HmmModel, list[bool], list[int]]:
+    """Estimate a profile HMM from an alignment (see the block comment)."""
+    names = list(aln)
+    n_seq = len(names)
+    width = len(keys)
+    letters = {a: i for i, a in enumerate(AMINO_LETTERS)}
+
+    bounds: dict[str, tuple[int, int]] = {}
+    fragment: dict[str, bool] = {}
+    for seq, row in aln.items():
+        residues = [i for i, c in enumerate(row) if c != "-"]
+        bounds[seq] = (residues[0], residues[-1])
+        fragment[seq] = (residues[-1] - residues[0] + 1) / width < 0.5
+
+    def present(seq: str, i: int) -> bool:
+        return not fragment[seq] or bounds[seq][0] <= i <= bounds[seq][1]
+
+    is_match = []
+    for i in range(width):
+        seen = [s for s in names if present(s, i)]
+        gaps = sum(1 for s in seen if aln[s][i] == "-")
+        is_match.append(bool(seen) and gaps / len(seen) < 0.5)
+    match_cols = [i for i, flag in enumerate(is_match) if flag]
+    m = len(match_cols)
+
+    # Henikoff position-based weights over the match columns.
+    weight = np.zeros(n_seq)
+    for i in match_cols:
+        chars = [aln[s][i] if present(s, i) and aln[s][i] in letters else None for s in names]
+        kinds = {c for c in chars if c}
+        for index, char in enumerate(chars):
+            if char:
+                weight[index] += 1.0 / (len(kinds) * chars.count(char))
+    weight = weight / weight.sum() * n_seq
+
+    counts = np.zeros((m, len(AMINO_LETTERS)))
+    for k, i in enumerate(match_cols):
+        for index, seq in enumerate(names):
+            char = aln[seq][i]
+            if present(seq, i) and char in letters:
+                counts[k, letters[char]] += weight[index]
+
+    # Effective number of sequences: the single-linkage clusters at 80% identity.
+    parent = list(range(n_seq))
+
+    def root(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for a in range(n_seq):
+        for b in range(a + 1, n_seq):
+            pairs = [
+                (aln[names[a]][i], aln[names[b]][i])
+                for i in match_cols
+                if present(names[a], i) and present(names[b], i)
+            ]
+            pairs = [(x, y) for x, y in pairs if x in letters and y in letters]
+            if len(pairs) >= _FAM_MIN_STATES and sum(x == y for x, y in pairs) / len(pairs) >= 0.8:
+                parent[root(a)] = root(b)
+    effn = float(len({root(x) for x in range(n_seq)}))
+    scale = effn / n_seq
+    scaled = counts * scale
+    totals = scaled.sum(axis=1, keepdims=True)
+    match_emissions = (scaled + _FAM_PSEUDO_EMISSION * _FAM_BACKGROUND) / (
+        totals + _FAM_PSEUDO_EMISSION
+    )
+
+    # Transition counts along each row's path.
+    mm, mi, md, im, ii, dm, dd = range(7)
+    trans = np.zeros((m + 1, 7))
+    for index, seq in enumerate(names):
+        state: list[str | None] = [None] * (m + 2)
+        for k, i in enumerate(match_cols, start=1):
+            if present(seq, i):
+                state[k] = "D" if aln[seq][i] == "-" else "M"
+        inserted = [0] * (m + 1)
+        before = 0
+        for i in range(width):
+            if is_match[i]:
+                before += 1
+            elif aln[seq][i] != "-":
+                inserted[before] += 1
+        w = weight[index] * scale
+        for k in range(m):
+            source = "B" if k == 0 else state[k]
+            target = state[k + 1]
+            if source is None or target is None:
+                continue
+            if inserted[k]:
+                if source in "BM" and target == "M":
+                    trans[k, mi] += w
+                    trans[k, ii] += w * (inserted[k] - 1)
+                    trans[k, im] += w
+                continue
+            if source in "BM":
+                trans[k, mm if target == "M" else md] += w
+            else:
+                trans[k, dm if target == "M" else dd] += w
+    prior_m, prior_i, prior_d = (1.8, 0.1, 0.1), (1.2, 0.8), (1.2, 0.8)
+    transitions = []
+    for k in range(m + 1):
+        row = trans[k]
+        pm = np.array(prior_m) + row[[mm, mi, md]]
+        pi = np.array(prior_i) + row[[im, ii]]
+        pd = np.array(prior_d) + row[[dm, dd]]
+        pm, pi, pd = pm / pm.sum(), pi / pi.sum(), pd / pd.sum()
+        if k == 0:  # node 0 is B: it has no delete state of its own
+            pd = np.array([1.0, 0.0])
+        if k == m:  # the last node leaves for the end state
+            pm, pi, pd = np.array([1.0, 0.0, 0.0]), np.array([1.0, 0.0]), np.array([1.0, 0.0])
+        transitions.append([pm[0], pm[1], pm[2], pi[0], pi[1], pd[0], pd[1]])
+
+    consensus = []
+    for row in match_emissions:
+        best = int(np.argmax(row))
+        letter = AMINO_LETTERS[best]
+        consensus.append(letter.upper() if row[best] >= 0.5 else letter.lower())
+    ss_cons: list[str | None] = []
+    for i in match_cols:
+        key = keys[i]
+        ss_cons.append(structure.get(key[1]) if key[0] == "m" else None)
+    model = HmmModel(
+        name=name,
+        acc=_FAM_ACCESSIONS[name],
+        desc=desc,
+        length=m,
+        alphabet=tuple(AMINO_LETTERS),
+        match_emissions=[[float(v) for v in row] for row in match_emissions],
+        insert_emissions=[[float(v) for v in _FAM_BACKGROUND] for _ in range(m + 1)],
+        transitions=[[float(v) for v in row] for row in transitions],
+        map_columns=[i + 1 for i in match_cols],
+        consensus=consensus,
+        rf=["x"] * m,
+        cs=ss_cons,
+        nseq=n_seq,
+        effn=effn,
+        compo=[float(v) for v in match_emissions.mean(axis=0)],
+    )
+    return model, is_match, match_cols
+
+
+def _fam_stockholm(
+    name: str,
+    desc: str,
+    aln: dict[str, str],
+    ranges: dict[str, tuple[int, int]],
+    is_match: list[bool],
+    ss_cons: str,
+) -> str:
+    """One hmmalign-shaped Stockholm record: match columns upper case or '-',
+    inserts lower case or '.', and the #=GC RF line (x on a match column)."""
+
+    def render(row: str) -> str:
+        return "".join(
+            c if flag else (c.lower() if c != "-" else ".")
+            for c, flag in zip(row, is_match, strict=True)
+        )
+
+    labels = {seq: f"{seq}/{ranges[seq][0]}-{ranges[seq][1]}" for seq in aln}
+    pad = max(max(len(v) for v in labels.values()), len("#=GC SS_cons")) + 2
+    lines = [
+        "# STOCKHOLM 1.0",
+        f"#=GF ID   {name}",
+        f"#=GF DE   {desc}",
+        "#=GF AU   depictio showcase fixture script (shaped like hmmalign output)",
+        "",
+    ]
+    lines += [f"{labels[seq]:<{pad}}{render(row)}" for seq, row in aln.items()]
+    lines.append(f"{'#=GC SS_cons':<{pad}}{ss_cons}")
+    lines.append(f"{'#=GC RF':<{pad}}" + "".join("x" if flag else "." for flag in is_match))
+    lines.append("//")
+    return "\n".join(lines) + "\n"
+
+
+def _fam_scores(strength: float) -> dict[str, float]:
+    """Synthetic domain statistics, all monotone in ``strength`` (identity x coverage)."""
+    dom_score = round(12.0 + 78.0 * strength, 1)
+    seq_score = round(dom_score + 0.4, 1)
+    return {
+        "seq_evalue": float(f"{_FAM_DB_SIZE * 2.0 ** (-seq_score):.3g}"),
+        "seq_score": seq_score,
+        "c_evalue": float(f"{_FAM_DOM_Z * 2.0 ** (-dom_score):.3g}"),
+        "i_evalue": float(f"{_FAM_DB_SIZE * 2.0 ** (-dom_score):.3g}"),
+        "dom_score": dom_score,
+        "dom_bias": round(0.1 + 1.4 * (1.0 - strength) ** 2, 1),
+        "acc": round(0.7 + 0.28 * strength**0.5, 2),
+    }
+
+
+def _fam_extra_domains(members: dict[str, dict]) -> dict[str, list[dict]]:
+    """Synthetic OtherFam domains placed in the extension of the carrying members."""
+    rng = np.random.default_rng([_FAM_SEED, 2])
+    domains: dict[str, list[dict]] = {}
+    for family, (hmm_length, carriers) in _FAM_EXTRA.items():
+        for entity, (end, length) in carriers.items():
+            member = members[entity]
+            hmm_from = 1 + int(rng.integers(0, 3))
+            hmm_to = hmm_length - int(rng.integers(0, 4))
+            span = (hmm_to - hmm_from + 1) + int(rng.integers(-2, 5))
+            if end == "N":
+                ali_from = 3 + int(rng.integers(0, 4))
+                ali_to = ali_from + span - 1
+                if ali_to > length - 3:
+                    raise ValueError(f"{entity}: {family} does not fit in {length} residues")
+            else:
+                ali_from = member["body_end"] + 4 + int(rng.integers(0, 6))
+                ali_to = ali_from + span - 1
+                member["c_ext"] = ali_to + 3 + int(rng.integers(0, 7)) - member["body_end"]
+            strength = float(rng.uniform(0.55, 0.95))
+            domains.setdefault(entity, []).append(
+                {
+                    "label": family,
+                    "source": _FAM_SOURCE_SYNTHETIC,
+                    "description": (
+                        f"Synthetic family {family[-1]} with no HMM in the library, "
+                        "there so the architecture view has more than one architecture"
+                    ),
+                    "hmm_length": hmm_length,
+                    "hmm_from": hmm_from,
+                    "hmm_to": hmm_to,
+                    "ali_from": ali_from,
+                    "ali_to": ali_to,
+                    "strength": strength,
+                }
+            )
+    return domains
+
+
+def generate_protein_family_demo() -> None:
+    """Write the protein family and structure confidence fixtures (see the block comment)."""
+    msa = pl.read_csv(OUT / "protein_msa_demo.tsv", separator="\t")
+    residues = pl.read_csv(OUT / "protein_residues_demo.tsv", separator="\t")
+    structure_ss = dict(
+        zip(residues["position"].to_list(), residues["secondary_structure"].to_list(), strict=True)
+    )
+    members = _fam_members(msa)
+
+    # --- the two profile HMMs and their alignments --------------------------
+    models: dict[str, HmmModel] = {}
+    stockholm: dict[str, str] = {}
+    domains: dict[str, list[dict]] = {}
+    profile_frames = []
+    for name, span in _FAM_SPANS.items():
+        keys = _fam_keys(span, members)
+        aln = {}
+        for entity in sorted(members, key=_fam_entity_order):
+            row = _fam_raw_row(members[entity], keys)
+            if (
+                sum(1 for key, c in zip(keys, row, strict=True) if key[0] == "m" and c != "-")
+                >= _FAM_MIN_STATES
+            ):
+                aln[entity] = row
+        desc = (
+            f"Demo family over residues {span[0]} to {span[1]} of {_PROTEIN_ENTITY}, "
+            "estimated by the showcase fixture script, not hmmbuild"
+        )
+        model, is_match, match_cols = _fam_estimate(name, desc, aln, keys, structure_ss)
+        models[name] = model
+
+        ranges = {}
+        for entity in aln:
+            numbers = [
+                members[entity]["numbers"][key]
+                for key, c in zip(keys, aln[entity], strict=True)
+                if c != "-"
+            ]
+            ranges[entity] = (min(numbers), max(numbers))
+        ss_cons = "".join(
+            (structure_ss.get(key[1], "C") if key[0] == "m" else ".") if flag else "."
+            for key, flag in zip(keys, is_match, strict=True)
+        )
+        text = _fam_stockholm(name, desc, aln, ranges, is_match, ss_cons)
+        stockholm[name] = text
+        positions = reference_positions_from_stockholm(text, _PROTEIN_ENTITY, model.length)
+        expected = [keys[i][1] for i in match_cols]
+        if positions != expected:
+            raise ValueError(f"{name}: Stockholm positions disagree with the alignment columns")
+        profile_frames.append(profile_frame(model, entity=_PROTEIN_ENTITY, positions=positions))
+
+        # Domain hits of every member that aligns to the model.
+        reference = aln[_PROTEIN_ENTITY]
+        for entity, row in aln.items():
+            aligned = [(state, i) for state, i in enumerate(match_cols, start=1) if row[i] != "-"]
+            if len(aligned) < _FAM_MIN_STATES:
+                continue
+            identity = sum(1 for _, i in aligned if row[i] == reference[i]) / len(aligned)
+            hmm_from, hmm_to = aligned[0][0], aligned[-1][0]
+            coverage = (hmm_to - hmm_from + 1) / model.length
+            domains.setdefault(entity, []).append(
+                {
+                    "label": name,
+                    "source": _FAM_SOURCE_LIBRARY,
+                    "description": (
+                        f"Demo family {name[-1]}, estimated from the demo alignment over "
+                        f"residues {span[0]} to {span[1]}"
+                    ),
+                    "hmm_length": model.length,
+                    "hmm_from": hmm_from,
+                    "hmm_to": hmm_to,
+                    "ali_from": members[entity]["numbers"][keys[aligned[0][1]]],
+                    "ali_to": members[entity]["numbers"][keys[aligned[-1][1]]],
+                    "strength": identity * coverage,
+                }
+            )
+
+    # HMMER pads its `HMM` header line; trailing blanks carry nothing in the format
+    # and the whitespace hook would strip them, so they are left out here.
+    library = "".join(format_hmm(m) for m in models.values())
+    (OUT / "protein_family_demo.hmm").write_text(
+        "".join(line.rstrip() + "\n" for line in library.splitlines())
+    )
+    print(f"wrote protein_family_demo.hmm: {len(models)} models")
+    (OUT / "protein_family_demo.sto").write_text("".join(stockholm.values()))
+    print(f"wrote protein_family_demo.sto: {len(stockholm)} alignments")
+    # The files must read back as what was estimated.
+    reread = parse_hmm((OUT / "protein_family_demo.hmm").read_text())
+    assert [m.name for m in reread] == list(models)
+    assert [m.length for m in reread] == [m.length for m in models.values()]
+
+    profile = pl.concat(profile_frames).with_columns(
+        pl.col("emission").round(5),
+        pl.col("height_bits").round(4),
+        pl.col("info_bits").round(4),
+        pl.col("insert_prob").round(5),
+        pl.col("insert_length").round(3),
+        pl.col("occupancy").round(5),
+        pl.col("delete_prob").round(5),
+    )
+    profile.write_csv(OUT / "protein_family_hmm_demo.tsv", separator="\t")
+    print(f"wrote protein_family_hmm_demo.tsv: {profile.height} rows")
+
+    # --- the hits table ------------------------------------------------------
+    extra = _fam_extra_domains(members)
+    for entity, found in extra.items():
+        domains.setdefault(entity, []).extend(found)
+    rng = np.random.default_rng([_FAM_SEED, 3])
+    hit_rows: list[dict] = []
+    for entity in sorted(domains, key=_fam_entity_order):
+        member = members[entity]
+        protein_length = member["body_end"] + member.get("c_ext", 0)
+        found = sorted(domains[entity], key=lambda d: d["ali_from"])
+        for d in found:
+            d["env_from"] = max(1, d["ali_from"] - int(rng.integers(0, 4)))
+            d["env_to"] = min(protein_length, d["ali_to"] + int(rng.integers(0, 4)))
+        for left, right in zip(found, found[1:], strict=False):
+            left["env_to"] = min(left["env_to"], right["ali_from"] - 1)
+            right["env_from"] = max(right["env_from"], left["ali_to"] + 1)
+        for d in found:
+            hit_rows.append(
+                {
+                    "entity": entity,
+                    "sample": _FAM_SAMPLE,
+                    "source": d["source"],
+                    "label": d["label"],
+                    "accession": _FAM_ACCESSIONS[d["label"]],
+                    "description": d["description"],
+                    "start": d["env_from"],
+                    "end": d["env_to"],
+                    "protein_length": protein_length,
+                    "hmm_length": d["hmm_length"],
+                    "domain_index": 1,
+                    "domain_count": 1,
+                    **_fam_scores(d["strength"]),
+                    "hmm_from": d["hmm_from"],
+                    "hmm_to": d["hmm_to"],
+                    "ali_from": d["ali_from"],
+                    "ali_to": d["ali_to"],
+                    "hmm_coverage": round((d["hmm_to"] - d["hmm_from"] + 1) / d["hmm_length"], 3),
+                }
+            )
+    hits_schema = {
+        "entity": pl.Utf8,
+        "sample": pl.Utf8,
+        "source": pl.Utf8,
+        "label": pl.Utf8,
+        "accession": pl.Utf8,
+        "description": pl.Utf8,
+        "start": pl.Int64,
+        "end": pl.Int64,
+        "protein_length": pl.Int64,
+        "hmm_length": pl.Int64,
+        "domain_index": pl.Int64,
+        "domain_count": pl.Int64,
+        "seq_evalue": pl.Float64,
+        "seq_score": pl.Float64,
+        "c_evalue": pl.Float64,
+        "i_evalue": pl.Float64,
+        "dom_score": pl.Float64,
+        "dom_bias": pl.Float64,
+        "hmm_from": pl.Int64,
+        "hmm_to": pl.Int64,
+        "ali_from": pl.Int64,
+        "ali_to": pl.Int64,
+        "acc": pl.Float64,
+        "hmm_coverage": pl.Float64,
+        "neg_log10_evalue": pl.Float64,
+    }
+    hits = pl.DataFrame(
+        [{**row, "neg_log10_evalue": round(-math.log10(row["i_evalue"]), 2)} for row in hit_rows],
+        schema=hits_schema,
+    )
+    hits.write_csv(OUT / "protein_family_hits_demo.tsv", separator="\t")
+    architectures = {
+        tuple(g["label"].to_list())
+        for _, g in hits.sort("start").group_by("entity", maintain_order=True)
+    }
+    print(
+        f"wrote protein_family_hits_demo.tsv: {hits.height} rows, "
+        f"{hits['entity'].n_unique()} proteins, {len(architectures)} architectures"
+    )
+
+    # --- secondary structure -------------------------------------------------
+    positions = residues["position"].to_list()
+    letters = residues["residue"].to_list()
+    states = [structure_ss[p] for p in positions]
+    n = len(positions)
+    rng = np.random.default_rng([_FAM_SEED, 4])
+    order = {"C": 0, "H": 1, "E": 2}  # the column order of a .ss2 line is P(C) P(H) P(E)
+    onehot = np.zeros((n, 3))
+    for i, s in enumerate(states):
+        onehot[i, order[s]] = 1.0
+    kernel = np.array([0.1, 0.2, 0.4, 0.2, 0.1])
+    blurred = np.zeros_like(onehot)
+    for i in range(n):
+        lo, hi = max(0, i - 2), min(n, i + 3)
+        k = kernel[lo - i + 2 : hi - i + 2]
+        blurred[i] = (onehot[lo:hi] * k[:, None]).sum(axis=0) / k.sum()
+    probs = np.zeros_like(blurred)
+    for i in range(n):
+        noise = rng.dirichlet([1.0, 1.0, 1.0])
+        mix = 0.05 + 0.25 * rng.random()
+        row = (1 - mix) * blurred[i] + mix * noise
+        # Away from the deliberate disagreements the call is the structure's.
+        own = order[states[i]]
+        others = [j for j in range(3) if j != own]
+        top = max(row[j] for j in others)
+        if row[own] < top + 0.04:
+            deficit = top + 0.04 - row[own]
+            row[own] += deficit
+            row[max(others, key=lambda j: row[j])] -= deficit
+        probs[i] = row / row.sum()
+    # Disagreement 1: the last three residues of the longest helix are called coil.
+    # Disagreement 2: the shortest coil of 3 or 4 between two strands is called strand.
+    runs = _runs(states)
+    helix = max((r for r in runs if r[2] == "H"), key=lambda r: r[1] - r[0])
+    for i in range(helix[1] - 3, helix[1]):
+        probs[i] = [0.5 + 0.03 * (i - helix[1] + 3), 0.4 - 0.03 * (i - helix[1] + 3), 0.1]
+    bridges = [
+        r
+        for index, r in enumerate(runs)
+        if r[2] == "C"
+        and 3 <= r[1] - r[0] <= 4
+        and 0 < index < len(runs) - 1
+        and runs[index - 1][2] == "E"
+        and runs[index + 1][2] == "E"
+    ]
+    bridge = min(bridges, key=lambda r: r[1] - r[0])
+    for i in range(bridge[0], bridge[1]):
+        probs[i] = [0.4, 0.1, 0.5]
+    disagreements = [
+        (helix[1] - 3 + 1, helix[1], "H", "C"),
+        (bridge[0] + 1, bridge[1], "C", "E"),
+    ]
+    rounded = np.round(probs, 3)
+    called = {0: "C", 1: "H", 2: "E"}
+    lines = [
+        "# PSIPRED VFORMAT (S4PRED-like: synthetic, written by the showcase fixture script)",
+        "",
+    ]
+    for i in range(n):
+        p_coil, p_helix, p_strand = rounded[i]
+        lines.append(
+            f"{positions[i]:>4} {letters[i]} {called[int(np.argmax(rounded[i]))]}"
+            f"   {p_coil:.3f}  {p_helix:.3f}  {p_strand:.3f}"
+        )
+    (OUT / f"{_PROTEIN_ENTITY}.ss2").write_text("\n".join(lines) + "\n")
+    predicted = parse_ss2((OUT / f"{_PROTEIN_ENTITY}.ss2").read_text(), _PROTEIN_ENTITY)
+    differing = [
+        (p, structure_ss[p], c)
+        for p, c in zip(
+            predicted["position"].to_list(), predicted["ss_code"].to_list(), strict=True
+        )
+        if structure_ss[p] != c
+    ]
+    print(
+        f"wrote {_PROTEIN_ENTITY}.ss2: {predicted.height} residues, "
+        f"{len(differing)} differ from the structure's call {disagreements}"
+    )
+    expected_differences = {
+        p: new for first, last, _, new in disagreements for p in range(first, last + 1)
+    }
+    if {p: c for p, _, c in differing} != expected_differences:
+        raise ValueError(f"unexpected disagreements: {differing}")
+    ss_table = pl.concat(
+        [
+            predicted.select(
+                "entity",
+                "position",
+                pl.lit("S4PRED").alias("ss_source"),
+                "ss_code",
+                pl.col("value").alias("ss_probability"),
+                "p_helix",
+                "p_strand",
+                "p_coil",
+            ),
+            pl.DataFrame(
+                {
+                    "entity": [_PROTEIN_ENTITY] * n,
+                    "position": positions,
+                    "ss_source": ["structure"] * n,
+                    "ss_code": states,
+                    "ss_probability": [None] * n,
+                    "p_helix": [None] * n,
+                    "p_strand": [None] * n,
+                    "p_coil": [None] * n,
+                },
+                schema={
+                    "entity": pl.Utf8,
+                    "position": pl.Int64,
+                    "ss_source": pl.Utf8,
+                    "ss_code": pl.Utf8,
+                    "ss_probability": pl.Float64,
+                    "p_helix": pl.Float64,
+                    "p_strand": pl.Float64,
+                    "p_coil": pl.Float64,
+                },
+            ),
+        ]
+    )
+    ss_table.write_csv(OUT / "protein_ss_demo.tsv", separator="\t")
+    print(f"wrote protein_ss_demo.tsv: {ss_table.height} rows")
+
+    # --- predicted aligned error ---------------------------------------------
+    plddt = np.array(residues["plddt"].to_list())
+    domain_spans = pl.read_csv(OUT / "protein_domains_demo.tsv", separator="\t").rows()
+    segment = np.zeros(n, dtype=int)  # 0 = outside every confident segment
+    for index, (_, first, last, _, _) in enumerate(domain_spans, start=1):
+        segment[first - 1 : last] = index
+    # Typical error between two segments, by segment pair (0 is the low-confidence rest).
+    packing = {(1, 2): 6.5, (2, 3): 11.0, (1, 3): 13.0}
+    rng = np.random.default_rng([_FAM_SEED, 5])
+    index_i = np.arange(n)[:, None]
+    index_j = np.arange(n)[None, :]
+    separation = np.abs(index_i - index_j)
+    base = np.zeros((n, n))
+    for i in range(n):
+        for j in range(n):
+            a, b = int(segment[i]), int(segment[j])
+            if a != 0 and a == b:
+                base[i, j] = 1.2 + 0.05 * min(separation[i, j], 40)
+            elif a != 0 and b != 0:
+                base[i, j] = packing[(min(a, b), max(a, b))]
+            else:
+                base[i, j] = 5.0 + 0.08 * min(separation[i, j], 60)
+    deficit_scored = np.clip(85.0 - plddt, 0.0, None)[None, :]
+    deficit_aligned = np.clip(85.0 - plddt, 0.0, None)[:, None]
+    noise = rng.normal(0.0, 1.0, (n, n))
+    symmetric = (noise + noise.T) / math.sqrt(2.0)
+    asymmetric = rng.normal(0.0, 1.0, (n, n))
+    sigma = 0.35 + 0.05 * base
+    pae = (
+        base
+        + 0.30 * deficit_scored
+        + 0.12 * deficit_aligned
+        + sigma * (0.9 * symmetric + 0.3 * asymmetric)
+    )
+    pae = np.clip(np.round(pae, 2), 0.0, 31.75)
+    np.fill_diagonal(pae, np.round(0.3 + 0.2 * rng.random(n), 2))
+    matrix = pae.tolist()
+    (OUT / f"{_PROTEIN_ENTITY}.pae.tsv").write_text(write_pae_tsv(matrix))
+    check = read_pae((OUT / f"{_PROTEIN_ENTITY}.pae.tsv").read_text())
+    assert len(check) == n and all(len(row) == n for row in check)
+    print(
+        f"wrote {_PROTEIN_ENTITY}.pae.tsv: {n} x {n}, "
+        f"mean {pae.mean():.1f}, within-segment mean {pae[(segment[:, None] == segment[None, :]) & (segment[:, None] > 0)].mean():.1f}"
+    )
+
+
+generate_protein_family_demo()

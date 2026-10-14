@@ -248,6 +248,13 @@ STATIC_IDS = {
             "protein_msa_demo": "646b0f3c1e4a2d7f8e5b8dd3",
             "protein_variants_demo": "646b0f3c1e4a2d7f8e5b8dd4",
             "protein_domains_demo": "646b0f3c1e4a2d7f8e5b8dd5",
+            # Protein families and structure confidence tabs (the 8dex block): the
+            # profile HMMs, the domain hits, the predicted aligned error file and
+            # the secondary-structure calls. 8de0 and 8de5 are the two dashboards.
+            "protein_family_hmm_demo": "646b0f3c1e4a2d7f8e5b8de1",
+            "protein_family_hits_demo": "646b0f3c1e4a2d7f8e5b8de2",
+            "protein_pae_demo": "646b0f3c1e4a2d7f8e5b8de3",
+            "protein_ss_demo": "646b0f3c1e4a2d7f8e5b8de4",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
@@ -302,6 +309,10 @@ STATIC_IDS = {
             # The protein structure tab opens the 8ddx block; 8dd1 to 8dd5 are
             # its collections.
             "advanced_viz_protein_structure": "646b0f3c1e4a2d7f8e5b8dd0",
+            # The two tabs after it open the 8dex block; 8de1 to 8de4 are their
+            # collections.
+            "advanced_viz_protein_families": "646b0f3c1e4a2d7f8e5b8de0",
+            "advanced_viz_protein_quality": "646b0f3c1e4a2d7f8e5b8de5",
             "advanced_viz_benchmark_pr": "646b0f3c1e4a2d7f8e5b8d62",
             "advanced_viz_benchmark_confusion": "646b0f3c1e4a2d7f8e5b8d63",
             "advanced_viz_benchmark_ci": "646b0f3c1e4a2d7f8e5b8d64",

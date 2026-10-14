@@ -446,6 +446,8 @@ async def create_initial_dashboards(
                 "parallel_coordinates",
                 "locus_section",
                 "protein_structure",
+                "protein_families",
+                "protein_quality",
                 "benchmark_pr",
                 "benchmark_confusion",
                 "benchmark_ci",
