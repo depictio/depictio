@@ -79,6 +79,60 @@ class TestGroupSync:
         assert len(group.users_ids) == 1
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("configured,sent", [("groups", "Groups"), ("Groups", "groups")])
+    async def test_attribute_name_matches_ignoring_case(self, monkeypatch, configured, sent):
+        await _setup_db()
+        monkeypatch.setattr(settings.auth, "saml_attribute_groups", configured)
+        user = await _create_user()
+
+        await sync_sso_user(user, {sent: ["Lab Alpha"]})
+
+        group = await GroupBeanie.find_one({"name": "Lab Alpha"})
+        assert group is not None
+        assert str(user.id) in _member_ids(group)
+
+    @pytest.mark.asyncio
+    async def test_an_empty_attribute_name_is_not_configured(self, monkeypatch):
+        """Helm passes "" for an unset mapping: it must skip the sync, not wipe groups."""
+        await _setup_db()
+        monkeypatch.setattr(settings.auth, "saml_attribute_groups", "")
+        user = await _create_user()
+        group = GroupBeanie(name="Lab Alpha", sso_managed=True, users_ids=[user.id])
+        await group.save()
+
+        await sync_sso_user(user, {"groups": ["Other"]})
+
+        kept = await GroupBeanie.find_one({"name": "Lab Alpha"})
+        assert kept is not None
+        assert str(user.id) in _member_ids(kept)
+        assert await GroupBeanie.find_one({"name": "Other"}) is None
+
+    def test_empty_strings_from_helm_are_coerced_to_unset(self):
+        from depictio.api.v1.configs.settings_models import AuthConfig
+
+        cfg = AuthConfig(
+            saml_attribute_groups="",
+            saml_attribute_title="",
+            saml_attribute_display_name="",
+            saml_attribute_login="",
+        )
+        assert cfg.saml_attribute_groups is None
+        assert cfg.saml_attribute_title is None
+        assert cfg.saml_attribute_display_name is None
+        assert cfg.saml_attribute_login is None
+
+    @pytest.mark.asyncio
+    async def test_exact_attribute_name_wins_over_a_case_variant(self, monkeypatch):
+        await _setup_db()
+        monkeypatch.setattr(settings.auth, "saml_attribute_groups", "groups")
+        user = await _create_user()
+
+        await sync_sso_user(user, {"Groups": ["Wrong"], "groups": ["Right"]})
+
+        assert await GroupBeanie.find_one({"name": "Right"}) is not None
+        assert await GroupBeanie.find_one({"name": "Wrong"}) is None
+
+    @pytest.mark.asyncio
     async def test_adds_user_to_existing_sso_group(self, monkeypatch):
         await _setup_db()
         monkeypatch.setattr(settings.auth, "saml_attribute_groups", "memberOf")

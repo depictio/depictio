@@ -573,6 +573,10 @@ class AuthConfig(BaseSettings):
         "saml_sp_base_url",
         "saml_attribute_email",
         "saml_attribute_username",
+        "saml_attribute_groups",
+        "saml_attribute_title",
+        "saml_attribute_display_name",
+        "saml_attribute_login",
         mode="before",
     )
     @classmethod

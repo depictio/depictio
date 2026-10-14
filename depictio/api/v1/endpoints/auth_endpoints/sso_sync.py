@@ -34,6 +34,9 @@ async def sync_sso_user(user: UserBeanie, attributes: dict[str, list[str]] | Non
     designated by email before the account existed is promoted here, on the
     login that first asserts the group.
 
+    Attribute names are matched exactly first, then ignoring case (``Groups`` and
+    ``groups`` are the same attribute to an IdP and to this sync).
+
     Group sync (``saml_attribute_groups``):
         The attribute's value list is taken verbatim as group names (whitespace
         stripped, empties dropped) — IdPs may send full DNs or plain names; no
@@ -71,15 +74,34 @@ async def sync_sso_user(user: UserBeanie, attributes: dict[str, list[str]] | Non
     await claim_pending_pi_groups(user)
 
 
+def _attribute_values(attributes: dict[str, list[str]], name: str) -> list[str] | None:
+    """The values of the assertion attribute called ``name``, or None if absent.
+
+    The exact name wins; otherwise the match ignores case, because an IdP may
+    send ``Groups`` where a deployment configured ``groups`` (or the reverse)
+    and a mismatch would otherwise read as an empty list, which removes the
+    user from every SSO-managed group.
+    """
+    if name in attributes:
+        return attributes[name]
+    folded = name.casefold()
+    for key, values in attributes.items():
+        if key.casefold() == folded:
+            return values
+    return None
+
+
 async def _sync_groups(user: UserBeanie, attributes: dict[str, list[str]]) -> None:
     """Mirror the assertion's group list onto sso_managed GroupBeanie docs."""
     attr_name = settings.auth.saml_attribute_groups
-    if attr_name is None:
+    if not attr_name:
         return
 
     user_id_str = str(user.id)
     # Absent attribute => empty list => user leaves all sso_managed groups.
-    incoming_names = [v.strip() for v in attributes.get(attr_name, []) if v and v.strip()]
+    incoming_names = [
+        v.strip() for v in (_attribute_values(attributes, attr_name) or []) if v and v.strip()
+    ]
     incoming_set = set(incoming_names)
 
     # Ensure membership in every asserted group, creating missing ones.
@@ -127,9 +149,9 @@ async def _sync_profile(user: UserBeanie, attributes: dict[str, list[str]]) -> N
 
     changed = False
     for attr_name, field in field_mappings:
-        if attr_name is None:
+        if not attr_name:
             continue
-        values = attributes.get(attr_name)
+        values = _attribute_values(attributes, attr_name)
         if not values:
             continue
         value = values[0].strip()

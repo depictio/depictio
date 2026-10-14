@@ -240,6 +240,26 @@ def _pyarrow_to_polars_dtype_name(pa_type) -> str:
     return str(pa_type)
 
 
+def _project_with_dc_access(dc_oid: ObjectId, current_user, required: str) -> dict:
+    """The project holding this data collection, if the user holds ``required`` on it.
+
+    Goes through the permissions chokepoint, so a group role counts and a sysadmin
+    passes. A missing data collection and a forbidden one answer the same 404, as
+    the three write endpoints below always have, so the response does not tell a
+    caller which data collections exist.
+
+    The previous predicate was owners-or-direct-viewers: an editor was refused
+    while a viewer could rename or delete.
+    """
+    project = projects_collection.find_one({"workflows.data_collections._id": dc_oid})
+    group_ids = (
+        [] if getattr(current_user, "is_admin", False) else get_user_group_ids(current_user.id)
+    )
+    if not project or not has_permission(project, current_user, required, group_ids):
+        raise HTTPException(status_code=404, detail="Data collection not found or access denied")
+    return project
+
+
 async def _delete_data_collection_by_id(data_collection_id: str, current_user) -> dict:
     """Core function to delete a data collection by its ID.
 
@@ -258,19 +278,9 @@ async def _delete_data_collection_by_id(data_collection_id: str, current_user) -
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # Find the project containing this data collection
-    project = projects_collection.find_one(
-        {
-            "workflows.data_collections._id": data_collection_oid,
-            "$or": [
-                {"permissions.owners._id": current_user.id},
-                {"permissions.viewers._id": current_user.id},
-            ],
-        }
-    )
-
-    if not project:
-        raise HTTPException(status_code=404, detail="Data collection not found or access denied")
+    # Irreversible (the data under the collection's S3 prefix goes with it), so
+    # owner level, like deleting a dashboard or a project.
+    project = _project_with_dc_access(data_collection_oid, current_user, "owner")
 
     # Remove the data collection from the project
     result = projects_collection.update_one(
@@ -317,19 +327,9 @@ async def _update_data_collection_name(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # Find the project containing this data collection
-    project = projects_collection.find_one(
-        {
-            "workflows.data_collections._id": data_collection_oid,
-            "$or": [
-                {"permissions.owners._id": current_user.id},
-                {"permissions.viewers._id": current_user.id},
-            ],
-        }
-    )
-
-    if not project:
-        raise HTTPException(status_code=404, detail="Data collection not found or access denied")
+    # Metadata only and undone by renaming back: editor level, like creating a
+    # data collection or editing a dashboard.
+    project = _project_with_dc_access(data_collection_oid, current_user, "editor")
 
     # Update the data collection name in the project
     result = projects_collection.update_one(
@@ -371,17 +371,15 @@ async def _update_dc_specific_properties(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    project = projects_collection.find_one(
-        {
-            "workflows.data_collections._id": dc_oid,
-            "$or": [
-                {"permissions.owners._id": current_user.id},
-                {"permissions.viewers._id": current_user.id},
-            ],
-        }
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Data collection not found or access denied")
+    # Keys become path segments of the $set below: a dot or a dollar sign would
+    # reach outside the property being named.
+    bad_keys = [k for k in properties if not isinstance(k, str) or not k or "." in k or "$" in k]
+    if bad_keys:
+        raise HTTPException(status_code=400, detail=f"Invalid property name(s): {bad_keys}")
+
+    # Editor level: the MultiQC creation flow runs this with the editor's own
+    # token, and the CLI calls it while processing a collection.
+    project = _project_with_dc_access(dc_oid, current_user, "editor")
 
     # Build $set paths for each property key
     set_fields = {
