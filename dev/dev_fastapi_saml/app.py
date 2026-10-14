@@ -1,4 +1,4 @@
-# app.py - EMBL SAML Integration with FastAPI and Beanie
+# app.py - SAML integration prototype with FastAPI and Beanie
 import json
 import logging
 import os
@@ -63,6 +63,11 @@ class UserCreate(schemas.BaseUserCreate):
 
 # --- Load SAML configuration from environment ---
 IDP_SSO_URL = os.getenv("CMD_SAML_IDPSSOURL")
+# The IdP entityID, e.g. https://sso.example.org/realms/myrealm. Defaults to the SSO URL
+# without its "/protocol/saml" suffix, which is how a Keycloak realm names itself.
+IDP_ENTITY_ID = os.getenv("CMD_SAML_IDPENTITYID") or (
+    IDP_SSO_URL.removesuffix("/protocol/saml") if IDP_SSO_URL else ""
+)
 IDP_CERT_PATH = os.getenv("CMD_SAML_IDPCERT")
 SP_ENTITY_ID = os.getenv("CMD_SAML_ISSUER")
 ATTR_ID = os.getenv("CMD_SAML_ATTRIBUTE_ID")
@@ -102,7 +107,7 @@ saml_settings = {
         "privateKey": "",
     },
     "idp": {
-        "entityId": "https://auth.ktest.embl.de/realms/EMBL-HD",
+        "entityId": IDP_ENTITY_ID,
         "singleSignOnService": {
             "url": IDP_SSO_URL,
             "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
@@ -347,11 +352,11 @@ async def saml_login(request: Request, RelayState: Optional[str] = None):
         <!DOCTYPE html>
         <html>
             <head>
-                <title>Redirecting to EMBL Login</title>
+                <title>Redirecting to the identity provider</title>
                 <meta http-equiv="refresh" content="0;url={login_url}">
             </head>
             <body>
-                <h1>Redirecting to EMBL Login</h1>
+                <h1>Redirecting to the identity provider</h1>
                 <p>If you are not redirected automatically, click <a href="{login_url}">here</a>.</p>
                 <p>Debug info: <pre>{login_url}</pre></p>
             </body>
@@ -580,13 +585,12 @@ async def debug_config():
 # Add a direct test/debug SSO endpoint
 @app.get("/auth/direct-test")
 async def direct_test():
-    """Direct test link to EMBL SSO (for debugging)"""
-    # Build a direct URL to EMBL's SAML endpoint
+    """Direct test link to the identity provider (for debugging)"""
+    # Build a direct URL to the IdP's SAML endpoint
     entity_id = urllib.parse.quote(SP_ENTITY_ID)
     acs_url = urllib.parse.quote(ACS_URL)
 
-    # Direct URL to EMBL's SAML endpoint (using the test domain)
-    direct_url = f"https://auth.ktest.embl.de/realms/EMBL-HD/protocol/saml?client_id={entity_id}&redirect_uri={acs_url}"
+    direct_url = f"{IDP_SSO_URL}?client_id={entity_id}&redirect_uri={acs_url}"
 
     logger.info(f"Direct test URL: {direct_url}")
 
@@ -594,11 +598,11 @@ async def direct_test():
     <!DOCTYPE html>
     <html>
         <head>
-            <title>Direct EMBL SSO Test</title>
+            <title>Direct SSO Test</title>
         </head>
         <body>
-            <h1>Direct EMBL SSO Test</h1>
-            <p>This is a direct link to EMBL's SSO service for testing purposes.</p>
+            <h1>Direct SSO Test</h1>
+            <p>This is a direct link to the identity provider's SSO service for testing purposes.</p>
             <p><a href="{direct_url}">Click here to test direct SSO access</a></p>
             <p>Debug info: <pre>{direct_url}</pre></p>
         </body>
