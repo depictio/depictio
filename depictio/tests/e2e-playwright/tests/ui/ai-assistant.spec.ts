@@ -28,6 +28,23 @@
  *     the routing notice carries the suggestion's rationale. Catalog offers
  *     ("From the catalog", the compose endpoint mocked with one match) land
  *     through the catalog path, on the Design step of the 3-step stepper.
+ *  6. Whole-dashboard generation: the New Dashboard dialog grows a
+ *     "Generate with AI" tab on its own flag (ai_generate_dashboard; absent
+ *     even with `ai` on). A mocked SSE run lists one row per planned
+ *     component with its outcome and hands off to the editor, where a
+ *     dashboard stamped `ai_generation.status = 'draft'` shows the draft
+ *     banner: Promote posts once and clears it; Discard confirms, DELETEs
+ *     and lands on /dashboards. The "draft" is a seeded dashboard whose GET
+ *     is proxied and stamped, so nothing is generated or deleted for real.
+ *  7. Reviewing that draft tile by tile, from the right-hand review panel:
+ *     the panel lists every tile, Keep posts once, moves the banner's
+ *     counter and steps to the next tile, a mocked regenerate stream
+ *     replaces exactly one tile (the replacement comes back under a new
+ *     generation tag, which is what the assertions read off the panel) and
+ *     Promote asks for a confirmation while tiles are still unreviewed. The
+ *     Generate tab's "Previous generations" column lists a project's mocked
+ *     runs, with the counts, the warnings and a link into the draft a run
+ *     saved.
  *
  * The seeded dashboard's collection ids are never hard-coded: the project
  * payload is sniffed as the SPA loads it and the collection the mock
@@ -36,13 +53,21 @@
 
 import type { Locator, Page, Request } from "@playwright/test";
 
-import { expect, test } from "@fixtures/auth";
+import { expect, getAuthMode, test } from "@fixtures/auth";
 
 const STATUS_GLOB = "**/depictio/api/v1/utils/status";
 const COMPONENT_FROM_PROMPT_GLOB = "**/depictio/api/v1/ai/component-from-prompt";
 const SUGGEST_COMPONENTS_GLOB = "**/depictio/api/v1/ai/suggest-components";
 const CATALOG_COMPOSE_GLOB = "**/depictio/api/v1/catalog/project/*/compose";
 const PROJECT_FROM_DASHBOARD_GLOB = "**/depictio/api/v1/projects/get/from_dashboard_id/*";
+const GENERATE_DASHBOARD_GLOB = "**/depictio/api/v1/ai/generate-dashboard";
+const PROMOTE_GENERATED_GLOB = "**/depictio/api/v1/ai/generated-dashboards/*/promote";
+const DASHBOARD_GET_GLOB = "**/depictio/api/v1/dashboards/get/*";
+const REVIEW_GLOB = "**/depictio/api/v1/ai/generated-dashboards/*/review";
+const REGENERATE_COMPONENT_GLOB =
+  "**/depictio/api/v1/ai/generated-dashboards/*/components/*/regenerate";
+const GENERATIONS_GLOB = "**/depictio/api/v1/ai/generations/*";
+const DASHBOARD_DELETE_GLOB = "**/depictio/api/v1/dashboards/delete/*";
 
 /** One data collection of the dashboard's project, as the Describe step's
  *  chips list it and as the routed answer names it. */
@@ -61,12 +86,13 @@ interface Routing {
 }
 
 /** Rewrites the status payload's feature flags, keeping the real
- *  status/version so the header badge stays truthful. */
-async function mockFeatures(page: Page, ai: boolean): Promise<void> {
+ *  status/version so the header badge stays truthful. Whole-dashboard
+ *  generation has its own flag (off by default here, as on the server). */
+async function mockFeatures(page: Page, ai: boolean, generate = false): Promise<void> {
   await page.route(STATUS_GLOB, async (route) => {
     const res = await route.fetch();
     const json = (await res.json()) as Record<string, unknown>;
-    json.features = { ai, ai_user_keys: ai };
+    json.features = { ai, ai_user_keys: ai, ai_generate_dashboard: generate };
     await route.fulfill({ json });
   });
 }
@@ -263,6 +289,142 @@ async function mockCatalogCompose(page: Page, dc: () => Collection | null): Prom
   });
 }
 
+/** One gate's verdict on one tile, as `ai_generation.checks` stores it. */
+interface AICheck {
+  layer: string;
+  status: "passed" | "failed" | "skipped";
+  detail: string;
+}
+
+/** Mirrors AIGenerationInfo, the `ai_generation` block on a dashboard. */
+interface AIGeneration {
+  status: "draft" | "promoted";
+  model: string;
+  prompt: string;
+  generated_at: string;
+  run_id: string;
+  warnings: string[];
+  sections?: { name: string; kind: "filter" | "grid"; rationale: string }[];
+  checks?: { tag: string; attempts: number; repair: string; checks: AICheck[] }[];
+}
+
+/** Proxies GET /dashboards/get/{id} (`route.fetch`) and stamps the real
+ *  payload with an `ai_generation` block, so a seeded dashboard plays a
+ *  fresh AI draft without any generation having run. The promote route is
+ *  mocked alongside and flips the stamped status, so a refetch after Promote
+ *  agrees with the banner having gone. Returns the shared state so a test
+ *  can count the promote calls. */
+async function mockDraftDashboard(page: Page): Promise<{ promoted: boolean; promoteCalls: number }> {
+  const state = { promoted: false, promoteCalls: 0 };
+  await page.route(DASHBOARD_GET_GLOB, async (route) => {
+    const res = await route.fetch();
+    const json = (await res.json()) as Record<string, unknown>;
+    const info: AIGeneration = {
+      status: state.promoted ? "promoted" : "draft",
+      model: "test/canned-model",
+      prompt: "compare body mass across species",
+      generated_at: "2026-09-03T10:00:00+00:00",
+      run_id: "run-canned",
+      warnings: ['Dropped "mass_by_island": no column matched the intent.'],
+    };
+    json.ai_generation = info;
+    await route.fulfill({ json });
+  });
+  await page.route(PROMOTE_GENERATED_GLOB, (route) => {
+    state.promoted = true;
+    state.promoteCalls += 1;
+    const id =
+      route.request().url().match(/generated-dashboards\/([^/]+)\/promote/)?.[1] ?? "";
+    return route.fulfill({ json: { dashboard_id: id, status: "promoted" } });
+  });
+  return state;
+}
+
+/** Body of POST /ai/generate-dashboard (GenerateDashboardRequest). */
+interface GenerateDashboardBody {
+  project_id: string;
+  prompt: string;
+  title: string | null;
+  data_collection_ids: string[];
+  /** Phase one: plan and stop. Phase two sends the approved plan back. */
+  plan_only?: boolean;
+  plan?: unknown;
+}
+
+/** Canned generation run over SSE: a plan with two components, one filled
+ *  clean and one repaired, a budget tick, then the terminal `dashboard`
+ *  event naming `dashboardId()`. That id is an EXISTING dashboard, so the
+ *  hand-off opens a real editor; it is resolved per request so the test can
+ *  learn it before the mock needs it.
+ *
+ *  The route answers both phases off the request body, the way the server
+ *  does: a `plan_only` call stops after the plan, and a call carrying an
+ *  approved `plan` re-emits it and then fills. A call with neither is the
+ *  one-shot flow, so the mock covers the panel whether or not the plan is
+ *  reviewed first. */
+async function mockGenerateDashboard(page: Page, dashboardId: () => string): Promise<void> {
+  await page.route(GENERATE_DASHBOARD_GLOB, (route) => {
+    const id = dashboardId();
+    const plan = JSON.stringify({
+      title: "Penguin morphology",
+      subtitle: "Body mass by species and island",
+      filter_sections: [
+        { name: "Cohort", icon: "mdi:filter-outline", color: "blue", description: "Pick the birds" },
+      ],
+      grid_sections: [
+        { name: "Metrics", icon: "mdi:chart-box-outline", color: "teal", description: "" },
+      ],
+      components: [
+        {
+          tag: "species_filter",
+          section: "Cohort",
+          component_type: "interactive",
+          data_collection_tag: "penguins",
+          intent: "filter on species",
+        },
+        {
+          tag: "mass_card",
+          section: "Metrics",
+          component_type: "card",
+          data_collection_tag: "penguins",
+          intent: "average body mass",
+        },
+      ],
+    });
+    const body = route.request().postDataJSON() as GenerateDashboardBody;
+    const frames = [
+      'event: status\ndata: {"message":"reading project"}',
+      `event: plan\ndata: {"plan":${plan}}`,
+      'event: budget\ndata: {"steps_used":1,"tokens_used":1200,"seconds":3,"cost_usd":0.0134,"max_steps":20,"max_tokens":150000,"max_seconds":180}',
+    ];
+    if (!body.plan_only) {
+      frames.push(
+        'event: component\ndata: {"tag":"species_filter","section":"Cohort","component_type":"interactive","status":"ok","attempts":1}',
+        'event: component\ndata: {"tag":"mass_card","section":"Metrics","component_type":"card","status":"ok","attempts":1}',
+        // The same tag reports again after a repair: the row must update in
+        // place, not duplicate.
+        'event: component\ndata: {"tag":"mass_card","section":"Metrics","component_type":"card","status":"repaired","attempts":2,"error":"unknown column body_mass"}',
+        `event: dashboard\ndata: {"dashboard_id":"${id}","title":"Penguin morphology","project_id":"p1","yaml":"title: Penguin morphology\\n","warnings":["mass_card needed one repair"],"dropped":[]}`,
+      );
+    }
+    frames.push("event: done\ndata: {}");
+    const sse = frames.join("\n\n");
+    return route.fulfill({
+      contentType: "text/event-stream",
+      body: `${sse}\n\n`,
+    });
+  });
+}
+
+/** /dashboards → New Dashboard → the Generate tab (feature on). */
+async function openGenerateTab(page: Page): Promise<void> {
+  await page.goto("/dashboards");
+  await page.locator("[data-testid='new-dashboard-btn']").click();
+  await expect(page.locator("[data-testid='create-dashboard-modal']")).toBeVisible();
+  await page.locator("[data-testid='generate-dashboard-tab']").click();
+  await expect(page.locator("[data-testid='generate-dashboard-panel']")).toBeVisible();
+}
+
 /** Opens the first seeded dashboard card; returns its id from the URL. */
 async function openFirstDashboard(page: Page): Promise<string> {
   await page.goto("/dashboards");
@@ -400,6 +562,260 @@ async function openSuggestions(page: Page): Promise<void> {
   await expect(page.locator("[data-testid='ai-suggest-scope']")).toBeVisible();
   await expect(page.locator("[data-testid='ai-describe-prompt']")).toHaveCount(0);
   await expect(page.locator("[data-testid='ai-suggest-run']")).toBeVisible();
+}
+
+/** Everything a draft-review test needs to observe, filled in as the mocked
+ *  routes are hit. `tags` is what the GET proxy stamped on the dashboard, so
+ *  a test can name the banner's denominator without hard-coding a seed. */
+interface DraftReviewState {
+  /** Generation tags stamped on the tiles, in stored_metadata order. */
+  tags: string[];
+  /** Component index → the tag its tile currently carries. */
+  tagByIndex: Record<string, string>;
+  /** The stored_metadata the proxy last stamped, so the regenerate mock can
+   *  echo a real component back as the replacement. */
+  components: Record<string, unknown>[];
+  /** Tags the review route has been told to keep. */
+  reviewed: string[];
+  /** The planner rationales stamped alongside the tiles. */
+  sections: { name: string; kind: "filter" | "grid"; rationale: string }[];
+  /** Tags the proxy stamped check verdicts on, and the one it deliberately
+   *  left out so the panel's "not recorded" wording is reachable. Empty on a
+   *  one-tile draft, which has no tile to spare. */
+  checkedTags: string[];
+  uncheckedTag: string;
+  reviews: { tag: string; action: string }[];
+  regenerated: { index: string; instruction?: string }[];
+  /** index → the tag its regeneration gave it. The GET proxy applies these
+   *  too, so the optimistic swap and the refetch that follows it agree. */
+  retagged: Record<string, string>;
+  promoted: boolean;
+  promoteCalls: number;
+}
+
+const DRAFT_PROMPT = "compare body mass across species";
+/** The finding the mocked run says a repair round corrected on the first tile. */
+const DRAFT_REPAIR = "average is not available on a String column";
+/** A real skip reason from `probe_verdict`, so the panel draws a gate that
+ *  did not run rather than one that passed. */
+const DRAFT_SKIP = "no data collection to render against";
+
+/** The review flow's counterpart to `mockDraftDashboard`: the same proxy over
+ *  GET /dashboards/get/{id} (so a seeded dashboard plays a fresh AI draft),
+ *  plus the per-tile generation tags the review and regenerate routes address
+ *  a tile by, and canned answers for review / regenerate / promote.
+ *
+ *  A regeneration answers with the SAME component under a NEW tag. The real
+ *  route keeps the tile's tag (it re-fills the same planned component), but
+ *  a canned change to it is the one signal a test can assert on without
+ *  knowing what the seeded tiles render — and it holds whether the assertion
+ *  catches the optimistic swap or the refetch behind it, because the GET
+ *  proxy stamps the new tag too. What it proves is what it has to: the
+ *  client applied the component the terminal event carried. */
+async function mockDraftReview(page: Page): Promise<DraftReviewState> {
+  const state: DraftReviewState = {
+    tags: [],
+    tagByIndex: {},
+    components: [],
+    reviewed: [],
+    sections: [],
+    checkedTags: [],
+    uncheckedTag: "",
+    reviews: [],
+    regenerated: [],
+    retagged: {},
+    promoted: false,
+    promoteCalls: 0,
+  };
+
+  await page.route(DASHBOARD_GET_GLOB, async (route) => {
+    const res = await route.fetch();
+    const json = (await res.json()) as Record<string, unknown> & {
+      stored_metadata?: Record<string, unknown>[];
+    };
+    const components = json.stored_metadata ?? [];
+    state.tags = [];
+    state.tagByIndex = {};
+    components.forEach((m, i) => {
+      const index = String(m.index ?? i);
+      const tag = state.retagged[index] ?? `gen_${i}`;
+      m.ai_source = { flow: "generate", prompt: DRAFT_PROMPT, tag };
+      state.tags.push(tag);
+      state.tagByIndex[index] = tag;
+    });
+    state.components = components;
+
+    // The planner's reason per section, built from the sections the seeded
+    // tiles actually name so the quote lands on a section the panel shows.
+    const named = new Set<string>();
+    components.forEach((m) => {
+      if (typeof m.section === "string" && m.section) named.add(m.section);
+    });
+    state.sections = [...named].map((name) => ({
+      name,
+      kind: "grid" as const,
+      rationale: `${name} answers the prompt directly.`,
+    }));
+
+    // What the run proved about each tile. The first tile is the interesting
+    // one: a finding the repair round corrected, and a render the probe could
+    // not run, so the panel has to draw a repaired tile and a skipped gate
+    // rather than a row of green. The last tile is left out on purpose, so a
+    // draft stamped before the run kept verdicts is on screen too.
+    const spare = state.tags.length > 1;
+    state.checkedTags = spare ? state.tags.slice(0, -1) : [...state.tags];
+    state.uncheckedTag = spare ? state.tags[state.tags.length - 1] : "";
+    const checks = state.checkedTags.map((tag, i) =>
+      i === 0
+        ? {
+            tag,
+            attempts: 2,
+            repair: DRAFT_REPAIR,
+            checks: [
+              { layer: "model", status: "passed" as const, detail: "" },
+              { layer: "style", status: "passed" as const, detail: "" },
+              { layer: "substance", status: "passed" as const, detail: "" },
+              { layer: "schema", status: "passed" as const, detail: "" },
+              { layer: "render", status: "skipped" as const, detail: DRAFT_SKIP },
+            ],
+          }
+        : {
+            tag,
+            attempts: 1,
+            repair: "",
+            checks: [
+              { layer: "model", status: "passed" as const, detail: "" },
+              { layer: "render", status: "passed" as const, detail: "" },
+            ],
+          },
+    );
+
+    const info: AIGeneration & { reviewed: string[] } = {
+      status: state.promoted ? "promoted" : "draft",
+      model: "test/canned-model",
+      prompt: DRAFT_PROMPT,
+      generated_at: "2026-09-03T10:00:00+00:00",
+      run_id: "run-canned",
+      warnings: [],
+      reviewed: [...state.reviewed],
+      sections: state.sections,
+      checks,
+    };
+    json.ai_generation = info;
+    await route.fulfill({ json });
+  });
+
+  await page.route(REVIEW_GLOB, (route) => {
+    const body = route.request().postDataJSON() as {
+      tag: string;
+      action: "keep" | "unkeep";
+    };
+    state.reviews.push(body);
+    if (body.action === "keep") {
+      if (!state.reviewed.includes(body.tag)) state.reviewed.push(body.tag);
+    } else {
+      state.reviewed = state.reviewed.filter((t) => t !== body.tag);
+    }
+    return route.fulfill({
+      json: { reviewed: state.reviewed.length, total: state.tags.length },
+    });
+  });
+
+  await page.route(REGENERATE_COMPONENT_GLOB, (route) => {
+    const index = route.request().url().match(/components\/([^/]+)\/regenerate/)?.[1] ?? "";
+    const body = (route.request().postDataJSON() ?? {}) as { instruction?: string };
+    state.regenerated.push({ index, instruction: body.instruction });
+    const oldTag = state.tagByIndex[index] ?? "";
+    const newTag = `${oldTag}_v2`;
+    state.retagged[index] = newTag;
+    const source: Record<string, unknown> =
+      state.components.find((c) => String(c.index) === index) ?? { index };
+    const replacement = {
+      ...source,
+      ai_source: { flow: "generate", prompt: DRAFT_PROMPT, tag: newTag },
+    };
+    const sse = [
+      'event: status\ndata: {"message":"refilling the component"}',
+      'event: budget\ndata: {"steps_used":1,"tokens_used":800,"seconds":2,"max_steps":20,"max_tokens":150000,"max_seconds":180}',
+      `event: component\ndata: {"tag":"${newTag}","section":"Metrics","component_type":"${String(
+        source.component_type ?? "card",
+      )}","status":"ok","attempts":1}`,
+      // Terminal event (RegeneratedEvent): `components` lists every tile
+      // written back, and the single-tile route repeats its one tile.
+      `event: regenerated\ndata: ${JSON.stringify({
+        dashboard_id: "mocked",
+        tag: newTag,
+        component: replacement,
+        components: [replacement],
+        warnings: [],
+      })}`,
+      "event: done\ndata: {}",
+    ].join("\n\n");
+    return route.fulfill({ contentType: "text/event-stream", body: `${sse}\n\n` });
+  });
+
+  await page.route(PROMOTE_GENERATED_GLOB, (route) => {
+    state.promoted = true;
+    state.promoteCalls += 1;
+    const id = route.request().url().match(/generated-dashboards\/([^/]+)\/promote/)?.[1] ?? "";
+    return route.fulfill({ json: { dashboard_id: id, status: "promoted" } });
+  });
+
+  return state;
+}
+
+/** Opens the editor on the mocked draft and waits for the banner and the
+ *  review panel, which opens by itself on an unreviewed draft and is where
+ *  every review test starts. */
+async function openDraftEditor(page: Page, dashboardId: string): Promise<void> {
+  await page.goto(`/dashboard-edit/${dashboardId}`);
+  await expect(page.locator("[data-testid='ai-draft-banner']")).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.locator("[data-testid='draft-review-panel']")).toBeVisible({
+    timeout: 30_000,
+  });
+}
+
+/** Tags of the draft's tiles as the panel lists them, sorted. The panel shows
+ *  every tile at once, grouped by section, so the whole draft is readable
+ *  without moving the cursor; the sort is what keeps the assertions about
+ *  WHICH tiles are listed independent of how the plan grouped them. */
+async function reviewPanelTags(page: Page, count: number): Promise<string[]> {
+  const items = page.locator("[data-testid='draft-review-item']");
+  await expect(items).toHaveCount(count);
+  const tags = await items.evaluateAll((els) =>
+    els.map((el) => el.getAttribute("data-tag") ?? ""),
+  );
+  return tags.sort();
+}
+
+/** The panel row for one tile, which is also how a reviewer selects it. */
+function reviewPanelItem(page: Page, tag: string): Locator {
+  return page.locator(`[data-testid='draft-review-item'][data-tag='${tag}']`);
+}
+
+/** Mirrors one row of GET /ai/generations/{project_id} (GenerationSummary):
+ *  the per-outcome tally is spelled out flat on the row. */
+interface GenerationRow {
+  id: string;
+  dashboard_id: string | null;
+  title: string | null;
+  prompt: string;
+  model: string;
+  status: "running" | "complete" | "failed" | "cancelled";
+  created_at: string;
+  ok: number;
+  repaired: number;
+  dropped: number;
+  warnings: string[];
+}
+
+/** Canned "Previous generations" list for whichever project is picked. */
+async function mockGenerations(page: Page, rows: GenerationRow[]): Promise<void> {
+  await page.route(GENERATIONS_GLOB, (route) =>
+    route.fulfill({ json: { generations: rows } }),
+  );
 }
 
 /** Post-Generate hand-off: same create URL, Design step active, and the AI
@@ -951,5 +1367,430 @@ test.describe("AI assistant", () => {
     await expect(
       page.locator("[data-tour-id='component-wizard-stepper'] .mantine-Stepper-step"),
     ).toHaveCount(3);
+  });
+
+  test("generation off: the New Dashboard dialog has no Generate tab", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    // AI on, generation off: the tab hangs on its own flag, not on `ai`.
+    await mockFeatures(page, true, false);
+    await mockAIHealth(page);
+
+    await loginAsAdmin();
+    await page.goto("/dashboards");
+    await page.locator("[data-testid='new-dashboard-btn']").click();
+    await expect(page.locator("[data-testid='create-dashboard-modal']")).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Create New" })).toBeVisible();
+    await expect(page.locator("[data-testid='generate-dashboard-tab']")).toHaveCount(0);
+    await expect(page.locator("[data-testid='generate-dashboard-panel']")).toHaveCount(0);
+  });
+
+  test("Generate with AI: a mocked run lands on the editor as a draft, Promote clears the banner", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    const mode = await getAuthMode();
+    test.skip(
+      mode.is_public_mode || mode.is_demo_mode,
+      "Generate tab is disabled in public/demo mode",
+    );
+    test.setTimeout(120_000);
+    await mockFeatures(page, true, true);
+    await mockAIHealth(page);
+
+    await loginAsAdmin();
+    // The canned run "creates" an existing dashboard, so the hand-off opens
+    // a real editor; from here on its GET is stamped as a draft.
+    const dashboardId = await openFirstDashboard(page);
+    const draft = await mockDraftDashboard(page);
+    await mockGenerateDashboard(page, () => dashboardId);
+
+    await openGenerateTab(page);
+
+    // A project is the one required input; the prompt says what to build.
+    await page.locator("[data-testid='generate-dashboard-project']").click();
+    const options = page.getByRole("option");
+    await options.first().waitFor({ state: "visible", timeout: 15_000 }).catch(() => undefined);
+    test.skip((await options.count()) === 0, "No projects visible to the admin in this stack.");
+    await options.first().click();
+    await page
+      .locator("[data-testid='generate-dashboard-prompt']")
+      .fill("compare body mass across species");
+
+    const requestPromise = page.waitForRequest(
+      (req) => req.method() === "POST" && req.url().includes("/ai/generate-dashboard"),
+      { timeout: 15_000 },
+    );
+    const runButton = page.locator("[data-testid='generate-dashboard-run']");
+    await expect(runButton).toBeEnabled();
+    await runButton.click();
+
+    // Nothing pinned beyond the project: no title, every table collection.
+    // Plan review is on by default, so the first call only asks for a plan.
+    const body = (await requestPromise).postDataJSON() as GenerateDashboardBody;
+    expect(body.project_id).toBeTruthy();
+    expect(body.prompt).toBe("compare body mass across species");
+    expect(body.title).toBeNull();
+    expect(body.data_collection_ids).toEqual([]);
+    expect(body.plan_only).toBe(true);
+
+    // The plan comes back for a verdict, and nothing is filled until Build:
+    // the second call carries the approved plan and no `plan_only`.
+    await expect(page.locator("[data-testid='generate-plan']")).toContainText(
+      "Penguin morphology",
+      { timeout: 15_000 },
+    );
+    const buildPromise = page.waitForRequest(
+      (req) => req.method() === "POST" && req.url().includes("/ai/generate-dashboard"),
+      { timeout: 15_000 },
+    );
+    await page.locator("[data-testid='generate-build-plan']").click();
+    const buildBody = (await buildPromise).postDataJSON() as GenerateDashboardBody;
+    expect(buildBody.plan).toBeTruthy();
+    expect(buildBody.plan_only).toBeFalsy();
+
+    // Then one row per planned component carrying its latest outcome (the
+    // repaired tag reported twice and shows once).
+    const rows = page.locator("[data-testid='generate-progress-component']");
+    await expect(rows).toHaveCount(2);
+    await expect(rows.filter({ hasText: "species_filter" })).toHaveAttribute(
+      "data-status",
+      "ok",
+    );
+    await expect(rows.filter({ hasText: "mass_card" })).toHaveAttribute(
+      "data-status",
+      "repaired",
+    );
+
+    // The terminal event names the draft. "Open in editor" is the only
+    // hand-off: the panel never navigates on its own.
+    const open = page.locator("[data-testid='generate-open-editor']");
+    await expect(open).toBeVisible();
+    await open.click();
+    await expect(page).toHaveURL(new RegExp(`/dashboard-edit/${dashboardId}`), {
+      timeout: 20_000,
+    });
+
+    // The editor announces the draft; Promote posts once and the banner goes.
+    const banner = page.locator("[data-testid='ai-draft-banner']");
+    await expect(banner).toBeVisible({ timeout: 20_000 });
+    await expect(banner).toContainText("test/canned-model");
+    const promoteRequest = page.waitForRequest(
+      (req) => req.method() === "POST" && req.url().includes("/generated-dashboards/"),
+      { timeout: 15_000 },
+    );
+    await page.locator("[data-testid='ai-draft-promote']").click();
+    await promoteRequest;
+    await expect(banner).toHaveCount(0);
+    expect(draft.promoteCalls).toBe(1);
+  });
+
+  test("AI draft: Discard confirms, deletes the dashboard and returns to the list", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await mockFeatures(page, true, true);
+    await mockAIHealth(page);
+
+    await loginAsAdmin();
+    const dashboardId = await openFirstDashboard(page);
+    await mockDraftDashboard(page);
+    // The delete is mocked: the seeded dashboard must survive the test.
+    const deleted: string[] = [];
+    await page.route(DASHBOARD_DELETE_GLOB, (route) => {
+      deleted.push(route.request().url().match(/dashboards\/delete\/([^/?#]+)/)?.[1] ?? "");
+      return route.fulfill({ json: { message: "deleted" } });
+    });
+
+    await page.goto(`/dashboard-edit/${dashboardId}`);
+    await expect(page.locator("[data-testid='ai-draft-banner']")).toBeVisible({
+      timeout: 20_000,
+    });
+
+    // Discard asks first; nothing is deleted until the confirm.
+    await page.locator("[data-testid='ai-draft-discard']").click();
+    const confirm = page.locator("[data-testid='ai-draft-discard-confirm']");
+    await expect(confirm).toBeVisible();
+    expect(deleted).toEqual([]);
+
+    const deleteRequest = page.waitForRequest(
+      (req) => req.method() === "DELETE" && req.url().includes("/dashboards/delete/"),
+      { timeout: 15_000 },
+    );
+    await confirm.click();
+    await deleteRequest;
+    await expect(page).toHaveURL(/\/dashboards\/?([?#].*)?$/, { timeout: 20_000 });
+    expect(deleted).toEqual([dashboardId]);
+  });
+
+  test("AI draft: the review panel lists the tiles, Keep moves the banner counter", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await mockFeatures(page, true, true);
+    await mockAIHealth(page);
+
+    await loginAsAdmin();
+    const dashboardId = await openFirstDashboard(page);
+    const draft = await mockDraftReview(page);
+    await openDraftEditor(page, dashboardId);
+
+    // The denominator is what the proxy stamped, so this holds on any seed.
+    const total = draft.tags.length;
+    expect(total).toBeGreaterThan(0);
+    const counter = page.locator("[data-testid='ai-draft-review-count']");
+    await expect(counter).toHaveText(`Reviewed 0 of ${total}`);
+
+    // The panel lists every tile of the draft, in plan order, and its own
+    // progress agrees with the banner's counter.
+    const panel = page.locator("[data-testid='draft-review-panel']");
+    const position = page.locator("[data-testid='draft-review-position']");
+    const current = page.locator("[data-testid='draft-review-current']");
+    await expect(position).toHaveText(`0 of ${total} reviewed`);
+    expect(await reviewPanelTags(page, total)).toEqual([...draft.tags].sort());
+
+    // Nothing reviewed yet, so the cursor sits on the first tile.
+    await expect(current).toHaveAttribute("data-reviewed", "false");
+    const tag = String(draft.tags[0]);
+    await expect(current).toHaveAttribute("data-tag", tag);
+
+    // Keep posts once and moves the counter with the click.
+    const reviewRequest = page.waitForRequest(
+      (req) => req.method() === "POST" && req.url().includes("/generated-dashboards/"),
+      { timeout: 15_000 },
+    );
+    await page.locator("[data-testid='draft-review-keep']").click();
+    await reviewRequest;
+    await expect(counter).toHaveText(`Reviewed 1 of ${total}`);
+    await expect(position).toHaveText(`1 of ${total} reviewed`);
+    expect(draft.reviews).toEqual([{ tag, action: "keep" }]);
+    // The tile's row carries the verdict, so the list is a map of what is
+    // left rather than a static index.
+    await expect(reviewPanelItem(page, tag)).toHaveAttribute("data-reviewed", "true");
+
+    if (total > 1) {
+      // And the cursor has moved on by itself: reviewing n tiles is n clicks.
+      await expect(current).toHaveAttribute("data-tag", String(draft.tags[1]));
+      // Clicking a row is the other way to walk the draft: it puts the cursor
+      // back on the tile just kept, undo and all.
+      await reviewPanelItem(page, tag).click();
+      await expect(current).toHaveAttribute("data-tag", tag);
+      await expect(current).toHaveAttribute("data-reviewed", "true");
+    } else {
+      // A one-tile draft has nothing left to decide, so the panel says so
+      // instead of offering three dead buttons.
+      await expect(panel).toContainText("reviewed");
+      await expect(page.locator("[data-testid='draft-review-keep']")).toHaveCount(0);
+    }
+  });
+
+  test("AI draft: the review panel says how each tile was checked", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await mockFeatures(page, true, true);
+    await mockAIHealth(page);
+
+    await loginAsAdmin();
+    const dashboardId = await openFirstDashboard(page);
+    const draft = await mockDraftReview(page);
+    await openDraftEditor(page, dashboardId);
+
+    const panel = page.locator("[data-testid='draft-review-panel']");
+    const strip = page.locator("[data-testid='draft-review-checks']");
+    const current = page.locator("[data-testid='draft-review-current']");
+
+    // The cursor opens on the first tile, the one the mocked run repaired.
+    await expect(current).toHaveAttribute("data-tag", String(draft.tags[0]));
+    await expect(strip).toBeVisible();
+
+    // Every gate the run recorded is named, and the gate that did not run
+    // says so with its reason rather than passing quietly.
+    for (const layer of ["model", "style", "substance", "schema"]) {
+      await expect(strip.locator(`[data-layer='${layer}']`)).toHaveAttribute(
+        "data-status",
+        "passed",
+      );
+    }
+    const render = strip.locator("[data-layer='render']");
+    await expect(render).toHaveAttribute("data-status", "skipped");
+    await expect(render).toContainText(DRAFT_SKIP);
+
+    // A repaired tile shows what the repair round corrected.
+    await expect(page.locator("[data-testid='draft-review-repair']")).toContainText(DRAFT_REPAIR);
+
+    // The planner's reason for the tile's section is quoted next to it.
+    const section = draft.components[0]?.section;
+    if (typeof section === "string" && section) {
+      await expect(panel).toContainText(`${section} answers the prompt directly.`);
+    }
+
+    // A tile the run never recorded verdicts for says so. Drawing nothing
+    // would read as "fine" beside a neighbour carrying a row of green.
+    if (draft.uncheckedTag) {
+      await reviewPanelItem(page, draft.uncheckedTag).click();
+      await expect(current).toHaveAttribute("data-tag", draft.uncheckedTag);
+      await expect(strip).toHaveAttribute("data-status", "not-recorded");
+      await expect(strip).toContainText("Checks not recorded");
+    }
+  });
+
+  test("AI draft: a mocked regenerate replaces one tile and leaves the others alone", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await mockFeatures(page, true, true);
+    await mockAIHealth(page);
+
+    await loginAsAdmin();
+    const dashboardId = await openFirstDashboard(page);
+    const draft = await mockDraftReview(page);
+    await openDraftEditor(page, dashboardId);
+
+    // What the GET proxy stamped; the cursor opens on the first of them.
+    const before = [...draft.tags];
+    const total = before.length;
+    const target = before[0];
+    expect(target).toBeTruthy();
+
+    const current = page.locator("[data-testid='draft-review-current']");
+    await expect(current).toHaveAttribute("data-tag", target);
+
+    // The instruction is optional, but it is what the reveal exists for: the
+    // form opens inside the panel, not over the dashboard being judged.
+    await page.locator("[data-testid='draft-review-regenerate']").click();
+    const instruction = page.locator("[data-testid='draft-review-instruction']");
+    await expect(instruction).toBeVisible();
+    await instruction.fill("use a box plot");
+
+    const regenerateRequest = page.waitForRequest(
+      (req) => req.method() === "POST" && req.url().includes("/regenerate"),
+      { timeout: 15_000 },
+    );
+    await page.locator("[data-testid='draft-review-regenerate-run']").click();
+    const request = await regenerateRequest;
+    expect(request.url()).toContain("/components/");
+    expect((request.postDataJSON() as { instruction?: string }).instruction).toBe(
+      "use a box plot",
+    );
+
+    // The replacement carries a new tag, and the cursor stays on it: the tile
+    // that changed is the one whose result was being judged.
+    await expect(current).toHaveAttribute("data-tag", `${target}_v2`, {
+      timeout: 30_000,
+    });
+    // And every other tile kept the tag it had: the panel lists the whole
+    // draft, so one read covers all of them.
+    const after = await reviewPanelTags(page, total);
+    expect(after).toEqual(before.map((t) => (t === target ? `${target}_v2` : t)).sort());
+    expect(draft.regenerated).toHaveLength(1);
+    expect(draft.regenerated[0].instruction).toBe("use a box plot");
+  });
+
+  test("AI draft: Promote is gated on the review and goes through a confirm", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await mockFeatures(page, true, true);
+    await mockAIHealth(page);
+
+    await loginAsAdmin();
+    const dashboardId = await openFirstDashboard(page);
+    const draft = await mockDraftReview(page);
+    await openDraftEditor(page, dashboardId);
+
+    // Nothing reviewed yet: Promote asks first and posts nothing.
+    await page.locator("[data-testid='ai-draft-promote']").click();
+    const confirm = page.locator("[data-testid='ai-draft-promote-confirm']");
+    await expect(confirm).toBeVisible();
+    expect(draft.promoteCalls).toBe(0);
+
+    const promoteRequest = page.waitForRequest(
+      (req) => req.method() === "POST" && req.url().includes("/promote"),
+      { timeout: 15_000 },
+    );
+    await confirm.click();
+    await promoteRequest;
+    await expect(page.locator("[data-testid='ai-draft-banner']")).toHaveCount(0);
+    expect(draft.promoteCalls).toBe(1);
+  });
+
+  test("Generate tab: Previous generations lists the project's runs", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    const mode = await getAuthMode();
+    test.skip(
+      mode.is_public_mode || mode.is_demo_mode,
+      "Generate tab is disabled in public/demo mode",
+    );
+    test.setTimeout(120_000);
+    await mockFeatures(page, true, true);
+    await mockAIHealth(page);
+    await mockGenerations(page, [
+      {
+        id: "run-1",
+        dashboard_id: "dash-1",
+        title: "Penguin morphology",
+        prompt: "compare body mass across species",
+        model: "test/canned-model",
+        status: "complete",
+        created_at: "2026-09-03T10:00:00",
+        ok: 5,
+        repaired: 1,
+        dropped: 0,
+        warnings: ["mass_card needed one repair"],
+      },
+      {
+        id: "run-2",
+        dashboard_id: null,
+        title: "Island overview",
+        prompt: "an overview per island",
+        model: "test/canned-model",
+        status: "failed",
+        created_at: "2026-09-02T09:00:00",
+        ok: 0,
+        repaired: 0,
+        dropped: 3,
+        warnings: ["every data-bound component was dropped"],
+      },
+    ]);
+
+    await loginAsAdmin();
+    await openGenerateTab(page);
+
+    // Nothing is fetched until a project is picked.
+    const history = page.locator("[data-testid='generation-history']");
+    await expect(history).toBeVisible();
+    await expect(history).toContainText("Select a project");
+    await expect(page.locator("[data-testid='generation-history-item']")).toHaveCount(0);
+
+    await page.locator("[data-testid='generate-dashboard-project']").click();
+    const options = page.getByRole("option");
+    await options.first().waitFor({ state: "visible", timeout: 15_000 }).catch(() => undefined);
+    test.skip((await options.count()) === 0, "No projects visible to the admin in this stack.");
+    await options.first().click();
+
+    const items = page.locator("[data-testid='generation-history-item']");
+    await expect(items).toHaveCount(2, { timeout: 15_000 });
+    const complete = items.first();
+    await expect(complete).toContainText("Penguin morphology");
+    await expect(complete).toContainText("complete");
+    await expect(complete).toContainText("test/canned-model");
+    await expect(complete.locator("[data-testid='generation-history-count-ok']")).toHaveText(
+      "5 ok",
+    );
+    await expect(complete).toContainText("mass_card needed one repair");
+    // A run that saved a draft links to it; the failed one has nothing to open.
+    await expect(complete.locator("[data-testid='generation-history-open']")).toBeVisible();
+    const failed = items.nth(1);
+    await expect(failed).toContainText("failed");
+    await expect(failed.locator("[data-testid='generation-history-open']")).toHaveCount(0);
   });
 });

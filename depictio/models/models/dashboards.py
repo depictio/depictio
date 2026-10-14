@@ -342,6 +342,90 @@ class FilterSectionSpec(BaseModel):
     )
 
 
+class AISectionRationale(BaseModel):
+    """Why the planner gave a generated dashboard one of its sections."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    kind: Literal["filter", "grid"] = "grid"
+    rationale: str = ""
+
+
+class AIComponentCheck(BaseModel):
+    """One gate's verdict on one generated tile.
+
+    Mirrors `ComponentCheck` in the AI package's `schemas.py`, kept as its own
+    model here because `AIGenerationInfo` is `extra="forbid"` and the AI
+    package is not importable from `depictio/models/`. `layer` and `status`
+    are plain strings rather than literals so a draft stamped by a newer
+    server still loads on an older one: a gate this build has never heard of
+    is something to show, not something to reject the whole dashboard over.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    layer: str
+    status: str
+    detail: str = ""
+
+
+class AIComponentChecks(BaseModel):
+    """The gates one generated tile went through, and what a repair corrected."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tag: str
+    attempts: int = 1
+    repair: str = ""
+    checks: list[AIComponentCheck] = Field(default_factory=list)
+
+
+class AIGenerationInfo(BaseModel):
+    """Provenance of a dashboard drafted by the AI generator.
+
+    Stamped once by the generation route, flipped to ``promoted`` by the
+    promote route, and never writable through the editor's autosave. Absent
+    (``None``) on every hand-made dashboard, so it is not part of the YAML
+    surface (``DashboardDataLite``) either.
+
+    `reviewed` and `dropped` back the review pass over a draft: which tiles
+    the user has accepted (or regenerated and kept) and which planned tiles
+    never made it into the draft. `sections` carries the planner's reason for
+    each section it laid out, which the draft itself never shows, and `checks`
+    which validation gates each tile actually passed, so a reviewer can tell a
+    tile that cleared every gate from one that was kept unchecked. All four
+    default to empty, so a draft stamped before they existed still loads.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["draft", "promoted"] = "draft"
+    model: str = Field(..., description="Id of the LLM that produced the draft")
+    prompt: str = Field(default="", description="User intent the draft was generated from")
+    generated_at: str = Field(..., description="ISO 8601 timestamp of the generation")
+    run_id: str = Field(..., description="Id of the generation run record")
+    warnings: list[str] = Field(
+        default_factory=list, description="Non-fatal issues raised while generating"
+    )
+    reviewed: list[str] = Field(
+        default_factory=list,
+        description="Generation tags of the tiles the user has reviewed and kept",
+    )
+    dropped: list[str] = Field(
+        default_factory=list,
+        description="Generation tags the run planned but could not deliver",
+    )
+    sections: list[AISectionRationale] = Field(
+        default_factory=list,
+        description="The planner's reason for each section, filter panel first then grid",
+    )
+    checks: list[AIComponentChecks] = Field(
+        default_factory=list,
+        description="Which validation gates each generated tile went through",
+    )
+
+
 class DashboardDataLite(BaseModel):
     """Minimal dashboard format for YAML import/export.
 
@@ -2288,6 +2372,10 @@ class DashboardData(MongoModel):
     # defaults). None for dashboards saved before the feature existed — those
     # inherit the instance branding exactly as they did before.
     brand_theme: BrandTheme | None = None
+    # Provenance of an AI-drafted dashboard. None for every hand-made
+    # dashboard. The editor's autosave never writes it (see save_dashboard),
+    # so a stored value survives editing untouched.
+    ai_generation: AIGenerationInfo | None = None
 
     @model_validator(mode="before")
     @classmethod

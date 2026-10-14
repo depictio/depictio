@@ -13,7 +13,24 @@ export { default as ActionsPreview } from './components/ActionsPreview';
 export type { ApplyActionsPayload } from './components/ActionsPreview';
 export { default as AiFillModal } from './components/AiFillModal';
 export { default as AIAnalysisModal } from './components/AIAnalysisModal';
+export { default as AIDraftBanner, formatGeneratedAt } from './components/AIDraftBanner';
+export { default as DraftReviewPanel } from './components/DraftReviewPanel';
+export type {
+  DraftReviewPanelProps,
+  DraftReviewSection,
+  DraftTile,
+} from './components/DraftReviewPanel';
 export { default as ExecutionTrace } from './components/ExecutionTrace';
+export { default as GenerationHistory } from './components/GenerationHistory';
+export type { GenerationHistoryProps } from './components/GenerationHistory';
+export { default as GenerateDashboardPanel } from './components/GenerateDashboardPanel';
+export type {
+  GenerateDataCollection,
+  GenerateJoinInfo,
+  GenerateProjectOption,
+} from './components/GenerateDashboardPanel';
+export { default as GenerationProgress } from './components/GenerationProgress';
+export type { GenerationProgressProps } from './components/GenerationProgress';
 export {
   SectionSummaryPanel,
   SummarizeSectionButton,
@@ -24,31 +41,53 @@ export type { SectionSummaryState } from './components/SectionSummary';
 
 export {
   componentFromPrompt,
+  fetchGenerations,
   getAIHealth,
   getAnalyses,
   getSummaries,
+  promoteGeneratedDashboard,
   resolveFilters,
+  reviewComponent,
   streamAnalyze,
+  streamGenerateDashboard,
+  streamPost,
+  streamRegenerateComponent,
+  streamRegenerateSection,
   suggestComponents,
   summarizeSection,
 } from './api';
-export type { AIHealth, AnalyzeStreamHandlers } from './api';
+export type { AIHealth, AIStreamHandlers, AnalyzeStreamHandlers } from './api';
 
 export { useAISession, useAIStore } from './store';
 export type { AIChatMessage, AISession } from './store';
 
 export {
+  GENERATE_DASHBOARD_SESSION_ID,
   useAIHealth,
   useAnalysisReport,
   useAnalyze,
   useComponentFromPrompt,
+  useGenerateDashboard,
+  useGenerationRun,
+  useRegenerateComponent,
   useResolveFilters,
   useSuggestComponents,
   useSummarizeSection,
 } from './hooks';
-export type { AnalysisRunState } from './hooks';
+export type {
+  AnalysisRunState,
+  GenerateDashboardRunOptions,
+  GenerateDashboardRunState,
+  GenerationRun,
+  GenerationRunSummary,
+  RegenerateRunState,
+  RunSpend,
+} from './hooks';
 
 export type {
+  AIComponentChecks,
+  AIGenerationInfo,
+  AISectionRationale,
   AIStreamEvent,
   AIStreamEventType,
   AnalysesResponse,
@@ -59,18 +98,35 @@ export type {
   BudgetSpent,
   BudgetTick,
   Finding,
+  CheckLayer,
+  CheckStatus,
+  ComponentCheck,
+  RecordedCheck,
   ComponentFromPromptRequest,
   ComponentFromPromptResponse,
   ComponentSuggestion,
   ComponentType,
   DashboardActions,
+  DashboardPlan,
   ExecutionStep,
   FigureMutation,
   FilterAction,
   FilterProposal,
+  GenerateDashboardRequest,
+  GeneratedComponentEvent,
+  GeneratedDashboardEvent,
+  GenerationCounts,
+  GenerationSummary,
+  PlannedComponent,
+  PlannedSection,
+  PromoteGeneratedDashboardResponse,
+  RegenerateRequest,
+  RegeneratedComponentsEvent,
   ResolveFiltersRequest,
   ResolveFiltersResponse,
   ResolvedFilter,
+  ReviewComponentRequest,
+  ReviewComponentResponse,
   RoutedCollection,
   RoutingInfo,
   SuggestComponentsRequest,

@@ -322,6 +322,14 @@ class BudgetSpent(BaseModel):
     steps: int = 0
     tokens: int = 0
     seconds: float = 0.0
+    cost_usd: float | None = Field(
+        default=None,
+        description=(
+            "What the provider billed, in USD, for the calls of this run that reported a "
+            "cost. None when none of them did; when only some did it is the sum of those, "
+            "not a guaranteed total for the run. Never a price computed from a token count."
+        ),
+    )
 
 
 class AnalysisReport(BaseModel):
@@ -342,6 +350,223 @@ class AnalysisReport(BaseModel):
     narrative_md: str = ""
     budget_spent: BudgetSpent = Field(default_factory=BudgetSpent)
     warnings: list[str] = Field(default_factory=list)
+
+
+# ---------- Whole-dashboard generation ----------
+
+
+class GenerateDashboardRequest(BaseModel):
+    """Body for `/ai/generate-dashboard` (prompt -> whole dashboard draft).
+
+    `prompt` may be empty: the planner then builds the most useful overview
+    of the project it can. `data_collection_ids` narrows the collections the
+    planner sees (every table collection of the project when empty); each
+    id must belong to the project. `title` pins the dashboard title, and a
+    title collision is then a 409 unless `overwrite`; left None, the planner
+    chooses one and a collision gets a suffix instead.
+
+    `plan_only` and `plan` are the two halves of the two-phase flow, and are
+    mutually exclusive (both together is a 422 from `_one_plan_phase`): the
+    first run stops at the plan and pays only for the planning call, the
+    second is handed the plan the user approved and pays only for the fill.
+    Either field left at its default is the one-shot run, unchanged.
+    """
+
+    project_id: str
+    prompt: str = Field(default="", max_length=2000)
+    title: str | None = None
+    data_collection_ids: list[str] = Field(default_factory=list)
+    overwrite: bool = False
+    plan_only: bool = Field(
+        default=False,
+        description=(
+            "Stop after the plan: emit the plan, a final budget and done. No dashboard is "
+            "saved and no component is filled, so the run costs one planning call."
+        ),
+    )
+    plan: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "A plan the user already approved, as the `plan` event carried it. The planning "
+            "LLM call is skipped and this plan is filled instead. Client input like any "
+            "other: it is parsed, normalised and re-checked against the project's "
+            "collections before a single component is filled."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _one_plan_phase(self) -> "GenerateDashboardRequest":
+        if self.plan_only and self.plan is not None:
+            raise ValueError(
+                "plan_only and plan are the two phases of one flow: ask for a plan, or send "
+                "back the plan you approved, never both in the same request"
+            )
+        return self
+
+
+GeneratedComponentStatus = Literal["ok", "repaired", "dropped"]
+"""Fate of one planned component.
+
+``ok``: validated first time. ``repaired``: validated after at least one
+repair round-trip. ``dropped``: left out of the draft (repairs exhausted,
+or the token / wall-clock budget ran out before it was filled).
+"""
+
+
+CheckLayer = Literal["model", "style", "substance", "schema", "render"]
+"""The gates one filled component passes, named after what actually runs.
+
+``model``: `DashboardDataLite.from_yaml`, the loader `depictio-cli dashboard
+import` uses. ``style``: `component_style.sanitize_style`. ``substance``:
+`dashboard_validate.substance_error`. ``schema``:
+`dashboard_validate.check_against_schema`, the only gate that reads the
+collection. ``render``: `dashboard_probe.probe_verdict`.
+"""
+
+CheckStatus = Literal["passed", "failed", "skipped"]
+"""How one gate answered.
+
+``skipped`` is its own state on purpose. A gate can decline to run (a `text`
+component has no table to check columns against, four types have no cheap
+render probe, a code-mode figure binds no columns statically, the probe itself
+can break) and reporting any of those as ``passed`` would claim a check that
+never happened.
+"""
+
+
+class ComponentCheck(BaseModel):
+    """One gate's verdict on one component."""
+
+    layer: CheckLayer
+    status: CheckStatus
+    detail: str = Field(default="", description="The finding when failed, the reason when skipped")
+
+
+class GeneratedComponentEvent(BaseModel):
+    """Payload of one `component` stream event, emitted once per planned component."""
+
+    tag: str
+    section: str
+    component_type: ComponentType
+    status: GeneratedComponentStatus
+    attempts: int = 1
+    error: str | None = None
+    checks: list[ComponentCheck] = Field(
+        default_factory=list,
+        description="Which gates the component went through, in the order they ran",
+    )
+    repair: str | None = Field(
+        default=None, description="The finding the successful repair round corrected"
+    )
+
+
+class GeneratedDashboardEvent(BaseModel):
+    """Payload of the terminal `dashboard` stream event.
+
+    `yaml` is the persisted draft (show-your-work, like the single component
+    flow); `dropped` lists the tags that did not make it so the client can
+    say what is missing without diffing the plan.
+    """
+
+    dashboard_id: str
+    title: str
+    project_id: str
+    yaml: str
+    warnings: list[str] = Field(default_factory=list)
+    dropped: list[str] = Field(default_factory=list)
+
+
+class PromoteResponse(BaseModel):
+    """Returned by `/ai/generated-dashboards/{dashboard_id}/promote`."""
+
+    dashboard_id: str
+    status: Literal["promoted"] = "promoted"
+
+
+# ---------- Reviewing a draft ----------
+
+
+class RegenerateRequest(BaseModel):
+    """Body of both regenerate routes (one component, or a whole section).
+
+    `instruction` is the reviewer's steer ("make it a box plot by species");
+    appended to the planned intent of every tile the call regenerates. None
+    or empty re-runs the original intent unchanged.
+    """
+
+    instruction: str | None = Field(default=None, max_length=500)
+
+
+class RegeneratedEvent(BaseModel):
+    """Payload of the terminal `regenerated` stream event of both regenerate routes.
+
+    `components` always lists every tile written back, in the order they sit
+    in ``stored_metadata``, as the stored (full) component dicts the viewer
+    already renders; the single-component route also repeats its one tile in
+    `component` and names its `index` (its position in ``stored_metadata``)
+    and `tag`. `section` is set by the section route only.
+    """
+
+    dashboard_id: str
+    section: str | None = None
+    index: int | None = None
+    tag: str | None = None
+    component: dict[str, Any] | None = None
+    components: list[dict[str, Any]] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ReviewRequest(BaseModel):
+    """Body of `/ai/generated-dashboards/{dashboard_id}/review`.
+
+    `tag` is a component's generation tag (`ai_source.tag` in
+    ``stored_metadata``); `keep` marks it reviewed, `unkeep` takes the mark
+    back. The `-all` actions take no tag: the server reads the draft's tiles
+    off the document, so a reviewer who has read the whole thing settles it in
+    one call instead of one call per tile.
+    """
+
+    tag: str = Field(default="", max_length=200)
+    action: Literal["keep", "unkeep", "keep-all", "unkeep-all"] = "keep"
+
+    @model_validator(mode="after")
+    def _tag_names_a_tile(self) -> "ReviewRequest":
+        if self.action in ("keep", "unkeep") and not self.tag.strip():
+            raise ValueError("tag is required unless the action is keep-all or unkeep-all")
+        return self
+
+
+class ReviewResponse(BaseModel):
+    """Counts after one review call: how many of the draft's tiles are kept."""
+
+    reviewed: int = 0
+    total: int = 0
+
+
+class GenerationSummary(BaseModel):
+    """One row of `/ai/generations/{project_id}`: a run without its YAML or plan."""
+
+    id: str
+    dashboard_id: str | None = None
+    title: str | None = None
+    prompt: str = ""
+    model: str = ""
+    status: str = "running"
+    created_at: str = ""
+    ok: int = 0
+    repaired: int = 0
+    dropped: int = 0
+    warnings: list[str] = Field(default_factory=list)
+    dashboard_deleted: bool = Field(
+        default=False,
+        description="the run saved a draft that has since been deleted",
+    )
+
+
+class GenerationsResponse(BaseModel):
+    """Returned by `/ai/generations/{project_id}`, newest run first."""
+
+    generations: list[GenerationSummary] = Field(default_factory=list)
 
 
 # ---------- Request bodies ----------
@@ -506,6 +731,14 @@ StreamEventType = Literal[
     "plan",
     "budget",
     "report",
+    # Whole-dashboard generation: `component` once per planned component
+    # (GeneratedComponentEvent) and `dashboard` as the terminal payload
+    # (GeneratedDashboardEvent), before `done`.
+    "component",
+    "dashboard",
+    # Reviewing a draft: the terminal payload of both regenerate routes
+    # (RegeneratedEvent), after their per-tile `component` events.
+    "regenerated",
     "error",
     "done",
 ]

@@ -30,11 +30,18 @@ logger = logging.getLogger(__name__)
 
 
 class CompletionUsage(NamedTuple):
-    """Token accounting for one completion, as the provider reported it."""
+    """Token and money accounting for one completion, as the provider reported it.
+
+    `cost_usd` is what the provider says it billed for this call, not a
+    price computed from a token count: it is None whenever nothing reported
+    one (a provider that does not, a streamed call, a cached hit whose
+    original had none).
+    """
 
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int
+    cost_usd: float | None = None
 
 
 class Completion(NamedTuple):
@@ -84,6 +91,40 @@ def _cache_key(messages: list[dict[str, Any]], model: str, fmt: str, api_key: st
         sort_keys=True,
     )
     return hashlib.sha256(payload.encode()).hexdigest()
+
+
+# Where litellm parks the cost OpenRouter itself reported for a completion.
+# Its OpenRouter transformer always asks for ``usage: {"include": true}`` and
+# copies the figure out of the answer into the response's hidden params
+# (litellm/llms/openrouter/chat/transformation.py). Two neighbouring numbers
+# are deliberately not used:
+#   - `litellm.completion_cost` prices the call from the bundled price map,
+#     which knows neither model id this deployment runs, and answers a
+#     confident 0.0 for a model it has never heard of;
+#   - `_hidden_params["response_cost"]` is written by a logging handler on
+#     another thread, so reading it at the return races that write.
+_COST_HEADER = "llm_provider-x-litellm-response-cost"
+
+
+def _response_cost_usd(response: Any) -> float | None:
+    """The provider's billed cost of one completion in USD, or None.
+
+    None for every reason the figure can be absent: a provider that reports
+    none, a litellm that parks it elsewhere, a value that is not a number.
+    The cost is an extra on the budget frame and must never cost the
+    completion it describes, so nothing here raises.
+    """
+    try:
+        hidden = getattr(response, "_hidden_params", None) or {}
+        raw = (hidden.get("additional_headers") or {}).get(_COST_HEADER)
+    except Exception:  # noqa: BLE001, a response shape without hidden params
+        return None
+    if raw is None or isinstance(raw, bool):
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
 
 
 def _log_messages(messages: list[dict[str, Any]]) -> None:
@@ -150,14 +191,18 @@ def completion_with_usage(
         prompt_tokens=int(getattr(raw_usage, "prompt_tokens", 0) or 0),
         completion_tokens=int(getattr(raw_usage, "completion_tokens", 0) or 0),
         total_tokens=int(getattr(raw_usage, "total_tokens", 0) or 0),
+        # Read here, while `response` is still in scope: it is dropped at
+        # the return and the figure lives nowhere else.
+        cost_usd=_response_cost_usd(response),
     )
     if raw_usage:
         logger.info(
-            "═══ LLM Response (%.1fs) ═══  Tokens: %d + %d = %d",
+            "═══ LLM Response (%.1fs) ═══  Tokens: %d + %d = %d%s",
             elapsed,
             usage.prompt_tokens,
             usage.completion_tokens,
             usage.total_tokens,
+            f"  Cost: ${usage.cost_usd:.6f}" if usage.cost_usd is not None else "",
         )
     else:
         logger.info("═══ LLM Response (%.1fs) ═══", elapsed)
@@ -198,7 +243,11 @@ def stream_completion(
     temperature: float = 0,
     max_tokens: int | None = None,
 ) -> Iterator[str]:
-    """Yield content deltas as they arrive from the provider."""
+    """Yield content deltas as they arrive from the provider.
+
+    Reports neither tokens nor cost: the deltas carry no usage object, so a
+    streamed call is invisible to the budget by design.
+    """
     model = model or get_default_model()
     max_tokens = max_tokens or settings.ai.max_tokens
     api_key = _resolve_api_key(user_api_key)

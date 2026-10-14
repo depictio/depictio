@@ -284,27 +284,18 @@ def _add_matches(
         )
 
 
-@catalog_endpoint_router.get("/project/{project_id}/compose")
-async def compose_project(
-    project_id: str,
-    current_user: User = Depends(get_user_or_anonymous),
-) -> dict[str, Any]:
-    """Return recognized catalog modules for a project, grouped by tool_id."""
-    try:
-        oid = ObjectId(project_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid project_id")
+def compose_offers_for_project(project_doc: dict[str, Any]) -> dict[str, Any]:
+    """Catalog modules recognised in ``project_doc``, grouped by ``tool_id``.
 
-    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
-    permission_query: dict[str, Any] = {
-        "_id": oid,
-        **build_access_query(current_user, "viewer", group_ids),
-    }
+    The auth-free core of ``compose_project``: walks the project's data
+    collections, matches each one against the catalog (recipe, single
+    filename, or the files a recursive scan ingested) and returns
+    ``{"modules": [...]}``. Also what the AI dashboard generator reads to
+    learn which advanced-viz offers a project can back.
 
-    project = projects_collection.find_one(permission_query)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
+    Raises ``HTTPException(500)`` when the catalog itself cannot be loaded,
+    exactly as the route always has.
+    """
     try:
         entries = load_catalog_entries()
     except Exception:
@@ -318,7 +309,7 @@ async def compose_project(
     recursive_dc_ids: list[ObjectId] = []
     dc_meta: dict[str, dict[str, Any]] = {}  # dc_id_str -> {wf_id, wf_tag, dc_tag, dc_type}
 
-    for workflow in project.get("workflows", []):
+    for workflow in project_doc.get("workflows", []):
         wf_id = str(workflow.get("_id", ""))
         wf_tag = str(workflow.get("workflow_tag") or workflow.get("name") or "")
         for dc in workflow.get("data_collections", []):
@@ -429,6 +420,30 @@ async def compose_project(
             )
 
     return {"modules": list(modules_by_tool.values())}
+
+
+@catalog_endpoint_router.get("/project/{project_id}/compose")
+async def compose_project(
+    project_id: str,
+    current_user: User = Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """Return recognized catalog modules for a project, grouped by tool_id."""
+    try:
+        oid = ObjectId(project_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid project_id")
+
+    group_ids = [] if current_user.is_admin else get_user_group_ids(current_user.id)
+    permission_query: dict[str, Any] = {
+        "_id": oid,
+        **build_access_query(current_user, "viewer", group_ids),
+    }
+
+    project = projects_collection.find_one(permission_query)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    return compose_offers_for_project(project)
 
 
 @catalog_endpoint_router.get("/output/{output_id}/preview-payload")

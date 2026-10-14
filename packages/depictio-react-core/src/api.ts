@@ -461,8 +461,14 @@ export interface StoredMetadata {
   catalog_source?: CatalogSource;
   /** Set when the component's config was produced by the AI assistant
    *  ("Describe with AI" in the builder). Drives the "Authored with AI"
-   *  badge in the component chrome; `prompt` is the user's own wording. */
-  ai_source?: { flow: string; prompt?: string } | null;
+   *  badge in the component chrome; `prompt` is the user's own wording.
+   *  `tag` is set only by whole-dashboard generation: it is the handle the
+   *  plan gave this tile, and the one the review / regenerate routes
+   *  address it by. */
+  ai_source?: { flow: string; prompt?: string; tag?: string } | null;
+  /** Authoring handle from the dashboard YAML / a generated plan. Unique
+   *  within a dashboard; `index` (a UUID) stays the runtime identity. */
+  tag?: string;
   // Card
   title?: string;
   value?: unknown;
@@ -633,6 +639,64 @@ export interface FilterSectionSpec {
 /** Column name → categorical value → CSS colour. See `categoryColors.ts`. */
 export type CategoryColors = Record<string, Record<string, string>>;
 
+/** Provenance stamped on a dashboard the AI generated whole (see
+ *  POST /ai/generate-dashboard). Mirrors AIGenerationInfo in
+ *  depictio/models/models/dashboards.py. `draft` until the owner promotes
+ *  it from the editor banner; the autosave path never writes this field,
+ *  only the promote route changes it. */
+/** One section of the plan with the planner's own reason for it. Mirrors
+ *  AISectionRationale in depictio/models/models/dashboards.py. */
+export interface DashboardAISection {
+  name: string;
+  /** Filter-panel section or main-grid section. */
+  kind: 'filter' | 'grid';
+  /** One sentence on why the section exists and what it holds. */
+  rationale: string;
+}
+
+/** One validation gate's verdict on one generated tile. Mirrors
+ *  AIComponentCheck in depictio/models/models/dashboards.py. `layer` and
+ *  `status` are open strings for the same reason the model keeps them open:
+ *  a gate a newer server records is something to show, not to choke on. */
+export interface DashboardAICheck {
+  layer: string;
+  status: string;
+  /** The finding when failed, the reason when skipped. */
+  detail: string;
+}
+
+/** The gates one generated tile went through. */
+export interface DashboardAIComponentChecks {
+  tag: string;
+  attempts: number;
+  repair: string;
+  checks: DashboardAICheck[];
+}
+
+export interface DashboardAIGeneration {
+  status: 'draft' | 'promoted';
+  model: string;
+  prompt: string;
+  /** ISO timestamp of the run. */
+  generated_at: string;
+  run_id: string;
+  warnings: string[];
+  /** Generation tags of the tiles the owner has been through, written only
+   *  by POST /ai/generated-dashboards/{id}/review (autosave strips the whole
+   *  block, as it does the draft flag). Absent on drafts saved before the
+   *  review flow existed, which is why readers default it to an empty list. */
+  reviewed?: string[];
+  /** Why the planner shaped each section the way it did, filter panel first
+   *  then the grid, in plan order. Absent on drafts saved before the planner
+   *  was asked to explain itself. */
+  sections?: DashboardAISection[];
+  /** Generation tags the run planned but could not deliver. */
+  dropped?: string[];
+  /** Which validation gates each tile passed, keyed by generation tag.
+   *  Absent on drafts saved before the gates were recorded. */
+  checks?: DashboardAIComponentChecks[];
+}
+
 export interface DashboardData {
   _id?: string;
   dashboard_id?: string;
@@ -690,6 +754,8 @@ export interface DashboardData {
   /** Present only when a past version was requested. Carries everything the
    *  read-only banner needs, so previewing costs one request, not two. */
   preview?: DashboardPreviewInfo;
+  /** Present only on AI-generated dashboards; null or absent otherwise. */
+  ai_generation?: DashboardAIGeneration | null;
   [key: string]: unknown;
 }
 
@@ -4040,6 +4106,9 @@ export interface DashboardListEntry extends DashboardSummary {
   permissions?: DashboardPermissions;
   /** Some endpoints stamp this; matches the YAML/seed origin. */
   template_origin?: string;
+  /** Present only on AI-generated dashboards (the list projection carries
+   *  it so the card can flag a draft). */
+  ai_generation?: DashboardAIGeneration | null;
   /** Shape can drift slightly per backend version — keep it permissive. */
   [key: string]: unknown;
 }

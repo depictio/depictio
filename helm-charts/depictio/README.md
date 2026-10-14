@@ -67,6 +67,7 @@ helm uninstall depictio
 |-----------|-------------|---------|
 | `secrets.s3RootUser` | S3 root access key (legacy key: `secrets.minioRootUser`) | `""` (release name) |
 | `secrets.s3RootPassword` | S3 root secret key (legacy key: `secrets.minioRootPassword`) | `""` (random, kept across upgrades) |
+| `secrets.aiApiKey` | Server-side model provider key for the AI assistant, injected into the backend as `DEPICTIO_AI_API_KEY`. Optional: leave empty and users bring their own key when `backend.env.DEPICTIO_AI_ALLOW_USER_KEYS` is `"true"` | `""` |
 
 These credentials are stored in the Kubernetes Secret named `<release-name>-depictio-secrets`
 under the data keys `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` (legacy names kept on purpose:

@@ -105,6 +105,11 @@ SNAPSHOT_BASE_MODEL_FIELDS: frozenset[str] = frozenset(
     {"id", "description", "flexible_metadata", "hash"}
 )
 
+#: Server-side provenance, not content. ``ai_generation`` is stamped by the AI
+#: generator and flipped only by its promote route; a restore must neither
+#: forge a draft flag on a past state nor clear one.
+SNAPSHOT_PROVENANCE_FIELDS: frozenset[str] = frozenset({"ai_generation"})
+
 #: Every dashboard field a snapshot leaves out on purpose. A ``DashboardData``
 #: field in neither this set nor ``TabSnapshot`` is one somebody forgot, and the
 #: field-coverage test fails on it rather than letting restore drop it silently.
@@ -114,6 +119,7 @@ SNAPSHOT_EXCLUDED_FIELDS: frozenset[str] = (
     | SNAPSHOT_VOLATILE_FIELDS
     | SNAPSHOT_DERIVED_FIELDS
     | SNAPSHOT_BASE_MODEL_FIELDS
+    | SNAPSHOT_PROVENANCE_FIELDS
 )
 
 #: The brand-theme keys that point at logo bytes. The bytes live in

@@ -1,7 +1,7 @@
 # AI assistant
 
 Depictio ships an opt-in, LLM-backed assistant (issue #79 / epic #844) with
-four user-facing flows:
+five user-facing flows:
 
 1. **Per-section summaries** — a sparkle button in each dashboard section
    header (and above the grid on section-less dashboards) generates a
@@ -98,6 +98,321 @@ four user-facing flows:
    Components authored this way carry an `ai_source` provenance mark,
    shown as a small badge in the editor, the same way catalog components
    carry `catalog_source`.
+5. **Whole dashboard from a project**: on `/dashboards`, the Create
+   dashboard modal gains a **Generate with AI** tab when the deployment
+   enables it. Pick a project, optionally a subset of its table data
+   collections, describe the intent, and the assistant plans a funnel
+   (cohort filters, KPI cards, figures, a reference table), fills and
+   validates every component the way the Describe step does, lays it out
+   deterministically and lands it as a new dashboard flagged as an **AI
+   draft**. In the editor a review bar in the draft banner then walks you
+   through the generated tiles one by one (why the planner asked for each,
+   *Regenerate*, *Keep*, *Remove*), tracking how much of the draft you have
+   been through, before you promote or discard it. Details in
+   [Generate a dashboard](#generate-a-dashboard).
+
+## Generate a dashboard
+
+The Describe step adds one component to a dashboard that already exists.
+Whole-dashboard generation starts one step earlier: from a project and an
+optional intent it plans a complete first dashboard, fills every planned
+component through the same generation and validation the Describe step
+uses, lays it out deterministically and saves it as a **draft** that you
+review in the editor before promoting or discarding it. It is a separate
+opt-in (`DEPICTIO_AI_GENERATE_DASHBOARD_ENABLED`, on top of
+`DEPICTIO_AI_ENABLED`), it needs editor permission on the project, and it
+is refused in public mode, since a generation is a dashboard import.
+
+### Walkthrough
+
+1. On `/dashboards`, *Create dashboard* opens the usual modal; with the
+   feature on it has a third tab, **Generate with AI**.
+2. Pick the **project**. The collection picker lists its table data
+   collections, marking the ones that are the result of a project-level
+   join the way the component builder's data collection dropdown does:
+   leave it empty to let the planner see all of them (up to
+   `DEPICTIO_AI_GENERATE_MAX_COLLECTIONS`; the rest are left out with a
+   warning), or pick the subset the dashboard should be about. *Select all*
+   next to the label fills the picker with every collection, which sends the
+   same run as leaving it empty but gives you a list you can then take one
+   collection out of; it reads *Clear* once everything is in. The
+   **intent** is optional free text (up to 2000 characters: the audience,
+   the questions to answer, what matters most); left empty, the planner
+   builds the most useful overview of the project it can. Naming a colour,
+   a palette or a brand in it ("in green", "our brand is teal") steers the
+   section colours. The **title** is
+   optional too: pinned, a name collision is refused; left empty, the
+   planner chooses one and a collision gets an *(AI draft N)* suffix plus
+   a warning. Without a server-side key the tab shows the same key field
+   as the other AI surfaces.
+3. **Review the plan before building** is on by default. With it checked,
+   *Generate* only plans: the run stops after the plan, saves nothing, and
+   the panel shows what would be built so it can be judged before any of
+   it is paid for. *Build this plan* sends the plan back and fills it;
+   *Re-plan* asks for another plan, with the intent edited if you like.
+   Unchecked, the run plans and fills in one pass, as it used to.
+4. *Generate* opens a panel of its own under the form and streams the run
+   into it: a stage rail (reading the project, inventory, planning,
+   filling, checking, layout, saving) that names the current stage, counts
+   the steps and times each one, the **run limit** spent against its token
+   and wall-clock caps (with the cost the provider billed, when it reports
+   one), the **plan** (title, subtitle, the collections it uses, a tally
+   by component type, then one block per section with its icon, its
+   rationale and the components it holds with their tags, types,
+   collections and intents), and **one card per planned component**,
+   grouped by section, each settling on *ok*, *repaired* (validated after
+   a repair round) or *dropped* (with the reason). A component nobody has
+   reported on yet stays colourless, so colour on that grid only ever
+   means an outcome. *Stop generating* ends the run; a run that does not
+   reach its terminal event saves no dashboard.
+5. When the terminal event arrives the panel shows the dashboard title,
+   the warnings (dropped components, collections left out, a renamed
+   title) and an *Open in editor* button. Nothing navigates on its own:
+   the click is the hand-off.
+6. The editor opens with a **draft banner** above the dashboard: the model
+   that produced it, the date, a *Why this layout* fold with the planner's
+   reason for each section, the warnings behind a fold of their own, a
+   *reviewed n of m* counter, a *Review n components* button that opens
+   the review panel
+   (see [Reviewing a draft](#reviewing-a-draft)) and two actions. *Promote* flips the status to
+   `promoted`: the banner and the badges go away and the provenance
+   (model, prompt, run id) stays on the document. *Discard* asks for
+   confirmation, deletes the dashboard and returns to `/dashboards`. Until
+   you decide, the dashboard card in the list and the dashboard info panel
+   carry an **AI draft** badge. A draft is otherwise a normal dashboard:
+   you can edit it in the editor first, and autosave keeps the draft flag
+   as it is (it can neither clear nor set it; only *Promote* changes it).
+
+### Reviewing a draft
+
+A draft is reviewed tile by tile, not as one block, and the review lives in a
+panel of its own on the right of the editor. Nothing is added to a generated
+component: the panel takes the same slot and the same width as the inspector,
+so the canvas narrows instead of being covered and the tiles stay whole while
+you judge them. It opens by itself the first time an unreviewed draft is
+opened, closes from its header, and comes back from the *Review n components*
+button on the banner.
+
+The panel lists every generated tile grouped by section, in plan order with the
+filter panel first, under a *n of m reviewed* progress bar. Each section is a
+fold carrying its own count, so a long draft can be walked one section at a
+time, and the fold holding the cursor stays open however it was left. A draft
+that spans a tab family folds by tab above that. A row names the tile and
+carries its type as the icon and the colour the builder's type grid uses for
+it; the selected row is the cursor, and the canvas answers with two cues. A tile nobody has been through yet keeps
+a hairline dashed outline; the tile the cursor names is outlined solid, and it
+is scrolled into view when the cursor moves.
+
+Under the list, pinned so it stays reachable however long the list gets, sits
+the tile under review: the brief the planner wrote for it, and the reason it
+gave for the tile's section. Both were written before anything was filled, so
+they say why the component was asked for rather than what it ended up showing.
+Then the three decisions, one full-width labelled button each:
+
+- *Keep* marks the tile reviewed without changing it and steps to the next tile
+  that has not been through, so twelve tiles are twelve clicks. On a tile
+  already reviewed it reads *Reviewed, undo*.
+- *Regenerate* opens an instruction field ("use a box plot", "group by cohort")
+  and re-runs that one tile. It goes through the same fill and the same
+  validation as the original run, repair round included, and the result
+  replaces the component in place: its position, its size and its section stay
+  as they were and the rest of the dashboard is untouched. A regeneration that
+  fails validation leaves the tile as it was and reports the error in the
+  panel, with the cursor still on it.
+- *Remove* takes the tile out of the draft and steps on as well.
+
+Keeping the actions out of the tiles is deliberate, and so is keeping them off
+the canvas entirely. They have to be visible for as long as the draft is one:
+icons sitting permanently on every component crowd the very thing they ask you
+to judge, a bar at the top of the page scrolls away from the tile it is talking
+about, and anything floating over the canvas hides tiles in order to review
+tiles.
+
+A whole grid section can also be regenerated at once, from *Regenerate the
+whole section* under the same instruction field, offered when the tile under
+review sits in a grid section: the components of that section are filled again
+and the layout pass re-runs for that section only, so the other sections keep
+the boxes they had.
+
+A draft can also be settled in one click, from the pair of controls under the
+progress bar. *Keep all* marks every tile reviewed and turns into *Unkeep all*
+once they are, which is the undo a bulk action needs; the server reads the
+draft's tiles off the document rather than taking a list from the browser, so
+the two cannot disagree about what "all" is. *Remove all* deletes every
+generated tile in one save, behind a confirmation: the dashboard itself stays,
+holding whatever was added to it by hand, and deleting the draft outright is
+*Discard* on the banner.
+
+The banner counts the progress, *reviewed n of m*, and gates the promotion on
+it. Once every tile is either reviewed or removed, *Promote* applies outright;
+before that it asks for a confirmation first, since promoting is what turns the
+draft into an ordinary dashboard.
+
+The review state lives on the dashboard document next to the draft flag, in the
+same `ai_generation` field, so it survives a reload or a change of browser. Like
+the draft flag it is stripped from autosave payloads: the editor can neither mark
+a tile reviewed nor unmark one, only the review route writes it.
+
+
+### Grounding and validation
+
+The model never starts from a blank page and its output is never saved
+as-is. The planner works from an inventory of the project (the schemas,
+redacted sample rows and declared joins of the selected table collections,
+the catalog offers matched to the project, and the advanced visualization
+kinds each collection can feed, ranked from the data) and returns a JSON
+plan that is normalised before anything is generated; each planned
+component is then filled and checked one at a time. A visualization kind
+is only offered when every role it requires matched a column on its name
+and not merely on its dtype: a kind that fits the table's shape by
+accident is worse than no suggestion, because the planner reads the list
+as a recommendation.
+
+- **Plan**: one model call, steered before it is checked. The catalog comes
+  first: a render the catalog already recognises on a collection is planned
+  as itself, by its `tool/render` id, rather than reinvented, and the fill
+  pass reproduces it. The specialised tiles are not defaults either. An
+  advanced visualization is planned only with a kind the ranking offered for
+  that collection, whose roles bind to real columns there; a MultiQC tile
+  only on a MultiQC report. Whenever the data is not the shape a specialised
+  plot needs, the answer is a plain figure, since a forced one is a tile that
+  gets dropped. The plan is validated against a strict schema,
+  clamped to `DEPICTIO_AI_GENERATE_MAX_COMPONENTS` and
+  `DEPICTIO_AI_GENERATE_MAX_SECTIONS`, its tags deduplicated, its section
+  icons and colours restricted to the sets the sections manager offers,
+  and its sections put in funnel order. Invalid JSON gets one retry with
+  the error; a second failure ends the run.
+- **Fill**: every data-bound component goes through the same generation as
+  the Describe step (its intent plus a dashboard context: the title, its
+  section and the sibling tags already filled) and the same validator
+  (`validate_single`, the `depictio-cli dashboard import` grammar). The
+  decorations are held to the pickers' own lists, so an icon the bundled
+  subset does not carry never reaches the builder as a blank box.
+  Section headers are written from the plan without a model call, and
+  advanced visualizations are bound deterministically from a catalog offer
+  or from the ranked role bindings, never invented.
+- **Schema checks**: on top of the grammar, the server runs the checks the
+  CLI's `dashboard validate` runs online: every referenced column exists
+  in the collection, card aggregations and interactive widgets are
+  compatible with the column type, breakdown and trend columns exist and
+  the secondary card layouts have their required companions, a
+  multi-select never lands on a column with more than 50 distinct values,
+  and an advanced visualization's role bindings name real columns of the
+  right dtype.
+- **Render check**: once every component is filled, each one is asked to
+  produce what it would show, through the same server-side path the viewer
+  calls, with the cheapest projection that would still fail (one row, one
+  shape, one aggregation). A component that cannot render is dropped with
+  its reason rather than saved into a dashboard where it would answer 500.
+  Text has nothing to probe, and image, map and MultiQC tiles have no
+  in-process probe cheap enough to be worth its cost, so they are not
+  checked. A figure written in code mode is checked here and nowhere else:
+  it declares no column bindings for the schema check to read, and the
+  render path reports what its code raised. A tile regenerated from the
+  review panel goes through the same probe before it is written back.
+- **Repair, then drop**: a component that fails gets
+  `DEPICTIO_AI_GENERATE_MAX_REPAIRS_PER_COMPONENT` repair rounds with the
+  formatted error; once they are exhausted the component is dropped and
+  the run continues. When the token or wall-clock budget runs out, the
+  components not yet filled are dropped with a `budget` reason. A run that
+  ends with no surviving data-bound component fails and saves nothing.
+- **Envelope and persistence**: the assembled dashboard is parsed once
+  through `DashboardDataLite.from_yaml` (with one repair round at that
+  level), then persisted through the exact path
+  `POST /dashboards/import/yaml` uses, with the `ai_generation` provenance
+  added. The YAML travels in the terminal event, so a draft can be
+  re-imported with the CLI.
+
+### What each check can see
+
+The chain is not a single wall, and the gates do not all apply to every
+component. A card is checked against the column types the collection really
+stores; a text tile has no collection, so that check does not run at all. A
+figure written in code mode binds its columns inside Python, where the column
+check cannot follow, and is covered by the render probe instead. Four types
+have no render probe cheap enough to be worth its cost.
+
+Because those gaps are real, the run records which gates each component
+actually went through and how each one answered: passed, failed, or not run
+with the reason it did not. That record travels in the stream, so the progress
+panel shows a row of marks under each tile as it is filled and again once it
+has been probed, and it is stamped on the draft, so the review panel can still
+show it a day later when the run itself is gone. A tile whose gates were never
+recorded says so rather than showing an unearned row of green, which matters
+for drafts generated before the record existed.
+
+The same gates run wherever a component is generated, not only in a whole
+dashboard run. Describing a single component with AI puts the answer through
+the grammar, the style allowlists, the substance check and the column check,
+and repairs it once from the finding, within the same two attempts. The
+suggestion list runs the column check too and drops what fails, since a
+suggestion has no repair round. Neither of those two runs the render probe:
+both hand their answer straight to the builder, which draws a real preview of
+it within the second.
+
+### Layout conventions
+
+The layout pass is deterministic and writes explicit boxes on the
+8-column grid, so the same plan always produces the same page:
+
+- Sections follow the funnel: cohort filters, then metrics, then
+  analysis, then reference.
+- Interactive components go to the left filter panel, stacked. The filters
+  that answer one question are given a shared group by the plan and render
+  inside a single collapsible card, at most six per group; an ungrouped
+  control costs a card of its own, which is why a section holding more than
+  two filters is grouped.
+- Cards and filters are generated styled. Each carries an icon and a colour
+  chosen from the builder's own pickers, not from the whole of Iconify: the
+  viewer ships a scanned icon subset and its CSP blocks the network
+  fallback, so an id nobody wrote down renders as a blank box and blanks
+  itself on the first save. Anything outside those lists is dropped
+  server-side before the component is saved, and a colour given as a palette
+  name is translated to the hex the picker writes.
+- Each grid section starts with a one-row text header taken from the
+  plan's section description.
+- Cards are 2 columns wide in rows of four, and rows are always full:
+  three leftovers become 3/3/2, two become 4/4, one spans the row. They are
+  planned and filled as multi-metric cards: a hero statistic plus the two to
+  five secondary ones that give it context, in the layout that suits them
+  (a grid of four, a box plot for a numeric spread, a top-N breakdown for a
+  count). A tile showing one number alone spends the same space to answer a
+  quarter as many questions, so it is what the prompts steer away from.
+- Figures are half-width in pairs; a lone trailing figure is widened to
+  the full row. Advanced visualizations take a full row at double height.
+- The reference table comes last, full width, and a section holding
+  nothing but tables starts collapsed, the way the reference dashboards
+  fold their raw data.
+
+### Previous runs
+
+A draft is not the only trace a run leaves. The *Generate with AI* tab
+lists what the selected project has generated before, newest first: the
+prompt, the model, the status (`running`, `planned` for a run that stopped
+at the plan on purpose, `complete`, `failed` or `cancelled`), the date, how many components came out *ok*, *repaired* or
+*dropped*, and the warnings the run collected. Each row is named by the
+dashboard it saved, falling back to the title the plan chose, then to what
+was asked for, then to the date, so a row is worth reading even when the
+run never got as far as saving anything. A run that saved a dashboard links
+to it, so a draft left half-reviewed is one click away; a run whose
+dashboard has since been deleted says so instead of offering a dead link. The rows are
+the `ai_generations` records, which are written at the start, after the
+plan, after every component and at the end, so a cancelled or failed run
+shows up in the list too.
+
+### Limits of the MVP
+
+- **Single tab.** The draft is one dashboard tab; multi-tab plans are not
+  produced.
+- **Table collections only.** MultiQC, image and map collections are not
+  inventoried and never planned; add them by hand once the draft is
+  promoted.
+- **Review is per tile, generation is not.** Each tile can be regenerated,
+  kept or removed on its own, and a section can be regenerated as a whole,
+  but what a run may produce is still bounded by the two limits above: one
+  tab, table collections only.
+- **Nothing lands without data.** A run whose data-bound components were
+  all dropped fails instead of saving an empty shell.
 
 ## Enabling
 
@@ -123,6 +438,13 @@ Settings (env prefix `DEPICTIO_AI_`, see `AIConfig` in
 | `DEPICTIO_AI_ANALYZE_MAX_STEPS` | `20` | Read-only analysis: hard ceiling on LLM/executor round-trips per run |
 | `DEPICTIO_AI_ANALYZE_MAX_TOKENS_TOTAL` | `200000` | Read-only analysis: total tokens (prompt + completion) per run — the cost lever |
 | `DEPICTIO_AI_ANALYZE_MAX_WALL_CLOCK_S` | `300` | Read-only analysis: wall-clock bound per run — the UX lever |
+| `DEPICTIO_AI_GENERATE_DASHBOARD_ENABLED` | `false` | Whole-dashboard generation: mounts the *Generate with AI* tab and the `/ai/generate-dashboard` route (needs `DEPICTIO_AI_ENABLED` too) |
+| `DEPICTIO_AI_GENERATE_MAX_COMPONENTS` | `16` | Whole-dashboard generation: hard ceiling on the components a plan may contain (the plan is clamped, not rejected) |
+| `DEPICTIO_AI_GENERATE_MAX_SECTIONS` | `4` | Whole-dashboard generation: hard ceiling on the grid sections a plan may contain |
+| `DEPICTIO_AI_GENERATE_MAX_TOKENS_TOTAL` | `150000` | Whole-dashboard generation: total tokens (prompt + completion) per run, the cost lever; once spent, the components not yet filled are dropped |
+| `DEPICTIO_AI_GENERATE_MAX_WALL_CLOCK_S` | `180` | Whole-dashboard generation: wall-clock bound per run, the UX lever; same drop rule |
+| `DEPICTIO_AI_GENERATE_MAX_REPAIRS_PER_COMPONENT` | `1` | Whole-dashboard generation: repair round-trips per component before it is dropped from the draft |
+| `DEPICTIO_AI_GENERATE_MAX_COLLECTIONS` | `6` | Whole-dashboard generation: table collections described to the planner; the rest are left out with a warning |
 
 ### Keys: BYOK with a server fallback
 
@@ -134,13 +456,16 @@ either pure-BYOK (no server key), server-key-only
 (`DEPICTIO_AI_ALLOW_USER_KEYS=false`), or both.
 
 The public `GET /utils/status` payload advertises
-`features: {ai, ai_user_keys}` so the SPA hides every AI affordance when
-the feature is off.
+`features: {ai, ai_user_keys, ai_generate_dashboard}` so the SPA hides
+every AI affordance when the feature is off; the last flag gates the
+*Generate with AI* tab alone.
 
 ## API surface
 
 All under `/depictio/api/v1/ai`, feature-gated, authenticated like every
 other read (`get_user_or_anonymous` + project-viewer permission checks):
+the dashboard-generation and draft-review routes are the exception, they
+are writes and require a signed-in user with editor permission.
 
 - `GET /ai/health` — configured model + key posture (no key material).
 - `POST /ai/suggest-components`: typed suggestions for a dashboard (the
@@ -186,6 +511,55 @@ other read (`get_user_or_anonymous` + project-viewer permission checks):
   summary generation and the hash-keyed cache (Mongo collection
   `ai_summaries`; summaries are derived artifacts, never stored on the
   dashboard document).
+- `POST /ai/generate-dashboard`: streaming, same SSE-over-chunked-POST
+  envelope as `/ai/analyze`. Request: `project_id` (required), `prompt`
+  (optional, up to 2000 characters), `title` (optional),
+  `data_collection_ids` (optional subset; every id must belong to the
+  project) and `overwrite`. The gates answer with real HTTP codes before
+  the stream opens: 404 while `DEPICTIO_AI_GENERATE_DASHBOARD_ENABLED` is
+  off, 403 in public mode (a generation is an import) or without editor
+  permission on the project, 400 for a collection outside the project,
+  409 for a title collision on an explicit `title` without `overwrite`.
+  Events: `status`, `plan` (the validated `DashboardPlan`), `budget` after
+  every model call (`steps_used`, `tokens_used`, `seconds` and the three
+  maxima), `component` once per planned component (`tag`, `section`,
+  `component_type`, `status` in `ok` / `repaired` / `dropped`, `attempts`,
+  `error`), the terminal `dashboard` (`dashboard_id`, `title`,
+  `project_id`, `yaml`, `warnings`, `dropped`), then `done`; `error` +
+  `done` on failure. Every run is recorded in the Mongo collection
+  `ai_generations` (status `running` / `complete` / `failed` /
+  `cancelled`, the plan, the per-component outcomes, the YAML and the
+  budget spent), a derived artifact like `ai_analyses`. The dashboard
+  itself carries an `ai_generation` field (`status`, `model`, `prompt`,
+  `generated_at`, `run_id`, `warnings`): absent on hand-made dashboards,
+  not part of the YAML surface, and stripped from autosave payloads so the
+  editor can neither clear nor forge it.
+- `POST /ai/generated-dashboards/{dashboard_id}/promote`: flips
+  `ai_generation.status` from `draft` to `promoted` and returns
+  `{dashboard_id, status: "promoted"}`; editor permission on the
+  dashboard, 404 when it carries no `ai_generation`. Discarding a draft is
+  the regular `DELETE /dashboards/delete/{dashboard_id}`.
+- `POST /ai/generated-dashboards/{dashboard_id}/components/{index}/regenerate`:
+  streaming, the same SSE-over-chunked-POST envelope, for one tile of a
+  draft. Body: an optional `instruction` refining what the tile should
+  show. The component at `index` is filled and validated the way the run
+  filled it (schema checks and repair round included) and replaces the old
+  one in place, keeping its layout box; nothing else on the dashboard
+  changes, and a failure leaves the tile as it was. Editor permission on
+  the dashboard, 404 when it carries no `ai_generation` or the index does
+  not exist.
+- `POST /ai/generated-dashboards/{dashboard_id}/sections/{section}/regenerate`:
+  the same for a whole grid section, refilling its components and re-running
+  the layout pass for that section alone.
+- `POST /ai/generated-dashboards/{dashboard_id}/review`: records which
+  tiles have been reviewed and which were removed. The review block sits
+  next to the draft flag in `ai_generation` and, like the flag, is stripped
+  from autosave payloads, so this route is the only writer.
+- `GET /ai/generations/{project_id}`: the project's recent generation runs
+  from the `ai_generations` collection, newest first, behind the same
+  project-viewer permission as the other reads: prompt, model, status,
+  date, the per-component outcomes (`ok` / `repaired` / `dropped`), the
+  warnings and the `dashboard_id` when the run saved one.
 
 ## Safety posture
 
@@ -200,9 +574,14 @@ other read (`get_user_or_anonymous` + project-viewer permission checks):
     written to the dashboard document, code-mode figures ignore them, and
     the chip reverts them in one click.
 - Sample rows sent to the LLM pass a PII redaction pass (emails, phones).
+- Generated dashboards are persisted through the YAML import path and land
+  as drafts: the `ai_generation` flag is stripped from autosave payloads,
+  only the promote route flips it, and generation is refused in public
+  mode like any import.
 - Reverse proxies must not buffer the analyze stream: for nginx, set
   `proxy_buffering off;` on `/depictio/api/v1/ai/analyze` (the response
-  already carries `X-Accel-Buffering: no`).
+  already carries `X-Accel-Buffering: no`). The same applies to
+  `/depictio/api/v1/ai/generate-dashboard`.
 
 ## Testing
 

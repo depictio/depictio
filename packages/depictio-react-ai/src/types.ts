@@ -197,10 +197,13 @@ export interface AnalysisResult {
   warnings?: string[];
 }
 
-/** SSE event names emitted by /ai/analyze.
+/** SSE event names emitted by /ai/analyze and /ai/generate-dashboard.
  *  Mutate mode: status* → step* → answer → actions → result → done.
  *  Analyze mode: status* → (plan) → (budget|step)* → answer → report →
  *  result → done.
+ *  Generation: status* → plan → (budget|component)* → dashboard → done.
+ *  Regeneration: status* → (budget|component)* → a terminal event carrying
+ *  the replacing component dict(s) → done.
  *  `error` may interrupt the stream at any point and is followed by `done`. */
 export type AIStreamEventType =
   | 'status'
@@ -211,6 +214,10 @@ export type AIStreamEventType =
   | 'plan'
   | 'budget'
   | 'report'
+  | 'component'
+  | 'components'
+  | 'replacement'
+  | 'dashboard'
   | 'error'
   | 'done';
 
@@ -273,6 +280,10 @@ export interface BudgetTick {
   max_steps: number;
   max_tokens: number;
   max_seconds: number;
+  /** Dollars the tokens spent so far are estimated to cost, from the model's
+   *  public pricing. Null or absent when the model has no price the server
+   *  knows, in which case no cost is shown at all rather than a zero. */
+  cost_usd?: number | null;
 }
 
 export interface ResolveFiltersRequest {
@@ -324,4 +335,270 @@ export interface SummaryEntry {
 
 export interface SummariesResponse {
   summaries: SummaryEntry[];
+}
+
+// ---------- Whole-dashboard generation ----------
+
+/** Body of POST /ai/generate-dashboard. Only `project_id` is required: an
+ *  empty prompt lets the model plan from the data alone, an empty
+ *  `data_collection_ids` means every table collection of the project (up to
+ *  the server's cap), and `title` overrides the model's choice (a title
+ *  collision then fails unless `overwrite`). */
+export interface GenerateDashboardRequest {
+  project_id: string;
+  prompt?: string;
+  title?: string | null;
+  data_collection_ids?: string[];
+  overwrite?: boolean;
+  /** Phase one of the reviewed flow: plan, emit the `plan` event and stop.
+   *  Nothing is filled and nothing is saved, so the same request can be
+   *  replayed until the plan is worth building. */
+  plan_only?: boolean;
+  /** Phase two: the plan the user approved, sent back as the server emitted
+   *  it. The server re-normalises it, re-emits it as a `plan` event and fills
+   *  it, so no planning call is paid for twice. Omit it (with `plan_only`
+   *  unset) for the single-call flow. */
+  plan?: DashboardPlan | null;
+}
+
+/** One section of a generated plan: the presentation fields of
+ *  FilterSectionSpec (icon ids and palette names are allowlisted
+ *  server-side). */
+export interface PlannedSection {
+  name: string;
+  icon?: string | null;
+  color?: string | null;
+  description?: string | null;
+  /** The planner's own reason for the section, shown to whoever reviews the
+   *  draft. Absent from runs generated before the planner was asked for it. */
+  rationale?: string | null;
+}
+
+/** One component the plan intends to fill. `tag` is the handle every later
+ *  `component` event and the terminal `dropped` list refer to. */
+export interface PlannedComponent {
+  tag: string;
+  section: string;
+  component_type: ComponentType;
+  data_collection_tag: string;
+  intent: string;
+  /** Catalog offer to fill from, when the plan picked one. */
+  use?: string | null;
+  /** Advanced-viz kind to fill from, when the plan picked one. */
+  viz_kind?: string | null;
+}
+
+/** Payload of the `plan` event (under `plan`): what the model intends to
+ *  build, before any component is filled. */
+export interface DashboardPlan {
+  title: string;
+  subtitle?: string | null;
+  filter_sections: PlannedSection[];
+  grid_sections: PlannedSection[];
+  components: PlannedComponent[];
+}
+
+/** The gates one filled component passes, named after what actually runs.
+ *  Mirrors CheckLayer in the AI package's schemas.py. */
+export type CheckLayer = 'model' | 'style' | 'substance' | 'schema' | 'render';
+
+/** How one gate answered. `skipped` is its own state: a gate can decline to
+ *  run (a text tile has no table to check columns against, four types have no
+ *  cheap render probe, a code-mode figure binds no columns statically, the
+ *  probe itself can break) and showing that as `passed` would claim a check
+ *  that never happened. */
+export type CheckStatus = 'passed' | 'failed' | 'skipped';
+
+/** One gate's verdict, read loosely.
+ *
+ *  What the surfaces that draw a strip actually need. It is deliberately open
+ *  where `ComponentCheck` is closed, because those surfaces draw two sources:
+ *  this run's own events, which come from this build's server, and the stamp
+ *  on a draft, which may have been written by another one. A gate this build
+ *  has never heard of is something to show, not to choke on, which is the
+ *  same call `AIComponentCheck` makes in the Pydantic model. */
+export interface RecordedCheck {
+  layer: string;
+  status: string;
+  /** The finding when failed, the reason when skipped. */
+  detail: string;
+}
+
+/** One gate's verdict on one component of the run in progress. */
+export interface ComponentCheck extends RecordedCheck {
+  layer: CheckLayer;
+  status: CheckStatus;
+}
+
+/** Payload of a `component` event, one per planned component. A later event
+ *  for the same tag supersedes the earlier one: a repair turns a failing
+ *  component into `repaired`, an exhausted repair budget into `dropped`, and
+ *  the render pass re-reports every tile once it has been probed. */
+export interface GeneratedComponentEvent {
+  tag: string;
+  section: string;
+  component_type: ComponentType;
+  status: 'ok' | 'repaired' | 'dropped';
+  attempts: number;
+  error?: string | null;
+  /** The gates the component went through, in the order they ran. Absent on
+   *  a run from a server that did not record them. */
+  checks?: ComponentCheck[];
+  /** The finding a successful repair round corrected. */
+  repair?: string | null;
+}
+
+/** Payload of the terminal `dashboard` event: the persisted draft. */
+export interface GeneratedDashboardEvent {
+  dashboard_id: string;
+  title: string;
+  project_id: string;
+  /** The dashboard as YAML, display-only ("show your work"). */
+  yaml: string;
+  warnings: string[];
+  /** Tags of the planned components that did not survive validation. */
+  dropped: string[];
+}
+
+/** One planned section with the planner's reason for it; mirrors
+ *  AISectionRationale in depictio/models/models/dashboards.py and
+ *  DashboardAISection in depictio-react-core. */
+export interface AISectionRationale {
+  name: string;
+  kind: 'filter' | 'grid';
+  rationale: string;
+}
+
+/** The gates one generated tile went through, as the draft records them.
+ *  Mirrors AIComponentChecks in depictio/models/models/dashboards.py. */
+export interface AIComponentChecks {
+  tag: string;
+  attempts: number;
+  /** The finding a successful repair round corrected; empty when none. */
+  repair: string;
+  /** Loose, like the stamp itself: a draft can have been written by another
+   *  server build than the one reading it. */
+  checks: RecordedCheck[];
+}
+
+/** `ai_generation` on a dashboard document. Mirrors AIGenerationInfo in
+ *  depictio/models/models/dashboards.py; structurally identical to
+ *  depictio-react-core's DashboardAIGeneration so hosts pass the
+ *  dashboard's field straight through. */
+export interface AIGenerationInfo {
+  status: 'draft' | 'promoted';
+  model: string;
+  prompt: string;
+  /** ISO timestamp of the run. */
+  generated_at: string;
+  run_id: string;
+  warnings: string[];
+  /** Generation tags of the tiles the owner has been through. Written only
+   *  by the review route; autosave strips the whole block. Absent on drafts
+   *  saved before the review flow existed, so readers default it to []. */
+  reviewed?: string[];
+  /** The planner's reason for each section, filter panel first then the
+   *  grid, in plan order. Absent on drafts generated before the planner was
+   *  asked to explain itself, so readers default it to []. */
+  sections?: AISectionRationale[];
+  /** Generation tags the run planned but could not deliver. */
+  dropped?: string[];
+  /** Which gates each tile passed. Absent on drafts saved before the gates
+   *  were recorded, which readers must show as "not recorded" rather than
+   *  as a clean pass. */
+  checks?: AIComponentChecks[];
+}
+
+/** Answer of POST /ai/generated-dashboards/{id}/promote. */
+export interface PromoteGeneratedDashboardResponse {
+  dashboard_id: string;
+  status: 'promoted';
+}
+
+// ---------- Reviewing a generated draft ----------
+
+/** Body of the two regenerate routes
+ *  (`.../components/{index}/regenerate`, `.../sections/{section}/regenerate`).
+ *  `instruction` refines what the tile should show ("use a box plot",
+ *  "group by cohort"); omitted, the tile is filled again from the plan's
+ *  original intent. */
+export interface RegenerateRequest {
+  instruction?: string;
+}
+
+/** Body of POST /ai/generated-dashboards/{id}/review. `tag` is the
+ *  generation handle of one tile (`ai_source.tag` on its stored metadata),
+ *  not its runtime `index`. */
+export interface ReviewComponentRequest {
+  /** Empty for the `-all` actions, which read the draft's tiles server-side. */
+  tag: string;
+  action: 'keep' | 'unkeep' | 'keep-all' | 'unkeep-all';
+}
+
+/** Answer of the review route: the draft's progress after the write. */
+export interface ReviewComponentResponse {
+  reviewed: number;
+  total: number;
+}
+
+/** Payload of the terminal `regenerated` event of both regenerate routes
+ *  (RegeneratedEvent server-side): the components written back, as the full
+ *  stored dicts the viewer renders, so a host swaps them into its local
+ *  dashboard by `index` without waiting for a refetch.
+ *
+ *  `components` always lists every tile written; the single-tile route also
+ *  repeats its one tile in `component` and names its position and tag.
+ *  `normalizeReplacement` in hooks.ts reads whichever is there, and keys off
+ *  the payload rather than the event name. */
+export interface RegeneratedComponentsEvent {
+  dashboard_id: string;
+  /** Set by the section route only. */
+  section?: string | null;
+  /** Position in `stored_metadata`, single-tile route only. */
+  index?: number | null;
+  tag?: string | null;
+  component?: Record<string, unknown> | null;
+  components: Record<string, unknown>[];
+  warnings: string[];
+}
+
+/** Per-outcome tally of one generation run. The wire shape spells the three
+ *  out flat on the row (see `GenerationSummary`); this is what
+ *  `GenerationHistory` reduces them to before rendering. */
+export interface GenerationCounts {
+  ok: number;
+  repaired: number;
+  dropped: number;
+}
+
+/** One row of GET /ai/generations/{project_id}: a past whole-dashboard run,
+ *  without its plan or its YAML. Mirrors GenerationSummary in schemas.py.
+ *  `dashboard_id` is null while the run saved nothing (cancelled, or failed
+ *  before the draft landed). `title` is the saved dashboard's, falling back
+ *  to the title the plan chose, so it is null only for a run that never got
+ *  as far as a plan. */
+export interface GenerationSummary {
+  id: string;
+  dashboard_id: string | null;
+  title: string | null;
+  prompt: string;
+  model: string;
+  status: 'running' | 'planned' | 'complete' | 'failed' | 'cancelled';
+  /** Naive UTC ISO timestamp, the API's wire convention (no offset). */
+  created_at: string;
+  ok: number;
+  repaired: number;
+  dropped: number;
+  warnings: string[];
+  /** The run saved a draft that has since been deleted: the row still
+   *  reports what the run did, without a way back into it. */
+  dashboard_deleted?: boolean;
+  /** Not on the wire today: tolerated so a nested tally would render rather
+   *  than read as three zeroes. */
+  counts?: GenerationCounts | null;
+}
+
+/** Answer of GET /ai/generations/{project_id} (GenerationsResponse). */
+export interface GenerationsResponse {
+  generations: GenerationSummary[];
 }
