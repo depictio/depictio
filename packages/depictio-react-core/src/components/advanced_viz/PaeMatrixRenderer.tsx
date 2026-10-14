@@ -33,6 +33,7 @@ import {
   rowIndicesWhere,
   scopeToEntity,
   stringOrNull,
+  withoutFiltersOn,
   withoutOwnChainPick,
   withoutPositionSelections,
 } from './protein/rendererData';
@@ -176,9 +177,20 @@ const PaeMatrixRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     () => distinctColumns([entityCol, positionCol, valueCol, chainCol]),
     [entityCol, positionCol, valueCol, chainCol],
   );
+  // The table numbers the axes and gives the pLDDT strips, so it must hold
+  // every residue of the entity: no filter on the position or chain column
+  // narrows it, a sidebar slider included (it would leave fewer rows than the
+  // matrix has residues, and the axes would fall back to 1..N).
   const residueFilters = useMemo(
-    () => scopeToEntity(fetchFilters, index, metadata.dc_id, entityCol, picker.entity),
-    [fetchFilters, index, metadata.dc_id, entityCol, picker.entity],
+    () =>
+      scopeToEntity(
+        withoutFiltersOn(fetchFilters, [positionCol, chainCol]),
+        index,
+        metadata.dc_id,
+        entityCol,
+        picker.entity,
+      ),
+    [fetchFilters, positionCol, chainCol, index, metadata.dc_id, entityCol, picker.entity],
   );
   const residueFiltersKey = JSON.stringify(residueFilters);
   const [frame, setFrame] = useState<Frame | null>(null);

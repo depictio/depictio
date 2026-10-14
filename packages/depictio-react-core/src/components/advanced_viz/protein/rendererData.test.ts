@@ -10,6 +10,7 @@ import {
   numberOrNull,
   ownSelectionValues,
   rowIndicesWhere,
+  withoutFiltersOn,
   withoutOwnChainPick,
   withoutPositionSelections,
 } from './rendererData';
@@ -27,6 +28,41 @@ describe('withoutPositionSelections', () => {
     ];
     const kept = withoutPositionSelections(filters, ['position', null]);
     expect(kept.map((k) => k.index)).toEqual(['a', 'side']);
+  });
+});
+
+describe('withoutFiltersOn', () => {
+  const filters = [
+    f({ index: 'side', column_name: 'position', value: [30, 100] }),
+    f({ index: 'a::res', source: 'residue_selection', column_name: 'position', value: [3, 9] }),
+    f({ index: 'nested', source: 'scatter_selection', metadata: { column_name: 'chain' }, value: ['A'] }),
+    f({ index: 'chain-side', column_name: 'chain', value: ['B'] }),
+    f({ index: 'ent', column_name: 'entity', value: ['P1'] }),
+    f({ index: 'bare', value: ['x'] }),
+  ];
+
+  it('drops every filter on the columns, sidebar or selection, top-level or nested', () => {
+    const kept = withoutFiltersOn(filters, ['position', 'chain']);
+    expect(kept.map((k) => k.index)).toEqual(['ent', 'bare']);
+  });
+
+  it('keeps what withoutPositionSelections keeps, minus the sidebar filter on the column', () => {
+    const viaSelections = withoutPositionSelections(filters, ['position']);
+    expect(viaSelections.map((k) => k.index)).toContain('side');
+    const viaColumns = withoutFiltersOn(viaSelections, ['position']);
+    expect(viaColumns.map((k) => k.index)).not.toContain('side');
+    expect(viaColumns.map((k) => k.index)).toEqual(['nested', 'chain-side', 'ent', 'bare']);
+  });
+
+  it('ignores unset roles and returns the filters whole when no column is named', () => {
+    expect(withoutFiltersOn(filters, [null, undefined, ''])).toEqual(filters);
+    expect(withoutFiltersOn(filters, [])).toEqual(filters);
+  });
+
+  it('does not touch its input', () => {
+    const copy = [...filters];
+    withoutFiltersOn(filters, ['position']);
+    expect(filters).toEqual(copy);
   });
 });
 

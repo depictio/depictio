@@ -30,6 +30,7 @@ import {
   rowIndicesWhere,
   scopeToEntity,
   stringOrNull,
+  withoutFiltersOn,
   withoutPositionSelections,
 } from './protein/rendererData';
 import { useEntityPicker } from './protein/useEntityPicker';
@@ -368,12 +369,20 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
   // Wait for the model list, then fetch the picked model. With no model to
   // pick (no model column: a one-model table, or the lookup failed) the fetch
   // goes out unscoped and the first model in it is shown.
+  // The profile is the whole model: a filter on the position column, a sidebar
+  // slider included, would drop states from it, so none reaches this fetch.
   const mainFilters = useMemo(
     () =>
       picker.entities === null
         ? null
-        : scopeToEntity(fetchFilters, index, metadata.dc_id, scopeCol, picker.entity),
-    [picker.entities, picker.entity, fetchFilters, index, metadata.dc_id, scopeCol],
+        : scopeToEntity(
+            withoutFiltersOn(fetchFilters, [positionCol]),
+            index,
+            metadata.dc_id,
+            scopeCol,
+            picker.entity,
+          ),
+    [picker.entities, picker.entity, fetchFilters, positionCol, index, metadata.dc_id, scopeCol],
   );
   const main = useRows(metadata.wf_id, metadata.dc_id, columns, mainFilters, refreshTick);
   const frame = main.rows;

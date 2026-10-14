@@ -7,7 +7,9 @@
  * namespace (its own budget, so PAE matrices and structures never evict each
  * other). The cached value is the parsed matrix, not the text: `parsePae` runs
  * inside the shared promise, so two tiles on the same file, or a refresh that
- * signs a new URL for it, parse it once.
+ * signs a new URL for it, parse it once. That cache is the only one: a matrix
+ * is N x N Float32 values (25 MB at 2500 residues), so the namespace keeps
+ * `PAE_MAX_CACHED_OBJECTS` of them, not the 24 a structure's text gets.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -16,6 +18,11 @@ import { loadObjectTextRenewing, objectCacheKey } from '../molecule/objectText';
 import { parsePae, type PaeMatrix } from './paeParse';
 
 export const PAE_CACHE_NAMESPACE = 'pae';
+
+/** Matrices kept in memory (about 100 MB at 2500 residues); the least recently
+ *  used goes first. A dashboard shows one entity at a time, so a handful covers
+ *  flipping between proteins without a second download. */
+export const PAE_MAX_CACHED_OBJECTS = 4;
 
 /** Fetch (or take from the cache) and parse one PAE object. */
 export function loadPaeMatrix(
@@ -28,6 +35,7 @@ export function loadPaeMatrix(
 ): Promise<PaeMatrix> {
   return loadObjectTextRenewing<PaeMatrix>(url, {
     cacheNamespace: PAE_CACHE_NAMESPACE,
+    maxCachedObjects: PAE_MAX_CACHED_OBJECTS,
     nameHint: opts.nameHint ?? null,
     renew: opts.renew ?? null,
     fetcher: opts.fetcher,

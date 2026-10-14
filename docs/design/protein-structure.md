@@ -282,7 +282,10 @@ order, never by a uniform sample (`max_hits` of `hmm_logo`, `max_proteins` and
 `follow_selection` to `true`, are in `RESIDUE_EMITTING_KINDS` (a `record_card` linked to one
 receives the pick as column filters) and export as `client_only`; `pae_matrix` and
 `ramachandran`, like `molecule_3d`, have no static HTML export because they fetch a file when
-they render. Required roles are `state` + `letter` + `emission` for `hmm_logo` (with
+they render. An HTML export or embed carries, beside the tile's own table, every table companion
+its config binds with a `<base>_dc_id` (the logo's `hits_dc_id`, the sequence track's
+`domains_dc_id` and `variants_dc_id`), keyed by that real id as the tile asks for it; an
+`indexed_file` companion (a structure, a PAE file) is left out. Required roles are `state` + `letter` + `emission` for `hmm_logo` (with
 `profile_source: msa`, `msa_id` + `seq_id` + `sequence`), `position` + `state` for
 `secondary_structure`, `entity` + `start` + `end` + `label` for `domain_architecture` and
 `position` for `pae_matrix` and `ramachandran`. Every other role is optional and a tile draws
@@ -418,7 +421,9 @@ partial hit), residues, E-value and score.
   (`filtersExcludingOwnResidue`), and so are the selection-sourced filters on the position, entity
   and model columns (in msa mode the position, entity, `msa_id` and `seq_id` columns, so that a
   row click in the alignment does not cut the profile to one sequence), before fetching
-  (`withoutPositionSelections`).
+  (`withoutPositionSelections`). The profile fetch also drops every filter on the position
+  column, a sidebar slider included (`withoutFiltersOn`): the logo is the whole model, and a
+  slider would take states out of it.
 
 **Performance.** One DPR-aware 2D canvas virtualised to the visible states inside a horizontal
 scroll spacer (the `MsaPanel` arrangement); a pointer move or a scroll redraws through refs, at
@@ -656,16 +661,22 @@ pair, plus the chain filter on a complex), last gesture wins:
   ignored; on a complex the named chain is honoured, else the first chain holding the residue.
 - The residue table is never narrowed by a residue pick or a chain pick
   (`withoutPositionSelections` on the position and chain columns), and the tile's own pick is
-  dropped from its fetch.
+  dropped from its fetch. Nor is it narrowed by a sidebar filter on those two columns
+  (`withoutFiltersOn`): the table numbers the axes, so a residue-range slider that keeps 71 of 172
+  residues would send the axes back to 1 to N, take the pLDDT strips away and, on a protein not
+  numbered from 1, emit picks at the wrong positions. A filter on any other column still narrows
+  it.
 
 Empty states: no PAE collection bound (or its tag not in the project), no PAE files in the
 collection, `No PAE file for <entity>`, a file the parser refuses (with its message), and the
 catalog preview or a component embed, which have no object store behind them.
 
 **Caching.** The parsed matrix, not the text, is cached per object in `molecule/objectText.ts`
-under the `pae` namespace (keyed on the URL without its query string, its own 24-object budget),
-so a refresh that signs a new URL, or two tiles on the same file, parse it once. An expired URL
-(403) re-reads the manifest once. Parsing runs on the main thread.
+under the `pae` namespace (keyed on the URL without its query string, its own 4-object budget:
+`PAE_MAX_CACHED_OBJECTS`, passed as `maxCachedObjects`, because a matrix is N x N Float32 values,
+25 MB at 2500 residues, against the 24 objects a structure's text gets), so a refresh that signs a
+new URL, or two tiles on the same file, parse it once. An expired URL (403) re-reads the manifest
+once. Parsing runs on the main thread.
 
 **Why this is a kind** (a new interaction shape, on a new data shape). A PAE matrix is a square,
 residue-by-residue heatmap read from a per-entity file in object storage, which no existing kind
@@ -812,7 +823,9 @@ change.
   (and, by kind, its entity, label, model or chain column: `withoutPositionSelections`), or a
   point selection from a table or another tile would narrow the profile, the domain list or the
   matrix's residue table to the picked rows. A sidebar filter on the same column has no source
-  and still narrows.
+  and still narrows, except where the fetch is a whole axis: the matrix's residue table and the
+  logo's profile drop every filter on the position column (and the matrix's on its chain column),
+  whatever its source (`withoutFiltersOn`).
 
 **Last gesture wins.** `mergeFiltersBySource` replaces every `residue_selection` filter on the
 same column when a new one arrives, whichever tile emitted it. Without that, a click on one
@@ -1022,7 +1035,8 @@ None of the following is benchmarked; they are the mechanisms, not measured gain
   `protein/canvas.ts`). Letters appear only above a readable cell size.
 - **No re-parse on an unchanged object.** Structure text is cached per object, keyed by the URL
   without its query string (a new presigned signature is the same object), as a shared promise so
-  two tiles share one download, capped at 24 entries (LRU by insertion order). The viewer's
+  two tiles share one download, capped at 24 entries per namespace unless the namespace passes a
+  smaller `maxCachedObjects` (the `pae` matrices do: 4) (LRU by insertion order). The viewer's
   effects run in order (load, colours, style, selection, overlays), and a filter change that
   leaves the object alone reaches none of the first three. A hover adds and removes shapes and
   never restyles the model.
@@ -1151,7 +1165,9 @@ working example of each.
   `test_indexed_file_ingest.py` (no index, entity id as sample). The kinds' registry, roles,
   validators, sampling policy and record-link tables are in `test_advanced_viz_protein_kinds.py`
   and `test_record_link_residue.py`; the export capabilities (`client_only`, no static HTML for
-  `pae_matrix` and `ramachandran`) in `depictio/tests/api/v1/services/export/test_capabilities.py`.
+  `pae_matrix` and `ramachandran`) in `depictio/tests/api/v1/services/export/test_capabilities.py`
+  and the table companions of an export (the logo's hits, a sequence track's domains and variants)
+  in `test_embed_payload.py` beside it.
   The existing
   `depictio/tests/models/test_advanced_viz_config_alignment.py` keeps the TypeScript config
   interfaces in step with the models.
@@ -1200,7 +1216,8 @@ with probabilities and `confidence_col`) with the call from the structure's own 
 deliberate disagreements for the agreement lane to show; a full-width `sequence_track`; then a
 `ramachandran` of the same model, coloured by pLDDT, beside a `profile` of pLDDT on the residue
 axis (`residue_axis: true`), which shades a pick and marks a hover. A left-panel residue-range
-slider narrows every tile.
+slider narrows the tiles that draw a range of residues; the `pae_matrix` ignores it, since its
+axes are the whole protein.
 The secondary-structure table (`protein_ss_demo`) is a separate collection whose columns are named
 for it (`ss_source`, `ss_code`, `ss_probability`, `p_helix`, `p_strand`, `p_coil`, no `residue`) and
 shares only `entity` and `position` with the residue table, which is what carries a pick from one

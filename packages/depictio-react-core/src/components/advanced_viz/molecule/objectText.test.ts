@@ -248,6 +248,79 @@ describe('the LRU cap', () => {
   });
 });
 
+describe('a namespace with its own cap', () => {
+  const ask = (n: number | string, ns: string, fetcher: () => Promise<Response>, cap?: number) =>
+    loadObjectText(url(n, ns), { cacheNamespace: ns, fetcher, maxCachedObjects: cap });
+
+  it('keeps that many objects and drops the oldest past it', async () => {
+    const fetcher = vi.fn(body('x'));
+    for (let i = 0; i < 3; i += 1) await ask(i, 'small', fetcher, 3);
+    for (let i = 0; i < 3; i += 1) await ask(i, 'small', fetcher, 3);
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    await ask(3, 'small', fetcher, 3);
+    expect(fetcher).toHaveBeenCalledTimes(4);
+    // The first is gone, the newest is still held.
+    await ask(3, 'small', fetcher, 3);
+    expect(fetcher).toHaveBeenCalledTimes(4);
+    await ask(0, 'small', fetcher, 3);
+    expect(fetcher).toHaveBeenCalledTimes(5);
+  });
+
+  it('still counts a hit as a use', async () => {
+    const fetcher = vi.fn(body('x'));
+    for (let i = 0; i < 3; i += 1) await ask(i, 'small', fetcher, 3);
+    await ask(0, 'small', fetcher, 3);
+    await ask('extra', 'small', fetcher, 3);
+    expect(fetcher).toHaveBeenCalledTimes(4);
+    await ask(0, 'small', fetcher, 3);
+    expect(fetcher).toHaveBeenCalledTimes(4);
+    await ask(1, 'small', fetcher, 3);
+    expect(fetcher).toHaveBeenCalledTimes(5);
+  });
+
+  it('leaves the default namespace at MAX_CACHED_OBJECTS', async () => {
+    const small = vi.fn(body('s'));
+    for (let i = 0; i < 10; i += 1) await ask(i, 'small', small, 2);
+    const structure = vi.fn(body('t'));
+    for (let i = 0; i < MAX_CACHED_OBJECTS; i += 1) await ask(i, 'structure', structure);
+    for (let i = 0; i < MAX_CACHED_OBJECTS; i += 1) await ask(i, 'structure', structure);
+    expect(structure).toHaveBeenCalledTimes(MAX_CACHED_OBJECTS);
+    await ask(MAX_CACHED_OBJECTS, 'structure', structure);
+    await ask(0, 'structure', structure);
+    expect(structure).toHaveBeenCalledTimes(MAX_CACHED_OBJECTS + 2);
+  });
+
+  it('is at least one object, and a nonsense cap falls back to the default', async () => {
+    const one = vi.fn(body('x'));
+    await ask('a', 'one', one, 0);
+    await ask('a', 'one', one, 0);
+    expect(one).toHaveBeenCalledTimes(1);
+    await ask('b', 'one', one, 0);
+    await ask('a', 'one', one, 0);
+    expect(one).toHaveBeenCalledTimes(3);
+
+    const odd = vi.fn(body('x'));
+    for (let i = 0; i < MAX_CACHED_OBJECTS; i += 1) await ask(i, 'odd', odd, Number.NaN);
+    for (let i = 0; i < MAX_CACHED_OBJECTS; i += 1) await ask(i, 'odd', odd, Number.NaN);
+    expect(odd).toHaveBeenCalledTimes(MAX_CACHED_OBJECTS);
+  });
+
+  it('applies through the renewing loader too', async () => {
+    const fetcher = vi.fn(body('x'));
+    const load = (n: number) =>
+      loadObjectTextRenewing(url(n, 'renew'), {
+        cacheNamespace: 'renew',
+        maxCachedObjects: 2,
+        fetcher,
+      });
+    await load(0);
+    await load(1);
+    await load(2);
+    await load(0);
+    expect(fetcher).toHaveBeenCalledTimes(4);
+  });
+});
+
 describe('loadObjectTextRenewing', () => {
   it('asks once for a fresh URL after a 403 and loads from it', async () => {
     const fetcher = vi.fn(async (u: string) =>

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { clearObjectCache } from '../molecule/objectText';
 import { paeAt, parsePae, PaeParseError, pyFloat, type PaeMatrix } from './paeParse';
-import { loadPaeMatrix, PAE_CACHE_NAMESPACE } from './usePaeMatrix';
+import { loadPaeMatrix, PAE_CACHE_NAMESPACE, PAE_MAX_CACHED_OBJECTS } from './usePaeMatrix';
 
 // Same fixture as depictio/tests/unit/recipes/test_pae_lib.py.
 const MATRIX = [
@@ -178,6 +178,24 @@ describe('loadPaeMatrix: through the object loader', () => {
     await expect(loadPaeMatrix('https://s3/bucket/bad.pae.tsv', { fetcher })).rejects.toThrow(/square/);
     await expect(loadPaeMatrix('https://s3/bucket/bad.pae.tsv', { fetcher })).rejects.toThrow(/square/);
     expect(fetched).toBe(2);
+  });
+
+  it('keeps a handful of parsed matrices, not the 24 a structure namespace holds', async () => {
+    expect(PAE_MAX_CACHED_OBJECTS).toBeLessThan(24);
+    let fetched = 0;
+    const fetcher = async () => {
+      fetched += 1;
+      return new Response('0 1\n1 0\n');
+    };
+    const load = (n: number) => loadPaeMatrix(`https://s3/bucket/p${n}.pae.tsv`, { fetcher });
+    for (let i = 0; i < PAE_MAX_CACHED_OBJECTS; i += 1) await load(i);
+    for (let i = 0; i < PAE_MAX_CACHED_OBJECTS; i += 1) await load(i);
+    expect(fetched).toBe(PAE_MAX_CACHED_OBJECTS);
+    await load(PAE_MAX_CACHED_OBJECTS);
+    expect(fetched).toBe(PAE_MAX_CACHED_OBJECTS + 1);
+    // The oldest was evicted: it downloads and parses again.
+    await load(0);
+    expect(fetched).toBe(PAE_MAX_CACHED_OBJECTS + 2);
   });
 
   it('names the file kind in a refused download', async () => {

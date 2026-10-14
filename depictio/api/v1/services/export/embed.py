@@ -463,6 +463,113 @@ def _add_advanced_viz(
             access_token=access_token,
             viz_kind=viz_kind,
         )
+        _add_table_companions(
+            data,
+            config,
+            columns=columns,
+            wf_id=wf_id,
+            filter_metadata=filter_metadata,
+            viz_kind=viz_kind,
+            user=user,
+            access_token=access_token,
+        )
+
+
+#: ``<base>_dc_id`` keys that name no table companion read under its own id: the
+#: phylogeny (``tree_dc_id``, embedded under its own synthetic key above), the
+#: volcano's MA source (``ma_dc_id``, loaded from the view plan) and the unused
+#: ``matrix_dc_id`` of a complex heatmap.
+_NOT_TABLE_COMPANION_KEYS = frozenset({"tree_dc_id", "ma_dc_id", "matrix_dc_id"})
+
+#: Columns a companion table is read by under a fixed name, which no ``*_col``
+#: key carries (constants of ``SequenceTrackRenderer.tsx``): a domain's
+#: annotation database, a variant's reference and alternate residues.
+_FIXED_COMPANION_COLUMNS: dict[str, tuple[str, ...]] = {
+    "domains_dc_id": ("source",),
+    "variants_dc_id": ("ref_aa", "alt_aa"),
+}
+
+
+def _companion_dc_ids(config: dict[str, Any]) -> dict[str, tuple[str | None, list[str]]]:
+    """Every companion collection a config binds: ``{dc_id: (wf_id, fixed columns)}``.
+
+    Advanced-viz configs bind a second collection with a ``<base>_dc_id`` key (the
+    hits of an HMM logo, the domains and variants of a sequence track, the
+    alignment under a structure, the PAE file of a matrix) and, beside it, the
+    ``<base>_wf_id`` of its workflow. The renderer asks for it by that real id, so
+    the payload keys it the same way. A collection named twice is listed once.
+    """
+    found: dict[str, tuple[str | None, list[str]]] = {}
+    for key, value in config.items():
+        if not key.endswith("_dc_id") or key in _NOT_TABLE_COMPANION_KEYS or not value:
+            continue
+        dc_id = str(value)
+        wf_id = config.get(f"{key[: -len('_dc_id')]}_wf_id")
+        known_wf, known_extra = found.get(dc_id, (None, []))
+        extra = [c for c in _FIXED_COMPANION_COLUMNS.get(key, ()) if c not in known_extra]
+        found[dc_id] = (known_wf or (str(wf_id) if wf_id else None), [*known_extra, *extra])
+    return found
+
+
+def _is_table_dc(dc_id: str) -> bool:
+    """Whether the collection is a ``table`` (rows in a Delta table the data route reads).
+
+    An ``indexed_file`` collection (a structure, a PAE matrix) has objects, not
+    rows, and the route answers 404 for it.
+    """
+    from bson import ObjectId
+
+    from depictio.api.v1.deltatables_utils import _get_dc_type_from_db
+
+    try:
+        dc_type = _get_dc_type_from_db(ObjectId(dc_id))
+    except Exception:  # not an ObjectId
+        return False
+    return str(dc_type or "").lower() == "table"
+
+
+def _add_table_companions(
+    data: dict[str, Any],
+    config: dict[str, Any],
+    *,
+    columns: list[str],
+    wf_id: str,
+    filter_metadata: list[dict],
+    viz_kind: str | None,
+    user: Any,
+    access_token: str | None,
+) -> None:
+    """Embed the table collections a tile reads beside its own, under their real ids.
+
+    An HMM logo draws the hits that matched its model from ``hits_dc_id``, a
+    sequence track its domains and variants from ``domains_dc_id`` and
+    ``variants_dc_id``. The offline shim answers a request by ``dc_id`` alone, so
+    a companion left out of the payload makes the tile report it unavailable.
+    ``indexed_file`` companions (structures, PAE matrices) are skipped: their
+    objects are fetched from storage at render time, which no offline page can
+    do (``HTML_UNAVAILABLE_KINDS`` says so for those kinds). A companion that
+    cannot be read costs the tile that lane, not the export.
+    """
+    from depictio.api.v1.services.advanced_viz.data import load_tidy_columns
+
+    for dc_id, (companion_wf_id, fixed) in _companion_dc_ids(config).items():
+        if dc_id in data["advancedVizData"]:
+            continue
+        if not _is_table_dc(dc_id):
+            logger.info("export: companion dc=%s is not a table; left out of the payload", dc_id)
+            continue
+        try:
+            data["advancedVizData"][dc_id] = load_tidy_columns(
+                wf_id=companion_wf_id or wf_id,
+                dc_id=dc_id,
+                columns=list(dict.fromkeys([*columns, *fixed])),
+                filter_metadata=filter_metadata,
+                current_user=user,
+                access_token=access_token,
+                viz_kind=viz_kind,
+            )
+        except Exception as exc:
+            logger.warning("export: companion table dc=%s not embedded: %s", dc_id, exc)
 
 
 def _advanced_viz_columns(config: dict[str, Any]) -> list[str]:

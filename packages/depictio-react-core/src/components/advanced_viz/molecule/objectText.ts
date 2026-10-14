@@ -10,10 +10,13 @@
  *
  * The cache is split by `cacheNamespace`, one map and one budget per kind of
  * file, so a dashboard full of PAE matrices does not push the structures its
- * 3D tiles hold out of memory, or the other way round.
+ * 3D tiles hold out of memory, or the other way round. The budget is a count
+ * of objects, so a namespace whose values are big (a parsed PAE matrix is
+ * N x N floats: 25 MB at 2500 residues) passes a smaller `maxCachedObjects`.
  */
 
-/** Objects kept per namespace; the least recently used goes first. */
+/** Objects kept per namespace unless the caller passes its own cap; the least
+ *  recently used goes first. */
 export const MAX_CACHED_OBJECTS = 24;
 
 /** gzip magic number (1f 8b). */
@@ -68,9 +71,16 @@ export interface ObjectParseContext {
 }
 
 export interface ObjectLoadOptions<T = string> {
-  /** Cache bucket: one map, one `MAX_CACHED_OBJECTS` budget per namespace. A
-   *  namespace holds one kind of value, the one its callers' `parse` returns. */
+  /** Cache bucket: one map, one object budget per namespace. A namespace holds
+   *  one kind of value, the one its callers' `parse` returns. */
   cacheNamespace: string;
+  /**
+   * Objects the namespace keeps (the least recently used goes first), for
+   * values far heavier than a structure's text. Defaults to
+   * `MAX_CACHED_OBJECTS`; every caller of one namespace passes the same value,
+   * or the last to load decides the cap. At least 1.
+   */
+  maxCachedObjects?: number;
   /** A file name, when the caller knows it, for `parse` to sniff the format by. */
   nameHint?: string | null;
   fetcher?: (url: string) => Promise<Response>;
@@ -108,6 +118,8 @@ function bucketOf(namespace: string): Map<string, Promise<unknown>> {
  */
 export function loadObjectText<T = string>(url: string, opts: ObjectLoadOptions<T>): Promise<T> {
   const { cacheNamespace, nameHint = null, parse, errorFor } = opts;
+  const asked = opts.maxCachedObjects;
+  const cap = asked !== undefined && Number.isFinite(asked) ? Math.max(1, Math.floor(asked)) : MAX_CACHED_OBJECTS;
   const noun = opts.noun ?? cacheNamespace;
   const cache = bucketOf(cacheNamespace);
   const key = objectCacheKey(url);
@@ -130,7 +142,7 @@ export function loadObjectText<T = string>(url: string, opts: ObjectLoadOptions<
   pending.catch(() => {
     if (cache.get(key) === pending) cache.delete(key);
   });
-  while (cache.size > MAX_CACHED_OBJECTS) {
+  while (cache.size > cap) {
     const oldest = cache.keys().next().value;
     if (oldest === undefined) break;
     cache.delete(oldest);

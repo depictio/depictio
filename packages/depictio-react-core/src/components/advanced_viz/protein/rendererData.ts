@@ -29,6 +29,26 @@ export function withoutPositionSelections(
 }
 
 /**
+ * Drop EVERY filter on the named columns, whatever its source.
+ *
+ * For a fetch that reads a whole axis rather than a subset: the PAE matrix
+ * numbers its axes from the residue table's rows (index k is the k-th row, so a
+ * sidebar slider that keeps residues 30 to 100 of 172 leaves 71 rows against a
+ * 172 x 172 matrix, and the axes fall back to 1..N), and the logo's profile is
+ * the model's states (a slider on `position` would drop states). Where
+ * `withoutPositionSelections` leaves a sidebar filter standing because it is a
+ * filter like any other, these fetches have no use for the rows it removes.
+ * Tiles that draw a range of residues keep honouring the sidebar.
+ */
+export function withoutFiltersOn(
+  filters: readonly InteractiveFilter[],
+  columns: ReadonlyArray<string | null | undefined>,
+): InteractiveFilter[] {
+  const cols = new Set(columns.filter((c): c is string => Boolean(c)));
+  return filters.filter((f) => !cols.has(filterColumn(f) ?? ''));
+}
+
+/**
  * Distinct entities of a column, the one with the most rows first (ties keep
  * their first-appearance order). The order every protein tile opens on, so a
  * structure, a sequence track and an alignment of the same table start on the
