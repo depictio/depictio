@@ -145,6 +145,9 @@ export interface FilterPanelProps {
    *  opaque node: the apps put the docked map panel here, and this component
    *  has no business knowing that. */
   footer?: React.ReactNode;
+  /** Offer "copy a link with these filters" in the active-filters summary.
+   *  Off for hosts that do not restore a shared link (the editor). */
+  shareLink?: boolean;
   /** Funnel filtering (issue #939). Omitted → the controls are hidden (the
    *  host, e.g. the editor, doesn't wire it). `onOpenView` opens the funnel
    *  overview modal; the button stays mounted while the toggle is off but
@@ -190,6 +193,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   onToggleCollapsed,
   headerActions,
   footer,
+  shareLink = false,
   funnel,
   groupSummaryRows,
 }) => {
@@ -883,6 +887,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
         groupRows={groupSummaryRows}
         open={collapse.isOpen(SUMMARY_KEY)}
         onToggle={() => collapse.toggle(SUMMARY_KEY)}
+        shareable={shareLink}
       />
 
       {components.length > SEARCH_THRESHOLD && (

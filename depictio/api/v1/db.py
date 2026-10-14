@@ -73,6 +73,9 @@ branding_assets_collection = db[settings.mongodb.collections.branding_assets_col
 user_avatars_collection = db[settings.mongodb.collections.user_avatars_collection]
 telemetry_collection = db[settings.mongodb.collections.telemetry_collection]
 comment_threads_collection = db[settings.mongodb.collections.comment_threads_collection]
+
+# Per-user filter state of a dashboard (the viewer's remembered filters).
+dashboard_filter_states_collection = db["dashboard_filter_states"]
 cli_agents_collection = db[settings.mongodb.collections.cli_agents_collection]
 jobs_collection = db[settings.mongodb.collections.jobs_collection]
 test_collection = db[settings.mongodb.collections.test_collection]

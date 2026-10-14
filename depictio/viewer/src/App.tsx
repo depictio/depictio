@@ -48,6 +48,11 @@ import {
   writeCrossTabFilters,
   clearCrossTabFilters,
   persistableCrossTabFilters,
+  readFiltersFromLocation,
+  syncFiltersToLocation,
+  sanitizeRestoredFilters,
+  fetchDashboardFilterState,
+  saveDashboardFilterState,
   FILTER_PANEL_RAIL_WIDTH,
   countActiveFilters,
   useSelectionGroups,
@@ -98,6 +103,11 @@ const ingestionBannerKey = (projectId: string) =>
  *  Long enough to swallow a burst of MultiSelect picks or a slider drag, short
  *  enough that a single deliberate change still feels immediate. */
 const FILTER_DEBOUNCE_MS = 250;
+
+/** Debounce for the per-user server-side filter-state write. Longer than the
+ *  fetch debounce: persistence has no visible latency to hide, so it can wait
+ *  out a whole burst of interaction. */
+const SAVE_FILTER_STATE_DEBOUNCE_MS = 800;
 import { notifications } from '@mantine/notifications';
 import { Sidebar, RunParametersHost, SettingsDrawer, TabIntro } from './chrome';
 import type { HeaderAction } from './chrome/Header';
@@ -112,6 +122,13 @@ import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
 import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
 import { useCurrentUser } from './hooks/useCurrentUser';
 import { isDashboardOwner } from './lib/dashboardOwnership';
+import {
+  readLocalFilterState,
+  writeLocalFilterState,
+  clearLocalFilterState,
+  readRememberToggle,
+  writeRememberToggle,
+} from './lib/filterStateStorage';
 import { FILTER_PANEL_RESIZER_WIDTH } from './components/FilterPanelResizer';
 import GroupingHeaderControl, {
   ANALYSIS_PANEL_WIDTH_PX,
@@ -152,26 +169,30 @@ const App: React.FC = () => {
   const [allDashboards, setAllDashboards] = useState<DashboardSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  // Seed from the persisted cross-tab filters, synchronously. A selection made
-  // on the floating map or a value set in a persistent filter section is meant
-  // to survive a tab switch, and hydrating in an effect instead would let
-  // every grid tile fetch once unfiltered before the seed landed, then again
-  // straight after. The seed is validated against the real cross-tab
-  // components once they resolve (`handleCrossTabResolved`), which is what
-  // discards stale entries.
-  const [filters, setFilters] = useState<InteractiveFilter[]>(
-    () => readCrossTabFilters()?.filters ?? [],
-  );
-  // Indices we hydrated from storage. Only these may be pruned as stale — a
-  // selection the viewer makes on a *grid* map during this page load must
-  // never be swept up by the validation pass.
+  // Seed synchronously from three sources merged per (index, source) key, in
+  // ascending priority: this dashboard's remembered filters (localStorage, when
+  // "Remember my filters" is on) -> the cross-tab selection (floating map,
+  // persistent sections) -> a `#filters=` share-link fragment, consumed once
+  // and stripped from the address bar. Hydrating in an effect instead would
+  // let every grid tile fetch once unfiltered before the seed landed, then
+  // again straight after. The cross-tab entries are validated against the real
+  // cross-tab components once they resolve (`handleCrossTabResolved`); the
+  // rest against the dashboard's own components (`restoredPruned` below).
   //
-  // Lazily, because `useRef`'s argument is evaluated on EVERY render and React
-  // keeps only the first: an eager read would re-parse the stored payload — as
-  // large as the last lasso — on every keystroke in a filter.
+  // Lazily, because `useRef`'s argument is evaluated on EVERY render and the
+  // hydration reads storage and decodes the URL fragment.
+  const hydrationRef = useRef<InitialFilterHydration | null>(null);
+  if (hydrationRef.current === null) {
+    hydrationRef.current = hydrateInitialFilters(extractDashboardId(), extractPreviewVersionId());
+  }
+  const [filters, setFilters] = useState<InteractiveFilter[]>(hydrationRef.current.filters);
+  // Indices we hydrated from the cross-tab store. Only these may be pruned by
+  // the cross-tab validation pass — a selection the viewer makes on a *grid*
+  // map during this page load, or a filter restored from this dashboard's own
+  // remembered state, must never be swept up by it.
   const hydratedIndicesRef = useRef<Set<string> | null>(null);
   if (hydratedIndicesRef.current === null) {
-    hydratedIndicesRef.current = new Set(filters.map((f) => f.index));
+    hydratedIndicesRef.current = new Set(hydrationRef.current.crossTabIndices);
   }
   // Saved selection groups ("select & compare"): annotation state kept apart
   // from `filters` — the user's filter list stays theirs, and the active
@@ -701,8 +722,15 @@ const App: React.FC = () => {
     [summaryMetadata],
   );
 
+  // True once the viewer has changed a filter this page load. Gates the server
+  // reconcile (never replace what they are actively doing) and the debounced
+  // server write (never round-trip a state that is only the hydration echoed
+  // back).
+  const userTouchedRef = useRef(false);
+
   const handleFilterChange = useCallback(
     (update: InteractiveFilter) => {
+      userTouchedRef.current = true;
       // Looked up against the family-wide union, not just this tab's own
       // metadata: a control fanned out from a persistent filter section has no
       // entry in `dashboard.stored_metadata` here.
@@ -719,6 +747,7 @@ const App: React.FC = () => {
   // "Reset all" does for the whole tab; everything else stays.
   const handleResetFilterIndices = useCallback(
     (indices: string[]) => {
+      userTouchedRef.current = true;
       const drop = new Set(indices);
       const barMetadata = summaryMetadata.filter((m) => drop.has(m.index));
       setFilters((prev) =>
@@ -750,6 +779,7 @@ const App: React.FC = () => {
    */
   const handleApplyViewState = useCallback(
     (viewState: CommentViewState) => {
+      userTouchedRef.current = true;
       const incoming = [
         ...(viewState.filters ?? []),
         ...((viewState.selection?.filters as InteractiveFilter[] | undefined) ?? []),
@@ -769,6 +799,7 @@ const App: React.FC = () => {
   );
 
   const handleResetAllFilters = useCallback(() => {
+    userTouchedRef.current = true;
     // "Reset all" returns to the author's initial view: declared defaults
     // come back, everything else is cleared.
     setFilters(withInteractiveDefaults([], dashboard?.stored_metadata));
@@ -800,6 +831,168 @@ const App: React.FC = () => {
       persistableCrossTabFilters(filters, floatingIndices, persistentFilterIndices),
     );
   }, [filters, crossTab.resolved, crossTab.familyId, floatingIndices, persistentFilterIndices]);
+
+  // ---- Remembered filters (issue #936) --------------------------------------
+  // Hybrid: localStorage restores instantly (hydrated in the useState
+  // initializer above), the per-user server copy reconciles asynchronously so
+  // the view follows the viewer across browsers. Every filter level rides
+  // along: panel controls and scatter / table / map / image selections all
+  // live in the one `filters` array being persisted. A `?version=` preview is
+  // a read-only view of the past: it neither restores nor remembers anything.
+  const remembering = Boolean(dashboardId) && !previewVersionId;
+  const [rememberFilters, setRememberFilters] = useState<boolean>(() =>
+    dashboardId ? readRememberToggle(dashboardId) : true,
+  );
+
+  // Mirror of `filters` for callbacks that must not rebuild per keystroke.
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+
+  const handleRememberFiltersChange = useCallback(
+    (on: boolean) => {
+      setRememberFilters(on);
+      if (!dashboardId) return;
+      writeRememberToggle(dashboardId, on);
+      if (on) {
+        writeLocalFilterState(dashboardId, filtersRef.current);
+        void saveDashboardFilterState(dashboardId, filtersRef.current, true);
+      } else {
+        // Forget the stored state but keep what is on screen: switching this
+        // off is about the next visit, not this one. A PUT rather than a
+        // DELETE, so the OFF preference roams to the viewer's other browsers.
+        clearLocalFilterState(dashboardId);
+        void saveDashboardFilterState(dashboardId, [], false);
+      }
+    },
+    [dashboardId],
+  );
+
+  // Drop restored entries (local state, share link) that no longer match a
+  // component of this dashboard family: stale storage, a deleted tile, a link
+  // minted on another tab. Waits for the family-wide metadata (this tab's
+  // components plus the cross-tab ones) so a restored map selection is judged
+  // against the floating maps too. Cross-tab entries are not touched here:
+  // `handleCrossTabResolved` owns them.
+  const restoredPrunedRef = useRef(false);
+  useEffect(() => {
+    if (!dashboard || !crossTab.resolved || restoredPrunedRef.current) return;
+    restoredPrunedRef.current = true;
+    const restored = hydrationRef.current?.restoredIndices;
+    if (!restored || restored.size === 0) return;
+    const known = new Set(summaryMetadata.map((m) => m.index));
+    setFilters((prev) =>
+      prev.filter(
+        (f) =>
+          !restored.has(f.index) || hydratedIndicesRef.current?.has(f.index) || known.has(f.index),
+      ),
+    );
+  }, [dashboard, crossTab.resolved, summaryMetadata]);
+
+  // Whether the current filters are the viewer's own view rather than the
+  // dashboard's declared defaults, which are not worth remembering or writing
+  // into the address bar: they were changed, restored, or arrived in a link.
+  const viewIsTheirs = () =>
+    userTouchedRef.current ||
+    serverStateAppliedRef.current ||
+    Boolean(hydrationRef.current?.urlConsumed) ||
+    (hydrationRef.current?.restoredIndices.size ?? 0) > 0;
+
+  // Local write, derived from `filters` on every change (like the cross-tab
+  // write above), so "Reset all" empties the stored copy for free.
+  useEffect(() => {
+    if (!remembering || !dashboardId || !rememberFilters || !viewIsTheirs()) return;
+    writeLocalFilterState(dashboardId, filters);
+  }, [filters, dashboardId, rememberFilters, remembering]);
+
+  // The address bar carries the view: `#filters=` follows the filters, so the
+  // page's own URL can be copied and pasted as the link. Debounced, because
+  // browsers throttle history writes and a slider drag is a burst.
+  useEffect(() => {
+    if (!remembering) return;
+    if (!rememberFilters) {
+      // Not remembering: a fragment left from before would mislead.
+      syncFiltersToLocation([]);
+      return;
+    }
+    if (!viewIsTheirs()) return;
+    const timer = window.setTimeout(() => syncFiltersToLocation(filters), 300);
+    return () => window.clearTimeout(timer);
+  }, [filters, remembering, rememberFilters]);
+
+  // Server write: debounced, and only once the viewer has changed a filter.
+  const serverSaveTimer = useRef<number | null>(null);
+  const pendingServerSave = useRef<InteractiveFilter[] | null>(null);
+  useEffect(() => {
+    if (!remembering || !dashboardId || !rememberFilters || !userTouchedRef.current) return;
+    pendingServerSave.current = filters;
+    if (serverSaveTimer.current) window.clearTimeout(serverSaveTimer.current);
+    serverSaveTimer.current = window.setTimeout(() => {
+      pendingServerSave.current = null;
+      void saveDashboardFilterState(dashboardId, filters, true);
+    }, SAVE_FILTER_STATE_DEBOUNCE_MS);
+    return () => {
+      if (serverSaveTimer.current) window.clearTimeout(serverSaveTimer.current);
+    };
+  }, [filters, dashboardId, rememberFilters, remembering]);
+
+  // A tab switch is a full page navigation, so a click right after a filter
+  // change would lose the debounced write. `keepalive` lets it outlive the page.
+  useEffect(() => {
+    if (!dashboardId) return;
+    const flush = () => {
+      if (pendingServerSave.current === null) return;
+      void saveDashboardFilterState(dashboardId, pendingServerSave.current, true, {
+        keepalive: true,
+      });
+      pendingServerSave.current = null;
+    };
+    window.addEventListener('pagehide', flush);
+    return () => window.removeEventListener('pagehide', flush);
+  }, [dashboardId]);
+
+  // Server reconcile: fetched once per dashboard, applied only when it is the
+  // best information available: saved, newer than what localStorage restored,
+  // no share link in play, and the viewer has not started interacting.
+  const [serverFilterState, setServerFilterState] = useState<InteractiveFilter[] | null>(null);
+  const serverStateAppliedRef = useRef(false);
+  useEffect(() => {
+    if (!remembering || !dashboardId) return;
+    let cancelled = false;
+    (async () => {
+      const res = await fetchDashboardFilterState(dashboardId);
+      if (cancelled || !res || !res.persisted) return;
+      if (res.enabled === false) {
+        // Switched off in another browser: adopt it here.
+        setRememberFilters(false);
+        writeRememberToggle(dashboardId, false);
+        clearLocalFilterState(dashboardId);
+        return;
+      }
+      if (!readRememberToggle(dashboardId)) return;
+      if (hydrationRef.current?.urlConsumed) return;
+      const serverAt = res.updated_at ? Date.parse(res.updated_at) : 0;
+      if (Number.isNaN(serverAt) || serverAt <= (hydrationRef.current?.localUpdatedAt ?? 0)) {
+        return;
+      }
+      if (res.filters.length > 0) setServerFilterState(res.filters);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [dashboardId, remembering]);
+  useEffect(() => {
+    if (!serverFilterState || !dashboard || !crossTab.resolved || serverStateAppliedRef.current) {
+      return;
+    }
+    serverStateAppliedRef.current = true;
+    if (userTouchedRef.current) return;
+    const sane = sanitizeRestoredFilters(
+      serverFilterState,
+      new Set(summaryMetadata.map((m) => m.index)),
+    );
+    if (sane.length === 0) return;
+    setFilters((prev) => sane.reduce((acc, f) => mergeFiltersBySource(acc, f), prev));
+  }, [serverFilterState, dashboard, crossTab.resolved, summaryMetadata]);
 
   // ---- Realtime: WebSocket subscription + UI toggle -------------------------
   // Mode toggle persisted to localStorage so the user's choice survives
@@ -1324,6 +1517,7 @@ const App: React.FC = () => {
         filters={filters}
         onFilterChange={handleFilterChange}
         onResetAllFilters={handleResetAllFilters}
+        shareLink={remembering}
         layoutData={dashboard.left_panel_layout_data}
         filterSections={panelFilterSections}
         dashboardId={dashboardId}
@@ -1664,6 +1858,16 @@ const App: React.FC = () => {
         onClose={closeSettings}
         dashboard={dashboard}
         initialSection={settingsSection}
+        filters={
+          remembering
+            ? {
+                current: filters,
+                activeCount: countActiveFilters(filters),
+                remember: rememberFilters,
+                onRememberChange: handleRememberFiltersChange,
+              }
+            : undefined
+        }
       />
       {/* Opens on a dashboard's `params:` links. */}
       <RunParametersHost dashboard={dashboard} />
@@ -1829,6 +2033,77 @@ function extractDashboardId(): string | null {
   const path = window.location.pathname;
   const match = path.match(/\/dashboard\/([^/?#]+)/);
   return match?.[1] || null;
+}
+
+interface InitialFilterHydration {
+  filters: InteractiveFilter[];
+  /** Indices that came from the cross-tab store: `handleCrossTabResolved`
+   *  validates those. */
+  crossTabIndices: Set<string>;
+  /** Indices restored from this dashboard's remembered state or a share link:
+   *  pruned against the dashboard's own components once they are known. */
+  restoredIndices: Set<string>;
+  /** A `#filters=` fragment was decoded and applied: the URL wins over the
+   *  async server reconcile for this page load. */
+  urlConsumed: boolean;
+  /** `updatedAt` of the local state as read BEFORE this load's writes refresh
+   *  it, so the server reconcile compares against the previous visit and not
+   *  against the write this mount just made. */
+  localUpdatedAt: number;
+}
+
+/** Merge the remembered / cross-tab / share-link filter sources in ascending
+ *  priority, so a URL entry replaces a remembered one for the same
+ *  (index, source) key while the entries it does not mention survive. A
+ *  version preview restores nothing of its own: it is a view of the past. */
+function hydrateInitialFilters(
+  dashboardId: string | null,
+  previewVersionId: string | null,
+): InitialFilterHydration {
+  // Once per page load. React's dev StrictMode renders the component body
+  // twice on mount and keeps the second pass; reading the share-link fragment
+  // strips it from the address bar, so a second read would find nothing and
+  // the link would silently apply no filters.
+  const key = `${dashboardId ?? ''}|${previewVersionId ?? ''}`;
+  const cached = hydrationCache.get(key);
+  if (cached) return cached;
+  const hydration = readInitialFilters(dashboardId, previewVersionId);
+  hydrationCache.set(key, hydration);
+  return hydration;
+}
+
+const hydrationCache = new Map<string, InitialFilterHydration>();
+
+function readInitialFilters(
+  dashboardId: string | null,
+  previewVersionId: string | null,
+): InitialFilterHydration {
+  const crossTab = readCrossTabFilters()?.filters ?? [];
+  const crossTabIndices = new Set(crossTab.map((f) => f.index));
+  if (previewVersionId) {
+    return {
+      filters: crossTab,
+      crossTabIndices,
+      restoredIndices: new Set(),
+      urlConsumed: false,
+      localUpdatedAt: 0,
+    };
+  }
+  const url = readFiltersFromLocation();
+  const local =
+    dashboardId && readRememberToggle(dashboardId) ? readLocalFilterState(dashboardId) : null;
+  const restored = [...(local?.filters ?? []), ...(url ?? [])];
+  let merged: InteractiveFilter[] = [];
+  for (const f of [...(local?.filters ?? []), ...crossTab, ...(url ?? [])]) {
+    merged = mergeFiltersBySource(merged, f);
+  }
+  return {
+    filters: merged,
+    crossTabIndices,
+    restoredIndices: new Set(restored.map((f) => f.index)),
+    urlConsumed: url !== null,
+    localUpdatedAt: local?.updatedAt ?? 0,
+  };
 }
 
 function stableFilterKey(filters: InteractiveFilter[]): string {

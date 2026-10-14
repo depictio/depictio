@@ -503,6 +503,10 @@ export {
   fetchFigureVisualizationList,
   upsertComponent,
   saveDashboardNotes,
+  // Per-user dashboard filter state
+  fetchDashboardFilterState,
+  saveDashboardFilterState,
+  deleteDashboardFilterState,
   uploadDashboardLogo,
   updateDashboardAppearance,
   // Instance branding (admin panel)
@@ -733,6 +737,14 @@ export {
 } from './crossTabFilters';
 export type { CrossTabFilterPayload } from './crossTabFilters';
 export {
+  encodeFiltersForHash,
+  decodeFiltersFromHash,
+  readFiltersFromLocation,
+  syncFiltersToLocation,
+  buildFilterShareUrl,
+  sanitizeRestoredFilters,
+} from './filterShare';
+export {
   readEditorFilters,
   writeEditorFilters,
   clearEditorFilters,
@@ -903,6 +915,7 @@ export type {
   DashboardSummary,
   InteractiveFilter,
   InteractiveFilterSource,
+  DashboardFilterStateResponse,
   BulkComputeResponse,
   FigureResponse,
   TableResponse,

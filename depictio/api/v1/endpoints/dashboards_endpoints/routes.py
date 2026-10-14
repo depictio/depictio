@@ -39,6 +39,9 @@ from depictio.api.v1.endpoints.dashboards_endpoints.data_versions import (
     referenced_dc_ids,
     resolve_data_versions,
 )
+from depictio.api.v1.endpoints.dashboards_endpoints.filter_state_cascade import (
+    delete_filter_states_for_dashboards,
+)
 from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_current_user,
     get_user_or_anonymous,
@@ -1432,6 +1435,7 @@ async def delete_dashboard(
         # it rather than sitting in `branding_assets` forever.
         delete_logo_asset(dashboard_logo_key(dashboard_id))
         delete_threads_for_dashboards(tab_ids_for_threads)
+        delete_filter_states_for_dashboards(tab_ids_for_threads)
         # Drop the version ledger with the dashboard. Versions are keyed on the
         # family id, so without this every deleted dashboard leaves its whole
         # history — and its sequence counter — behind with nothing able to
@@ -1642,6 +1646,7 @@ async def delete_tab(
 
     if result.deleted_count > 0:
         delete_threads_for_dashboards([dashboard_id])
+        delete_filter_states_for_dashboards([dashboard_id])
         # Anchored on the *parent*: the tab is gone, so it can no longer resolve
         # its own family, and a capture addressed to it would find nothing.
         #
