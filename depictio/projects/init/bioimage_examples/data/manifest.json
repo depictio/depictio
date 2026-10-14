@@ -13,7 +13,15 @@
     "levels": 3,
     "sample_crop": 256,
     "seed": 1086,
+    "spatialdata_version": "0.8.0",
     "spot_spacing": 14.0,
+    "tiff_crop": 480,
+    "tiff_max_cell": 4000,
+    "tiff_min_cell": 15,
+    "tiff_origin": [
+      256,
+      256
+    ],
     "timepoints": 5,
     "tissue_threshold": 0.85,
     "volume_channels": "0,2",
@@ -22,7 +30,8 @@
       96,
       96
     ],
-    "z_step": 2
+    "z_step": 2,
+    "zarr3_version": "3.4.0"
   },
   "generator": "dev/bioimage/make_examples.py",
   "stores": [
@@ -55,6 +64,32 @@
       "bytes": 40106,
       "rows": 89,
       "store": "multi_sample/sample_C.zarr"
+    },
+    {
+      "bytes": 459458,
+      "rows": 1102,
+      "store": "lily_stem.ome.tif"
+    },
+    {
+      "bytes": 2054017,
+      "image_path": "images/he",
+      "ngff_version": "0.5-dev-spatialdata",
+      "nuclei": 1220,
+      "rows": 618,
+      "spatialdata_version": "0.8.0",
+      "store": "skin_spatialdata.zarr",
+      "zarr_version": "3.4.0"
+    },
+    {
+      "bytes": 1486063,
+      "chunk": 128,
+      "largest_file_bytes": 102740,
+      "ngff_version": "0.5",
+      "rows": 1103,
+      "shard": 256,
+      "shard_files": 18,
+      "store": "lily_sharded.zarr",
+      "zarr_version": "3.4.0"
     }
   ]
 }

@@ -2,7 +2,7 @@
   "kinds": [
     {
       "category": "plot",
-      "description": "Multiscale microscopy image from a bioimage DC (OME-Zarr / NGFF 0.4) with per-channel colour and contrast, and an optional cell-points overlay that cross-filters by lasso.",
+      "description": "Multiscale microscopy image from a bioimage DC (OME-Zarr NGFF 0.4/0.5, OME-TIFF or SpatialData) with per-channel colour and contrast, and an optional cell-points overlay that cross-filters by lasso.",
       "heavy": true,
       "icon": "tabler:microscope",
       "label": "Bioimage viewer",

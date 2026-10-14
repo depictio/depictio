@@ -1,0 +1,647 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f13"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f13"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "omz-tif-text",
+      "component_type": "text",
+      "title": "Pyramidal OME-TIFF",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Stem cells",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "A cross-section of a lily of the valley stem in two fluorescence channels, stored as one OME-TIFF file whose smaller levels are SubIFDs. The viewer fetches only the tiles it draws, with HTTP Range requests. Each point is a cell found between the walls; cells with bright Ch2 walls (the sheaths around the vascular bundles) are called thick-walled. Lasso cells to filter the table and the cards.\n",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-tif-card-count",
+      "component_type": "card",
+      "title": "Cells",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "lily_stem_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f0c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Plant cells segmented between the cell walls of the lily stem",
+        "data_collection_tag": "lily_stem_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f0c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Stem cells",
+      "aggregation": "count",
+      "column_name": "cell_id",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:counter",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-tif-card-area",
+      "component_type": "card",
+      "title": "Lumen area (um2)",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "lily_stem_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f0c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Plant cells segmented between the cell walls of the lily stem",
+        "data_collection_tag": "lily_stem_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f0c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Stem cells",
+      "aggregation": "median",
+      "column_name": "area_um2",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "histogram",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-histogram",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-tif-card-wall-type",
+      "component_type": "card",
+      "title": "Wall type",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "lily_stem_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f0c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Plant cells segmented between the cell walls of the lily stem",
+        "data_collection_tag": "lily_stem_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f0c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Stem cells",
+      "aggregation": "nunique",
+      "column_name": "wall_type",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "donut",
+      "breakdown_col": "wall_type",
+      "top_n_count": 2,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-donut",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-tif-card-ch2",
+      "component_type": "card",
+      "title": "Ch2 intensity",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "lily_stem_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f0c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Plant cells segmented between the cell walls of the lily stem",
+        "data_collection_tag": "lily_stem_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f0c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Stem cells",
+      "aggregation": "median",
+      "column_name": "mean_ch2",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": [
+        "box_plot_stats"
+      ],
+      "filter_expr": null,
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-box-outline",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-tif-viewer",
+      "component_type": "advanced_viz",
+      "title": "Lily of the valley stem, 2 channels",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "lily_stem_image",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f0b"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Lily of the valley stem, 2-channel confocal fluorescence, pyramidal OME-TIFF (480 x 480)",
+        "data_collection_tag": "lily_stem_image",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f0b"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Confocal section (1.24 um pixels) in one pyramidal OME-TIFF. Points are cells, coloured by wall type.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Image",
+      "viz_kind": "bioimage_viewer",
+      "config": {
+        "viz_kind": "bioimage_viewer",
+        "image_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "image_dc_id": "646b0f3c1e4a2d7f8e5b8f0b",
+        "image_dc_tag": "lily_stem_image",
+        "store": null,
+        "sample_wf_id": null,
+        "sample_dc_id": null,
+        "sample_dc_tag": null,
+        "sample_column": null,
+        "channels": [],
+        "show_scalebar": true,
+        "points_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "points_dc_id": "646b0f3c1e4a2d7f8e5b8f0c",
+        "points_dc_tag": "lily_stem_cells",
+        "cell_id_col": "cell_id",
+        "x_col": "x",
+        "y_col": "y",
+        "color_col": "wall_type",
+        "points_scale": 1.0,
+        "points_offset_x": 0.0,
+        "points_offset_y": 0.0,
+        "point_radius": 3.0,
+        "points_sample_col": "sample",
+        "selection_enabled": true
+      },
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-tif-table",
+      "component_type": "table",
+      "title": "Cells",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "lily_stem_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f0c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Plant cells segmented between the cell walls of the lily stem",
+        "data_collection_tag": "lily_stem_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f0c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One row per cell. A lasso on the image narrows it to the cells inside.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Image",
+      "columns": [
+        "cell_id",
+        "area_um2",
+        "mean_ch1",
+        "mean_ch2",
+        "wall_type"
+      ],
+      "page_size": 50,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-tif-f-wall-type",
+      "component_type": "interactive",
+      "title": "Wall type",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "lily_stem_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f0c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Plant cells segmented between the cell walls of the lily stem",
+        "data_collection_tag": "lily_stem_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f0c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Cells",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "wall_type",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Cell filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:shape-outline",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-tif-f-area",
+      "component_type": "interactive",
+      "title": "Lumen area (um2)",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "lily_stem_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f0c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Plant cells segmented between the cell walls of the lily stem",
+        "data_collection_tag": "lily_stem_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f0c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Cells",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "area_um2",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Cell filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:ruler",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-tif-f-ch1",
+      "component_type": "interactive",
+      "title": "Ch1 intensity",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "lily_stem_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f0c"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Plant cells segmented between the cell walls of the lily stem",
+        "data_collection_tag": "lily_stem_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f0c"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Cells",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "mean_ch1",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Cell filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:gauge",
+      "wf_tag": "python/bioimage_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-omz-tif-f-wall-type",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-omz-tif-f-area",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-omz-tif-f-ch1",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-omz-tif-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-tif-card-count",
+      "x": 0,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-tif-card-area",
+      "x": 2,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-tif-card-wall-type",
+      "x": 4,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-tif-card-ch2",
+      "x": 6,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-tif-viewer",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-tif-table",
+      "x": 0,
+      "y": 9,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "OME-TIFF",
+  "subtitle": "A pyramidal OME-TIFF of a plant stem, read tile by tile",
+  "icon": "mdi:leaf",
+  "icon_color": "lime",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "tab_order": 4,
+  "main_tab_name": null,
+  "tab_icon": "mdi:leaf",
+  "tab_icon_color": "lime",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Cells",
+      "icon": "mdi:filter-variant",
+      "color": "lime",
+      "description": "Narrows the cells drawn over the image, the table and the cards",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Stem cells",
+      "icon": "mdi:counter",
+      "color": "lime",
+      "description": "The segmented plant cells in numbers",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Image",
+      "icon": "mdi:microscope",
+      "color": "lime",
+      "description": "The two channels, with one point per cell; lasso points to filter the table",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
+}
