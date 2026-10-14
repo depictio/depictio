@@ -1395,6 +1395,19 @@ def client_aggregate_data(
                 scoped=plan.scoped,
             )
 
+    # Genomic tracks: the manifest is now a Delta table; upload the local files
+    # its rows point at so the API's track proxy can serve them. Done before the
+    # upsert so a missing index fails the DC instead of registering it.
+    if data_collection.config.type.lower() == "genomic_tracks":
+        from depictio.cli.cli.utils.genomic_tracks_ingest import upload_genomic_track_files
+
+        with timed("upload_tracks"):
+            upload_result = upload_genomic_track_files(
+                data_collection, CLI_config, overwrite, files=files
+            )
+        if upload_result.get("result") != "success":
+            return {"result": "error", "message": str(upload_result.get("message"))}
+
     record("delta_bytes", deltatable_size_bytes)
     logger.debug(f"Calculated deltatable_size_bytes = {deltatable_size_bytes}")
 
@@ -2012,6 +2025,12 @@ def process_recipe_data_collection(
         }
 
     recipe_name = transform_config.recipe
+    # Two-argument recipes see the collection's properties (e.g. whether a
+    # genomic_tracks manifest reads its run in place).
+    _props = data_collection.config.dc_specific_properties
+    _recipe_properties = (
+        _props.model_dump() if hasattr(_props, "model_dump") else dict(_props or {})
+    )
     pipeline_version: str | None = getattr(workflow, "version", None)
     rich_print_checked_statement(f"Running recipe: {escape(recipe_name)}", "info")
 
@@ -2121,10 +2140,15 @@ def process_recipe_data_collection(
             sources = _resolve_sources(recipe_module, data_dir, overrides)
             if extra_sources:
                 sources.update(extra_sources)
-            from depictio.recipes import call_transform
+            from depictio.recipes import RecipeContext, call_transform
 
             _validate_sources(recipe_module, sources, recipe_name)
-            result_df = call_transform(recipe_module, sources, transform_config.params)
+            result_df = call_transform(
+                recipe_module,
+                sources,
+                transform_config.params,
+                RecipeContext.of(data_dir, _recipe_properties),
+            )
             if not isinstance(result_df, pl.DataFrame):
                 return {"result": "error", "message": "transform() did not return a DataFrame"}
             _validate_schema(
@@ -2151,6 +2175,7 @@ def process_recipe_data_collection(
                         extra_sources=extra_sources,
                         pipeline_version=pipeline_version,
                         params=transform_config.params,
+                        properties=_recipe_properties,
                     )
                     run_df = run_df.with_columns(pl.lit(run_tag).alias("depictio_run_id"))
                     all_dfs.append(run_df)
@@ -2167,6 +2192,7 @@ def process_recipe_data_collection(
                 extra_sources=extra_sources,
                 pipeline_version=pipeline_version,
                 params=transform_config.params,
+                properties=_recipe_properties,
             )
     except RecipeError as e:
         return {"result": "error", "message": f"Recipe failed: {e}"}
@@ -2199,6 +2225,35 @@ def process_recipe_data_collection(
 
     if write_result.get("result") == "error":
         return write_result
+
+    # A recipe-built track manifest points at pipeline outputs: upload the local
+    # ones, resolved against the recipe's data dir. The pipeline may not have
+    # produced every file, so missing ones only warn here.
+    if data_collection.config.type.lower() == "genomic_tracks":
+        from depictio.cli.cli.utils.genomic_tracks_ingest import (
+            manifests_from_frame,
+            upload_genomic_track_files,
+        )
+
+        # Only a local run folder holds files to upload: a run read from an s3://
+        # prefix is read in place (``remote_base_uri``), there is nothing to copy.
+        local_dir = data_dir if isinstance(data_dir, str) else data_dir.location
+        if isinstance(data_dir, str) or not data_dir.is_remote:
+            local_run_dirs = [r.location for r in run_data_roots if not r.is_remote]
+            upload_result = upload_genomic_track_files(
+                data_collection,
+                CLI_config,
+                overwrite,
+                manifests=manifests_from_frame(result_df, local_dir, local_run_dirs),
+                missing_ok=True,
+            )
+            if upload_result.get("result") != "success":
+                return {"result": "error", "message": str(upload_result.get("message"))}
+        else:
+            rich_print_checked_statement(
+                f"Track files stay in {escape(local_dir)}: set remote_base_uri to read them in place",
+                "warning",
+            )
 
     # Upsert metadata
     api_upsert_result = api_upsert_deltatable(

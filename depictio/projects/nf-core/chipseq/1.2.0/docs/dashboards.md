@@ -133,6 +133,18 @@ distance matrix is block diagonal, and the PCA uses a pipeline-local recipe
 (`nf-core/chipseq/deseq2_qc_pca.py`) that resolves the components per matrix while keeping
 the catalog output's columns.
 
+**Genome tracks.** A genome browser over the `tracks` collection, a manifest the pipeline-local
+recipe `nf-core/chipseq/tracks.py` spells out from `pipeline_info/design_controls.csv`: per
+ChIP sample its bigWig signal, MACS2 narrowPeak calls and filtered BAM, and per input control
+its bigWig (32 rows on the megatest). The assembly is the `hg19` preset, and the browser opens
+on GREB1 (`chr2:11,640,000-11,720,000`). Four cards, a peak significance track and the MACS2 peak
+table share the tab with it. The left-panel sample filter, the pinned sample sheet and the
+peaks picked in the table pick which tracks are open; clicking a feature in the browser
+filters every other tab on its sample. The tables-only megatest subset holds none of the track
+files: pass `--var TRACKS_URI=s3://nf-core-awsmegatests/chipseq/results-048fd6854fcc85b355c61dfc2e21da0bcc6399ea`
+and the collection reads them in place, by range; without it the recipe keeps only the files
+DATA_ROOT holds and the CLI uploads them at ingestion.
+
 ## Routes and pruning
 
 | Route | What changes |

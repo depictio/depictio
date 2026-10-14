@@ -196,6 +196,7 @@ const SELECTION_SOURCES = new Set([
   'table_selection',
   'map_selection',
   'image_selection',
+  'jbrowse_selection',
 ]);
 
 /** Active selection-event filters a group can be created from: they carry a

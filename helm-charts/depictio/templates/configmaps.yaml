@@ -79,6 +79,16 @@ data:
   {{- end }}
   {{- end }}
 
+  # Genome browser (jbrowse component + genomic_tracks collections). Forwarded
+  # by prefix like branding: JBrowseConfig (env_prefix DEPICTIO_JBROWSE_) owns
+  # the names. The remote-S3 secret key is a credential: pass it through a
+  # Secret (secrets.jbrowseRemoteS3SecretKey), never here.
+  {{- range $key, $value := .Values.backend.env }}
+  {{- if and (hasPrefix "DEPICTIO_JBROWSE_" $key) (ne $key "DEPICTIO_JBROWSE_REMOTE_S3_SECRET_KEY") (ne (toString $value) "") }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}
+
   # Performance
   DEPICTIO_FASTAPI_WORKERS: {{ .Values.backend.env.DEPICTIO_FASTAPI_WORKERS | quote }}
   # Analytics

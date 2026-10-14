@@ -91,6 +91,7 @@ export function orientationFor(componentType: string): 'horizontal' | 'vertical'
     case 'multiqc':
     case 'map':
     case 'advanced_viz':
+    case 'jbrowse':
       return 'vertical';
     default:
       return 'horizontal';
