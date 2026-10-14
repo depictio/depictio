@@ -1,6 +1,6 @@
 ---
 description: Auth as Depictio admin on an EMBL K8s deployment by injecting the on-pod long-lived token into the React /dashboards hand-off — no login form, no password.
-argument-hint: "[namespace | hostname]   (default: datasci-depictio-project-demo-dev → viewer dev.demo.depictio.embl.org)"
+argument-hint: "[namespace | hostname]   (default: datasci-depictio-demo-dev → viewer trec-demo.depictio.embl.org)"
 allowed-tools: Bash, Read
 ---
 
@@ -18,7 +18,7 @@ hand-off (`#auth=<base64 JSON>` fragment), which `viewer/src/main.tsx`
 ## Inputs
 
 `$ARGUMENTS` may be:
-- **empty** → default ns `datasci-depictio-project-demo-dev`
+- **empty** → default ns `datasci-depictio-demo-dev`
 - **a namespace** (e.g. `datasci-depictio-project-demo`) → resolve hosts from that ns's ingress
 - **a hostname** (e.g. `demo.depictio.embl.org`, contains a dot) → look up the owning namespace via `kubectl get ingress -A`
 
@@ -31,8 +31,8 @@ hand-off (`#auth=<base64 JSON>` fragment), which `viewer/src/main.tsx`
    kubectl -n "$NS" get ingress -o jsonpath='{.items[*].spec.rules[*].host}'
    ```
    These are **two different hosts** and must NOT be conflated:
-   - **`API_HOST`** = the host containing `api` (e.g. `dev.api.demo.depictio.embl.org`) — serves the FastAPI backend; `/depictio/api/v1/auth/me` lives here.
-   - **`VIEWER_HOST`** = the host **without** `api` (e.g. `dev.demo.depictio.embl.org`) — serves the React viewer; **`/dashboards` lives here**. Opening `/dashboards` on `API_HOST` returns a 404 JSON.
+   - **`API_HOST`** = the host containing `api` (e.g. `api.trec-demo.depictio.embl.org`) — serves the FastAPI backend; `/depictio/api/v1/auth/me` lives here.
+   - **`VIEWER_HOST`** = the host **without** `api` (e.g. `trec-demo.depictio.embl.org`) — serves the React viewer; **`/dashboards` lives here**. Opening `/dashboards` on `API_HOST` returns a 404 JSON.
 
    ```bash
    HOSTS=$(kubectl -n "$NS" get ingress -o jsonpath='{.items[*].spec.rules[*].host}')
