@@ -2308,9 +2308,9 @@ tabs:
     order: 2
     alignment: left
     body: >
-      H3K27me3 paints broad repressed domains, H3K4me3 sharp promoter peaks and
-      the IgG control stays flat. The browser opens on the HOXA cluster, where
-      both marks meet; the cards count what the filters keep. Click a region on
+      Broad marks paint wide domains, sharp marks narrow peaks, and the control
+      stays flat. The browser opens on a locus where the targets differ; the
+      cards count what the filters keep. Click a region on
       the Manhattan or in the peak table below to open its sample's tracks on
       that region, or pick samples in the left panel or the sample table.
     workflow_tag: cutandrun

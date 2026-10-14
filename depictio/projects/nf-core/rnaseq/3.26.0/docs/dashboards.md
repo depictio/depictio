@@ -105,9 +105,9 @@ log2(TPM + 1) range.
 **Genome tracks.** The reads behind the tables, in a genome browser over the `tracks`
 collection, a manifest the pipeline-local recipe `nf-core/rnaseq/tracks.py` builds from the
 samplesheet: per library its forward and reverse strand bigWig coverage and its duplicate-marked
-STAR BAM. Four cards, library depth and sample PCA figures and the samples table share the tab
-with the browser. The left-panel sample scope and the rows ticked in the samples table pick
-which tracks are open; clicking a coverage track picks its sample back for every other tab. The
+STAR BAM. Four cards and the library depth and sample PCA figures share the tab with the browser.
+The left-panel sample scope and the rows ticked in the pinned sample sheet pick which tracks
+are open; clicking a coverage track picks its sample back for every other tab. The
 tables-only megatest subset holds none of the track files: pass
 `--var TRACKS_URI=s3://nf-core-awsmegatests/rnaseq/results-e7ca46272c8f9d5ceee3f71759f4ba551d3217a4/aligner_star_salmon`
 and the collection reads them in place, by range. A `--skip_alignment` run (`PSEUDOALIGNER_ONLY`)

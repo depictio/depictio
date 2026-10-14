@@ -1507,10 +1507,6 @@ tabs:
     icon: mdi:chart-scatter-plot
     color: cyan
     description: Library depth and sample similarity; lasso points to open their tracks
-  - name: Samples
-    icon: mdi:table
-    color: gray
-    description: Pick rows to open their tracks
   components:
   - component_type: text
     tag: rna-tracks-intro
@@ -1524,9 +1520,9 @@ tabs:
     alignment: left
     body: >
       One coverage track per strand and sample, coloured by condition. The view
-      opens on the beta-globin cluster, where HBG1, HBG2 and HBE1 peak in K562
-      only. The cards sum up the libraries in scope; lasso the scatter below or
-      pick samples on the left to open tracks, click a track to filter every tab.
+      opens on one gene cluster. The cards sum up the libraries in scope; lasso
+      the scatter below or pick samples on the left to open tracks, click a
+      track to filter every tab.
     layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: card
     tag: rna-tracks-card-libraries
@@ -1651,16 +1647,3 @@ tabs:
     description: First two principal components of the log2(TPM + 1) matrix. Lasso a cluster of replicates to lay their coverage side by side.
     title_size: h3
     layout: {x: 4, y: 0, w: 4, h: 5}
-  - component_type: table
-    tag: rna-tracks-samples
-    index: rna-tracks-samples
-    section: Samples
-    workflow_tag: rnaseq
-    data_collection_tag: samplesheet
-    row_selection_enabled: true
-    row_selection_column: sample
-    title: Samples
-    description: Select rows to open their tracks in the browser above.
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 10, w: 8, h: 4}

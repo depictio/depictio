@@ -396,7 +396,7 @@ class TestUpload:
     def test_files_are_fetched_when_not_given(self, tmp_path, cli_config, s3_client, monkeypatch):
         _touch(tmp_path / "a.bw")
         manifest = _manifest(tmp_path / "tracks.tsv", [{"uri": "a.bw"}])
-        monkeypatch.setattr(deltatables, "fetch_file_data", lambda dc_id, cfg: [manifest])
+        monkeypatch.setattr(deltatables, "fetch_file_data", lambda dc_id, cfg, **k: [manifest])
 
         result = upload_genomic_track_files(_dc(), cli_config)
 
@@ -475,7 +475,7 @@ class TestAggregateRouting:
         monkeypatch.setattr(
             deltatables, "read_delta_table", lambda *a, **k: {"result": "error", "message": ""}
         )
-        monkeypatch.setattr(deltatables, "fetch_file_data", lambda dc_id, cfg: [manifest])
+        monkeypatch.setattr(deltatables, "fetch_file_data", lambda dc_id, cfg, **k: [manifest])
         monkeypatch.setattr(
             deltatables,
             "write_delta_table",

@@ -2279,10 +2279,6 @@ tabs:
     icon: mdi:chart-scatter-plot
     color: indigo
     description: Pick a peak to open its sample's tracks at that peak
-  - name: ChIP samples
-    icon: mdi:table
-    color: gray
-    description: Pick rows to open their tracks
   components:
   - component_type: text
     tag: cs-tracks-intro
@@ -2294,7 +2290,7 @@ tabs:
     alignment: left
     body: >
       Each ChIP's bigWig sits next to its MACS2 peaks; the grey tracks are the
-      inputs. The view opens on GREB1, the cards summarise the peaks of the
+      inputs. The view opens on one locus, the cards summarise the peaks of the
       samples in scope, and a click on a peak in the Manhattan or in the peak
       table below opens its sample's tracks at that peak.
     workflow_tag: chipseq
@@ -2427,16 +2423,3 @@ tabs:
     title_size: sm
     title_align: left
     layout: {x: 0, y: 6, w: 8, h: 4}
-  - component_type: table
-    tag: cs-tracks-samples
-    index: cs-tracks-samples
-    section: ChIP samples
-    workflow_tag: chipseq
-    data_collection_tag: design
-    row_selection_enabled: true
-    row_selection_column: sample_id
-    title: ChIP samples
-    description: Select rows to open their tracks in the browser above.
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 10, w: 8, h: 4}
