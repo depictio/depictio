@@ -1,0 +1,150 @@
+AMBER:
+  amber: 4.3
+  java: 21-internal
+  r: 4.4.3
+  bioconductor-copynumber: 1.38.0
+BAMTOOLS:
+  bamtools: 1.6.1
+  java: 21-internal
+BWAMEM2_ALIGN:
+  bwa-mem2: 2.3
+  samtools: 1.21
+  sambamba: 1.0.1
+CHORD:
+  chord: 2.1.2
+  java: 21-internal
+  r: 4.4.3
+  r-randomforest: 4.7.1.2
+CIDER:
+  cider: 1.2
+  java: 21-internal
+COBALT:
+  cobalt: 3.0
+  java: 21-internal
+  r: 4.4.3
+  r-dplyr: 1.2.1
+  bioconductor-copynumber: 1.38.0
+CUPPA:
+  cuppa: 2.5.1
+  java: 21-internal
+  r: 4.2.3
+  r-ggplot2: 3.5.1
+  python: 3.11.15
+  numpy: 1.26.4
+  pandas: 2.0.3
+  scikit-learn: 1.3.0
+ESVEE:
+  esvee: 2.0.1
+  java: 22.0.1-internal
+  sambamba: 1.0.1
+GATK4_MARKDUPLICATES:
+  gatk4: 4.6.1.0
+ISOFOX:
+  isofox: 2.0.1
+  java: 21-internal
+LILAC:
+  lilac: 2.0
+  java: 21-internal
+LINXREPORT:
+  linxreport: 1.2.0
+  r: 4.5.3
+  r-dplyr: 1.2.1
+LINX_GERMLINE:
+  linx: 2.3.1
+  java: 21-internal
+LINX_SOMATIC:
+  linx: 2.3.1
+  java: 21-internal
+LINX_VISUALISER:
+  linx: 2.3.1
+  java: 21-internal
+  r: 4.5.3
+  r-dplyr: 1.2.1
+  r-ggplot2: 4.0.3
+  circos: 0.69-8
+NEO_ANNOTATE_FUSIONS:
+  isofox: 2.0.1
+  java: 21-internal
+NEO_FINDER:
+  neo: 1.3
+  java: 21-internal
+NEO_SCORER:
+  neo: 1.3
+  java: 21-internal
+ORANGE:
+  orange: 5.0.1
+  java: 21-internal
+PAVE_GERMLINE:
+  pave: 1.9
+  java: 21-internal
+PAVE_SOMATIC:
+  pave: 1.9
+  java: 21-internal
+PEACH:
+  peach: 2.0.0
+  java: 21-internal
+PURPLE:
+  purple: 4.4
+  java: 21-internal
+  r: 4.5.3
+  r-dplyr: 1.2.1
+  r-ggplot2: 4.0.3
+  circos: 0.69-8
+QSEE:
+  qsee: 1.0
+  r: 4.5.3
+  r-dplyr: 1.2.1
+  r-ggplot2: 4.0.3
+REDUX:
+  redux: 2.0.5
+  java: 21-internal
+  samtools: 1.24
+  r: 4.5.3
+  r-dplyr: 1.2.1
+  r-ggplot2: 4.0.3
+SAGE_APPEND_GERMLINE:
+  sage: 5.0.2
+  java: 21-internal
+SAGE_APPEND_SOMATIC:
+  sage: 5.0.2
+  java: 21-internal
+SAGE_GERMLINE:
+  sage: 5.0.2
+  java: 21-internal
+SAGE_SOMATIC:
+  sage: 5.0.2
+  java: 21-internal
+SAGE_VISUALISER:
+  sage: 5.0.2
+  java: 21-internal
+SAMTOOLS_SORT:
+  samtools: 1.21
+SIGS:
+  sigs: 1.2.1
+  java: 21-internal
+STAR_ALIGN:
+  star: 2.7.3a
+TEAL_PIPELINE:
+  teal: 1.4
+  java: 21-internal
+  samtools: 1.23.1
+TEAL_PREP:
+  teal: 1.4
+  java: 21-internal
+  samtools: 1.23.1
+VIRUSBREAKEND:
+  gridss: 2.13.2
+  java: 20.0.2-internal
+  samtools: 1.19.2
+  bcftools: 1.19
+  bwa: 0.7.17-r1188
+  repeatmasker: 4.1.5
+  kraken2: 2.1.3
+  r: 4.3.1
+  r-structuralvariantannotation: 1.18.0
+VIRUSINTERPRETER:
+  virusinterpreter: 1.7.2
+  java: 21-internal
+Workflow:
+    nf-core/oncoanalyser: v3.0.0-g7c74c87
+    Nextflow: 26.04.6

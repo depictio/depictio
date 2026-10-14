@@ -255,6 +255,15 @@ SCENARIOS: list[Scenario] = [
         note="MultiQC reprocessed, vendored design; 3.1.0 megatest is empty",
         vars=(_DESIGN_IN_DATA_ROOT,),
     ),
+    # The samplesheet is vendored and copied into input/ by download_test_data.sh. The
+    # Protein changes tab resolves the structure of a gene only when the server has
+    # DEPICTIO_STRUCTURE_RESOLVER_ENABLED=true.
+    Scenario(
+        "oncoanalyser",
+        "3.0.0",
+        "megatest",
+        note="test_full WGTS; 33 MB of tables from a 272 GB run, vendored samplesheet",
+    ),
     # The samplesheet and the design table are vendored and copied into input/ by
     # download_test_data.sh. The run is a dev run (3 proteins, no MultiQC panel
     # read); the Structure tab folds a protein only when the server has
