@@ -1,6 +1,6 @@
 # New Worktree
 
-Create a new git worktree for depictio under `../depictio-worktrees/<branch>`, allocate ports, and ensure single-user auth mode.
+Create a new git worktree for depictio under `../depictio-worktrees/<branch>`, allocate ports, ensure single-user auth mode, and seed only the iris example.
 
 ## Usage
 
@@ -37,17 +37,20 @@ $ARGUMENTS
      export DEPICTIO_AUTH_SINGLE_USER_MODE=true
      source .devcontainer/scripts/allocate-ports.sh
      ```
+   - The script also writes `DEPICTIO_SEED_PROJECTS=iris` (to `.env.instance` and the override), so the stack boots with the iris dashboards only and `data/` stays small. To seed more, export `DEPICTIO_SEED_PROJECTS=iris,penguins` before sourcing; set it to an empty string to seed everything.
    - The script uses `${DEPICTIO_AUTH_SINGLE_USER_MODE:-true}` so it defaults to `true` even if the export is missing — exporting it explicitly removes any ambiguity.
    - **Source, don't execute** (`source` / `.`), so the exported `COMPOSE_PROJECT_NAME`, `*_PORT`, etc. land in the parent shell — though for a one-shot Bash invocation they're only useful insofar as the script wrote `.env.instance` and `docker-compose.override.yaml`.
 
 4. **Set up the depictio-cli venv** at `depictio/cli/.venv`:
-   - `UV_PROJECT_ENVIRONMENT=depictio/cli/.venv uv sync --frozen --extra multiqc` (from the worktree root) — creates an isolated CLI environment scoped to this worktree, so `depictio-cli ingest` / `dashboard import` can target the worktree's API/Mongo ports without colliding with sibling worktrees.
+   - `UV_PROJECT_ENVIRONMENT=depictio/cli/.venv uv sync --frozen` (from the worktree root; add `--extra multiqc` only when this worktree ingests MultiQC data). uv hard-links packages from its shared cache, so the venv costs little on the same disk; keep the cache and the worktrees on one filesystem — creates an isolated CLI environment scoped to this worktree, so `depictio-cli ingest` / `dashboard import` can target the worktree's API/Mongo ports without colliding with sibling worktrees.
    - Verify `depictio/cli/.venv/bin/depictio-cli` exists after the sync. If `uv sync` fails, **stop and ask** — don't `pip install` as a fallback (the lockfile is the source of truth).
    - This duplicates the `/cli-venv` skill; running it again later is safe and idempotent.
 
-5. **Verify** and report:
+5. **Reclaim old worktrees**: `scripts/worktree_gc.sh` (dry run). Show the user what it lists; delete only after their go (`--apply`, plus `--remove` for merged ones). See `/worktree-gc`.
+
+6. **Verify** and report:
    - `cat .env.instance | grep -E '^(COMPOSE_PROJECT_NAME|.*_PORT|DEPICTIO_AUTH_SINGLE_USER_MODE)='`
-   - Confirm `DEPICTIO_AUTH_SINGLE_USER_MODE=true` is present.
+   - Confirm `DEPICTIO_AUTH_SINGLE_USER_MODE=true` and `DEPICTIO_SEED_PROJECTS=iris` are present.
    - Print: worktree path, branch, allocated FastAPI/viewer (Vite)/Mongo/S3 ports, and the path to the CLI venv.
 
 ## Stop conditions (ask, don't guess)

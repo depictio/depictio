@@ -23,7 +23,7 @@ Project instructions are in `/CLAUDE.md` (source of truth). This directory holds
 - Scaffolding: `/api-endpoint`, `/pydantic-model`, `/validate-dashboard`
 - Data and projects: `/import-project`, `/import-template`, `/reseed`
 - Inspection: `/arch`, `/logs`, `/db`, `/check-deployment`
-- Git and release: `/commit`, `/commit-push`, `/commit-push-pr`, `/bump-version`, `/bump-docs-version`, `/new-worktree`, `/cli-venv`
+- Git and release: `/commit`, `/commit-push`, `/commit-push-pr`, `/bump-version`, `/bump-docs-version`, `/new-worktree`, `/worktree-gc`, `/cli-venv`
 - EMBL deployment: `/depictio-embl-admin-login`
 
 A command is a markdown file in `commands/`; `$ARGUMENTS` receives what follows the command name.

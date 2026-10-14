@@ -233,6 +233,11 @@ DEPICTIO_DEV_MODE=true
 DEPICTIO_AUTH_SINGLE_USER_MODE=${DEPICTIO_AUTH_SINGLE_USER_MODE}
 DEPICTIO_MONGODB_WIPE=${MONGODB_WIPE}
 
+# Reference projects seeded at boot. A worktree stack only needs the iris example; the
+# nf-core showcases are what fills data/ to several GB. Set DEPICTIO_SEED_PROJECTS to a
+# CSV (e.g. iris,penguins) before sourcing this script, or to an empty string to seed all.
+DEPICTIO_SEED_PROJECTS=${DEPICTIO_SEED_PROJECTS-iris}
+
 # Data directory
 DATA_DIR=data/${COMPOSE_PROJECT_NAME}
 EOF
@@ -268,6 +273,7 @@ services:
       - DEPICTIO_AUTH_SINGLE_USER_MODE=${DEPICTIO_AUTH_SINGLE_USER_MODE}
       - DEPICTIO_FASTAPI_EXTERNAL_PORT=${FASTAPI_PORT}
       - DEPICTIO_VIEWER_EXTERNAL_PORT=${VIEWER_DEV_PORT}
+      - DEPICTIO_SEED_PROJECTS=${DEPICTIO_SEED_PROJECTS-iris}
 
   # Dev viewer (Vite HMR) — the only viewer in the dev stack.
   depictio-viewer-dev:
@@ -315,6 +321,7 @@ export DATA_DIR="data/${COMPOSE_PROJECT_NAME}"
 # file falls back to DEPICTIO_AUTH_SINGLE_USER_MODE=false → instance starts in multi-user mode.
 export DEPICTIO_DEV_MODE=true
 export DEPICTIO_AUTH_SINGLE_USER_MODE
+export DEPICTIO_SEED_PROJECTS
 export DEPICTIO_MONGODB_WIPE="${MONGODB_WIPE}"
 # S3 creds (sourced from docker-compose/.env above) — export so the `s3`
 # container's ${DEPICTIO_S3_ROOT_USER} interpolation resolves to the same
