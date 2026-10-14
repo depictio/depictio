@@ -56,6 +56,7 @@ and are lower bounds for the big runs.
 | riboseq | 2.0.0 | `11d66a3b` | ok | `.` | yes (`multiqc/star/multiqc_report_data/`) | **Templated (wave 3).** About 150 GB in full; the tables-only fetch is 206 files / 104 MB. MultiQC 1.33. The samplesheet, contrasts and a derived design table are not published and are vendored under `input/`. |
 | genomeassembler | 2.0.0 | `a72d47d9` | partial | `.` | no | **Templated (wave 3).** 961 GB / 45.8k objects, 42k of them BUSCO internals. LINKS failed on one sample (exit 255) and 22 tasks were aborted, so only 5 of 10 samples reached assembly QC. No MultiQC. Selective fetch about 8.6 MB. A cluster re-run with LINKS errors ignored is submitted. |
 | mhcquant | 3.2.0 | `6ec12c97` | ok | `.` | yes (`multiqc/multiqc_data/`) | **Templated (wave 3).** `test_full` profile. MultiQC 1.33 parquet with mhcquant custom content only. 71 MB of tables fetched with `--max-file-mb 300`; the samplesheet is not published and is vendored under `input/`. |
+| proteinfamilies | 2.5.0 | `f8c0b183` | ok | `.` | yes (`multiqc/multiqc_data/`) | **Templated.** `test_full` profile, release run. MultiQC 1.35 parquet with custom content only (family metadata; SeqFu and cluster-size sections named after each sample). 59 files / 0.42 MB fetched with `--max-file-mb 5`, the hmmalign alignments (`full_msa/raw/hmmer_hmmalign/*/*.sto.gz`, 10 of 12 families kept) included for the profile logo; the samplesheet is not published and is vendored under `input/`. |
 | demultiplex | 1.8.0 | `daade37c` | ok | `.` | yes (`multiqc/multiqc_data/`) | **Templated (wave 3).** bcl2fastq route; 183 files / 34.6 MB without the FASTQ. The run-level `multiqcsav/` report holds no SAV sections (the MultiQC `sav` module found no `RunInfo.xml` next to `InterOp/`). |
 | rnasplice | 1.0.4 | `1d0494ae` | partial | `.` | no | **Pending.** 494 objects, only 80 with data (95.9 GB, mostly alignments); no MultiQC and none of the differential splicing directories. The template waits for an EMBL cluster `test_full` run. |
 | seqinspector | 1.1.2 | `6aa08aab` | ok | `.` | yes (`multiqc/global_report/multiqc_data/`, plus one per group under `multiqc/group_reports/`) | Fallback for rnasplice if its cluster run fails twice. 1899 objects / 678 MB, every data file under 50 MB. |
@@ -186,6 +187,7 @@ template lint, CLI dry run 8/8).
 | smrnaseq | 2.4.1 | `cb0af579b24cb8d5a3accd87b2f14ea93fe04832` | `.` | 1.33 |
 | genomeassembler | 2.0.0 | `a72d47d9cdb50f21b97882dfb2abf4af8f4c74ad` | `.` | none published; the template declares no MultiQC collection |
 | mhcquant | 3.2.0 | `6ec12c97f7889a3e1f09ab89930723045c6bac68` | `.` | 1.33, custom content only |
+| proteinfamilies | 2.5.0 | `f8c0b183e59df3d87c38d0f7c4acc6918593f4f5` | `.` | 1.35, custom content only |
 | demultiplex | 1.8.0 | `daade37c4a75a4c1709ccf12434deb3424141319` | `.` | 1.35 native parquet |
 
 rnasplice 1.0.4 is built from a cluster `test_full` run rather than the megatest: its megatest

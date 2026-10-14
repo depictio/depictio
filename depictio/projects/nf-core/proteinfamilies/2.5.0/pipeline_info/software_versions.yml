@@ -1,0 +1,86 @@
+BRANCH_HITS_FASTA:
+  biopython: 1.85
+  python: 3.13.1
+CALCULATE_CLUSTER_DISTRIBUTION:
+  sed: 4.7
+CAT_FASTA:
+  coreutils: 9.4
+  find: 4.6.0
+  pigz: 2.8
+CAT_HMM:
+  coreutils: 9.4
+  find: 4.6.0
+  pigz: 2.8
+CHUNK_CLUSTERS:
+  biopython: 1.85
+  python: 3.13.1
+CLIPKIT:
+  clipkit: 2.11.4
+CMAPLE:
+  cmaple: 1.1.0
+EXTRACT_FAMILY_MEMBERS:
+  python: 3.13.1
+EXTRACT_FAMILY_REPS:
+  python: 3.13.1
+FAMSA_ALIGN:
+  famsa: 2.4.1-45c9b2b
+FILTER_NON_REDUNDANT_FASTA:
+  python: 3.13.1
+FILTER_NON_REDUNDANT_FULL_MSA:
+  python: 3.13.1
+FILTER_NON_REDUNDANT_HMM:
+  python: 3.13.1
+FILTER_NON_REDUNDANT_SEED_MSA:
+  python: 3.13.1
+FILTER_RECRUITED:
+  biopython: 1.85
+  python: 3.13.1
+FIND_CONCATENATE_HMMS:
+  coreutils: 9.4
+  find: 4.6.0
+  pigz: 2.8
+FIND_CONCATENATE_HMM_LIBRARY:
+  coreutils: 9.4
+  find: 4.6.0
+  pigz: 2.8
+FIND_CONCATENATE_SKIP_IDS:
+  coreutils: 9.4
+  find: 4.6.0
+  pigz: 2.8
+HMMER_HMMALIGN:
+  hmmer: 3.4
+HMMER_HMMBUILD:
+  hmmer: 3.4
+HMMER_HMMSEARCH:
+  hmmer: 3.4
+IDENTIFY_REDUNDANT_FAMS:
+  pandas: 2.3.0
+  python: 3.13.1
+MMSEQS_CREATEDB:
+  mmseqs: 18.8cc5c
+MMSEQS_CREATETSV:
+  mmseqs: 18.8cc5c
+MMSEQS_LINCLUST:
+  mmseqs: 18.8cc5c
+REMOVE_REDUNDANT_SEQS:
+  biopython: 1.85
+  python: 3.13.1
+SEQFU_STATS_AFTER:
+  seqfu: 1.22.3
+SEQFU_STATS_BEFORE:
+  seqfu: 1.22.3
+SEQKIT_REPLACE:
+  seqkit: 2.13.0
+SEQKIT_RMDUP:
+  seqkit: 2.13.0
+SEQKIT_SEQ:
+  seqkit: 2.13.0
+SEQKIT_SEQ_CLIPPED_MSA_TO_FASTA:
+  seqkit: 2.13.0
+UNTAR_HMM:
+  untar: 1.34
+UNTAR_MSA:
+  untar: 1.34
+Workflow:
+    nf-core/proteinfamilies: v2.5.0-gf8c0b18
+    Nextflow: 26.04.6

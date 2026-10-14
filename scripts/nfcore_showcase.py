@@ -169,7 +169,9 @@ SCENARIOS: list[Scenario] = [
     ),
     Scenario("atacseq", "2.1.2", "test", note="CI profile, yeast"),
     Scenario("atacseq", "2.1.2", "test_controls", note="control route: libraries with an input"),
-    Scenario("chipseq", "2.1.0", "test", note="EMBL HPC run (no 2.x megatest); yeast, one antibody"),
+    Scenario(
+        "chipseq", "2.1.0", "test", note="EMBL HPC run (no 2.x megatest); yeast, one antibody"
+    ),
     Scenario("chipseq", "2.1.0", "test_star", note="STAR route: adds the STAR MultiQC module"),
     # No 3.2.x megatest: EMBL HPC runs, with the MultiQC 1.19 report reprocessed
     # beside them, which MULTIQC_REPROCESSED binds.
@@ -229,6 +231,14 @@ SCENARIOS: list[Scenario] = [
     # The samplesheet is vendored and copied into input/ by download_test_data.sh;
     # the template reads it there by default (GROUP_COL defaults to Condition).
     Scenario("mhcquant", "3.2.0", "megatest", note="test_full profile, vendored samplesheet"),
+    # The hmmalign alignments (full_msa/raw) are in the manifest: they map the profile
+    # HMM states onto the representative's residues for the Profile HMM tab.
+    Scenario(
+        "proteinfamilies",
+        "2.5.0",
+        "megatest",
+        note="test_full profile, vendored samplesheet, hmmalign alignments for the profile logo",
+    ),
     Scenario(
         "nanoseq",
         "3.0.0",

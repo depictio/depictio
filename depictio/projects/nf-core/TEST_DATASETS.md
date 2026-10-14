@@ -364,6 +364,7 @@ files, template lint and a CLI dry run.
 | smrnaseq | 2.4.1 | 2.4.1 | no | `cb0af579` | 1.33 | flat | 17 (8) | 28 libraries, two crossed factors; design table vendored, built once from the test-datasets samplesheet |
 | genomeassembler | 2.0.0 | 2.0.0 | no | `a72d47d9` | none | flat | 24 (20) | 10 assembly strategies, half of them without assembly QC on this partial run; samplesheet vendored and read as the design table |
 | mhcquant | 3.2.0 | 3.2.0 | no | `6ec12c97` | 1.33 (custom content only) | flat | 15 (4) | `test_full`: PRIDE PXD011628, 2 samples x 3 raw replicates, one per condition; samplesheet vendored under `input/` |
+| proteinfamilies | 2.5.0 | 2.5.0 | no | `f8c0b183` | 1.35 (custom content only) | flat | 19 (6) | `test_full`: two samples of 50,000 sequences, one creating families, one extending an existing library; samplesheet vendored under `input/` |
 | demultiplex | 1.8.0 | 1.8.0 | no | `daade37c` | 1.35 | flat | 18 (13) | `test_full`: one flowcell, one lane, 18 libraries, bcl2fastq route; library design vendored in the template directory |
 | rnasplice | 1.0.4 | 1.0.4 | no | none usable: `1d0494ae` is truncated, so `results_sha` is null | 1.18 on the cluster run, no parquet, rebuilt with `multiqc_reprocess` | flat | 12 (6) | EMBL cluster `test_full` run: 6 samples, two conditions, two mirrored contrasts, GRCh37; design table vendored under `input/metadata.tsv` |
 

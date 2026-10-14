@@ -1,0 +1,1700 @@
+version: 1
+# nf-core/proteinfamilies 2.5.0, on the family rules of depictio/projects/nf-core/RULES.md
+# (ampliseq/2.18.0 is the reference implementation).
+#
+# Funnel: the MultiQC report and the input sequences with their initial
+# clusters (Data & QC) -> the families the run built or extended and their
+# members (Families) -> one family's alignment, residue conservation, predicted
+# structure and tree, and its profile HMM as a sequence logo with the members
+# that matched it (Alignment). The samplesheet (`samples`) is what every filter
+# starts from: its links carry a pick to every sample-level table by sample,
+# and the families hub carries a family pick to every family-level table.
+#
+# Routes: a run with --skip_phylogenetic_inference prunes the tree collections,
+# and with them the collapsed Family tree section of the Family alignment tab.
+# A run that did not publish the hmmalign alignments (full_msa/raw) or the
+# family HMMs loses the profile and hits collections, and the logo with them.
+main_dashboard:
+  title: nf-core/proteinfamilies
+  subtitle: Protein families, from the input sequences to each family's profile HMM
+  project_tag: proteinfamilies Protein Families
+  main_tab_name: Overview
+  tab_icon: mdi:compass-outline
+  tab_icon_color: brandPrimary
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_panel_default: collapsed
+  content_width_default: compact
+  show_tab_header: false
+  # Declared once here, read by every tab of the family.
+  category_colors:
+    '{GROUP_COL}': auto
+    # Families the run built from scratch against existing ones it extended.
+    origin:
+      new: '#1c7ed6'
+      updated: '#f59f00'
+    # The conservation classes of the residue table, shared by the track, the
+    # 3D colouring and the histogram.
+    category:
+      conserved: '#2f9e44'
+      intermediate: '#f59f00'
+      variable: '#868e96'
+    # A run builds hundreds of families: the eight largest take the palette,
+    # largest first, so a family keeps its colour across the figures.
+    family:
+      '*': 'auto:size'
+  # Persistent: drawn in every tab's filter panel, picks kept across tabs. Both
+  # are bound to the samplesheet, the source of every sample link.
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab
+    persistent: true
+    pin: top
+  grid_sections:
+  - name: Key figures
+    icon: mdi:counter
+    color: gray
+    appearance: plain
+    card_variant: headline
+    filter_bar: true
+    visible_filters: 2
+    description: The run in four numbers. The filters here narrow these four only.
+  - name: Findings
+    icon: mdi:star-outline
+    color: gray
+    appearance: plain
+    figure_style: minimal
+    filter_bar: true
+    visible_filters: 2
+    description: What the data says, each with the tab that shows it, then the figures behind it.
+  - name: How to read this dashboard
+    icon: mdi:information-outline
+    color: gray
+    appearance: plain
+    description: The tabs by group, each with the question it answers.
+  # Declared on the main tab, which no route removes.
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: gray
+    description: The samplesheet behind every tab, narrowed by the sample filters
+    collapsed: true
+    persistent: true
+    pin: bottom
+    exclude_tabs:
+    - Overview
+  - name: Reference tables
+    icon: mdi:table
+    color: gray
+    description: The family table behind the tiles, narrowed by the filters
+    collapsed: true
+    persistent: true
+    pin: bottom
+    exclude_tabs:
+    - Overview
+  components:
+  # First in component order on purpose: the Guide demos the first categorical
+  # filter that shares a data collection with the first card (Samples, below).
+  - component_type: interactive
+    workflow_tag: proteinfamilies
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Key figures
+    tag: pf-ov-kf-group
+    index: ov-kf-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: proteinfamilies
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: teal
+      strip_label: Sample
+    section: Key figures
+    tag: pf-ov-kf-sample
+    index: ov-kf-sample
+    title: Sample
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # The pipeline's wordmark, read from its repository; where it cannot load (no
+  # internet), the title is drawn as text.
+  - component_type: text
+    title: nf-core/proteinfamilies
+    logo: https://raw.githubusercontent.com/nf-core/proteinfamilies/master/docs/images/nf-core-proteinfamilies_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/proteinfamilies/master/docs/images/nf-core-proteinfamilies_logo_dark.png
+    order: 1
+    body: >
+      Protein sequences grouped into families: how they clustered, which families the run built,
+      and what each family's alignment and profile model look like. [Run parameters](params:)
+    tag: pf-ov-hero
+    index: ov-hero
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/proteinfamilies clusters protein sequences, aligns each cluster, builds a profile HMM from it and recruits the sequences the model matches. The result is a set of families, each with its members, an alignment and a model. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
+    tag: pf-ov-about
+    index: ov-about
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash.
+  - component_type: text
+    surface: card
+    values:
+      samples: {dc: samples, column: sample, aggregation: nunique, format: integer}
+    body: |
+      ### The run
+      - ![](icon:mdi:flask-outline) **Samples** {{samples}}
+      - ![](icon:mdi:set-merge) **Clustering** {{param:clustering_tool}} at {{param:cluster_seq_identity}} identity
+      - ![](icon:mdi:dna) **Aligner** {{param:alignment_tool}}
+      - ![](icon:mdi:filter-outline) **Seed clusters** from {{param:cluster_size_threshold}} sequences
+      - ![](icon:mdi:magnify-scan) **Recruiting** E-value {{param:hmmsearch_evalue_cutoff}}
+    tag: pf-ov-run
+    index: ov-run
+    layout: {x: 5, y: 1, w: 3, h: 3}
+  # The marks take the family's colour (the header's), not the theme's blue.
+  - component_type: text
+    surface: card
+    accent: green
+    body: |
+      ### Six steps from sequences to families
+      Each step names its settings and the tab that shows its result.
+
+      ::: steps
+      1. ![](icon:mdi:set-merge) **Cluster** MMseqs2 groups similar sequences · [Settings](params:cluster) · [Input & Clustering](tab:Input & Clustering)
+      2. ![](icon:mdi:dna) **Align** {{param:alignment_tool}} aligns each seed cluster, ClipKIT trims it · [Settings](params:alignment) · [Family alignment](tab:Family alignment)
+      3. ![](icon:mdi:chart-bar) **Model** hmmbuild writes a profile HMM per family · [Settings](params:hmm) · [Profile HMM](tab:Profile HMM)
+      4. ![](icon:mdi:magnify-scan) **Recruit** hmmsearch gathers the sequences the model matches · [Settings](params:hmmsearch) · [Members](tab:Members)
+      5. ![](icon:mdi:filter-outline) **Prune** Redundant sequences and families are dropped · [Settings](params:redundancy) · [Families](tab:Families)
+      6. ![](icon:mdi:family-tree) **Place** CMAPLE infers a tree of each family · [Settings](params:phylogenetic) · [Family alignment](tab:Family alignment)
+      :::
+    tag: pf-ov-steps
+    index: ov-steps
+    layout: {x: 0, y: 4, w: 8, h: 3}
+  # Key figures: one card per stage of the funnel, each opening the tab that
+  # explains it. All four read collections every route writes.
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: samples
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: '{GROUP_COL}'
+    display:
+      icon_name: mdi:flask-outline
+      icon_color: orange
+      caption: in the samplesheet, by {GROUP_COL_DISPLAY}
+      link: tab:MultiQC
+    section: Key figures
+    tag: pf-ov-kf-samples
+    index: ov-kf-samples
+    title: Samples
+    description: Samples in the samplesheet. The bar splits them by {GROUP_COL_DISPLAY}, create or update.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: sequence_stats
+    use: seqfu/sequences_total
+    aggregation: sum
+    column_name: sequences
+    column_type: int64
+    filter_expr: "col('stage') == 'before'"
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:dna
+      icon_color: blue
+      caption: per sample, with the spread
+      link: tab:Input & Clustering
+      format: si
+    section: Key figures
+    tag: pf-ov-kf-sequences
+    index: ov-kf-sequences
+    title: Input sequences
+    description: Protein sequences the samples started from, before the length and duplicate filters.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: families
+    use: proteinfamilies/families_total
+    aggregation: count
+    column_name: family
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: origin
+    display:
+      icon_name: mdi:shape-outline
+      icon_color: violet
+      caption: built by the run or extended from existing ones
+      link: tab:Families
+    section: Key figures
+    tag: pf-ov-kf-families
+    index: ov-kf-families
+    title: Families
+    description: Protein families in the result. The bar splits them into new families and existing ones the run extended.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: families
+    use: proteinfamilies/members_total
+    aggregation: sum
+    column_name: size
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:account-group-outline
+      icon_color: teal
+      caption: per family, with the spread
+      link: tab:Members
+      format: si
+    section: Key figures
+    tag: pf-ov-kf-members
+    index: ov-kf-members
+    title: Family members
+    description: Sequences that belong to a family. The box shows how many members each family holds.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Findings filter bar: the group, then the family origin.
+  - component_type: interactive
+    workflow_tag: proteinfamilies
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Findings
+    tag: pf-ov-findings-group
+    index: ov-findings-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: proteinfamilies
+    data_collection_tag: families
+    interactive_component_type: MultiSelect
+    column_name: origin
+    column_type: object
+    display:
+      icon_name: mdi:source-branch
+      custom_color: orange
+      strip_label: Origin
+    section: Findings
+    tag: pf-ov-findings-origin
+    index: ov-findings-origin
+    title: Family origin
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # One result row per finding, each citing data collections every route writes.
+  - component_type: text
+    surface: card
+    values:
+      singles: {dc: cluster_sizes, column: sequence_share, aggregation: median, filter_expr: "col('cluster_size') == 1",
+        format: percent}
+      n_fam: {dc: families, column: family, aggregation: nunique, format: integer}
+      n_mem: {dc: families, column: size, aggregation: sum, format: si}
+      max_size: {dc: families, column: size, aggregation: max, format: integer}
+      ident: {dc: family_members, column: identity, aggregation: median, format: percent}
+      cover: {dc: family_members, column: coverage, aggregation: median, format: percent}
+      cons: {dc: family_residues, column: value, aggregation: median, format: 'decimals:2'}
+    body: |
+      - **{{singles}}** of the input sequences stay alone after clustering – only larger clusters can seed a family [Input & Clustering](tab:Input & Clustering)
+      - **{{n_fam}}** families hold **{{n_mem}}** sequences – the largest has {{max_size}} members [Families](tab:Families)
+      - **{{ident}}** median identity of a member to its representative – covering {{cover}} of it [Members](tab:Members)
+      - **{{cons}}** median conservation score of a representative residue, from 0 to 1 [Family alignment](tab:Family alignment)
+    section: Findings
+    tag: pf-ov-findings
+    index: ov-findings
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # One highlight per analysis tab, in the order of the rows above. The tiles
+  # of a row share a stored height.
+  - component_type: highlight
+    section: Findings
+    source_tab: Input & Clustering
+    source_component: inp-cluster-profile
+    caption: Clusters of each size, one curve per sample, on log axes; the long tail on the right is what can seed a family.
+    hide_legend: true
+    tag: pf-ov-hl-clusters
+    index: ov-hl-clusters
+    layout: {x: 0, y: 2, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Families
+    source_component: fam-landscape
+    caption: One point per family, by members and mean conservation; colour is the family origin.
+    tag: pf-ov-hl-landscape
+    index: ov-hl-landscape
+    layout: {x: 4, y: 2, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Members
+    source_component: mem-scatter
+    caption: One point per member, by the share of the representative it covers and its identity to it.
+    hide_legend: true
+    tag: pf-ov-hl-members
+    index: ov-hl-members
+    layout: {x: 0, y: 6, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Family alignment
+    source_component: aln-fig-conservation
+    caption: Representative residues by conservation score; colour is the class, conserved at 0.7 and above.
+    tag: pf-ov-hl-conservation
+    index: ov-hl-conservation
+    layout: {x: 4, y: 6, w: 4, h: 4}
+  # Link-only tab tiles: each tile prints its tab's subtitle, the question the
+  # tab answers.
+  - component_type: text
+    body: |
+      ### Data & QC
+      - [MultiQC](tab:MultiQC)
+      - [Input & Clustering](tab:Input & Clustering)
+
+      ### Families
+      - [Families](tab:Families)
+      - [Members](tab:Members)
+
+      ### Alignment
+      - [Family alignment](tab:Family alignment)
+      - [Profile HMM](tab:Profile HMM)
+    section: How to read this dashboard
+    tag: pf-ov-how-to-read
+    index: ov-how-to-read
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Persistent sample filters, the group first.
+  - component_type: interactive
+    workflow_tag: proteinfamilies
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+    section: Sample filters
+    group: Sample scope
+    tag: pf-filter-group
+    index: sample-filters-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: proteinfamilies
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: teal
+    section: Sample filters
+    group: Sample scope
+    tag: pf-filter-sample
+    index: sample-filters-sample
+    title: Sample
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  # Row selection feeds the Analysis panel.
+  - component_type: table
+    workflow_tag: proteinfamilies
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Sample sheet
+    tag: pf-sample-sheet
+    index: sample-sheet
+    title: Samplesheet
+    description: One row per sample, with its mode, input FASTA and the existing family archives an update extends.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: proteinfamilies
+    data_collection_tag: families
+    use: proteinfamilies/family_metadata
+    row_selection_enabled: true
+    row_selection_column: family
+    section: Reference tables
+    tag: pf-ref-families
+    index: ref-families
+    title: Protein families
+    description: Size, representative, seed and recruited members, HMM statistics and alignment summary, one row per family.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+tabs:
+# ============================================================================
+# Data & QC
+# ============================================================================
+- title: MultiQC
+  subtitle: What does the MultiQC report say about the families?
+  tab_group: Data & QC
+  tab_order: 1
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Report scope
+    icon: mdi:tune
+    color: orange
+    description: Narrow the MultiQC family table to selected report rows
+  grid_sections:
+  - name: Family metadata
+    icon: mdi:chart-box-outline
+    color: orange
+    description: Family sizes and representative lengths as MultiQC reports them
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      The [MultiQC](https://multiqc.info) report of the run carries one custom table: every
+      family with its member count and the length of its representative. Check that sizes and
+      lengths look plausible before reading the families.
+    tag: pf-mqc-intro
+    index: mqc-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    workflow_tag: proteinfamilies
+    data_collection_tag: multiqc_data
+    selected_module: family_metadata
+    selected_plot: family_metadata-section
+    section: Family metadata
+    tag: pf-mqc-family-metadata
+    title: Family metadata
+    description: Member count and representative length of every family, as the MultiQC report tabulates them.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: interactive
+    workflow_tag: proteinfamilies
+    data_collection_tag: multiqc_data
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:file-document-outline
+      custom_color: orange
+    section: Report scope
+    group: Report scope
+    tag: pf-mqc-filter-report-row
+    index: pf-mqc-report-row-filter
+    title: Report row
+    layout: {x: 0, y: 0, w: 1, h: 3}
+- title: Input & Clustering
+  subtitle: How many sequences went in, and how did they cluster?
+  tab_group: Data & QC
+  tab_order: 2
+  tab_icon: mdi:set-merge
+  tab_icon_color: blue
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Cluster scope
+    icon: mdi:filter-variant
+    color: blue
+    description: Keep clusters inside a size band
+  grid_sections:
+  - name: Input at a glance
+    icon: mdi:counter
+    color: blue
+    description: Sequences in, sequences kept, their length and how many stay alone
+  - name: Initial clusters
+    icon: mdi:chart-line
+    color: blue
+    description: Clusters of every size, per sample
+  - name: Preprocessing
+    icon: mdi:chart-bar
+    color: blue
+    description: Sequences before and after the length and duplicate filters
+  - name: Input tables
+    icon: mdi:table
+    color: gray
+    description: Sequence statistics and cluster sizes behind the tiles
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [MMseqs2](https://github.com/soedinglab/MMseqs2) clusters the preprocessed sequences, and only
+      clusters above the size threshold seed a family. The curve reads from the right: the long tail
+      is what the run can turn into families, while the left stays singletons.
+    tag: pf-inp-intro
+    index: inp-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: proteinfamilies
+    data_collection_tag: cluster_sizes
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: cluster_size
+    column_type: int64
+    display:
+      icon_name: mdi:ruler
+      custom_color: pink
+    section: Cluster scope
+    group: Cluster size
+    tag: pf-inp-filter-size
+    index: inp-size-range
+    title: Members per cluster
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: sequence_stats
+    use: seqfu/sequences_total
+    aggregation: sum
+    column_name: sequences
+    column_type: int64
+    filter_expr: "col('stage') == 'before'"
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:dna
+      icon_color: blue
+      caption: per sample, with the spread
+      format: si
+    section: Input at a glance
+    tag: pf-inp-card-input
+    index: inp-card-input
+    title: Input sequences
+    description: Sequences as given, before the length and duplicate filters.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: sequence_stats
+    use: seqfu/sequences_total
+    aggregation: sum
+    column_name: sequences
+    column_type: int64
+    filter_expr: "col('stage') == 'after'"
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    display:
+      icon_name: mdi:filter-check-outline
+      icon_color: teal
+      caption: the samples keeping most
+      format: si
+    section: Input at a glance
+    tag: pf-inp-card-kept
+    index: inp-card-kept
+    title: Sequences kept
+    description: Sequences left after the length filter, gap removal and deduplication.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: sequence_stats
+    use: seqfu/mean_length
+    aggregation: median
+    column_name: mean_length
+    column_type: float64
+    filter_expr: "col('stage') == 'after'"
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:ruler
+      icon_color: violet
+      caption: mean length per sample, residues
+      decimals: 0
+    section: Input at a glance
+    tag: pf-inp-card-length
+    index: inp-card-length
+    title: Sequence length
+    description: Mean length of the kept sequences, residues.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: cluster_sizes
+    use: proteinfamilies/cluster_size_distribution
+    aggregation: median
+    column_name: sequence_share
+    column_type: float64
+    filter_expr: "col('cluster_size') == 1"
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:account-outline
+      icon_color: orange
+      caption: median per sample, with the spread
+      format: percent
+    section: Input at a glance
+    tag: pf-inp-card-singletons
+    index: inp-card-singletons
+    title: Sequences left alone
+    description: Share of a sample's sequences that form a cluster of one.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: proteinfamilies
+    data_collection_tag: cluster_sizes
+    use: proteinfamilies/cluster_size_profile
+    config:
+      x_title: Initial cluster size (members, log)
+      y_title: Clusters of that size (log)
+      log_x: true
+      log_y: true
+      legend_pos: bottom
+    section: Initial clusters
+    tag: pf-inp-av-clusters
+    index: inp-cluster-profile
+    title: Initial cluster size distribution per sample
+    description: MMseqs2 clusters of the preprocessed sequences by size. Only clusters above the size threshold seed a family.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: figure
+    workflow_tag: proteinfamilies
+    data_collection_tag: sequence_stats
+    use: seqfu/stats
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: sequences
+      color: stage
+      barmode: group
+      labels: {sample: Sample, sequences: Sequences, stage: Stage}
+    section: Preprocessing
+    tag: pf-inp-fig-sequences
+    index: inp-fig-sequences
+    title: Input sequences before and after preprocessing
+    description: A large drop points at a length range or duplicate content worth checking.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: table
+    workflow_tag: proteinfamilies
+    data_collection_tag: sequence_stats
+    use: seqfu/stats
+    section: Input tables
+    tag: pf-inp-table-sequences
+    index: inp-table-sequences
+    title: Input sequence statistics
+    description: Sequence count, total and mean length, N50 and extremes per sample, before and after preprocessing.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: proteinfamilies
+    data_collection_tag: cluster_sizes
+    use: proteinfamilies/cluster_size_distribution
+    section: Input tables
+    tag: pf-inp-table-clusters
+    index: inp-table-clusters
+    title: Initial cluster sizes
+    description: Clusters of every size per sample, the sequences they hold and their share of the sample.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+# ============================================================================
+# Families
+# ============================================================================
+- title: Families
+  subtitle: Which families were built, and how large and conserved?
+  tab_group: Families
+  tab_order: 3
+  tab_icon: mdi:shape-outline
+  tab_icon_color: violet
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Family scope
+    icon: mdi:filter-variant
+    color: violet
+    description: Keep families by origin, size or conservation
+  grid_sections:
+  - name: Families at a glance
+    icon: mdi:counter
+    color: violet
+    description: Family count, size, recruitment and conservation
+  - name: Family landscape
+    icon: mdi:chart-scatter-plot
+    color: violet
+    description: Every family by size and conservation, with the record of the picked one
+  - name: Family size
+    icon: mdi:chart-box-outline
+    color: violet
+    description: Members per family, by sample and origin
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      A family is seeded from one initial cluster, modelled as a profile HMM and grown by recruiting
+      the sequences the model matches. Members far outnumbering the seed mean the model generalised;
+      low conservation marks a family whose members agree on few residues. Click a family on the plot
+      to open its record.
+    tag: pf-fam-intro
+    index: fam-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: proteinfamilies
+    data_collection_tag: families
+    interactive_component_type: MultiSelect
+    column_name: origin
+    column_type: object
+    display:
+      icon_name: mdi:source-branch
+      custom_color: orange
+    section: Family scope
+    group: Families
+    tag: pf-fam-filter-origin
+    index: fam-origin-filter
+    title: Family origin
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: proteinfamilies
+    data_collection_tag: families
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: size
+    column_type: int64
+    display:
+      icon_name: mdi:account-group-outline
+      custom_color: blue
+    section: Family scope
+    group: Families
+    tag: pf-fam-filter-size
+    index: fam-size-range
+    title: Members per family
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: proteinfamilies
+    data_collection_tag: families
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: mean_conservation
+    column_type: float64
+    display:
+      icon_name: mdi:check-decagram
+      custom_color: green
+    section: Family scope
+    group: Families
+    tag: pf-fam-filter-conservation
+    index: fam-conservation-range
+    title: Mean residue conservation
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: families
+    use: proteinfamilies/families_total
+    aggregation: count
+    column_name: family
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: origin
+    display:
+      icon_name: mdi:shape-outline
+      icon_color: violet
+      caption: built by the run or extended
+    section: Families at a glance
+    tag: pf-fam-card-families
+    index: fam-card-families
+    title: Families
+    description: Protein families in scope, new ones apart from existing families the run extended.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: families
+    use: proteinfamilies/family_size
+    aggregation: median
+    column_name: size
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:account-group-outline
+      icon_color: blue
+      caption: median, with its spread
+    section: Families at a glance
+    tag: pf-fam-card-size
+    index: fam-card-size
+    title: Members per family
+    description: Sequences that belong to a family.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: families
+    use: proteinfamilies/recruited_total
+    aggregation: sum
+    column_name: recruited
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    display:
+      icon_name: mdi:set-merge
+      icon_color: teal
+      caption: the samples recruiting most
+      format: si
+    section: Families at a glance
+    tag: pf-fam-card-recruited
+    index: fam-card-recruited
+    title: Members recruited
+    description: Members beyond the seed the family HMM was built from, found by hmmsearch.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: families
+    use: proteinfamilies/family_conservation
+    aggregation: median
+    column_name: mean_conservation
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: green
+      caption: mean score per family, 0 to 1
+      decimals: 2
+    section: Families at a glance
+    tag: pf-fam-card-conservation
+    index: fam-card-conservation
+    title: Residue conservation
+    description: Mean conservation score along the representative, 1 for an invariant column.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: proteinfamilies
+    data_collection_tag: families
+    use: proteinfamilies/family_landscape
+    config:
+      x_title: Members (log)
+      y_title: Mean residue conservation
+      log_x: true
+      top_n_labels: 8
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: family
+    section: Family landscape
+    tag: pf-fam-av-landscape
+    index: fam-landscape
+    title: Family size against conservation
+    description: One point per family, sized by representative length. Click a family to open its record.
+    layout: {x: 0, y: 0, w: 5, h: 7}
+  - component_type: advanced_viz
+    workflow_tag: proteinfamilies
+    data_collection_tag: families
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: fam-landscape
+      id_col: family
+      title_col: family
+      selection_source: scatter_selection
+      sections:
+        Family: [family, sample, origin, size, representative_id, representative_length]
+        Model: [seed_size, recruited, effective_sequences, model_length]
+        Alignment: [aligned_members, alignment_columns, mean_identity, mean_coverage, mean_conservation, conserved_share]
+        Sequence: [sequence]
+    section: Family landscape
+    tag: pf-fam-av-family-record
+    index: fam-family-record
+    title: Picked family
+    description: The family picked on the plot, with its seed, model and alignment statistics.
+    layout: {x: 5, y: 0, w: 3, h: 7}
+  - component_type: figure
+    workflow_tag: proteinfamilies
+    data_collection_tag: families
+    use: proteinfamilies/family_metadata
+    visu_type: box
+    dict_kwargs:
+      x: sample
+      y: size
+      color: origin
+      labels: {sample: Sample, size: Members per family, origin: Origin}
+    section: Family size
+    tag: pf-fam-fig-size
+    index: fam-fig-size
+    title: Family size per sample
+    description: Members per family, families the run built apart from existing families it extended.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+# ============================================================================
+# Members
+# ============================================================================
+- title: Members
+  subtitle: How close are the members to their family's representative?
+  tab_group: Families
+  tab_order: 4
+  tab_icon: mdi:account-group-outline
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Member scope
+    icon: mdi:filter-variant
+    color: teal
+    description: Keep members by identity to the representative, coverage or family origin
+  grid_sections:
+  - name: Members at a glance
+    icon: mdi:counter
+    color: teal
+    description: Members, identity, coverage and length
+  - name: Identity per family
+    icon: mdi:chart-box-outline
+    color: teal
+    description: How tightly each family's members cluster around the representative
+  - name: Member detail
+    icon: mdi:chart-scatter-plot
+    color: teal
+    description: Every member by coverage and identity, with the record of the picked one
+  - name: Member table
+    icon: mdi:table
+    color: gray
+    description: The member roster behind the tiles
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      Identity and coverage are measured against the family representative over the full alignment.
+      Low coverage marks fragments, and low identity at full coverage marks distant homologues the
+      HMM recruited.
+    tag: pf-mem-intro
+    index: mem-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_members
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: identity
+    column_type: float64
+    display:
+      icon_name: mdi:relation-many-to-many
+      custom_color: cyan
+    section: Member scope
+    group: Members
+    tag: pf-mem-filter-identity
+    index: mem-identity-range
+    title: Identity to the representative
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_members
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: coverage
+    column_type: float64
+    display:
+      icon_name: mdi:ruler
+      custom_color: lime
+    section: Member scope
+    group: Members
+    tag: pf-mem-filter-coverage
+    index: mem-coverage-range
+    title: Representative covered
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_members
+    interactive_component_type: MultiSelect
+    column_name: origin
+    column_type: object
+    display:
+      icon_name: mdi:source-branch
+      custom_color: orange
+    section: Member scope
+    group: Members
+    tag: pf-mem-filter-origin
+    index: mem-origin-filter
+    title: Family origin
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_members
+    use: proteinfamilies/members_count
+    aggregation: count
+    column_name: member_id
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: origin
+    display:
+      icon_name: mdi:account-group-outline
+      icon_color: teal
+      caption: in new or extended families
+    section: Members at a glance
+    tag: pf-mem-card-members
+    index: mem-card-members
+    title: Members
+    description: Sequences on the family rosters.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_members
+    use: proteinfamilies/member_identity
+    aggregation: median
+    column_name: identity
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:relation-many-to-many
+      icon_color: cyan
+      caption: median, with its spread
+      format: percent
+    section: Members at a glance
+    tag: pf-mem-card-identity
+    index: mem-card-identity
+    title: Identity to the representative
+    description: Identity over the columns member and representative share.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_members
+    use: proteinfamilies/member_coverage
+    aggregation: median
+    column_name: coverage
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:ruler
+      icon_color: lime
+      caption: how members spread, 0 to 100%
+      format: percent
+    section: Members at a glance
+    tag: pf-mem-card-coverage
+    index: mem-card-coverage
+    title: Representative covered
+    description: Share of the representative's residues a member covers.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_members
+    use: proteinfamilies/member_length
+    aggregation: median
+    column_name: length
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: indigo
+      caption: residues, with the spread
+    section: Members at a glance
+    tag: pf-mem-card-length
+    index: mem-card-length
+    title: Member length
+    description: Ungapped length of a member.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_members
+    use: proteinfamilies/family_members
+    visu_type: box
+    dict_kwargs:
+      x: family
+      y: identity
+      color: family
+      labels: {family: Family, identity: Identity to the representative}
+    section: Identity per family
+    tag: pf-mem-fig-identity
+    index: mem-fig-identity
+    title: Identity to the representative per family
+    description: A wide box is a family whose members range from near copies to distant homologues.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: advanced_viz
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_members
+    use: proteinfamilies/member_scatter
+    config:
+      x_title: Share of the representative covered
+      y_title: Identity to the representative
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: member_id
+    section: Member detail
+    tag: pf-mem-av-scatter
+    index: mem-scatter
+    title: Member coverage against identity
+    description: One point per member, sized by length. Click a member to open its record.
+    layout: {x: 0, y: 0, w: 5, h: 7}
+  - component_type: advanced_viz
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_members
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: mem-scatter
+      id_col: member_id
+      title_col: member_id
+      selection_source: scatter_selection
+      sections:
+        Member: [member_id, family, sample, origin, is_representative]
+        Alignment: [in_alignment, identity, coverage, length]
+    section: Member detail
+    tag: pf-mem-av-member-record
+    index: mem-member-record
+    title: Picked member
+    description: The member picked on the plot, its family and how it aligns to the representative.
+    layout: {x: 5, y: 0, w: 3, h: 7}
+  - component_type: table
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_members
+    use: proteinfamilies/family_members
+    row_selection_enabled: true
+    row_selection_column: member_id
+    section: Member table
+    tag: pf-mem-table-members
+    index: mem-table-members
+    title: Family members
+    description: Every member of every family with its identity, coverage and length.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+# ============================================================================
+# Alignment
+# ============================================================================
+- title: Family alignment
+  subtitle: How conserved is each family's representative, residue by residue?
+  tab_group: Alignment
+  tab_order: 5
+  tab_icon: mdi:dna
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Alignment scope
+    icon: mdi:filter-variant
+    color: grape
+    description: The aligned members kept, by identity to the representative
+  grid_sections:
+  - name: Alignment at a glance
+    icon: mdi:counter
+    color: grape
+    description: Aligned members, their identity to the representative, residue conservation and column occupancy
+  - name: Conservation
+    icon: mdi:chart-bar
+    color: grape
+    description: How the representative's residues spread over the conservation scale
+  - name: Structure and sequence
+    icon: mdi:dna
+    color: grape
+    description: Pick a family, then read its fold and sequence track linked by residue
+  - name: Alignment
+    icon: mdi:relation-many-to-many
+    color: grape
+    description: The representative on the first row, the members below it
+  - name: Family tree
+    icon: mdi:family-tree
+    color: grape
+    description: Maximum-likelihood tree of the family members
+    collapsed: true
+  - name: Residue table
+    icon: mdi:table
+    color: gray
+    description: Per-residue conservation behind the tiles
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      Pick a family on the plot to open its predicted structure, sequence track and alignment;
+      selecting residues in any of them marks the same residues in the others. Conservation is
+      1 for an invariant, gap-free column and falls toward 0 as residues diverge or members gap.
+    tag: pf-aln-intro
+    index: aln-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_msa
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: identity
+    column_type: float64
+    display:
+      icon_name: mdi:relation-many-to-many
+      custom_color: cyan
+    section: Alignment scope
+    group: Alignment
+    tag: pf-aln-filter-identity
+    index: aln-identity-range
+    title: Identity to the representative
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_msa
+    use: famsa/aligned_rows
+    aggregation: count
+    column_name: seq_id
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: msa_id
+    top_n_count: 3
+    display:
+      icon_name: mdi:table
+      icon_color: grape
+      caption: the families with most rows
+    section: Alignment at a glance
+    tag: pf-aln-card-rows
+    index: aln-card-rows
+    title: Aligned sequences
+    description: Rows of the full family alignments, capped at 500 per family.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_msa
+    use: famsa/aligned_identity
+    aggregation: median
+    column_name: identity
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:relation-many-to-many
+      icon_color: cyan
+      caption: median, with its spread
+      format: percent
+    section: Alignment at a glance
+    tag: pf-aln-card-identity
+    index: aln-card-identity
+    title: Identity to the representative
+    description: Identity of each aligned row to the representative.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_residues
+    use: famsa/residue_conservation
+    aggregation: median
+    column_name: value
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: green
+      caption: residue scores, 0 to 1
+      decimals: 2
+    section: Alignment at a glance
+    tag: pf-aln-card-conservation
+    index: aln-card-conservation
+    title: Residue conservation
+    description: Conservation score of each representative residue.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_residues
+    use: famsa/conservation
+    aggregation: median
+    column_name: occupancy
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:chart-bar
+      icon_color: orange
+      caption: median, with its spread
+      format: percent
+    section: Alignment at a glance
+    tag: pf-aln-card-occupancy
+    index: aln-card-occupancy
+    title: Column occupancy
+    description: Share of members with a residue in a column.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_residues
+    use: famsa/conservation
+    visu_type: histogram
+    dict_kwargs:
+      x: value
+      color: category
+      labels: {value: Conservation score, category: Class, count: Residues}
+    section: Conservation
+    tag: pf-aln-fig-conservation
+    index: aln-fig-conservation
+    title: Residues by conservation score
+    description: Representative residues in scope, coloured by class.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: figure
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_residues
+    use: famsa/conservation
+    visu_type: histogram
+    dict_kwargs:
+      x: occupancy
+      color: category
+      labels: {occupancy: Share of members with a residue, category: Class, count: Residues}
+    section: Conservation
+    tag: pf-aln-fig-occupancy
+    index: aln-fig-occupancy
+    title: Residues by column occupancy
+    description: Low occupancy marks columns most members gap.
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  # The plot and the 3D tile share the section width: a click on a family
+  # narrows the residue and alignment tables to it through the family links,
+  # and the structure, track and alignment follow.
+  - component_type: advanced_viz
+    workflow_tag: proteinfamilies
+    data_collection_tag: families
+    use: proteinfamilies/family_landscape
+    config:
+      x_title: Members (log)
+      y_title: Mean residue conservation
+      log_x: true
+      top_n_labels: 5
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: family
+    section: Structure and sequence
+    tag: pf-aln-av-families
+    index: aln-families
+    title: Families by size and conservation
+    description: One point per family. Click one to open its structure, sequence and alignment.
+    layout: {x: 0, y: 0, w: 4, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_residues
+    use: famsa/conservation_structure
+    config:
+      structure_source: resolve
+      color_mode: value
+      representations: [cartoon]
+      highlight_site: true
+      show_variants: false
+      layout: structure_text
+      selection_enabled: true
+      follow_selection: true
+    section: Structure and sequence
+    tag: pf-aln-av-structure
+    index: aln-structure
+    title: Predicted structure of the representative
+    description: Folded on demand from the picked family's representative and coloured by residue conservation.
+    layout: {x: 4, y: 0, w: 4, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_residues
+    use: famsa/conservation_track
+    config:
+      value_label: Conservation
+      selection_enabled: true
+      follow_selection: true
+    section: Structure and sequence
+    tag: pf-aln-av-track
+    index: aln-track
+    title: Representative sequence with conservation
+    description: The representative's residues, a conservation lane and its conserved, intermediate or variable class.
+    layout: {x: 0, y: 5, w: 8, h: 3}
+  - component_type: advanced_viz
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_msa
+    use: famsa/family_msa
+    config:
+      color_scheme: clustal
+      max_rows: 200
+      sort_by: rank
+      show_consensus: true
+      show_conservation: true
+      entity_col_for_selection: entity
+      position_col_for_selection: position
+      selection_enabled: true
+      follow_selection: true
+    section: Alignment
+    tag: pf-aln-av-msa
+    index: aln-msa
+    title: Family alignment
+    description: Brushing columns selects the same residues on the track and the structure.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: figure
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_trees
+    use: cmaple/tree_layout
+    mode: code
+    code_content: |
+      d = df.sort('draw_order')
+      tips = d.filter(pl.col('is_tip'))
+      edges = go.Scatter(
+          x=d['x'].to_list(), y=d['y'].to_list(), mode='lines', connectgaps=False,
+          line={'width': 1}, hoverinfo='skip', showlegend=False,
+      )
+      tip_marks = go.Scatter(
+          x=tips['x'].to_list(), y=tips['y'].to_list(), mode='markers',
+          marker={'size': 6}, text=tips['node'].to_list(), customdata=tips['family'].to_list(),
+          hovertemplate='%{text}<br>%{customdata}<extra></extra>', showlegend=False,
+      )
+      fig = go.Figure(data=[edges, tip_marks])
+      fig.update_layout(xaxis_title='Substitutions per site from the root', margin={'t': 10, 'l': 16, 'r': 16, 'b': 48})
+      fig.update_yaxes(visible=False, autorange='reversed')
+    selection_enabled: false
+    section: Family tree
+    tag: pf-aln-fig-tree
+    index: aln-tree
+    title: Member tree of the family
+    description: CMAPLE tree of the picked family's aligned members, one tip per member (every family in scope, stacked, until one is picked).
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_residues
+    use: famsa/conservation
+    columns: [position, residue, value, category, consensus, consensus_share, occupancy, n_members]
+    section: Residue table
+    tag: pf-aln-table-residues
+    index: aln-table-residues
+    title: Residue conservation
+    description: Every residue of the picked family's representative with its score and class, the column consensus and occupancy.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Profile HMM
+  subtitle: What does a family's profile model look like?
+  tab_group: Alignment
+  tab_order: 6
+  tab_icon: mdi:chart-bar
+  tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Profile scope
+    icon: mdi:filter-variant
+    color: indigo
+    description: Pick one family, or keep families by their members
+  grid_sections:
+  - name: Profile at a glance
+    icon: mdi:counter
+    color: indigo
+    description: Match states, seed sequences, effective sequences and representative length
+  - name: Profile logo
+    icon: mdi:chart-bar
+    color: indigo
+    description: One stack of letters per match state, the members' coverage of the model below it
+  - name: Family and structure
+    icon: mdi:dna
+    color: indigo
+    description: Pick a family, then read its fold linked to the logo by residue
+  - name: Residues
+    icon: mdi:relation-many-to-many
+    color: indigo
+    description: The representative's sequence with its conservation
+  - name: Family alignment
+    icon: mdi:relation-many-to-many
+    color: indigo
+    description: The hmmer-recruited members aligned to the representative
+    collapsed: true
+  - name: Hits table
+    icon: mdi:table
+    color: gray
+    description: Where each member sits on the family model
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [hmmbuild](http://hmmer.org) turns each family's seed alignment into a profile HMM, drawn here
+      as a sequence logo: tall stacks are conserved states. Pick a family in the filter or on the
+      plot; brushing states selects the representative residues they sit on in the structure and
+      the track.
+    tag: pf-hmm-intro
+    index: hmm-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: proteinfamilies
+    data_collection_tag: families
+    interactive_component_type: Select
+    column_name: family
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: grape
+    section: Profile scope
+    group: Family
+    tag: pf-hmm-filter-family
+    index: hmm-family-select
+    title: Family
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: proteinfamilies
+    data_collection_tag: families
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: size
+    column_type: int64
+    display:
+      icon_name: mdi:account-group-outline
+      custom_color: blue
+    section: Profile scope
+    group: Family
+    tag: pf-hmm-filter-size
+    index: hmm-size-range
+    title: Members per family
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: families
+    aggregation: median
+    column_name: model_length
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:ruler
+      icon_color: indigo
+      caption: median, with its spread
+    section: Profile at a glance
+    tag: pf-hmm-card-states
+    index: hmm-card-states
+    title: Match states
+    description: States of the family HMM, one per column of the seed alignment kept.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: families
+    aggregation: median
+    column_name: seed_size
+    column_type: int64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:sprout-outline
+      icon_color: green
+      caption: seed sequences per family
+    section: Profile at a glance
+    tag: pf-hmm-card-seed
+    index: hmm-card-seed
+    title: Seed sequences
+    description: Sequences the family HMM was built from.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: families
+    aggregation: median
+    column_name: effective_sequences
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: cyan
+      caption: median, with its spread
+      decimals: 1
+    section: Profile at a glance
+    tag: pf-hmm-card-effn
+    index: hmm-card-effn
+    title: Effective sequences
+    description: HMMER's effective sequence number, the weight of evidence behind the model.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: families
+    use: proteinfamilies/representative_length
+    aggregation: median
+    column_name: representative_length
+    column_type: int64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:dna
+      icon_color: orange
+      caption: residues per family
+    section: Profile at a glance
+    tag: pf-hmm-card-representative
+    index: hmm-card-representative
+    title: Representative length
+    description: Residues of the sequence the family is drawn on.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # The logo follows the family a filter or a pick names on hmm_name. A brush on
+  # its states selects the representative residues they sit on, which the
+  # structure, the track and the alignment follow. The hits lane draws every
+  # member the family alignment placed on the model. The hits table has no
+  # search statistics and numbers a member's residues along the member itself,
+  # so the lane binds neither the E-value, the score nor the alignment span (a
+  # click on a bar would otherwise pick residues of the member on the
+  # representative's tiles).
+  - component_type: advanced_viz
+    workflow_tag: proteinfamilies
+    data_collection_tag: hmm_profile
+    use: hmmer/family_logo
+    config:
+      height_mode: relent_abovebg
+      color_scheme: clustal
+      show_indel_rows: true
+      show_consensus: true
+      hits_dc_tag: hmmalign_hits
+      hits_model_col: label
+      hits_entity_col: entity
+      hits_evalue_col: null
+      hits_score_col: null
+      hits_ali_from_col: null
+      hits_ali_to_col: null
+      hits_evalue_max: null
+      max_hits: 200
+      selection_enabled: true
+      follow_selection: true
+    section: Profile logo
+    tag: pf-hmm-av-logo
+    index: hmm-logo
+    title: Profile HMM logo
+    description: Letter heights are relative entropy above background; the lanes show insert behaviour, occupancy and the members that matched each state.
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: advanced_viz
+    workflow_tag: proteinfamilies
+    data_collection_tag: families
+    use: proteinfamilies/family_landscape
+    config:
+      x_title: Members (log)
+      y_title: Mean residue conservation
+      log_x: true
+      top_n_labels: 5
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: family
+    section: Family and structure
+    tag: pf-hmm-av-families
+    index: hmm-families
+    title: Families by size and conservation
+    description: One point per family. Click one to draw its logo and fold.
+    layout: {x: 0, y: 0, w: 4, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_residues
+    use: famsa/conservation_structure
+    config:
+      structure_source: resolve
+      color_mode: category
+      representations: [cartoon]
+      highlight_site: true
+      show_variants: false
+      layout: structure
+      selection_enabled: true
+      follow_selection: true
+    section: Family and structure
+    tag: pf-hmm-av-structure
+    index: hmm-structure
+    title: Predicted structure of the representative
+    description: Folded on demand from the picked family's representative and coloured by conservation class.
+    layout: {x: 4, y: 0, w: 4, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_residues
+    use: famsa/conservation_track
+    config:
+      value_label: Conservation
+      selection_enabled: true
+      follow_selection: true
+    section: Residues
+    tag: pf-hmm-av-track
+    index: hmm-track
+    title: Representative sequence with conservation
+    description: States brushed on the logo are drawn red on the sequence.
+    layout: {x: 0, y: 0, w: 8, h: 3}
+  - component_type: advanced_viz
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_msa
+    use: famsa/family_msa
+    config:
+      color_scheme: clustal
+      max_rows: 200
+      sort_by: rank
+      show_consensus: true
+      show_conservation: true
+      entity_col_for_selection: entity
+      position_col_for_selection: position
+      selection_enabled: true
+      follow_selection: true
+    section: Family alignment
+    tag: pf-hmm-av-msa
+    index: hmm-msa
+    title: Family alignment
+    description: The representative on the first row, the members below it.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    workflow_tag: proteinfamilies
+    data_collection_tag: hmmalign_hits
+    use: hmmer/hmmalign_hits
+    section: Hits table
+    tag: pf-hmm-table-hits
+    index: hmm-table-hits
+    title: Members on the model
+    description: The HMM states each member covers, from the hmmalign alignment.
+    layout: {x: 0, y: 0, w: 8, h: 6}
