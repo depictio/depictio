@@ -3,6 +3,37 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.18.1
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.18.1</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.18.0 → 1.18.1 [36856d5e1]
+* fix(docker): build lxml from source with xmlsec so SAML loads in the API image [a22bd5c3b]
+* fix(deploy): internal dev needs the S3 checksum switches on its Generic bucket [8e2f88200]
+* fix(advanced-viz): send the bearer token when fetching the indexed-file manifest [0f38f5067]
+* refactor(dev): read the IdP of the SAML prototype from the environment [c1b4d4798]
+* feat(deploy): turn the EMBL dev demo into the persistent TREC demo [8ebf75677]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.17.4
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
