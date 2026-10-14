@@ -12,12 +12,17 @@ const CommentsHeaderButton: React.FC = () => {
   const open = sum(control.openCounts);
   const proposed = sum(control.proposedCounts);
   const stale = sum(control.staleCounts);
+  // The badge and the tooltip count the same threads: open plus proposed.
+  const pending = open + proposed;
+  const parts = [
+    open ? `${open} open` : '',
+    proposed ? `${proposed} awaiting review` : '',
+    stale ? `${stale} with changed data` : '',
+  ].filter(Boolean);
   const tooltip = !control.canComment
     ? 'Sign in to comment on this dashboard'
-    : open || proposed
-      ? `${open} open thread${open === 1 ? '' : 's'}${proposed ? `, ${proposed} awaiting review` : ''}${
-          stale ? `, ${stale} with changed data` : ''
-        }`
+    : pending
+      ? `${pending} thread${pending === 1 ? '' : 's'} to follow: ${parts.join(', ')}`
       : 'Comment on this dashboard';
   return (
     <ChromeButton
@@ -26,7 +31,7 @@ const CommentsHeaderButton: React.FC = () => {
       icon="comments"
       label="Comments"
       tooltip={tooltip}
-      badge={open > 0 ? open : proposed}
+      badge={pending}
       onClick={() => control.openDrawer(null)}
       data-tour-id="comments-header"
     />

@@ -624,6 +624,9 @@ INHERITED_SETTINGS = (
     "DEPICTIO_VERSION_CHECK_",
     "DEPICTIO_REMOTE_",
     "DEPICTIO_FASTAPI_EMBED_",
+    # The AI provider (keys, model) and the MCP endpoint limits.
+    "DEPICTIO_AI_",
+    "DEPICTIO_MCP_",
 )
 
 
@@ -634,6 +637,7 @@ def server_env(
     seed: str,
     screenshots: bool,
     data_roots: Sequence[str] = (),
+    mcp: bool = False,
 ) -> dict:
     """The environment of the API and the worker. ``data_roots`` are the folders the
     web UI may read run folders from (see local_data_roots)."""
@@ -699,6 +703,8 @@ def server_env(
     )
     if data_roots:
         env["DEPICTIO_LOCAL_DATA_ROOTS"] = ",".join(data_roots)
+    if mcp:
+        env["DEPICTIO_MCP_ENABLED"] = "true"
     if seed == "none":
         env["DEPICTIO_DISABLE_EXAMPLE_DASHBOARDS"] = "true"
     else:
@@ -2005,6 +2011,7 @@ def start_stack(
     log=print,
     warn=None,
     data_roots: list[str] | None = None,
+    mcp: bool = False,
 ) -> State:
     """Start every service and wait until the API answers; returns what was recorded.
 
@@ -2018,7 +2025,7 @@ def start_stack(
         data_roots = local_data_roots(paths)
     with _signals_interrupt():
         try:
-            return _start_stack(paths, port, seed, screenshots, log, warn, data_roots)
+            return _start_stack(paths, port, seed, screenshots, log, warn, data_roots, mcp)
         except BaseException as exc:
             logger.debug("Startup failed (%s): stopping what this run started", type(exc).__name__)
             with _signals_ignored():
@@ -2034,6 +2041,7 @@ def _start_stack(
     log,
     warn,
     data_roots: list[str],
+    mcp: bool = False,
 ) -> State:
     stop_all(paths, log=log)
     ensure_binaries(paths, log=log)
@@ -2050,7 +2058,7 @@ def _start_stack(
         log("Installing Chromium for dashboard thumbnails")
         install_chromium()
     secret_values = load_secrets(paths)
-    env = server_env(paths, ports, secret_values, seed, screenshots, data_roots)
+    env = server_env(paths, ports, secret_values, seed, screenshots, data_roots, mcp=mcp)
     state = State(
         ports=ports,
         home=str(paths.home),

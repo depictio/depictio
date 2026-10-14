@@ -322,7 +322,12 @@ def _prepare_viewer(paths: Paths, running: bool) -> None:
 
 
 def _start_or_reuse(
-    paths: Paths, port: int | None, seed: str, screenshots: bool | None, data_roots: list[str]
+    paths: Paths,
+    port: int | None,
+    seed: str,
+    screenshots: bool | None,
+    data_roots: list[str],
+    mcp: bool = False,
 ) -> State:
     """The server already running, else a new one; exits 1 on failure, and 130 on
     Ctrl-C (128 + the signal for SIGTERM and SIGHUP).
@@ -369,6 +374,7 @@ def _start_or_reuse(
                 log=_info,
                 warn=_warn,
                 data_roots=data_roots,
+                mcp=mcp,
             )
     except LocalStackError as exc:
         _fail(str(exc))
@@ -512,6 +518,14 @@ def up(
             "needed. Off by default.",
         ),
     ] = None,
+    mcp: Annotated[
+        bool,
+        typer.Option(
+            "--mcp/--no-mcp",
+            help="Serve the MCP endpoint so AI agents (Claude Code, Claude Desktop) can "
+            "read and annotate dashboards; connect with `depictio mcp install`.",
+        ),
+    ] = False,
     data_root_allow: Annotated[
         list[Path] | None,
         typer.Option(
@@ -554,9 +568,11 @@ def up(
     except LocalStackError as exc:
         _fail(str(exc))
     with lock:
-        state = _start_or_reuse(paths, port, seed, screenshots, data_roots)
+        state = _start_or_reuse(paths, port, seed, screenshots, data_roots, mcp)
     present = _wait_for_examples(paths, state, seed.split(",") if examples else [])
     _print_summary(paths, state, present)
+    if mcp:
+        _info("Connect Claude Code: depictio mcp install")
     if open_browser:
         _open_dashboards(state)
 

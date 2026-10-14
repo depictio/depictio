@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 import multiprocessing as mp
+import threading
 from dataclasses import dataclass, field
 from multiprocessing.connection import Connection
 from typing import Any
@@ -144,6 +145,9 @@ class AnalysisSandbox:
         )
         self._proc: mp.process.BaseProcess | None = None
         self._conn: Connection | None = None
+        # close() may race with itself: a timed-out caller closes from its own
+        # thread while the worker thread's ``finally`` closes too.
+        self._close_lock = threading.Lock()
         self.rows: dict[str, int] = {}
 
     # ---------- lifecycle ----------
@@ -180,21 +184,23 @@ class AnalysisSandbox:
         self.rows = hello.get("rows", {})
 
     def close(self) -> None:
-        """Kill the child. Safe to call twice, and never raises."""
-        if self._conn is not None:
+        """Kill the child. Safe to call twice, from two threads at once, and never raises."""
+        # Detach under the lock so each handle is torn down by exactly one caller.
+        with self._close_lock:
+            conn, self._conn = self._conn, None
+            proc, self._proc = self._proc, None
+        if conn is not None:
             try:
-                self._conn.send(None)
+                conn.send(None)
             except (BrokenPipeError, OSError):
                 pass
             try:
-                self._conn.close()
+                conn.close()
             except OSError:
                 pass
-            self._conn = None
-        if self._proc is not None:
-            self._proc.kill()
-            self._proc.join(timeout=5)
-            self._proc = None
+        if proc is not None:
+            proc.kill()
+            proc.join(timeout=5)
 
     def __enter__(self) -> AnalysisSandbox:
         self.start()

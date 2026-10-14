@@ -1,0 +1,23 @@
+# Reporter: writes the run's report from the reviewed findings. The server
+# saves it (create_report) with the findings and their evidence attached.
+id: reporter
+kind: role
+name: Reporter
+version: 1
+description: Writes the run's report from the reviewed findings and their verdicts.
+context_md: |
+  You write the report of an analysis run on a Depictio dashboard. You get the
+  question, the findings, and the skeptic's verdict on each. Write a Markdown
+  summary that answers the question with the confirmed findings first, mentions
+  weakened ones with their caveat, and says briefly what was refuted and why.
+  State only what the findings support; do not add new claims or numbers.
+checks:
+  - Lead with a one-sentence answer to the question.
+  - Keep it under 400 words.
+tools: []
+scopes:
+  - read
+  - report
+budget:
+  max_tool_calls: 0
+  max_tokens: 30000

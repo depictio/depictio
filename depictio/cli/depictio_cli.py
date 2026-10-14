@@ -31,6 +31,7 @@ from depictio.cli.cli.commands.dev import app as dev
 from depictio.cli.cli.commands.images import app as images
 from depictio.cli.cli.commands.local import app as local
 from depictio.cli.cli.commands.manifest import app as manifest
+from depictio.cli.cli.commands.mcp import app as mcp
 from depictio.cli.cli.commands.migrate import migrate
 from depictio.cli.cli.commands.run import register_run_command
 from depictio.cli.cli.commands.standalone import register_standalone_commands
@@ -49,7 +50,7 @@ TAGLINE = "Interactive dashboards for bioinformatics data"
 # The panels of `depictio --help`, in display order, with their commands.
 HELP_PANELS = {
     "Get started": ("local", "ingest", "watch"),
-    "Projects and data": ("config", "data", "dashboard", "template", "manifest"),
+    "Projects and data": ("config", "data", "dashboard", "template", "manifest", "mcp"),
     "Administration": ("migrate", "backup"),
     "Reference": ("catalog", "commands", "version"),
 }
@@ -253,6 +254,7 @@ app.add_typer(
     name="catalog",
     help="Browse the supported tools and the dashboard components their outputs become.",
 )
+app.add_typer(mcp, name="mcp", help="Connect MCP clients (Claude Code, Claude Desktop) to Depictio")
 # Maintainer / CI tooling (catalog authoring, recipe test harness, backup
 # coverage). Hidden from the user-facing help; still callable as `depictio dev …`.
 app.add_typer(dev, name="dev", hidden=True)

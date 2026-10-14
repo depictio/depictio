@@ -1,0 +1,55 @@
+# Differential expression / abundance results (DESeq2-style tables).
+id: differential_expression
+kind: topic
+name: Differential expression
+version: 1
+description: Differential expression or abundance results (fold changes, adjusted p-values, contrasts).
+applies_to:
+  template_ids:
+    - nf-core/rnaseq*
+    - nf-core/differentialabundance*
+  catalog_modules:
+    - deseq2
+    - deseq2/*
+  # The column vocabulary of DE result tables (DESeq2, edgeR, limma). The
+  # router needs at least two of them (or a template / catalog match): the
+  # keywords below never route here on their own.
+  columns:
+    - "log2foldchange"
+    - "*log2fc*"
+    - "*log2_fold*"
+    - "logfc"
+    - "lfcse"
+    - "basemean"
+    - "logcpm"
+    - "aveexpr"
+    - "padj"
+    - "*p_adj*"
+    - "*adj_p*"
+    - "adj.p.val"
+    - "pvalue"
+    - "*fdr*"
+  keywords:
+    - differential
+    - expression
+    - fold change
+    - volcano
+    - significant genes
+    - upregulated
+    - downregulated
+    - contrast
+    - deseq
+context_md: |
+  Topic: differential expression and abundance.
+  - Count significant features per contrast at the adjusted p-value and fold
+    change thresholds the dashboard uses (look at its filters); state them.
+  - Check direction balance (up versus down) and whether significance is driven
+    by low-count features (low mean expression with large fold changes).
+  - Look at the strongest hits by adjusted p-value and by absolute fold change;
+    they are often different lists.
+  - Sample-level views (PCA, correlation heatmaps) show whether replicates group
+    by condition; a sample grouping with the wrong condition deserves a finding.
+checks:
+  - Always use adjusted p-values for significance, and say which threshold.
+  - Report counts per contrast, not pooled across contrasts.
+tools: []

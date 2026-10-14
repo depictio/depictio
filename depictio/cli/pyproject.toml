@@ -18,6 +18,8 @@ classifiers = [
 
 [project.optional-dependencies]
 multiqc = ["depictio[multiqc]==1.17.4"]
+# `depictio mcp serve`: stdio proxy for AI agents (Claude Code, Claude Desktop).
+mcp = ["mcp==2.2.0"]
 
 # Declared here as well as in depictio: `uv tool install depictio-cli` and pipx only
 # expose the commands of the package they were asked for.

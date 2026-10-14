@@ -19,6 +19,7 @@ from fastapi.testclient import TestClient
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.comments_endpoints import cascade
 from depictio.api.v1.endpoints.comments_endpoints import routes as cr
+from depictio.api.v1.endpoints.comments_endpoints import service as cs
 from depictio.api.v1.endpoints.dashboards_endpoints import routes as dash_routes
 from depictio.api.v1.endpoints.dashboards_endpoints import version_store, versioning
 from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
@@ -49,8 +50,8 @@ def world():
     database = mongomock.MongoClient()["depictio_test"]
     hashes = {str(DC): "h1"}
     with (
-        patch.object(cr, "comment_threads_collection", database["comment_threads"]),
-        patch.object(cr, "dashboards_collection", database["dashboards"]),
+        patch.object(cs, "comment_threads_collection", database["comment_threads"]),
+        patch.object(cs, "dashboards_collection", database["dashboards"]),
         patch.object(cascade, "comment_threads_collection", database["comment_threads"]),
         patch.object(dash_routes, "dashboards_collection", database["dashboards"]),
         patch.object(dash_routes, "projects_collection", database["projects"]),
@@ -66,7 +67,7 @@ def world():
             "dashboard_version_counters_collection",
             database["dashboard_version_counters"],
         ),
-        patch.object(cr, "_get_aggregation_hash", side_effect=lambda dc: hashes.get(dc)),
+        patch.object(cs, "_get_aggregation_hash", side_effect=lambda dc: hashes.get(dc)),
         patch.object(settings.auth, "single_user_mode", False),
     ):
         editor, editor2, owner, viewer = _user(), _user(), _user(), _user()
@@ -528,7 +529,7 @@ class TestComments:
 
     def test_comment_cap(self, world):
         t = create(world)
-        with patch.object(cr, "MAX_COMMENTS_PER_THREAD", 2):
+        with patch.object(cs, "MAX_COMMENTS_PER_THREAD", 2):
             run(cr.add_comment(t.id, CommentCreate(body="2"), current_user=world.editor))
             with pytest.raises(HTTPException) as e:
                 run(cr.add_comment(t.id, CommentCreate(body="3"), current_user=world.editor))
@@ -612,7 +613,8 @@ class TestAgents:
         same = self.agent_thread(world, body="claim v2", dedupe_key="k", response=resp3)
         assert (resp1.status_code, resp2.status_code, resp3.status_code) == (201, 200, 200)
         assert first.id == again.id == same.id
-        assert [c.body for c in same.comments] == ["claim", "claim v2"]
+        # The agent's opening comment is rewritten, not appended to.
+        assert [c.body for c in same.comments] == ["claim v2"]
         assert same.number == first.number
         assert world.db["comment_threads"].count_documents({}) == 1
 
@@ -631,7 +633,7 @@ class TestAgents:
         assert client.post("/comments/threads", json=body).status_code == 200
 
     def test_run_cap(self, world):
-        with patch.object(cr, "MAX_THREADS_PER_RUN", 3):
+        with patch.object(cs, "MAX_THREADS_PER_RUN", 3):
             for _ in range(3):
                 create(world, agent={"name": "bot", "run_id": "r9"})
             with pytest.raises(HTTPException) as e:
@@ -640,7 +642,7 @@ class TestAgents:
         assert status_of(e) == 429
 
     def test_run_cap_is_per_user(self, world):
-        with patch.object(cr, "MAX_THREADS_PER_RUN", 2):
+        with patch.object(cs, "MAX_THREADS_PER_RUN", 2):
             for _ in range(2):
                 create(world, agent={"name": "bot", "run_id": "r9"})
             # Same run id, launched by someone else: a separate budget.

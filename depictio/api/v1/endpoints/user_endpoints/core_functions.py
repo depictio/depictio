@@ -15,6 +15,7 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.endpoints.groups_endpoints.pending_pi import (
     claim_pending_pi_groups,
 )
+from depictio.api.v1.endpoints.user_endpoints.token_scopes import set_current_token
 from depictio.api.v1.endpoints.user_endpoints.utils import create_access_token
 from depictio.api.v1.key_utils import get_public_key
 from depictio.models.models.base import PyObjectId
@@ -461,6 +462,9 @@ async def _async_fetch_user_from_token(token: str) -> UserBeanie | None:
     if not user:
         return None
 
+    # Expose the token's scopes to the rest of the request (REST scope gate,
+    # comment authorship); None keeps full access for legacy tokens.
+    set_current_token(token_doc.scopes, token_doc.name, str(token_doc.id))
     return user
 
 
@@ -736,6 +740,7 @@ async def _add_token(token_data: TokenData) -> TokenBeanie:
             else datetime.max
         ),
         name=token_data.name,
+        scopes=token_data.scopes,
         token_lifetime=token_data.token_lifetime,
         user_id=token_data.sub,  # type: ignore[invalid-argument-type]
     )

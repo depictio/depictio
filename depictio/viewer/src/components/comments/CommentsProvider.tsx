@@ -32,6 +32,7 @@ import { useUiStore } from '../../store/useUiStore';
 import type { CurrentUser } from '../../hooks/useCurrentUser';
 import CommentsDrawer from './CommentsDrawer';
 import GuestSignInModal from './GuestSignInModal';
+import { clearThreadFromUrl, openCommentThread, threadFromUrl } from './openThread';
 import { buildViewState, componentLabel } from './viewState';
 
 const EMPTY_COUNTS: CommentCounts = { open: {}, proposed: {} };
@@ -175,6 +176,33 @@ const CommentsProvider: React.FC<CommentsProviderProps> = ({
     void refreshCounts();
     void loadThreads();
   }, [access, refreshCounts, loadThreads]);
+
+  // A `?thread=<id>` deep link opens the drawer on that thread, once the
+  // tab's threads are in. Served once per page load; the parameter is then
+  // dropped so switching tabs does not reopen it.
+  const deepLinkServed = useRef(false);
+  useEffect(() => {
+    if (deepLinkServed.current || access === 'unknown') return;
+    const id = threadFromUrl();
+    if (!id) {
+      deepLinkServed.current = true;
+      return;
+    }
+    // Viewers get no drawer: the link stays for someone who can comment to use.
+    if (access !== 'editor' && access !== 'commenter') return;
+    if (threads === null) return;
+    deepLinkServed.current = true;
+    clearThreadFromUrl();
+    if (threads.some((t) => t.id === id)) {
+      openCommentThread(id);
+    } else {
+      notifications.show({
+        color: 'gray',
+        message: 'The linked comment is not on this tab.',
+        autoClose: 3000,
+      });
+    }
+  }, [access, threads]);
 
   // Viewers and commenters: the published annotations only, once per
   // dashboard. A refusal (403 on a private dashboard, an older API) simply

@@ -141,3 +141,35 @@ class TestInlineSandbox:
     def test_unknown_tag(self, frames):
         with InlineSandbox(frames=frames, default_tag="obs") as box:
             assert box.run("df.height", dc_tag="nope").status == "error"
+
+
+def test_concurrent_close_tears_down_once() -> None:
+    """A timed-out caller and the worker's ``finally`` may close at the same time."""
+    import threading
+
+    class Handle:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def send(self, _msg: object) -> None:
+            time.sleep(0.05)
+
+        def close(self) -> None:
+            self.calls += 1
+
+        def kill(self) -> None:
+            self.calls += 1
+
+        def join(self, timeout: float | None = None) -> None:
+            return None
+
+    sandbox = AnalysisSandbox()
+    conn, proc = Handle(), Handle()
+    sandbox._conn, sandbox._proc = conn, proc  # type: ignore[assignment]
+    threads = [threading.Thread(target=sandbox.close) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert (conn.calls, proc.calls) == (1, 1)
+    sandbox.close()

@@ -328,6 +328,12 @@ class MongoDBConfig(ServiceConfig):
         comment_threads_collection: str = Field(default="comment_threads")
         cli_agents_collection: str = Field(default="cli_agents")
         jobs_collection: str = Field(default="jobs")
+        # One row per agent tool call (MCP or in-app), kept 90 days by a TTL index.
+        agent_tool_calls_collection: str = Field(default="agent_tool_calls")
+        # Daily per-token write counters for agents (threads, reports), kept two days by a TTL index.
+        agent_quotas_collection: str = Field(default="agent_quotas")
+        # One document per agent-team run (question, team, tool calls, findings, outputs).
+        ai_agent_runs_collection: str = Field(default="ai_agent_runs")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)
@@ -1331,8 +1337,68 @@ class AIConfig(BaseSettings):
         le=12,
         description="Data collections described to the planner (the rest are left out with a warning)",
     )
+    # Agent teams: routed specialist analysts, a skeptic, an annotator, a
+    # questioner and a reporter working through the agent tool registry.
+    # Opt-in on top of `enabled`. Every run shares one budget pool: tool
+    # calls are the hard ceiling, cost the money lever (only enforced when
+    # the provider reports a cost), tokens the fallback when it does not.
+    agents_enabled: bool = Field(
+        default=False,
+        description="Enable the /ai/agent-runs team flow. Requires enabled; off by default.",
+    )
+    agents_max_tool_calls: int = Field(
+        default=60, ge=1, le=500, description="Tool calls one agent-team run may make in total"
+    )
+    agents_max_cost_usd: float = Field(
+        default=0.50,
+        gt=0,
+        description="Cost ceiling of one agent-team run in USD (a request may ask for less)",
+    )
+    agents_max_tokens_total: int = Field(
+        default=400_000,
+        ge=1_000,
+        description="Total LLM tokens (prompt + completion) one agent-team run may spend",
+    )
+    agents_max_parallel: int = Field(
+        default=3, ge=1, le=8, description="Analysts of one run working at the same time"
+    )
+    agents_model: str | None = Field(
+        default=None,
+        description="LiteLLM model for agent teams; None uses default_model",
+    )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_AI_")
+
+
+class MCPConfig(BaseSettings):
+    """Agent tools exposed over the Model Context Protocol.
+
+    Off by default: when disabled the ``/depictio/api/v1/mcp`` endpoint is not
+    mounted at all. Tools authenticate with the caller's Bearer token and only
+    see what the token's scopes allow.
+    """
+
+    enabled: bool = Field(default=False, description="Mount the MCP server at /depictio/api/v1/mcp")
+    max_output_chars: int = Field(
+        default=12_000,
+        ge=500,
+        description="Default cap on the JSON size of one tool result (larger results are truncated)",
+    )
+    rate_per_min: int = Field(
+        default=60, ge=1, description="Tool calls allowed per token (or user) per minute"
+    )
+    query_timeout_s: float = Field(
+        default=20, gt=0, description="Wall-clock seconds a data query tool may run"
+    )
+    enable_ingest: bool = Field(
+        default=False, description="Expose the ingestion tools (they also need the ingest scope)"
+    )
+    enable_llm_tools: bool = Field(
+        default=False,
+        description="Expose tools that call the configured LLM themselves (dashboard generation, suggestions)",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_MCP_")
 
 
 class BackupConfig(BaseSettings):
@@ -2482,6 +2548,7 @@ class Settings(BaseSettings):
     # Optional features
     jbrowse: JBrowseConfig = Field(default_factory=JBrowseConfig)
     ai: AIConfig = Field(default_factory=AIConfig)
+    mcp: MCPConfig = Field(default_factory=MCPConfig)
     backup: BackupConfig = Field(default_factory=BackupConfig)
     events: EventsConfig = Field(default_factory=EventsConfig)
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
