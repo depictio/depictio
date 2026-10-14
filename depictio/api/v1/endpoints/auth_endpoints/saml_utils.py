@@ -108,17 +108,20 @@ async def init_saml_auth(request: Request) -> Any:
     if not port:
         port = "443" if scheme == "https" else "80"
 
-    form_data: list[tuple[str, Any]] = []
+    # python3-saml tests `"SAMLResponse" in post_data` and reads `.get(...)`, so
+    # these must be dicts: a list of pairs is accepted silently and then reports
+    # "SAML Response not found" for a POST that carries one.
+    form_data: dict[str, Any] = {}
     if request.method == "POST":
         form = await request.form()
-        form_data = [(k, v) for k, v in form.items()]
+        form_data = dict(form.items())
 
     data = {
         "https": "on" if scheme == "https" else "off",
         "http_host": host,
         "server_port": port,
         "script_name": url.path,
-        "get_data": [(k, v) for k, v in request.query_params.items()],
+        "get_data": dict(request.query_params.items()),
         "post_data": form_data,
     }
     logger.debug(f"SAML auth request data: {data}")
