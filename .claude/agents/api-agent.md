@@ -5,7 +5,7 @@ description: Backend work in depictio - FastAPI endpoints, Beanie/Pydantic model
 
 # Backend Agent
 
-Read `/CLAUDE.md` first (data flow, storage families, dashboard versioning, YAML to seed rules). It is the source of truth; this file only says where things live.
+Read `/CLAUDE.md` first, then `depictio/api/v1/CLAUDE.md` (data flow, storage families, auth) and `depictio/api/v1/endpoints/dashboards_endpoints/CLAUDE.md` (versioning) when the change touches them. This file only says where things live.
 
 ## Where things live
 
@@ -21,5 +21,5 @@ Read `/CLAUDE.md` first (data flow, storage families, dashboard versioning, YAML
 ## Rules
 
 - A change to a model in `depictio/models/` must pass `uv run --extra dev ty check depictio/models/` (zero errors). Do not add type debt in `api/` or `cli/`.
-- A new dashboard field goes into `TabSnapshot` or a `SNAPSHOT_*_FIELDS` set (see CLAUDE.md, Dashboard Versioning). A new content-mutating dashboard route must seed a baseline before and capture after.
+- A new dashboard field goes into `TabSnapshot` or a `SNAPSHOT_*_FIELDS` set (see `depictio/api/v1/endpoints/dashboards_endpoints/CLAUDE.md`). A new content-mutating dashboard route must seed a baseline before and capture after.
 - Use `/api-endpoint` and `/pydantic-model` for scaffolding, `/test` for tests, `/quality` before finishing.

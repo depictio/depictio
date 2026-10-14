@@ -12,7 +12,7 @@ Review or implement security-sensitive changes. Report findings by severity (Cri
 - Auth: `depictio/api/v1/endpoints/user_endpoints/routes.py` (`get_current_user`, `get_user_or_anonymous`), `depictio/api/v1/endpoints/auth_endpoints/` (Google OAuth, SAML), `depictio/api/v1/key_utils.py` and `crypto.py` (JWT keys, encryption).
 - Permissions: `Permission` (owners / editors / viewers, `"*"` wildcard viewer for public) in `depictio/models/models/users.py`, enforced per project/dashboard in each endpoint.
 - Modes: `DEPICTIO_AUTH_SINGLE_USER_MODE`, public mode, anonymous sessions. A route using `get_user_or_anonymous` is reachable without login: check what it exposes.
-- Code execution: code-mode figures run through the sandboxed executor (tests: `depictio/tests/api/v1/test_code_executor_*.py`). Renders must take no definition from the request body (CLAUDE.md, Dashboard Versioning).
+- Code execution: code-mode figures run through the sandboxed executor (tests: `depictio/tests/api/v1/test_code_executor_*.py`). Renders must take no definition from the request body (`depictio/api/v1/endpoints/dashboards_endpoints/CLAUDE.md`).
 - Files and paths: ingestion roots (`depictio/api/v1/ingestion_roots.py`), file/S3 endpoints, upload endpoints (path traversal, size limits).
 - Secrets: `DEPICTIO_S3_*`, `DEPICTIO_BOOTSTRAP_*` come from env/Helm secrets; never log tokens or hardcode them.
 

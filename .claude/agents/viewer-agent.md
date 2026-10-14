@@ -5,7 +5,7 @@ description: Frontend work in depictio - the React 18 + Vite + Mantine 7 SPA in 
 
 # Viewer Agent
 
-The Dash/DMC frontend is gone. Read `/CLAUDE.md` (Frontend, SPA Routes, Dashboard Versioning) first.
+The Dash/DMC frontend is gone. Read `/CLAUDE.md` first, and `depictio/api/v1/endpoints/dashboards_endpoints/CLAUDE.md` before touching the editor's writes or the version UI.
 
 ## Where things live
 
