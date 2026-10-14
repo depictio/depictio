@@ -1,0 +1,23 @@
+id: crisprseq_indels
+name: Indel alleles per library
+mode: gene-editing/indels
+description: >-
+  Every distinct indel allele of every library (type, start, length, signed
+  size, offset from the cut site, frame, main-peak membership) with its read
+  count and its share of the library's classified and indel reads, collapsed
+  from the CIGAR parser's per-read indel tables.
+find: { path_glob: "**/*_indels.csv" }
+recipe: crisprseq/indels.py
+fixture: indels.tsv
+renders_as:
+  # Where each allele starts against how large it is: repair signatures form
+  # stripes (microhomology deletions) and a 1 bp insertion column at the cut.
+  - id: allele_map
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: offset, y: size, label: allele, color: indel_type, size: pct_reads }
+  - { id: allele_count, component: card, column: allele, aggregation: nunique, secondary_layout: donut, breakdown_col: indel_type }
+  - { component: interactive, interactive_type: MultiSelect, column_name: indel_type }
+  - { component: interactive, interactive_type: MultiSelect, column_name: frame }
+  - { component: interactive, interactive_type: MultiSelect, column_name: peak }
+  - { component: table, row_selection_enabled: true, row_selection_column: allele }
