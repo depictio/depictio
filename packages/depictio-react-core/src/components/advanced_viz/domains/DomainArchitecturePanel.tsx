@@ -14,11 +14,18 @@ import { cssToRgb, panelColours, type PanelColours } from '../protein/panelTheme
 import {
   domainAt,
   domainTooltip,
+  lengthGutter,
+  lengthLabel,
+  LENGTH_LABEL_GAP_PX,
   partialEdges,
+  pxPerResidue as scalePxPerResidue,
+  residueAt,
+  residueX,
   rowAt,
   rowHeight,
   rowOffsets,
   rowWindow,
+  trackBox,
   type ArchitectureGroup,
   type DomainHit,
   type PanelRow,
@@ -199,11 +206,30 @@ const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
     }
     return Math.round(Math.min(LABEL_MAX_PX, Math.max(LABEL_MIN_PX, widest + 12)));
   }, [rows, colours.font]);
-  const trackX = labelWidth + 6;
-  const trackW = Math.max(10, view.w - trackX - RIGHT_PAD_PX);
+  // The longest backbone ends at the track's end (every one does on the
+  // per-protein scale), so its length label needs a gutter of its own: the
+  // widest label's text, measured as it is drawn.
+  const gutterPx = useMemo(() => {
+    const text = lengthLabel(sharedLength);
+    let width = text.length * 6;
+    if (typeof document !== 'undefined') {
+      const ctx = document.createElement('canvas').getContext('2d');
+      if (ctx) {
+        ctx.font = `10px ${colours.font}`;
+        width = ctx.measureText(text).width;
+      }
+    }
+    return lengthGutter(width);
+  }, [sharedLength, colours.font]);
+  const track = useMemo(
+    () => trackBox(view.w, labelWidth, { rightPadPx: RIGHT_PAD_PX, gutterPx }),
+    [view.w, labelWidth, gutterPx],
+  );
+  const trackX = track.x;
+  const trackW = track.w;
   const gridH = Math.max(0, view.h - AXIS_PX);
   const pxPerResidue = useCallback(
-    (p: ProteinArch) => trackW / Math.max(1, scale === 'shared' ? sharedLength : p.length),
+    (p: ProteinArch) => scalePxPerResidue(trackW, scale, p.length, sharedLength),
     [trackW, scale, sharedLength],
   );
 
@@ -307,7 +333,7 @@ const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
 
       // Track: shading, backbone, domains.
       const ppr = pxPerResidue(protein);
-      const X = (pos: number) => trackX + pos * ppr;
+      const X = (pos: number) => residueX(trackX, ppr, pos);
       const shade = (span: EntitySpan | null, fill: string) => {
         if (!span || span.entity !== protein.entity) return;
         const a = Math.max(0, Math.min(span.start, span.end) - 1);
@@ -382,11 +408,11 @@ const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
         }
       });
 
-      // The length past the end of a backbone, where a shared scale leaves room.
+      // The length past the end of a backbone, in the gutter the track leaves.
       ctx.font = `10px ${colours.font}`;
       ctx.textAlign = 'left';
-      const lengthText = `${protein.length.toLocaleString()} aa`;
-      const endX = X(protein.length) + 4;
+      const lengthText = lengthLabel(protein.length);
+      const endX = X(protein.length) + LENGTH_LABEL_GAP_PX;
       if (endX + ctx.measureText(lengthText).width <= view.w - 2) {
         ctx.fillStyle = colours.dimmed;
         ctx.fillText(lengthText, endX, cy + 0.5);
@@ -408,13 +434,13 @@ const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
     ctx.textAlign = 'left';
     ctx.fillText(scale === 'shared' ? 'Residue' : 'Protein', 4, AXIS_PX - 6);
     if (scale === 'shared') {
-      const ppr = trackW / Math.max(1, sharedLength);
+      const ppr = scalePxPerResidue(trackW, 'shared', sharedLength, sharedLength);
       const step = rulerStep(ppr, 56);
       ctx.strokeStyle = colours.dimmed;
       ctx.lineWidth = 1;
       ctx.textAlign = 'center';
       for (let t = step; t <= sharedLength; t += step) {
-        const x = Math.round(trackX + (t - 0.5) * ppr) + 0.5;
+        const x = Math.round(residueX(trackX, ppr, t - 0.5)) + 0.5;
         ctx.beginPath();
         ctx.moveTo(x, AXIS_PX - 4);
         ctx.lineTo(x, AXIS_PX);
@@ -502,7 +528,7 @@ const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
         };
       }
       const ppr = pxPerResidue(protein);
-      const pos = (x - trackX) / ppr;
+      const pos = residueAt(trackX, ppr, x);
       const yIn = y - AXIS_PX + sy - offsets[r] - GEOMETRY.padPx;
       const lane = Math.floor(yIn / GEOMETRY.lanePx);
       const domain =

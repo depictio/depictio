@@ -8,14 +8,27 @@ import type { MsaColourScheme, ProteinHighlight, ResidueRange } from '../protein
 import { atlasCellPx, atlasKey, GlyphAtlas, glyphAtlasFor } from './glyphAtlas';
 import { columnHeights, logoHeights, type HeightMode } from './heights';
 import {
+  drawnHitCount,
   evalueScale,
   formatEvalue,
   hitAt,
+  HITS_LABEL_SEPARATOR,
+  hitsLaneLabel,
   packHits,
   partialEdges,
   type LogoHit,
 } from './hitsModel';
-import { insertLengthShare, laneAt, layoutLanes, LOGO_TOP_PAD, logoAxis, rampColour, type Lane } from './layout';
+import {
+  hitBarTop,
+  hitRowAt,
+  insertLengthShare,
+  laneAt,
+  layoutLanes,
+  LOGO_TOP_PAD,
+  logoAxis,
+  rampColour,
+  type Lane,
+} from './layout';
 import { logoColours } from './logoTheme';
 import {
   letterColours,
@@ -186,6 +199,11 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
         hitRows: packing?.rows ?? 0,
       }),
     [view.h, showConsensus, showIndelRows, profile, hits, packing],
+  );
+  // Hits the bars show, for the lane label: rows past the budget are summarised.
+  const hitsDrawn = useMemo(
+    () => drawnHitCount(packing, layout.hitRowsShown),
+    [packing, layout.hitRowsShown],
   );
   const gridW = Math.max(0, view.w - GUTTER_PX);
   const cw = cellWidth && cellWidth > 0 ? cellWidth : fitCellWidth(gridW, m, 1, MAX_FIT_PX);
@@ -383,15 +401,15 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
     // Hit bars, packed in rows, coloured by E-value, partial ends jagged.
     const lane = lanes.hits;
     if (lane && hits && packing) {
-      const rowPx = layout.hitRowPx;
-      const barH = Math.max(1, rowPx - (rowPx > 3 ? 1 : 0));
+      const barH = layout.hitBarPx;
+      const rings: Array<[number, number, number, boolean, boolean]> = [];
       hits.forEach((h, idx) => {
         const row = packing.rowOf[idx];
         if (row >= layout.hitRowsShown) return;
         const x0 = colX(colOfState(h.from));
         const x1 = colX(colOfState(h.to)) + cw;
         if (x1 < GUTTER_PX || x0 > view.w) return;
-        const y = lane.y + 2 + row * rowPx;
+        const y = hitBarTop(lane, row);
         ctx.fillStyle = rgbCss(rampColour(colours.evalueRamp, evalueT(h.evalue)));
         const edges = partialEdges(h, modelLength);
         const tooth = Math.min(3, barH / 2, (x1 - x0) / 4);
@@ -420,12 +438,14 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
         const selected = selectedHitKey != null && h.key === selectedHitKey;
         const ringed = selected || (selectedHitEntity != null && h.entity === selectedHitEntity);
         const pointed = highlightHitEntity != null && h.entity === highlightHitEntity;
-        if (ringed || pointed || hover?.hit === h) {
-          ctx.strokeStyle = pointed && !ringed ? colours.highlight : colours.accent;
-          ctx.lineWidth = selected ? 2 : 1.25;
-          ctx.strokeRect(x0 - 0.5, y - 0.5, x1 - x0 + 1, barH + 1);
-        }
+        if (ringed || pointed || hover?.hit === h) rings.push([x0, y, x1 - x0, selected, pointed && !ringed]);
       });
+      // Rings last: on bars this thin, the next row's fill would cover them.
+      for (const [x0, y, w, selected, pointedOnly] of rings) {
+        ctx.strokeStyle = pointedOnly ? colours.highlight : colours.accent;
+        ctx.lineWidth = selected ? 2 : 1.25;
+        ctx.strokeRect(x0 - 0.5, y - 0.5, w + 1, barH + 1);
+      }
     }
 
     // Crosshair of a hover elsewhere.
@@ -485,11 +505,19 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
       insertProb: 'Insert P',
       insertLength: 'Insert len',
       occupancy: occupancyMode === 'delete' ? 'Delete P' : 'Occupancy',
-      coverage: `Hits ${coverageCount}`,
+      coverage: hitsLaneLabel(coverageCount, hitsDrawn),
     };
     for (const l of layout.lanes) {
       const text = labels[l.key];
-      if (text) ctx.fillText(text, 4, l.y + l.h / 2 + 0.5);
+      if (!text) continue;
+      if (ctx.measureText(text).width > GUTTER_PX - 8 && text.includes(HITS_LABEL_SEPARATOR)) {
+        // The summary does not fit the gutter on one line: count above, drawn below.
+        const [head, tail] = text.split(HITS_LABEL_SEPARATOR);
+        ctx.fillText(head, 4, l.y + l.h / 2 - 5.5);
+        ctx.fillText(tail, 4, l.y + l.h / 2 + 6.5);
+      } else {
+        ctx.fillText(text, 4, l.y + l.h / 2 + 0.5);
+      }
     }
     if (ruler) {
       ctx.fillText('State', 4, ruler.y + ruler.h / 4 + 1);
@@ -546,6 +574,7 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
     occupancyMode,
     coverage,
     coverageCount,
+    hitsDrawn,
     maxDepth,
     maxInsertLength,
     hits,
@@ -581,9 +610,9 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
       const col = x >= GUTTER_PX && raw >= 0 && raw < m ? raw : null;
       const lane = laneAt(layout, y);
       let hit: LogoHit | null = null;
-      if (col != null && lane?.key === 'hits' && hits && packing && layout.hitRowPx > 0) {
-        const row = Math.floor((y - lane.y - 2) / layout.hitRowPx);
-        if (row >= 0 && row < layout.hitRowsShown) hit = hitAt(hits, packing, row, profile.states[col]);
+      if (col != null && lane?.key === 'hits' && hits && packing) {
+        const row = hitRowAt(layout, y);
+        if (row >= 0) hit = hitAt(hits, packing, row, profile.states[col]);
       }
       return { col, lane, hit, x, y };
     },

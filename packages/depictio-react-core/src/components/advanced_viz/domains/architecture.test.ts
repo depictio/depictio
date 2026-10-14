@@ -15,18 +15,26 @@ import {
   hasSources,
   hmmCoverage,
   isPartial,
+  LENGTH_LABEL_GAP_PX,
+  LENGTH_LABEL_PAD_PX,
+  lengthGutter,
+  lengthLabel,
   normaliseCoverage,
   packLanes,
   parseDomainHits,
   partialEdges,
   proteinLengths,
   proteinRows,
+  pxPerResidue,
   representative,
+  residueAt,
+  residueX,
   rowAt,
   rowHeight,
   rowOffsets,
   rowWindow,
   sortProteins,
+  trackBox,
   UNLABELLED,
   valueCounts,
   type DomainColumns,
@@ -536,5 +544,89 @@ describe('domainTooltip', () => {
     expect(formatEvalue(0)).toBe('0');
     expect(formatEvalue(0.0123)).toBe('0.012');
     expect(formatEvalue(1.5e-12)).toBe('1.5e-12');
+  });
+});
+
+describe('track geometry with a length-label gutter', () => {
+  /** A fixed-pitch stand-in for `ctx.measureText`: 5.6 px a character. */
+  const measure = (text: string) => text.length * 5.6;
+  const VIEW_W = 620;
+  const LABEL_COL = 96;
+  const RIGHT_PAD = 8;
+  const lengths = [65, 120, 252, 256];
+  const longest = Math.max(...lengths);
+
+  it('writes the label as the panel draws it', () => {
+    expect(lengthLabel(256)).toBe('256 aa');
+    expect(lengthLabel(12345)).toBe(`${(12345).toLocaleString()} aa`);
+  });
+
+  it('reserves the gap, the text and some padding', () => {
+    const text = measure(lengthLabel(longest));
+    expect(lengthGutter(text)).toBe(LENGTH_LABEL_GAP_PX + Math.ceil(text) + LENGTH_LABEL_PAD_PX);
+    expect(lengthGutter(0)).toBe(0);
+    expect(lengthGutter(Number.NaN)).toBe(0);
+  });
+
+  it('leaves a track as wide as before when no gutter is asked for', () => {
+    expect(trackBox(VIEW_W, LABEL_COL, { rightPadPx: RIGHT_PAD })).toEqual({
+      x: LABEL_COL + 6,
+      w: VIEW_W - (LABEL_COL + 6) - RIGHT_PAD,
+    });
+  });
+
+  it('shrinks the track by the gutter', () => {
+    const gutterPx = lengthGutter(measure(lengthLabel(longest)));
+    const bare = trackBox(VIEW_W, LABEL_COL, { rightPadPx: RIGHT_PAD });
+    const box = trackBox(VIEW_W, LABEL_COL, { rightPadPx: RIGHT_PAD, gutterPx });
+    expect(box.x).toBe(bare.x);
+    expect(bare.w - box.w).toBe(gutterPx);
+  });
+
+  for (const scale of ['shared', 'per_protein'] as const) {
+    it(`keeps the longest protein's label on the canvas on the ${scale} scale`, () => {
+      const text = measure(lengthLabel(longest));
+      const box = trackBox(VIEW_W, LABEL_COL, {
+        rightPadPx: RIGHT_PAD,
+        gutterPx: lengthGutter(text),
+      });
+      for (const length of lengths) {
+        const ppr = pxPerResidue(box.w, scale, length, longest);
+        const end = residueX(box.x, ppr, length);
+        const labelEnd = end + LENGTH_LABEL_GAP_PX + measure(lengthLabel(length));
+        // The backbone stays inside the track, its label inside the canvas.
+        expect(end).toBeLessThanOrEqual(box.x + box.w + 1e-9);
+        expect(labelEnd).toBeLessThanOrEqual(VIEW_W - RIGHT_PAD + 1e-9);
+      }
+    });
+
+    it(`maps a residue to x and back with one mapping on the ${scale} scale`, () => {
+      const box = trackBox(VIEW_W, LABEL_COL, { rightPadPx: RIGHT_PAD, gutterPx: 40 });
+      for (const length of lengths) {
+        const ppr = pxPerResidue(box.w, scale, length, longest);
+        for (const pos of [0, 1, length / 2, length]) {
+          expect(residueAt(box.x, ppr, residueX(box.x, ppr, pos))).toBeCloseTo(pos, 9);
+        }
+        // The last residue of the protein lies inside the track, the pointer
+        // one pixel past the backbone's end does not map back onto it.
+        expect(residueAt(box.x, ppr, residueX(box.x, ppr, length) + 1)).toBeGreaterThan(length);
+      }
+    });
+  }
+
+  it('fits the longest protein to the track on a shared scale and every one on a per-protein scale', () => {
+    const box = trackBox(VIEW_W, LABEL_COL, { rightPadPx: RIGHT_PAD, gutterPx: 40 });
+    expect(residueX(box.x, pxPerResidue(box.w, 'shared', longest, longest), longest)).toBeCloseTo(box.x + box.w);
+    expect(residueX(box.x, pxPerResidue(box.w, 'shared', 65, longest), 65)).toBeLessThan(box.x + box.w);
+    for (const length of lengths) {
+      expect(residueX(box.x, pxPerResidue(box.w, 'per_protein', length, longest), length)).toBeCloseTo(box.x + box.w);
+    }
+  });
+
+  it('caps the gutter on a tile too narrow for it, and never draws a track under 10 px', () => {
+    const narrow = trackBox(200, LABEL_COL, { rightPadPx: RIGHT_PAD, gutterPx: 80 });
+    const room = 200 - (LABEL_COL + 6) - RIGHT_PAD;
+    expect(narrow.w).toBeGreaterThanOrEqual(room * 0.65 - 1e-9);
+    expect(trackBox(50, LABEL_COL, { rightPadPx: RIGHT_PAD, gutterPx: 80 }).w).toBe(10);
   });
 });

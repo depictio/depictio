@@ -177,6 +177,30 @@ export function packHits(hits: readonly LogoHit[], gap = 1): HitPacking {
   return { rowOf, rows: byRow.length, byRow };
 }
 
+/** Hits in the first `rowsShown` packed rows: the ones the lane draws. */
+export function drawnHitCount(packing: HitPacking | null, rowsShown: number): number {
+  if (!packing) return 0;
+  const n = Math.max(0, Math.floor(rowsShown));
+  let count = 0;
+  for (let row = 0; row < Math.min(n, packing.byRow.length); row++) count += packing.byRow[row].length;
+  return count;
+}
+
+/** Separator of the two parts of the hits lane label. */
+export const HITS_LABEL_SEPARATOR = ' \u00b7 ';
+
+/**
+ * Label of the hits lane: how many hits pass the threshold, and, when the
+ * bars cannot show them all, how many are drawn (`Hits 33 · 20 drawn`).
+ * Rows left out of the lane are summarised here, never dropped silently.
+ */
+export function hitsLaneLabel(total: number, drawn: number): string {
+  const shown = Math.max(0, Math.min(total, drawn));
+  return shown < total
+    ? `Hits ${total}${HITS_LABEL_SEPARATOR}${shown} drawn`
+    : `Hits ${total}`;
+}
+
 /** The hit drawn at `state` on `row`, or null. */
 export function hitAt(
   hits: readonly LogoHit[],

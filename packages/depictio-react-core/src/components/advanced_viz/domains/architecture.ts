@@ -606,6 +606,94 @@ export function rowWindow(
 }
 
 // ---------------------------------------------------------------------------
+// Track geometry (x mapping shared by drawing and hit testing)
+// ---------------------------------------------------------------------------
+
+/** Clear space between the end of a backbone and its length label, CSS px. */
+export const LENGTH_LABEL_GAP_PX = 4;
+/** Clear space kept past the end of the longest length label, CSS px. */
+export const LENGTH_LABEL_PAD_PX = 4;
+/** The most of the track area the label gutter may take on a narrow tile. */
+const MAX_GUTTER_SHARE = 0.35;
+
+/** The length label drawn past the end of a backbone. */
+export function lengthLabel(length: number): string {
+  return `${length.toLocaleString()} aa`;
+}
+
+/**
+ * Room to keep right of the track for the length labels: the gap after a
+ * backbone, the widest label's text (`labelTextPx`, measured with the font it
+ * is drawn in) and a little padding. Zero when there is no label to place.
+ */
+export function lengthGutter(labelTextPx: number): number {
+  if (!(labelTextPx > 0)) return 0;
+  return LENGTH_LABEL_GAP_PX + Math.ceil(labelTextPx) + LENGTH_LABEL_PAD_PX;
+}
+
+export interface TrackBox {
+  /** Left edge of the drawable track (residue 0). */
+  x: number;
+  /** Drawable width: the longest backbone ends at `x + w`, its label after. */
+  w: number;
+}
+
+export interface TrackBoxOptions {
+  /** Space between the label column and the track. */
+  gapPx?: number;
+  /** Space kept at the right edge of the canvas. */
+  rightPadPx?: number;
+  /** Room reserved right of the track for the length labels (`lengthGutter`). */
+  gutterPx?: number;
+  /** The narrowest track ever drawn. */
+  minPx?: number;
+}
+
+/**
+ * The track within a canvas `viewW` wide whose label column is
+ * `labelColumnPx`: everything right of the column minus the edge padding and
+ * the gutter of the length labels, so the longest backbone (a shared scale
+ * ends it at the track's end, a per-protein scale does so for every protein)
+ * leaves its label on the canvas. On a tile too narrow for both, the gutter
+ * is capped at 35 % of the room (the panel then drops a label that no longer
+ * fits rather than clip it).
+ */
+export function trackBox(
+  viewW: number,
+  labelColumnPx: number,
+  { gapPx = 6, rightPadPx = 8, gutterPx = 0, minPx = 10 }: TrackBoxOptions = {},
+): TrackBox {
+  const x = labelColumnPx + gapPx;
+  const room = viewW - x - rightPadPx;
+  const gutter = Math.max(0, Math.min(gutterPx, room * MAX_GUTTER_SHARE));
+  return { x, w: Math.max(minPx, room - gutter) };
+}
+
+/**
+ * Pixels per residue of a protein `length` long: the shared scale fits the
+ * longest protein (`sharedLength`) to the track, the per-protein scale fits
+ * each protein to it.
+ */
+export function pxPerResidue(
+  trackW: number,
+  scale: 'shared' | 'per_protein',
+  length: number,
+  sharedLength: number,
+): number {
+  return trackW / Math.max(1, scale === 'shared' ? sharedLength : length);
+}
+
+/** x of residue coordinate `pos` (0 at the start of residue 1). */
+export function residueX(trackX: number, ppr: number, pos: number): number {
+  return trackX + pos * ppr;
+}
+
+/** Residue coordinate under `x`; the inverse of `residueX`. */
+export function residueAt(trackX: number, ppr: number, x: number): number {
+  return (x - trackX) / ppr;
+}
+
+// ---------------------------------------------------------------------------
 // Tooltip text
 // ---------------------------------------------------------------------------
 

@@ -53,22 +53,33 @@ export const LANE_PX: Readonly<Record<Exclude<LaneKey, 'logo' | 'hits'>, number>
 export const LOGO_TOP_PAD = 8;
 export const LOGO_MIN_PX = 60;
 export const LOGO_NATURAL_PX = 150;
-export const HIT_ROW_PX = 7;
-export const HIT_ROW_MIN_PX = 2;
-/** Padding around the packed bars. */
+/** One hit bar is this tall, whatever the room: a compact bar, never taller. */
+export const HIT_BAR_PX = 4;
+/** Clear space between two rows of bars. */
+export const HIT_GAP_PX = 1;
+/** Pitch of the packed rows (bar plus gap). */
+export const HIT_ROW_PX = HIT_BAR_PX + HIT_GAP_PX;
+/** Gap between the top of the bars lane and its first row. */
+export const HITS_TOP_INSET = 2;
+/** Padding around the packed bars (top inset included). */
 const HITS_PAD = 4;
-/** Share of the room left by the fixed lanes the bars may take at most: the
- *  logo stays the larger of the two. */
-const HITS_MAX_SHARE = 0.45;
-/** Natural height the bars ask for (the tile grows to it when it can). */
-const HITS_NATURAL_MAX_PX = 120;
+/** Share of the room left by the fixed rows (everything but the logo and the
+ *  hits) that the whole hits block, coverage area and bars together, may take. */
+export const HITS_MAX_SHARE = 0.28;
+/** Share of the panel height the logo keeps at least, the hits yielding first. */
+export const LOGO_MIN_SHARE = 0.55;
+/** Rows of bars the tile asks for when it grows to its natural height. */
+export const HITS_NATURAL_ROWS = 8;
 
 export interface LaneLayout {
   lanes: Lane[];
   byKey: Partial<Record<LaneKey, Lane>>;
-  /** Height of one row of hit bars, and how many rows fit. */
+  /** Pitch of the hit bar rows, the height of a bar within it, how many rows
+   *  fit and how many the packing holds (0 and 0 when no bar fits). */
   hitRowPx: number;
+  hitBarPx: number;
   hitRowsShown: number;
+  hitRowsTotal: number;
   /** Height the content would like (lanes plus a comfortable logo). */
   natural: number;
 }
@@ -87,11 +98,15 @@ const ORDER: readonly LaneKey[] = [
 ];
 
 /**
- * Lanes for a panel `height` px tall: the fixed lanes the flags ask for, the
- * hit bars (rows shrink from 7 px down to 2 px, and the bars take at most
- * 45 % of what the fixed lanes leave; rows that do not fit are not drawn),
- * and the logo gets the rest, never less than `LOGO_MIN_PX` while the bars
- * can give way.
+ * Lanes for a panel `height` px tall: the fixed rows the flags ask for, the
+ * hits block, and the logo, which gets the rest.
+ *
+ * The hits block is the coverage area (a lane that is always kept) and the
+ * packed hit bars. Bars are a fixed 4 px with a 1 px gap, so their count, not
+ * their size, gives way: the whole block takes at most 28 % of what the fixed
+ * rows leave, and never so much that the logo falls under 55 % of the panel
+ * (or `LOGO_MIN_PX`). Rows that do not fit are not drawn; `hitRowsShown` of
+ * `hitRowsTotal` is what the lane label summarises.
  */
 export function layoutLanes(height: number, flags: LaneFlags): LaneLayout {
   const on: Record<LaneKey, boolean> = {
@@ -108,37 +123,68 @@ export function layoutLanes(height: number, flags: LaneFlags): LaneLayout {
   };
   let fixed = 0;
   for (const key of ORDER) {
-    if (key !== 'logo' && key !== 'hits' && on[key]) fixed += LANE_PX[key];
+    if (key !== 'logo' && key !== 'hits' && key !== 'coverage' && on[key]) fixed += LANE_PX[key];
   }
+  const coverageH = on.coverage ? LANE_PX.coverage : 0;
   const rows = Math.max(0, Math.floor(flags.hitRows));
-  let hitRowPx = 0;
   let hitRowsShown = 0;
   let hitsH = 0;
   if (on.hits) {
     const free = height - fixed;
-    const room = Math.max(0, Math.min(free - LOGO_MIN_PX, free * HITS_MAX_SHARE)) - HITS_PAD;
-    hitRowPx = Math.max(HIT_ROW_MIN_PX, Math.min(HIT_ROW_PX, Math.floor(room / rows)));
-    hitRowsShown = Math.max(0, Math.min(rows, Math.floor(room / hitRowPx)));
-    hitsH = hitRowsShown > 0 ? hitRowsShown * hitRowPx + HITS_PAD : 0;
+    const logoMin = Math.max(LOGO_MIN_PX, LOGO_MIN_SHARE * height);
+    const block = Math.min(free * HITS_MAX_SHARE, free - logoMin);
+    const room = block - coverageH - HITS_PAD;
+    hitRowsShown = Math.max(0, Math.min(rows, Math.floor(room / HIT_ROW_PX)));
+    hitsH = hitRowsShown > 0 ? hitRowsShown * HIT_ROW_PX + HITS_PAD : 0;
   }
-  const logoH = Math.max(20, height - fixed - hitsH);
+  const logoH = Math.max(20, height - fixed - coverageH - hitsH);
   const lanes: Lane[] = [];
   let y = 0;
   for (const key of ORDER) {
     if (!on[key]) continue;
-    const h = key === 'logo' ? logoH : key === 'hits' ? hitsH : LANE_PX[key];
+    const h = key === 'logo' ? logoH : key === 'hits' ? hitsH : key === 'coverage' ? coverageH : LANE_PX[key];
     if (h <= 0) continue;
     lanes.push({ key, y, h });
     y += h;
   }
-  const naturalHits = on.hits ? Math.min(HITS_NATURAL_MAX_PX, rows * HIT_ROW_PX + HITS_PAD) : 0;
+  // The height at which the preferred rows are all drawn: a logo of its
+  // natural height, and both shares of the block honoured.
+  let natural = LOGO_NATURAL_PX + fixed;
+  if (on.coverage) {
+    const naturalRows = on.hits ? Math.min(rows, HITS_NATURAL_ROWS) : 0;
+    const block = coverageH + (naturalRows > 0 ? naturalRows * HIT_ROW_PX + HITS_PAD : 0);
+    natural = Math.max(
+      LOGO_NATURAL_PX + fixed + block,
+      fixed + block / HITS_MAX_SHARE,
+      (fixed + block) / (1 - LOGO_MIN_SHARE),
+    );
+  }
   return {
     lanes,
     byKey: Object.fromEntries(lanes.map((l) => [l.key, l])),
-    hitRowPx,
+    hitRowPx: hitRowsShown > 0 ? HIT_ROW_PX : 0,
+    hitBarPx: hitRowsShown > 0 ? HIT_BAR_PX : 0,
     hitRowsShown,
-    natural: LOGO_NATURAL_PX + fixed + naturalHits,
+    hitRowsTotal: on.hits ? rows : 0,
+    natural: Math.ceil(natural),
   };
+}
+
+/** Top of the bars of packed row `row` in the hits `lane`. */
+export function hitBarTop(lane: Lane, row: number): number {
+  return lane.y + HITS_TOP_INSET + row * HIT_ROW_PX;
+}
+
+/**
+ * The packed row under a y coordinate of the hits lane (a bar and the gap
+ * under it count as its row, so hit testing and drawing share one pitch), or
+ * -1 outside the rows that are drawn. The inverse of `hitBarTop`.
+ */
+export function hitRowAt(layout: LaneLayout, y: number): number {
+  const lane = layout.byKey.hits;
+  if (!lane || layout.hitRowsShown <= 0 || y < lane.y) return -1;
+  const row = Math.floor((y - lane.y - HITS_TOP_INSET) / layout.hitRowPx);
+  return row >= 0 && row < layout.hitRowsShown ? row : -1;
 }
 
 /** The lane under a y coordinate, or null below the last one. */

@@ -3,10 +3,12 @@ import { describe, expect, it } from 'vitest';
 import {
   compareHits,
   coverageDepth,
+  drawnHitCount,
   evalueScale,
   formatEvalue,
   hitAt,
   hitsFromFrame,
+  hitsLaneLabel,
   packHits,
   partialEdges,
   selectHits,
@@ -139,6 +141,52 @@ describe('packHits', () => {
     expect(hitAt(hits, pack, 0, 11)).toBeNull();
     expect(hitAt(hits, pack, 2, 11)?.entity).toBe('d');
     expect(hitAt(hits, pack, 7, 1)).toBeNull();
+  });
+});
+
+describe('drawnHitCount', () => {
+  // Three hits spanning the whole model stack in three rows; a fourth sits beside the first.
+  const hits = [
+    hit({ entity: 'a', from: 1, to: 50 }),
+    hit({ entity: 'b', from: 1, to: 50 }),
+    hit({ entity: 'c', from: 2, to: 49 }),
+    hit({ entity: 'd', from: 60, to: 80 }),
+  ];
+  const pack = packHits(hits);
+
+  it('counts the hits in the rows that are drawn', () => {
+    expect(pack.rows).toBe(3);
+    expect(drawnHitCount(pack, 0)).toBe(0);
+    expect(drawnHitCount(pack, 1)).toBe(2);
+    expect(drawnHitCount(pack, 2)).toBe(3);
+    expect(drawnHitCount(pack, 3)).toBe(4);
+    expect(drawnHitCount(pack, 99)).toBe(4);
+    expect(drawnHitCount(pack, -2)).toBe(0);
+    expect(drawnHitCount(null, 5)).toBe(0);
+  });
+
+  it('agrees with the rows hit testing reaches', () => {
+    const reachable = new Set<string>();
+    for (let row = 0; row < 2; row++) {
+      for (let state = 1; state <= 80; state++) {
+        const h = hitAt(hits, pack, row, state);
+        if (h) reachable.add(h.entity);
+      }
+    }
+    expect(reachable.size).toBe(drawnHitCount(pack, 2));
+  });
+});
+
+describe('hitsLaneLabel', () => {
+  it('names the hits, and how many are drawn when the lane cannot show them all', () => {
+    expect(hitsLaneLabel(33, 20)).toBe('Hits 33 \u00b7 20 drawn');
+    expect(hitsLaneLabel(33, 33)).toBe('Hits 33');
+    expect(hitsLaneLabel(33, 0)).toBe('Hits 33 \u00b7 0 drawn');
+    expect(hitsLaneLabel(0, 0)).toBe('Hits 0');
+  });
+
+  it('never reports more drawn than there are', () => {
+    expect(hitsLaneLabel(5, 9)).toBe('Hits 5');
   });
 });
 
