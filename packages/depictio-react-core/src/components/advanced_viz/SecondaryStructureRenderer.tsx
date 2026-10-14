@@ -1,15 +1,46 @@
-import React from 'react';
-import { Box } from '@mantine/core';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Box, ColorSwatch, Group, Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 
-import { InteractiveFilter, StoredMetadata } from '../../api';
+import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
+import { usePublishHighlight, useHighlight } from '../../highlight/bus';
+import {
+  filtersExcludingOwnResidue,
+  residueEntityFromFilters,
+  residueRangeFilters,
+  residueRangeFromFilters,
+} from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { demandForPx } from './contentDemand';
+import { VizControlGroup, VizSelect, VizSlider, VizSwitch } from './controls/VizControls';
+import { MIN_LETTER_PX } from './protein/canvas';
+import { panelColours } from './protein/panelTheme';
+import {
+  distinctColumns,
+  firstValueOf,
+  hasOwnResiduePick,
+  scopeToEntity,
+  withoutPositionSelections,
+} from './protein/rendererData';
+import { rgbCss } from './protein/residueColours';
+import { SS_GLYPH_FILLS } from './protein/ssGlyphs';
+import type { ResidueRange } from './protein/types';
+import { useEntityPicker } from './protein/useEntityPicker';
+import { compositionBadges } from './secstruct/compositionBadges';
+import SecondaryStructurePanel, { naturalPanelHeight } from './secstruct/SecondaryStructurePanel';
+import SegmentList, { SEGMENT_LIST_MAX_PX } from './secstruct/SegmentList';
+import {
+  agreementOf,
+  buildSsModel,
+  segmentsOf,
+  type SsColumns,
+} from './secstruct/ssModel';
 
 /**
  * Mirrors `SecondaryStructureConfig` in depictio/models/components/advanced_viz/configs.py
- * (`test_advanced_viz_config_alignment` enforces the keys a renderer reads).
+ * (`test_advanced_viz_config_alignment` enforces the keys read here).
  */
 interface SecondaryStructureConfig {
-  entity_col?: string;
+  entity_col?: string | null;
   position_col?: string;
   residue_col?: string | null;
   state_col?: string;
@@ -35,23 +66,460 @@ interface Props {
   onFilterChange?: (filter: InteractiveFilter) => void;
 }
 
+/** Tile furniture around the panel: frame header and badges, the legend row. */
+const CHROME_PX = 110;
+const LEGEND_PX = 24;
+
+type Frame = Record<string, unknown[]>;
+
+/** A column the config names, `null` meaning "not bound", `undefined` the model's default. */
+function optionalColumn(value: string | null | undefined, fallback: string | null): string | null {
+  if (value === undefined) return fallback;
+  return value || null;
+}
+
 /**
- * `secondary_structure`: a protein's secondary structure as a topology ribbon, confidence shading,
- * P(H/E/C) lanes and a comparison of sources.
+ * `secondary_structure`: one protein's secondary structure from a per-residue
+ * prediction table, as a topology ribbon (shaded by confidence), stacked
+ * P(helix / strand / coil) lanes, one ribbon per additional prediction source
+ * with a lane marking where they agree, the composition in percent and a list
+ * of segments. Drawn by `SecondaryStructurePanel`; the model behind it is the
+ * pure `secstruct/ssModel`.
  *
- * Registered with the dispatch, the builder and the selection helpers ahead of its drawing code.
- * Until the renderer lands the frame shows its explained empty state, which replaces its children:
- * the `depictio-secondary-structure` root below is the one the drawn tile mounts, and is not
- * mounted yet.
+ * A brush or click on the ribbons, or a click on a segment, emits a
+ * `residue_selection` (entity + position range); a hover publishes on the
+ * highlight bus; the range and hover of the other protein tiles come back in
+ * as a shaded range and a marked residue. The tile keeps all its rows when a
+ * range is picked (it shades rather than narrows) and follows a single-value
+ * filter on the entity column.
  */
-const SecondaryStructureRenderer: React.FC<Props> = ({ metadata }) => (
-  <AdvancedVizFrame
-    title={metadata.title || 'Secondary structure'}
-    subtitle={(metadata as any).description || (metadata as any).subtitle}
-    emptyMessage="Secondary structure renderer lands in a later commit of this PR"
-  >
-    <Box className="depictio-secondary-structure" style={{ width: '100%', height: '100%' }} />
-  </AdvancedVizFrame>
-);
+const SecondaryStructureRenderer: React.FC<Props> = ({
+  metadata,
+  filters,
+  refreshTick,
+  onFilterChange,
+}) => {
+  const theme = useMantineTheme();
+  const { colorScheme } = useMantineColorScheme();
+  const isDark = colorScheme === 'dark';
+  const config = (metadata.config || {}) as SecondaryStructureConfig;
+  const index = String(metadata.index);
+  const entityCol = config.entity_col === undefined ? 'entity' : config.entity_col;
+  const positionCol = config.position_col || 'position';
+  const residueCol = optionalColumn(config.residue_col, 'residue');
+  const stateCol = config.state_col || 'ss_code';
+  const sourceCol = config.source_col || null;
+  const referenceSource = config.reference_source || null;
+  const pHelixCol = optionalColumn(config.p_helix_col, 'p_helix');
+  const pStrandCol = optionalColumn(config.p_strand_col, 'p_strand');
+  const pCoilCol = optionalColumn(config.p_coil_col, 'p_coil');
+  const confidenceCol = config.confidence_col || null;
+  const showProbabilities = config.show_probabilities !== false;
+  const showAgreement = config.show_agreement !== false;
+  const showSegments = config.show_segments !== false;
+  const showComposition = config.show_composition !== false;
+  const follow = config.follow_selection !== false;
+  const brushEnabled = Boolean(onFilterChange) && config.selection_enabled !== false;
+
+  const [showLetters, setShowLetters] = useState(true);
+  const [shadeConfidence, setShadeConfidence] = useState(true);
+  const [coilSegments, setCoilSegments] = useState(false);
+  // Pixels per residue; 0 fits the whole protein to the tile width.
+  const [zoom, setZoom] = useState<number>(0);
+  const [pickedReference, setPickedReference] = useState<string | null>(null);
+  const [drawn, setDrawn] = useState(false);
+
+  // The tile's own residue pick never narrows its own fetch, and no residue
+  // range does (it shades); everything else the dashboard filters applies.
+  const withoutOwn = useMemo(() => filtersExcludingOwnResidue(filters, index), [filters, index]);
+  const fetchFilters = useMemo(
+    () => withoutPositionSelections(withoutOwn, [positionCol]),
+    [withoutOwn, positionCol],
+  );
+  const followed = useMemo(() => residueEntityFromFilters(withoutOwn, entityCol), [withoutOwn, entityCol]);
+  const picker = useEntityPicker(metadata.dc_id, entityCol, followed, refreshTick, {
+    wfId: metadata.wf_id,
+    vizKind: 'secondary_structure',
+    filters: fetchFilters,
+    shareKey: entityCol,
+    owner: index,
+  });
+
+  // ---- residue table -------------------------------------------------------
+  const columns = useMemo(
+    () =>
+      distinctColumns([
+        entityCol,
+        positionCol,
+        residueCol,
+        stateCol,
+        sourceCol,
+        pHelixCol,
+        pStrandCol,
+        pCoilCol,
+        confidenceCol,
+      ]),
+    [entityCol, positionCol, residueCol, stateCol, sourceCol, pHelixCol, pStrandCol, pCoilCol, confidenceCol],
+  );
+  const [frame, setFrame] = useState<Frame | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  // `filters` is a fresh array on every parent render: key the fetch on the
+  // filters' content, as the other protein tiles do, or it refetches after
+  // every render, its own brush included.
+  const residueFilters = useMemo(
+    () => scopeToEntity(fetchFilters, index, metadata.dc_id, entityCol, picker.entity),
+    [fetchFilters, index, metadata.dc_id, entityCol, picker.entity],
+  );
+  const residueFiltersKey = JSON.stringify(residueFilters);
+
+  useEffect(() => {
+    if (!metadata.wf_id || !metadata.dc_id) {
+      setError('Secondary structure: missing data binding');
+      setLoading(false);
+      return;
+    }
+    if (picker.entities === null) return;
+    if (entityCol && !picker.entity && !picker.failed) {
+      setFrame({});
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetchAdvancedVizData({
+      wfId: metadata.wf_id,
+      dcId: metadata.dc_id,
+      columns,
+      filters: residueFilters,
+      vizKind: 'secondary_structure',
+    })
+      .then((res) => {
+        if (!cancelled) setFrame(res.rows);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    metadata.wf_id,
+    metadata.dc_id,
+    JSON.stringify(columns),
+    residueFiltersKey,
+    picker.entities,
+    picker.entity,
+    picker.failed,
+    entityCol,
+    refreshTick,
+  ]);
+
+  const entity = useMemo(
+    () => picker.entity ?? firstValueOf(frame, entityCol),
+    [picker.entity, frame, entityCol],
+  );
+
+  // ---- model -----------------------------------------------------------------
+  const ssColumns = useMemo<SsColumns>(
+    () => ({
+      entity: entityCol,
+      position: positionCol,
+      residue: residueCol,
+      state: stateCol,
+      source: sourceCol,
+      pHelix: pHelixCol,
+      pStrand: pStrandCol,
+      pCoil: pCoilCol,
+      confidence: confidenceCol,
+    }),
+    [entityCol, positionCol, residueCol, stateCol, sourceCol, pHelixCol, pStrandCol, pCoilCol, confidenceCol],
+  );
+  const model = useMemo(
+    () => buildSsModel(frame, ssColumns, entity, pickedReference ?? referenceSource),
+    [frame, ssColumns, entity, pickedReference, referenceSource],
+  );
+  const agreement = useMemo(() => agreementOf(model), [model]);
+  const segments = useMemo(
+    () => segmentsOf(model, 0).filter((s) => coilSegments || s.state !== 'coil'),
+    [model, coilSegments],
+  );
+  const sources = model.sources.length;
+  const hasLetters = model.letters.some((l) => l != null);
+  const hasProbabilities = model.sources.some((s) => s.hasProbabilities);
+  const hasConfidence = model.sources.some((s) => s.confidence.some((c) => c != null));
+
+  useEffect(() => setDrawn(false), [entity]);
+
+  // ---- selections in ---------------------------------------------------------
+  const ownResidue = useMemo(() => hasOwnResiduePick(filters, index), [filters, index]);
+  const selectedRange = useMemo<ResidueRange | null>(() => {
+    if (!follow && !ownResidue) return null;
+    const r = residueRangeFromFilters(filters, entityCol, positionCol);
+    if (!r || (r.entity && entity && r.entity !== entity)) return null;
+    return { start: r.start, end: r.end };
+  }, [filters, entityCol, positionCol, follow, ownResidue, entity]);
+
+  const incoming = useHighlight(index, follow);
+  const highlight = useMemo(() => {
+    if (!incoming || (incoming.entity && entity && incoming.entity !== entity)) return null;
+    // An event on another position column is on another axis entirely.
+    if (incoming.positionColumn && incoming.positionColumn !== positionCol) return null;
+    return { start: incoming.start, end: incoming.end };
+  }, [incoming, entity, positionCol]);
+
+  // ---- selections out --------------------------------------------------------
+  const publish = usePublishHighlight(index);
+  const onHover = useCallback(
+    (position: number | null) => {
+      if (position == null) {
+        publish(null);
+        return;
+      }
+      publish({ entity: entity ?? undefined, start: position, positionColumn: positionCol });
+    },
+    [publish, entity, positionCol],
+  );
+
+  // A brush, a click on a residue and a click on a segment all pick a range.
+  const onPick = useCallback(
+    (range: ResidueRange | null) => {
+      if (!onFilterChange) return;
+      const pair = residueRangeFilters(index, {
+        entityColumn: entityCol,
+        positionColumn: positionCol,
+        entity,
+        start: range ? range.start : null,
+        end: range ? (range.end ?? range.start) : null,
+        dcId: metadata.dc_id,
+      });
+      for (const f of pair) onFilterChange(f);
+    },
+    [onFilterChange, index, entityCol, positionCol, entity, metadata.dc_id],
+  );
+  // Clicking the segment that is already picked clears the pick, as a residue click does.
+  const onPickSegment = useCallback(
+    (range: ResidueRange) => {
+      const same =
+        selectedRange != null &&
+        selectedRange.start === range.start &&
+        (selectedRange.end ?? selectedRange.start) === (range.end ?? range.start);
+      onPick(same ? null : range);
+    },
+    [onPick, selectedRange],
+  );
+
+  // ---- legend ----------------------------------------------------------------
+  const colours = useMemo(() => panelColours(theme, isDark), [theme, isDark]);
+  const hasTurn = useMemo(
+    () => model.sources.some((s) => s.states.includes('turn')),
+    [model.sources],
+  );
+  const legend = useMemo(() => {
+    const items: { label: string; colour: string }[] = [
+      { label: 'Helix', colour: SS_GLYPH_FILLS.helix },
+      { label: 'Strand', colour: SS_GLYPH_FILLS.strand },
+    ];
+    if (hasTurn) items.push({ label: 'Turn', colour: SS_GLYPH_FILLS.turn });
+    items.push({ label: 'Coil', colour: rgbCss(colours.neutral) });
+    if (showAgreement && agreement) {
+      items.push({ label: 'Agree', colour: theme.colors.teal[isDark ? 4 : 6] });
+      items.push({ label: 'Differ', colour: theme.colors.red[isDark ? 4 : 6] });
+    }
+    return items;
+  }, [hasTurn, colours.neutral, showAgreement, agreement, theme, isDark]);
+
+  // ---- chrome ----------------------------------------------------------------
+  const entityChoices = picker.entities && picker.entities.length > 1 ? picker.entities : null;
+  const mainSource = model.sources[0]?.name ?? null;
+  const primaryControls = useMemo(
+    () =>
+      entityChoices || sources > 1 ? (
+        <>
+          {entityChoices ? (
+            <VizSelect
+              label="Entity"
+              value={entity}
+              onChange={(v) => v && picker.setEntity(v)}
+              data={entityChoices}
+              searchable
+              limit={200}
+              allowDeselect={false}
+            />
+          ) : null}
+          {sources > 1 ? (
+            <VizSelect
+              label="Reference"
+              value={mainSource}
+              onChange={(v) => v && setPickedReference(v)}
+              data={model.names}
+              allowDeselect={false}
+            />
+          ) : null}
+        </>
+      ) : null,
+    [entityChoices, picker.setEntity, entity, sources, mainSource, model.names],
+  );
+
+  const controls = useMemo(
+    () => (
+      <VizControlGroup title="Display">
+        <VizSlider
+          label="Residue width"
+          value={zoom}
+          onChange={setZoom}
+          min={0}
+          max={24}
+          step={1}
+          thumbLabel={(v) => (v === 0 ? 'Fit' : `${v} px`)}
+        />
+        <VizSwitch
+          label="Letters"
+          checked={showLetters}
+          onChange={(e) => setShowLetters(e.currentTarget.checked)}
+          disabled={!residueCol || !hasLetters}
+        />
+        <VizSwitch
+          label="Confidence shading"
+          checked={shadeConfidence}
+          onChange={(e) => setShadeConfidence(e.currentTarget.checked)}
+          disabled={!hasConfidence}
+        />
+        {showSegments ? (
+          <VizSwitch
+            label="Coil segments"
+            checked={coilSegments}
+            onChange={(e) => setCoilSegments(e.currentTarget.checked)}
+          />
+        ) : null}
+      </VizControlGroup>
+    ),
+    [zoom, showLetters, residueCol, hasLetters, shadeConfidence, hasConfidence, showSegments, coilSegments],
+  );
+
+  const echo = useMemo(() => {
+    if (!model.positions.length) return undefined;
+    const parts = [entity, `${model.positions.length} residues`];
+    if (sources > 1) parts.push(`${sources} sources`);
+    if (selectedRange) {
+      parts.push(`residues ${selectedRange.start}-${selectedRange.end ?? selectedRange.start}`);
+    }
+    return parts.filter(Boolean).join(' · ');
+  }, [entity, model.positions.length, sources, selectedRange]);
+
+  const badges = useMemo(() => {
+    const list = compositionBadges(model, agreement, {
+      composition: showComposition,
+      agreement: showAgreement,
+    });
+    return list.length ? list : undefined;
+  }, [model, agreement, showComposition, showAgreement]);
+
+  const agreementShown = showAgreement && agreement != null;
+  const probabilitiesShown = showProbabilities && hasProbabilities;
+  const naturalPx = useMemo(
+    () =>
+      naturalPanelHeight({
+        // Letters only get a lane once the cells are wide enough to read.
+        letters: showLetters && hasLetters && zoom >= MIN_LETTER_PX,
+        extraSources: Math.max(0, sources - 1),
+        agreement: agreementShown,
+        probabilities: probabilitiesShown,
+      }) +
+      LEGEND_PX +
+      (showSegments ? SEGMENT_LIST_MAX_PX : 0),
+    [showLetters, hasLetters, zoom, sources, agreementShown, probabilitiesShown, showSegments],
+  );
+  const contentDemand = useMemo(() => demandForPx(naturalPx + CHROME_PX), [naturalPx]);
+  const onDrawn = useCallback(() => setDrawn(true), []);
+
+  const noProteins = picker.entities !== null && picker.entities.length === 0 && !picker.failed;
+  const emptyMessage = loading || error
+    ? undefined
+    : noProteins
+      ? 'No protein in this collection'
+      : model.positions.length === 0
+        ? 'No residues for this entity'
+        : !model.hasStates
+          ? `No secondary-structure state in column "${stateCol}"`
+          : undefined;
+  const empty = model.positions.length === 0 || !model.hasStates;
+
+  return (
+    <AdvancedVizFrame
+      title={metadata.title || 'Secondary structure'}
+      subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
+      controls={controls}
+      contentDemand={contentDemand}
+      echo={echo}
+      loading={loading}
+      error={error}
+      emptyMessage={emptyMessage}
+      dataRows={frame ?? undefined}
+      dataColumns={columns}
+      badges={badges}
+    >
+      {!empty ? (
+        <Box
+          className="depictio-secondary-structure"
+          data-secondary-structure-ready={drawn ? 'true' : undefined}
+          style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', minHeight: 0 }}
+        >
+          {/* Absolutely filled so the panel gets a definite height to spread
+              its lanes over, whatever the flex engine makes of percentages. */}
+          <Box style={{ flex: '1 1 auto', minHeight: 60, position: 'relative' }}>
+            <Box style={{ position: 'absolute', inset: 0 }}>
+              <SecondaryStructurePanel
+                model={model}
+                agreement={agreement}
+                showProbabilities={showProbabilities}
+                showAgreement={showAgreement}
+                showLetters={showLetters}
+                shadeConfidence={shadeConfidence}
+                selectedRange={selectedRange}
+                highlight={highlight}
+                onHover={onHover}
+                onBrush={brushEnabled ? onPick : undefined}
+                height="100%"
+                cellWidth={zoom > 0 ? zoom : undefined}
+                followSelection={follow}
+                onDrawn={onDrawn}
+              />
+            </Box>
+          </Box>
+          <Group gap="sm" px={4} pt={4} wrap="wrap" style={{ flex: '0 0 auto' }}>
+            {legend.map((item) => (
+              <Group key={item.label} gap={4} wrap="nowrap">
+                <ColorSwatch color={item.colour} size={10} withShadow={false} />
+                <Text size="xs" c="dimmed">
+                  {item.label}
+                </Text>
+              </Group>
+            ))}
+            {hasConfidence && shadeConfidence ? (
+              <Text size="xs" c="dimmed">
+                Lighter = less confident
+              </Text>
+            ) : null}
+          </Group>
+          {showSegments ? (
+            <Box pt={4} style={{ flex: '0 0 auto' }}>
+              <SegmentList
+                segments={segments}
+                selectedRange={selectedRange}
+                onPick={brushEnabled ? onPickSegment : undefined}
+              />
+            </Box>
+          ) : null}
+        </Box>
+      ) : null}
+    </AdvancedVizFrame>
+  );
+};
 
 export default SecondaryStructureRenderer;
