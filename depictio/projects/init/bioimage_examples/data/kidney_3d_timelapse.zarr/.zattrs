@@ -1,0 +1,126 @@
+{
+    "multiscales": [
+        {
+            "axes": [
+                {
+                    "name": "t",
+                    "type": "time",
+                    "unit": "second"
+                },
+                {
+                    "name": "c",
+                    "type": "channel"
+                },
+                {
+                    "name": "z",
+                    "type": "space",
+                    "unit": "micrometer"
+                },
+                {
+                    "name": "y",
+                    "type": "space",
+                    "unit": "micrometer"
+                },
+                {
+                    "name": "x",
+                    "type": "space",
+                    "unit": "micrometer"
+                }
+            ],
+            "datasets": [
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                60.0,
+                                1.0,
+                                2.5,
+                                1.24,
+                                1.24
+                            ],
+                            "type": "scale"
+                        }
+                    ],
+                    "path": "0"
+                },
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                60.0,
+                                1.0,
+                                2.5,
+                                2.48,
+                                2.48
+                            ],
+                            "type": "scale"
+                        }
+                    ],
+                    "path": "1"
+                },
+                {
+                    "coordinateTransformations": [
+                        {
+                            "scale": [
+                                60.0,
+                                1.0,
+                                2.5,
+                                4.96,
+                                4.96
+                            ],
+                            "type": "scale"
+                        }
+                    ],
+                    "path": "2"
+                }
+            ],
+            "metadata": {
+                "description": "2x mean downsampling of y and x per level",
+                "method": "skimage.transform.downscale_local_mean"
+            },
+            "name": "kidney_3d_timelapse",
+            "type": "local_mean",
+            "version": "0.4"
+        }
+    ],
+    "omero": {
+        "channels": [
+            {
+                "active": true,
+                "coefficient": 1,
+                "color": "0000FF",
+                "family": "linear",
+                "inverted": false,
+                "label": "Em 450 nm (nuclei)",
+                "window": {
+                    "end": 190.0,
+                    "max": 255.0,
+                    "min": 0.0,
+                    "start": 0.0
+                }
+            },
+            {
+                "active": true,
+                "coefficient": 1,
+                "color": "FF00FF",
+                "family": "linear",
+                "inverted": false,
+                "label": "Em 605 nm",
+                "window": {
+                    "end": 189.0,
+                    "max": 255.0,
+                    "min": 0.0,
+                    "start": 0.0
+                }
+            }
+        ],
+        "id": 1,
+        "name": "kidney_3d_timelapse",
+        "rdefs": {
+            "defaultT": 0,
+            "defaultZ": 4,
+            "model": "color"
+        },
+        "version": "0.4"
+    }
+}

@@ -647,6 +647,9 @@ export {
   fetchPolarsSchema,
   fetchVizSuggestions,
   fetchPhylogenyNewick,
+  fetchBioimageStores,
+  bioimageStoreUrl,
+  createBioimageZarrStore,
   dispatchComputeEmbedding,
   pollComputeEmbedding,
   dispatchComplexHeatmap,
@@ -1062,6 +1065,8 @@ export type {
   AdvancedVizKind,
   AdvancedVizKindDescriptor,
   AdvancedVizDataResponse,
+  BioimageStoreInfo,
+  BioimageZarrStore,
 } from './api';
 
 // Anonymous browser telemetry — shared with the Tools Studio, which aliases this

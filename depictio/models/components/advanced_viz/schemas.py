@@ -135,6 +135,11 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     "phylogenetic": {
         "taxon": _STRING,
     },
+    # A bioimage is file-backed (the stores live in a `bioimage` DC, served key
+    # by key via /advanced_viz/bioimage/{dc_id}/...). Its point columns sit on
+    # a second, optional table DC, not on the component's own DC, so there is
+    # nothing here for validate_binding to check against.
+    "bioimage_viewer": {},
     "rarefaction": {
         "sample_id": _STRING,
         "depth": _NUMERIC,
@@ -436,6 +441,7 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     "phylogenetic": {
         "taxon": frozenset({"taxon", "tip", "tip_label", "label", "leaf", "name"}),
     },
+    "bioimage_viewer": {},
     "rarefaction": {
         "sample_id": frozenset({"sample_id", "sample-id", "sample"}),
         "depth": frozenset({"depth", "sampling_depth", "rarefaction_depth"}),
@@ -733,6 +739,7 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "color": _NUMERIC | _STRING,
         "label": _STRING,
     },
+    "bioimage_viewer": {},
     "rarefaction": {
         "iter": _NUMERIC,
         "group": _STRING,
@@ -1059,7 +1066,10 @@ def validate_binding(config: VizConfig, dc_schema: dict[str, str]) -> list[Bindi
 _MIN_FLOAT_COLS: dict[AdvancedVizKind, int] = {"complex_heatmap": 8, "group_compare": 8}
 _MIN_INT_COLS: dict[AdvancedVizKind, int] = {"upset_plot": 3}
 _MIN_STRING_COLS: dict[AdvancedVizKind, int] = {"sankey": 2}
-_KIND_REQUIRES_DC_TYPE: dict[AdvancedVizKind, str] = {"phylogenetic": "phylogeny"}
+_KIND_REQUIRES_DC_TYPE: dict[AdvancedVizKind, str] = {
+    "phylogenetic": "phylogeny",
+    "bioimage_viewer": "bioimage",
+}
 _EMBEDDING_LIVE_MIN_NUMERIC = 10
 # A live embedding is the obvious read only on a wide matrix (an expression or
 # abundance table). Between the two floors it stays pickable but unannounced: a
@@ -1827,6 +1837,15 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "label": "Phylogenetic tree",
         "description": "Newick tree + tip metadata (Microreact-style): 5 layouts, tip search, subtree highlight.",
         "icon": "tabler:hierarchy-3",
+    },
+    "bioimage_viewer": {
+        "label": "Bioimage viewer",
+        "description": (
+            "Multiscale microscopy image from a bioimage DC (OME-Zarr / NGFF 0.4) with "
+            "per-channel colour and contrast, and an optional cell-points overlay that "
+            "cross-filters by lasso."
+        ),
+        "icon": "tabler:microscope",
     },
     "scatter_xy": {
         "label": "Scatter (X/Y)",

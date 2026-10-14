@@ -20,6 +20,11 @@ ALLOWED_SCAN_REASONS = frozenset({"added", "skipped", "updated", "failed", "unch
 NOT_UPLOADED_SCAN_REASONS = frozenset({"skipped", "unchanged", "changed"})
 
 
+def is_zarr_store_dir(path: str) -> bool:
+    """True when ``path`` is a directory named ``*.zarr`` (an OME-Zarr store)."""
+    return os.path.isdir(path) and path.rstrip("/").endswith(".zarr")
+
+
 class WildcardRegex(WildcardRegexBase):
     value: str
 
@@ -126,7 +131,8 @@ class File(MongoModel):
         if DEPICTIO_CONTEXT.lower() == "cli":
             if not os.path.exists(value):
                 raise ValueError(f"The file '{value}' does not exist.")
-            if not os.path.isfile(value):
+            # An OME-Zarr store is a directory registered as one File.
+            if not os.path.isfile(value) and not is_zarr_store_dir(value):
                 raise ValueError(f"'{value}' is not a file.")
             if not os.access(value, os.R_OK):
                 raise ValueError(f"'{value}' is not readable.")

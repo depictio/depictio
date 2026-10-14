@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel
+from depictio.models.models.data_collections_types.bioimage import DCBioimageConfig
 from depictio.models.models.data_collections_types.geojson import DCGeoJSONConfig
 from depictio.models.models.data_collections_types.image import DCImageConfig
 from depictio.models.models.data_collections_types.indexed_file import DCIndexedFileConfig
@@ -381,6 +382,7 @@ class DataCollectionConfig(MongoModel):
         | DCImageConfig
         | DCGeoJSONConfig
         | DCPhylogenyConfig
+        | DCBioimageConfig
         | DCIndexedFileConfig
     )
     join: TableJoinConfig | None = None
@@ -428,6 +430,7 @@ class DataCollectionConfig(MongoModel):
             "image",
             "geojson",
             "phylogeny",
+            "bioimage",
             "indexed_file",
         ]
         lower_v = v.lower()
@@ -504,6 +507,12 @@ class DataCollectionConfig(MongoModel):
                     values["dc_specific_properties"] = DCPhylogenyConfig(**dc_specific_properties)
                 else:
                     values["dc_specific_properties"] = DCPhylogenyConfig()
+        elif type_value == "bioimage":
+            if not isinstance(dc_specific_properties, DCBioimageConfig):
+                if isinstance(dc_specific_properties, dict):
+                    values["dc_specific_properties"] = DCBioimageConfig(**dc_specific_properties)
+                else:
+                    values["dc_specific_properties"] = DCBioimageConfig()
         elif type_value == "indexed_file":
             # File-backed DC: no delta table, the browser reads the objects from
             # S3 over range requests. `format` is required, so an absent config
