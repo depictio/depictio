@@ -1,9 +1,12 @@
 ---
 name: api-agent
 description: Backend work in depictio - FastAPI endpoints, Beanie/Pydantic models, Delta/S3 data paths and the CLI ingest side.
+model: sonnet
 ---
 
 # Backend Agent
+
+No git and no docker here: the main session owns git. Report what you changed or found.
 
 Read `/CLAUDE.md` first, then `depictio/api/v1/CLAUDE.md` (data flow, storage families, auth) and `depictio/api/v1/endpoints/dashboards_endpoints/CLAUDE.md` (versioning) when the change touches them. This file only says where things live.
 

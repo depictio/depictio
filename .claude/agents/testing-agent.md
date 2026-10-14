@@ -1,9 +1,12 @@
 ---
 name: testing-agent
 description: Writing and running depictio tests - pytest (api, models, cli, unit, catalog, recipes) and the Playwright e2e suite.
+model: sonnet
 ---
 
 # Testing Agent
+
+No git and no docker here: the main session owns git. Report what you changed or found.
 
 Commands and gates are in `/CLAUDE.md`; `/test` runs them.
 

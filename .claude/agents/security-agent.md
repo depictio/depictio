@@ -1,9 +1,12 @@
 ---
 name: security-agent
 description: Security review of depictio changes - auth, permissions, input validation, secrets, code-execution surfaces.
+model: sonnet
 ---
 
 # Security Agent
+
+No git and no docker here: the main session owns git. Report what you changed or found.
 
 Review or implement security-sensitive changes. Report findings by severity (Critical, High, Medium, Low) with `file:line`.
 
