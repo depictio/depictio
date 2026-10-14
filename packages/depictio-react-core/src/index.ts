@@ -90,6 +90,7 @@ export type {
 } from './components/markdownCheatsheet';
 export { formatTextValue, hasLiveValues, splitPlaceholders } from './components/textValues';
 export type { TextSegment } from './components/textValues';
+export { renderInlineMarkdown } from './components/TextRenderer';
 export { default as JBrowseRenderer } from './components/JBrowseRenderer';
 export { default as MultiQCRenderer } from './components/MultiQCRenderer';
 
@@ -533,6 +534,7 @@ export {
   currentSessionId,
   validateSession,
   authFetch,
+  API_BASE,
   refreshAccessToken,
   startSessionKeepAlive,
   stopSessionKeepAlive,
@@ -721,6 +723,8 @@ export {
   regionFromFilters,
   isRegionFilter,
   cardScopedFilters,
+  applyAIPlanToFilters,
+  revertAIPlanFilters,
 } from './selection';
 export type { GenomeRegionSelection } from './selection';
 

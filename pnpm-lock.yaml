@@ -73,6 +73,9 @@ importers:
       depictio-components:
         specifier: file:../../packages/depictio-components
         version: link:../../packages/depictio-components
+      depictio-react-ai:
+        specifier: workspace:*
+        version: link:../../packages/depictio-react-ai
       depictio-react-core:
         specifier: file:../../packages/depictio-react-core
         version: link:../../packages/depictio-react-core
@@ -245,6 +248,42 @@ importers:
       webpack-cli:
         specifier: ^5.1.0
         version: 5.1.4(webpack@5.106.2)
+
+  packages/depictio-react-ai:
+    devDependencies:
+      '@iconify/react':
+        specifier: ^5.0.2
+        version: 5.2.1(react@18.3.1)
+      '@mantine/core':
+        specifier: ^7.14.0
+        version: 7.17.8(@mantine/hooks@7.17.8(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@mantine/hooks':
+        specifier: ^7.14.0
+        version: 7.17.8(react@18.3.1)
+      '@mantine/notifications':
+        specifier: ^7.14.0
+        version: 7.17.8(@mantine/core@7.17.8(@mantine/hooks@7.17.8(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@mantine/hooks@7.17.8(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/react':
+        specifier: ^18.3.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.28)
+      depictio-react-core:
+        specifier: workspace:*
+        version: link:../depictio-react-core
+      react:
+        specifier: ^18.3.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.0
+        version: 18.3.1(react@18.3.1)
+      typescript:
+        specifier: ^5.3.0
+        version: 5.9.3
+      zustand:
+        specifier: ^5.0.0
+        version: 5.0.12(@types/react@18.3.28)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))
 
   packages/depictio-react-core:
     devDependencies:

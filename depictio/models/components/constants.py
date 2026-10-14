@@ -5,7 +5,8 @@ Extracted from dash modules so the model layer can validate enum-like fields
 without importing Dash/DMC dependencies (which would cause circular imports).
 
 Sources:
-    - VISU_TYPES: depictio/api/v1/services/figure/definitions.py (ALLOWED_VISUALIZATIONS)
+    - ALLOWED_VISUALIZATIONS / VISU_TYPES: defined here; the figure service
+      (depictio/api/v1/services/figure/definitions.py) re-exports the former
     - INTERACTIVE_COMPATIBILITY: dash/modules/interactive_component/utils.py (agg_functions dict)
     - AGGREGATION_COMPATIBILITY: dash/modules/card_component/utils.py (agg_functions dict)
 """
@@ -28,37 +29,42 @@ COLUMN_TYPES: tuple[str, ...] = (
 # Valid figure visualization types
 # ---------------------------------------------------------------------------
 
-#: What a UI-mode figure may declare. Mirrors ``ALLOWED_VISUALIZATIONS`` in
-#: ``depictio/api/v1/services/figure/definitions.py`` (the curated set the
-#: builder dropdown is populated from at runtime) plus ``heatmap``, which the
-#: builder renders through the complex-heatmap path rather than as a Plotly
-#: Express constructor and is therefore absent from that set.
-#:
-#: Duplicated rather than imported because the model layer is shared with the
-#: CLI and must not pull in the API package. It drifted once: this list stayed
-#: on the types a since-deleted Dash module offered while the registry grew, so
-#: every YAML dashboard declaring a strip or an ECDF was rejected for a chart
-#: the UI would happily build. `test_visu_types_match_registry` fails if the two
-#: lists part ways again.
-#:
-#: Keep in step with ``ChartType`` in components/types.py too: both describe the
-#: same figure component, and a value in one and not the other is a figure that
-#: validates in one layer and is rejected in the next.
-VISU_TYPES: tuple[str, ...] = (
+# Plotly Express constructors the figure builder exposes. One list for every
+# consumer: the API's figure registry re-exports it, the lite model checks
+# ``visu_type`` against ``VISU_TYPES`` below, and the AI prompts recite it.
+# The dependency direction is api -> models, so it lives here rather than
+# next to the registry. ``test_visu_types_match_registry`` fails if the
+# registry and this list part ways.
+#
+# ``heatmap`` and ``scatter_matrix`` are excluded on purpose: the first is not
+# a Plotly Express constructor of its own (heatmap rendering goes through the
+# complex-heatmap path), and scatter_matrix has a per-viz parameter shape that
+# does not match the rest of the builder. Add them back only alongside
+# dedicated builder support.
+#
+# Keep in step with ``ChartType`` in components/types.py too: both describe the
+# same figure component, and a value in one and not the other is a figure that
+# validates in one layer and is rejected in the next.
+ALLOWED_VISUALIZATIONS: tuple[str, ...] = (
     "scatter",
     "line",
     "bar",
     "box",
-    "violin",
     "histogram",
+    "violin",
     "ecdf",
-    "strip",
-    "area",
-    "funnel",
     "density_heatmap",
     "density_contour",
-    "heatmap",
+    "area",
+    "funnel",
+    "strip",
 )
+
+# Everything a stored ``visu_type`` may be: the builder's constructors plus
+# ``heatmap``, which persisted dashboards still carry and which renders
+# outside Plotly Express. A superset of ALLOWED_VISUALIZATIONS by design so
+# no existing YAML stops validating.
+VISU_TYPES: tuple[str, ...] = ALLOWED_VISUALIZATIONS + ("heatmap",)
 
 # ---------------------------------------------------------------------------
 # Interactive component type × column_type compatibility

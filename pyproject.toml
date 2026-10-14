@@ -59,6 +59,9 @@ server = [
   "fastapi==0.141.1",
   "fsspec==2026.4.0",
   "gunicorn==26.0.0",
+  # LLM client for the AI endpoints (provider-agnostic; lazy-imported so the
+  # app boots without a working install when DEPICTIO_AI_ENABLED is false)
+  "litellm>=1.50,<2",
   "mypy-boto3-s3==1.43.50",
   # Dashboard thumbnails. The Chromium they drive is downloaded separately, by the
   # worker image or by `depictio local up --screenshots`.

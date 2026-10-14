@@ -8,8 +8,12 @@ import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
 import { fetchSpecs, upsertComponent } from 'depictio-react-core';
 import { useGlassPages } from '../../chrome/variants/glass/pages';
+import { AI_COLOR, AI_ICON, AiFillModal, useAIHealth } from 'depictio-react-ai';
+import type { ComponentType as AIComponentType } from 'depictio-react-ai';
+import { useServerStatus } from '../../hooks/useServerStatus';
 import { useBuilderStore } from '../store/useBuilderStore';
 import type { ColumnSpec } from '../store/useBuilderStore';
+import { applyLiteComponent } from '../store/applyLiteComponent';
 import ComponentBuilder from '../ComponentBuilder';
 import { buildMetadata } from '../buildMetadata';
 import { getComponentTypeMeta } from '../componentTypes';
@@ -19,6 +23,35 @@ const StepDesign: React.FC = () => {
   const state = useBuilderStore();
   const [savedRedirect, setSavedRedirect] = useState(false);
   const glass = useGlassPages();
+
+  const [aiFillOpened, setAiFillOpened] = useState(false);
+  const { features: serverFeatures } = useServerStatus();
+  const aiHealth = useAIHealth(serverFeatures.ai);
+  // Every builder type can be filled; text is the one that needs no data
+  // collection (it is written with the dashboard as context).
+  const aiFillAvailable =
+    serverFeatures.ai && Boolean(state.componentType) &&
+    (Boolean(state.dcId) || state.componentType === 'text');
+
+  /** Hydrate the builder from an AI-validated component dict, through the
+   *  same mapping the Describe step and the catalog use, and mark the
+   *  component as AI-authored for the saved `ai_source` provenance. */
+  const applyAiFill = (parsed: Record<string, unknown>) => {
+    applyLiteComponent(parsed);
+    if (!state.aiSource) state.setAiSource({ flow: 'component-from-prompt' });
+  };
+
+  /** Current component state for the revision prompt — lets the LLM patch
+   *  what's on screen instead of starting over. Best effort: an incomplete
+   *  builder state simply means a from-scratch fill. */
+  const currentForAiFill = (): Record<string, unknown> | null => {
+    try {
+      if (Object.keys(state.config).length === 0 && !state.existing) return null;
+      return buildMetadata(state) as unknown as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  };
 
   // Filters the previews can apply: the dashboard's active ones minus any this
   // component emitted itself (mirrors useBuilderPreviewFilters, but unhooked
@@ -109,6 +142,13 @@ const StepDesign: React.FC = () => {
   }
 
   const meta = getComponentTypeMeta(state.componentType);
+  // What the AI routing notice says after the type name: the collection the
+  // component was generated against, or the fact that text has none.
+  const routedOn = ((): string => {
+    if (state.componentType === 'text') return ', written with the dashboard as context';
+    if (state.aiRouting?.dcTag) return ` on ${state.aiRouting.dcTag}`;
+    return '';
+  })();
 
   return (
     <Stack gap="md" pt="md">
@@ -119,7 +159,62 @@ const StepDesign: React.FC = () => {
         <Text size="sm" c="gray" ta="center">
           Customize the appearance and behavior of your component
         </Text>
+        {aiFillAvailable && (
+          <Group justify="center" mt={4}>
+            <Button
+              size="xs"
+              variant="light"
+              color={AI_COLOR}
+              leftSection={<Icon icon={AI_ICON} width={14} />}
+              onClick={() => setAiFillOpened(true)}
+              data-testid="ai-fill-open"
+            >
+              {state.mode === 'edit' || Object.keys(state.config).length > 0
+                ? 'Refine with AI'
+                : 'AI fill'}
+            </Button>
+          </Group>
+        )}
       </Stack>
+
+      {state.sourceMode === 'ai' && state.aiSource && (
+        <Paper withBorder radius="md" p="sm" data-testid="ai-routing-notice">
+          <Group gap="xs" wrap="nowrap" align="flex-start">
+            <Icon icon={AI_ICON} width={18} style={{ flexShrink: 0, marginTop: 2 }} />
+            <Stack gap={2}>
+              <Text size="sm">
+                <Text span fw={600}>
+                  {meta.label}
+                </Text>
+                {routedOn}
+                {state.aiRouting?.source === 'auto' && (
+                  <Text span c="dimmed">
+                    {' '}
+                    · chosen by the AI
+                    {state.aiRouting.reason ? `: ${state.aiRouting.reason}` : ''}
+                  </Text>
+                )}
+                {state.aiRouting?.source === 'single' && (
+                  <Text span c="dimmed">
+                    {' '}
+                    · the only matching collection
+                  </Text>
+                )}
+              </Text>
+              {state.aiRouting && state.aiRouting.alternatives.length > 0 && (
+                <Text size="xs" c="dimmed">
+                  Also plausible:{' '}
+                  {state.aiRouting.alternatives.map((a) => a.data_collection_tag).join(', ')}
+                </Text>
+              )}
+              <Text size="xs" c="dimmed">
+                Not what you meant? Use Back to change the type or the collection and
+                generate again.
+              </Text>
+            </Stack>
+          </Group>
+        </Paper>
+      )}
 
       {/* MultiQC previews render pre-aggregated report plots (no row-filter
           concept) and text components have no data at all — no banner there. */}
@@ -149,6 +244,20 @@ const StepDesign: React.FC = () => {
             </Group>
           </Paper>
         )}
+
+      {aiFillAvailable && state.dashboardId && (
+        <AiFillModal
+          opened={aiFillOpened}
+          onClose={() => setAiFillOpened(false)}
+          dashboardId={state.dashboardId}
+          componentType={state.componentType as AIComponentType}
+          dataCollectionId={state.dcId}
+          current={currentForAiFill()}
+          onApply={applyAiFill}
+          closeOnApply={false}
+          serverKeyAvailable={aiHealth?.server_key_configured === true}
+        />
+      )}
 
       <ComponentBuilder />
 

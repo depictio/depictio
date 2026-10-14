@@ -1,7 +1,9 @@
 /**
- * Step 0 of the Add-component flow: a two-tile chooser. The user either builds a
- * component from scratch (the manual stepper) or picks a pre-configured one that
- * depictio recognised from the project's ingested data (the catalog browser).
+ * Step 0 of the Add-component flow: the source chooser. The user builds a
+ * component from scratch (the manual stepper), picks a pre-configured one that
+ * depictio recognised from the project's ingested data (the catalog browser),
+ * or, when the assistant is enabled, describes it and lets the AI draft it
+ * (the same stepper with a Describe step).
  *
  * The labels, glyphs and accents come from `componentSource.ts`, which the
  * header band above these tiles reads too, so the two cannot disagree about
@@ -131,20 +133,26 @@ const GlassChoiceCard: React.FC<ChoiceCardProps> = ({
 interface ChoiceScreenProps {
   onManual: () => void;
   onCatalog: () => void;
+  /** Present only when the server has the AI assistant enabled; the third
+   *  tile is not rendered otherwise. */
+  onAI?: () => void;
 }
 
 const MANUAL_COPY =
   'Choose a component type, connect your data, and configure the design step by step.';
 const CATALOG_COPY =
   'Depictio recognizes the bioinformatics tools behind your data and suggests ready-to-add visualizations.';
+const AI_COPY =
+  'Describe what you need in a sentence. The AI picks the kind of component and the data, drafts it, and you finish it in the designer.';
 
-const GlassChoiceScreen: React.FC<ChoiceScreenProps> = ({ onManual, onCatalog }) => (
+const GlassChoiceScreen: React.FC<ChoiceScreenProps> = ({ onManual, onCatalog, onAI }) => (
   <section className="bgl-choice">
     <div className="bgl-choice-hero">
       <h1 className="bgl-choice-title">Add a component</h1>
       <p className="bgl-choice-lead">
-        Build one from scratch, or pick a pre-configured visualization Depictio recognized from the
-        tools in your project's data.
+        Build one from scratch, pick a pre-configured visualization Depictio recognized from the
+        tools in your project's data
+        {onAI ? ', or describe what you need and let the AI draft it' : ''}.
       </p>
     </div>
     <div className="bgl-choice-grid">
@@ -162,6 +170,15 @@ const GlassChoiceScreen: React.FC<ChoiceScreenProps> = ({ onManual, onCatalog })
         testId="component-source-catalog"
         onClick={onCatalog}
       />
+      {onAI && (
+        <GlassChoiceCard
+          source={COMPONENT_SOURCE.ai}
+          description={AI_COPY}
+          badge="AI"
+          testId="component-source-ai"
+          onClick={onAI}
+        />
+      )}
     </div>
     <p className="bgl-choice-note">
       <Info size={14} strokeWidth={1.8} aria-hidden />
@@ -176,20 +193,25 @@ const ChoiceScreen: React.FC<ChoiceScreenProps> = (props) => {
   return glass ? <GlassChoiceScreen {...props} /> : <ClassicChoiceScreen {...props} />;
 };
 
-const ClassicChoiceScreen: React.FC<ChoiceScreenProps> = ({ onManual, onCatalog }) => (
+const ClassicChoiceScreen: React.FC<ChoiceScreenProps> = ({ onManual, onCatalog, onAI }) => (
   <Center style={{ minHeight: 'calc(100vh - 220px)' }}>
     <Stack gap="xl" align="center" w="100%">
       <Stack gap="xs" align="center">
         <Title order={2} fw={700} ta="center">
           Add a component
         </Title>
-        <Text size="md" c="dimmed" ta="center" maw={560}>
-          Build one from scratch, or pick a pre-configured visualization Depictio
-          recognized from the tools in your project's data.
+        <Text size="md" c="dimmed" ta="center" maw={620}>
+          Build one from scratch, pick a pre-configured visualization Depictio
+          recognized from the tools in your project's data
+          {onAI ? ', or describe what you need and let the AI draft it' : ''}.
         </Text>
       </Stack>
 
-      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xl" style={{ maxWidth: 860, width: '100%' }}>
+      <SimpleGrid
+        cols={{ base: 1, sm: 2, md: onAI ? 3 : 2 }}
+        spacing="xl"
+        style={{ maxWidth: onAI ? 1240 : 860, width: '100%' }}
+      >
         <ChoiceCard
           source={COMPONENT_SOURCE.manual}
           description={MANUAL_COPY}
@@ -204,6 +226,15 @@ const ClassicChoiceScreen: React.FC<ChoiceScreenProps> = ({ onManual, onCatalog 
           testId="component-source-catalog"
           onClick={onCatalog}
         />
+        {onAI && (
+          <ChoiceCard
+            source={COMPONENT_SOURCE.ai}
+            description={AI_COPY}
+            badge="AI"
+            testId="component-source-ai"
+            onClick={onAI}
+          />
+        )}
       </SimpleGrid>
 
       <Box maw={560}>

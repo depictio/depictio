@@ -57,7 +57,39 @@ export interface ColumnSpec {
 
 /** Which surface the Add-component page is showing. Named because the page's
  *  history entries carry it too. */
-export type SourceMode = 'unset' | 'manual' | 'catalog';
+export type SourceMode = 'unset' | 'manual' | 'catalog' | 'ai';
+
+/**
+ * Step numbers of the create flow.
+ *
+ * Manual and catalog: 0 Type, 1 Data, 2 Design. Text binds to no data
+ * collection and skips Data (0 then 2). The AI mode is prompt-first: 0
+ * Describe (the prompt, with type and collection left to the assistant or
+ * pinned), 1 Design.
+ */
+export function designStepFor(mode: SourceMode): number {
+  return mode === 'ai' ? 1 : 2;
+}
+export function stepAfterType(t: ComponentType | null): number {
+  return t === 'text' ? 2 : 1;
+}
+
+export interface AISource {
+  /** Which assistant flow authored the component: a prompt on the Describe
+   *  step (or the Design step's AI fill), or a picked typed suggestion. */
+  flow: 'component-from-prompt' | 'suggest-components';
+  prompt?: string;
+}
+
+/** How the AI answer's type and collection were decided (see
+ *  RoutingInfo in depictio-react-ai). Transient: shown on the Design step,
+ *  never persisted. */
+export interface AIRouting {
+  source: 'user' | 'single' | 'auto';
+  reason?: string | null;
+  dcTag: string | null;
+  alternatives: { data_collection_id: string; data_collection_tag: string }[];
+}
 
 export interface BuilderState {
   // Mode + ids
@@ -107,7 +139,8 @@ export interface BuilderState {
   // dataset. Never persisted into the component metadata.
   applyDashboardFilters: boolean;
 
-  // 'unset' = mode choice screen; 'manual' = stepper; 'catalog' = catalog browser or pre-fill
+  // 'unset' = mode choice screen; 'manual' = stepper; 'catalog' = catalog
+  // browser or pre-fill; 'ai' = the stepper with a Describe step before Design
   sourceMode: SourceMode;
   // Set true when the builder was initiated from a catalog suggestion. Steps
   // 0 and 1 are skipped; the design step shows a dismissable catalog banner.
@@ -122,6 +155,11 @@ export interface BuilderState {
     description?: string;
     use?: string;
   } | null;
+  // Set when the component was authored by the AI (Describe step or the
+  // "Refine with AI" modal); persisted as `ai_source` provenance on the saved
+  // metadata (mirrors catalog_source).
+  aiSource: AISource | null;
+  aiRouting: AIRouting | null;
 
   // UI status flags
   saving: boolean;
@@ -175,6 +213,19 @@ export interface BuilderActions {
       use?: string;
     };
   }) => void;
+  setAiSource: (source: AISource | null) => void;
+  /** Seed the store from an AI answer: the resolved type and collection
+   *  plus the routing verdict, keeping the visit (dashboard, filters). The
+   *  config itself is applied through applyLiteComponent afterwards. */
+  initFromAI: (patch: {
+    componentType: ComponentType;
+    wfId: string | null;
+    dcId: string | null;
+    projectId: string | null;
+    dcConfigType: string | null;
+    source: AISource;
+    routing: AIRouting | null;
+  }) => void;
   loadExisting: (m: StoredMetadata) => void;
   setApplyDashboardFilters: (b: boolean) => void;
   setSaving: (b: boolean) => void;
@@ -214,6 +265,8 @@ const INITIAL: BuilderState = {
   sourceMode: 'unset',
   catalogMode: false,
   catalogSource: null,
+  aiSource: null,
+  aiRouting: null,
   saving: false,
   saveError: null,
   previewReady: true,
@@ -321,6 +374,26 @@ export const useBuilderStore = create<BuilderState & BuilderActions>((set) => ({
       ...figureFields,
     }));
   },
+  setAiSource: (source) => set({ aiSource: source }),
+  initFromAI: ({ componentType, wfId, dcId, projectId, dcConfigType, source, routing }) =>
+    set((s) => ({
+      ...INITIAL,
+      mode: 'create',
+      dashboardId: s.dashboardId,
+      componentId: s.componentId,
+      dashboardFilters: s.dashboardFilters,
+      applyDashboardFilters: s.applyDashboardFilters,
+      sourceMode: 'ai',
+      step: designStepFor('ai'),
+      componentType,
+      wfId,
+      dcId,
+      projectId,
+      dcConfigType,
+      aiSource: source,
+      aiRouting: routing,
+      previewReady: componentType !== 'advanced_viz',
+    })),
   loadExisting: (m) => {
     const ct = String(m.component_type) as ComponentType;
     // Legacy Map components saved before the rename used `lat`/`lon`/`color`/`size`.
