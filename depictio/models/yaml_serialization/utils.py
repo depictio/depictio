@@ -530,6 +530,76 @@ def enrich_component_geojson_dc_tag(
             comp["geojson_dc_tag"] = tag
 
 
+def _viz_config_fields(viz_kind: str | None) -> set[str]:
+    """Field names of an advanced viz's config model; empty for an unknown kind."""
+    from typing import get_args
+
+    from depictio.models.components.advanced_viz.configs import VizConfig
+
+    for model in get_args(get_args(VizConfig)[0]):
+        if model.model_fields["viz_kind"].default == viz_kind:
+            return set(model.model_fields)
+    return set()
+
+
+def enrich_component_config_dc_tags(
+    comp: dict,
+    dc_cache: dict[str, dict | None],
+    projects_collection: Any,
+) -> None:
+    """Enrich an advanced viz's config with a ``<x>_dc_tag`` per ``<x>_dc_id``.
+
+    The inverse of the import's resolution of ``<x>_dc_tag`` to ids (a
+    phylogeny's ``tree_dc_id``, an MA plot's ``ma_dc_id``...). The ids are also
+    written as strings: a dashboard saved or ingested by a local stack can hold
+    them as ObjectIds, which the export cannot serialise, and the import
+    overwrites them from the tags anyway.
+    """
+    config = comp.get("config")
+    if not isinstance(config, dict):
+        return
+
+    for key in [k for k in config if k.endswith(("_dc_id", "_wf_id"))]:
+        if config[key] is not None:
+            config[key] = str(config[key])
+
+    taggable = _viz_config_fields(comp.get("viz_kind") or config.get("viz_kind"))
+    for key in [k for k in config if k.endswith("_dc_id") and config[k]]:
+        tag_key = key[: -len("_id")] + "_tag"
+        # A viz whose `<x>_dc_id` is deprecated (complex heatmap, UpSet) has no
+        # tag field, and its config rejects unknown keys.
+        if tag_key not in taggable or config.get(tag_key):
+            continue
+
+        dc_id_str = config[key]
+        if dc_id_str not in dc_cache:
+            dc_doc = None
+            try:
+                for project in projects_collection.find():
+                    for wf in project.get("workflows", []):
+                        dc_doc = next(
+                            (
+                                dc
+                                for dc in wf.get("data_collections", [])
+                                if str(dc.get("_id")) == dc_id_str
+                            ),
+                            None,
+                        )
+                        if dc_doc:
+                            break
+                    if dc_doc:
+                        break
+            except Exception as e:
+                logger.debug(f"Failed to lookup data collection {dc_id_str}: {e}")
+            dc_cache[dc_id_str] = dc_doc
+
+        tag = (dc_cache[dc_id_str] or {}).get("data_collection_tag")
+        if tag:
+            config[tag_key] = tag
+        else:
+            logger.warning(f"No data collection tag found for config.{key}={dc_id_str}")
+
+
 def enrich_dashboard_with_tags(
     dashboard_data: dict,
     db_client: Any = None,
@@ -566,6 +636,7 @@ def enrich_dashboard_with_tags(
         enrich_component_dc_tag(comp, dc_cache, projects_collection)
         enrich_component_wf_tag(comp, wf_cache, projects_collection)
         enrich_component_geojson_dc_tag(comp, dc_cache, projects_collection)
+        enrich_component_config_dc_tags(comp, dc_cache, projects_collection)
 
     return dashboard_data
 
