@@ -92,12 +92,35 @@ def _name_conflict(name: str, exclude_id: ObjectId | None = None) -> bool:
     return groups_collection.find_one(query, {"_id": 1}) is not None
 
 
-def _group_summary(group_doc: dict) -> GroupSummary:
+def _live_user_ids(group_docs: list[dict]) -> set[ObjectId]:
+    """Ids from the groups' member arrays that still belong to a user document.
+
+    A membership array can hold ids with no user behind them (the seeded test
+    user on an instance that never created it, a deleted account). The detail
+    view skips those, so a count taken on the raw array disagrees with the list
+    it opens: one query here keeps the two in step.
+    """
+    referenced = {
+        ObjectId(str(user_id)) for doc in group_docs for user_id in doc.get("users_ids") or []
+    }
+    if not referenced:
+        return set()
+    return {
+        user_doc["_id"]
+        for user_doc in users_collection.find({"_id": {"$in": list(referenced)}}, {"_id": 1})
+    }
+
+
+def _group_summary(group_doc: dict, live_user_ids: set[ObjectId]) -> GroupSummary:
     return GroupSummary(
         id=str(group_doc["_id"]),
         name=group_doc.get("name", ""),
         description=group_doc.get("description"),
-        member_count=len(group_doc.get("users_ids") or []),
+        member_count=sum(
+            1
+            for user_id in group_doc.get("users_ids") or []
+            if ObjectId(str(user_id)) in live_user_ids
+        ),
         sso_managed=bool(group_doc.get("sso_managed", False)),
     )
 
@@ -170,7 +193,9 @@ def _remove_group_refs(group_oid: ObjectId) -> None:
 async def list_groups(current_user: User = Depends(require_authenticated_user)):
     """List all groups (sharing picker). Any authenticated non-anonymous user;
     summaries only, so no member emails are leaked."""
-    return [_group_summary(group_doc) for group_doc in groups_collection.find({})]
+    group_docs = list(groups_collection.find({}))
+    live_user_ids = _live_user_ids(group_docs)
+    return [_group_summary(group_doc, live_user_ids) for group_doc in group_docs]
 
 
 @groups_endpoint_router.get("/mine", response_model=list[MyGroup])
@@ -178,8 +203,10 @@ async def my_groups(current_user: User = Depends(require_authenticated_user)):
     """Groups the caller belongs to, annotated with their role in each."""
     user_oid = ObjectId(str(current_user.id))
     results = []
-    for group_doc in groups_collection.find({"users_ids": user_oid}):
-        summary = _group_summary(group_doc)
+    group_docs = list(groups_collection.find({"users_ids": user_oid}))
+    live_user_ids = _live_user_ids(group_docs)
+    for group_doc in group_docs:
+        summary = _group_summary(group_doc, live_user_ids)
         results.append(
             MyGroup(
                 **summary.model_dump(),
