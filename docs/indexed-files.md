@@ -1,4 +1,4 @@
-# Indexed files (VCF, BAM, bigWig, GFF3, PDB, mmCIF)
+# Indexed files (VCF, BAM, bigWig, GFF3, PDB, mmCIF, PAE)
 
 Some genomic outputs are too dense to become a table. A sarek run publishes a
 filtered VCF per sample with its tabix index; chipseq, atacseq, cutandrun,
@@ -14,7 +14,10 @@ with `source: file` is what draws them.
 Protein structures take the same path for a different reason: a PDB or mmCIF
 model is read whole, not by range, but it is a file the 3D viewer parses, not
 rows. The `pdb` and `mmcif` formats store one structure per entity, and a
-`molecule_3d` component with `structure_source: file` draws them.
+`molecule_3d` component with `structure_source: file` draws them (a
+`ramachandran` component computes its backbone torsions from the same files).
+The `pae` format does the same for the predicted aligned error matrix of a
+structure, one file per entity, which a `pae_matrix` component draws.
 
 ## Declaring the collection
 
@@ -31,7 +34,7 @@ data_collections:
           regex_config:
             pattern: .*\.filtered\.vcf\.gz$
       dc_specific_properties:
-        format: vcf          # vcf | bam | bigwig | bigbed | gff3 | fasta | tabix | pdb | mmcif
+        format: vcf          # vcf | bam | bigwig | bigbed | gff3 | fasta | tabix | pdb | mmcif | pae
         assembly: hg38
         sample_regex: variant_calling/[^/]+/(?P<sample>[^/]+)/
         max_file_size_mb: 512
@@ -48,14 +51,24 @@ Notes:
 - `pdb` (alias `ent`) and `mmcif` (alias `cif`) hold protein structures:
   `.pdb`, `.ent`, `.cif` or `.mmcif`, gzip allowed. They carry no index, so
   nothing is looked for beside them, and `assembly` does not apply.
+- `pae` holds the predicted aligned error matrix of a structure: `.pae.tsv` or
+  `.pae.json`, gzip allowed, no aliases. Like pdb and mmcif it carries no index,
+  so nothing is looked for beside it, it is fetched whole by the browser, and
+  `assembly` does not apply. The default suffix rule strips `.pae.tsv` and
+  `.pae.json` (with the dot), so `demo_protein.pae.tsv` is the sample
+  `demo_protein`, but nf-core/proteinfold's `paes/<name>_<rank>_pae.tsv` is not
+  shortened to the entity: name it with a `sample_regex`, such as
+  `(?P<sample>[^/]+)_pae\.tsv$`. The content is one square matrix of errors,
+  as a tab-separated table or as AlphaFold DB or ColabFold JSON (see
+  `docs/design/protein-structure.md`).
 - One object per sample. `sample_regex` names the sample from the file path
   through a named `sample` group; a regex with named groups but no `sample`
   group joins them with `__` in declaration order (empty groups skipped).
   Without a regex the file name is used, with its format and compression
   suffixes stripped. A file whose sample is already taken is skipped rather
-  than silently overwriting the first one. For structures the sample id is the
-  entity id, so it must equal the `entity` value of the residue tables the 3D
-  tile reads.
+  than silently overwriting the first one. For structures and PAE matrices the
+  sample id is the entity id, so it must equal the `entity` value of the residue
+  tables the 3D and PAE tiles read.
 - `max_file_size_mb` (default 512) caps what ingest will push.
 - A file with no index beside it is skipped, with the reason in the CLI log.
   An empty file is skipped too.
@@ -112,8 +125,9 @@ viewer's origin, pass the flag explicitly. Equivalent settings elsewhere:
 
 CORS lets the storage answer; the page's Content-Security-Policy decides
 whether the browser may ask. The reads are fetch requests (range reads for a
-track, one whole-file GET for a structure), so the page's `connect-src` must
-name the storage origin, or the fetch is blocked before it leaves the browser.
+track, one whole-file GET for a structure or a PAE matrix), so the page's
+`connect-src` must name the storage origin, or the fetch is blocked before it
+leaves the browser.
 
 - **API (and the SPA it serves):** nothing to do. `build_security_headers` in
   `depictio/api/v1/configs/security_headers.py` appends the origin
@@ -126,8 +140,9 @@ name the storage origin, or the fetch is blocked before it leaves the browser.
   files and the Helm chart derive it from the same public URL; set it
   explicitly on the viewer container only to override that.
 
-Without it the browser refuses every read: the lanes draw empty and a 3D tile
-draws no model, while the Vite dev server, which sends no CSP, shows them.
+Without it the browser refuses every read: the lanes draw empty, a 3D tile
+draws no model and a PAE tile no matrix, while the Vite dev server, which sends
+no CSP, shows them.
 
 A deployment that does not set any of this simply does not show file tracks:
 `genome_view` falls back to `source: table`.
@@ -155,6 +170,13 @@ Structures are drawn by `molecule_3d` with `structure_source: file` and
 collection is the residue or variant table that colours the model. It fetches
 the manifest, picks the object of the entity it shows and downloads it whole.
 See `docs/design/protein-structure.md`.
+
+A PAE matrix is drawn by `pae_matrix` with `pae_dc_tag` (or `pae_dc_id`) naming the
+collection; its own bound collection is the residue table, which gives the matrix
+its residue numbers and an optional pLDDT. It fetches the manifest, picks the object
+of the entity it shows, downloads it whole and parses it in the browser.
+`ramachandran` with `structure_source: file` reads the same `pdb` and `mmcif`
+collections as `molecule_3d`.
 
 ## Gene annotation for file-backed tracks
 
