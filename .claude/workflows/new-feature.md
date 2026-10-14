@@ -1,103 +1,14 @@
 # New Feature Workflow
 
-A structured workflow for implementing new features in depictio.
+Checklist for a change that spans backend, viewer and data. Commands, conventions and the versioning rules are in `/CLAUDE.md`; this only orders the steps. Skip the sections the change does not touch.
 
-## Phase 1: Planning & Analysis
-
-1. **Understand requirements**
-   - Clarify feature scope and acceptance criteria
-   - Identify affected components (API, Dash, CLI, Models)
-   - Note integration points with existing code
-
-2. **Architecture review**
-   - Review related existing code
-   - Identify models that need updates
-   - Plan API endpoint structure
-   - Design UI components (if applicable)
-
-3. **Create task breakdown**
-   - Use TodoWrite to create detailed tasks
-   - Estimate complexity for each task
-   - Identify dependencies between tasks
-
-## Phase 2: Implementation
-
-### Backend (if needed)
-
-1. **Models** (`depictio/models/`)
-   - Create/update Pydantic models
-   - Add validators and defaults
-   - Run: `ty check depictio/models/`
-
-2. **API Endpoints** (`depictio/api/v1/endpoints/`)
-   - Create route handlers
-   - Add authentication/authorization
-   - Write utility functions
-   - Run: `ty check depictio/api/`
-
-3. **Tests** (`depictio/tests/api/`)
-   - Write unit tests for new endpoints
-   - Test success and error cases
-   - Run: `pytest depictio/tests/api/ -xvs`
-
-### Frontend (if needed)
-
-1. **Components** (`depictio/dash/modules/`)
-   - Create/update component modules
-   - Use DMC 2.0+ components
-   - Ensure theme compatibility
-   - Run: `ty check depictio/dash/`
-
-2. **Callbacks** (`depictio/dash/`)
-   - Add Dash callbacks
-   - Handle state management
-   - Test interactivity
-
-3. **Tests** (`depictio/tests/dash/`)
-   - Write component tests
-   - Run: `pytest depictio/tests/dash/ -xvs`
-
-## Phase 3: Quality Assurance
-
-1. **Code quality**
-   ```bash
-   ruff format depictio/
-   ruff check depictio/ --fix
-   ty check depictio/models/ depictio/api/ depictio/dash/ depictio/cli/
-   pre-commit run --all-files
-   ```
-
-2. **Full test suite**
-   ```bash
-   pytest depictio/tests/ -xvs -n auto
-   ```
-
-3. **Manual testing**
-   - Test in development environment
-   - Verify theme compatibility (light/dark)
-   - Check responsive behavior
-
-## Phase 4: Documentation & Commit
-
-1. **Update documentation**
-   - Update relevant docstrings
-   - Add usage examples if needed
-   - Update CLAUDE.md if patterns changed
-
-2. **Commit changes**
-   - Stage related files
-   - Write descriptive commit message
-   - Reference issue/PR if applicable
-
-## Checklist
-
-- [ ] Models created/updated with proper types
-- [ ] API endpoints with auth and error handling
-- [ ] Frontend components using DMC 2.0+
-- [ ] Theme compatibility verified
-- [ ] Unit tests written and passing
-- [ ] Type checking passes (ty check)
-- [ ] Linting passes (ruff)
-- [ ] Pre-commit hooks pass
-- [ ] Documentation updated
-- [ ] Committed with descriptive message
+1. **Scope.** Read the code you will touch (`/arch <topic>`). Note which of models, API, CLI, viewer, dashboard YAML and docs are affected.
+2. **Models** (`depictio/models/models/`). Add the Pydantic/Beanie model or field (`/pydantic-model`). A new dashboard field must be covered by `TabSnapshot` or a `SNAPSHOT_*_FIELDS` set in `versioning.py`. Gate: `uv run --extra dev ty check depictio/models/`.
+3. **API** (`depictio/api/v1/endpoints/<domain>_endpoints/`). Add the route (`/api-endpoint`) with an auth dependency and a permission check. A route that mutates dashboard content must seed a baseline before the write and capture after it.
+4. **CLI** (`depictio/cli/`) if ingestion or import changes. Smoke it with `/import-project` or `/import-template`.
+5. **Viewer** (`depictio/viewer/`, `packages/`). Mantine 7, theme tokens only. Build with `cd depictio/viewer && pnpm run build`, run the relevant `pnpm run check:*`. Spawn `viewer-agent` for larger UI work.
+6. **Dashboard YAML and seeds.** If you changed a `depictio/projects/**/dashboards/*.yaml`, regenerate the matching `.db_seeds/*.json` (`depictio/dev_scripts/generate_dashboard_seeds.py`, or the project's `generate_seeds.sh`), then `/validate-dashboard` and `/reseed` a running instance.
+7. **Tests.** pytest next to the code (`depictio/tests/{api,models,cli,unit}`), plus a Playwright spec in `depictio/tests/e2e-playwright` for user-visible flows. `/test`.
+8. **Quality gates.** `/quality`, then `pre-commit run --all-files` (mandatory after any code change).
+9. **Docs.** After a significant PR, update depictio-docs and the Obsidian notes (CLAUDE.md, Documentation). Update `/CLAUDE.md` only if a convention changed.
+10. **Commit** with `/commit` (or `/commit-push-pr`).

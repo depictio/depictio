@@ -137,11 +137,9 @@ components: []
     chart: scatter
 ```
 
-## Python Path
+## Running
 
-Use the project Python environment: `/Users/tweber/Gits/workspaces/depictio-workspace/depictio/depictio-venv-dash-v3/bin/python`
-
-Run as module: `python -m depictio.cli.depictio_cli dashboard validate --offline <args>`
+Use the project environment: `uv run --extra dev depictio dashboard validate --offline <args>` (or `depictio/cli/.venv/bin/depictio` after `/cli-venv`).
 
 ## Notes
 

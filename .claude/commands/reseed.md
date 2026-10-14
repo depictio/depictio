@@ -5,7 +5,7 @@ advanced_viz_showcase, …) **without** wiping the whole MongoDB / MinIO state.
 Use after editing `template.yaml`, a canonical recipe, or a `.db_seeds/*.json`
 on the project, when you want the changes reflected in the running app.
 
-Backed by `dev/reseed_project.py`. Runs **inside the API container** so it has
+Backed by `depictio/dev_scripts/reseed_project.py`. Runs **inside the API container** so it has
 MongoDB + MinIO + the depictio module path.
 
 ## When to use
@@ -19,12 +19,12 @@ MongoDB + MinIO + the depictio module path.
 
 ## When NOT to use
 
-- For a fresh full-state wipe: use `docker compose ... down -v && up`.
+- For a fresh full-state wipe: ask the user to run `docker compose ... down -v && up` (not run by Claude).
 - For non-reference projects (user-created via the CLI / API): use the
   project-delete + re-import flow.
-- For a runtime model / Pydantic schema change in `configs.py` / `schemas.py`:
-  reseed alone won't pick that up; the API container needs a restart
-  (`docker compose ... restart depictio`).
+- For a Python model / settings change (`depictio/models/`, `settings_models.py`):
+  reseed alone won't pick that up; the user must restart the `depictio-backend`
+  container.
 
 ## Usage
 
@@ -32,8 +32,11 @@ MongoDB + MinIO + the depictio module path.
 # Reseed ampliseq end-to-end (default — re-materialises Delta tables from TSV seeds)
 /reseed ampliseq
 
-# Skip Delta-table re-materialisation (fastest; only project + DCs + dashboards rebuilt)
+# Skip Delta-table re-materialisation (only project + DCs + dashboards rebuilt)
 /reseed ampliseq --no-data
+
+# Refresh only the dashboard documents (after editing .db_seeds/dashboard_*.json)
+/reseed ampliseq --dashboards-only
 
 # Multiple at once
 /reseed ampliseq advanced_viz_showcase
@@ -56,37 +59,34 @@ MongoDB + MinIO + the depictio module path.
 
 ## Instructions for Claude
 
-When the user invokes `/reseed <dataset> [<dataset> ...] [--no-data]`:
+When the user invokes `/reseed <dataset> [<dataset> ...] [--no-data | --dashboards-only]`:
 
 1. Confirm the dataset name(s) appear in `ReferenceDatasetRegistry.STATIC_IDS`
-   (`depictio/api/v1/db_init_reference_datasets.py:33`). If not, list valid
+   (`depictio/api/v1/db_init_reference_datasets.py`). If not, list valid
    options and stop.
 
-2. Run inside the API container:
+2. Run inside the API container. CLAUDE.md allows only `docker logs` for Claude,
+   so give the user this command to run (or run it if they have approved it):
 
    ```bash
    docker compose -f docker-compose.dev.yaml --env-file docker-compose/.env \
      exec depictio-backend python -m depictio.dev_scripts.reseed_project $ARGUMENTS
    ```
 
-3. Stream the container logs (`docker logs depictio-api -f --tail 0 &`) so the
-   user sees the resolver / scan progress. Stop the log follower when the
-   exec call returns.
+3. Afterwards read the container logs (`docker logs --tail 50 depictio-backend`)
+   and report the resolver / scan progress.
 
 4. After it succeeds, remind the user:
    - Hard-refresh the browser (`Cmd+Shift+R`) — the React viewer caches API
      responses by DC ID and dashboard ID.
-   - For dashboard-layout changes the React viewer may also need
-     `pnpm dev` to be running for HMR; if the prod bundle is served from
-     `/dashboard-beta`, build with `pnpm build` then `touch
-     depictio/api/main.py` to remount routes (per
-     `project_viewer_dist_route_mount` memory).
+   - The dev stack's `depictio-viewer-dev` (Vite HMR) picks up viewer code
+     changes; a reseed only changes data and dashboard documents.
 
 ## Safety
 
 - The cascade is scoped to the named projects' static IDs — it cannot
   accidentally drop unrelated projects or user-created dashboards.
-- If the MinIO bucket is unreachable, the script logs a warning and
+- If the S3 bucket is unreachable, the script logs a warning and
   continues — MongoDB cascade still runs so the next `--no-data` reseed
   isn't blocked.
 - The script is idempotent: running it on a project that's already deleted

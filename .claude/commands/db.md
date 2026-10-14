@@ -1,54 +1,22 @@
 # Database Helper
 
-MongoDB database operations and queries for depictio.
+Inspect MongoDB for the dev stack. Default URL `localhost:27018/depictioDB` unless `.env` / `.env.instance` says otherwise (a worktree has its own `MONGO_PORT` in `.env.instance`).
 
-## Instructions
+## Rules
 
-Help with MongoDB operations:
+- Read-only by default: `find`, `countDocuments`, `getIndexes`, `getCollectionNames`. Show the query before running it.
+- Never drop, delete or update without explicit confirmation. Prefer the CLI or API for changes (`/reseed` for reference projects).
+- Collection names come from `settings.mongodb.collections` and are bound in `depictio/api/v1/db.py`; read that file rather than trusting a list here. `dashboards` holds one document per tab; history is in `dashboard_versions`.
 
-1. **Connection info**:
-   - MongoDB URL: `localhost:27018`
-   - Database: `depictioDB`
-   - Use mongosh for queries
+## Commands
 
-2. **Available collections**:
-   - `users` - User accounts
-   - `groups` - User groups
-   - `projects` - Projects
-   - `workflows` - Workflow definitions
-   - `data_collections` - Data collection metadata
-   - `dashboards` - Dashboard configurations
-   - `files` - File metadata
-   - `tokens` - API tokens
-   - `analytics` - Usage analytics
+```bash
+mongosh "mongodb://localhost:27018/depictioDB" --quiet --eval 'db.getCollectionNames()'
+mongosh "mongodb://localhost:27018/depictioDB" --quiet --eval 'db.projects.countDocuments()'
+mongosh "mongodb://localhost:27018/depictioDB" --quiet --eval 'db.users.find({}, {password: 0}).limit(5).toArray()'
+```
 
-3. **Common operations**:
-
-   ```bash
-   # Connect to MongoDB
-   mongosh mongodb://localhost:27018/depictioDB
-
-   # List collections
-   mongosh mongodb://localhost:27018/depictioDB --eval "db.getCollectionNames()"
-
-   # Count documents
-   mongosh mongodb://localhost:27018/depictioDB --eval "db.users.countDocuments()"
-
-   # Find documents
-   mongosh mongodb://localhost:27018/depictioDB --eval "db.users.find().limit(5).toArray()"
-   ```
-
-4. **Safety rules**:
-   - NEVER drop collections without explicit confirmation
-   - NEVER delete data without backup
-   - Always use `--eval` for non-interactive queries
-   - Show query before executing
-
-## Usage
-
-`/db collections` - List all collections with counts
-`/db query <collection> <query>` - Run a find query
-`/db count <collection>` - Count documents in collection
-`/db indexes <collection>` - Show indexes for collection
+Usage: `/db collections`, `/db count <collection>`, `/db query <collection> <filter>`, `/db indexes <collection>`.
+Never print password hashes or tokens (project them out).
 
 $ARGUMENTS

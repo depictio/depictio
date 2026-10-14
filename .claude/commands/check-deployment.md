@@ -100,7 +100,7 @@ Not covered:
 
 `/check-deployment dev` - check dev.demo only
 
-`/check-deployment localhost:5080` - check a local stack (add `--scheme http`)
+`/check-deployment localhost:8058` - check a local stack (add `--scheme http`)
 
 ## Notes
 

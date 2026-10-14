@@ -1,59 +1,19 @@
 # Code Review Helper
 
-Perform code review on changes or specific files.
+Review a change. For a full multi-pass review prefer the `/code-review` plugin skill; this is the quick local version.
 
-## Instructions
+## Scope
 
-When reviewing code:
+No argument: `git diff` and `git diff --cached`. A file path: that file. `pr <number>`: `gh pr diff <number>`.
 
-1. **Gather changes to review**:
-   - If no arguments: review staged changes (`git diff --cached`)
-   - If file path: review that specific file
-   - If PR number: fetch and review PR changes
+## Check, in priority order
 
-2. **Review criteria** (in order of priority):
+1. **Security**: auth dependency and permission check on every route, NoSQL injection, path traversal, secrets in logs (see `security-agent`).
+2. **Invariants** from `/CLAUDE.md` that the diff touches: dashboard versioning (baseline before and capture after a content write, `TabSnapshot` coverage), storage families, component ids from tags, YAML changes with their `.db_seeds/*.json` regenerated, editor not writing before a user action, Mantine theming without hardcoded colors.
+3. **Types**: `depictio/models/` must stay `ty`-clean; no new debt in `api/` or `cli/`.
+4. **Correctness and performance**: None handling, missing `await`, N+1 queries, reading whole Delta tables where a projection would do.
+5. **Tests**: a test for the new behaviour, including the error path.
 
-   **Security**:
-   - SQL/NoSQL injection vulnerabilities
-   - Command injection risks
-   - XSS vulnerabilities
-   - Sensitive data exposure
-   - Authentication/authorization issues
-
-   **Type Safety**:
-   - Proper type annotations
-   - None handling
-   - Union type guards
-   - Pydantic model validation
-
-   **Code Quality**:
-   - Following depictio patterns
-   - Proper error handling
-   - Logging appropriateness
-   - Code duplication
-   - Function/method complexity
-
-   **Performance**:
-   - N+1 query patterns
-   - Missing async/await
-   - Unnecessary database calls
-   - Memory leaks in callbacks
-
-   **Testing**:
-   - Test coverage for new code
-   - Edge cases handled
-   - Mock usage appropriateness
-
-3. **Provide feedback**:
-   - List issues by severity (Critical, Warning, Info)
-   - Include file:line references
-   - Suggest specific fixes
-   - Highlight good patterns found
-
-## Usage
-
-`/review` - Review staged git changes
-`/review <file>` - Review specific file
-`/review pr <number>` - Review pull request
+Report by severity (Critical, Warning, Info) with `file:line` and a concrete fix.
 
 $ARGUMENTS

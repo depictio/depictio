@@ -36,7 +36,7 @@ $ARGUMENTS
 
 ## Examples of acceptable subjects
 
-- `feat(dash): add multiqc edit modal`
+- `feat(viewer): add multiqc edit modal`
 - `fix(api): handle missing token in single-user mode`
 - `chore: bump version to 0.9.1`
 - `refactor(cli): extract migrate helpers`

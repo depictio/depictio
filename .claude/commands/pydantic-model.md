@@ -1,64 +1,16 @@
 # Pydantic Model Generator
 
-Create or modify Pydantic models following depictio conventions.
+Add or change a model in `depictio/models/models/`. These models are shared by the API, CLI and worker.
 
-## Instructions
+## Conventions (read a neighbour first, e.g. `projects.py`, `users.py`)
 
-When working with models:
+- Pydantic v2. Plain models derive from `BaseModel` or `MongoModel` (`base.py`, which also holds `PyObjectId`).
+- Mongo documents are a second class `<Name>Beanie(<Name>, Document)` with an inner `class Settings: name = "<collection>"`; add it to the `init_beanie` document list in `depictio/api/v1/services/lifespan.py` (and `depictio/api/celery_app.py` if the worker reads it).
+- Use `X | None` and explicit types on every field; validators with `@field_validator`.
+- Gate: `uv run --extra dev ty check depictio/models/` must report zero errors (do not add the file to the `[tool.ty.src]` excludes).
+- A dashboard model field must also be added to `TabSnapshot` or a `SNAPSHOT_*_FIELDS` set in `depictio/api/v1/endpoints/dashboards_endpoints/versioning.py`, or the field-coverage test fails.
+- Tests in `depictio/tests/models/`.
 
-1. **Location**: `depictio/models/models/`
-   - `base.py` - Base models and PyObjectId
-   - `users.py` - User, Group, Token models
-   - `projects.py` - Project models
-   - `workflows.py` - Workflow models
-   - `data_collections.py` - Data collection models
-   - `dashboards.py` - Dashboard models
-   - `files.py` - File metadata models
-   - `analytics.py` - Analytics models
-
-2. **Model patterns**:
-   - Use Pydantic v2 syntax
-   - Inherit from `DepictioBaseModel` for shared functionality
-   - Use `PyObjectId` for MongoDB ObjectId fields
-   - Add `Beanie` suffix for MongoDB document models
-
-3. **Type safety requirements**:
-   - All fields must have explicit types
-   - Use Optional[] for nullable fields
-   - Use Union[] for polymorphic fields
-   - Add proper validators using `@field_validator`
-
-4. **MongoDB integration**:
-   - Document models inherit from `beanie.Document`
-   - Define `Settings` class with collection name
-   - Use `Link[]` for document references
-
-## Example Pattern
-
-```python
-from typing import Optional
-from pydantic import Field, field_validator
-from bson import ObjectId
-from beanie import Document
-from depictio.models.models.base import DepictioBaseModel, PyObjectId
-
-class MyModel(DepictioBaseModel):
-    """Model description."""
-    id: Optional[PyObjectId] = Field(default=None, alias="_id")
-    name: str = Field(..., min_length=1)
-
-    @field_validator("name")
-    @classmethod
-    def validate_name(cls, v: str) -> str:
-        return v.strip()
-
-class MyModelBeanie(Document, MyModel):
-    class Settings:
-        name = "my_collection"
-```
-
-## Usage
-
-`/pydantic-model <name> <description>` - Create or update model
+Usage: `/pydantic-model <name> <description>`
 
 $ARGUMENTS

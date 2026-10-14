@@ -157,9 +157,8 @@ hand-off (`#auth=<base64 JSON>` fragment), which `viewer/src/main.tsx`
 session already cached in localStorage. The hand-off only requires
 `typeof session.access_token === 'string'`, but emitting the full
 `SessionPayload` (defined in `packages/depictio-react-core/src/api.ts`) makes the
-refresh flow happy and avoids a premature re-login. The same `local-store` key
-is shared by the legacy Dash app and the React viewer
-(`SESSION_KEY = 'local-store'`). The pod's exported `{username}_config.yaml`
+refresh flow happy and avoids a premature re-login. The session lives under the
+`local-store` key (`SESSION_KEY = 'local-store'`). The pod's exported `{username}_config.yaml`
 token is long-lived (years-long), minted at backend bootstrap.
 
 ## Safety / failure modes

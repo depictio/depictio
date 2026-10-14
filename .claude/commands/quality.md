@@ -1,27 +1,12 @@
 # Quality Check
 
-Run comprehensive code quality checks on the depictio codebase.
+Run the project gates (CLAUDE.md, Code Quality) and report.
 
-## Instructions
+1. `uv run --extra dev ruff format depictio` then `uv run --extra dev ruff check depictio`
+2. `uv run --extra dev ty check depictio/models/` (the only gated directory; must be zero errors)
+3. `uv run --extra dev pre-commit run --all-files` (mandatory after any code change)
+4. If `depictio/viewer` or `packages/` changed: `cd depictio/viewer && pnpm run build` and the relevant `pnpm run check:*`.
 
-Execute the following quality checks in order:
-
-1. **Ruff Format Check**: `ruff format --check depictio/`
-2. **Ruff Lint Check**: `ruff check depictio/`
-3. **Type Check with ty**: `ty check depictio/models/ depictio/api/ depictio/dash/ depictio/cli/`
-4. **Pre-commit hooks**: `pre-commit run --all-files`
-
-If any check fails:
-- Show the specific errors found
-- Suggest fixes for each issue
-- Offer to auto-fix issues where possible (ruff --fix)
-
-If all checks pass, confirm success and show a summary.
-
-## Usage
-
-`/quality` - Run all quality checks
-`/quality fix` - Run checks and auto-fix what's possible
-`/quality <path>` - Run checks on specific path (e.g., `/quality depictio/api/`)
+On failure show the errors and fix them (`ruff --fix` where safe). `/quality fix` applies fixes and re-runs; `/quality <path>` limits ruff to a path (pre-commit still runs on everything).
 
 $ARGUMENTS

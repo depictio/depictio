@@ -1,50 +1,31 @@
 # Service Logs Viewer
 
-View logs from depictio services.
+Read logs of the dev stack (`docker-compose.dev.yaml`). Only `docker logs` is allowed (CLAUDE.md); do not run other docker commands.
 
-## Instructions
+## Containers
 
-Check logs for the specified service:
+| Alias | Container |
+| --- | --- |
+| api, backend | `depictio-backend` |
+| viewer, frontend | `depictio-viewer-dev` (Vite; `depictio-viewer` under the `ci` profile) |
+| mongo | `mongo` |
+| redis | `redis` |
+| s3, minio | `s3` |
+| celery, worker | `depictio-celery-worker` |
+| ingestion | `depictio-ingestion-worker` |
+| flower | `depictio-flower` (`monitoring` profile) |
 
-1. **Available services**:
-   - `api` or `backend` - FastAPI backend logs
-   - `dash` or `frontend` - Dash frontend logs
-   - `mongo` or `mongodb` - MongoDB logs
-   - `redis` - Redis cache logs
-   - `s3` or `minio` - S3 storage (SeaweedFS) logs
-   - `celery` or `worker` - Celery worker logs
-   - `all` - All services
+In a worktree, container names may carry the `COMPOSE_PROJECT_NAME` prefix; check `.env.instance` and the user's `docker ps` output.
 
-2. **Commands**:
-   ```bash
-   # View recent logs
-   docker compose -f docker-compose.dev.yaml logs --tail=100 <service>
+## Commands
 
-   # Follow logs in real-time
-   docker compose -f docker-compose.dev.yaml logs -f <service>
-   ```
+```bash
+docker logs --tail 100 depictio-backend
+docker logs --tail 500 depictio-backend 2>&1 | grep -iE "error|traceback|warning"
+```
 
-3. **Analyze logs**:
-   - Look for ERROR or WARNING messages
-   - Check for stack traces
-   - Identify connection issues
-   - Note timing and performance issues
+Summarise: errors and stack traces first, then connection problems and slow requests. Do not use `-f` (it never returns).
 
-## Service Mapping
-
-| Alias | Docker Service |
-|-------|---------------|
-| api, backend | backend |
-| dash, frontend | dash |
-| mongo, mongodb | mongodb |
-| redis | redis |
-| s3, minio | s3 |
-| celery, worker | celery_worker |
-
-## Usage
-
-`/logs <service>` - View last 100 lines of service logs
-`/logs <service> <lines>` - View specified number of lines
-`/logs <service> errors` - Filter for errors only
+Usage: `/logs <service> [lines|errors]`
 
 $ARGUMENTS

@@ -1,60 +1,25 @@
-# API Development Agent
+---
+name: api-agent
+description: Backend work in depictio - FastAPI endpoints, Beanie/Pydantic models, Delta/S3 data paths and the CLI ingest side.
+---
 
-A specialized agent for FastAPI backend development in depictio.
+# Backend Agent
 
-## Expertise
+Read `/CLAUDE.md` first (data flow, storage families, dashboard versioning, YAML to seed rules). It is the source of truth; this file only says where things live.
 
-- FastAPI endpoint design and implementation
-- Beanie ODM for async MongoDB operations
-- Pydantic model design and validation
-- JWT authentication and authorization
-- REST API best practices
-- Error handling and logging
+## Where things live
 
-## Context
+- Endpoints: `depictio/api/v1/endpoints/<domain>_endpoints/routes.py`, each router registered in `depictio/api/v1/endpoints/routers.py`.
+- Auth dependencies: `get_current_user` and `get_user_or_anonymous` in `depictio/api/v1/endpoints/user_endpoints/routes.py`.
+- Mongo collections: `depictio/api/v1/db.py` (names come from `settings.mongodb.collections`).
+- Models (shared by API, CLI and worker): `depictio/models/models/`. Base classes and `PyObjectId` are in `base.py`; Beanie documents are `<Name>Beanie(<Name>, Document)` with an inner `Settings.name`.
+- Delta/S3: `depictio/api/v1/deltatables_utils.py`, `depictio/api/v1/s3.py`; S3 storage options for Polars in `depictio/models/s3_utils.py`.
+- Config: `depictio/api/v1/configs/settings_models.py`. Do not read env vars ad hoc.
+- CLI: `depictio/cli/` (Typer, commands in `cli/cli/commands/`).
+- Background jobs: `depictio/api/celery_app.py`, `depictio/api/v1/celery_tasks.py`.
 
-You are an expert FastAPI developer working on the depictio project. The API is located in `depictio/api/` with endpoints in `depictio/api/v1/endpoints/`.
+## Rules
 
-## Key Files
-
-- `depictio/api/main.py` - FastAPI application entry point
-- `depictio/api/v1/endpoints/routers.py` - Router aggregation
-- `depictio/models/models/` - Pydantic and Beanie models
-- `depictio/api/v1/endpoints/user_endpoints/core_functions.py` - Auth utilities
-
-## Patterns to Follow
-
-### Endpoint Structure
-```python
-from fastapi import APIRouter, Depends, HTTPException, status
-from depictio.api.v1.endpoints.user_endpoints.core_functions import get_current_user
-from depictio.models.models.users import UserBeanie
-
-router = APIRouter()
-
-@router.get("/items/{item_id}")
-async def get_item(
-    item_id: str,
-    current_user: UserBeanie = Depends(get_current_user)
-):
-    """Get an item by ID."""
-    item = await ItemBeanie.get(item_id)
-    if not item:
-        raise HTTPException(status_code=404, detail="Item not found")
-    return item
-```
-
-### Model Patterns
-- Use `PyObjectId` for MongoDB ObjectId fields
-- Inherit from `DepictioBaseModel` for shared functionality
-- Use `Beanie` suffix for document models
-
-## Instructions
-
-When invoked for API tasks:
-1. Analyze requirements and existing patterns
-2. Design models if needed
-3. Implement endpoints following patterns
-4. Add proper error handling
-5. Write tests
-6. Run type checking with `ty check`
+- A change to a model in `depictio/models/` must pass `uv run --extra dev ty check depictio/models/` (zero errors). Do not add type debt in `api/` or `cli/`.
+- A new dashboard field goes into `TabSnapshot` or a `SNAPSHOT_*_FIELDS` set (see CLAUDE.md, Dashboard Versioning). A new content-mutating dashboard route must seed a baseline before and capture after.
+- Use `/api-endpoint` and `/pydantic-model` for scaffolding, `/test` for tests, `/quality` before finishing.

@@ -1,52 +1,16 @@
 # API Endpoint Generator
 
-Create a new FastAPI endpoint following depictio conventions.
+Add a FastAPI endpoint. Conventions and invariants: `/CLAUDE.md`.
 
-## Instructions
+## Steps
 
-When creating a new API endpoint:
+1. Pick the domain package `depictio/api/v1/endpoints/<domain>_endpoints/` (look at a neighbour such as `projects_endpoints/routes.py` first). Add the handler to its `routes.py`; a new domain needs its router registered in `depictio/api/v1/endpoints/routers.py`.
+2. Auth: `Depends(get_current_user)` for logged-in routes, `Depends(get_user_or_anonymous)` only for routes that are meant to work in public mode. Both live in `depictio/api/v1/endpoints/user_endpoints/routes.py`. Check the user's project/dashboard permission (owners, editors, viewers), not just that they are logged in.
+3. Request and response types come from `depictio/models/` (add them there, see `/pydantic-model`). Handlers are `async`; raise `HTTPException` for 4xx.
+4. A route that changes dashboard content must seed a baseline before the write and capture a version after it (CLAUDE.md, Dashboard Versioning).
+5. If the viewer consumes it, update the client in `packages/depictio-react-core`.
+6. Tests in `depictio/tests/api/` (success, 401/403, 404). Then `/quality`.
 
-1. **Analyze the request** to understand:
-   - Endpoint purpose and HTTP method(s)
-   - Required request/response models
-   - Authentication requirements
-   - Related data collections or workflows
-
-2. **Follow depictio patterns**:
-   - Location: `depictio/api/v1/endpoints/{domain}_endpoints/`
-   - Use Pydantic models from `depictio/models/`
-   - Async functions with Beanie ODM for MongoDB
-   - JWT authentication via `get_current_user` dependency
-   - Proper error handling with HTTPException
-
-3. **Create or update files**:
-   - `routes.py` - Endpoint route handlers
-   - `utils.py` - Helper functions if needed
-   - Update `depictio/api/v1/endpoints/routers.py` to include new router
-
-4. **Add tests**:
-   - Create test file in `depictio/tests/api/v1/endpoints/{domain}_endpoints/`
-   - Test success and error cases
-
-## Template Structure
-
-```python
-from fastapi import APIRouter, Depends, HTTPException, status
-from depictio.api.v1.endpoints.user_endpoints.core_functions import get_current_user
-from depictio.models.models.users import UserBeanie
-
-router = APIRouter()
-
-@router.get("/endpoint")
-async def get_endpoint(
-    current_user: UserBeanie = Depends(get_current_user)
-):
-    """Endpoint description."""
-    pass
-```
-
-## Usage
-
-`/api-endpoint <description>` - Create endpoint based on description
+Usage: `/api-endpoint <description>`
 
 $ARGUMENTS

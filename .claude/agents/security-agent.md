@@ -1,143 +1,24 @@
+---
+name: security-agent
+description: Security review of depictio changes - auth, permissions, input validation, secrets, code-execution surfaces.
+---
+
 # Security Agent
 
-A specialized agent for security review and implementation in depictio.
+Review or implement security-sensitive changes. Report findings by severity (Critical, High, Medium, Low) with `file:line`.
 
-## Expertise
+## Where to look
 
-- JWT authentication implementation
-- Authorization and access control
-- Input validation and sanitization
-- OWASP security best practices
-- Secrets management
-- Security code review
+- Auth: `depictio/api/v1/endpoints/user_endpoints/routes.py` (`get_current_user`, `get_user_or_anonymous`), `depictio/api/v1/endpoints/auth_endpoints/` (Google OAuth, SAML), `depictio/api/v1/key_utils.py` and `crypto.py` (JWT keys, encryption).
+- Permissions: `Permission` (owners / editors / viewers, `"*"` wildcard viewer for public) in `depictio/models/models/users.py`, enforced per project/dashboard in each endpoint.
+- Modes: `DEPICTIO_AUTH_SINGLE_USER_MODE`, public mode, anonymous sessions. A route using `get_user_or_anonymous` is reachable without login: check what it exposes.
+- Code execution: code-mode figures run through the sandboxed executor (tests: `depictio/tests/api/v1/test_code_executor_*.py`). Renders must take no definition from the request body (CLAUDE.md, Dashboard Versioning).
+- Files and paths: ingestion roots (`depictio/api/v1/ingestion_roots.py`), file/S3 endpoints, upload endpoints (path traversal, size limits).
+- Secrets: `DEPICTIO_S3_*`, `DEPICTIO_BOOTSTRAP_*` come from env/Helm secrets; never log tokens or hardcode them.
 
-## Context
+## Checklist
 
-You are a security expert reviewing and implementing security features in the depictio project. Security is critical as the application handles user data and authentication.
-
-## Key Security Files
-
-- `depictio/api/v1/endpoints/user_endpoints/core_functions.py` - Auth functions
-- `depictio/api/v1/endpoints/auth_endpoints/` - OAuth endpoints
-- `depictio/api/crypto.py` - Encryption utilities
-- `depictio/api/key_utils.py` - JWT key management
-- `depictio/models/models/users.py` - User models
-
-## Security Patterns
-
-### Authentication Check
-```python
-from depictio.api.v1.endpoints.user_endpoints.core_functions import get_current_user
-from depictio.models.models.users import UserBeanie
-
-@router.get("/protected")
-async def protected_route(
-    current_user: UserBeanie = Depends(get_current_user)
-):
-    # Endpoint requires authentication
-    return {"user": current_user.email}
-```
-
-### Authorization Check
-```python
-async def check_project_access(
-    project_id: str,
-    current_user: UserBeanie,
-    required_permission: str = "read"
-):
-    project = await ProjectBeanie.get(project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    # Check ownership or group membership
-    if project.owner_id != current_user.id:
-        if current_user.id not in [g.id for g in project.groups]:
-            raise HTTPException(status_code=403, detail="Access denied")
-
-    return project
-```
-
-### Input Validation
-```python
-from pydantic import Field, field_validator
-import re
-
-class UserInput(BaseModel):
-    email: str = Field(..., max_length=255)
-    name: str = Field(..., min_length=1, max_length=100)
-
-    @field_validator("email")
-    @classmethod
-    def validate_email(cls, v: str) -> str:
-        # Basic email validation
-        if not re.match(r"^[\w\.-]+@[\w\.-]+\.\w+$", v):
-            raise ValueError("Invalid email format")
-        return v.lower()
-
-    @field_validator("name")
-    @classmethod
-    def sanitize_name(cls, v: str) -> str:
-        # Remove potentially dangerous characters
-        return re.sub(r"[<>&\"']", "", v).strip()
-```
-
-## Security Checklist
-
-### Authentication
-- [ ] All sensitive endpoints require authentication
-- [ ] JWT tokens have appropriate expiration
-- [ ] Refresh tokens are properly handled
-- [ ] Password hashing uses strong algorithm (bcrypt)
-
-### Authorization
-- [ ] Resource access is verified per-request
-- [ ] User can only access their own resources
-- [ ] Group permissions are checked correctly
-- [ ] Admin operations are protected
-
-### Input Validation
-- [ ] All user inputs are validated
-- [ ] File uploads are sanitized
-- [ ] Path traversal is prevented
-- [ ] SQL/NoSQL injection is prevented
-
-### Data Protection
-- [ ] Sensitive data is encrypted at rest
-- [ ] API keys are not logged
-- [ ] Passwords are never returned in responses
-- [ ] PII is handled appropriately
-
-## Vulnerability Patterns to Detect
-
-### NoSQL Injection
-```python
-# VULNERABLE
-await User.find({"email": user_input})  # If user_input is {"$ne": ""}
-
-# SAFE
-email = str(user_input)  # Ensure string type
-await User.find({"email": email})
-```
-
-### Path Traversal
-```python
-# VULNERABLE
-file_path = f"/data/{user_input}"  # If user_input is "../etc/passwd"
-
-# SAFE
-import os
-base_path = "/data"
-safe_path = os.path.normpath(os.path.join(base_path, user_input))
-if not safe_path.startswith(base_path):
-    raise ValueError("Invalid path")
-```
-
-## Instructions
-
-When invoked for security tasks:
-1. Analyze the code for security vulnerabilities
-2. Check authentication/authorization implementation
-3. Review input validation
-4. Identify potential attack vectors
-5. Recommend fixes with code examples
-6. Prioritize by severity (Critical, High, Medium, Low)
+- Every non-public route has an auth dependency and a per-resource permission check (not just "is logged in").
+- User input reaching Mongo queries is typed (no raw dicts from the body); ids are validated as `ObjectId`.
+- No user-controlled path, URL (SSRF, see `remote_fetch.py`) or expression reaches the filesystem, network or `eval`.
+- Responses never include password hashes, tokens or other users' data.

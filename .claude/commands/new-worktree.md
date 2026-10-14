@@ -48,7 +48,7 @@ $ARGUMENTS
 5. **Verify** and report:
    - `cat .env.instance | grep -E '^(COMPOSE_PROJECT_NAME|.*_PORT|DEPICTIO_AUTH_SINGLE_USER_MODE)='`
    - Confirm `DEPICTIO_AUTH_SINGLE_USER_MODE=true` is present.
-   - Print: worktree path, branch, allocated FastAPI/Dash/Mongo/Minio ports, and the path to the CLI venv.
+   - Print: worktree path, branch, allocated FastAPI/viewer (Vite)/Mongo/S3 ports, and the path to the CLI venv.
 
 ## Stop conditions (ask, don't guess)
 
