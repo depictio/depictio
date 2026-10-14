@@ -682,6 +682,8 @@ async def _edit_password(user_id: PydanticObjectId, new_password: str) -> bool:
         return False
 
     user.password = new_password
+    # A password the person chose themselves ends the "set by an admin" state.
+    user.must_change_password = False
 
     try:
         await user.save()

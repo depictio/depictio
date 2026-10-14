@@ -313,6 +313,9 @@ class UserBaseUI(UserBase):
     title: str | None = None
     login: str | None = None
     sso_provider: str | None = None
+    # Set when an admin created the account with a password the person did not
+    # choose; cleared by the first password change.
+    must_change_password: bool = False
 
 
 class User(UserBaseUI):
@@ -336,6 +339,9 @@ class User(UserBaseUI):
             is_verified=self.is_verified,
             last_login=self.last_login,
             registration_date=self.registration_date,
+            display_name=self.display_name,
+            sso_provider=self.sso_provider,
+            must_change_password=self.must_change_password,
         )
         return userbaseui
 
@@ -495,6 +501,24 @@ class RequestEditPassword(BaseModel):
     def hash_new_password(cls, v):
         if v.startswith("$2b$"):
             raise ValueError("Password is already hashed")
+        return v
+
+
+class RequestAdminCreateUser(BaseModel):
+    """An admin creating an account with a password the person will change."""
+
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+    is_admin: bool = False
+    display_name: str | None = Field(default=None, max_length=120)
+    # On by default: the password was chosen by someone else, so it is a
+    # starting point. Turn it off for a service account that keeps it.
+    must_change_password: bool = True
+
+    @field_validator("password")
+    def reject_hashed_password(cls, v):
+        if v.startswith("$2b$"):
+            raise ValueError("Password must be sent in plaintext, not pre-hashed")
         return v
 
 

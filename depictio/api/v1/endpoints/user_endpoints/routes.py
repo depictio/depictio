@@ -59,6 +59,7 @@ from depictio.api.v1.endpoints.user_endpoints.utils import (
 )
 from depictio.api.v1.services import avatars as avatar_service
 from depictio.models.models.users import (
+    RequestAdminCreateUser,
     RequestEditPassword,
     RequestUserRegistration,
     TokenBeanie,
@@ -659,6 +660,7 @@ async def get_current_user_info_optional(
                 "is_admin": getattr(user, "is_admin", False),
                 # A public-mode guest: the SPA offers it a way to sign in.
                 "is_temporary": bool(getattr(user, "is_temporary", False)),
+                "must_change_password": bool(getattr(user, "must_change_password", False)),
                 **_avatar_payload(user.id),
             }
 
@@ -1082,6 +1084,61 @@ async def register(
         raise HTTPException(status_code=400, detail=_REGISTER_GENERIC_ERROR)
 
     return result
+
+
+@auth_endpoint_router.post("/admin/create_user")
+async def admin_create_user(
+    payload: RequestAdminCreateUser,
+    current_user=Depends(get_current_user),
+) -> dict[str, Any]:
+    """Create an account with an initial password. Admin-only.
+
+    The admin chooses the password and hands it over; by default the person is
+    asked to replace it at their first sign-in (``must_change_password``).
+    Unlike ``/register`` this is not gated by ``registration_disabled`` or
+    ``password_login_disabled``: an admin pre-creating accounts is how a closed
+    instance gets its users, and on an SSO-only instance the account is matched
+    by email at the first SSO sign-in, the password never being used.
+
+    A duplicate email is a 409 here: the caller is an admin, so there is no
+    enumeration to hide.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin privileges required.")
+    if settings.auth.is_single_user_mode or settings.auth.is_public_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="Accounts are not managed in single-user mode and public mode.",
+        )
+
+    email = str(payload.email).strip().lower()
+    result = await _create_user_in_db(email, payload.password, is_admin=payload.is_admin)
+    if not result or not result.get("success"):
+        if result and result.get("message") == "User already exists":
+            raise HTTPException(
+                status_code=409, detail="An account with this email already exists."
+            )
+        logger.error(f"Admin create_user failed for {email}: {result}")
+        raise HTTPException(status_code=500, detail="Failed to create the account.")
+
+    user = result["user"]
+    if not isinstance(user, UserBeanie):
+        raise HTTPException(status_code=500, detail="Failed to create the account.")
+    user.must_change_password = payload.must_change_password
+    if payload.display_name and payload.display_name.strip():
+        user.display_name = payload.display_name.strip()
+    await user.save()
+
+    logger.info(f"Admin {current_user.email} created the account {email} (admin={user.is_admin})")
+    return {
+        "success": True,
+        "user_id": str(user.id),
+        "email": user.email,
+        "is_admin": user.is_admin,
+        "must_change_password": user.must_change_password,
+    }
 
 
 @auth_endpoint_router.get("/get_all_users", include_in_schema=False, deprecated=True)
