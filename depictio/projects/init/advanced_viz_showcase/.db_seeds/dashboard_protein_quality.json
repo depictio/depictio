@@ -29,7 +29,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "How far to trust the predicted structure of the demo protein. The error matrix (synthetic: low inside each confident segment, high between segments and around the low-confidence ends) beside the structure and its written sequence; a synthetic S4PRED-style prediction against the call from the structure's own geometry, with two deliberate disagreements; the backbone torsions computed in the browser; and the sequence track. Brush the matrix diagonal, the ribbon or the track, or click a point or a letter, to select that range in every tile; hover marks it.\n",
+      "body": "How far to trust the predicted structure of the demo protein. The error matrix (synthetic: low inside each confident segment, high between segments and around the low-confidence ends) beside the structure and its written sequence; a synthetic S4PRED-style prediction against the call from the structure's own geometry, with two deliberate disagreements; the sequence track; then the backbone torsions computed in the browser beside the confidence profile. Brush the matrix diagonal, the ribbon or the track, or click a point or a letter, to select that range in every tile; hover marks it.\n",
       "surface": "none",
       "accent": null,
       "logo": null,
@@ -321,6 +321,63 @@
       "wf_tag": "python/advanced_viz_demo"
     },
     {
+      "index": "qual-plddt",
+      "component_type": "advanced_viz",
+      "title": "Confidence along the sequence",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_residues_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dd2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per residue of the demo structure: amino acid, pLDDT and an approximate secondary structure",
+        "data_collection_tag": "protein_residues_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dd2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The pLDDT of each residue as a line on the residue axis. A pick made in any tile is shaded, a hovered residue is marked.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Confidence of the model",
+      "viz_kind": "profile",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "profile",
+        "series_col": "entity",
+        "x_col": "position",
+        "y_col": "plddt",
+        "lower_col": null,
+        "upper_col": null,
+        "reference_x": null,
+        "reference_label": null,
+        "shaded_bands": [],
+        "log_x": false,
+        "log_y": false,
+        "band_opacity": 0.2,
+        "line_width": 2.0,
+        "x_title": "Residue",
+        "y_title": "pLDDT",
+        "legend_pos": "none",
+        "selection_enabled": false,
+        "selection_column": null,
+        "residue_axis": true,
+        "derivative": false,
+        "derivative_window": 5
+      },
+      "controls_placement": "popover",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
       "index": "qual-f-position",
       "component_type": "interactive",
       "title": "Residue range",
@@ -443,7 +500,7 @@
     {
       "i": "box-qual-rama",
       "x": 0,
-      "y": 14,
+      "y": 17,
       "w": 4,
       "h": 7,
       "static": false,
@@ -457,8 +514,23 @@
     },
     {
       "i": "box-qual-seq",
-      "x": 4,
+      "x": 0,
       "y": 14,
+      "w": 8,
+      "h": 3,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-qual-plddt",
+      "x": 4,
+      "y": 17,
       "w": 4,
       "h": 7,
       "static": false,

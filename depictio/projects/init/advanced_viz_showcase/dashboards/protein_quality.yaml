@@ -60,9 +60,10 @@ components:
       How far to trust the predicted structure of the demo protein. The error matrix (synthetic: low
       inside each confident segment, high between segments and around the low-confidence ends) beside
       the structure and its written sequence; a synthetic S4PRED-style prediction against the call from
-      the structure's own geometry, with two deliberate disagreements; the backbone torsions computed
-      in the browser; and the sequence track. Brush the matrix diagonal, the ribbon or the track, or
-      click a point or a letter, to select that range in every tile; hover marks it.
+      the structure's own geometry, with two deliberate disagreements; the sequence track; then the
+      backbone torsions computed in the browser beside the confidence profile. Brush the matrix
+      diagonal, the ribbon or the track, or click a point or a letter, to select that range in every
+      tile; hover marks it.
     layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-quality-pae
@@ -171,7 +172,7 @@ components:
       show_regions: true
       selection_enabled: true
       follow_selection: true
-    layout: { x: 0, y: 14, w: 4, h: 7 }
+    layout: { x: 0, y: 17, w: 4, h: 7 }
 
   - tag: viz-quality-sequence
     index: 'qual-seq'
@@ -199,7 +200,29 @@ components:
       domain_label_col: "domain"
       selection_enabled: true
       follow_selection: true
-    layout: { x: 4, y: 14, w: 4, h: 7 }
+    layout: { x: 0, y: 14, w: 8, h: 3 }
+
+  - tag: viz-quality-plddt
+    index: 'qual-plddt'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'protein_residues_demo'
+    title: 'Confidence along the sequence'
+    description: 'The pLDDT of each residue as a line on the residue axis. A pick made in any tile is shaded, a hovered residue is marked.'
+    section: 'Confidence of the model'
+    viz_kind: 'profile'
+    controls_placement: popover
+    config:
+      viz_kind: "profile"
+      controls_placement: popover
+      series_col: "entity"
+      x_col: "position"
+      y_col: "plddt"
+      x_title: "Residue"
+      y_title: "pLDDT"
+      residue_axis: true
+      legend_pos: "none"
+    layout: { x: 4, y: 17, w: 4, h: 7 }
 
   - tag: filter-quality-position
     index: qual-f-position
