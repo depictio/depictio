@@ -1524,6 +1524,8 @@ class DashboardDataLite(BaseModel):
                     lite_comp["default_range"] = default_state["default_range"]
                 elif default_state.get("default_value") is not None:
                     lite_comp["default_value"] = default_state["default_value"]
+                if comp.get("always_selected"):
+                    lite_comp["always_selected"] = True
                 display = collect_display_fields(
                     comp, ["title_size", "custom_color", "icon_name", "strip_label"]
                 )
@@ -1973,6 +1975,10 @@ class DashboardDataLite(BaseModel):
                         "slider_mode": comp_dict.get("slider_mode"),
                     }
                 )
+                # Written only when on, so stored components that never set it
+                # keep their shape (and their snapshot hash).
+                if comp_dict.get("always_selected"):
+                    full_comp["always_selected"] = True
                 for f in ["title_size", "custom_color", "icon_name", "strip_label"]:
                     if comp_dict.get(f):
                         full_comp[f] = comp_dict[f]

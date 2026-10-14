@@ -158,6 +158,16 @@ export { default as RangeSliderRenderer } from './components/interactive/RangeSl
 export { default as SliderRenderer } from './components/interactive/SliderRenderer';
 export { default as DatePickerRenderer } from './components/interactive/DatePickerRenderer';
 export { default as CheckboxSwitchRenderer } from './components/interactive/CheckboxSwitchRenderer';
+// `always_selected` Selects: the host-level automatic pick, and the rules the
+// controls share (see components/interactive/alwaysSelected.ts).
+export { AlwaysSelectedPickers } from './components/interactive/AlwaysSelectedPickers';
+export {
+  autoPickValue,
+  isAlwaysSelected,
+  ownFilterValues,
+  singlePick,
+} from './components/interactive/alwaysSelected';
+export type { PickableOption } from './components/interactive/alwaysSelected';
 export { default as SegmentedControlRenderer } from './components/interactive/SegmentedControlRenderer';
 export { default as TimelineRenderer } from './components/interactive/TimelineRenderer';
 // The one frame every interactive control renders inside — exported so the

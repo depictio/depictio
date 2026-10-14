@@ -19,6 +19,7 @@ import {
   fetchAllDashboards,
   bulkComputeCards,
   hasLiveValues,
+  AlwaysSelectedPickers,
   AvailableFilterValuesProvider,
   DataVersionProvider,
   dataVersionBody,
@@ -1906,6 +1907,14 @@ const App: React.FC = () => {
           : undefined
       }
     >
+      {/* `always_selected` Selects take their first option here, whether or
+          not their control is on screen (panel collapsed, section folded,
+          phone drawer closed). Renders nothing. */}
+      <AlwaysSelectedPickers
+        components={summaryMetadata}
+        filters={filters}
+        onFilterChange={handleFilterChange}
+      />
       <DashboardLoadingProvider>
       {/* One hover bus for the whole view: pinned sections rendered outside
           DashboardGrid share it (the grid's own provider reuses this one). */}
