@@ -327,13 +327,21 @@ anything to the Depictio maintainers:
 3. **`DEPICTIO_GOOGLE_ANALYTICS_*`** — optional GA4 tracking in the web frontend.
    Data goes to *your* GA4 property, not to us. Disabled by default.
 
-## Known limitation
+## Known limitations
 
 Restoring a MongoDB backup into a second environment clones the installation ID, so
 a production database copied into staging reports as one installation from two
 places. The `boot_id` property makes this visible in the data rather than silently
 wrong. We have not tried to engineer around it; a heuristic that re-mints IDs would
 risk over-counting legitimate restores, which is the worse failure.
+
+The converse, an ID minted again on a database that already existed (its `telemetry`
+collection dropped, or a backup restored without it), counts one installation twice.
+`DEPICTIO_MONGODB_WIPE` keeps that collection for this reason, and the
+`preexisting_data` property marks such an ID so it can be corrected for: it is true
+whenever the ID was created after the boot that initialised the database, which also
+covers telemetry turned on after the first boot and an upgrade from a release
+without telemetry.
 """
 
 

@@ -80,8 +80,9 @@ interface AppSidebarProps {
 }
 
 /** The entries this reader may see: Administration only for admins (matches
- *  the Dash sidebar visibility callback at sidebar.py:721-756). Shared with
- *  the Glass page shell (chrome/variants/glass/pages). */
+ *  the Dash sidebar visibility callback at sidebar.py:721-756). Group
+ *  administration lives inside that page; members reach their own groups from
+ *  /profile. Shared with the Glass page shell (chrome/variants/glass/pages). */
 export function useAppNavEntries(): NavEntry[] {
   const { user } = useCurrentUser();
   return NAV_ENTRIES.filter((entry) => entry.key !== 'admin' || Boolean(user?.is_admin));

@@ -140,6 +140,7 @@ def _user(is_admin: bool):
     user = MagicMock()
     user.id = PyObjectId()
     user.is_admin = is_admin
+    user.is_anonymous = False  # a bare MagicMock attribute would read as anonymous
     return user
 
 

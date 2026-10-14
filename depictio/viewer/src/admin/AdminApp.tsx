@@ -26,6 +26,7 @@ import {
   ScrollText,
   Settings,
   Users,
+  UsersRound,
   Wrench,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -36,6 +37,7 @@ import '../chrome/variants/glass/pages/admin.css';
 import { AppSidebar } from '../chrome';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import AdminUsersPanel from './AdminUsersPanel';
+import AdminGroupsPanel from './AdminGroupsPanel';
 import AdminProjectsPanel from './AdminProjectsPanel';
 import AdminDashboardsPanel from './AdminDashboardsPanel';
 import AdminBrandingPanel from './AdminBrandingPanel';
@@ -68,7 +70,13 @@ interface AdminNavGroup {
 /** Who has access, what they made, what the instance has been doing, and how
  *  it is set up: the four questions an admin comes with. */
 const NAV_GROUPS: AdminNavGroup[] = [
-  { label: 'People', items: [{ view: 'users', label: 'Users', icon: Users }] },
+  {
+    label: 'People',
+    items: [
+      { view: 'users', label: 'Users', icon: Users },
+      { view: 'groups', label: 'Groups', icon: UsersRound },
+    ],
+  },
   {
     label: 'Content',
     items: [
@@ -260,6 +268,7 @@ const AdminApp: React.FC = () => {
           </Tabs.List>
           <Tabs.Panel value={view} className="ga-content">
             {view === 'users' && <AdminUsersPanel currentUserEmail={user.email} />}
+            {view === 'groups' && <AdminGroupsPanel />}
             {view === 'projects' && <AdminProjectsPanel />}
             {view === 'dashboards' && <AdminDashboardsPanel />}
             {view === 'branding' && <AdminBrandingPanel />}
@@ -290,6 +299,12 @@ const AdminApp: React.FC = () => {
         <Tabs.List>
           <Tabs.Tab value="users" leftSection={<Icon icon="mdi:account-group" width={16} />}>
             Users
+          </Tabs.Tab>
+          <Tabs.Tab
+            value="groups"
+            leftSection={<Icon icon="mdi:account-multiple-outline" width={16} />}
+          >
+            Groups
           </Tabs.Tab>
           <Tabs.Tab value="projects" leftSection={<Icon icon="mdi:jira" width={16} />}>
             Projects
@@ -334,6 +349,9 @@ const AdminApp: React.FC = () => {
 
         <Tabs.Panel value="users" pt="md">
           <AdminUsersPanel currentUserEmail={user.email} />
+        </Tabs.Panel>
+        <Tabs.Panel value="groups" pt="md">
+          <AdminGroupsPanel />
         </Tabs.Panel>
         <Tabs.Panel value="projects" pt="md">
           <AdminProjectsPanel />

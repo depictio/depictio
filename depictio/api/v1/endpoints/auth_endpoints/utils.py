@@ -1,8 +1,8 @@
 """
-Utility functions for Google OAuth authentication.
+Utility functions for SSO authentication (Google OAuth, shared SSO user mapping).
 
 This module contains helper functions for managing OAuth state, token exchange,
-and user creation for Google OAuth 2.0 authentication flow.
+and user creation for browser SSO flows.
 """
 
 import secrets
@@ -14,6 +14,9 @@ from fastapi import HTTPException
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.endpoints.groups_endpoints.pending_pi import (
+    claim_pending_pi_groups,
+)
 from depictio.models.models.google_oauth import GoogleUserInfo, OAuthStateBeanie
 from depictio.models.models.users import UserBeanie
 
@@ -111,16 +114,16 @@ async def fetch_google_user_info(access_token: str) -> GoogleUserInfo:
         return GoogleUserInfo(**user_data)
 
 
-async def create_or_get_user(
-    google_user: GoogleUserInfo, *, allow_create: bool = True
+async def create_or_get_sso_user(
+    email: str, *, allow_create: bool = True
 ) -> tuple[UserBeanie | None, bool]:
-    """Create new user or get existing user from Google OAuth info.
+    """Create or fetch a user for an IdP-verified email (Google OAuth, SAML).
 
     Args:
-        google_user: Verified Google account info.
+        email: Email address already verified by the identity provider.
         allow_create: When False, never provision a new account — return
             ``(None, False)`` for an unknown email. Used to honour
-            ``registration_disabled`` so OAuth is a login-only door for
+            ``registration_disabled`` so SSO is a login-only door for
             pre-provisioned accounts, not a registration bypass.
 
     Returns:
@@ -128,32 +131,50 @@ async def create_or_get_user(
         created. ``user`` is None when the email is unknown and
         ``allow_create`` is False.
     """
-    # Check if user already exists
-    existing_user = await UserBeanie.find_one({"email": google_user.email})
+    from depictio.api.v1.endpoints.user_endpoints.core_functions import _hash_password
+
+    existing_user = await UserBeanie.find_one({"email": email})
 
     if existing_user:
-        logger.info(f"Existing user found for OAuth login: {google_user.email}")
+        logger.info(f"Existing user found for SSO login: {email}")
         return existing_user, False
 
     if not allow_create:
         logger.warning(
-            f"OAuth login rejected for unregistered email (registration disabled): "
-            f"{google_user.email}"
+            f"SSO login rejected for unregistered email (registration disabled): {email}"
         )
         return None, False
 
-    # Create new user
-    logger.info(f"Creating new user from OAuth: {google_user.email}")
+    logger.info(f"Creating new user from SSO: {email}")
 
     new_user = UserBeanie(
-        email=google_user.email,
-        password="$2b$12$oauth.user.no.password",  # OAuth users don't have passwords
+        email=email,
+        # SSO users have no usable password; a hash of an unguessable random
+        # secret keeps password login structurally valid but never satisfiable.
+        password=_hash_password(secrets.token_urlsafe(32)),
         is_admin=False,
         is_active=True,
-        is_verified=True,  # Google email is already verified
+        is_verified=True,  # Email is verified by the identity provider
     )
 
     await new_user.save()
-    logger.info(f"Created new OAuth user: {new_user.id}")
+    logger.info(f"Created new SSO user: {new_user.id}")
+    # Apply any group P.I. designation parked on this address. Best-effort for
+    # the same reason as in _create_user_in_db: the account exists, and an
+    # unclaimed designation stays parked for a later login.
+    try:
+        await claim_pending_pi_groups(new_user)
+    except Exception as claim_error:
+        logger.error(
+            f"Pending P.I. claim failed for {new_user.email} (designation stays parked): "
+            f"{claim_error}"
+        )
 
     return new_user, True
+
+
+async def create_or_get_user(
+    google_user: GoogleUserInfo, *, allow_create: bool = True
+) -> tuple[UserBeanie | None, bool]:
+    """Create new user or get existing user from Google OAuth info."""
+    return await create_or_get_sso_user(google_user.email, allow_create=allow_create)

@@ -170,10 +170,15 @@ def main() -> int:
     print("\n=== 2. Identity ===")
     from depictio.api.v1.telemetry.identity import get_or_create_instance_id
 
-    instance_id, created_at = get_or_create_instance_id()
+    instance_id, created_at, preexisting_data = get_or_create_instance_id()
     failures += not check("instance id resolved", bool(instance_id), instance_id)
-    again, _ = get_or_create_instance_id()
+    again, _, preexisting_again = get_or_create_instance_id()
     failures += not check("instance id is stable across calls", again == instance_id)
+    failures += not check(
+        "preexisting_data is decided once",
+        isinstance(preexisting_data, bool) and preexisting_again is preexisting_data,
+        str(preexisting_data),
+    )
 
     print("\n=== 3. Payload ===")
     from depictio.api.v1.telemetry.payload import build_heartbeat_properties

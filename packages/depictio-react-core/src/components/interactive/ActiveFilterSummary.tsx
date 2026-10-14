@@ -19,6 +19,7 @@ import {
   formatFilterValue,
 } from '../../activeFilters';
 import { INTERACTIVE_FRAME, interactiveAccent, interactiveIcon } from './frame';
+import ShareFiltersLink from './ShareFiltersLink';
 
 /**
  * Icon for a selection row, by the component the selection was made on.
@@ -65,6 +66,9 @@ interface ActiveFilterSummaryProps {
   groupRows?: GroupSummaryRow[];
   open: boolean;
   onToggle: () => void;
+  /** Offer "copy a link with these filters" beside the count. Off where the
+   *  host does not restore a link (the editor, a version preview). */
+  shareable?: boolean;
 }
 
 /**
@@ -96,6 +100,7 @@ const ActiveFilterSummary: React.FC<ActiveFilterSummaryProps> = ({
   groupRows = [],
   open,
   onToggle,
+  shareable = false,
 }) => {
   const active = activeFiltersFor(filters);
   const totalActive = active.length + groupRows.length;
@@ -103,19 +108,24 @@ const ActiveFilterSummary: React.FC<ActiveFilterSummaryProps> = ({
 
   return (
     <Box mt={6}>
-      <UnstyledButton onClick={onToggle} aria-expanded={open} style={{ width: '100%' }}>
-        <Group gap={4} wrap="nowrap" justify="space-between">
-          <Text size="xs" c="dimmed">
-            {totalActive === 1 ? '1 filter active' : `${totalActive} filters active`}
-          </Text>
-          <Icon
-            icon={open ? 'mdi:chevron-up' : 'mdi:chevron-down'}
-            width={14}
-            height={14}
-            style={{ flexShrink: 0, color: 'var(--mantine-color-dimmed)' }}
-          />
-        </Group>
-      </UnstyledButton>
+      {/* Two siblings, not a button inside a button: the count folds the list,
+          the link beside it shares what the list says. */}
+      <Group gap={4} wrap="nowrap" align="center">
+        <UnstyledButton onClick={onToggle} aria-expanded={open} style={{ flex: 1, minWidth: 0 }}>
+          <Group gap={4} wrap="nowrap" justify="space-between">
+            <Text size="xs" c="dimmed">
+              {totalActive === 1 ? '1 filter active' : `${totalActive} filters active`}
+            </Text>
+            <Icon
+              icon={open ? 'mdi:chevron-up' : 'mdi:chevron-down'}
+              width={14}
+              height={14}
+              style={{ flexShrink: 0, color: 'var(--mantine-color-dimmed)' }}
+            />
+          </Group>
+        </UnstyledButton>
+        {shareable && <ShareFiltersLink filters={filters} />}
+      </Group>
 
       <Collapse in={open}>
         {/* Capped and scrolled rather than allowed to run: this sits above the

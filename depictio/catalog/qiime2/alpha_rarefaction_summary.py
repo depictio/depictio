@@ -40,12 +40,20 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
 OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 _METADATA_ID_COL = "ID"
+_KEY_COLS = ("sample", "depth", "iter")
+# Ingestion adds `depictio_run_id` (and `depictio_manifest_id`) to every Delta
+# table, so both sources arrive carrying them: never a metric, never an annotation.
+_SYSTEM_PREFIX = "depictio_"
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Collapse the iteration axis, then attach the sample metadata."""
     df = sources["rarefaction"]
-    metric_cols = [c for c in df.columns if c not in ("sample", "depth", "iter")]
+    metric_cols = [
+        c
+        for c in df.columns
+        if c not in _KEY_COLS and not c.startswith(_SYSTEM_PREFIX) and df[c].dtype.is_numeric()
+    ]
     if not metric_cols:
         raise ValueError("alpha_rarefaction_summary: no metric column to summarise")
 
@@ -78,7 +86,11 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         return summary
     # Annotations are cast to Utf8: they are grouping keys here, and a numeric
     # column would otherwise arrive as a continuous colour scale.
-    annotations = [c for c in metadata.columns if c != id_col and c not in summary.columns]
+    annotations = [
+        c
+        for c in metadata.columns
+        if c != id_col and c not in summary.columns and not c.startswith(_SYSTEM_PREFIX)
+    ]
     if not annotations:
         return summary
     joined = metadata.select(

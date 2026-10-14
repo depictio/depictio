@@ -97,9 +97,12 @@ def mock_projects_collection():
         collection,
     ):
         with patch("depictio.api.v1.db.projects_collection", collection):
-            yield collection
-            # Make sure to clean up after each test
-            client.close()
+            # Group-membership lookups resolve depictio.api.v1.db.groups_collection
+            # lazily; point them at mongomock so no real Mongo is needed.
+            with patch("depictio.api.v1.db.groups_collection", db.groups):
+                yield collection
+                # Make sure to clean up after each test
+                client.close()
 
 
 @pytest.fixture(autouse=True)

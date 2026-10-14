@@ -14,6 +14,7 @@ from depictio.api.v1.db import (
     data_collections_collection,
     deltatables_collection,
     files_collection,
+    groups_collection,
     jbrowse_collection,
     multiqc_collection,
     project_storage_collection,
@@ -24,6 +25,9 @@ from depictio.api.v1.db import (
 from depictio.api.v1.endpoints.comments_endpoints.cascade import delete_threads_for_project
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     cascade_project_visibility,
+)
+from depictio.api.v1.endpoints.dashboards_endpoints.filter_state_cascade import (
+    delete_filter_states_for_project,
 )
 from depictio.api.v1.endpoints.dashboards_endpoints.version_store import (
     delete_project_versions,
@@ -104,6 +108,11 @@ from depictio.api.v1.endpoints.projects_endpoints.utils import (
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
 from depictio.api.v1.ingestion_roots import roots_refusal
+from depictio.api.v1.permissions import (
+    get_administered_group_ids,
+    get_user_group_ids,
+    has_permission,
+)
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.projects import Project, ProjectPermissionRequest, ProjectResponse
 from depictio.models.models.users import Permission, UserBase
@@ -203,6 +212,8 @@ def _cascade_delete_project(project_id: PyObjectId, project_name: str) -> None:
             {"workflow_id": {"$in": wf_ids + [str(wf_id) for wf_id in wf_ids]}}
         )
 
+    # Before the dashboards go: a saved filter state only knows its dashboard id.
+    delete_filter_states_for_project(project_id)
     dashboards_collection.delete_many({"project_id": ObjectId(project_id)})
     delete_threads_for_project(project_id)
     # The dashboards went without the dashboard delete route, so their version
@@ -568,13 +579,7 @@ def _may_trigger_ingestion(project: dict, current_user) -> bool:
     """
     if getattr(current_user, "is_admin", False):
         return True
-    permissions = project.get("permissions") or {}
-    user_id = str(current_user.id)
-    return any(
-        str(entry.get("_id")) == user_id
-        for group in ("owners", "editors")
-        for entry in (permissions.get(group) or [])
-    )
+    return has_permission(project, current_user, "editor", get_user_group_ids(current_user.id))
 
 
 @projects_endpoint_router.get("/ingestion/trigger-status/{project_id}")
@@ -1284,20 +1289,25 @@ async def create_project(project: Project, current_user=Depends(get_user_or_anon
 @projects_endpoint_router.put("/update")
 async def update_project(project: Project, current_user=Depends(get_current_user)):
     """Update an existing project."""
-    if (
-        current_user.id not in [owner.id for owner in project.permissions.owners]
-        and not current_user.is_admin
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="User does not have permission to update this project.",
-        )
-
+    # Authorise against the STORED project, never the request body: the body
+    # carries its own `permissions`, so naming oneself an owner there would pass a
+    # check made on it. The lookup is read-level and answers 404 to someone who
+    # cannot see the project at all.
     existing_project_dict = _async_get_project_from_id(
         project.id, current_user, projects_collection
     )
     if not existing_project_dict:
         raise HTTPException(status_code=404, detail="Project not found.")
+
+    stored_owner_ids = {
+        str(owner.get("_id"))
+        for owner in (existing_project_dict.get("permissions") or {}).get("owners", []) or []
+    }
+    if str(current_user.id) not in stored_owner_ids and not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="User does not have permission to update this project.",
+        )
 
     validate_workflow_uniqueness_in_project(project)
     update_payload = project.mongo()
@@ -1312,6 +1322,11 @@ async def update_project(project: Project, current_user=Depends(get_current_user
     # the whole project document, so honoring `is_public` here would flip
     # visibility silently without the cascade.
     update_payload["is_public"] = existing_project_dict.get("is_public", False)
+    # Sharing has its own owner-gated path (`/update_project_permissions`, which
+    # also checks that referenced users and groups exist and keeps an owner). The
+    # client round-trips the whole project, so honouring its `permissions` here
+    # would let a plain update rewrite who owns the project.
+    update_payload.pop("permissions", None)
     # The browser appends workflows straight onto the stored document while the
     # client round-trips the whole project through here, so a plain `$set` lets
     # whoever saves last delete the other surface's work. Same reasoning as the
@@ -1402,6 +1417,25 @@ async def clean_example_projects(current_user=Depends(get_user_or_anonymous)):
     return {"deleted": deleted}
 
 
+def _can_manage_project_sharing(project: dict, current_user) -> bool:
+    """Sharing/visibility management gate: direct owner, sysadmin, or group
+    admin of a group currently listed in ``permissions.group_owners``."""
+    if current_user.is_admin:
+        return True
+    permissions = project.get("permissions") or {}
+    if str(current_user.id) in [str(owner["_id"]) for owner in permissions.get("owners", [])]:
+        return True
+    group_owner_ids = {
+        str(entry.get("_id", entry.get("id")))
+        for entry in permissions.get("group_owners", []) or []
+        if isinstance(entry, dict)
+    }
+    if not group_owner_ids:
+        return False
+    administered = get_administered_group_ids(current_user.id)
+    return any(str(group_id) in group_owner_ids for group_id in administered)
+
+
 @projects_endpoint_router.post("/update_project_permissions")
 async def add_or_update_permission(
     permission_request: ProjectPermissionRequest,
@@ -1415,10 +1449,7 @@ async def add_or_update_permission(
         PyObjectId(permission_request.project_id), current_user, projects_collection
     )
 
-    if (
-        str(current_user.id)
-        not in [str(owner["_id"]) for owner in project["permissions"]["owners"]]
-    ) and (not current_user.is_admin):
+    if not _can_manage_project_sharing(project, current_user):
         raise HTTPException(
             status_code=403,
             detail="User does not have permission to update permissions for this project.",
@@ -1440,12 +1471,12 @@ async def add_or_update_permission(
             detail=f"Invalid permissions payload: {exc}",
         )
 
-    # A project must always keep at least one owner, otherwise it becomes
-    # orphaned / unmanageable.
-    if not validated_permissions.owners:
+    # A project must always keep at least one owner (direct user or owning
+    # group), otherwise it becomes orphaned / unmanageable.
+    if not validated_permissions.owners and not validated_permissions.group_owners:
         raise HTTPException(
             status_code=400,
-            detail="A project must keep at least one owner.",
+            detail="A project must keep at least one owner (user or group).",
         )
 
     # Sanity-check that every referenced user (owners/editors and non-wildcard
@@ -1469,6 +1500,33 @@ async def add_or_update_permission(
                 status_code=400,
                 detail="Permissions reference one or more users that do not exist.",
             )
+
+    # Same sanity check for group references, and refresh each snapshot's name
+    # from the DB — client-sent names are ignored so snapshots can't drift.
+    referenced_groups = [
+        group
+        for role_list in (
+            validated_permissions.group_owners,
+            validated_permissions.group_editors,
+            validated_permissions.group_viewers,
+        )
+        for group in role_list
+    ]
+    if referenced_groups:
+        referenced_group_ids = {ObjectId(str(group.id)) for group in referenced_groups}
+        group_names = {
+            row["_id"]: row.get("name", "")
+            for row in groups_collection.find(
+                {"_id": {"$in": list(referenced_group_ids)}}, {"name": 1}
+            )
+        }
+        if len(group_names) != len(referenced_group_ids):
+            raise HTTPException(
+                status_code=400,
+                detail="Permissions reference one or more groups that do not exist.",
+            )
+        for group in referenced_groups:
+            group.name = group_names[ObjectId(str(group.id))]
 
     project["permissions"] = validated_permissions.dict()
     project = ProjectResponse.from_mongo(project)
@@ -1496,11 +1554,7 @@ async def toggle_public_private(
 
     project = _async_get_project_from_id(PyObjectId(project_id), current_user, projects_collection)
 
-    if (
-        str(current_user.id)
-        not in [str(owner["_id"]) for owner in project["permissions"]["owners"]]
-        and not current_user.is_admin
-    ):
+    if not _can_manage_project_sharing(project, current_user):
         raise HTTPException(
             status_code=403,
             detail="User does not have permission to update this project.",

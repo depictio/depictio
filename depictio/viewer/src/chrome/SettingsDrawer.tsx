@@ -26,9 +26,11 @@ import {
   isControlsPlacement,
   type ControlsPlacement,
   type DashboardData,
+  type InteractiveFilter,
   type LogoMode,
 } from 'depictio-react-core';
 import DashboardInfoBody from './DashboardInfoBody';
+import ShareFiltersField from './ShareFiltersField';
 import {
   SECTION_ICON_STYLE,
   SettingsNavModal,
@@ -181,6 +183,31 @@ const PageWidthBlock: React.FC = () => {
     </Field>
   );
 };
+
+// ---------------------------------------------------------------------------
+// Your filters (remembered per user, shareable)
+// ---------------------------------------------------------------------------
+
+/** The reader's filters on this dashboard: whether they come back on the next
+ *  visit, in any browser, and a link that hands the current view to someone
+ *  else. Both act on the same filter array the panel and the tiles share. */
+const YourFiltersBlock: React.FC<{ filters: FilterSettings }> = ({ filters }) => (
+  <Stack gap="lg" data-testid="your-filters-section">
+    <SwitchField
+      label="Remember my filters"
+      description="Bring this dashboard back as you left it on your next visit, in any browser you sign in on. Reset all also clears what is remembered."
+      checked={filters.remember}
+      onChange={filters.onRememberChange}
+      testId="remember-filters-switch"
+    />
+    <Field
+      label="Share this view"
+      description="The address bar carries it as you filter, so you can copy it from there or from here. Anyone who opens it sees the same view; with no filters it is the plain link."
+    >
+      <ShareFiltersField filters={filters.current} activeCount={filters.activeCount} />
+    </Field>
+  </Stack>
+);
 
 // ---------------------------------------------------------------------------
 // Tab defaults (editor, saved on the dashboard)
@@ -621,6 +648,7 @@ const FeedbackBlock: React.FC<{ href: string; label: string }> = ({ href, label 
 type SectionKey =
   | 'about'
   | 'view'
+  | 'my-filters'
   | 'tab-defaults'
   | 'tiles'
   | 'filtering'
@@ -795,8 +823,22 @@ interface SettingsDrawerProps {
   /** Editor only: the Data version section's body, which points the editor at
    *  the data of a past dashboard version or pins one collection. */
   dataVersionPanel?: React.ReactNode;
+  /** Viewer only: the reader's own filters, and the "Your filters" section
+   *  that remembers them and shares them as a link. Omitted by the editor and
+   *  by a version preview, where the section is not rendered. */
+  filters?: FilterSettings;
   /** The section to open on, instead of the one last visited. */
   initialSection?: SettingsSectionKey;
+}
+
+/** What the "Your filters" section needs from the viewer. */
+export interface FilterSettings {
+  /** The filters currently applied, for the share link. */
+  current: InteractiveFilter[];
+  activeCount: number;
+  /** Whether this dashboard's filters are remembered for the reader. */
+  remember: boolean;
+  onRememberChange: (on: boolean) => void;
 }
 
 /**
@@ -843,6 +885,7 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   guide,
   historyPanel,
   dataVersionPanel,
+  filters,
   initialSection,
 }) => {
   const surface: Surface =
@@ -886,6 +929,16 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
       ),
     },
   ];
+  if (filters) {
+    sections.push({
+      key: 'my-filters',
+      icon: 'mdi:filter-check-outline',
+      title: 'Your filters',
+      navLabel: 'Filters',
+      subtitle: 'Kept for you on this dashboard, and shareable as a link',
+      body: <YourFiltersBlock filters={filters} />,
+    });
+  }
   if (onChangeTabDefaults) {
     sections.push({
       key: 'tab-defaults',
