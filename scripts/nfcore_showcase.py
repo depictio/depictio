@@ -215,6 +215,15 @@ SCENARIOS: list[Scenario] = [
     Scenario(
         "hic", "2.0.0", "megatest", note="MultiQC reprocessed; 2.1.0 megatest is a truncated sync"
     ),
+    # The design table is vendored (the pipeline publishes none) and copied into input/ by
+    # download_test_data.sh; the reference GTF is the one uLTRA indexed.
+    Scenario(
+        "isoseq",
+        "3.0.1",
+        "megatest",
+        note="vendored design, uLTRA GTF as reference; one sample, CCS in 100 chunks",
+        vars=(_DESIGN_IN_DATA_ROOT, ("GROUP_COL", "tissue")),
+    ),
     Scenario(
         "mag",
         "5.5.0",

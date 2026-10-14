@@ -62,6 +62,7 @@ and are lower bounds for the big runs.
 | rnasplice | 1.0.4 | `1d0494ae` | partial | `.` | no | **Pending.** 494 objects, only 80 with data (95.9 GB, mostly alignments); no MultiQC and none of the differential splicing directories. The template waits for an EMBL cluster `test_full` run. |
 | seqinspector | 1.1.2 | `6aa08aab` | ok | `.` | yes (`multiqc/global_report/multiqc_data/`, plus one per group under `multiqc/group_reports/`) | Fallback for rnasplice if its cluster run fails twice. 1899 objects / 678 MB, every data file under 50 MB. |
 | proteinannotator | 1.1.0 | `cbf78d47` | ok (dev) | `.` | yes, not read | **Templated.** Development run `v1.2.0dev-gb8fac19` (outdir `results-dev`) synced under a non-tag sha; the template directory stays at 1.1.0, the latest release. 36 files / 84 KB fetched: three single-protein samples, four hmmsearch domain tables each, InterProScan (two empty TSVs), S4PRED ss2 per protein. MultiQC 1.33 holds only SeqFu custom content anchored by sample name, so it is not read and the template has no MultiQC tab. Samplesheet and design vendored under `input/`. |
+| isoseq | 3.0.1 | `6c944831` | ok | `.` | yes (`multiqc/multiqc_data/`) | **Templated.** `test_full` profile: one Iso-Seq sample, CCS in 100 chunks, uLTRA mapping. 287 MB fetched, 234 MB of it the indexed GTF (BAMs and FASTA skipped). Reads the CCS and refine reports, the TAMA poly(A), collapse and merge outputs, the GTF and the MultiQC 1.33 parquet (ccs, lima). The samplesheet is not published and has no design column: the design table is vendored under `input/`. |
 
 ## Selected runs for this lot
 
@@ -192,6 +193,7 @@ template lint, CLI dry run 8/8).
 | proteinfamilies | 2.5.0 | `f8c0b183e59df3d87c38d0f7c4acc6918593f4f5` | `.` | 1.35, custom content only |
 | demultiplex | 1.8.0 | `daade37c4a75a4c1709ccf12434deb3424141319` | `.` | 1.35 native parquet |
 | proteinfold | 2.1.0 (dev run) | `a414fd1368009500b66761e37e7cde80366a45e9` | `.` | per-engine custom content (per-target pLDDT plots), not bound |
+| isoseq | 3.0.1 | `6c944831289d4d6e33497026f6b18e8c671705bd` | `.` | 1.33 (ccs, lima) |
 
 rnasplice 1.0.4 is built from a cluster `test_full` run rather than the megatest: its megatest
 prefix `1d0494ae` holds 494 objects of which only 80 carry data, with no MultiQC and no

@@ -1,0 +1,28 @@
+BAMTOOLS_CONVERT:
+  bamtools: 2.5.2
+GNU_SORT:
+  coreutils: 9.5
+GSTAMA_COLLAPSE:
+  gstama: 2021_11_03
+GSTAMA_MERGE:
+  gstama: 0.0.1
+GSTAMA_POLYACLEANUP:
+  gstama: 2021_11_03
+GUNZIP:
+  gunzip: 1.13
+ISOSEQ_REFINE:
+  isoseq: 4.0.0
+LIMA:
+  lima: 2.12.0
+PBCCS:
+  pbccs: 6.4.0
+ULTRA_ALIGN:
+  samtools: 1.17
+  ultra: 0.1
+ULTRA_INDEX:
+  gffutils: 0.11.1
+  sqlite: 3.42.0
+  ultra: 0.1
+Workflow:
+    nf-core/isoseq: v3.0.1-g6c94483
+    Nextflow: 26.04.6

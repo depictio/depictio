@@ -369,6 +369,7 @@ files, template lint and a CLI dry run.
 | proteinfold | 2.1.0 | 2.1.0 | no | `a414fd13` (development run `v2.1.0dev-ga414fd1`; the 2.0.0 run is empty) | per engine, custom content only | flat | 11 (4) | `test_full` profiles gathered under one prefix: AlphaFold2 (standard, split-MSA), ColabFold, ESMFold and RoseTTAFold All-Atom on 2 monomers, AlphaFold2 multimer and ESMFold on 1 heterodimer; samplesheet vendored under `input/`, top-ranked PAE only |
 | rnasplice | 1.0.4 | 1.0.4 | no | none usable: `1d0494ae` is truncated, so `results_sha` is null | 1.18 on the cluster run, no parquet, rebuilt with `multiqc_reprocess` | flat | 12 (6) | EMBL cluster `test_full` run: 6 samples, two conditions, two mirrored contrasts, GRCh37; design table vendored under `input/metadata.tsv` |
 | proteinannotator | 1.1.0 | 1.1.0 | no | `cbf78d47` (dev run `v1.2.0dev-gb8fac19`) | 1.33 (SeqFu custom content only, not read) | flat | 17 (5) | `test_full`: three single-protein FASTA files, test-sized Pfam, FunFam, NMPFamsDB and MetagRoot libraries, InterProScan (HAMAP, TIGRFAM, SFLD) and S4PRED; samplesheet and design table vendored under `input/` |
+| isoseq | 3.0.1 | 3.0.1 | no | `6c944831` | 1.33 | flat | 13 (6) | `test_full`: one Iso-Seq sample started from subreads, CCS in 100 chunks, uLTRA mapping to an iGenomes assembly; design table vendored under `input/` (the pipeline publishes no samplesheet) |
 
 With these, 25 templates ship (one directory per pipeline under `depictio/projects/nf-core/`).
 
