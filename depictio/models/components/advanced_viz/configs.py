@@ -3451,7 +3451,8 @@ class HmmLogoConfig(_BaseVizConfig):
         description="Residue colouring scheme, the same set as the `msa` kind",
     )
     show_indel_rows: bool = Field(
-        default=True, description="Show the insert probability and expected insert length lanes"
+        default=True,
+        description="Show the insert probability, expected insert length and occupancy lanes",
     )
     show_consensus: bool = Field(default=True, description="Show the consensus residue row")
     hits_wf_id: str | None = Field(
@@ -3558,7 +3559,8 @@ class SecondaryStructureConfig(_BaseVizConfig):
         default=None,
         description=(
             "Value of `source_col` the other sources are compared with in the "
-            "agreement lane; null compares them with each other. Needs `source_col`"
+            "agreement lane, and the one drawn as the main ribbon; null takes the "
+            "first source. Needs `source_col`"
         ),
     )
     p_helix_col: str | None = Field(
@@ -3892,8 +3894,9 @@ class RamachandranConfig(_BaseVizConfig):
         description=(
             "How points are coloured: `plddt` reads the structure's B-factor "
             "column, `residue_class` the general / glycine / proline / "
-            "pre-proline class, `secondary_structure` the structure's own helix "
-            "and strand, `value` / `category` the bound collection, `chain` the chain"
+            "pre-proline class, `secondary_structure` the helix / strand state of "
+            "`category_col` when it holds one, else the phi/psi region each point "
+            "falls in, `value` / `category` the bound collection, `chain` the chain"
         ),
     )
     show_regions: bool = Field(
