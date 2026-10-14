@@ -101,11 +101,12 @@ fold, so a high pLDDT with a low pTM is a set of confident pieces placed loosely
 write no TM score (ESMFold, RoseTTAFold All-Atom) are absent from the scatter and the pTM card.
 Filters: engine and model rank.
 
-**Structure.** Strip: the median residue pLDDT (its spread), the residues split by AlphaFold
-confidence band, the residues under pLDDT 50 ranked by engine and the structures in scope.
-Then one point per top-ranked structure (mean pLDDT against the share of residues under 50)
-beside the picked structure in 3D over its written sequence, and the sequence with its pLDDT
-lane. A second section holds the Ramachandran plot of the picked structure (phi and psi are
+**Structure.** The tab reads one target (see "Single-unit pickers" below). Strip: the median
+residue pLDDT (its spread), the residues split by AlphaFold confidence band, the residues under
+pLDDT 50 ranked by engine and the best mean pLDDT of the target's structures, the engines ranked
+by theirs. Then one point per engine's top-ranked structure (mean pLDDT against the share of
+residues under 50) beside the picked structure in 3D over its written sequence, and the sequence
+with its pLDDT lane. A second section holds the Ramachandran plot of the picked structure (phi and psi are
 computed in the browser from the PDB's backbone, coloured by pLDDT) beside the per-engine
 pLDDT profile. Collapsed: the alignment the structure was folded from and the residue table.
 
@@ -114,8 +115,9 @@ structure, read from the same PDBs, so every point has a file to open. Its click
 `entity`, the column the 3D tile names its structure by, so a click opens that structure; the
 sequence track, the Ramachandran plot and the alignment follow the same column. An engine picker
 on the left would narrow the plot to one point, so the tab has none. The tab's `Target` filter
-is optional: until a target is picked the plot draws every structure in scope, and the tiles
-that show one structure at a time (3D, track, Ramachandran, alignment) open on the first one.
+is `always_selected`: the plot draws one point per engine on that target, and the tiles that
+show one structure at a time (3D, track, Ramachandran, alignment) open on its first structure
+until a point is clicked.
 
 The 3D tile (`molecule_3d`, `layout: structure_text`) draws the top-ranked PDB coloured by pLDDT
 from its B-factor column over its sequence written out, one clickable letter per residue;
@@ -129,18 +131,17 @@ picks and hovers carry that chain.
 
 The per-engine profile reads its own collection (`proteinfold_engine_plddt`), which carries no
 `engine` column: a dashboard filter narrows every collection that has its column, so the curves
-follow the target while the clicked structure cannot hide the other engines. A curve is a
-target and an engine (and a chain on a complex), so several targets in scope draw several curves
-instead of zigzagging at one residue number. The Ramachandran regions are approximate polygons,
-not MolProbity contours.
+follow the target while the clicked structure cannot hide the other engines. A curve is an
+engine on the picked target (and a chain on a complex). The Ramachandran regions are approximate
+polygons, not MolProbity contours.
 
 A lone query row in the alignment is the data, not a filter: the engine found or used no
 homologs (AlphaFold2 run against reduced databases writes a one-row MSA). ESMFold folds
 without an alignment.
 
-**Predicted error.** Strip: the mean PAE of the matrices in scope (its spread over residue
-bins), the matrices split by engine, the pTM of the top models (its distribution) and the best
-ipTM of a complex (its spread). Then the PAE matrix of the picked structure (`pae_matrix`)
+**Predicted error.** The tab reads one structure. Strip: its mean PAE (the spread over residue
+bins), the pLDDT of its residues (their spread), and the pTM and ipTM of its top-ranked model
+against AlphaFold's cut-offs (pTM 0.5; ipTM 0.8 and 0.6). Then the PAE matrix (`pae_matrix`)
 beside the same structure in 3D (`molecule_3d`, coloured by pLDDT, no sequence strip), and the
 sequence with its pLDDT lane below. Both tiles read `proteinfold_residues`, which numbers the
 matrix axes (`entity`, `position`, `chain`) and gives the pLDDT strips along them, and the matrix
@@ -149,39 +150,36 @@ is fetched from `proteinfold_pae_matrices`. A diagonal brush on the matrix selec
 it, so a confident domain is picked in 3D. Dark blocks off the diagonal are domains or chains
 placed confidently relative to each other; on a complex the chain boundaries are marked.
 
-The tab's `Structure` filter names the structure for the matrix, the 3D tile and the cards at
-once (it narrows `proteinfold_pae` and `proteinfold_models` by `entity` too); with nothing
-picked the tiles open on the first structure that has a matrix. ESMFold writes no PAE, so its
-structures never appear on the matrix. The binned `proteinfold_pae` table is kept only for the
-mean-error and matrix-count cards: each row's mean over its residues averages to the matrix
-mean. ipSAE stays in the models table and record on the Engines comparison tab: it is null for
-single chains and, on a complex without a confidently placed interface, 0 on every model, which
-reads as a constant on a card.
+The tab's `Structure` filter is `always_selected`: it names one structure for the matrix, the
+3D tile, the track and the cards at once (it narrows `proteinfold_pae` and `proteinfold_models`
+by `entity` too). ESMFold writes no PAE, so the filter does not offer its structures
+(`filter_expr`) and its first option always has a matrix. The tab has no engine filter: the
+structure id carries its engine, and another engine would empty every tile. The binned
+`proteinfold_pae` table is kept only for the mean-error card: each row's mean over its residues
+averages to the matrix mean. ipSAE stays in the models table and record on the Engines
+comparison tab: it is null for single chains and, on a complex without a confidently placed
+interface, 0 on every model, which reads as a constant on a card.
 
-**Engines comparison.** Strip: the models in scope (split by engine), the median mean pLDDT per
-model (its distribution), the weakest model's mean pLDDT (counted against the 70 and 50
-cut-offs) and the pTM per model (its spread). Then the mean pLDDT of every engine's top-ranked
-model per target, and the confidence by model rank per engine (a box over the targets, so a steep
-fall from the first model means the ranking was decisive), with the per-residue profile: one
-curve per engine and target, the line the top-ranked model and the band the lowest to the
+**Engines comparison.** The tab compares the engines on one target. Strip: the models in scope
+(split by engine), the median mean pLDDT per model (its distribution), the weakest model's mean
+pLDDT (counted against the 70 and 50 cut-offs) and the pTM per model (its spread). Then the mean
+pLDDT of every engine's top-ranked model, and the mean pLDDT by model rank, one line per engine
+(a steep fall from the first model means the ranking was decisive), with the per-residue
+profile: one curve per engine, the line the top-ranked model and the band the lowest to the
 highest of its models. A wide band marks residues the engine's models disagree on and curves
 that part mark residues the engines disagree on. Drawing every model instead would stack up to
 25 curves per engine (AlphaFold2 multimer). Collapsed: the models table and its record card.
-Filters: target, engine and model rank. The target filter is optional, so with several targets
-in scope the profile draws one curve per engine and target; pick one target to read it on a
-single sequence.
+Filters: target (one at a time), engine and model rank.
 
-## Filters and the removed `always_selected`
+## Single-unit pickers (`always_selected`)
 
-The lot 3 template held a single pick on five filters with an `always_selected` option that
-this branch does not have: a `Select` is a multi-valued control here, and the only declared
-initial state is a literal `default_value`, which a generic template cannot write (a target name
-belongs to one run). The filters are therefore optional, and the tiles that show one structure at
-a time carry their own default (the structure the dashboard filters name on `entity`, else the
-reader's pick in the tile, else the first). What changes for the reader: a tab opens on every
-target in scope instead of the first, the structure plot is the picker, and a single
-sequence is read by picking one target (or one structure on the Predicted error tab). The PAE
-heatmap no longer needs a pick at all, since the tile draws one matrix.
+Three tab-local pickers always hold exactly one value: the target of the Structure and Engines
+comparison tabs and the structure of the Predicted error tab. Each opens on the first option of
+its own list, so the template names no value of one run (a target belongs to one samplesheet);
+a pick replaces it, the filter cannot be cleared, and a held value that leaves the list is
+replaced by the first again. The tiles that show one structure at a time therefore always agree
+on it, and the curves and points of a tab are one target's. The pinned `Sample filters` and the
+Overview's filter bars stay optional, so the Overview and Model scores read every target.
 
 ## Method notes
 

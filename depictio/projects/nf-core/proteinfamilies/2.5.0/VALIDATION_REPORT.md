@@ -64,8 +64,11 @@ heights.
   `family_residues`. The five updated families have an HMM but no alignment: their logo draws,
   `position` is empty.
 - **HMM information.** hmmbuild's entropy weighting holds the mean information per match state
-  at 0.59 bits for every family, so the Profile HMM strip reports match states, seed and effective
-  sequences instead.
+  at 0.59 bits for every family (the median per family runs 0.59 to 0.62), and a state's
+  occupancy sits near 0.98: neither tells one family from another. The Profile HMM tab shows one
+  family (`always_selected`), whose match states and seed are single values, so its strip reads
+  the family residue by residue (conservation, conservation class) and member by member
+  (identity to the representative, length).
 
 ## Open issues
 
@@ -83,8 +86,10 @@ heights.
   on a bar does nothing.
 - The hmmalign alignments of two families the redundancy filter removed stay in `hmmalign_hits`
   (their `label` matches no family).
-- The Profile HMM tab has no Select default: it opens on the first family of the profile table
-  and of the residue table, which agree only while both are sorted alike.
+- The Profile HMM tab opens on the first family of its picker (on the megatest, the first
+  family the run created), which the logo, the structure and the track all follow. On a run whose first family
+  is an updated one (no hmmalign alignment), a brush on the logo selects no residue until a new
+  family is picked.
 - Overview highlights cannot show the logo (a w4 tile holds about 30 states): the four figures are
   the cluster curves, the family landscape, the member scatter and the conservation histogram.
 - `SKIP_PHYLOGENETIC_INFERENCE` must be set by hand; it is not introspected from

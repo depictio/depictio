@@ -1441,20 +1441,20 @@ tabs:
   - name: Profile scope
     icon: mdi:filter-variant
     color: indigo
-    description: Pick one family, or keep families by their members
+    description: The family whose profile, fold and sequence the tab draws
   grid_sections:
   - name: Profile at a glance
     icon: mdi:counter
     color: indigo
-    description: Match states, seed sequences, effective sequences and representative length
+    description: The picked family's conservation, residue by residue, and its members
   - name: Profile logo
     icon: mdi:chart-bar
     color: indigo
     description: One stack of letters per match state, the members' coverage of the model below it
-  - name: Family and structure
+  - name: Structure
     icon: mdi:dna
     color: indigo
-    description: Pick a family, then read its fold linked to the logo by residue
+    description: The family's representative folded, linked to the logo by residue
   - name: Residues
     icon: mdi:relation-many-to-many
     color: indigo
@@ -1474,116 +1474,114 @@ tabs:
     order: 1
     body: >
       [hmmbuild](http://hmmer.org) turns each family's seed alignment into a profile HMM, drawn here
-      as a sequence logo: tall stacks are conserved states. Pick a family in the filter or on the
-      plot; brushing states selects the representative residues they sit on in the structure and
-      the track.
+      as a sequence logo: tall stacks are conserved states. The tab shows one family, the first of
+      the list until another is picked on the left; brushing states selects the representative
+      residues they sit on in the structure and the track.
     tag: pf-hmm-intro
     index: hmm-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
+  # always_selected: the logo, the structure and the track show one family, so
+  # the picker always names one, the first of its list until another is picked
+  # (on any run, where a default_value would name one run's family). The tiles
+  # follow it on hmm_name, entity and label through the families links. No size
+  # filter beside it: a range that left the picked family out would empty the
+  # tab.
   - component_type: interactive
     workflow_tag: proteinfamilies
     data_collection_tag: families
     interactive_component_type: Select
+    always_selected: true
     column_name: family
     column_type: object
     display:
       icon_name: mdi:shape-outline
       custom_color: grape
     section: Profile scope
-    group: Family
     tag: pf-hmm-filter-family
     index: hmm-family-select
     title: Family
     layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    workflow_tag: proteinfamilies
-    data_collection_tag: families
-    interactive_component_type: RangeSlider
-    show_histogram: true
-    column_name: size
-    column_type: int64
-    display:
-      icon_name: mdi:account-group-outline
-      custom_color: blue
-    section: Profile scope
-    group: Family
-    tag: pf-hmm-filter-size
-    index: hmm-size-range
-    title: Members per family
-    layout: {x: 0, y: 3, w: 1, h: 3}
+  # One family in scope: its own descriptors (match states, seed and effective
+  # sequences) are single values, whose spread would say nothing. The strip
+  # reads the family residue by residue and member by member instead.
   - component_type: card
     workflow_tag: proteinfamilies
-    data_collection_tag: families
+    data_collection_tag: family_residues
+    use: famsa/residue_conservation
     aggregation: median
-    column_name: model_length
+    column_name: value
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: green
+      caption: median per residue, with its spread
+      decimals: 2
+    section: Profile at a glance
+    tag: pf-hmm-card-conservation
+    index: hmm-card-conservation
+    title: Residue conservation
+    description: Conservation of each representative residue in the family alignment, from 0 (as diverse as random sequence) to 1 (invariant).
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_residues
+    aggregation: count
+    column_name: position
+    column_type: int64
+    secondary_layout: composition
+    breakdown_col: category
+    display:
+      icon_name: mdi:shape-outline
+      icon_color: orange
+      caption: residues, by conservation class
+    section: Profile at a glance
+    tag: pf-hmm-card-residues
+    index: hmm-card-residues
+    title: Representative residues
+    description: Residues of the representative, split into conserved (0.7 and above), intermediate (0.4 to 0.7) and variable.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_members
+    use: proteinfamilies/member_identity
+    aggregation: median
+    column_name: identity
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:relation-many-to-many
+      icon_color: cyan
+      caption: median per member, with its spread
+      format: percent
+    section: Profile at a glance
+    tag: pf-hmm-card-identity
+    index: hmm-card-identity
+    title: Identity to the representative
+    description: Identity of each member to the representative over the columns they share.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_members
+    use: proteinfamilies/member_length
+    aggregation: median
+    column_name: length
     column_type: int64
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
     display:
       icon_name: mdi:ruler
       icon_color: indigo
-      caption: median, with its spread
+      caption: residues per member, with the spread
     section: Profile at a glance
-    tag: pf-hmm-card-states
-    index: hmm-card-states
-    title: Match states
-    description: States of the family HMM, one per column of the seed alignment kept.
-    layout: {x: 0, y: 0, w: 2, h: 2}
-  - component_type: card
-    workflow_tag: proteinfamilies
-    data_collection_tag: families
-    aggregation: median
-    column_name: seed_size
-    column_type: int64
-    secondary_layout: histogram
-    display:
-      icon_name: mdi:sprout-outline
-      icon_color: green
-      caption: seed sequences per family
-    section: Profile at a glance
-    tag: pf-hmm-card-seed
-    index: hmm-card-seed
-    title: Seed sequences
-    description: Sequences the family HMM was built from.
-    layout: {x: 2, y: 0, w: 2, h: 2}
-  - component_type: card
-    workflow_tag: proteinfamilies
-    data_collection_tag: families
-    aggregation: median
-    column_name: effective_sequences
-    column_type: float64
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    display:
-      icon_name: mdi:chart-bell-curve
-      icon_color: cyan
-      caption: median, with its spread
-      decimals: 1
-    section: Profile at a glance
-    tag: pf-hmm-card-effn
-    index: hmm-card-effn
-    title: Effective sequences
-    description: HMMER's effective sequence number, the weight of evidence behind the model.
-    layout: {x: 4, y: 0, w: 2, h: 2}
-  - component_type: card
-    workflow_tag: proteinfamilies
-    data_collection_tag: families
-    use: proteinfamilies/representative_length
-    aggregation: median
-    column_name: representative_length
-    column_type: int64
-    secondary_layout: histogram
-    display:
-      icon_name: mdi:dna
-      icon_color: orange
-      caption: residues per family
-    section: Profile at a glance
-    tag: pf-hmm-card-representative
-    index: hmm-card-representative
-    title: Representative length
-    description: Residues of the sequence the family is drawn on.
+    tag: pf-hmm-card-length
+    index: hmm-card-length
+    title: Member length
+    description: Ungapped length of each member of the family.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  # The logo follows the family a filter or a pick names on hmm_name. A brush on
+  # The logo follows the family the picker names, on hmm_name. A brush on
   # its states selects the representative residues they sit on, which the
   # structure, the track and the alignment follow. The hits lane draws every
   # member the family alignment placed on the model. The hits table has no
@@ -1617,24 +1615,8 @@ tabs:
     title: Profile HMM logo
     description: Letter heights are relative entropy above background; the lanes show insert behaviour, occupancy and the members that matched each state.
     layout: {x: 0, y: 0, w: 8, h: 7}
-  - component_type: advanced_viz
-    workflow_tag: proteinfamilies
-    data_collection_tag: families
-    use: proteinfamilies/family_landscape
-    config:
-      x_title: Members (log)
-      y_title: Mean residue conservation
-      log_x: true
-      top_n_labels: 5
-      legend_pos: bottom
-      selection_enabled: true
-      selection_column: family
-    section: Family and structure
-    tag: pf-hmm-av-families
-    index: hmm-families
-    title: Families by size and conservation
-    description: One point per family. Click one to draw its logo and fold.
-    layout: {x: 0, y: 0, w: 4, h: 5}
+  # No family landscape here: the picker holds one family, so it would draw one
+  # point. The Families and Family alignment tabs keep it, as a picker.
   - component_type: advanced_viz
     workflow_tag: proteinfamilies
     data_collection_tag: family_residues
@@ -1648,12 +1630,12 @@ tabs:
       layout: structure
       selection_enabled: true
       follow_selection: true
-    section: Family and structure
+    section: Structure
     tag: pf-hmm-av-structure
     index: hmm-structure
     title: Predicted structure of the representative
-    description: Folded on demand from the picked family's representative and coloured by conservation class.
-    layout: {x: 4, y: 0, w: 4, h: 5}
+    description: Folded on demand from the family's representative and coloured by conservation class.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: proteinfamilies
     data_collection_tag: family_residues

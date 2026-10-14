@@ -129,17 +129,22 @@ empty state. Residues picked in the structure, on the track or by brushing align
 selected in all three. Collapsed: the maximum-likelihood tree of the family (CMAPLE, absent on a run
 that skips phylogenetic inference) and the residue table. Filter: identity to the representative.
 
-**Profile HMM.** Strip: the match states of the family HMMs (their spread), the seed sequences
-(their distribution), the effective sequences (their spread) and the representative length (its
-distribution). Then the profile logo of the family HMM, one stack of letters per match state with the
-insert, occupancy and consensus lanes and, under it, the members the hmmalign alignment placed on the
-model; the family scatter beside the predicted structure of the representative, coloured by
-conservation class; and the representative's sequence track. A family is picked on the scatter or in
-the `Family` filter of the left panel and the logo follows it. A brush on the logo selects the
-representative residues its states sit on, in the structure and on the track. The states are mapped
-onto the residues through the hmmalign alignment of the family, so a family an update run extended
-(no such alignment) draws its logo but a pick on it selects no residue. Collapsed: the family
-alignment and the table of members on the model. Filters: family and members per family.
+**Profile HMM.** The tab shows one family: its `Family` filter is `always_selected`, so it opens
+on the first family of its list on any run, a pick replaces it and it cannot be cleared, and the
+logo, the structure and the track always agree on the family. Strip, for that family: the
+conservation of its representative's residues (their spread), those residues split by
+conservation class, the members' identity to the representative and their length (both with
+their spread). The model's own descriptors (match states, seed and effective sequences) are one
+value per family: the pinned family table, narrowed to the family's row, holds them. Then the
+profile logo of the family HMM, one stack of letters per match state with the insert, occupancy
+and consensus lanes and, under it, the members the hmmalign alignment placed on the model; the
+predicted structure of the representative, coloured by conservation class; and the
+representative's sequence track. A brush on the logo selects the representative residues its
+states sit on, in the structure and on the track. The states are mapped onto the residues through the hmmalign alignment of the family,
+so a family an update run extended (no such alignment) draws its logo but a pick on it selects no
+residue. Collapsed: the family alignment and the table of members on the model. Filter: the
+family. The family scatter is not repeated here (it would draw one point); it picks families on
+the Families and Family alignment tabs.
 
 ## Colours
 
@@ -154,6 +159,6 @@ the structure agree; the family id takes the palette for the eight largest famil
   of the Family alignment tab goes with them.
 - A run that did not publish the family HMMs (`hmm/`) or the hmmalign alignments (`full_msa/raw/`)
   leaves `hmm_profile` or `hmmalign_hits` empty: the logo, the hits lane and the table of members on
-  the model go, and the rest of the Profile HMM tab (the family scatter, the structure and the
-  track) stays.
+  the model go, and the rest of the Profile HMM tab (the strip, the structure and the track)
+  stays.
 - A run with no update sample has no `updated` family: the origin splits show the new families alone.

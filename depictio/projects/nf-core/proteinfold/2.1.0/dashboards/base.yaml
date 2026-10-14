@@ -657,7 +657,8 @@ tabs:
   - component_type: text
     order: 1
     body: >
-      Click a point on the plot to open that engine's structure in 3D, coloured by pLDDT.
+      The tab reads one target, the first of the list until another is picked on the left;
+      click a point on the plot to open that engine's structure in 3D, coloured by pLDDT.
       A residue picked in 3D, on the sequence, on the Ramachandran plot or in the alignment is
       selected in every tile. The Ramachandran regions are approximate, a glance at backbone
       quality and not a validation.
@@ -665,13 +666,14 @@ tabs:
     index: st-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
   # No engine picker: the plot is the engine picker (an engine filter would
-  # narrow it to one point). The target filter is optional, so the tab opens on
-  # every target in scope and the 3D tiles on the first structure until a point
-  # is clicked.
+  # narrow it to one point). The target is always_selected: every tile reads one
+  # sequence (the plot one point per engine, the profile one curve per engine),
+  # the first target of the list until another is picked, on any run.
   - component_type: interactive
     workflow_tag: proteinfold
     data_collection_tag: proteinfold_residues
     interactive_component_type: Select
+    always_selected: true
     column_name: target
     column_type: object
     display:
@@ -760,24 +762,27 @@ tabs:
     title: Likely disordered residues
     description: Residues under pLDDT 50, which engines usually place as loose ends or loops, ranked by engine.
     layout: {x: 4, y: 0, w: 2, h: 2}
+  # One target, so one structure per engine: a count by engine would split
+  # evenly by design. The engines are ranked by their structure's confidence.
   - component_type: card
     workflow_tag: proteinfold
-    data_collection_tag: proteinfold_residues
-    use: proteinfold/residues
-    aggregation: nunique
-    column_name: entity
-    column_type: object
-    secondary_layout: donut
+    data_collection_tag: proteinfold_structure_scores
+    aggregation: max
+    column_name: mean_plddt
+    column_type: float64
+    secondary_layout: top_n
     breakdown_col: engine
+    top_n_count: 3
     display:
-      icon_name: mdi:molecule
+      icon_name: mdi:trophy-outline
       icon_color: indigo
-      caption: structures, by engine
+      caption: engines, by their structure's mean pLDDT
+      decimals: 1
     section: Confidence at a glance
-    tag: pf-st-card-structures
-    index: st-card-structures
-    title: Structures in scope
-    description: Top-ranked structures the tab draws, one per engine and target.
+    tag: pf-st-card-best
+    index: st-card-best
+    title: Best mean pLDDT
+    description: Mean pLDDT of the target's most confident structure, the engines ranked by theirs.
     layout: {x: 6, y: 0, w: 2, h: 2}
   # The plot and the 3D tile share the section width: a click on a point emits
   # that structure's entity, which the 3D tile, the sequence track and the
@@ -801,7 +806,7 @@ tabs:
     section: Structure and sequence
     tag: pf-st-av-structures
     index: st-structures
-    title: Structures, one point per engine and target
+    title: Structures of the target, one point per engine
     description: Mean confidence against the share of likely disordered residues. Bottom right is confident throughout. Click a point to open its structure.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
@@ -873,7 +878,7 @@ tabs:
     tag: pf-st-av-engine-profile
     index: st-engine-profile
     title: pLDDT per residue of every engine
-    description: One curve per engine and target, and per chain on a complex. Regions where the engines part are the least settled.
+    description: One curve per engine, and per chain on a complex. Regions where the engines part are the least settled.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: proteinfold
@@ -923,12 +928,12 @@ tabs:
   - name: Matrix picker
     icon: mdi:tune
     color: orange
-    description: The structure whose error matrix is drawn, or the engines it is picked from
+    description: The structure whose error matrix, fold and sequence the tab draws
   grid_sections:
   - name: Error at a glance
     icon: mdi:counter
     color: orange
-    description: Global and interface scores of the top-ranked models, and the matrices' mean error
+    description: The picked structure's mean error, residue confidence and top-model scores
   - name: Error matrix and structure
     icon: mdi:chart-box-outline
     color: orange
@@ -948,38 +953,30 @@ tabs:
     tag: pf-pe-intro
     index: pe-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
-  # The matrix is the tile's own pick when nothing is selected: this picker
-  # names the structure for the matrix, the 3D view and the cards at once.
+  # always_selected: the picker always names one structure, for the matrix, the
+  # 3D view, the track and the cards at once (it narrows proteinfold_pae and
+  # proteinfold_models by entity through the links). ESMFold writes no PAE, so
+  # its structures are not offered: the first option always has a matrix.
+  # No engine filter beside it: the structure id carries its engine, and an
+  # engine other than the picked structure's would empty every tile.
   - component_type: interactive
     workflow_tag: proteinfold
     data_collection_tag: proteinfold_residues
     interactive_component_type: Select
+    always_selected: true
+    filter_expr: "~col('entity').str.starts_with('esmfold__')"
     column_name: entity
     column_type: object
     display:
       icon_name: mdi:molecule
       custom_color: pink
     section: Matrix picker
-    group: Matrix
     tag: pf-pe-filter-entity
     index: pe-entity-filter
     title: Structure
     layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    workflow_tag: proteinfold
-    data_collection_tag: proteinfold_residues
-    interactive_component_type: MultiSelect
-    column_name: engine
-    column_type: object
-    display:
-      icon_name: mdi:tools
-      custom_color: grape
-    section: Matrix picker
-    group: Matrix
-    tag: pf-pe-filter-engine
-    index: pe-engine-filter
-    title: Engine
-    layout: {x: 0, y: 3, w: 1, h: 3}
+  # One structure in scope: each card reads it alone, along its residue bins,
+  # its residues or against the cut-offs of its top-ranked model's scores.
   - component_type: card
     workflow_tag: proteinfold
     data_collection_tag: proteinfold_pae
@@ -998,47 +995,53 @@ tabs:
     tag: pf-pe-card-mean
     index: pe-card-mean
     title: Mean PAE (angstroms)
-    description: Mean predicted aligned error of the matrices in scope. The box shows how it varies along the chain.
+    description: Mean predicted aligned error of the picked structure's matrix. The box shows how it varies along the chain.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: proteinfold
-    data_collection_tag: proteinfold_pae
-    use: proteinfold/mean_pae
-    aggregation: nunique
-    column_name: entity
-    column_type: object
-    secondary_layout: composition
-    breakdown_col: engine
+    data_collection_tag: proteinfold_residues
+    use: proteinfold/residue_plddt
+    aggregation: median
+    column_name: value
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     display:
-      icon_name: mdi:grid
-      icon_color: orange
-      caption: matrices, by engine
+      icon_name: mdi:check-decagram
+      icon_color: green
+      caption: median pLDDT per residue, with its spread
+      decimals: 1
     section: Error at a glance
-    tag: pf-pe-card-matrices
-    index: pe-card-matrices
-    title: Matrices in scope
-    description: Error matrices of the top-ranked models. ESMFold writes none.
+    tag: pf-pe-card-plddt
+    index: pe-card-plddt
+    title: Residue pLDDT
+    description: Local confidence of each residue of the picked structure, from 0 to 100, the strips along the matrix axes.
     layout: {x: 2, y: 0, w: 2, h: 2}
+  # 0.5 is the pTM the AlphaFold papers read as "the overall fold may be right".
   - component_type: card
     workflow_tag: proteinfold
     data_collection_tag: proteinfold_models
     use: proteinfold/model_ptm
-    aggregation: median
+    aggregation: max
     column_name: ptm
     column_type: float64
     filter_expr: "col('is_top') == True"
-    secondary_layout: histogram
+    secondary_layout: threshold
+    threshold_value: 0.5
+    threshold_direction: min
     display:
       icon_name: mdi:target
       icon_color: indigo
-      caption: median per top-ranked model, distribution
+      caption: the top-ranked model at pTM 0.5 or more
       decimals: 2
     section: Error at a glance
     tag: pf-pe-card-ptm
     index: pe-card-ptm
-    title: pTM of the top models
-    description: Predicted TM score of each top-ranked model, from 0 to 1.
+    title: pTM of the top model
+    description: Predicted TM score of the structure's top-ranked model, from 0 to 1. RoseTTAFold All-Atom writes none.
     layout: {x: 4, y: 0, w: 2, h: 2}
+  # AlphaFold-Multimer's reading of ipTM: 0.8 and more is a confident interface,
+  # under 0.6 a likely failed one, the band between a grey zone.
   - component_type: card
     workflow_tag: proteinfold
     data_collection_tag: proteinfold_models
@@ -1047,18 +1050,20 @@ tabs:
     column_name: iptm
     column_type: float64
     filter_expr: "col('is_top') == True"
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
+    secondary_layout: threshold
+    threshold_value: 0.8
+    threshold_warn: 0.6
+    threshold_direction: min
     display:
       icon_name: mdi:relation-many-to-many
-      icon_color: green
-      caption: best per top-ranked model, with its spread
+      icon_color: violet
+      caption: the top-ranked model at ipTM 0.8 or more, 0.6 to 0.8, under 0.6
       decimals: 2
     section: Error at a glance
     tag: pf-pe-card-iptm
     index: pe-card-iptm
-    title: Best ipTM of a complex
-    description: Interface TM score of the top-ranked complexes; single chains have none.
+    title: ipTM of the top model
+    description: Interface TM score of the top-ranked model of a complex; single chains have none.
     layout: {x: 6, y: 0, w: 2, h: 2}
   # The matrix and the 3D view share one residue table (entity, position,
   # chain), so a diagonal brush picks a domain in both and on the sequence below.
@@ -1139,10 +1144,10 @@ tabs:
     icon: mdi:counter
     color: blue
     description: Confidence of every model in scope
-  - name: Best model per target
+  - name: Best model per engine
     icon: mdi:check-decagram
     color: blue
-    description: The top-ranked model of each engine, target by target
+    description: The top-ranked model of each engine on the target
   - name: Rank and agreement
     icon: mdi:chart-line
     color: blue
@@ -1156,17 +1161,21 @@ tabs:
   - component_type: text
     order: 1
     body: >
-      The tab compares every engine on the targets in scope; pick one target on the left to
-      read the curves on a single sequence. A steep fall from the first model to the next
+      The tab compares every engine on one target, the first of the list until another is
+      picked on the left. A steep fall from the first model to the next
       means the ranking was decisive. A wide band along the sequence marks residues the
       models of an engine disagree on.
     tag: pf-en-intro
     index: en-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
+  # always_selected: engines are compared on one sequence, so the target picker
+  # holds the whole tab (curves, models, cards) on one target, the first of the
+  # list until another is picked. The engine and rank filters stay optional.
   - component_type: interactive
     workflow_tag: proteinfold
     data_collection_tag: proteinfold_models
     interactive_component_type: Select
+    always_selected: true
     column_name: target
     column_type: object
     display:
@@ -1225,7 +1234,7 @@ tabs:
     tag: pf-en-card-models
     index: en-card-models
     title: Models in scope
-    description: Models of the engines and targets in scope. The bar splits them by engine.
+    description: Models the engines in scope built for the target. The bar splits them by engine.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: proteinfold
@@ -1298,31 +1307,33 @@ tabs:
       color: engine
       barmode: group
       labels: {target: Target, mean_plddt: Mean pLDDT, engine: Engine}
-    section: Best model per target
+    section: Best model per engine
     tag: pf-en-fig-best
     index: en-best-bar
-    title: Mean pLDDT of each engine's top-ranked model, per target
-    description: The tallest bar of a target is the engine whose top model is the most confident overall.
+    title: Mean pLDDT of each engine's top-ranked model
+    description: The tallest bar is the engine whose top model is the most confident overall.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: figure
     workflow_tag: proteinfold
     data_collection_tag: proteinfold_models
     use: proteinfold/models
-    visu_type: box
+    # One target, so one model per engine and rank: a line per engine (the
+    # table is sorted by engine and rank) where a box would hold one value.
+    visu_type: line
     dict_kwargs:
       x: model_rank
       y: mean_plddt
       color: engine
+      markers: true
       labels: {model_rank: Model rank, mean_plddt: Mean pLDDT, engine: Engine}
     section: Rank and agreement
     tag: pf-en-fig-rank
-    index: en-rank-box
-    title: Mean pLDDT by model rank, per engine
-    description: How an engine's confidence falls from its first model to its last. Engines that write one model show a single box.
+    index: en-rank-line
+    title: Mean pLDDT by model rank, one line per engine
+    description: How an engine's confidence falls from its first model to its last. Engines that write one model show a single point.
     layout: {x: 0, y: 0, w: 8, h: 4}
-  # One curve per engine and target (the series is the entity), so the tile reads
-  # right before a target is picked instead of zigzagging between targets at
-  # the same residue number.
+  # One curve per engine (the series is the entity, one per engine on the one
+  # target the picker holds).
   - component_type: advanced_viz
     workflow_tag: proteinfold
     data_collection_tag: proteinfold_plddt_ranks

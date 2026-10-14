@@ -18,7 +18,7 @@ Overview highlights, the linked structure tiles) is not part of this report.
 | Every catalog recipe and both project recipes on the megatest (glob sources as the CLI reads them, schemas exact) | pass, 8 collections |
 | `depictio/tests/recipes/test_proteinfold_recipes.py` (recipes, project recipes, the template's PAE and structure sample regexes, its scores scan) | 15 passed |
 | `test_shipped_dashboard_yamls.py`, `test_template_conventions.py`, `test_template_dc_order.py` `-k proteinfold` | 22 passed |
-| `pytest depictio/tests -k "proteinfold or template_conventions or shipped_dashboard or template_dc_order or nfcore"` | 1608 passed, 4 skipped |
+| `pytest depictio/tests -k "proteinfold or template_conventions or shipped_dashboard or template_dc_order or nfcore"` | 1656 passed, 4 skipped |
 | `depictio-cli run --template nf-core/proteinfold/2.1.0 --data-root <megatest> --dry-run` | 8/8 steps, 11 collections, 0 empty, 0 missing sources |
 | Every `use:` handle of the dashboard resolves to its catalog entry | pass |
 | PAE and structure ids on the megatest | the 9 matrices carry the id of their structure; the 3 structures without a matrix are ESMFold's |
@@ -68,9 +68,7 @@ Overview highlights, the linked structure tiles) is not part of this report.
 - The megatest `params.json` is the latest of the eleven runs, so `{{param:mode}}` on the
   Overview prints that one run's mode (`colabfold`); on a single real run it lists the engines
   requested.
-- The tiles that show one structure at a time open on the first structure in scope until a
-  point is clicked or a filter names an `entity`: the tabs have no pre-selected target (see
-  `docs/dashboards.md`, "Filters and the removed `always_selected`").
-- The Engines comparison profile draws one curve per engine and target (series `entity`)
-  until a target is picked; a `target` column in the catalog's `plddt_ranks` series would let it
-  keep the engine colours.
+- The Structure and Engines comparison tabs read one target and the Predicted error tab one
+  structure (`always_selected`, see `docs/dashboards.md`, "Single-unit pickers"). On the
+  megatest they open on the heterodimer (AlphaFold2 multimer and ESMFold only) and on its
+  AlphaFold2 structure; the live check should pick a monomer target too (five engines).
