@@ -40,6 +40,7 @@ def telemetry_db():
 
     patches = {
         "telemetry_collection": db.telemetry,
+        "initialization_collection": db.initialization,
         "users_collection": db.users,
         "groups_collection": db.groups,
         "projects_collection": db.projects,
@@ -90,10 +91,32 @@ class TestInstanceIdentity:
     def test_identity_survives_repeated_boots(self, telemetry_db):
         from depictio.api.v1.telemetry.identity import get_or_create_instance_id
 
-        first, created_first = get_or_create_instance_id()
-        second, created_second = get_or_create_instance_id()
+        first, created_first, _ = get_or_create_instance_id()
+        second, created_second, _ = get_or_create_instance_id()
         assert first == second
         assert created_first == created_second
+
+    def test_identity_survives_a_wipe(self, telemetry_db, monkeypatch):
+        """``DEPICTIO_MONGODB_WIPE`` keeps the identity, or every wipe is a phantom install."""
+        from depictio.api.v1 import db_init
+        from depictio.api.v1.telemetry.identity import get_or_create_instance_id
+
+        before, _, _ = get_or_create_instance_id()
+        telemetry_db.initialization.insert_many(
+            [{"_id": "init_lock", "initialization_complete": True}, {"_id": "other"}]
+        )
+        telemetry_db.projects.insert_one({"name": "seeded"})
+        monkeypatch.setattr(db_init, "_ensure_mongodb_connection", lambda: None)
+        monkeypatch.setattr(
+            "depictio.api.v1.endpoints.utils_endpoints.core_functions.cleanup_orphaned_s3_files",
+            AsyncMock(return_value={"deleted_count": 0}),
+        )
+
+        asyncio.run(db_init.wipe_database())
+
+        assert "projects" not in telemetry_db.list_collection_names()
+        assert [d["_id"] for d in telemetry_db.initialization.find()] == ["init_lock"]
+        assert get_or_create_instance_id()[0] == before
 
     def test_install_age_days(self):
         assert install_age_days(datetime.now(timezone.utc)) == 0
@@ -107,6 +130,71 @@ class TestInstanceIdentity:
     def test_negative_age_is_clamped(self):
         """A clock skew must not produce a negative age."""
         assert install_age_days(datetime.now(timezone.utc) + timedelta(days=5)) == 0
+
+
+class TestPreexistingData:
+    """An identity created on a database an earlier boot initialised says so (#960).
+
+    The identity is created a minute after the boot that initialises a fresh
+    install, so only an older database marks it: a regenerated identity can be
+    corrected for at the collector instead of counting as a new installation.
+    """
+
+    BOOT = datetime(2026, 10, 14, 12, 0, tzinfo=timezone.utc)
+
+    @pytest.fixture(autouse=True)
+    def _booted(self, monkeypatch):
+        monkeypatch.setattr(
+            "depictio.api.v1.telemetry.identity._process_started_at", lambda: self.BOOT
+        )
+
+    def _create(self, telemetry_db, initialised_at: datetime | None) -> bool:
+        from depictio.api.v1.telemetry.identity import get_or_create_instance_id
+
+        if initialised_at is not None:
+            telemetry_db.initialization.insert_one(
+                {
+                    "_id": "init_lock",
+                    "initialization_complete": True,
+                    "completed_at": initialised_at,
+                }
+            )
+        return get_or_create_instance_id()[2]
+
+    def test_fresh_install_is_not_preexisting(self, telemetry_db):
+        assert self._create(telemetry_db, self.BOOT + timedelta(seconds=5)) is False
+
+    def test_database_from_an_earlier_boot_is_preexisting(self, telemetry_db):
+        assert self._create(telemetry_db, self.BOOT - timedelta(days=30)) is True
+
+    def test_replicas_of_one_fresh_install_are_not_preexisting(self, telemetry_db):
+        """A replica started a few minutes after the one that initialised."""
+        assert self._create(telemetry_db, self.BOOT - timedelta(minutes=3)) is False
+
+    def test_naive_mongo_datetime_is_read_as_utc(self, telemetry_db):
+        naive = (self.BOOT - timedelta(days=1)).replace(tzinfo=None)
+        assert self._create(telemetry_db, naive) is True
+
+    def test_no_init_lock_is_not_preexisting(self, telemetry_db):
+        assert self._create(telemetry_db, None) is False
+
+    def test_decided_once_at_creation(self, telemetry_db):
+        """A later boot finds the database old; the identity keeps its first answer."""
+        from depictio.api.v1.telemetry.identity import get_or_create_instance_id
+
+        assert self._create(telemetry_db, self.BOOT + timedelta(seconds=5)) is False
+        telemetry_db.initialization.update_one(
+            {"_id": "init_lock"}, {"$set": {"completed_at": self.BOOT - timedelta(days=30)}}
+        )
+        assert get_or_create_instance_id()[2] is False
+
+    def test_identity_recorded_before_the_field_reads_false(self, telemetry_db):
+        from depictio.api.v1.telemetry.identity import get_or_create_instance_id
+
+        telemetry_db.telemetry.insert_one(
+            {"_id": IDENTITY_DOC_ID, "instance_id": "abc", "created_at": self.BOOT}
+        )
+        assert get_or_create_instance_id() == ("abc", self.BOOT.replace(tzinfo=None), False)
 
 
 class TestSendGuard:
@@ -377,6 +465,7 @@ class TestPayloadContainsNothingIdentifying:
             "arch",
             "python_version",
             "boot_id",
+            "preexisting_data",
             "api_version",
             "install_age_days",
             "workers",

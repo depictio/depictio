@@ -162,6 +162,16 @@ class ServerHeartbeatProperties(CommonProperties):
             "into a second environment visible as such."
         ),
     )
+    preexisting_data: bool = Field(
+        default=False,
+        description=(
+            "Whether this installation's ID was created on a database an earlier boot "
+            "had already initialised: telemetry turned on after the first boot, an "
+            "upgrade from a release without it, or a regenerated ID (a dropped "
+            "`telemetry` collection, a restored backup). False for a fresh install. "
+            "Decided once, when the ID is created."
+        ),
+    )
     api_version: str = Field(description="Major API version served, e.g. `v1`.")
     install_age_days: int = Field(
         description=(
