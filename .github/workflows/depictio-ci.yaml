@@ -174,7 +174,7 @@ jobs:
               ! -path "depictio/tests/*" 2>/dev/null | sort | xargs cat 2>/dev/null | sha256sum | cut -c1-12)
           CONFIG_HASH=$(cat \
               pyproject.toml uv.lock \
-              pnpm-lock.yaml pnpm-workspace.yaml \
+              pnpm-lock.yaml pnpm-workspace.yaml patches/* \
               docker-images/Dockerfile.api \
               docker-images/Dockerfile.worker \
               docker-images/Dockerfile.viewer \
