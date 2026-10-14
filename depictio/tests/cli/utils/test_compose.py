@@ -109,6 +109,8 @@ def test_tabs_follow_the_pipeline_stages(conformance):
         "Alignment & coverage",
         "Quantification",
         "Taxonomy & diversity",
+        # TEAL and CHORD (stage "other") come last, before MultiQC.
+        "Other results",
         "MultiQC",
     ]
 
