@@ -119,6 +119,11 @@ const SELECTION_ON_BY_DEFAULT: ReadonlySet<string> = new Set([
   'molecule_3d',
   'msa',
   'sequence_track',
+  'hmm_logo',
+  'secondary_structure',
+  'domain_architecture',
+  'pae_matrix',
+  'ramachandran',
 ]);
 
 /**
@@ -192,9 +197,18 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
       return named ?? configColumn('label_col');
     case 'molecule_3d':
     case 'sequence_track':
+    case 'hmm_logo':
+    case 'secondary_structure':
+    case 'pae_matrix':
+    case 'ramachandran':
       // A picked residue is a position; the entity half travels in the
       // `residue_selection` filter pair, not in this scatter-style column.
       return configColumn('position_col') ?? 'position';
+    case 'domain_architecture':
+      // A click on a domain picks its span as a residue range (the pair
+      // above) and, beside it, the domain by name: the label column is what
+      // identifies it, as a chord's is for a link.
+      return configColumn('label_col') ?? 'label';
     case 'msa':
       // A row click picks one sequence of the alignment.
       return configColumn('seq_id_col') ?? 'seq_id';

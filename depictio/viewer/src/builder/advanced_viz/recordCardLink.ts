@@ -5,7 +5,7 @@
  * sources (`RecordCardConfig.selection_source`): `scatter_selection`,
  * which scatter figures and the selecting advanced_viz kinds emit, and
  * `table_selection`, which tables with row selection emit. It also follows a
- * `residue_selection` (molecule_3d, sequence_track, lollipop) under `any` or
+ * `residue_selection` (the protein kinds and lollipop) under `any` or
  * when linked to the emitting tile (see `readRecordSelection`). Maps and image
  * galleries select too, but on sources the card ignores, so offering them here
  * would link the card to a tile it can never hear.
@@ -43,11 +43,29 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : nul
 
 /** Kinds whose model defaults `selection_enabled` to true. Mirrors
  *  `SELECTION_ON_BY_DEFAULT` in selection.ts and record_link.py. */
-const SELECTION_ON_BY_DEFAULT: ReadonlySet<string> = new Set(['molecule_3d', 'msa', 'sequence_track']);
+const SELECTION_ON_BY_DEFAULT: ReadonlySet<string> = new Set([
+  'molecule_3d',
+  'msa',
+  'sequence_track',
+  'hmm_logo',
+  'secondary_structure',
+  'domain_architecture',
+  'pae_matrix',
+  'ramachandran',
+]);
 
 /** Kinds whose pick reaches the card as a `residue_selection` pair. Mirrors
  *  `RESIDUE_EMITTING_KINDS` in record_link.py. */
-const RESIDUE_EMITTING_KINDS: ReadonlySet<string> = new Set(['molecule_3d', 'sequence_track', 'lollipop']);
+const RESIDUE_EMITTING_KINDS: ReadonlySet<string> = new Set([
+  'molecule_3d',
+  'sequence_track',
+  'lollipop',
+  'hmm_logo',
+  'secondary_structure',
+  'domain_architecture',
+  'pae_matrix',
+  'ramachandran',
+]);
 
 /** The column an advanced_viz tile selects on, or null when it cannot select.
  *  Mirrors `advancedVizSelectionColumn` (see the module comment). The second
@@ -79,7 +97,16 @@ function advancedVizEmits(m: StoredMetadata): { emits: boolean; column: string |
       break;
     case 'molecule_3d':
     case 'sequence_track':
+    case 'hmm_logo':
+    case 'secondary_structure':
+    case 'pae_matrix':
+    case 'ramachandran':
       column = str(config.position_col) ?? 'position';
+      break;
+    case 'domain_architecture':
+      // A click on a domain picks its span (a residue range) and the domain
+      // by its label, which is the column the pick names.
+      column = str(config.label_col) ?? 'label';
       break;
     case 'msa':
       column = str(config.seq_id_col) ?? 'seq_id';

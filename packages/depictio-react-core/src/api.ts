@@ -1544,7 +1544,12 @@ export type AdvancedVizKind =
   | 'parallel_coordinates'
   | 'molecule_3d'
   | 'msa'
-  | 'sequence_track';
+  | 'sequence_track'
+  | 'hmm_logo'
+  | 'secondary_structure'
+  | 'domain_architecture'
+  | 'pae_matrix'
+  | 'ramachandran';
 
 /** Accepted dtypes for one role, plus whether the role is required. Sourced
  *  from the backend canonical schema so the builder never duplicates the

@@ -1,18 +1,19 @@
 /**
  * Companion data collections of the protein kinds (molecule_3d, msa,
- * sequence_track): which DCs of the project each picker offers, and the
- * config patch a pick writes.
+ * sequence_track, hmm_logo, pae_matrix, ramachandran): which DCs of the project
+ * each picker offers, and the config patch a pick writes.
  *
  * The bound DC comes from the builder's data step; these are the extra
  * collections a kind reads beside it (the structure files, an alignment, the
- * domain spans, the variants). Each is stored as the `<base>_dc_id` /
+ * domain spans, the variants, a profile's hits, the PAE files). Each is stored
+ * as the `<base>_dc_id` /
  * `<base>_wf_id` pair of the config model. A template ships `<base>_dc_tag`
  * instead, which the import resolves; a pick in the builder names the ids, so
  * it drops the tag.
  */
 import type { WorkflowEntry } from 'depictio-react-core';
 
-export type CompanionBase = 'structure' | 'msa' | 'domains' | 'variants';
+export type CompanionBase = 'structure' | 'msa' | 'domains' | 'variants' | 'hits' | 'pae';
 
 export interface CompanionOption {
   value: string;
@@ -22,6 +23,9 @@ export interface CompanionOption {
 
 /** Indexed-file formats that hold a protein structure (indexed_file.py). */
 const STRUCTURE_FORMATS = new Set(['pdb', 'mmcif']);
+
+/** The indexed-file format of predicted-aligned-error files, one per entity. */
+const PAE_FORMAT = 'pae';
 
 type Dc = NonNullable<WorkflowEntry['data_collections']>[number];
 
@@ -34,10 +38,12 @@ function dcFormat(dc: Dc): string {
   return String(props?.format ?? '').toLowerCase();
 }
 
-/** Whether a DC can serve `base`: structures are pdb/mmcif indexed files,
- *  the three others are ordinary tables. */
+/** Whether a DC can serve `base`: structures are pdb/mmcif indexed files, PAE
+ *  matrices are `pae` indexed files, the others (alignment, domains, variants,
+ *  hits) are ordinary tables. */
 export function isCompanionCandidate(base: CompanionBase, dc: Dc): boolean {
   if (base === 'structure') return dcType(dc) === 'indexed_file' && STRUCTURE_FORMATS.has(dcFormat(dc));
+  if (base === 'pae') return dcType(dc) === 'indexed_file' && dcFormat(dc) === PAE_FORMAT;
   return dcType(dc) === 'table';
 }
 

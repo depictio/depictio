@@ -244,6 +244,20 @@ const KIND_CONTENT_SELECTOR: Record<string, string> = {
   molecule_3d: '.depictio-molecule-3d canvas, [data-testid="advanced-viz-empty"]',
   msa: ".depictio-msa canvas",
   sequence_track: ".depictio-sequence-track canvas",
+  // Drawn from the catalog's own tables, so each paints its root with a canvas
+  // or an SVG (whichever the renderer picked).
+  hmm_logo: ".depictio-hmm-logo canvas, .depictio-hmm-logo svg",
+  secondary_structure:
+    ".depictio-secondary-structure canvas, .depictio-secondary-structure svg",
+  domain_architecture:
+    ".depictio-domain-architecture canvas, .depictio-domain-architecture svg",
+  // These two fetch a file at render time (a PAE matrix from object storage, a
+  // backbone from the structure resolver) that the catalog preview cannot
+  // serve, so the explained empty state is a pass, as for molecule_3d.
+  pae_matrix:
+    '.depictio-pae-matrix canvas, .depictio-pae-matrix svg, [data-testid="advanced-viz-empty"]',
+  ramachandran:
+    '.depictio-ramachandran svg, .depictio-ramachandran canvas, [data-testid="advanced-viz-empty"]',
 };
 
 /** What shows that a render drew its content: its kind's own selector, the

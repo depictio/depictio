@@ -1,49 +1,58 @@
 /**
- * Protein kinds (molecule_3d, msa, sequence_track): what the role mapping
- * cannot say.
+ * Protein kinds (molecule_3d, msa, sequence_track and the five newer ones):
+ * what the role mapping cannot say.
  *
  * The bound collection's columns go through the usual role mapping. What is
  * left is where the other data lives (the structure files, the alignment
- * beside the structure, the domain spans and variants under the sequence),
- * how a structure is found (a file per entity, or resolved from an accession
- * or a sequence), and whether the tile picks residues and follows the picks
- * of the others. All of it is plain config, written as viz overrides like the
- * record card's link settings.
+ * beside the structure, the domain spans and variants under the sequence, a
+ * profile's hits, the PAE files), how a structure is found (a file per entity,
+ * or resolved from an accession or a sequence), and whether the tile picks
+ * residues and follows the picks of the others. All of it is plain config,
+ * written as viz overrides like the record card's link settings.
+ *
+ * The newer kinds each keep their own panel under `./protein/`; this module
+ * owns the frame around them (the selection switches, the project's
+ * collections, the load error) and the three older kinds' panels.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Alert,
-  Group,
-  NumberInput,
-  Paper,
-  SegmentedControl,
-  Select,
-  Stack,
-  Switch,
-  Text,
-  TextInput,
-} from '@mantine/core';
-import { fetchProjectFromDashboard, fetchSpecs } from 'depictio-react-core';
+import { Alert, Group, Paper, Select, Stack, Switch, Text, TextInput } from '@mantine/core';
+import { fetchProjectFromDashboard } from 'depictio-react-core';
 import type { WorkflowEntry } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
-import {
-  type CompanionBase,
-  type CompanionOption,
-  companionOptions,
-  companionPatch,
-  specColumns,
-} from './proteinBindings';
+import { companionOptions } from './proteinBindings';
+import { ColumnPicker, CompanionPicker, str, useDcColumns } from './protein/common';
+import DomainArchitectureSettings from './protein/DomainArchitectureSettings';
+import HmmLogoSettings from './protein/HmmLogoSettings';
+import PaeMatrixSettings from './protein/PaeMatrixSettings';
+import RamachandranSettings from './protein/RamachandranSettings';
+import SecondaryStructureSettings from './protein/SecondaryStructureSettings';
+import StructureSourceSettings from './protein/StructureSourceSettings';
 
-type ProteinKind = 'molecule_3d' | 'msa' | 'sequence_track';
+type ProteinKind =
+  | 'molecule_3d'
+  | 'msa'
+  | 'sequence_track'
+  | 'hmm_logo'
+  | 'secondary_structure'
+  | 'domain_architecture'
+  | 'pae_matrix'
+  | 'ramachandran';
 
 /** Panel heading per kind. */
 const PANEL_TITLE: Record<ProteinKind, string> = {
   molecule_3d: 'Structure',
   msa: 'Alignment',
   sequence_track: 'Sequence lanes',
+  hmm_logo: 'HMM logo',
+  secondary_structure: 'Secondary structure',
+  domain_architecture: 'Domain architecture',
+  pae_matrix: 'Predicted aligned error',
+  ramachandran: 'Ramachandran plot',
 };
 
-const PROTEIN_KINDS: ReadonlySet<string> = new Set<ProteinKind>(['molecule_3d', 'msa', 'sequence_track']);
+const PROTEIN_KINDS: ReadonlySet<string> = new Set<ProteinKind>(
+  Object.keys(PANEL_TITLE) as ProteinKind[],
+);
 
 export function isProteinKind(kind: string): kind is ProteinKind {
   return PROTEIN_KINDS.has(kind);
@@ -56,80 +65,6 @@ export interface ProteinBindingSettingsProps {
   /** Writes config fields; `undefined` drops a key the saved config never had. */
   onChange: (patch: Record<string, unknown>) => void;
 }
-
-const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
-
-/** Columns of one companion DC, for its column pickers. */
-function useDcColumns(dcId: string | null): string[] {
-  const [columns, setColumns] = useState<string[]>([]);
-  useEffect(() => {
-    if (!dcId) {
-      setColumns([]);
-      return;
-    }
-    let cancelled = false;
-    fetchSpecs(dcId)
-      .then((specs) => {
-        if (!cancelled) setColumns(specColumns(specs));
-      })
-      .catch(() => {
-        if (!cancelled) setColumns([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [dcId]);
-  return columns;
-}
-
-const CompanionPicker: React.FC<{
-  label: string;
-  description: string;
-  base: CompanionBase;
-  options: CompanionOption[];
-  config: Record<string, unknown> | null;
-  onChange: (patch: Record<string, unknown>) => void;
-  loading: boolean;
-  emptyMessage: string;
-}> = ({ label, description, base, options, config, onChange, loading, emptyMessage }) => {
-  const current = str(config?.[`${base}_dc_id`]);
-  const tag = str(config?.[`${base}_dc_tag`]);
-  return (
-    <Select
-      label={label}
-      description={description}
-      placeholder={loading ? 'Loading collections…' : tag ? `Template tag: ${tag}` : 'None'}
-      data={options.map((o) => ({ value: o.value, label: o.label }))}
-      value={current && options.some((o) => o.value === current) ? current : null}
-      onChange={(v) => onChange(companionPatch(base, v, options))}
-      clearable
-      searchable
-      nothingFoundMessage={emptyMessage}
-    />
-  );
-};
-
-const ColumnPicker: React.FC<{
-  label: string;
-  field: string;
-  fallback: string;
-  columns: string[];
-  config: Record<string, unknown> | null;
-  onChange: (patch: Record<string, unknown>) => void;
-}> = ({ label, field, fallback, columns, config, onChange }) => {
-  const value = str(config?.[field]) ?? fallback;
-  const data = columns.includes(value) || !value ? columns : [value, ...columns];
-  return (
-    <Select
-      label={label}
-      data={data}
-      value={value || null}
-      onChange={(v) => onChange({ [field]: v ?? undefined })}
-      searchable
-      size="xs"
-    />
-  );
-};
 
 const ProteinBindingSettings: React.FC<ProteinBindingSettingsProps> = ({
   vizKind,
@@ -157,10 +92,6 @@ const ProteinBindingSettings: React.FC<ProteinBindingSettingsProps> = ({
   }, [dashboardId]);
 
   const loading = workflows == null && !loadError;
-  const structureOptions = useMemo(
-    () => companionOptions(workflows ?? [], 'structure'),
-    [workflows],
-  );
   // The alignment, domain and variant pickers all offer the project's other tables.
   const tableOptions = useMemo(
     () => companionOptions(workflows ?? [], 'msa', boundDcId),
@@ -172,8 +103,9 @@ const ProteinBindingSettings: React.FC<ProteinBindingSettingsProps> = ({
 
   const selectionEnabled = config?.selection_enabled !== false;
   const followSelection = config?.follow_selection !== false;
-  const structureSource = str(config?.structure_source) ?? 'file';
   const layout = str(config?.layout) ?? 'structure';
+  // What each newer kind's own panel receives.
+  const kindProps = { config, onChange, workflows, loading, boundDcId };
 
   return (
     <Paper withBorder p="md" radius="md">
@@ -184,49 +116,12 @@ const ProteinBindingSettings: React.FC<ProteinBindingSettingsProps> = ({
 
         {vizKind === 'molecule_3d' ? (
           <>
-            <Stack gap={4}>
-              <Text size="sm" fw={500}>
-                Structure source
-              </Text>
-              <SegmentedControl
-                data={[
-                  { value: 'file', label: 'Structure files' },
-                  { value: 'resolve', label: 'Predicted (resolved)' },
-                ]}
-                value={structureSource}
-                onChange={(v) => onChange({ structure_source: v })}
-                fullWidth
-                size="xs"
-              />
-            </Stack>
-            {structureSource === 'file' ? (
-              <CompanionPicker
-                label="Structure files"
-                description="An indexed-file collection of pdb or mmcif files, one per entity. The entity the dashboard filters on is the one shown."
-                base="structure"
-                options={structureOptions}
-                config={config}
-                onChange={onChange}
-                loading={loading}
-                emptyMessage="No pdb or mmcif collection in this project"
-              />
-            ) : (
-              <>
-                <Text size="xs" c="dimmed">
-                  Bind a UniProt, gene or sequence column in the role mapping above: the
-                  structure is fetched from the AlphaFold database, or folded from the sequence
-                  when no accession resolves.
-                </Text>
-                <NumberInput
-                  label="Taxon"
-                  description="NCBI taxonomy id used to resolve gene symbols"
-                  value={typeof config?.taxon === 'number' ? config.taxon : 9606}
-                  onChange={(v) => onChange({ taxon: typeof v === 'number' ? v : undefined })}
-                  min={1}
-                  size="xs"
-                />
-              </>
-            )}
+            <StructureSourceSettings
+              config={config}
+              onChange={onChange}
+              workflows={workflows}
+              loading={loading}
+            />
             <Select
               label="Layout"
               data={[
@@ -320,6 +215,12 @@ const ProteinBindingSettings: React.FC<ProteinBindingSettingsProps> = ({
             </Group>
           </>
         ) : null}
+
+        {vizKind === 'hmm_logo' ? <HmmLogoSettings {...kindProps} /> : null}
+        {vizKind === 'secondary_structure' ? <SecondaryStructureSettings {...kindProps} /> : null}
+        {vizKind === 'domain_architecture' ? <DomainArchitectureSettings {...kindProps} /> : null}
+        {vizKind === 'pae_matrix' ? <PaeMatrixSettings {...kindProps} /> : null}
+        {vizKind === 'ramachandran' ? <RamachandranSettings {...kindProps} /> : null}
 
         <Stack gap={6}>
           <Switch

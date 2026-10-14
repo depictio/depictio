@@ -52,6 +52,7 @@ import PreviewPanel from '../shared/PreviewPanel';
 import AdvancedVizPreview from './AdvancedVizPreview';
 import { BuilderSection, BuilderSections } from '../shared/BuilderSections';
 import { bindingSchemaDcId, mergedPresetConfig, rolesFromConfigBlob } from './configBlob';
+import { roleModeOf, splitRoles } from './kindModes';
 import {
   RankedKind,
   matchBadge,
@@ -206,6 +207,56 @@ function detectEmbeddingMode(
  *  `taxon` is the column naming its tips. Absent kinds and roles show the key. */
 const ROLE_DISPLAY_NAMES: Record<string, Record<string, string>> = {
   phylogenetic: { taxon: 'Tip name column', color: 'Colour by', label: 'Label by' },
+  // A profile HMM's long table: one row per match state and letter. The last
+  // four are the alignment mode's roles (`profile_source: msa`).
+  hmm_logo: {
+    state: 'HMM state',
+    letter: 'Residue letter',
+    emission: 'Emission probability',
+    model: 'Model name',
+    insert_prob: 'Insert probability',
+    insert_length: 'Expected insert length',
+    occupancy: 'Match occupancy',
+    consensus: 'Consensus residue',
+    rf: 'Reference annotation (RF)',
+    cs: 'Consensus structure (CS)',
+    msa_id: 'Alignment id',
+    seq_id: 'Sequence id',
+    sequence: 'Aligned sequence',
+    rank: 'Row order',
+  },
+  secondary_structure: {
+    state: 'Secondary structure state',
+    residue: 'Residue letter',
+    source: 'Prediction source',
+    p_helix: 'P(helix)',
+    p_strand: 'P(strand)',
+    p_coil: 'P(coil)',
+    confidence: 'Confidence',
+  },
+  // One row per domain hit (a hmmsearch domain table or a plain domain list).
+  domain_architecture: {
+    start: 'Domain start',
+    end: 'Domain end',
+    label: 'Domain label',
+    protein_length: 'Protein length',
+    hmm_from: 'HMM match start',
+    hmm_to: 'HMM match end',
+    hmm_length: 'HMM length',
+    hmm_coverage: 'HMM coverage',
+    evalue: 'E-value',
+    source: 'Annotation source',
+    description: 'Description',
+    accession: 'Accession',
+  },
+  pae_matrix: { value: 'pLDDT (axis strips)' },
+  ramachandran: {
+    value: 'Colour value',
+    category: 'Colour category',
+    uniprot: 'UniProt accession',
+    gene: 'Gene symbol',
+    sequence: 'Protein sequence',
+  },
 };
 
 /** Compact binding label: the role name, a red asterisk or a grey "optional",
@@ -475,37 +526,27 @@ const AdvancedVizBuilder: React.FC = () => {
     [suggestions],
   );
   const descriptor = selectedKind ? (kindMap.get(selectedKind) ?? null) : null;
-  // [role, acceptedDtypes, description][] for the selected kind, split required
-  // vs optional. Description feeds each binding's rich tooltip.
-  const requiredRoles = useMemo<[string, string[], string][]>(
-    () =>
-      descriptor
-        ? Object.entries(descriptor.roles)
-            .filter(([, spec]) => spec.required)
-            .map(([role, spec]) => [role, spec.dtypes, spec.description ?? ''])
-        : [],
-    [descriptor],
-  );
-  const optionalRoles = useMemo<[string, string[], string][]>(
-    () =>
-      descriptor
-        ? Object.entries(descriptor.roles)
-            .filter(([, spec]) => !spec.required)
-            .map(([role, spec]) => [role, spec.dtypes, spec.description ?? ''])
-        : [],
-    [descriptor],
-  );
-
-  const columnMapping = useMemo(
-    () => (config.column_mapping || {}) as Record<string, string | string[]>,
-    [config.column_mapping],
-  );
-
   // The preview must render exactly what Save will persist, so both go through
   // the one merge helper rather than each spelling the layering out.
   const mergedPreset = useMemo(
     () => mergedPresetConfig(config),
     [config.preset_config, config.config, config.viz_overrides],
+  );
+  // [role, acceptedDtypes, description][] for the selected kind, split required
+  // vs optional. Description feeds each binding's rich tooltip. A few kinds ask
+  // for other columns depending on a config field (an HMM logo computed from an
+  // alignment instead of a profile); that field selects the role mode, see
+  // kindModes.ts.
+  const roleMode = roleModeOf(selectedKind, mergedPreset);
+  const msaDescriptor = kindMap.get('msa') ?? null;
+  const { required: requiredRoles, optional: optionalRoles } = useMemo(
+    () => splitRoles(descriptor, roleMode, msaDescriptor),
+    [descriptor, roleMode, msaDescriptor],
+  );
+
+  const columnMapping = useMemo(
+    () => (config.column_mapping || {}) as Record<string, string | string[]>,
+    [config.column_mapping],
   );
 
   // Unpack a config blob back into the role map: a saved component being edited
@@ -556,7 +597,12 @@ const AdvancedVizBuilder: React.FC = () => {
     if (!selectedKind || !schema) return;
     if (Object.keys(columnMapping).length > 0) return;
 
-    const candidates = scoreMap.get(selectedKind)?.role_candidates ?? {};
+    // An HMM logo built from an alignment binds the msa kind's roles, which the
+    // suggester ranks under that kind.
+    const candidates = {
+      ...(roleMode === 'msa' ? scoreMap.get('msa')?.role_candidates : undefined),
+      ...scoreMap.get(selectedKind)?.role_candidates,
+    };
     const liveEmbeddingSuggest =
       selectedKind === 'embedding' && embeddingMode === 'live';
     const rolesToSuggest = liveEmbeddingSuggest
@@ -582,7 +628,7 @@ const AdvancedVizBuilder: React.FC = () => {
     if (Object.keys(suggest).length > 0) {
       patchConfig({ column_mapping: { ...columnMapping, ...suggest } });
     }
-  }, [selectedKind, schema, columnMapping, patchConfig, embeddingMode, requiredRoles, scoreMap]);
+  }, [selectedKind, schema, columnMapping, patchConfig, embeddingMode, requiredRoles, roleMode, scoreMap]);
 
   const setKind = (kind: AdvancedVizKind | null) => {
     // Re-picking a kind invalidates the catalog/saved preset (its control
