@@ -34,6 +34,7 @@ class TestDCIndexedFileConfig:
             ("bigbed", ""),
             ("pdb", ""),
             ("mmcif", ""),
+            ("pae", ""),
         ],
     )
     def test_default_index_suffix_per_format(self, fmt, suffix):
@@ -46,6 +47,12 @@ class TestDCIndexedFileConfig:
         assert DCIndexedFileConfig(format="gff").format == "gff3"
         assert DCIndexedFileConfig(format="cif").format == "mmcif"
         assert DCIndexedFileConfig(format="PDB").format == "pdb"
+
+    def test_pae_is_a_format_without_aliases(self):
+        cfg = DCIndexedFileConfig(format="PAE")
+        assert cfg.format == "pae"
+        assert cfg.effective_index_suffix == ""
+        assert "pae" in DCIndexedFileConfig.model_fields["format"].description
 
     def test_unknown_format_rejected(self):
         with pytest.raises(ValidationError):
@@ -118,6 +125,24 @@ class TestSampleFromPath:
         assert sample_from_path("/data/structures/P04637.cif") == "P04637"
         assert sample_from_path("/data/structures/P04637.cif.gz") == "P04637"
         assert sample_from_path("/data/structures/P04637.mmcif") == "P04637"
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "demo_protein.pae.tsv",
+            "demo_protein.pae.tsv.gz",
+            "demo_protein.pae.json",
+            "demo_protein.pae.json.gz",
+            "DEMO_PROTEIN.PAE.TSV",
+        ],
+    )
+    def test_pae_suffixes_are_stripped(self, name):
+        # A PAE matrix is one object per entity: the sample id is the entity id.
+        assert sample_from_path(f"/data/paes/{name}").lower() == "demo_protein"
+
+    def test_a_pae_suffix_is_only_stripped_at_the_end(self):
+        assert sample_from_path("/data/paes/q.pae.tsv.bak") == "q.pae.tsv.bak"
+        assert sample_from_path("/data/paes/pae.tsv") == "pae.tsv"
 
     def test_regex_named_group_wins(self):
         path = "/data/variant_calling/haplotypecaller/HCC1395T/HCC1395T.filtered.vcf.gz"

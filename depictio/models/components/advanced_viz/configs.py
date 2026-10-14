@@ -3019,6 +3019,30 @@ class ParallelCoordinatesConfig(_BaseVizConfig):
 # narrows or moves the others.
 # ---------------------------------------------------------------------------
 
+#: Residue colouring schemes of the `msa` kind; the `hmm_logo` kind colours its
+#: letters with the same ones, so a residue has one colour in both tiles.
+MsaColorScheme = Literal["clustal", "zappo", "hydrophobicity", "identity", "none"]
+
+
+def _check_resolve_source(
+    structure_source: str,
+    uniprot_col: str | None,
+    gene_col: str | None,
+    sequence_col: str | None,
+) -> None:
+    """Refuse `structure_source: resolve` with nothing to resolve the structure from.
+
+    Shared by every kind that can fetch a predicted structure instead of
+    reading one from a file (`molecule_3d`, `ramachandran`): the resolver is
+    keyed by a UniProt accession, a gene symbol or a sequence, so one of the
+    three columns must be bound. Raises ``ValueError`` for a model validator
+    to surface.
+    """
+    if structure_source == "resolve" and not (uniprot_col or gene_col or sequence_col):
+        raise ValueError(
+            "structure_source 'resolve' needs one of uniprot_col, gene_col or sequence_col"
+        )
+
 
 class Molecule3DConfig(_BaseVizConfig):
     """A protein structure in 3D, coloured and annotated from a residue table.
@@ -3164,12 +3188,9 @@ class Molecule3DConfig(_BaseVizConfig):
 
     @model_validator(mode="after")
     def _check_sources(self) -> "Molecule3DConfig":
-        if self.structure_source == "resolve" and not (
-            self.uniprot_col or self.gene_col or self.sequence_col
-        ):
-            raise ValueError(
-                "structure_source 'resolve' needs one of uniprot_col, gene_col or sequence_col"
-            )
+        _check_resolve_source(
+            self.structure_source, self.uniprot_col, self.gene_col, self.sequence_col
+        )
         if self.layout == "structure_msa" and not (self.msa_dc_id or self.msa_dc_tag):
             raise ValueError("layout 'structure_msa' needs msa_dc_id (or msa_dc_tag)")
         return self
@@ -3202,9 +3223,7 @@ class MsaConfig(_BaseVizConfig):
     identity_col: str | None = Field(
         default="identity", description="Identity to the reference row, 0 to 1"
     )
-    color_scheme: Literal["clustal", "zappo", "hydrophobicity", "identity", "none"] = Field(
-        default="clustal", description="Residue colouring scheme"
-    )
+    color_scheme: MsaColorScheme = Field(default="clustal", description="Residue colouring scheme")
     max_rows: int = Field(
         default=200, ge=1, le=1000, description="How many aligned sequences the tile draws"
     )
@@ -3314,6 +3333,590 @@ class SequenceTrackConfig(_BaseVizConfig):
     follow_selection: bool = Field(
         default=True, description="Highlight the residues of an incoming residue_selection or hover"
     )
+
+
+# ---------------------------------------------------------------------------
+# Protein kinds, wave 2. The profile HMM as a logo, the predicted secondary
+# structure, the domain architecture, the predicted aligned error and the
+# backbone torsions of one entity. They join the three kinds above on the same
+# two column names, `entity` and `position`: a pick in one narrows or moves the
+# others through `residue_selection`. Tables joined in one dashboard share only
+# those two names, so every other column keeps a kind-specific name.
+# ---------------------------------------------------------------------------
+
+
+class HmmLogoConfig(_BaseVizConfig):
+    """The sequence logo of one profile HMM, with an optional lane of the hits it matched.
+
+    Skylign and `hmmlogo` semantics: one stack per match state, letter heights
+    from the state's emission probabilities (always recomputed in the browser
+    from `emission_col`), insert probability and expected insert length beside
+    the stack, and a consensus row. `profile_source: hmm` reads the long
+    profile table of `recipes/lib/hmm.py` (one row per match state and
+    letter); `profile_source: msa` derives the same logo from an alignment
+    table (`recipes/lib/msa.py`). An optional second collection of domain hits
+    draws, under the logo, which states each hit covers.
+    """
+
+    viz_kind: Literal["hmm_logo"] = "hmm_logo"
+
+    profile_source: Literal["hmm", "msa"] = Field(
+        default="hmm",
+        description=(
+            "Where the logo comes from: `hmm` reads one row per match state and "
+            "letter of a profile HMM (emission probabilities), `msa` builds the "
+            "profile from the rows of an alignment table"
+        ),
+    )
+    entity_col: str = Field(
+        default="entity",
+        description=(
+            "Column naming the entity (reference sequence) a state maps onto; "
+            "the entity picked by the dashboard filters on it is shown, else the first one"
+        ),
+    )
+    position_col: str = Field(
+        default="position",
+        description=(
+            "Reference residue number of a match state (1-based); null where the "
+            "state has no residue on the reference. A pick on a stack emits it"
+        ),
+    )
+    model_col: str = Field(
+        default="hmm_name",
+        description="Column naming the profile HMM a row belongs to (one logo per model)",
+    )
+    state_col: str = Field(
+        default="hmm_position",
+        description="Match-state number along the HMM (1-based): the x axis of the logo",
+    )
+    letter_col: str = Field(
+        default="hmm_letter", description="Residue letter the emission probability belongs to"
+    )
+    emission_col: str = Field(
+        default="emission",
+        description="Match emission probability of the letter at the state, from 0 to 1",
+    )
+    insert_prob_col: str | None = Field(
+        default="insert_prob",
+        description="Probability of an insert after the state, drawn as the insert-probability lane",
+    )
+    insert_length_col: str | None = Field(
+        default="insert_length",
+        description="Expected length of an insert after the state, drawn as the insert-length lane",
+    )
+    occupancy_col: str | None = Field(
+        default="occupancy",
+        description="Fraction of the family's sequences that visit the state (match occupancy)",
+    )
+    consensus_col: str | None = Field(
+        default="consensus", description="Consensus residue of the state, for the consensus row"
+    )
+    rf_col: str | None = Field(
+        default="rf", description="Reference annotation character of the state (the `RF` line)"
+    )
+    cs_col: str | None = Field(
+        default="cs", description="Consensus structure character of the state (the `CS` line)"
+    )
+    msa_id_col: str = Field(
+        default="msa_id",
+        description="Column naming the alignment a row belongs to (`profile_source: msa`)",
+    )
+    seq_id_col: str = Field(
+        default="seq_id",
+        description="Column naming each aligned sequence (`profile_source: msa`)",
+    )
+    sequence_col: str = Field(
+        default="aligned_sequence",
+        description=(
+            "Aligned sequence column, gaps as `-`, same length within one "
+            "alignment (`profile_source: msa`)"
+        ),
+    )
+    rank_col: str | None = Field(
+        default="rank",
+        description="Row order column; rank 0 is the reference row (`profile_source: msa`)",
+    )
+    height_mode: Literal["relent_abovebg", "relent_all", "probability"] = Field(
+        default="relent_abovebg",
+        description=(
+            "Letter heights, as in HMMER's hmmlogo: `relent_abovebg` scales the "
+            "letters more frequent than background by the state's relative "
+            "entropy, `relent_all` scales every letter by it, `probability` "
+            "stacks the plain emission probabilities"
+        ),
+    )
+    color_scheme: MsaColorScheme = Field(
+        default="clustal",
+        description="Residue colouring scheme, the same set as the `msa` kind",
+    )
+    show_indel_rows: bool = Field(
+        default=True, description="Show the insert probability and expected insert length lanes"
+    )
+    show_consensus: bool = Field(default=True, description="Show the consensus residue row")
+    hits_wf_id: str | None = Field(
+        default=None, description="Workflow id of the domain hits table (optional)"
+    )
+    hits_dc_id: str | None = Field(
+        default=None,
+        description="Data-collection id of the domain hits table drawn under the logo (optional)",
+    )
+    hits_dc_tag: str | None = Field(
+        default=None,
+        description="Data-collection tag of the domain hits table (resolved to ids at import)",
+    )
+    hits_model_col: str = Field(
+        default="label",
+        description=(
+            "Hits table column naming the HMM a hit matched; the hits of the shown model are drawn"
+        ),
+    )
+    hits_entity_col: str = Field(
+        default="entity", description="Hits table column naming the protein a hit belongs to"
+    )
+    hits_from_col: str = Field(
+        default="hmm_from", description="Hits table column: first HMM state the hit aligns to"
+    )
+    hits_to_col: str = Field(
+        default="hmm_to", description="Hits table column: last HMM state the hit aligns to"
+    )
+    hits_length_col: str | None = Field(
+        default="hmm_length",
+        description="Hits table column holding the length of the HMM, to tell a partial hit",
+    )
+    hits_evalue_col: str | None = Field(
+        default="i_evalue",
+        description="Hits table column holding the independent E-value of a hit",
+    )
+    hits_score_col: str | None = Field(
+        default="dom_score", description="Hits table column holding the bit score of a hit"
+    )
+    hits_ali_from_col: str | None = Field(
+        default="ali_from",
+        description="Hits table column: first residue of the hit on its protein (alignment start)",
+    )
+    hits_ali_to_col: str | None = Field(
+        default="ali_to",
+        description="Hits table column: last residue of the hit on its protein (alignment end)",
+    )
+    hits_evalue_max: float | None = Field(
+        default=0.01,
+        gt=0,
+        description="Draw only the hits at or below this E-value; null draws every hit",
+    )
+    max_hits: int = Field(
+        default=200, ge=1, le=2000, description="How many hits the lane under the logo draws"
+    )
+    selection_enabled: bool = Field(
+        default=True,
+        description="Clicking or brushing states emits a residue_selection on the reference residues",
+    )
+    follow_selection: bool = Field(
+        default=True, description="Mark the states of an incoming residue_selection or hover"
+    )
+
+
+class SecondaryStructureConfig(_BaseVizConfig):
+    """The secondary structure of one protein, from a per-residue prediction table.
+
+    A topology ribbon (helix, strand arrow, coil, turn) shaded by confidence,
+    stacked helix / strand / coil probability lanes (S4PRED `.ss2`), several
+    prediction sources compared with an agreement lane, the composition in
+    percent and the list of segments. The bound collection holds one row per
+    residue (and per source when several are compared); brushing emits a
+    `residue_selection`.
+    """
+
+    viz_kind: Literal["secondary_structure"] = "secondary_structure"
+
+    entity_col: str | None = Field(
+        default="entity",
+        description=(
+            "Column naming the entity (protein) a row belongs to; the entity "
+            "picked by the dashboard filters on it is shown, else the first one"
+        ),
+    )
+    position_col: str = Field(default="position", description="Residue number column, 1-based")
+    residue_col: str | None = Field(
+        default="residue", description="One-letter residue column, written under the ribbon"
+    )
+    state_col: str = Field(
+        default="ss_code",
+        description=(
+            "Secondary-structure state of the residue: a DSSP or S4PRED code (H, E, C, ...)"
+        ),
+    )
+    source_col: str | None = Field(
+        default=None,
+        description=(
+            "Column naming the prediction source of a row (S4PRED, DSSP, a "
+            "structure). When set, each source gets its own ribbon and an "
+            "agreement lane compares them; null means a single source"
+        ),
+    )
+    reference_source: str | None = Field(
+        default=None,
+        description=(
+            "Value of `source_col` the other sources are compared with in the "
+            "agreement lane; null compares them with each other. Needs `source_col`"
+        ),
+    )
+    p_helix_col: str | None = Field(
+        default="p_helix", description="Probability of helix at the residue, from 0 to 1"
+    )
+    p_strand_col: str | None = Field(
+        default="p_strand", description="Probability of strand at the residue, from 0 to 1"
+    )
+    p_coil_col: str | None = Field(
+        default="p_coil", description="Probability of coil at the residue, from 0 to 1"
+    )
+    confidence_col: str | None = Field(
+        default=None,
+        description=(
+            "Per-residue confidence shading the ribbon, from 0 to 1; null uses "
+            "the largest of the three probabilities"
+        ),
+    )
+    show_probabilities: bool = Field(
+        default=True, description="Show the stacked helix / strand / coil probability lanes"
+    )
+    show_agreement: bool = Field(
+        default=True,
+        description="Show the lane marking where the sources agree (several sources only)",
+    )
+    show_segments: bool = Field(
+        default=True, description="Show the list of helix and strand segments with their span"
+    )
+    show_composition: bool = Field(
+        default=True, description="Show the percentage of helix, strand and coil residues"
+    )
+    selection_enabled: bool = Field(
+        default=True, description="Brushing the ribbon emits a residue_selection"
+    )
+    follow_selection: bool = Field(
+        default=True, description="Mark the residues of an incoming residue_selection or hover"
+    )
+
+    @model_validator(mode="after")
+    def _check_reference(self) -> "SecondaryStructureConfig":
+        if self.reference_source and not self.source_col:
+            raise ValueError("reference_source needs source_col (the column naming each source)")
+        return self
+
+
+class DomainArchitectureConfig(_BaseVizConfig):
+    """The domain architecture of proteins, from a table of domain hits.
+
+    `view: proteins` draws one backbone per protein with its domains coloured
+    by label. Where the HMM match is partial the domain's edge is zigzagged, as
+    Pfam graphics does: `hmm_from_col` above 1 marks the left edge,
+    `hmm_to_col` below `hmm_length_col` the right edge, and a coverage under
+    `partial_coverage` marks the domain partial on a side that is not known.
+    `view: architectures` groups the proteins by their ordered list of labels
+    and counts each architecture. The bound collection is a domain hit table
+    (lot 3 `hmmsearch_domtbl`) or a plain `entity, start, end, label` table.
+    """
+
+    viz_kind: Literal["domain_architecture"] = "domain_architecture"
+
+    entity_col: str = Field(
+        default="entity", description="Column naming the protein a domain belongs to"
+    )
+    start_col: str = Field(
+        default="start", description="First residue of the domain on its protein (1-based)"
+    )
+    end_col: str = Field(
+        default="end", description="Last residue of the domain on its protein (inclusive)"
+    )
+    label_col: str = Field(
+        default="label",
+        description=(
+            "Domain label (family name) that colours the domain and names it in the legend"
+        ),
+    )
+    protein_length_col: str | None = Field(
+        default="protein_length",
+        description=(
+            "Length of the protein, to draw the backbone to scale; null uses the last domain end"
+        ),
+    )
+    hmm_from_col: str | None = Field(
+        default="hmm_from",
+        description="First HMM state the domain aligns to; above 1 the left edge is drawn zigzag",
+    )
+    hmm_to_col: str | None = Field(
+        default="hmm_to",
+        description=(
+            "Last HMM state the domain aligns to; below the HMM length the right "
+            "edge is drawn zigzag"
+        ),
+    )
+    hmm_length_col: str | None = Field(
+        default="hmm_length", description="Length of the HMM the domain matched"
+    )
+    hmm_coverage_col: str | None = Field(
+        default="hmm_coverage",
+        description=(
+            "Fraction of the HMM the domain covers, from 0 to 1; the fallback "
+            "for a partial match when the HMM states are not bound"
+        ),
+    )
+    evalue_col: str | None = Field(
+        default="i_evalue", description="E-value of the domain hit, shown in the tooltip"
+    )
+    source_col: str | None = Field(
+        default="source",
+        description=(
+            "Annotation database of the hit (Pfam, SMART, ...), for "
+            "`color_by: source` and the source filter"
+        ),
+    )
+    description_col: str | None = Field(
+        default="description",
+        description="Free-text description of the family, shown in the tooltip",
+    )
+    accession_col: str | None = Field(
+        default="accession", description="Accession of the family (for example PF00069)"
+    )
+    view: Literal["proteins", "architectures"] = Field(
+        default="proteins",
+        description=(
+            "`proteins` draws one backbone per protein, `architectures` groups "
+            "proteins that share the same ordered labels and counts them"
+        ),
+    )
+    max_architectures: int = Field(
+        default=15,
+        ge=1,
+        le=100,
+        description="How many of the most frequent architectures the architectures view draws",
+    )
+    max_proteins: int = Field(
+        default=2000, ge=1, le=20000, description="How many proteins the tile draws"
+    )
+    evalue_threshold: float | None = Field(
+        default=None,
+        gt=0,
+        description="Draw only the domains at or below this E-value; null draws every hit",
+    )
+    sources: list[str] | None = Field(
+        default=None,
+        description="Annotation databases to keep, matched on `source_col`; null keeps them all",
+    )
+    scale: Literal["shared", "per_protein"] = Field(
+        default="shared",
+        description=(
+            "`shared` draws every backbone on the longest protein's scale, "
+            "`per_protein` stretches each backbone to the full width"
+        ),
+    )
+    color_by: Literal["label", "source"] = Field(
+        default="label", description="What the domain colour encodes"
+    )
+    partial_coverage: float = Field(
+        default=0.9,
+        ge=0,
+        le=1,
+        description="HMM coverage below which a domain counts as a partial match",
+    )
+    position_col_for_selection: str = Field(
+        default="position",
+        description=(
+            "Position column NAME a domain pick filters on (with the entity "
+            "column), so the filter lands on the residue tables of the same dashboard"
+        ),
+    )
+    label_selection: bool = Field(
+        default=True, description="A domain pick also emits a point selection on `label_col`"
+    )
+    selection_enabled: bool = Field(
+        default=True, description="Clicking a domain emits a residue_selection over its span"
+    )
+    follow_selection: bool = Field(
+        default=True, description="Mark the domains under an incoming residue_selection or hover"
+    )
+
+
+class PaeMatrixConfig(_BaseVizConfig):
+    """The predicted aligned error of a structure, as a residue-by-residue heatmap.
+
+    A square N x N matrix on residue axes (x the scored residue, y the aligned
+    residue), read from the structure predictor's PAE file: a companion
+    `indexed_file` collection of format `pae` (one object per entity, the
+    sample id being the entity), fetched by the browser like a structure file.
+    The bound collection is the residue table (`entity`, `position`, and
+    optionally pLDDT for the strips along the axes).
+    """
+
+    viz_kind: Literal["pae_matrix"] = "pae_matrix"
+
+    entity_col: str | None = Field(
+        default="entity",
+        description=(
+            "Column naming the entity (protein) a row belongs to; the entity "
+            "picked by the dashboard filters on it selects the PAE file shown"
+        ),
+    )
+    position_col: str = Field(
+        default="position", description="Residue number column, 1-based, in the matrix order"
+    )
+    value_col: str | None = Field(
+        default=None,
+        description="Numeric per-residue column (pLDDT) drawn as a strip along the axes",
+    )
+    chain_col: str | None = Field(
+        default=None, description="Optional chain id column, to mark chain boundaries on a complex"
+    )
+    pae_wf_id: str | None = Field(
+        default=None, description="Workflow id of the PAE indexed_file DC (format `pae`)"
+    )
+    pae_dc_id: str | None = Field(
+        default=None, description="Data-collection id of the PAE indexed_file DC (format `pae`)"
+    )
+    pae_dc_tag: str | None = Field(
+        default=None, description="Data-collection tag of the PAE DC (resolved to ids at import)"
+    )
+    max_pae: float | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "Upper bound of the colour scale in angstroms; null takes the "
+            "file's own maximum, else 31.75"
+        ),
+    )
+    colour_scale: ColourScale | None = Field(
+        default=None,
+        description=(
+            "Continuous colour scale of the matrix; null uses the AlphaFold-like "
+            "ramp derived from the theme"
+        ),
+    )
+    brush: Literal["diagonal", "rectangle"] = Field(
+        default="diagonal",
+        description=(
+            "How a drag selects: `diagonal` takes the square [a, b] x [a, b] "
+            "and emits [a, b]; `rectangle` (or shift-drag) emits the scored "
+            "range and keeps the aligned range as a local outline"
+        ),
+    )
+    show_plddt: bool = Field(
+        default=True, description="Draw the pLDDT strips along the axes when `value_col` is bound"
+    )
+    selection_enabled: bool = Field(
+        default=True, description="Brushing the matrix emits a residue_selection"
+    )
+    follow_selection: bool = Field(
+        default=True, description="Mark the residues of an incoming residue_selection or hover"
+    )
+
+    @model_validator(mode="after")
+    def _check_pae_source(self) -> "PaeMatrixConfig":
+        if not (self.pae_dc_id or self.pae_dc_tag):
+            raise ValueError("pae_matrix needs pae_dc_id (or pae_dc_tag)")
+        return self
+
+
+class RamachandranConfig(_BaseVizConfig):
+    """The phi / psi backbone torsions of a structure, as a Ramachandran plot.
+
+    The angles of every residue are computed in the browser from the backbone
+    (N, CA, C) of the structure, which comes from the same sources as
+    `molecule_3d` (an `indexed_file` DC of pdb / mmcif objects, or the
+    structure resolver). Glycine and proline are drawn with their own symbols,
+    and the schematic favoured regions are labelled as approximate, not as
+    MolProbity contours. The bound collection is the residue table that
+    colours the points.
+    """
+
+    viz_kind: Literal["ramachandran"] = "ramachandran"
+
+    structure_source: Literal["file", "resolve"] = Field(
+        default="file",
+        description=(
+            "Where the structure comes from: `file` reads the indexed_file DC "
+            "named by `structure_dc_id`, `resolve` asks the structure resolver "
+            "from the uniprot, gene or sequence column"
+        ),
+    )
+    structure_wf_id: str | None = Field(
+        default=None, description="Workflow id of the structure indexed_file DC (pdb / mmcif)"
+    )
+    structure_dc_id: str | None = Field(
+        default=None,
+        description="Data-collection id of the structure indexed_file DC (pdb / mmcif)",
+    )
+    structure_dc_tag: str | None = Field(
+        default=None,
+        description="Data-collection tag of the structure DC (resolved to ids at import)",
+    )
+    uniprot_col: str | None = Field(
+        default=None, description="Column holding a UniProt accession (resolve mode)"
+    )
+    gene_col: str | None = Field(
+        default=None, description="Column holding a gene symbol (resolve mode)"
+    )
+    sequence_col: str | None = Field(
+        default=None,
+        description=(
+            "Column holding a one-letter protein sequence, folded by ESMFold (resolve mode)"
+        ),
+    )
+    taxon: int = Field(
+        default=9606, gt=0, description="NCBI taxon id used to resolve a gene symbol (resolve mode)"
+    )
+    entity_col: str = Field(
+        default="entity",
+        description=(
+            "Column naming the entity (protein) a row belongs to; the entity "
+            "picked by the dashboard filters on it is shown, else the first one"
+        ),
+    )
+    position_col: str = Field(
+        default="position",
+        description="Residue number column, 1-based in the structure numbering",
+    )
+    chain_col: str | None = Field(default=None, description="Optional chain id column")
+    value_col: str | None = Field(
+        default=None, description="Numeric per-residue column used by `color_mode: value`"
+    )
+    category_col: str | None = Field(
+        default=None,
+        description=(
+            "Categorical per-residue column (domain, consequence) used by `color_mode: category`"
+        ),
+    )
+    color_mode: Literal[
+        "plddt", "residue_class", "secondary_structure", "value", "category", "chain"
+    ] = Field(
+        default="plddt",
+        description=(
+            "How points are coloured: `plddt` reads the structure's B-factor "
+            "column, `residue_class` the general / glycine / proline / "
+            "pre-proline class, `secondary_structure` the structure's own helix "
+            "and strand, `value` / `category` the bound collection, `chain` the chain"
+        ),
+    )
+    show_regions: bool = Field(
+        default=True,
+        description="Draw the schematic favoured regions (approximate, not MolProbity contours)",
+    )
+    residue_classes: list[Literal["general", "glycine", "proline", "pre_proline"]] | None = Field(
+        default=None, description="Residue classes to plot; null plots all four"
+    )
+    marker_size: int = Field(default=6, ge=2, le=20, description="Point diameter in pixels")
+    selection_enabled: bool = Field(
+        default=True, description="Clicking or lassoing points emits a residue_selection"
+    )
+    follow_selection: bool = Field(
+        default=True, description="Ring the residues of an incoming residue_selection or hover"
+    )
+
+    @model_validator(mode="after")
+    def _check_sources(self) -> "RamachandranConfig":
+        _check_resolve_source(
+            self.structure_source, self.uniprot_col, self.gene_col, self.sequence_col
+        )
+        return self
 
 
 # ---------------------------------------------------------------------------
@@ -3479,7 +4082,12 @@ _VizConfigUnion = Annotated[
     | ParallelCoordinatesConfig
     | Molecule3DConfig
     | MsaConfig
-    | SequenceTrackConfig,
+    | SequenceTrackConfig
+    | HmmLogoConfig
+    | SecondaryStructureConfig
+    | DomainArchitectureConfig
+    | PaeMatrixConfig
+    | RamachandranConfig,
     Field(discriminator="viz_kind"),
 ]
 

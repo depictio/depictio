@@ -316,6 +316,39 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     "sequence_track": {
         "position": _NUMERIC,
     },
+    # Protein kinds, wave 2. `hmm_logo` is keyed by the match state of a profile
+    # HMM (`profile_source: hmm`, the default; the long table of
+    # `recipes/lib/hmm.py`). Its other mode, `profile_source: msa`, binds an
+    # alignment table instead: see `_HMM_LOGO_MSA_REQUIRED` and `_roles_for`.
+    "hmm_logo": {
+        "state": _NUMERIC,
+        "letter": _STRING,
+        "emission": _FLOAT,
+    },
+    # One row per residue (and per source): the residue number and the state
+    # called there. The probabilities only shade and stack it.
+    "secondary_structure": {
+        "position": _NUMERIC,
+        "state": _STRING,
+    },
+    # One row per domain hit: the protein, its span and its label. `start` and
+    # `end` are the envelope on the protein, not the HMM states.
+    "domain_architecture": {
+        "entity": _STRING,
+        "start": _NUMERIC,
+        "end": _NUMERIC,
+        "label": _STRING,
+    },
+    # The matrix itself comes from a companion `pae` indexed_file DC; the bound
+    # residue table only gives the axes their residue numbers (and pLDDT).
+    "pae_matrix": {
+        "position": _NUMERIC,
+    },
+    # The angles are computed in the browser from the structure's backbone; the
+    # bound residue table only colours the points.
+    "ramachandran": {
+        "position": _NUMERIC,
+    },
 }
 
 # Per-role column-name aliases used by `suggest_viz_kinds`. The suggester
@@ -754,6 +787,91 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "value": frozenset({"value", "plddt", "score", "conservation", "disorder"}),
         "category": frozenset({"category", "secondary_structure", "ss", "domain", "region"}),
     },
+    # The profile table of `recipes/lib/hmm.py`. The msa-mode roles are not
+    # listed: the suggester only ever reads the default (hmm) mode, and an
+    # alignment table is the `msa` kind's.
+    "hmm_logo": {
+        "state": frozenset(
+            {"hmm_position", "hmm_pos", "hmm_state", "hmm_node", "match_state", "state", "node"}
+        ),
+        "letter": frozenset({"hmm_letter", "letter", "residue_letter", "amino_acid", "symbol"}),
+        "emission": frozenset(
+            {
+                "emission",
+                "emission_prob",
+                "emission_probability",
+                "match_emission",
+                "probability",
+                "frequency",
+            }
+        ),
+        "entity": _PROTEIN_ENTITY_NAMES,
+        "position": _RESIDUE_POSITION_NAMES,
+        "model": frozenset(
+            {"hmm_name", "model", "model_name", "hmm", "profile", "profile_name", "family"}
+        ),
+        "insert_prob": frozenset(
+            {"insert_prob", "insert_probability", "insert_p", "ins_prob", "insert_occupancy"}
+        ),
+        "insert_length": frozenset(
+            {"insert_length", "insert_len", "expected_insert_length", "ins_len"}
+        ),
+        "occupancy": frozenset({"occupancy", "match_occupancy", "occ"}),
+        "consensus": frozenset({"consensus", "consensus_residue", "consensus_seq"}),
+        "rf": frozenset({"rf", "reference_annotation"}),
+        "cs": frozenset({"cs", "consensus_structure"}),
+    },
+    "secondary_structure": {
+        "position": _RESIDUE_POSITION_NAMES,
+        "state": frozenset(
+            {"ss_code", "ss", "ss_state", "secondary_structure", "sec_struct", "dssp", "dssp_code"}
+        ),
+        "entity": _PROTEIN_ENTITY_NAMES,
+        "residue": frozenset({"residue", "aa", "amino_acid", "resn", "residue_name"}),
+        "source": frozenset({"source", "method", "predictor", "tool", "ss_source", "database"}),
+        "p_helix": frozenset({"p_helix", "prob_helix", "helix_prob", "helix_probability"}),
+        "p_strand": frozenset(
+            {"p_strand", "prob_strand", "strand_prob", "strand_probability", "p_sheet"}
+        ),
+        "p_coil": frozenset({"p_coil", "prob_coil", "coil_prob", "coil_probability"}),
+        "confidence": frozenset({"confidence", "ss_confidence", "conf", "value", "score"}),
+    },
+    "domain_architecture": {
+        "entity": _PROTEIN_ENTITY_NAMES
+        | frozenset({"protein_id", "sequence_id", "seq_id", "query"}),
+        "start": frozenset({"start", "domain_start", "env_from", "env_start", "begin"}),
+        "end": frozenset({"end", "domain_end", "env_to", "env_end", "stop"}),
+        "label": frozenset(
+            {"label", "domain", "domain_name", "family", "name", "hmm_name", "pfam", "hmm"}
+        ),
+        "protein_length": frozenset(
+            {"protein_length", "sequence_length", "seq_length", "target_length", "tlen", "length"}
+        ),
+        "hmm_from": frozenset({"hmm_from", "hmm_start"}),
+        "hmm_to": frozenset({"hmm_to", "hmm_end"}),
+        "hmm_length": frozenset({"hmm_length", "hmm_len", "model_length", "qlen"}),
+        "hmm_coverage": frozenset({"hmm_coverage", "hmm_cov", "domain_coverage", "coverage"}),
+        "evalue": frozenset({"i_evalue", "evalue", "e_value", "c_evalue", "independent_evalue"}),
+        "source": frozenset({"source", "database", "member_database", "db"}),
+        "description": frozenset({"description", "domain_description", "desc"}),
+        "accession": frozenset({"accession", "pfam_acc", "interpro_acc", "hmm_acc"}),
+    },
+    "pae_matrix": {
+        "position": _RESIDUE_POSITION_NAMES,
+        "entity": _PROTEIN_ENTITY_NAMES,
+        "value": frozenset({"value", "plddt", "score", "bfactor", "b_factor"}),
+        "chain": frozenset({"chain", "chain_id", "auth_asym_id"}),
+    },
+    "ramachandran": {
+        "position": _RESIDUE_POSITION_NAMES,
+        "entity": _PROTEIN_ENTITY_NAMES,
+        "chain": frozenset({"chain", "chain_id", "auth_asym_id"}),
+        "value": frozenset({"value", "plddt", "score", "bfactor", "b_factor"}),
+        "category": frozenset({"category", "secondary_structure", "ss", "domain", "region"}),
+        "uniprot": frozenset({"uniprot", "uniprot_id", "accession", "uniprot_accession"}),
+        "gene": frozenset({"gene", "gene_name", "symbol", "gene_symbol"}),
+        "sequence": frozenset({"sequence", "protein_sequence", "aa_sequence", "seq"}),
+    },
 }
 
 
@@ -936,7 +1054,99 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "value": _NUMERIC,
         "category": _STRING,
     },
+    # hmm_logo, default (hmm) mode. `position` is nullable: a match state with
+    # no residue on the reference has none.
+    "hmm_logo": {
+        "entity": _STRING,
+        "position": _NUMERIC,
+        "model": _STRING,
+        "insert_prob": _FLOAT,
+        "insert_length": _FLOAT,
+        "occupancy": _FLOAT,
+        "consensus": _STRING,
+        "rf": _STRING,
+        "cs": _STRING,
+    },
+    "secondary_structure": {
+        "entity": _STRING,
+        "residue": _STRING,
+        "source": _STRING,
+        "p_helix": _FLOAT,
+        "p_strand": _FLOAT,
+        "p_coil": _FLOAT,
+        "confidence": _FLOAT,
+    },
+    "domain_architecture": {
+        "protein_length": _NUMERIC,
+        "hmm_from": _NUMERIC,
+        "hmm_to": _NUMERIC,
+        "hmm_length": _NUMERIC,
+        "hmm_coverage": _FLOAT,
+        "evalue": _FLOAT,
+        "source": _STRING,
+        "description": _STRING,
+        "accession": _STRING,
+    },
+    "pae_matrix": {
+        "entity": _STRING,
+        "value": _NUMERIC,
+        "chain": _STRING,
+    },
+    "ramachandran": {
+        "entity": _STRING,
+        "chain": _STRING,
+        "value": _NUMERIC,
+        "category": _STRING,
+        "uniprot": _STRING,
+        "gene": _STRING,
+        "sequence": _STRING,
+    },
 }
+
+# `hmm_logo` with `profile_source: msa` derives the logo from an alignment table
+# (`recipes/lib/msa.py`, the `msa` kind's own roles), so the roles that make a
+# profile table valid do not apply to it and these do. The `sequence` role binds
+# `sequence_col`, whose canonical column is `aligned_sequence`.
+_HMM_LOGO_MSA_REQUIRED: dict[str, frozenset[str]] = {
+    "msa_id": _STRING,
+    "seq_id": _STRING,
+    "sequence": _STRING,
+}
+_HMM_LOGO_MSA_OPTIONAL: dict[str, frozenset[str]] = {
+    "rank": _NUMERIC,
+}
+
+_RolesByMode = dict[str, tuple[dict[str, frozenset[str]], dict[str, frozenset[str]]]]
+
+# Kinds whose roles depend on a mode setting of their config:
+# ``kind -> (config field, {field value: (required roles, optional roles)})``.
+# A value with no entry (every other value, and the field's default) keeps the
+# kind's ``CANONICAL_SCHEMAS`` / ``_OPTIONAL_ROLES``, so a kind only lists the
+# modes that differ from them. Read through ``_roles_for``.
+_MODE_ROLES: dict[AdvancedVizKind, tuple[str, _RolesByMode]] = {
+    "hmm_logo": ("profile_source", {"msa": (_HMM_LOGO_MSA_REQUIRED, _HMM_LOGO_MSA_OPTIONAL)}),
+}
+
+
+def _roles_for(
+    kind: AdvancedVizKind, config: VizConfig | None = None
+) -> tuple[dict[str, frozenset[str]], dict[str, frozenset[str]]]:
+    """``(required, optional)`` roles of a kind, narrowed by the config's mode.
+
+    Without a config, or for a kind whose roles do not depend on a mode
+    (everything but ``hmm_logo`` today), this is exactly
+    ``(CANONICAL_SCHEMAS[kind], _OPTIONAL_ROLES.get(kind, {}))``. It exists so
+    that one mode of one kind can bind other columns than its sibling without
+    a second kind: ``hmm_logo`` reads a profile table by default and an
+    alignment table with ``profile_source: msa``.
+    """
+    mode = _MODE_ROLES.get(kind)
+    if mode is not None and config is not None:
+        field, by_value = mode
+        narrowed = by_value.get(str(getattr(config, field, "")))
+        if narrowed is not None:
+            return narrowed
+    return CANONICAL_SCHEMAS[kind], _OPTIONAL_ROLES.get(kind, {})
 
 
 # ---------------------------------------------------------------------------
@@ -1089,8 +1299,7 @@ def validate_binding(config: VizConfig, dc_schema: dict[str, str]) -> list[Bindi
     kind: AdvancedVizKind = config.viz_kind
     errors: list[BindingError] = []
 
-    required = CANONICAL_SCHEMAS[kind]
-    optional = _OPTIONAL_ROLES[kind]
+    required, optional = _roles_for(kind, config)
 
     for role, accepted_dtypes in required.items():
         col = getattr(config, _role_to_config_field(role), None)
@@ -1449,26 +1658,55 @@ class _Draft:
     role_candidates: dict[str, list[str]]
 
 
-# molecule_3d and sequence_track require only a residue `position`, which half
-# the genomic tables carry too (damage profiles, coverage, lollipops). A named
-# match on it alone is no evidence for a protein kind, so the table must also
-# speak protein: a residue, an amino-acid change, a per-residue confidence or a
-# protein identifier. Without one the kinds stay pickable under the bar.
-_PROTEIN_KINDS = frozenset({"molecule_3d", "sequence_track"})
+# molecule_3d, sequence_track, secondary_structure, pae_matrix and ramachandran
+# require little more than a residue `position`, which half the genomic tables
+# carry too (damage profiles, coverage, lollipops). A named match on it alone is
+# no evidence for a protein kind, so the table must also speak protein: a
+# residue, an amino-acid change, a per-residue confidence or secondary-structure
+# call, a protein identifier or an HMM column. Without one the kinds stay
+# pickable under the bar.
+_PROTEIN_KINDS = frozenset(
+    {"molecule_3d", "sequence_track", "secondary_structure", "pae_matrix", "ramachandran"}
+)
 _PROTEIN_EVIDENCE_RE = re.compile(
     r"^(entity|residue|residue_name|resn|aa|amino_acid|ref_aa|alt_aa|wt_aa|mut_aa|"
     r"plddt|uniprot|uniprot_id|protein|protein_id|hgvsp|protein_change|aa_change|"
-    r"chain|chain_id|secondary_structure)$"
+    r"chain|chain_id|secondary_structure|ss_code|p_helix|p_strand|p_coil)$|^hmm_"
 )
+
+# domain_architecture requires an entity, a start, an end and a label, which a
+# gene BED (`chrom, start, end, name`) or any annotation interval table carries
+# too. What makes a table a set of protein domain hits is a column only a hit
+# has: the HMM span, the protein's length, an E-value or a family accession.
+_DOMAIN_EVIDENCE = frozenset({"hmm_from", "protein_length", "i_evalue", "evalue", "accession"})
 
 
 def _shape_protein(dc_schema: dict[str, str], draft: _Draft) -> None:
-    """molecule_3d / sequence_track: a position alone does not make a protein table."""
+    """Residue-keyed protein kinds: a position alone does not make a protein table."""
     if any(_PROTEIN_EVIDENCE_RE.match(_normalize_name(c)) for c in dc_schema):
         return
     draft.score = min(draft.score, _STRUCTURAL_ONLY_SCORE)
     draft.match = "weak"
     draft.reasons = ["no residue or protein column (residue, ref_aa, plddt, uniprot, entity)"]
+
+
+def _shape_domain_architecture(dc_schema: dict[str, str], draft: _Draft) -> None:
+    """domain_architecture: an interval with a label is not yet a protein domain hit."""
+    if any(_normalize_name(c) in _DOMAIN_EVIDENCE for c in dc_schema):
+        return
+    draft.score = min(draft.score, _STRUCTURAL_ONLY_SCORE)
+    draft.match = "weak"
+    draft.reasons = ["no domain-hit column (hmm_from, protein_length, i_evalue, accession)"]
+
+
+def _shape_hmm_logo(dc_schema: dict[str, str], draft: _Draft) -> None:
+    """hmm_logo: a state, a letter and a probability are only a profile with an HMM column."""
+    names = [_normalize_name(c) for c in dc_schema]
+    if any(n.startswith("hmm_") or n == "emission" for n in names):
+        return
+    draft.score = min(draft.score, _STRUCTURAL_ONLY_SCORE)
+    draft.match = "weak"
+    draft.reasons = ["no profile HMM column (hmm_name, hmm_position, hmm_letter, emission)"]
 
 
 def _shape_scatter(dc_schema: dict[str, str], draft: _Draft) -> None:
@@ -1661,6 +1899,10 @@ def _score_kind(
         _shape_embedding(dc_schema, draft)
     elif kind in _PROTEIN_KINDS:
         _shape_protein(dc_schema, draft)
+    elif kind == "domain_architecture":
+        _shape_domain_architecture(dc_schema, draft)
+    elif kind == "hmm_logo":
+        _shape_hmm_logo(dc_schema, draft)
     elif kind == "sunburst" and not any(
         _is_string(d) and _RANK_NAME_RE.match(_normalize_name(c)) for c, d in dc_schema.items()
     ):
@@ -1897,6 +2139,67 @@ _KIND_ROLE_DESCRIPTIONS: dict[AdvancedVizKind, dict[str, str]] = {
         "value": "Optional per-residue score drawn as a lane (pLDDT, conservation).",
         "category": "Optional per-residue class drawn as a coloured lane.",
     },
+    "hmm_logo": {
+        "state": "Match-state number along the HMM (1-based): one letter stack per state.",
+        "letter": "Residue letter an emission probability belongs to.",
+        "emission": "Match emission probability of the letter at the state, from 0 to 1.",
+        "entity": "Optional reference sequence a state maps onto; the filtered entity is shown.",
+        "position": "Optional reference residue number of a state (null where it has none).",
+        "model": "Optional name of the profile HMM a row belongs to, one logo per model.",
+        "insert_prob": "Optional probability of an insert after the state.",
+        "insert_length": "Optional expected length of an insert after the state.",
+        "occupancy": "Optional fraction of sequences that visit the state.",
+        "consensus": "Optional consensus residue of the state.",
+        "rf": "Optional reference annotation character of the state.",
+        "cs": "Optional consensus structure character of the state.",
+        # The roles of `profile_source: msa`.
+        "msa_id": "Which alignment a row belongs to (alignment mode).",
+        "seq_id": "Name of each aligned sequence (alignment mode).",
+        "sequence": "Aligned sequence with gaps as '-', same length within one alignment.",
+        "rank": "Optional row order; rank 0 is the reference row (alignment mode).",
+    },
+    "secondary_structure": {
+        "position": "Residue number (1-based) along the ribbon.",
+        "state": "Secondary-structure state called at the residue (a DSSP or S4PRED code).",
+        "entity": "Which protein a row belongs to; the filtered entity is the one drawn.",
+        "residue": "Optional one-letter amino acid written under the ribbon.",
+        "source": "Optional prediction source of a row; several sources are compared.",
+        "p_helix": "Optional probability of helix at the residue, from 0 to 1.",
+        "p_strand": "Optional probability of strand at the residue, from 0 to 1.",
+        "p_coil": "Optional probability of coil at the residue, from 0 to 1.",
+        "confidence": "Optional confidence shading the ribbon, from 0 to 1.",
+    },
+    "domain_architecture": {
+        "entity": "Which protein a domain belongs to: one backbone per entity.",
+        "start": "First residue of the domain on the protein (1-based).",
+        "end": "Last residue of the domain on the protein (inclusive).",
+        "label": "Domain or family name: colours the domain and names it in the legend.",
+        "protein_length": "Optional length of the protein, to draw the backbone to scale.",
+        "hmm_from": "Optional first HMM state aligned; above 1 the left edge is zigzag.",
+        "hmm_to": "Optional last HMM state aligned; below the HMM length the right edge is zigzag.",
+        "hmm_length": "Optional length of the HMM the domain matched.",
+        "hmm_coverage": "Optional fraction of the HMM covered, from 0 to 1.",
+        "evalue": "Optional E-value of the hit, shown in the tooltip and used by the threshold.",
+        "source": "Optional annotation database of the hit (Pfam, SMART).",
+        "description": "Optional free-text description of the family.",
+        "accession": "Optional accession of the family (for example PF00069).",
+    },
+    "pae_matrix": {
+        "position": "Residue number (1-based) of the matrix axes.",
+        "entity": "Which protein a row belongs to; the filtered entity selects the PAE file shown.",
+        "value": "Optional per-residue score (pLDDT) drawn as a strip along the axes.",
+        "chain": "Optional chain id, to mark chain boundaries on a complex.",
+    },
+    "ramachandran": {
+        "position": "Residue number in the structure numbering (1-based).",
+        "entity": "Which structure a row belongs to; the filtered entity is the one shown.",
+        "chain": "Optional chain id, for multi-chain structures.",
+        "value": "Optional per-residue score, used by the value colour mode.",
+        "category": "Optional per-residue class, used by the category colour mode.",
+        "uniprot": "UniProt accession used to fetch a predicted structure (resolve mode).",
+        "gene": "Gene symbol used to fetch a predicted structure (resolve mode).",
+        "sequence": "Protein sequence folded on demand when no accession resolves (resolve mode).",
+    },
 }
 
 
@@ -1905,22 +2208,29 @@ def _role_description(kind: AdvancedVizKind, role: str) -> str:
     return _KIND_ROLE_DESCRIPTIONS.get(kind, {}).get(role) or _ROLE_DESCRIPTIONS.get(role, "")
 
 
-def role_dtype_specs(kind: AdvancedVizKind) -> dict[str, dict[str, object]]:
+def role_dtype_specs(
+    kind: AdvancedVizKind, config: VizConfig | None = None
+) -> dict[str, dict[str, object]]:
     """Per-role spec for a viz kind, required first then optional.
 
     Returns ``{role: {"required": bool, "dtypes": sorted([...]), "description": str}}``.
     Exposed via the `/advanced_viz/kinds` descriptor so the React builder drives
     its binding dropdowns, dtype validation and per-binding tooltips from the
     backend instead of duplicating the dtype tables in TypeScript.
+
+    The kind-level descriptor has no config and so lists the kind's default
+    roles; a config whose mode binds other roles (``hmm_logo`` with
+    ``profile_source: msa``) gets those through ``_roles_for``.
     """
+    required, optional = _roles_for(kind, config)
     specs: dict[str, dict[str, object]] = {}
-    for role, accepted in CANONICAL_SCHEMAS[kind].items():
+    for role, accepted in required.items():
         specs[role] = {
             "required": True,
             "dtypes": sorted(accepted),
             "description": _role_description(kind, role),
         }
-    for role, accepted in _OPTIONAL_ROLES.get(kind, {}).items():
+    for role, accepted in optional.items():
         specs[role] = {
             "required": False,
             "dtypes": sorted(accepted),
@@ -2246,6 +2556,53 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         ),
         "icon": "tabler:ruler-2",
     },
+    "hmm_logo": {
+        "label": "HMM logo",
+        "description": (
+            "The sequence logo of a profile HMM: a stack of letters per match "
+            "state sized by information, with insert probability and length, "
+            "and the hits that matched it. A brush selects residues on the "
+            "linked tiles."
+        ),
+        "icon": "tabler:letter-case",
+    },
+    "secondary_structure": {
+        "label": "Secondary structure",
+        "description": (
+            "The secondary structure of a protein as a ribbon of helices, "
+            "strands and coil shaded by confidence, with the helix, strand and "
+            "coil probabilities, several sources compared and the segment list."
+        ),
+        "icon": "tabler:wave-sine",
+    },
+    "domain_architecture": {
+        "label": "Domain architecture",
+        "description": (
+            "Protein domains drawn on a backbone, coloured by family, with "
+            "zigzag edges where the HMM match is partial, or proteins grouped "
+            "by their ordered domains and counted."
+        ),
+        "icon": "tabler:timeline",
+    },
+    "pae_matrix": {
+        "label": "Predicted aligned error",
+        "description": (
+            "The predicted aligned error of a structure as a residue-by-residue "
+            "heatmap, with confidence strips on the axes. A brush selects "
+            "residues on the linked tiles."
+        ),
+        "icon": "tabler:chart-grid-dots",
+    },
+    "ramachandran": {
+        "label": "Ramachandran plot",
+        "description": (
+            "The phi and psi backbone angles of every residue of a structure, "
+            "computed in the browser, with glycine and proline marked and the "
+            "favoured regions outlined. A selection marks residues on the "
+            "linked tiles."
+        ),
+        "icon": "tabler:angle",
+    },
 }
 
 
@@ -2266,6 +2623,14 @@ INCUBATING: frozenset[str] = frozenset(
         # showcase's synthetic fixture binds it. Kept and flagged rather than
         # deleted; revisit on a re-pin.
         "gsea_running_score",
+        # The five wave-2 protein kinds: registered ahead of its renderer and
+        # showcase tab in this PR, which bind each of them from the protein
+        # dashboard.
+        "hmm_logo",
+        "secondary_structure",
+        "domain_architecture",
+        "pae_matrix",
+        "ramachandran",
     }
 )
 

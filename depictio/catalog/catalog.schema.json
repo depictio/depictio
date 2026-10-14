@@ -298,7 +298,12 @@
                 "parallel_coordinates",
                 "molecule_3d",
                 "msa",
-                "sequence_track"
+                "sequence_track",
+                "hmm_logo",
+                "secondary_structure",
+                "domain_architecture",
+                "pae_matrix",
+                "ramachandran"
               ],
               "type": "string"
             },

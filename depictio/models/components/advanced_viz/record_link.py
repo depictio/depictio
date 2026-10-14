@@ -40,6 +40,17 @@ SELECTION_EMITTING_KINDS: dict[str, tuple[str, ...]] = {
     # A stem: its label when bound, else its position (the feature half travels
     # in the `residue_selection` pair, as for the protein kinds). Opt-in.
     "lollipop": ("selection_column", "label_col", "position_col", "=position"),
+    # Protein kinds (wave 2). The logo, the secondary-structure view, the PAE
+    # matrix and the Ramachandran plot all pick residues, so they emit the
+    # position column like the 3D tile. A domain bar picks a domain: its
+    # `residue_selection` is the span (entity + start..end), and the point
+    # selection `label_selection` adds is on the label column, which is what a
+    # record card links on.
+    "hmm_logo": ("position_col", "=position"),
+    "secondary_structure": ("position_col", "=position"),
+    "domain_architecture": ("label_col", "=label"),
+    "pae_matrix": ("position_col", "=position"),
+    "ramachandran": ("position_col", "=position"),
 }
 
 # Kinds whose pick reaches a record card as a `residue_selection` pair (an
@@ -47,12 +58,34 @@ SELECTION_EMITTING_KINDS: dict[str, tuple[str, ...]] = {
 # filters. The card then shows the rows in the range whatever its `id_col`, so
 # the id_col agreement check does not apply to them. Mirrors
 # `readRecordSelection` in record_card/recordSelection.ts.
-RESIDUE_EMITTING_KINDS: frozenset[str] = frozenset({"molecule_3d", "sequence_track", "lollipop"})
+RESIDUE_EMITTING_KINDS: frozenset[str] = frozenset(
+    {
+        "molecule_3d",
+        "sequence_track",
+        "lollipop",
+        "hmm_logo",
+        "secondary_structure",
+        "domain_architecture",
+        "pae_matrix",
+        "ramachandran",
+    }
+)
 
 # Kinds whose config model defaults `selection_enabled` to true, so a raw YAML
 # config that omits the key still emits. Mirrors `SELECTION_ON_BY_DEFAULT` in
 # selection.ts.
-SELECTION_ON_BY_DEFAULT: frozenset[str] = frozenset({"molecule_3d", "msa", "sequence_track"})
+SELECTION_ON_BY_DEFAULT: frozenset[str] = frozenset(
+    {
+        "molecule_3d",
+        "msa",
+        "sequence_track",
+        "hmm_logo",
+        "secondary_structure",
+        "domain_architecture",
+        "pae_matrix",
+        "ramachandran",
+    }
+)
 
 
 class LinkedComponentError(ValueError):

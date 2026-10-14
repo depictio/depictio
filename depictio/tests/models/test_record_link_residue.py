@@ -1,4 +1,4 @@
-"""Record cards linked to residue-emitting tiles (lot 3 protein kinds + lollipop)."""
+"""Record cards linked to residue-emitting tiles (protein kinds + lollipop)."""
 
 from __future__ import annotations
 
@@ -8,6 +8,8 @@ import pytest
 
 from depictio.models.components.advanced_viz.configs import LollipopConfig
 from depictio.models.components.advanced_viz.record_link import (
+    RESIDUE_EMITTING_KINDS,
+    SELECTION_ON_BY_DEFAULT,
     emitted_selection_column,
     linked_component_problems,
 )
@@ -66,6 +68,11 @@ def test_lollipop_config_accepts_the_selection_fields():
         {"viz_kind": "molecule_3d"},
         {"viz_kind": "sequence_track"},
         {"viz_kind": "lollipop", "selection_enabled": True},
+        {"viz_kind": "hmm_logo"},
+        {"viz_kind": "secondary_structure"},
+        {"viz_kind": "domain_architecture"},
+        {"viz_kind": "pae_matrix", "pae_dc_tag": "pae"},
+        {"viz_kind": "ramachandran"},
     ],
 )
 def test_a_residue_pick_drives_a_card_on_the_same_collection_whatever_its_id_col(
@@ -86,3 +93,35 @@ def test_an_msa_row_pick_still_has_to_match_the_card_id_col():
     comps[1]["data_collection_tag"] = "msa"
     problems = linked_component_problems(comps)
     assert len(problems) == 1 and "selects on 'seq_id'" in problems[0]
+
+
+PROTEIN_WAVE_2 = (
+    "hmm_logo",
+    "secondary_structure",
+    "domain_architecture",
+    "pae_matrix",
+    "ramachandran",
+)
+
+
+@pytest.mark.parametrize("kind", PROTEIN_WAVE_2)
+def test_the_second_protein_wave_is_residue_emitting_and_on_by_default(kind: str):
+    assert kind in RESIDUE_EMITTING_KINDS
+    assert kind in SELECTION_ON_BY_DEFAULT
+
+
+@pytest.mark.parametrize("kind", PROTEIN_WAVE_2)
+def test_an_opted_out_second_wave_tile_is_still_reported(kind: str):
+    config = {"viz_kind": kind, "selection_enabled": False}
+    if kind == "pae_matrix":
+        config["pae_dc_tag"] = "pae"
+    problems = linked_component_problems([_viz("protein", config), _card("protein")])
+    assert len(problems) == 1 and "emits no selection" in problems[0]
+
+
+def test_a_domain_pick_links_a_card_on_the_label_column():
+    domains = _viz("domains", {"viz_kind": "domain_architecture"}, dc="domains")
+    assert emitted_selection_column(domains) == "label"
+    card = _card("domains", id_col="label")
+    card["data_collection_tag"] = "domains"
+    assert linked_component_problems([domains, card]) == []

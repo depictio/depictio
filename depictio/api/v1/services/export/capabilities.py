@@ -76,8 +76,9 @@ COMPONENT_FORMATS: dict[str, frozenset[ExportFormat]] = {
 #: empty frame and a CSP violation in the host page. Two reasons:
 #:
 #: * the renderer reaches the network on its own, outside ``api.ts``: GenomeSpy
-#:   reads its annotation tracks directly, a 3D structure tile fetches its
-#:   structure file from object storage or the structure resolver;
+#:   reads its annotation tracks directly, a 3D structure tile (and the
+#:   Ramachandran plot drawn from the same file) fetches its structure from
+#:   object storage or the structure resolver, a PAE matrix its matrix file;
 #: * the renderer computes per interaction, so no precomputed result stands for
 #:   the component: a contact map dispatches one job per zoom window, a group
 #:   comparison one per pair of selections.
@@ -98,6 +99,15 @@ HTML_UNAVAILABLE_KINDS: dict[str, str] = {
         "A 3D structure tile fetches its structure file at render time, from object "
         "storage or the structure resolver, so it cannot be taken offline. Open the "
         "dashboard instead."
+    ),
+    "pae_matrix": (
+        "A predicted aligned error matrix is read from its file in object storage at "
+        "render time, so it cannot be taken offline. Open the dashboard instead."
+    ),
+    "ramachandran": (
+        "A Ramachandran plot computes its torsion angles in the browser from the "
+        "structure file, fetched at render time from object storage or the structure "
+        "resolver, so it cannot be taken offline. Open the dashboard instead."
     ),
 }
 
@@ -176,10 +186,18 @@ AV_JSON_SOURCE: dict[str, AvJsonSource] = {
     "record_card": "client_only",
     "parallel_coordinates": "client_only",
     # Protein kinds. molecule_3d draws with 3Dmol.js, msa and sequence_track on
-    # a canvas: none of them is a Plotly figure.
+    # a canvas: none of them is a Plotly figure. The second wave is drawn the
+    # same way (SVG and canvas) except ramachandran, a Plotly scatter whose
+    # angles are computed in the browser from the structure file, so no
+    # server-side figure stands for it either.
     "molecule_3d": "client_only",
     "msa": "client_only",
     "sequence_track": "client_only",
+    "hmm_logo": "client_only",
+    "secondary_structure": "client_only",
+    "domain_architecture": "client_only",
+    "pae_matrix": "client_only",
+    "ramachandran": "client_only",
 }
 
 

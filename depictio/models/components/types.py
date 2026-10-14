@@ -101,6 +101,15 @@ AdvancedVizKind = Literal[
     "molecule_3d",
     "msa",
     "sequence_track",
+    # Protein kinds (wave 2): the profile HMM as a logo, the predicted
+    # secondary structure and the domain architecture of a protein, and the
+    # two views of a structure that are not 3D (predicted aligned error,
+    # backbone torsions). Same `residue_selection` link as the three above.
+    "hmm_logo",
+    "secondary_structure",
+    "domain_architecture",
+    "pae_matrix",
+    "ramachandran",
 ]
 
 # Map visualization types

@@ -1,5 +1,5 @@
 """Data-collection config for indexed genomic files (VCF, BAM, bigWig, GFF3, FASTA)
-and for whole-file structure objects (PDB, mmCIF).
+and for whole-file structure objects (PDB, mmCIF, predicted aligned error).
 
 An ``indexed_file`` DC is file-backed and has no delta table: the pipeline's
 output files (and their index sidecars) are copied to S3 at ingest, and the
@@ -11,7 +11,9 @@ a table first.
 The ``pdb`` / ``mmcif`` formats reuse the same file-backed path for protein
 structures: one structure per entity (the sample id is the entity id), no
 index sidecar, fetched whole by the ``molecule_3d`` viz through the same
-presigned manifest.
+presigned manifest. The ``pae`` format does the same for the predicted aligned
+error matrix of a structure (``.pae.tsv`` or ``.pae.json``, one per entity),
+fetched whole by the ``pae_matrix`` viz.
 
 One object per sample: the scan matches one primary file per sample, the CLI
 uploads it plus its index under ``indexed_file_s3_prefix(dc_id, sample)``, and
@@ -33,7 +35,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 IndexedFileFormat = Literal[
-    "vcf", "bam", "bigwig", "bigbed", "gff3", "fasta", "tabix", "pdb", "mmcif"
+    "vcf", "bam", "bigwig", "bigbed", "gff3", "fasta", "tabix", "pdb", "mmcif", "pae"
 ]
 
 #: Formats GenomeSpy can read lazily, mapped to the index sidecar suffix the
@@ -51,6 +53,9 @@ DEFAULT_INDEX_SUFFIX: dict[str, str] = {
     # range, so they carry no index. Extensions: .pdb, .cif, .mmcif (gz ok).
     "pdb": "",
     "mmcif": "",
+    # A predicted aligned error matrix is read whole too (a few hundred kB for
+    # a protein of a thousand residues). Extensions: .pae.tsv, .pae.json (gz ok).
+    "pae": "",
 }
 
 #: Bucket-relative prefix every indexed file lands under.
@@ -89,6 +94,10 @@ _STRIPPED_SUFFIXES: tuple[str, ...] = (
     ".ent.gz",
     ".cif.gz",
     ".mmcif.gz",
+    ".pae.tsv.gz",
+    ".pae.json.gz",
+    ".pae.tsv",
+    ".pae.json",
     ".pdb",
     ".ent",
     ".cif",
@@ -166,7 +175,10 @@ class DCIndexedFileConfig(BaseModel):
             "bigwig, bigbed, gff3, fasta (indexedFasta) or tabix (any other "
             "bgzip-compressed, tabix-indexed interval file such as BED). "
             "pdb and mmcif hold protein structures (.pdb, .cif, .mmcif, gzip "
-            "allowed), one per entity, read whole by the molecule_3d viz."
+            "allowed), one per entity, read whole by the molecule_3d viz. "
+            "pae holds the predicted aligned error matrix of a structure "
+            "(.pae.tsv, .pae.json, gzip allowed), one per entity, read whole by "
+            "the pae_matrix viz."
         )
     )
     index_suffix: str | None = Field(
