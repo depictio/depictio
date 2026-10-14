@@ -179,7 +179,7 @@ narrower one. Nothing is set per tab or per tile.
 ## Genome tracks
 
 A JBrowse genome browser over the `tracks` collection, a manifest the project-local recipe
-`depictio/projects/nf-core/cutandrun/recipes/tracks.py` spells out from the validated
+`depictio/catalog/cutandrun/tracks.py` spells out from the validated
 samplesheet: per sample the bigWig signal, the SEACR stringent and MACS2 narrowPeak calls
 (targets only) and the deduplicated BAM, coloured per target like the run's own IGV
 session. The assembly is the `hg38` preset; the browser opens on the HOXA cluster

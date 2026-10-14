@@ -2235,15 +2235,25 @@ def process_recipe_data_collection(
             upload_genomic_track_files,
         )
 
-        upload_result = upload_genomic_track_files(
-            data_collection,
-            CLI_config,
-            overwrite,
-            manifests=manifests_from_frame(result_df, data_dir, run_data_dirs),
-            missing_ok=True,
-        )
-        if upload_result.get("result") != "success":
-            return {"result": "error", "message": str(upload_result.get("message"))}
+        # Only a local run folder holds files to upload: a run read from an s3://
+        # prefix is read in place (``remote_base_uri``), there is nothing to copy.
+        local_dir = data_dir if isinstance(data_dir, str) else data_dir.location
+        if isinstance(data_dir, str) or not data_dir.is_remote:
+            local_run_dirs = [r.location for r in run_data_roots if not r.is_remote]
+            upload_result = upload_genomic_track_files(
+                data_collection,
+                CLI_config,
+                overwrite,
+                manifests=manifests_from_frame(result_df, local_dir, local_run_dirs),
+                missing_ok=True,
+            )
+            if upload_result.get("result") != "success":
+                return {"result": "error", "message": str(upload_result.get("message"))}
+        else:
+            rich_print_checked_statement(
+                f"Track files stay in {escape(local_dir)}: set remote_base_uri to read them in place",
+                "warning",
+            )
 
     # Upsert metadata
     api_upsert_result = api_upsert_deltatable(

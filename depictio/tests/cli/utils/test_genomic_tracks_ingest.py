@@ -630,7 +630,7 @@ class TestRecipeManifests:
             config={  # type: ignore[arg-type]
                 "type": "genomic_tracks",
                 "source": "transformed",
-                "transform": {"recipe": "nf-core/cutandrun/tracks.py"},
+                "transform": {"recipe": "cutandrun/tracks.py"},
                 "dc_specific_properties": {"format": "tsv", "sample_column": "sample"},
             },
         )

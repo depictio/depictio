@@ -157,7 +157,7 @@ workflows:
           metatype: "Metadata"
           source: "transformed"
           transform:
-            recipe: "nf-core/cutandrun/tracks.py"
+            recipe: "cutandrun/tracks.py"
           dc_specific_properties:
             format: "TSV"
             uri_column: "uri"
