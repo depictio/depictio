@@ -280,6 +280,15 @@ function redirectToAuth(): void {
   window.location.replace('/auth');
 }
 
+/** An admin created this account with a password the person did not choose:
+ *  open their profile on the password form until they replace it. A nudge, not a
+ *  lock — the page they land on is the only one that needs no other call. */
+function redirectToPasswordChangeIfRequired(user: { must_change_password?: boolean }): void {
+  if (!user.must_change_password) return;
+  if (window.location.pathname.startsWith('/profile')) return;
+  window.location.replace('/profile#password');
+}
+
 async function bootstrapSession(): Promise<void> {
   if (window.location.pathname.startsWith('/auth')) return;
 
@@ -298,7 +307,10 @@ async function bootstrapSession(): Promise<void> {
   }
 
   // Has a local token AND backend resolved a user → session is good.
-  if (localValid && status.user) return;
+  if (localValid && status.user) {
+    redirectToPasswordChangeIfRequired(status.user);
+    return;
+  }
 
   // Either no local token, or local token is stale/revoked. Drop it before
   // re-establishing so the next call doesn't reuse the bad token.

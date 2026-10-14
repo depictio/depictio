@@ -296,6 +296,20 @@ const ProfileApp: React.FC = () => {
     </Center>
   ) : (
     <Stack gap="md" maw={860} data-testid="account-settings">
+      {status?.user?.must_change_password && (
+        <Alert
+          color="orange"
+          variant="light"
+          icon={<Icon icon="mdi:lock-reset" />}
+          title="Choose your own password"
+          data-testid="must-change-password-note"
+        >
+          <Text size="sm">
+            An administrator set the password you signed in with. Replace it in the Password
+            section below.
+          </Text>
+        </Alert>
+      )}
       {guest.available && (
         <Alert color="blue" title="You are browsing as a guest" data-testid="guest-sign-in-note">
           <Stack gap="xs" align="flex-start">
