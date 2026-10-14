@@ -2,7 +2,7 @@
 """Hand-drawn schema of the SAML SSO login flow (PR #968).
 
 SP-initiated login, drawn as the screens the user sees and the envelope that
-travels between them: the Depictio login page, the Keycloak page, the signed
+travels between them: the Depictio login page, the IdP page, the signed
 SAMLResponse, the URL bar carrying the ticket in its fragment, the viewer that
 redeems it. Built on the shared sketch toolkit; the seeded jitter makes re-runs
 byte-identical, so the picture can be corrected in a diff when the flow moves.
@@ -206,7 +206,7 @@ def build_login_flow() -> Sketch:
     s.rect(halo, colour=BLUE_INK, dashed=True)
     s.rect(sso)
     key_glyph(s, sso.x + 26, sso.cy)
-    s.text(sso.cx + 12, sso.cy + 5, "Sign in with EMBL", size=14, weight="bold")
+    s.text(sso.cx + 12, sso.cy + 5, "Sign in with SSO", size=14, weight="bold")
     cursor(s, sso.right - 40, sso.cy + 4)
     s.text(card.cx, by + 150, "or with your email", size=11, colour=DIM)
     s.line(card.x + 20, by + 146, card.cx - 60, by + 146, colour=GREY, amount=0.3, passes=1)
@@ -253,7 +253,7 @@ def build_login_flow() -> Sketch:
     s.text(1105, 212, "carrying the AuthnRequest", size=12.5, colour=DIM)
     s.text(1105, 256, "(HTTP-Redirect binding)", size=12.5, colour=DIM)
 
-    # ---- 2. the IdP (Keycloak) login page ----------------------------------
+    # ---- 2. the IdP login page ----------------------------------
     kx, ky, kw, kh = 1200, 128, 440, 340
     browser(s, kx, ky, kw, kh)
     screen_bg(s, kx, ky, kw, kh)
@@ -261,11 +261,11 @@ def build_login_flow() -> Sketch:
     kcard = Box(kx + 40, ky + 42, kw - 80, 282, WHITE, "", ())
     s.rect(kcard, colour=GREY)
     s.text(kcard.cx, ky + 72, "Sign in to your account", size=17, weight="bold")
-    s.text(kcard.cx, ky + 92, "realm: EMBL", size=12, colour=DIM)
+    s.text(kcard.cx, ky + 92, "realm: example", size=12, colour=DIM)
     field(s, kx + 70, ky + 106, kw - 140, "Username or email", "jdoe")
     field(s, kx + 70, ky + 158, kw - 140, "Password", "••••••••")
     button(s, kx + 70, ky + 226, kw - 140, "Sign In", enabled=True)
-    s.text(kcard.cx, ky + 292, "Keycloak", size=12, colour=DIM)
+    s.text(kcard.cx, ky + 292, "any SAML IdP", size=12, colour=DIM)
     badge(s, kx + 2, ky - 6, 2)
 
     # ---- IdP -> the signed response ---------------------------------------

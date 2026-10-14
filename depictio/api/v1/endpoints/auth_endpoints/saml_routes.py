@@ -1,4 +1,4 @@
-"""SAML SSO endpoints (SP-initiated login against e.g. the EMBL Keycloak IdP).
+"""SAML SSO endpoints (SP-initiated login against any SAML 2.0 IdP, e.g. Keycloak).
 
 Flow:
 1. ``GET /auth/saml/login`` — build an AuthnRequest, remember its ID in the

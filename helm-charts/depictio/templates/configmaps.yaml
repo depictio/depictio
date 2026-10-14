@@ -69,8 +69,9 @@ data:
   DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI: ""
   {{- end }}
 
-  # SAML SSO Configuration (see helm-charts/depictio/values-embl-internal-prod.yaml for
-  # a working EMBL Keycloak reference block). The IdP signing certificate is
+  # SAML SSO Configuration (the SP side of a deployment is set in its own values
+  # file; the IdP side — entity ID, SSO URL, certificate — belongs in the
+  # environment's secrets values, merged into `auth:`). The IdP signing certificate is
   # public X.509 material — a ConfigMap is fine; no key material rides here.
   # Empty strings are coerced to "unset" by the backend settings model.
   DEPICTIO_AUTH_SAML_ENABLED: {{ .Values.backend.env.DEPICTIO_AUTH_SAML_ENABLED | default "false" | quote }}

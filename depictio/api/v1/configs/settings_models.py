@@ -504,17 +504,17 @@ class AuthConfig(BaseSettings):
         default=None, description="Google OAuth redirect URI"
     )
 
-    # SAML SSO (SP-initiated, python3-saml). Designed for the EMBL Keycloak
-    # IdP but provider-agnostic.
+    # SAML 2.0 SSO (SP-initiated, python3-saml). Provider-agnostic: validated
+    # against a Keycloak realm, but nothing here is specific to it.
     saml_enabled: bool = Field(default=False, description="Enable SAML SSO authentication")
     saml_idp_entity_id: Optional[str] = Field(
         default=None,
-        description="IdP entityID, e.g. https://auth.ktest.embl.de/realms/EMBL-HD",
+        description="IdP entityID, e.g. https://sso.example.org/realms/myrealm",
     )
     saml_idp_sso_url: Optional[str] = Field(
         default=None,
         description="IdP SSO endpoint (HTTP-Redirect binding), "
-        "e.g. https://auth.ktest.embl.de/realms/EMBL-HD/protocol/saml",
+        "e.g. https://sso.example.org/realms/myrealm/protocol/saml",
     )
     saml_idp_cert: Optional[str] = Field(
         default=None,
@@ -543,7 +543,7 @@ class AuthConfig(BaseSettings):
     )
     saml_login_label: str = Field(
         default="Sign in with SSO",
-        description="Label for the SSO button in the login form (e.g. 'Sign in with EMBL')",
+        description="Label for the SSO button in the login form (e.g. 'Sign in with your institution')",
     )
 
     @field_validator(

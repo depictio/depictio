@@ -20,8 +20,8 @@ from depictio.api.v1.endpoints.auth_endpoints.saml_utils import (
 
 _SAML_SETTINGS = {
     "saml_enabled": True,
-    "saml_idp_entity_id": "https://auth.ktest.embl.de/realms/EMBL-HD",
-    "saml_idp_sso_url": "https://auth.ktest.embl.de/realms/EMBL-HD/protocol/saml",
+    "saml_idp_entity_id": "https://sso.example.org/realms/myrealm",
+    "saml_idp_sso_url": "https://sso.example.org/realms/myrealm/protocol/saml",
     "saml_idp_cert": "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----",
     "saml_sp_entity_id": "https://api.example.org/depictio",
 }
@@ -62,9 +62,9 @@ def _no_redis():
         yield
 
 
-def _mock_auth(request_id="ONELOGIN_id_1", nameid="user@embl.de", errors=None, attributes=None):
+def _mock_auth(request_id="ONELOGIN_id_1", nameid="user@example.org", errors=None, attributes=None):
     auth = MagicMock()
-    auth.login.return_value = "https://auth.ktest.embl.de/sso?SAMLRequest=xyz"
+    auth.login.return_value = "https://sso.example.org/sso?SAMLRequest=xyz"
     auth.get_last_request_id.return_value = request_id
     auth.process_response.return_value = None
     auth.get_errors.return_value = errors or []
@@ -95,7 +95,7 @@ class TestSamlLogin:
             response = client.get("/auth/saml/login", follow_redirects=False)
 
         assert response.status_code == 302
-        assert response.headers["location"] == "https://auth.ktest.embl.de/sso?SAMLRequest=xyz"
+        assert response.headers["location"] == "https://sso.example.org/sso?SAMLRequest=xyz"
         auth.login.assert_called_once_with(return_to="/dashboards")
         assert state_store.consume_auth_state("saml", "ONELOGIN_id_1") == "/dashboards"
 
@@ -178,7 +178,7 @@ class TestSamlAcs:
 
     def test_acs_success_mints_magic_ticket(self, client):
         state_store.store_auth_state("saml", "ONELOGIN_id_1", value="/dashboard/42")
-        auth = _mock_auth(nameid="User@EMBL.de")
+        auth = _mock_auth(nameid="User@Example.org")
 
         user = MagicMock()
         user.id = "507f1f77bcf86cd799439011"
@@ -216,7 +216,7 @@ class TestSamlAcs:
         auth.process_response.assert_called_once_with(request_id="ONELOGIN_id_1")
         # Email is lowercased before the user lookup.
         create_user.assert_awaited_once()
-        assert create_user.await_args.args[0] == "user@embl.de"
+        assert create_user.await_args.args[0] == "user@example.org"
 
     def test_acs_replay_rejected(self, client):
         """A second POST with the same InResponseTo must not mint a ticket."""
@@ -274,14 +274,15 @@ class TestSamlHelpers:
     def test_resolve_email_prefers_configured_attribute(self):
         with patch.object(settings.auth, "saml_attribute_email", "urn:oid:mail"):
             assert (
-                resolve_email({"urn:oid:mail": ["User@EMBL.de"]}, "fallback@x.y") == "user@embl.de"
+                resolve_email({"urn:oid:mail": ["User@Example.org"]}, "fallback@x.y")
+                == "user@example.org"
             )
 
     def test_resolve_email_falls_back_to_nameid(self):
         with patch.object(settings.auth, "saml_attribute_email", None):
-            assert resolve_email({}, "User@EMBL.de ") == "user@embl.de"
+            assert resolve_email({}, "User@Example.org ") == "user@example.org"
         with patch.object(settings.auth, "saml_attribute_email", "urn:oid:mail"):
-            assert resolve_email({"urn:oid:mail": []}, "user@embl.de") == "user@embl.de"
+            assert resolve_email({"urn:oid:mail": []}, "user@example.org") == "user@example.org"
 
     def test_resolve_email_none_when_nothing_usable(self):
         with patch.object(settings.auth, "saml_attribute_email", None):
