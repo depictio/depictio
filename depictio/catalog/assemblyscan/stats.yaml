@@ -1,0 +1,34 @@
+id: assemblyscan_stats
+name: Assembly statistics
+mode: assembly/summary
+description: >-
+  One row per assembly from assembly-scan's JSON report: contig count, total,
+  median, maximum and N50 contig length, L50, GC and N content, and how many
+  contigs pass 1 kb, 10 kb, 100 kb and 1 Mb. Contiguity bounds how much of a
+  genome can align in long collinear blocks, so these numbers are read next to
+  the alignment coverage.
+find:
+  path_glob: "**/assemblyscan/*.json"
+recipe: assemblyscan/stats.py
+fixture: stats.tsv
+renders_as:
+  # Fragmented assemblies sit right (many sequences) and low (short N50); the
+  # point size is the assembly length.
+  - { id: contiguity_scatter, component: advanced_viz, kind: scatter_xy,
+      roles: {x: contigs, y: n50, label: genome, size: total_length} }
+  - { component: figure, visu_type: bar,
+      dict_kwargs: {x: genome, y: gc_pct, title: GC content per assembly} }
+  - { id: assembly_n50, component: card, column: n50, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
+  - { id: assembly_length, component: card, column: total_length, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  # Chromosome-level and fragmented assemblies make two groups, so the share of
+  # sequences past 1 Mb reads as a histogram rather than as one median.
+  - { id: assembly_large_share, component: card, column: contigs_over_1mb_pct, aggregation: median,
+      secondary_layout: histogram }
+  - { id: assembly_gc, component: card, column: gc_pct, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: assembly_contigs, component: card, column: contigs, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: interactive, interactive_type: RangeSlider, column_name: n50 }
+  - { component: table, row_selection_enabled: true, row_selection_column: genome }
