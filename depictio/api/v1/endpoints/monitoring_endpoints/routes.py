@@ -6,8 +6,10 @@ endpoints (auth-only, not admin-gated) let the CLI open/close an ingestion-run
 record — the caller is the ingesting user, identified by token + CLI headers.
 
 Admin gating mirrors ``celery_endpoints/routes.py`` (module-local
-``_require_admin``). The whole feature is additionally refused in public/demo
-mode, where there is no meaningful per-user admin surface.
+``_require_admin``). The whole feature is additionally refused in demo mode,
+where there is no meaningful per-user admin surface. A public instance does
+have real admins (they sign in), so there it is open to a signed-in admin and
+refused to the temporary guests the instance mints.
 """
 
 from __future__ import annotations
@@ -42,19 +44,23 @@ monitoring_endpoint_router = APIRouter()
 
 
 def _require_admin(current_user: User) -> None:
-    """Reject non-admin callers and public/demo deployments.
+    """Reject non-admin callers, guests of a public instance and demo deployments.
 
     Mirrors the celery introspection gate. The monitoring surface exposes task
-    args, tracebacks and host logs — admin-only, and meaningless in public/demo
-    mode (no real admin user), so we refuse there outright.
+    args, tracebacks and host logs: admin-only, and refused outright in demo
+    mode (no real admin user). A public instance can have a real admin signed
+    in, so it is allowed there, but never to a temporary guest.
     """
     # Single-user is a trusted personal admin instance — always allowed, even if
-    # public_mode is also set. Only pure public/demo deployments are refused.
-    if (
-        settings.auth.is_public_mode or settings.auth.is_demo_mode
-    ) and not settings.auth.is_single_user_mode:
+    # public_mode or demo_mode is also set.
+    single_user = settings.auth.is_single_user_mode
+    if settings.auth.is_demo_mode and not single_user:
         raise HTTPException(status_code=404, detail="Monitoring is not available in this mode.")
-    if not getattr(current_user, "is_admin", False):
+    if not getattr(current_user, "is_admin", False) or (
+        settings.auth.is_public_mode
+        and not single_user
+        and getattr(current_user, "is_temporary", False)
+    ):
         logger.warning(
             f"Denied monitoring access: non-admin user {current_user.id} ({current_user.email})"
         )

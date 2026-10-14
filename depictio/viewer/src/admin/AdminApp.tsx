@@ -43,6 +43,7 @@ import AdminBackupsPanel from './AdminBackupsPanel';
 import AdminMaintenancePanel from './AdminMaintenancePanel';
 import AdminMonitoringPanel from './AdminMonitoringPanel';
 import AdminSettingsPanel from './AdminSettingsPanel';
+import { canSeeBackups, canSeeMonitoring } from './access';
 import { usePageTitle } from '../branding';
 
 /** A page of the Glass admin: a plain tab, or one of the Log & Task panes
@@ -134,19 +135,21 @@ function writeAdminUrl(route: AdminRoute, mode: 'push' | 'replace'): void {
 
 const AdminApp: React.FC = () => {
   const { user, loading, isPublicMode, isDemoMode, isSingleUserMode } = useCurrentUser();
-  // Monitoring is for single- & multi-user (trusted) deployments. Single-user
-  // always wins — it's a personal admin instance even if public_mode is also
-  // set; only pure public/demo instances hide it.
-  const showMonitoring = isSingleUserMode || (!isPublicMode && !isDemoMode);
-  // Full-DB backup/restore is likewise a trusted-deployment tool.
-  const showBackups = showMonitoring;
+  // Monitoring is for single- & multi-user (trusted) deployments, and for a
+  // signed-in admin of a public one. Single-user always wins — it's a personal
+  // admin instance even if public_mode is also set; demo instances and guests
+  // never see it.
+  const modes = { user, isPublicMode, isDemoMode, isSingleUserMode };
+  const showMonitoring = canSeeMonitoring(modes);
+  // Full-DB backup/restore is a trusted-deployment tool only.
+  const showBackups = canSeeBackups(modes);
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
   const [route, setRoute] = useState<AdminRoute>(readAdminRoute);
-  // Monitoring and Backups aren't rendered in public/demo mode; a URL naming
-  // them falls back to Users instead of an empty panel.
+  // A tab that isn't rendered here; a URL naming it falls back to Users
+  // instead of an empty panel.
   const activeTab: AdminTab =
-    !showMonitoring && (route.tab === 'monitoring' || route.tab === 'backups')
+    (!showMonitoring && route.tab === 'monitoring') || (!showBackups && route.tab === 'backups')
       ? 'users'
       : route.tab;
 
@@ -225,7 +228,9 @@ const AdminApp: React.FC = () => {
         >
           <Tabs.List className="ga-nav" aria-label="Administration">
             {NAV_GROUPS.map((group) => {
-              const items = group.items.filter((item) => showMonitoring || !item.trusted);
+              const items = group.items.filter((item) =>
+                item.view === 'backups' ? showBackups : showMonitoring || !item.trusted,
+              );
               if (items.length === 0) return null;
               return (
                 <React.Fragment key={group.label}>

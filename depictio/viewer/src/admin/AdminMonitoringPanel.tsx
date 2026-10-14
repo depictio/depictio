@@ -41,6 +41,7 @@ import {
 } from 'depictio-react-core';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { canSeeMonitoring } from './access';
 import { formatDateTimeVerbose } from '../lib/datetime';
 import {
   absTime,
@@ -93,8 +94,9 @@ import { useQuietTags, useTone } from '../monitoring/useTone';
  * live in `../monitoring/` so the project-scoped panels reuse them rather than
  * growing near-copies.
  *
- * Hidden in public/demo mode (no real admin surface) — the parent AdminApp
- * already gates on `is_admin`, and we additionally bail in those modes here.
+ * Hidden in demo mode and from a public instance's guests (no real admin
+ * surface) — the parent AdminApp already gates on `is_admin`, and we
+ * additionally bail in those cases here.
  *
  * The open pane and the Ingestion filters are owned by AdminApp, which keeps
  * them in the URL (`/admin/<pane>?status=...`) so a refresh, Back/Forward or a
@@ -995,13 +997,13 @@ const AdminMonitoringPanel: React.FC<AdminMonitoringPanelProps> = ({
   onIngestionFiltersChange,
   showPaneSwitch = true,
 }) => {
-  const { isPublicMode, isDemoMode, isSingleUserMode } = useCurrentUser();
+  const { user, isPublicMode, isDemoMode, isSingleUserMode } = useCurrentUser();
   const [taskSignal, setTaskSignal] = useState(0);
   const [watcherSignal, setWatcherSignal] = useState(0);
   const [ingestionFeed] = useState(() => createLiveFeed<MonitoringLiveEvent>());
 
-  // Match AdminApp's gate: single-user always allowed; only pure public/demo hides.
-  const visible = isSingleUserMode || (!isPublicMode && !isDemoMode);
+  // Match AdminApp's gate (see `canSeeMonitoring`).
+  const visible = canSeeMonitoring({ user, isPublicMode, isDemoMode, isSingleUserMode });
 
   // Probe whether real-time events are enabled server-side before opening the
   // socket. When they're disabled the WS handshake is rejected (403) and the
