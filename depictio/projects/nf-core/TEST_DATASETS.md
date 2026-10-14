@@ -371,6 +371,7 @@ files, template lint and a CLI dry run.
 | proteinannotator | 1.1.0 | 1.1.0 | no | `cbf78d47` (dev run `v1.2.0dev-gb8fac19`) | 1.33 (SeqFu custom content only, not read) | flat | 17 (5) | `test_full`: three single-protein FASTA files, test-sized Pfam, FunFam, NMPFamsDB and MetagRoot libraries, InterProScan (HAMAP, TIGRFAM, SFLD) and S4PRED; samplesheet and design table vendored under `input/` |
 | isoseq | 3.0.1 | 3.0.1 | no | `6c944831` | 1.33 | flat | 13 (6) | `test_full`: one Iso-Seq sample started from subreads, CCS in 100 chunks, uLTRA mapping to an iGenomes assembly; design table vendored under `input/` (the pipeline publishes no samplesheet) |
 | oncoanalyser | 3.0.0 | 3.0.0 | no | `7c74c87a` | none | flat | 22 (8) | `test_full` WGTS: one tumor/normal DNA pair and its tumor RNA through the WiGiTS tools; 29 tables and small VCFs fetched from a 272 GB run, samplesheet vendored under `input/` |
+| crisprseq | 2.3.0 | 2.3.0 | no | `0e9f915c` | none | flat | 12 (1) | `test_full` targeted analysis: 6,195 single-end amplicon libraries, 122 protospacers, no donor template; 43,206 per-library CIGAR-parser and clonality tables (2.3 GB), samplesheet vendored under `input/` |
 
 With these, 25 templates ship (one directory per pipeline under `depictio/projects/nf-core/`).
 

@@ -173,6 +173,15 @@ SCENARIOS: list[Scenario] = [
         "chipseq", "2.1.0", "test", note="EMBL HPC run (no 2.x megatest); yeast, one antibody"
     ),
     Scenario("chipseq", "2.1.0", "test_star", note="STAR route: adds the STAR MultiQC module"),
+    # The samplesheet is vendored and copied into input/ by download_test_data.sh;
+    # an explicit GROUP_COL keeps the metadata auto-detection off fastq_1.
+    Scenario(
+        "crisprseq",
+        "2.3.0",
+        "megatest",
+        note="test_full targeted, 6195 libraries, vendored samplesheet; no MultiQC",
+        vars=(("GROUP_COL", "protospacer"),),
+    ),
     # No 3.2.x megatest: EMBL HPC runs, with the MultiQC 1.19 report reprocessed
     # beside them, which MULTIQC_REPROCESSED binds.
     Scenario(
