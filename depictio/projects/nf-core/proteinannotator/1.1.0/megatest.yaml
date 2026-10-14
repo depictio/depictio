@@ -1,0 +1,86 @@
+# Megatest manifest for nf-core/proteinannotator (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the subset of
+# it the template reads. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline proteinannotator --version 1.1.0 --max-file-mb 50 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing, plus the vendored input/ files
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+#
+# test_full profile: three single-protein FASTA inputs (two structure
+# prediction targets and one enzyme), searched against test-sized Pfam, FunFam,
+# NMPFamsDB and MetagRoot HMM libraries, InterProScan with the HAMAP, TIGRFAM
+# and SFLD applications, and S4PRED. The pipeline publishes neither its
+# samplesheet nor a design table: both are vendored under input/ and
+# download_test_data.sh copies them into {dest}/input/.
+pipeline: proteinannotator
+version: "1.1.0"
+# Pinned to a dev run of the pipeline (software_versions.yml reports
+# v1.2.0dev-gb8fac19, outdir results-dev), synced under this sha. The run is
+# about 10 MB; the template directory stays at 1.1.0, the latest release.
+results_sha: "cbf78d471f62d91af666e8c77bcd580b4743c6be"
+run_root: ""
+# The run writes a MultiQC 1.33 parquet, but it holds only SeqFu custom-content
+# sections anchored by sample name, so the template does not read it.
+multiqc:
+  version: null
+  parquet: null
+  reprocess: false
+keys:
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  # Filtered FASTA, SeqFu statistics before / after the filter, filter log.
+  - qc/*/*.tsv
+  - qc/*/*.fasta
+  - qc/*/*.log
+  # hmmsearch domain tables, one directory per database.
+  - domain_annotation/*/*.domtbl.gz
+  # InterProScan: the TSV is read; the GFF3 carries the same matches plus the
+  # sequences and is kept for reference.
+  - functional_annotation/interproscan/*/*.tsv
+  - functional_annotation/interproscan/*/*.gff3
+  # S4PRED secondary structure, one ss2 per sequence.
+  - s4pred/*/ss2/*.ss2
+  #
+  # Deliberately NOT fetched:
+  #   multiqc/: only SeqFu custom-content sections, one per sample and stage,
+  #     anchored by sample name, so no generic panel can bind them; the SeqFu
+  #     TSVs above hold the same numbers.
+  #   downloaded_dbs/: the test HMM libraries and the InterProScan data.
+  #   functional_annotation/interproscan/*/*.{json,xml}: the same matches.
+prefix_keys: []
+renames: {}
+# Megatest-specific terms that must never appear in the dashboard texts
+# (checked by the template lint test).
+forbidden_terms:
+  - T1024
+  - T1026
+  - l_arginase
+  - arginase
+  - LmrP
+  - FBNSV
+  - CASP14
+  - CASP
+  - MFS_1
+  - Nanovirus_coat
+  - SFLDS00057
+  - Glutaminase
+  - Asparaginase
+  - structure_target
+  - enzyme_family
+post_fetch_help: |
+  === Quick test commands ===
+
+  # The samplesheet and the design table are not published by the pipeline:
+  # download_test_data.sh copies the vendored ones into {dest}/input/.
+  mkdir -p {dest}/input && cp depictio/projects/nf-core/proteinannotator/1.1.0/input/* {dest}/input/
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/proteinannotator/1.1.0 --data-root {dest} \
+    --var METADATA_FILE={dest}/input/sample_metadata.tsv --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/proteinannotator/1.1.0 --data-root {dest} \
+    --var METADATA_FILE={dest}/input/sample_metadata.tsv

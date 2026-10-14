@@ -246,6 +246,17 @@ SCENARIOS: list[Scenario] = [
         note="MultiQC reprocessed, vendored design; 3.1.0 megatest is empty",
         vars=(_DESIGN_IN_DATA_ROOT,),
     ),
+    # The samplesheet and the design table are vendored and copied into input/ by
+    # download_test_data.sh. The run is a dev run (3 proteins, no MultiQC panel
+    # read); the Structure tab folds a protein only when the server has
+    # DEPICTIO_STRUCTURE_RESOLVER_ENABLED=true.
+    Scenario(
+        "proteinannotator",
+        "1.1.0",
+        "megatest",
+        note="dev run pin, vendored samplesheet and design; structure resolver off by default",
+        vars=(_DESIGN_IN_DATA_ROOT,),
+    ),
     # The samplesheet is vendored and copied into input/ by download_test_data.sh;
     # only the top-ranked PAE matrix of each engine and target is fetched.
     Scenario(

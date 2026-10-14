@@ -1,0 +1,37 @@
+ARIA2:
+  aria2: 1.37.0
+ARIA2_FUNFAM:
+  aria2: 1.37.0
+ARIA2_METAGROOT:
+  aria2: 1.37.0
+ARIA2_NMPFAMS:
+  aria2: 1.37.0
+ARIA2_PFAM:
+  aria2: 1.37.0
+HMMSEARCH_FUNFAM:
+  hmmer: 3.4
+HMMSEARCH_METAGROOT:
+  hmmer: 3.4
+HMMSEARCH_NMPFAMS:
+  hmmer: 3.4
+HMMSEARCH_PFAM:
+  hmmer: 3.4
+INTERPROSCAN:
+  interproscan: 5.59-91.0
+S4PRED_RUNMODEL:
+  s4pred: 1.2.1
+SEQFU_STATS_AFTER:
+  seqfu: 1.22.3
+SEQFU_STATS_BEFORE:
+  seqfu: 1.22.3
+SEQKIT_REPLACE:
+  seqkit: 2.9.0
+SEQKIT_RMDUP:
+  seqkit: 2.9.0
+SEQKIT_SEQ:
+  seqkit: 2.9.0
+UNTAR:
+  untar: 1.34
+Workflow:
+    nf-core/proteinannotator: v1.2.0dev-gb8fac19
+    Nextflow: 25.10.5
