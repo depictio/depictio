@@ -597,6 +597,8 @@ export {
   listGroups,
   listMyGroups,
   fetchGroup,
+  fetchProjectEffectiveAccess,
+  previewGroupMembers,
   createGroup,
   updateGroup,
   deleteGroup,
@@ -716,6 +718,10 @@ export type {
   MyGroup,
   GroupMember,
   GroupDetail,
+  AccessSource,
+  EffectiveAccess,
+  EffectiveAccessUser,
+  GroupMemberPreview,
 } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {

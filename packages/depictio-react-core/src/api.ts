@@ -5225,6 +5225,57 @@ export async function fetchGroup(groupId: string): Promise<GroupDetail> {
   return res.json();
 }
 
+/** One grant behind a person's access: a direct entry or a group's. */
+export interface AccessSource {
+  kind: 'direct' | 'group';
+  role: 'owner' | 'editor' | 'viewer';
+  group_id?: string;
+  group_name?: string;
+}
+
+export interface EffectiveAccessUser {
+  id: string;
+  email: string;
+  display_name?: string | null;
+  /** Highest of the person's grants. */
+  role: 'owner' | 'editor' | 'viewer';
+  /** Every grant, highest first, so the role reads off the first one. */
+  sources: AccessSource[];
+}
+
+export interface EffectiveAccess {
+  users: EffectiveAccessUser[];
+  /** The `*` viewer wildcard: every signed-in user. Not a row. */
+  everyone_can_view: boolean;
+}
+
+/** Everyone a project's grants reach, direct or through a group. Project
+ *  owners and sysadmins only: the rows carry group members' emails. */
+export async function fetchProjectEffectiveAccess(projectId: string): Promise<EffectiveAccess> {
+  const res = await authFetch(`${API_BASE}/projects/effective_access/${projectId}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load who can access this project');
+  return res.json();
+}
+
+export interface GroupMemberPreview {
+  id: string;
+  email: string;
+  display_name?: string | null;
+}
+
+/** Members of a group before it is shared with a project. Same gate as the
+ *  permissions edit, so a project owner need not belong to the group. */
+export async function previewGroupMembers(
+  projectId: string,
+  groupId: string,
+): Promise<{ id: string; name: string; members: GroupMemberPreview[] }> {
+  const res = await authFetch(
+    `${API_BASE}/projects/group_members_preview/${projectId}/${groupId}`,
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load the group members');
+  return res.json();
+}
+
 export async function createGroup(input: {
   name: string;
   description?: string;

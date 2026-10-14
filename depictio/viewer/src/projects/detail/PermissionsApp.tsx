@@ -65,6 +65,7 @@ import type {
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { AppSidebar } from '../../chrome';
 import { usePageTitle } from '../../branding';
+import { AccessOverview, GroupMembersPreview, useEffectiveAccess } from './AccessOverview';
 
 type Role = 'Owner' | 'Editor' | 'Viewer';
 const ROLES: Role[] = ['Owner', 'Editor', 'Viewer'];
@@ -376,6 +377,20 @@ const PermissionsApp: React.FC = () => {
     );
     return myGroups.some((g) => g.is_group_admin && ownerGroupIds.has(g.id));
   }, [user, project, myGroups]);
+
+  const { access: effectiveAccess, error: effectiveAccessError } = useEffectiveAccess(
+    projectId,
+    canManage,
+    refreshKey,
+  );
+
+  /** The group named in the add box, when it is a real one not yet on the project. */
+  const groupToAdd = useMemo(() => {
+    const typed = groupInput.trim().toLowerCase();
+    if (!typed) return null;
+    const g = allGroups.find((x) => (x.name || '').toLowerCase() === typed);
+    return g && !groupRows.some((r) => r._id === g.id) ? g : null;
+  }, [groupInput, allGroups, groupRows]);
 
   /** Single save path — always sends BOTH the user lists and the group
    *  lists, so a change to one grid can't wipe the other. */
@@ -1034,6 +1049,14 @@ const PermissionsApp: React.FC = () => {
               </li>
             );
           })}
+          {canManage && groupToAdd && projectId && (
+            <GroupMembersPreview
+              projectId={projectId}
+              groupId={groupToAdd.id}
+              groupName={groupToAdd.name}
+              access={effectiveAccess}
+            />
+          )}
           {canManage && (
             <li className="pm-add">
               <Autocomplete
@@ -1066,6 +1089,8 @@ const PermissionsApp: React.FC = () => {
           )}
         </ul>
       </section>
+
+      {canManage && <AccessOverview access={effectiveAccess} error={effectiveAccessError} />}
     </div>
   );
 
@@ -1279,6 +1304,18 @@ const PermissionsApp: React.FC = () => {
                   }
                 />
               </Box>
+              {canManage && groupToAdd && projectId && (
+                <div className="pm-plain">
+                  <ul>
+                    <GroupMembersPreview
+                      projectId={projectId}
+                      groupId={groupToAdd.id}
+                      groupName={groupToAdd.name}
+                      access={effectiveAccess}
+                    />
+                  </ul>
+                </div>
+              )}
               {canManage && (
                 <Group gap="xs" align="flex-end">
                   <Autocomplete
@@ -1317,6 +1354,13 @@ const PermissionsApp: React.FC = () => {
               )}
             </Stack>
           </Card>
+          {canManage && (
+            <Card withBorder radius="md" p="md">
+              <div className="pm-plain">
+                <AccessOverview access={effectiveAccess} error={effectiveAccessError} />
+              </div>
+            </Card>
+          )}
         </Stack>
       )}
     </>
