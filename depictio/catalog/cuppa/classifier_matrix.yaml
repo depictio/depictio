@@ -1,0 +1,15 @@
+id: cuppa_classifier_matrix
+name: Cancer type by classifier matrix
+mode: cuppa
+description: >-
+  CUPPA's probabilities pivoted to one row per tumor and cancer type and one
+  column per classifier, the shape a clustered heatmap reads. A row that is
+  high across the DNA and RNA classifiers is a call several independent
+  feature families agree on.
+find:
+  path_glob: "**/*.cuppa.vis_data.tsv"
+recipe: cuppa/classifier_matrix.py
+fixture: classifier_matrix.tsv
+renders_as:
+  - { id: classifier_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: row_label} }
+  - { component: table }

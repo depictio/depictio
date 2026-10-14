@@ -1,0 +1,16 @@
+id: cuppa_predictions
+name: Tissue of origin probabilities
+mode: cuppa
+description: >-
+  Every CUPPA classifier's probability for every cancer type, one row per
+  tumor, classifier and cancer type, with the classifier's rank of that type
+  and a flag on its top call. The combined classifier's first ranked type is
+  CUPPA's prediction; the feature classifiers show what it rests on.
+find:
+  path_glob: "**/*.cuppa.vis_data.tsv"
+recipe: cuppa/predictions.py
+fixture: predictions.tsv
+renders_as:
+  - { id: cancer_type_bar, component: figure, visu_type: bar, dict_kwargs: {x: cancer_type, y: probability, color: classifier} }
+  - { id: classifier_filter, component: interactive, interactive_type: MultiSelect, column_name: classifier }
+  - { id: prediction_table, component: table }

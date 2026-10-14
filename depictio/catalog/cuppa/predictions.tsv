@@ -1,0 +1,17 @@
+sample	classifier_group	classifier	cancer_type	probability	rank	is_top
+TUMOR1	rna	alt_sj	Breast: Triple negative	0.2811868531168869	1	true
+TUMOR1	rna	alt_sj	Skin: Melanoma	0.13649865250555898	2	false
+TUMOR1	rna	alt_sj	Anogenital	0.06122437236886394	3	false
+TUMOR1	combined	combined	Breast: Other	0.6518047240680731	1	true
+TUMOR1	combined	combined	Breast: Triple negative	0.3155495201670258	2	false
+TUMOR1	combined	combined	Head and neck: Other	0.006785426488003231	3	false
+TUMOR1	dna	dna_combined	Breast: Other	0.36057591118192517	1	true
+TUMOR1	dna	dna_combined	Breast: Triple negative	0.23625340656861113	2	false
+TUMOR1	dna	dna_combined	Head and neck: Other	0.16301104508107214	3	false
+TUMOR1	dna	event	Esophagus/Stomach	0.2417718004340272	1	true
+TUMOR1	dna	event	Head and neck: Other	0.20364668617524748	2	false
+TUMOR1	dna	event	HPB: Bile duct/Gallbladder	0.14354829037468952	3	false
+TUMOR1	dna	gen_pos	Breast: Triple negative	0.5282807646313937	1	true
+TUMOR1	dna	gen_pos	Gynecologic: Ovary/Fallopian tube	0.15712881623730515	2	false
+TUMOR1	dna	gen_pos	Skin: Other	0.090823780514888	3	false
+TUMOR1	rna	gene_exp	Breast: Triple negative	0.7656209697475006	1	true
