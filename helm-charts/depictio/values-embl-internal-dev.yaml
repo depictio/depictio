@@ -62,13 +62,25 @@ podDisruptionBudget:
   enabled: true
   minAvailable: 1
 
+# The EMBL S3 gateway rejects the checksums botocore >= 1.36 sends by default
+# (PutObject: "x-amz-content-sha256 must be UNSIGNED-PAYLOAD, ..."), which fails
+# the backend's startup write check and leaves the pods Running with a dead API.
+# EMBL's S3 docs recommend these two switches for every client. They are not in
+# the chart's configmap allowlist, hence extraEnv.
+#
 # Celery worker — same HA bump as prod.
 celery:
   replicas: 2
+  extraEnv: &s3ChecksumEnv
+    - name: AWS_REQUEST_CHECKSUM_CALCULATION
+      value: "when_required"
+    - name: AWS_RESPONSE_CHECKSUM_VALIDATION
+      value: "when_required"
 
 ## SecurityContext
 backend:
   replicas: 2  # Multiple replicas for high availability with anti-affinity
+  extraEnv: *s3ChecksumEnv
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000
