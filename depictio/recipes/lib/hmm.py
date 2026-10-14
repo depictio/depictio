@@ -12,6 +12,8 @@ tile needs, with the standard library and Polars only (no HMMER, no Biopython):
   :func:`expected_insert_length` reproduce what ``hmmlogo`` prints;
 * :func:`reference_positions_from_stockholm` / :func:`reference_positions_from_map`
   say which residue of a reference sequence each match state sits on;
+  :func:`member_spans_from_stockholm` says which stretch of the model each row of
+  an alignment covers;
 * :func:`profile_frame` flattens it all into one long table, one row per
   (match state, letter);
 * :func:`format_hmm` writes a ``HMMER3/f`` file back (test fixtures).
@@ -650,23 +652,15 @@ def _parse_stockholm(text: str) -> tuple[list[tuple[str, str]], str | None]:
     return rows, ("".join(rf_chunks) if rf_chunks else None)
 
 
-def reference_positions_from_stockholm(
-    text: str, reference_id: str, model_length: int | None = None
-) -> list[int | None]:
-    """Residue number of ``reference_id`` at each match state, from a ``hmmalign`` Stockholm file.
+def _stockholm_match_columns(
+    text: str, model_length: int | None
+) -> tuple[list[tuple[str, str]], list[bool]]:
+    """Rows of a Stockholm alignment and which of their columns are match states.
 
-    Returns one entry per match column (``M`` of them, in order): the number of the
-    reference residue aligned there, ``None`` where the reference has a deletion.
-    Insert columns are skipped but their residues still count, so numbering stays
-    true to the reference sequence.
-
-    * match columns are the ``#=GC RF`` characters outside ``.~-_``; without an RF
-      line, the columns where some row has an upper-case letter or ``-`` (HMMER's
-      convention: inserts are lower case with ``.`` padding);
-    * sequence blocks (interleaved Stockholm) are joined;
-    * a ``/start-end`` suffix on the row sets the first residue number; the
-      ``reference_id`` may carry it or not;
-    * ``model_length`` (the HMM's ``LENG``) is checked against the match columns.
+    Match columns are the ``#=GC RF`` characters outside :data:`GAP_CHARS`; without
+    an RF line, the columns where some row has an upper-case letter or ``-``
+    (HMMER's convention: inserts are lower case with ``.`` padding).
+    ``model_length`` (the HMM's ``LENG``), when given, is checked against them.
     """
     rows, rf = _parse_stockholm(text)
     if not rows:
@@ -689,9 +683,84 @@ def reference_positions_from_stockholm(
         raise ValueError(
             f"{n_match} match columns found from {source}, but the model has {model_length} states"
         )
+    return rows, is_match
+
+
+def reference_positions_from_stockholm(
+    text: str,
+    reference_id: str,
+    model_length: int | None = None,
+    *,
+    first_residue: int | None = None,
+) -> list[int | None]:
+    """Residue number of ``reference_id`` at each match state, from a ``hmmalign`` Stockholm file.
+
+    Returns one entry per match column (``M`` of them, in order): the number of the
+    reference residue aligned there, ``None`` where the reference has a deletion.
+    Insert columns are skipped but their residues still count, so numbering stays
+    true to the reference sequence.
+
+    * match columns are the ``#=GC RF`` characters outside ``.~-_``; without an RF
+      line, the columns where some row has an upper-case letter or ``-`` (HMMER's
+      convention: inserts are lower case with ``.`` padding);
+    * sequence blocks (interleaved Stockholm) are joined;
+    * a ``/start-end`` suffix on the row sets the first residue number; the
+      ``reference_id`` may carry it or not;
+    * ``first_residue`` overrides that: the number of the reference's first residue,
+      whatever its row name says (``1`` numbers along the sequence itself, which is
+      how a structure predicted from it numbers its residues);
+    * ``model_length`` (the HMM's ``LENG``) is checked against the match columns.
+    """
+    rows, is_match = _stockholm_match_columns(text, model_length)
     row, start = _find_reference(rows, reference_id)
-    numbers = _residue_numbers(row, start)
-    return [numbers[col] for col in range(width) if is_match[col]]
+    numbers = _residue_numbers(row, first_residue if first_residue is not None else start)
+    return [numbers[col] for col in range(len(row)) if is_match[col]]
+
+
+class MemberSpan(NamedTuple):
+    """Where one aligned row sits on the model: see :func:`member_spans_from_stockholm`."""
+
+    name: str
+    #: First and last match state the row has a residue at (1-based).
+    hmm_from: int
+    hmm_to: int
+    #: Residue numbers of those two residues along the row's own sequence (1-based).
+    ali_from: int
+    ali_to: int
+    #: Residues of the row (match and insert columns).
+    length: int
+    #: Match states of the model (``M``).
+    n_states: int
+
+
+def member_spans_from_stockholm(text: str, model_length: int | None = None) -> list[MemberSpan]:
+    """How much of the model each row of a ``hmmalign`` Stockholm file covers.
+
+    One :class:`MemberSpan` per row with a residue in at least one match column, in
+    file order: the first and last match state it aligns to, and the numbers of
+    the residues sitting there counted from 1 along the row's own ungapped sequence
+    (a ``/start-end`` suffix of the name is ignored: the span is on the sequence
+    as aligned). Deletions inside the span are not subtracted, and a row with no
+    residue in any match state is left out. Match columns and ``model_length``
+    follow :func:`reference_positions_from_stockholm`.
+    """
+    rows, is_match = _stockholm_match_columns(text, model_length)
+    match_columns = [col for col, flag in enumerate(is_match) if flag]
+    n_states = len(match_columns)
+    spans: list[MemberSpan] = []
+    for name, seq in rows:
+        numbers = _residue_numbers(seq, 1)
+        aligned = [
+            (state, number)
+            for state, col in enumerate(match_columns, 1)
+            if (number := numbers[col]) is not None
+        ]
+        if not aligned:
+            continue
+        (first, ali_from), (last, ali_to) = aligned[0], aligned[-1]
+        length = sum(1 for number in numbers if number is not None)
+        spans.append(MemberSpan(name, first, last, ali_from, ali_to, length, n_states))
+    return spans
 
 
 def reference_positions_from_map(

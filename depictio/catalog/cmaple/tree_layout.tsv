@@ -1,0 +1,19 @@
+family	sample	draw_order	x	y	node	is_tip	n_tips
+mgnifams_create_1	mgnifams_create	0	0.0	7.548828125	""	false	20
+mgnifams_create_1	mgnifams_create	1	0.0	18.5	""	false	20
+mgnifams_create_1	mgnifams_create	2			""	false	20
+mgnifams_create_1	mgnifams_create	3	0.0	7.548828125	""	false	20
+mgnifams_create_1	mgnifams_create	4	0.10000000149	7.548828125	""	false	20
+mgnifams_create_1	mgnifams_create	5			""	false	20
+mgnifams_create_1	mgnifams_create	6	0.0	18.5	""	false	20
+mgnifams_create_1	mgnifams_create	7	0.10000000149	18.5	""	false	20
+mgnifams_create_1	mgnifams_create	8			""	false	20
+mgnifams_create_1	mgnifams_create	9	0.10000000149	18.0	""	false	20
+mgnifams_create_1	mgnifams_create	10	0.10000000149	19.0	""	false	20
+mgnifams_create_1	mgnifams_create	11			""	false	20
+mgnifams_create_1	mgnifams_create	12	0.10000000149	18.0	""	false	20
+mgnifams_create_1	mgnifams_create	13	0.20000000298	18.0	1336010185_126_255/11-123	true	20
+mgnifams_create_1	mgnifams_create	14			""	false	20
+mgnifams_create_1	mgnifams_create	15	0.10000000149	19.0	""	false	20
+mgnifams_create_1	mgnifams_create	16	0.20000000298	19.0	1015154437_431_579/10-126	true	20
+mgnifams_create_1	mgnifams_create	17			""	false	20

@@ -1,0 +1,22 @@
+id: proteinfamilies_cluster_size_distribution
+name: Initial cluster sizes
+mode: families/clustering
+description: >-
+  How the input sequences of each sample fell into MMseqs2 clusters before
+  families are built: the number of clusters of every size, the sequences
+  they hold and those sequences' share of the sample. Families are seeded from
+  the clusters above the pipeline's size threshold, so the tail of this
+  distribution is what the run can turn into families.
+find:
+  path_glob: "**/mmseqs/initial_clustering/*_clustering_distribution_mqc.csv"
+  path_glob_alt:
+    - "**/*_clustering_distribution_mqc.csv"
+recipe: proteinfamilies/cluster_size_distribution.py
+fixture: cluster_size_distribution.tsv
+renders_as:
+  - { id: cluster_size_profile, component: advanced_viz, kind: profile,
+      roles: {series: sample, x: cluster_size, y: n_clusters} }
+  - { id: clusters_total, component: card, column: n_clusters, aggregation: sum,
+      secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: cluster_size, y: sequence_share, color: sample, barmode: group} }
+  - { component: table }

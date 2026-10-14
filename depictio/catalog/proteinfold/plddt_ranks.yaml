@@ -1,0 +1,18 @@
+id: proteinfold_plddt_ranks
+name: Residue confidence of each engine's models
+mode: protein/models
+description: >-
+  Per-residue pLDDT of each engine's models for a target, one curve per engine:
+  the top-ranked model, with a band from the lowest to the highest model at
+  each residue. Residues count from 1 over the chains in order. A wide band is
+  where the engine's models disagree, and curves that part are where the
+  engines do.
+find:
+  path_glob: "**/*_plddt.tsv"
+recipe: proteinfold/plddt_ranks.py
+fixture: plddt_ranks.tsv
+renders_as:
+  - { id: plddt_model_spread, component: advanced_viz, kind: profile,
+      roles: {series: engine, x: residue_index, y: plddt, lower: plddt_min, upper: plddt_max} }
+  - { component: interactive, interactive_type: Select, column_name: target }
+  - { component: table }

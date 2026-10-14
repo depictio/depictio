@@ -12,7 +12,7 @@ that is ``position residue state P(coil) P(helix) P(strand)`` with the state one
 of ``C``, ``H``, ``E``.
 
 :func:`parse_ss2` yields exactly the columns of the s4pred catalog recipe
-(``depictio/catalog/s4pred/secondary_structure.py``: ``EXPECTED_SCHEMA``, the
+(``depictio/catalog/s4pred/secondary_structure.py``: ``OUTPUT_SCHEMA``, the
 ``STATES`` names, the ``value`` rule and the sort order), so a recipe can call it
 instead of repeating the split. :func:`segments` turns the per-residue states
 into the runs a secondary-structure track draws.
@@ -24,7 +24,7 @@ from collections.abc import Sequence
 
 import polars as pl
 
-#: Columns of :func:`parse_ss2` (same as the s4pred recipe's ``EXPECTED_SCHEMA``).
+#: Columns of :func:`parse_ss2`; the s4pred recipe's ``OUTPUT_SCHEMA`` is built from them.
 SS2_SCHEMA: dict[str, type[pl.DataType]] = {
     "entity": pl.Utf8,
     "sample": pl.Utf8,

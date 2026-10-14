@@ -29,6 +29,7 @@ from depictio.recipes.lib.hmm import (
     format_hmm,
     insert_probability,
     letter_heights,
+    member_spans_from_stockholm,
     occupancy,
     parse_hmm,
     profile_frame,
@@ -531,6 +532,57 @@ def test_reference_positions_count_inserts_and_mark_deletions(sto):
 def test_reference_positions_other_rows_and_ranges():
     assert reference_positions_from_stockholm(STO, "other") == [1, 2, 3, 4, 5, 6, 7]
     assert reference_positions_from_stockholm(STO, "third/5-9") == [5, 6, 7, None, 8, 9, None]
+
+
+def test_first_residue_overrides_the_range_of_the_reference_row():
+    # The /31-90 of the row is a range in a longer protein; first_residue=1 numbers the
+    # sequence itself, which is how a structure predicted from it numbers its residues.
+    assert reference_positions_from_stockholm(STO, "ref/31-90", first_residue=1) == [
+        1,
+        2,
+        4,
+        None,
+        5,
+        8,
+        9,
+    ]
+    assert reference_positions_from_stockholm(STO, "other", first_residue=1) == [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+    ]
+    assert reference_positions_from_stockholm(STO, "other", first_residue=10) == [
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+    ]
+
+
+def test_member_spans_run_from_the_first_to_the_last_state_with_a_residue():
+    spans = {s.name: s for s in member_spans_from_stockholm(STO, model_length=7)}
+    assert list(spans) == ["ref/31-90", "other/1-40", "third/5-9"]
+    # A1 C2 g3 D4 -  E5 k6 l7 G8 H9: states 1-3 and 5-7, inserts counted, range suffix ignored.
+    assert tuple(spans["ref/31-90"][1:]) == (1, 7, 1, 9, 9, 7)
+    assert tuple(spans["other/1-40"][1:]) == (1, 7, 1, 7, 7, 7)
+    # A1 C2 D3 E4 G5 with deletions at states 4 and 7: the span ends at state 6.
+    assert tuple(spans["third/5-9"][1:]) == (1, 6, 1, 5, 5, 7)
+
+
+def test_member_spans_of_fragments_and_empty_rows():
+    sto = "# STOCKHOLM 1.0\n#=GC RF xxxx\nfull ACDE\nfrag --DE\nnone ----\n//\n"
+    spans = {s.name: s for s in member_spans_from_stockholm(sto)}
+    assert set(spans) == {"full", "frag"}  # a row with no residue on the model is left out
+    assert tuple(spans["frag"][1:]) == (3, 4, 1, 2, 2, 4)
+    with pytest.raises(ValueError, match="4 match columns.*model has 5 states"):
+        member_spans_from_stockholm(sto, model_length=5)
 
 
 def test_reference_without_a_range_numbers_from_one_and_reference_id_may_bring_it():
