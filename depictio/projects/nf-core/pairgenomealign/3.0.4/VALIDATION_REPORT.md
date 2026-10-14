@@ -85,9 +85,8 @@ heights.
   itself (chord layout, the query pick, the heaviest-links default) was not seen. A run with
   `--export_aln_to psl` is needed to confirm the real export naming (`<target>___<query>.psl.gz`
   is assumed from the module's `${meta.id}` prefix).
-- The query filter of the Synteny tab is optional: `always_selected` of the lot 3 template does not
-  exist on this branch and a generic template cannot write a `default_value` (a genome name belongs to
-  one run). Until a query is picked the ring shows the heaviest links of every query.
+- The query filter of the Synteny tab is `always_selected`: the ring opens on the first query of the
+  list on any run, where a `default_value` would name one run's genome.
 - The gap length matrix prints its column names (`log10_gap_length`, `gaps_pct`) as axis and
   colour bar titles: the signal matrix kind has no title options.
 - Five cards take the median of a percentage column (`*_pct`), which the lint reports as a warning:

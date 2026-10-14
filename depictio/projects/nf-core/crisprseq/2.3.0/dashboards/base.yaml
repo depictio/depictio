@@ -1216,7 +1216,7 @@ tabs:
   - name: Guide picker
     icon: mdi:dna
     color: orange
-    description: The guide the tab shows; with none picked it draws every guide in scope
+    description: The guide the tab shows, the first of the list until another is picked
   - name: Indel scope
     icon: mdi:tune
     color: orange
@@ -1249,6 +1249,7 @@ tabs:
     workflow_tag: crisprseq
     data_collection_tag: samples
     interactive_component_type: Select
+    always_selected: true
     column_name: guide
     column_type: object
     display:
@@ -1328,10 +1329,9 @@ tabs:
   - component_type: text
     order: 1
     body: >
-      The tab shows the guides in scope; pick one in the Guide picker on the left to read its
-      signature. Each curve is the mean library of the guide, with a band over the middle half of
-      its libraries, and offsets are relative to the cut site the pipeline reports. Without a
-      pick the tiles draw one curve per guide.
+      The tab reads one guide, the first of the list until another is picked on the left. Each
+      curve is the mean library of the guide, with a band over the middle half of its libraries,
+      and offsets are relative to the cut site the pipeline reports.
     tag: cs-ind-intro
     index: cs-ind-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1568,6 +1568,7 @@ tabs:
     workflow_tag: crisprseq
     data_collection_tag: guide_substitution_profile
     interactive_component_type: Select
+    always_selected: true
     column_name: profile_guide
     column_type: object
     display:

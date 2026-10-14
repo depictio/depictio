@@ -132,8 +132,9 @@ Filter: K80 distance.
 **Synteny.** Only with a PSL export. Strip: the links kept (split by orientation), the matching
 bases (the target sequences with most), the identity of the links (its spread) and their span (its
 spread). Then the ring: target and query sequences share it, a chord joins the two loci of an
-alignment, its width the matching bases and its colour the orientation. A query genome picked in
-the left panel narrows it to one ring; until then it shows the heaviest links of every query.
+alignment, its width the matching bases and its colour the orientation. The ring reads one query
+genome: the left panel's picker is `always_selected`, so it holds the first query of the list until
+another is picked.
 Collapsed: the alignments behind the chords. Filters: query genome and orientation.
 
 ## Colours

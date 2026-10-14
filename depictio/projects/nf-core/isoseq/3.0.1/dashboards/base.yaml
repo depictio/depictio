@@ -676,11 +676,15 @@ tabs:
     workflow_tag: isoseq
     data_collection_tag: pbccs_zmw_outcomes
     use: pbccs/ccs_outcome_bars
+    # One composition level and a fixed set of CCS filters: the taxonomy
+    # controls (rank, sort, top-N) mean nothing here, so the tile hides them.
     config:
       top_n: 12
       sort_by: abundance
       normalise_to_one: true
       sample_sort: first_taxon
+      hidden_controls: [rank, sample_sort, top_n]
+      x_title: Library
     section: CCS outcome
     tag: is-rd-av-ccs-outcome
     index: is-rd-av-ccs-outcome
@@ -982,12 +986,16 @@ tabs:
     workflow_tag: isoseq
     data_collection_tag: tama_category_composition
     use: tama/category_bars
+    # The rank column is the level (isoforms or FLNC reads), so its picker is
+    # labelled so; the categories are a fixed set, coloured by category_colors.
     config:
       default_rank: Isoforms
+      rank_label: Level
       top_n: 12
       sort_by: abundance
       normalise_to_one: true
       sample_sort: first_taxon
+      hidden_controls: [sample_sort, top_n]
     section: Structural categories
     tag: is-iso-av-categories
     index: is-iso-av-categories

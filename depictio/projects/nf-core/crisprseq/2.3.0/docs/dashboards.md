@@ -142,14 +142,10 @@ adds its own filters on the left.
 
 ## Filters and the guide pickers
 
-The lot 3 template held a single guide on the Indel spectrum and Substitutions tabs with an
-`always_selected` option on the Guide picker, so the tabs always opened on the first guide of the
-run. That option is not in this branch, so the pickers are plain single-value selects and are
-empty on opening. With no guide picked, the tabs draw every guide in scope: the profiles become
-one curve and band per guide, which reads as a spread of the guides rather than as one
-signature, so the tab intros say to pick a guide. Narrowing the group filter to one guide in the
-Overview or in the left panel has the same effect. Restoring `always_selected` on the two
-pickers brings back the one-guide default without changing anything else.
+Both Guide pickers are `always_selected`: the Indel spectrum and Substitutions tabs read one guide,
+the first of the list until another is picked, on any run and without a run-specific
+`default_value`. The pick cannot be cleared, so a profile is always one guide's signature (its
+mean library with the band of its libraries) rather than a spread of guides.
 
 Two pickers, two scopes. The Indel spectrum picker sits on the samplesheet's `guide` column, so
 it narrows every collection of that tab through the samplesheet links, the cards and the allele

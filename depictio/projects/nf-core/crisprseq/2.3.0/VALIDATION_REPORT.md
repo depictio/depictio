@@ -90,8 +90,8 @@ which is the cut-site convention noted in `docs/dashboards.md`, not a recipe fau
 - The tab order follows the funnel: Guides (all guides) now comes before Indel spectrum and
   Substitutions (one guide), as the second tab of the Editing group.
 - The per-guide size and position profiles are drawn as the mean with the interquartile band.
-- The tab-local Guide pickers are plain selects; `always_selected` is not in this branch (see
-  `docs/dashboards.md`, "Filters and the guide pickers").
+- The tab-local Guide pickers are `always_selected` (see `docs/dashboards.md`, "Filters and the
+  guide pickers"): the two one-guide tabs open on the first guide of the run.
 - The Overview scope filter, the glance strip and the per-tab intro sections were dropped; each
   child tab has one unsectioned intro and a boxed KPI strip.
 

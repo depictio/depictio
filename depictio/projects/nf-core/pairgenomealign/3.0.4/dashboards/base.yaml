@@ -1164,9 +1164,8 @@ tabs:
     order: 1
     body: >
       Each chord joins a target sequence to the query sequence it aligns to (prefixed `q:`),
-      weighted by matching bases. Pick a query genome on the left to read one ring; until then it
-      shows the heaviest links of every query. This tab needs a run started with
-      `--export_aln_to psl`.
+      weighted by matching bases. The ring reads one query genome, the first of the list until
+      another is picked on the left. This tab needs a run started with `--export_aln_to psl`.
     tag: pg-syn-intro
     index: syn-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1174,6 +1173,7 @@ tabs:
     workflow_tag: pairgenomealign
     data_collection_tag: last_synteny_links
     interactive_component_type: Select
+    always_selected: true
     column_name: query
     column_type: object
     display:
