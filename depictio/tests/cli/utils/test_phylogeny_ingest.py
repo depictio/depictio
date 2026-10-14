@@ -11,6 +11,7 @@ between its tree-repointing rules is the rule order in that file.
 No S3/MinIO or API is needed: the file listing and boto3 are mocked.
 """
 
+import io
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -25,6 +26,7 @@ from depictio.cli.cli.utils.templates import _apply_conditionals, _load_yaml
 from depictio.models.models.cli import CLIConfig
 from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
 from depictio.models.models.templates import TemplateMetadata
+from depictio.models.s3_access import S3AccessRefused
 from depictio.recipes import PROJECTS_DIR
 
 DC_ID = "646b0f3c1e4a2d7f8e5b8ca9"
@@ -88,6 +90,22 @@ def _registered(monkeypatch: pytest.MonkeyPatch, location: str) -> None:
     )
 
 
+@pytest.fixture
+def cli_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The CLI reads the user's own files; the suite otherwise runs as the server."""
+    monkeypatch.setenv("DEPICTIO_CONTEXT", "cli")
+
+
+def _source_on(monkeypatch: pytest.MonkeyPatch, body: bytes = b"(a,b);") -> MagicMock:
+    """Stand in for the remote-data resolution of an external ``s3://`` tree."""
+    source = SimpleNamespace(bucket="runs", key="run42/tree.nwk", client=MagicMock())
+    source.client.return_value.get_object.return_value = {"Body": io.BytesIO(body)}
+    resolve = MagicMock(return_value=source)
+    monkeypatch.setattr(deltatables, "s3_read_target_in_region", resolve)
+    return source.client.return_value
+
+
+@pytest.mark.usefixtures("cli_context")
 class TestUpload:
     def test_local_tree_is_uploaded_under_the_phylogeny_prefix(
         self, tmp_path, monkeypatch, cli_config, s3_client
@@ -107,13 +125,36 @@ class TestUpload:
         """Orphan cleanup deletes 24-hex top-level prefixes with no deltatable document."""
         assert phylogeny_s3_key(DC_ID).split("/")[0] == "phylogeny"
 
-    def test_tree_already_on_s3_is_not_uploaded(self, monkeypatch, cli_config, s3_client):
-        _registered(monkeypatch, f"s3://{BUCKET}/elsewhere/tree.nwk")
+    def test_tree_on_another_bucket_is_copied_under_the_phylogeny_prefix(
+        self, monkeypatch, cli_config, s3_client
+    ):
+        """Stored as is, the external URL was later read with the instance credentials (#1170)."""
+        _registered(monkeypatch, "s3://runs/run42/tree.nwk")
+        source = _source_on(monkeypatch)
 
         result = process_phylogeny_data_collection(_dc(), cli_config)
 
         assert result["result"] == "success"
-        s3_client.upload_file.assert_not_called()
+        deltatables.s3_read_target_in_region.assert_called_once_with(
+            "s3://runs/run42/tree.nwk", cli_config
+        )
+        source.get_object.assert_called_once_with(Bucket="runs", Key="run42/tree.nwk")
+        s3_client.put_object.assert_called_once_with(
+            Bucket=BUCKET, Key=f"phylogeny/{DC_ID}/tree.nwk", Body=b"(a,b);"
+        )
+
+    def test_refused_s3_source_is_an_error_result(self, monkeypatch, cli_config, s3_client):
+        _registered(monkeypatch, "s3://runs/run42/tree.nwk")
+        monkeypatch.setattr(
+            deltatables,
+            "s3_read_target_in_region",
+            MagicMock(side_effect=S3AccessRefused("s3://runs/run42/tree.nwk cannot be read.")),
+        )
+
+        result = process_phylogeny_data_collection(_dc(), cli_config)
+
+        assert result["result"] == "error"
+        s3_client.put_object.assert_not_called()
 
     def test_upload_failure_is_an_error_result(self, tmp_path, monkeypatch, cli_config, s3_client):
         tree = tmp_path / "tree.nwk"
@@ -136,6 +177,36 @@ class TestUpload:
 
         assert result["result"] == "error"
         s3_client.upload_file.assert_not_called()
+
+
+class TestServerContext:
+    """The ingest worker reads a path a project's configuration names: confined (#1170)."""
+
+    def test_a_path_outside_the_readable_folders_is_refused(
+        self, tmp_path, monkeypatch, cli_config, s3_client
+    ):
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+        tree = tmp_path / "tree.nwk"
+        tree.write_text("(a,b);")
+        _registered(monkeypatch, str(tree))
+
+        result = process_phylogeny_data_collection(_dc(), cli_config)
+
+        assert result["result"] == "error"
+        assert str(tree) not in result["message"]
+        s3_client.upload_file.assert_not_called()
+
+    def test_a_bundled_reference_tree_is_uploaded(self, monkeypatch, cli_config, s3_client):
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+        tree = PROJECTS_DIR / "init" / "advanced_viz_showcase" / "data" / "bacterial_tree.nwk"
+        _registered(monkeypatch, str(tree))
+
+        result = process_phylogeny_data_collection(_dc(), cli_config)
+
+        assert result["result"] == "success"
+        s3_client.upload_file.assert_called_once_with(
+            str(tree), BUCKET, f"phylogeny/{DC_ID}/tree.nwk"
+        )
 
 
 class TestAmpliseqTreeRoutes:

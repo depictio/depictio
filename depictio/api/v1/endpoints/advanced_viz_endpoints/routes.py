@@ -1655,6 +1655,32 @@ def _container_repo_path(path: str) -> str | None:
     return rewritten if rewritten != path else None
 
 
+def _read_phylogeny_s3_location(url: str, project_id: ObjectId | None) -> str:
+    """Read a stored ``s3://`` Newick location the way any remote data source is read.
+
+    The location is user-supplied, so it never gets the instance credentials:
+    the instance bucket is refused (the DC's own copy there is the fixed key,
+    already tried), and any other bucket needs the project's storage keys or an
+    administrator's allowlist entry. Raises
+    :class:`~depictio.models.s3_access.S3AccessError` when refused.
+    """
+    from depictio.api.v1.configs.config import settings
+    from depictio.api.v1.endpoints.projects_endpoints.storage_config import project_storage_for
+    from depictio.api.v1.remote_fetch import remote_policy
+    from depictio.models.s3_access import ensure_region, resolve_s3_target
+
+    target = resolve_s3_target(
+        url,
+        context="server",
+        project_storage=project_storage_for(project_id) if project_id is not None else None,
+        instance_s3=settings.s3,
+        policy=remote_policy(),
+    )
+    target = ensure_region(target)
+    obj = target.client().get_object(Bucket=target.bucket, Key=target.key)
+    return obj["Body"].read().decode("utf-8")
+
+
 def _phylogeny_s3_client():
     """boto3 client for the backend's bucket, shared by both Newick reads below.
 
@@ -1701,7 +1727,11 @@ def get_phylogeny_newick(
     ``/app`` bind mount, which is what makes a host-run CLI ingest readable
     from the backend container.
 
-    Returns local file contents directly; stream S3-hosted trees via boto3.
+    The stored paths are user-supplied, so neither kind is read as is: an
+    ``s3://`` one goes through the remote-data resolution (never the instance
+    credentials, never the instance bucket), a local one only from the bundled
+    reference projects or the local-data policy's folders. A refused candidate
+    is skipped, and the response never names a path.
     """
     from depictio.api.v1.db import files_collection, projects_collection
 
@@ -1772,52 +1802,56 @@ def get_phylogeny_newick(
             detail="Phylogeny file not registered (no entry in files_collection and no scan_parameters.filename in the project's DC config).",
         )
 
-    # Resolve to the first existing local path (or any s3:// URL — those go
-    # through boto3 below). Records the chosen path for the read block.
-    file_path: str | None = None
+    # First readable candidate wins. A refused one is skipped rather than fatal,
+    # so a later candidate (a seed path after a stale scan record) still serves.
+    from depictio.api.v1.configs.settings_models import server_may_read_local_file
+    from depictio.models.s3_access import S3AccessRefused
+
+    project_id = project_doc.get("_id") if project_doc else None
+    refused = failed = False
     for c in candidates:
-        if c.startswith("s3://"):
-            file_path = c
-            break
         try:
-            if os.path.exists(c):
-                file_path = c
-                break
-        except OSError:
+            if c.startswith("s3://"):
+                return _read_phylogeny_s3_location(c, project_id)
+            if not server_may_read_local_file(c):
+                # A rewrite outside them only means the repo is not mounted at
+                # /app here: not applicable, rather than refused.
+                if c not in host_rewrites:
+                    refused = True
+                    logger.warning(
+                        "phylogeny newick: %s is outside the folders this server reads", c
+                    )
+                continue
+            if not os.path.isfile(c):
+                continue
+            with open(c) as fh:
+                text = fh.read()
+        except S3AccessRefused as exc:
+            refused = True
+            logger.warning("phylogeny newick: %s refused: %s", c, exc)
             continue
+        except Exception as exc:
+            failed = True
+            logger.warning("phylogeny newick: reading %s failed: %s", c, exc, exc_info=True)
+            continue
+        if c in host_rewrites:
+            logger.info(
+                "phylogeny newick resolved through the %s fallback: the stored path(s) %s are "
+                "not readable by the backend (host CLI ingest against a containerised backend), "
+                "reading %s instead",
+                _CONTAINER_REPO_ROOT,
+                [p for p in candidates if p not in host_rewrites],
+                c,
+            )
+        return text
 
-    if file_path and file_path in host_rewrites:
-        logger.info(
-            "phylogeny newick resolved through the %s fallback: the stored path(s) %s are "
-            "not readable by the backend (host CLI ingest against a containerised backend), "
-            "reading %s instead",
-            _CONTAINER_REPO_ROOT,
-            [c for c in candidates if c not in host_rewrites],
-            file_path,
-        )
-
-    if not file_path:
+    # Server paths go to the log only, never into the response.
+    logger.warning("phylogeny newick: no readable location among %s", candidates)
+    if failed:
+        raise HTTPException(status_code=500, detail="Failed to read phylogeny")
+    if refused:
         raise HTTPException(
-            status_code=404,
-            detail=(
-                "Phylogeny file location resolved but none of the candidate paths "
-                f"exist on the backend filesystem: {candidates}"
-            ),
+            status_code=403,
+            detail="The phylogeny file's stored location is not one this server may read.",
         )
-
-    try:
-        if file_path.startswith("s3://"):
-            s3 = _phylogeny_s3_client()
-            _, _, rest = file_path.partition("s3://")
-            bucket, _, key = rest.partition("/")
-            obj = s3.get_object(Bucket=bucket, Key=key)
-            return obj["Body"].read().decode("utf-8")
-        with open(file_path) as fh:
-            return fh.read()
-    except FileNotFoundError as exc:
-        # Don't leak server-side paths in the response — log them instead.
-        logger.warning("phylogeny file not found at %s", file_path)
-        raise HTTPException(status_code=404, detail="Phylogeny file not found") from exc
-    except Exception as exc:
-        logger.warning("phylogeny newick read failed: %s", exc, exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to read phylogeny") from exc
+    raise HTTPException(status_code=404, detail="Phylogeny file not found")
