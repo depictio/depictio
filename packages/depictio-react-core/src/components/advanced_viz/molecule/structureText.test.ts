@@ -1,6 +1,7 @@
 import { gzipSync } from 'node:zlib';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { clearObjectCache, loadObjectText } from './objectText';
 import {
   clearStructureCache,
   decodeStructureBytes,
@@ -9,6 +10,7 @@ import {
   loadStructureTextRenewing,
   parseResidues,
   sniffFormat,
+  StructureFileError,
   structureCacheKey,
   toOneLetter,
   tokenizeCifLine,
@@ -148,6 +150,52 @@ describe('loadStructureText', () => {
     const ok = vi.fn(async () => new Response(PDB));
     await loadStructureText('https://s3/k/P2.pdb', { fetcher: ok });
     expect(ok).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the shared object cache', () => {
+  beforeEach(() => {
+    clearStructureCache();
+    clearObjectCache('pae');
+  });
+
+  it('keeps structures in their own namespace', async () => {
+    const pae = vi.fn(async () => new Response('pae'));
+    await loadObjectText('https://s3/k/P1.pdb', { cacheNamespace: 'pae', fetcher: pae });
+    const fetcher = vi.fn(async () => new Response(PDB));
+    const s = await loadStructureText('https://s3/k/P1.pdb', { fetcher });
+    // Same path, other namespace: a structure, not the PAE text.
+    expect(s.format).toBe('pdb');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    // Clearing structures leaves the other kinds of file cached.
+    clearStructureCache();
+    await loadObjectText('https://s3/k/P1.pdb', { cacheNamespace: 'pae', fetcher: pae });
+    expect(pae).toHaveBeenCalledTimes(1);
+    await loadStructureText('https://s3/k/P1.pdb', { fetcher });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws a StructureFileError, with its message, for a refused download', async () => {
+    const err = await loadStructureText('https://s3/k/P9.pdb', {
+      fetcher: async () => new Response('', { status: 403 }),
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(StructureFileError);
+    expect(err).toMatchObject({ status: 403, message: 'Structure file unavailable (403)' });
+    await expect(
+      loadStructureText('https://s3/k/P8.pdb', { fetcher: async () => new Response('  ') }),
+    ).rejects.toThrow('Empty structure file');
+  });
+
+  it('sniffs the format from the name hint, else from the object path', async () => {
+    const cif = await loadStructureText('https://s3/k/m.cif.gz?sig=1', {
+      fetcher: async () => new Response(PDB),
+    });
+    expect(cif.format).toBe('mmcif');
+    const hinted = await loadStructureText('https://s3/k/opaque?sig=1', {
+      nameHint: 'x.pdb',
+      fetcher: async () => new Response(CIF),
+    });
+    expect(hinted.format).toBe('pdb');
   });
 });
 

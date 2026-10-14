@@ -1,7 +1,8 @@
 /**
  * The protein panel library: canvas components shared by the `msa` and
  * `sequence_track` renderers and embedded by `molecule_3d`'s
- * `structure_msa` / `structure_sequence` layouts.
+ * `structure_msa` / `structure_sequence` layouts, and the canvas glyphs of
+ * secondary structure (`ssGlyphs`) any panel can draw along a residue axis.
  *
  * Both panels are controlled and data-agnostic: the caller fetches rows,
  * resolves the selection and the highlight bus, and passes plain props. They
@@ -35,7 +36,18 @@ export {
   schemeColour,
   rgbCss,
 } from './residueColours';
-export type { PlddtBand, RGB } from './residueColours';
+export type { PlddtBand, RGB, SecondaryStructure } from './residueColours';
+export type { Run } from './sequence';
+export {
+  drawCoil,
+  drawHelix,
+  drawSecondaryStructureRuns,
+  drawStrand,
+  drawTurn,
+  SS_GLYPH_FILLS,
+  TURN_THICKNESS,
+} from './ssGlyphs';
+export type { SsDrawColours, SsFills, SsGeometry } from './ssGlyphs';
 export {
   chainRangeToConcat,
   chainToConcat,

@@ -132,6 +132,15 @@ export function useStructureManifest(
   return { ...state, reload };
 }
 
+/**
+ * `useStructureManifest` under its generic name. The hook reads any
+ * `indexed_file` collection (one object per sample, presigned URLs that
+ * expire), so a tile that fetches another kind of file the same way, a PAE
+ * matrix for one, uses it under this name. Same hook, same messages.
+ */
+export const useIndexedManifest = useStructureManifest;
+export type IndexedManifest = StructureManifest;
+
 export interface ResolverAsk {
   uniprot: string | null;
   gene: string | null;

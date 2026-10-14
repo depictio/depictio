@@ -15,13 +15,7 @@ import {
 } from './canvas';
 import { useDrawScheduler, useViewSize } from './canvasHooks';
 import { cssToRgb, panelColours, type PanelColours } from './panelTheme';
-import {
-  plddtBand,
-  plddtIsFractional,
-  rgbCss,
-  SECONDARY_STRUCTURE_COLOURS,
-  type SecondaryStructure,
-} from './residueColours';
+import { plddtBand, plddtIsFractional, rgbCss, type SecondaryStructure } from './residueColours';
 import {
   isPlddtLabel,
   looksLikeSecondaryStructure,
@@ -31,7 +25,9 @@ import {
   stackVariants,
   stripSpan,
   valueExtent,
+  type Run,
 } from './sequence';
+import { drawCoil, drawSecondaryStructureRuns } from './ssGlyphs';
 import type { SequenceStripProps, StripDomain, StripHover, StripResidue } from './types';
 
 const LABEL_PX = 72;
@@ -298,41 +294,23 @@ const SequenceStrip: React.FC<SequenceStripProps> = ({
     if (cat) {
       const mid = cat.y + cat.h / 2;
       if (isSS) {
-        ctx.strokeStyle = colours.dimmed;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(xOf(Math.max(minPos, p0)), mid + 0.5);
-        ctx.lineTo(xOf(Math.min(minPos + count, p1 + 1)), mid + 0.5);
-        ctx.stroke();
-      }
-      for (const run of categoryRuns) {
-        if (run.end < p0 || run.start > p1) continue;
-        const x = xOf(run.start);
-        const w = (run.end - run.start + 1) * cw;
-        if (isSS) {
-          const ss = run.value as SecondaryStructure;
-          if (ss === 'coil') continue;
-          const rgb = SECONDARY_STRUCTURE_COLOURS[ss];
-          ctx.fillStyle = rgbCss(rgb);
-          if (ss === 'helix') {
-            roundRectPath(ctx, x, cat.y + 1, w, cat.h - 2, Math.min(cat.h / 2, w / 2));
-            ctx.fill();
-          } else if (ss === 'strand') {
-            const head = Math.min(w * 0.4, cat.h * 0.7);
-            ctx.beginPath();
-            ctx.moveTo(x, mid - cat.h * 0.25);
-            ctx.lineTo(x + w - head, mid - cat.h * 0.25);
-            ctx.lineTo(x + w - head, cat.y);
-            ctx.lineTo(x + w, mid);
-            ctx.lineTo(x + w - head, cat.y + cat.h);
-            ctx.lineTo(x + w - head, mid + cat.h * 0.25);
-            ctx.lineTo(x, mid + cat.h * 0.25);
-            ctx.closePath();
-            ctx.fill();
-          } else {
-            ctx.fillRect(x, mid - 1.5, w, 3);
-          }
-        } else {
+        const baseline: [number, number] = [
+          xOf(Math.max(minPos, p0)),
+          xOf(Math.min(minPos + count, p1 + 1)),
+        ];
+        drawCoil(ctx, baseline[0], baseline[1], mid, colours.dimmed);
+        drawSecondaryStructureRuns(ctx, categoryRuns as Run<SecondaryStructure>[], {
+          xOf,
+          cellWidth: cw,
+          yMid: mid,
+          height: cat.h,
+          visible: [p0, p1],
+        });
+      } else {
+        for (const run of categoryRuns) {
+          if (run.end < p0 || run.start > p1) continue;
+          const x = xOf(run.start);
+          const w = (run.end - run.start + 1) * cw;
           ctx.fillStyle = catMap.get(String(run.value));
           ctx.fillRect(x, cat.y + 1, Math.max(w, 0.5), cat.h - 2);
         }

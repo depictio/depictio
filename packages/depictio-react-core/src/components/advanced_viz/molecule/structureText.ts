@@ -1,6 +1,7 @@
 /**
- * Structure files as text: format detection, gzip, a per-object memory cache,
- * and a light CA-only parser for PDB and mmCIF.
+ * Structure files as text: format detection, the structure flavour of the
+ * shared per-object loader (`objectText`: gzip, a memory cache keyed on the
+ * object path, URL renewal), and a light CA-only parser for PDB and mmCIF.
  *
  * The parser is not a second structure reader beside 3Dmol. It reads one line
  * per residue (the alpha carbon) so the renderer knows the structure's own
@@ -9,6 +10,16 @@
  * N-to-C spectrum all need it, and a tile that lost its GL slot still shows
  * them.
  */
+
+import {
+  clearObjectCache,
+  decodeObjectBytes,
+  loadObjectText,
+  loadObjectTextRenewing,
+  objectCacheKey,
+  ObjectFileError,
+  type ObjectLoadOptions,
+} from './objectText';
 
 export type StructureFormat = 'pdb' | 'mmcif';
 
@@ -71,6 +82,13 @@ export function toOneLetter(name: string | null | undefined): string {
   return THREE_TO_ONE[n] ?? 'X';
 }
 
+/** Whether a residue name is an amino acid the parsers know (standard, modified
+ *  or a protonation-state name). HETATM records are kept only for these, never
+ *  for ligands, waters or ions. */
+export function isAminoAcidName(name: string | null | undefined): boolean {
+  return Boolean(name && THREE_TO_ONE[String(name).trim().toUpperCase()]);
+}
+
 /** mmCIF opens with a `data_` block (or a bare `_category.item`); anything
  *  else is read as PDB. A file name, when known, wins over sniffing. */
 export function sniffFormat(text: string, nameHint?: string | null): StructureFormat {
@@ -83,36 +101,24 @@ export function sniffFormat(text: string, nameHint?: string | null): StructureFo
     : 'pdb';
 }
 
-/** gzip magic number (1f 8b). */
-export function isGzip(bytes: Uint8Array): boolean {
-  return bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
-}
+export { isGzip } from './objectText';
 
-async function gunzipToText(bytes: Uint8Array): Promise<string> {
-  if (typeof DecompressionStream === 'undefined') {
-    throw new Error('This browser cannot read gzip-compressed structure files');
-  }
-  const stream = new Blob([bytes as BlobPart]).stream().pipeThrough(new DecompressionStream('gzip'));
-  return new Response(stream).text();
-}
+/** The `objectText` cache namespace of structure files. */
+export const STRUCTURE_CACHE_NAMESPACE = 'structure';
+
+/** What error messages call a structure file. */
+const STRUCTURE_NOUN = 'structure';
 
 /** Raw bytes to text, gunzipping when the bytes say so (whatever the name says). */
-export async function decodeStructureBytes(bytes: Uint8Array): Promise<string> {
-  if (isGzip(bytes)) return gunzipToText(bytes);
-  return new TextDecoder().decode(bytes);
+export function decodeStructureBytes(bytes: Uint8Array): Promise<string> {
+  return decodeObjectBytes(bytes, STRUCTURE_NOUN);
 }
 
 /**
- * The cache key of a URL: the URL without its query string.
- *
- * Presigned URLs change on every manifest or resolver call (new signature, new
- * expiry) while the object behind them does not, so keying on the full URL
- * would miss every time the tile refreshes. The path names the object.
+ * The cache key of a URL: the URL without its query string (see
+ * `objectCacheKey`).
  */
-export function structureCacheKey(url: string): string {
-  const q = url.indexOf('?');
-  return q === -1 ? url : url.slice(0, q);
-}
+export const structureCacheKey = objectCacheKey;
 
 export interface LoadedStructure {
   text: string;
@@ -120,54 +126,38 @@ export interface LoadedStructure {
 }
 
 /** A structure download the object store refused, with its HTTP status. */
-export class StructureFileError extends Error {
-  constructor(readonly status: number) {
-    super(`Structure file unavailable (${status})`);
+export class StructureFileError extends ObjectFileError {
+  constructor(status: number) {
+    super(status, STRUCTURE_NOUN);
     this.name = 'StructureFileError';
   }
 }
 
-const MAX_CACHED = 24;
-const cache = new Map<string, Promise<LoadedStructure>>();
+function structureLoadOptions(opts: {
+  nameHint?: string | null;
+  fetcher?: (url: string) => Promise<Response>;
+}): ObjectLoadOptions<LoadedStructure> {
+  return {
+    cacheNamespace: STRUCTURE_CACHE_NAMESPACE,
+    noun: STRUCTURE_NOUN,
+    nameHint: opts.nameHint,
+    fetcher: opts.fetcher,
+    errorFor: (status) => new StructureFileError(status),
+    parse: (text, { key, nameHint }) => ({ text, format: sniffFormat(text, nameHint ?? key) }),
+  };
+}
 
 /**
- * Fetch a structure once per object and keep it in memory.
- *
- * The promise is cached, not the result, so two tiles asking for the same
- * model at mount share one download. A failed load is evicted so a retry
- * (refresh tick, new presigned URL) fetches again. Insertion order doubles as
- * a cheap LRU: a hit is re-inserted at the end, the oldest entry goes first.
+ * Fetch a structure once per object and keep it in memory (the shared
+ * per-object cache of `objectText`, namespace `"structure"`): two tiles asking
+ * for the same model share one download, a failed load is evicted so a retry
+ * fetches again.
  */
 export function loadStructureText(
   url: string,
   opts: { nameHint?: string | null; fetcher?: (url: string) => Promise<Response> } = {},
 ): Promise<LoadedStructure> {
-  const key = structureCacheKey(url);
-  const hit = cache.get(key);
-  if (hit) {
-    cache.delete(key);
-    cache.set(key, hit);
-    return hit;
-  }
-  const fetcher = opts.fetcher ?? ((u: string) => fetch(u));
-  const pending = (async () => {
-    const res = await fetcher(url);
-    if (!res.ok) throw new StructureFileError(res.status);
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    const text = await decodeStructureBytes(bytes);
-    if (!text.trim()) throw new Error('Empty structure file');
-    return { text, format: sniffFormat(text, opts.nameHint ?? key) };
-  })();
-  cache.set(key, pending);
-  pending.catch(() => {
-    if (cache.get(key) === pending) cache.delete(key);
-  });
-  while (cache.size > MAX_CACHED) {
-    const oldest = cache.keys().next().value;
-    if (oldest === undefined) break;
-    cache.delete(oldest);
-  }
-  return pending;
+  return loadObjectText(url, structureLoadOptions(opts));
 }
 
 /**
@@ -176,7 +166,7 @@ export function loadStructureText(
  * the manifest it came from signs a fresh one. Any other failure, a renewal
  * that gives nothing or the same URL, or a second refusal is thrown as is.
  */
-export async function loadStructureTextRenewing(
+export function loadStructureTextRenewing(
   url: string,
   opts: {
     nameHint?: string | null;
@@ -184,23 +174,16 @@ export async function loadStructureTextRenewing(
     renew?: (() => Promise<string | null>) | null;
   } = {},
 ): Promise<LoadedStructure> {
-  const { renew, ...load } = opts;
-  try {
-    return await loadStructureText(url, load);
-  } catch (err) {
-    if (!renew || !(err instanceof StructureFileError) || err.status !== 403) throw err;
-    const fresh = await renew();
-    if (!fresh || fresh === url) throw err;
-    return loadStructureText(fresh, load);
-  }
+  return loadObjectTextRenewing(url, { ...structureLoadOptions(opts), renew: opts.renew });
 }
 
-/** Test hook: forget every cached structure. */
+/** Test hook: forget every cached structure (other namespaces are left alone). */
 export function clearStructureCache(): void {
-  cache.clear();
+  clearObjectCache(STRUCTURE_CACHE_NAMESPACE);
 }
 
-function parseNumber(s: string): number | null {
+/** A numeric field, null when blank, `.`/`?` (mmCIF's unknown) or not a number. */
+export function parseNumber(s: string): number | null {
   const t = s.trim();
   if (!t || t === '.' || t === '?') return null;
   const n = Number(t);
@@ -219,7 +202,7 @@ function parsePdbResidues(text: string): StructureResidue[] {
     const resn = line.slice(17, 20).trim();
     // HETATM alpha carbons are kept only for residues that are amino acids
     // (selenomethionine), never for ligands or ions named CA (calcium).
-    if (record === 'HETATM' && !THREE_TO_ONE[resn.toUpperCase()]) continue;
+    if (record === 'HETATM' && !isAminoAcidName(resn)) continue;
     const position = parseNumber(line.slice(22, 26));
     if (position === null) continue;
     const chain = line.slice(21, 22).trim();
@@ -322,7 +305,7 @@ function parseCifResidues(text: string): StructureResidue[] {
     }
     if (t[cAtom].replace(/"/g, '') !== 'CA') continue;
     const resn = t[cResn];
-    if (cGroup >= 0 && t[cGroup] === 'HETATM' && !THREE_TO_ONE[resn.toUpperCase()]) continue;
+    if (cGroup >= 0 && t[cGroup] === 'HETATM' && !isAminoAcidName(resn)) continue;
     const position = parseNumber(t[cSeq]);
     if (position === null) continue;
     const chain = cChain >= 0 ? t[cChain] : '';
