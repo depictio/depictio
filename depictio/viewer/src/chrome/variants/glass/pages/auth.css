@@ -291,7 +291,10 @@
     0 10px 22px -10px color-mix(in srgb, var(--gl-accent) 85%, transparent);
 }
 .gp-auth-card .mantine-Button-root[data-variant='default'] {
-  border-color: transparent;
+  /* No border at all, not a transparent one: the inset rim below is drawn on the
+     padding edge, so a 1px border leaves a gap between it and the outer ring and
+     the top edge reads as two lines. */
+  border: 0;
   background: var(--gp-raised);
   color: var(--gl-fg);
   box-shadow:
