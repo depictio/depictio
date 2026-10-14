@@ -11,7 +11,7 @@ Project instructions are in `/CLAUDE.md` (source of truth). This directory holds
 | `hooks/post-file-change.sh` | After Write/Edit on Python under `depictio/`: `ruff format --check` and `ruff check` hints |
 | `hooks/pre-bash-check.sh` | Blocks destructive patterns (docker rm/prune, mongo drop, force-push to main, ...) |
 | `hooks/on-stop-summary.sh` | Git status and lint summary at the end of a session |
-| `agents/` | `api-agent` (backend), `viewer-agent` (React SPA), `testing-agent`, `security-agent` |
+| `agents/` | `api-agent` (backend), `viewer-agent` (React SPA), `testing-agent`, `security-agent`, `status-agent` (Haiku, read-only CI and mergeability) |
 | `workflows/` | `new-feature.md` (backend + viewer + seeds + gates), `bug-fix.md` |
 | `commands/` | Slash commands, below |
 | `memory/MEMORY.md` | Pointer only; lessons live in CLAUDE.md |
