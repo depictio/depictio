@@ -51,7 +51,14 @@ import DesignShell from '../shared/DesignShell';
 import PreviewPanel from '../shared/PreviewPanel';
 import AdvancedVizPreview from './AdvancedVizPreview';
 import { BuilderSection, BuilderSections } from '../shared/BuilderSections';
-import { bindingSchemaDcId, mergedPresetConfig, rolesFromConfigBlob } from './configBlob';
+import {
+  bindingSchemaDcId,
+  buildAdvancedVizConfigBlob,
+  mergedPresetConfig,
+  panelColumnOfRole,
+  patchOverrides,
+  rolesFromConfigBlob,
+} from './configBlob';
 import { roleModeOf, splitRoles } from './kindModes';
 import {
   RankedKind,
@@ -380,11 +387,9 @@ const AdvancedVizBuilder: React.FC = () => {
     [patchConfig],
   );
 
-  // Record-card link and protein companion fields. Same override layer as
-  // above, except that `undefined` means "unset": the key is dropped when the
-  // saved config never had it, and nulled when it did, so clearing a link
-  // neither leaves the old one in place nor writes a key the saved component
-  // did not carry.
+  // Record-card link and protein settings fields. Same override layer as
+  // above, except that `undefined` means "unset" (see `patchOverrides`): the
+  // key is dropped when the saved config never had it, and nulled when it did.
   const setOverrideFields = useCallback(
     (patch: Record<string, unknown>) => {
       const c = useBuilderStore.getState().config as {
@@ -392,14 +397,9 @@ const AdvancedVizBuilder: React.FC = () => {
         config?: Record<string, unknown> | null;
         viz_overrides?: Record<string, unknown> | null;
       };
-      const inherited = c.preset_config ?? c.config ?? {};
-      const next: Record<string, unknown> = { ...(c.viz_overrides ?? {}) };
-      for (const [key, value] of Object.entries(patch)) {
-        if (value !== undefined) next[key] = value;
-        else if (inherited[key] != null) next[key] = null;
-        else delete next[key];
-      }
-      patchConfig({ viz_overrides: next });
+      patchConfig({
+        viz_overrides: patchOverrides(c.preset_config ?? c.config, c.viz_overrides, patch),
+      });
     },
     [patchConfig],
   );
@@ -549,6 +549,32 @@ const AdvancedVizBuilder: React.FC = () => {
     [config.column_mapping],
   );
 
+  // What Save will write: the bindings, the saved or catalog blob and the
+  // author's overrides, layered by the save path's own helper. The settings
+  // panels read this rather than `mergedPreset`, which has no bindings, so a
+  // column bound in the role table counts there as soon as it is bound (the
+  // secondary-structure reference source, the Ramachandran colour modes), and a
+  // panel shows the value the tile will be saved with.
+  const effectiveConfig = useMemo(
+    () => buildAdvancedVizConfigBlob(selectedKind ?? undefined, columnMapping, mergedPreset),
+    [selectedKind, columnMapping, mergedPreset],
+  );
+
+  // A role whose column a settings panel owns (configBlob.ts PANEL_COLUMNS) is
+  // read from and written to the config layer, the panel's store, instead of
+  // `column_mapping`: the row and the panel's picker are two views of one key.
+  // Clearing it here unbinds it (null), as the panel's own picker does; every
+  // such column is nullable on its model.
+  const roleValue = useCallback(
+    (role: string): string | string[] | undefined => {
+      const key = panelColumnOfRole(selectedKind, role);
+      if (!key) return columnMapping[role];
+      const value = effectiveConfig[key];
+      return typeof value === 'string' && value ? value : undefined;
+    },
+    [selectedKind, columnMapping, effectiveConfig],
+  );
+
   // Unpack a config blob back into the role map: a saved component being edited
   // (`config.config`) or a catalog offer's grounded preset (`preset_config`).
   // `rolesFromConfigBlob` is the inverse of the mapping the save path applies,
@@ -652,6 +678,11 @@ const AdvancedVizBuilder: React.FC = () => {
   };
 
   const setRole = (role: string, value: string | string[] | null) => {
+    const panelKey = panelColumnOfRole(selectedKind, role);
+    if (panelKey) {
+      setOverrideFields({ [panelKey]: typeof value === 'string' && value ? value : null });
+      return;
+    }
     const next: Record<string, string | string[]> = { ...columnMapping };
     if (value == null || (Array.isArray(value) && value.length === 0)) {
       delete next[role];
@@ -716,7 +747,7 @@ const AdvancedVizBuilder: React.FC = () => {
     const errors: string[] = [];
     const warnings: string[] = [];
     const checkBinding = (role: string, accepted: string[], optional: boolean) => {
-      const val = columnMapping[role];
+      const val = roleValue(role);
       const prefix = optional ? 'Optional column' : 'Column';
       if (!val) {
         if (!optional) errors.push(`Required role "${role}" is not bound`);
@@ -767,7 +798,7 @@ const AdvancedVizBuilder: React.FC = () => {
       errors.push('Pick a compute method (PCA / UMAP / t-SNE / PCoA)');
     }
     return { errors, warnings, ok: errors.length === 0 };
-  }, [selectedKind, schema, nothingToBind, columnMapping, liveEmbedding, requiredRoles, optionalRoles]);
+  }, [selectedKind, schema, nothingToBind, columnMapping, roleValue, liveEmbedding, requiredRoles, optionalRoles]);
 
   const setSaveError = useBuilderStore((s) => s.setSaveError);
   useEffect(() => {
@@ -840,10 +871,10 @@ const AdvancedVizBuilder: React.FC = () => {
       nothingToBind ||
       (requiredRoles.length > 0 &&
       requiredRoles.every(([role]) => {
-        const v = columnMapping[role];
+        const v = roleValue(role);
         return Array.isArray(v) ? v.length > 0 : Boolean(v);
       })),
-    [nothingToBind, requiredRoles, columnMapping],
+    [nothingToBind, requiredRoles, roleValue],
   );
 
   /** Render a titled grid of kind tiles with a match badge (named, shape,
@@ -1068,8 +1099,8 @@ const AdvancedVizBuilder: React.FC = () => {
           )}
           placeholder="Pick a column"
           value={
-            typeof columnMapping[role] === 'string'
-              ? (columnMapping[role] as string)
+            typeof roleValue(role) === 'string'
+              ? (roleValue(role) as string)
               : null
           }
           onChange={(v) => setRole(role, v)}
@@ -1090,8 +1121,8 @@ const AdvancedVizBuilder: React.FC = () => {
           )}
           placeholder="Pick a column"
           value={
-            typeof columnMapping[role] === 'string'
-              ? (columnMapping[role] as string)
+            typeof roleValue(role) === 'string'
+              ? (roleValue(role) as string)
               : null
           }
           onChange={(v) => setRole(role, v)}
@@ -1382,7 +1413,7 @@ const AdvancedVizBuilder: React.FC = () => {
 
       {selectedKind === 'record_card' ? (
         <RecordCardLinkSettings
-          config={mergedPreset}
+          config={effectiveConfig}
           idCol={typeof columnMapping.id === 'string' ? columnMapping.id : null}
           onChange={setOverrideFields}
         />
@@ -1391,7 +1422,7 @@ const AdvancedVizBuilder: React.FC = () => {
       {selectedKind && isProteinKind(selectedKind) ? (
         <ProteinBindingSettings
           vizKind={selectedKind}
-          config={mergedPreset}
+          config={effectiveConfig}
           onChange={setOverrideFields}
         />
       ) : null}

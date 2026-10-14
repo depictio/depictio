@@ -22,6 +22,14 @@ import { str, type ProteinKindSettingsProps } from './common';
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
+/** DomainArchitectureConfig's defaults for the fields below that do not take
+ *  null. A cleared input writes the default back: unsetting a saved key
+ *  writes null (`patchOverrides` in configBlob.ts), which the model refuses. */
+const DEFAULT_PARTIAL_COVERAGE = 0.9;
+const DEFAULT_MAX_ARCHITECTURES = 15;
+const DEFAULT_MAX_PROTEINS = 2000;
+const DEFAULT_POSITION_COLUMN = 'position';
+
 /** The values of the bound table's source column, as suggestions for the
  *  source filter (none when the column is missing). */
 function useSourceValues(dcId: string | null, column: string | null): string[] {
@@ -147,8 +155,10 @@ const DomainArchitectureSettings: React.FC<ProteinKindSettingsProps> = ({
         <NumberInput
           label="Partial below coverage"
           description="Without HMM states, a lower coverage is drawn partial"
-          value={num(config?.partial_coverage) ?? 0.9}
-          onChange={(v) => onChange({ partial_coverage: typeof v === 'number' ? v : undefined })}
+          value={num(config?.partial_coverage) ?? DEFAULT_PARTIAL_COVERAGE}
+          onChange={(v) =>
+            onChange({ partial_coverage: typeof v === 'number' ? v : DEFAULT_PARTIAL_COVERAGE })
+          }
           min={0}
           max={1}
           step={0.05}
@@ -172,8 +182,10 @@ const DomainArchitectureSettings: React.FC<ProteinKindSettingsProps> = ({
         <NumberInput
           label="Architectures"
           description="Most frequent ones drawn"
-          value={num(config?.max_architectures) ?? 15}
-          onChange={(v) => onChange({ max_architectures: typeof v === 'number' ? v : undefined })}
+          value={num(config?.max_architectures) ?? DEFAULT_MAX_ARCHITECTURES}
+          onChange={(v) =>
+            onChange({ max_architectures: typeof v === 'number' ? v : DEFAULT_MAX_ARCHITECTURES })
+          }
           min={1}
           max={100}
           allowDecimal={false}
@@ -182,8 +194,10 @@ const DomainArchitectureSettings: React.FC<ProteinKindSettingsProps> = ({
         <NumberInput
           label="Max proteins"
           description="Rows drawn at most"
-          value={num(config?.max_proteins) ?? 2000}
-          onChange={(v) => onChange({ max_proteins: typeof v === 'number' ? v : undefined })}
+          value={num(config?.max_proteins) ?? DEFAULT_MAX_PROTEINS}
+          onChange={(v) =>
+            onChange({ max_proteins: typeof v === 'number' ? v : DEFAULT_MAX_PROTEINS })
+          }
           min={1}
           max={20000}
           allowDecimal={false}
@@ -195,9 +209,9 @@ const DomainArchitectureSettings: React.FC<ProteinKindSettingsProps> = ({
         <TextInput
           label="Position column of the pick"
           description="A domain click picks its span on this column (with the entity column) of the residue tables"
-          value={str(config?.position_col_for_selection) ?? 'position'}
+          value={str(config?.position_col_for_selection) ?? DEFAULT_POSITION_COLUMN}
           onChange={(e) =>
-            onChange({ position_col_for_selection: e.currentTarget.value || undefined })
+            onChange({ position_col_for_selection: e.currentTarget.value || DEFAULT_POSITION_COLUMN })
           }
           size="xs"
         />

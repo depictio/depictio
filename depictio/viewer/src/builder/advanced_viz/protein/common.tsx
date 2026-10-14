@@ -19,7 +19,9 @@ import {
 
 /** What `ProteinBindingSettings` hands every per-kind panel. */
 export interface ProteinKindSettingsProps {
-  /** The config the tile renders with (saved or catalog blob plus overrides). */
+  /** What Save will write: the role bindings, the saved or catalog blob and
+   *  the overrides, merged (`buildAdvancedVizConfigBlob`). A column bound in
+   *  the role table is in it as soon as it is bound. */
   config: Record<string, unknown> | null;
   /** Writes config fields; `undefined` drops a key the saved config never had. */
   onChange: (patch: Record<string, unknown>) => void;
@@ -82,6 +84,13 @@ export const CompanionPicker: React.FC<{
   );
 };
 
+/**
+ * One column of a companion table. `fallback` is the field's default on the
+ * model, shown while the key is unset. There is no "none": deselecting would
+ * write `null` over a saved value (`patchOverrides`), and most of these
+ * fields (`hits_model_col`, `domain_start_col`...) are not nullable, so the
+ * save would be refused. Picking another column is the only change.
+ */
 export const ColumnPicker: React.FC<{
   label: string;
   field: string;
@@ -97,7 +106,10 @@ export const ColumnPicker: React.FC<{
       label={label}
       data={data}
       value={value || null}
-      onChange={(v) => onChange({ [field]: v ?? undefined })}
+      onChange={(v) => {
+        if (v) onChange({ [field]: v });
+      }}
+      allowDeselect={false}
       searchable
       size="xs"
     />

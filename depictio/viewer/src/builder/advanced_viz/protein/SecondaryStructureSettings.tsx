@@ -1,12 +1,15 @@
 /**
  * `secondary_structure` settings: what the role mapping above cannot say.
  *
- * The state, residue, source, probability and confidence columns are mapped in
- * the binding table; here they can also be re-pointed or unbound (a probability
- * column the table does not have), and the one value a column cannot be
- * mapped to is chosen: which source the others are compared with. The four
- * switches decide which lanes the tile draws. The tile reads a single
- * per-residue table, so there is no companion collection to pick.
+ * The state and residue columns are mapped in the binding table. The source,
+ * probability and confidence columns are listed there too, but this panel owns
+ * them (configBlob.ts PANEL_COLUMNS): the binding row and the picker below
+ * read and write the same config key, so a pick in either shows in both and is
+ * the one saved. Here they can also be unbound (a probability column the table
+ * does not have), and the one value a column cannot be mapped to is chosen:
+ * which source the others are compared with. The four switches decide which
+ * lanes the tile draws. The tile reads a single per-residue table, so there is
+ * no companion collection to pick.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { Group, Select, Stack, Switch, Text } from '@mantine/core';

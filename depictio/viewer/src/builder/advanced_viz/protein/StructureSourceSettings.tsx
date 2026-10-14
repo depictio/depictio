@@ -12,6 +12,11 @@ import { NumberInput, SegmentedControl, Stack, Text } from '@mantine/core';
 import { companionOptions } from '../proteinBindings';
 import { CompanionPicker, type ProteinKindSettingsProps } from './common';
 
+/** The `taxon` default of Molecule3DConfig and RamachandranConfig (human). The
+ *  field takes no null, so a cleared input writes it back rather than unsetting
+ *  the key, which nulls a saved value and has the save refused. */
+const DEFAULT_TAXON = 9606;
+
 const StructureSourceSettings: React.FC<
   Pick<ProteinKindSettingsProps, 'config' | 'onChange' | 'workflows' | 'loading'>
 > = ({ config, onChange, workflows, loading }) => {
@@ -62,8 +67,8 @@ const StructureSourceSettings: React.FC<
           <NumberInput
             label="Taxon"
             description="NCBI taxonomy id used to resolve gene symbols"
-            value={typeof config?.taxon === 'number' ? config.taxon : 9606}
-            onChange={(v) => onChange({ taxon: typeof v === 'number' ? v : undefined })}
+            value={typeof config?.taxon === 'number' ? config.taxon : DEFAULT_TAXON}
+            onChange={(v) => onChange({ taxon: typeof v === 'number' ? v : DEFAULT_TAXON })}
             min={1}
             size="xs"
           />

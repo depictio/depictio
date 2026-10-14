@@ -10,7 +10,6 @@
  */
 import React from 'react';
 import { MultiSelect, NumberInput, Select, Stack, Switch, Text } from '@mantine/core';
-import { useBuilderStore } from '../../store/useBuilderStore';
 import { str, type ProteinKindSettingsProps } from './common';
 import StructureSourceSettings from './StructureSourceSettings';
 
@@ -30,6 +29,9 @@ const RESIDUE_CLASSES: { value: string; label: string }[] = [
   { value: 'pre_proline', label: 'Pre-proline' },
 ];
 
+/** RamachandranConfig's `marker_size` default. The field takes no null, so a
+ *  cleared input writes it back rather than unsetting the key (which nulls a
+ *  saved value, and the save is refused). */
 const DEFAULT_MARKER_SIZE = 6;
 
 const RamachandranSettings: React.FC<ProteinKindSettingsProps> = ({
@@ -38,13 +40,10 @@ const RamachandranSettings: React.FC<ProteinKindSettingsProps> = ({
   workflows,
   loading,
 }) => {
-  // The role mapping lives in the builder store; the merged config only carries
-  // a column once it has been saved.
-  const columnMapping = useBuilderStore(
-    (s) => (s.config as { column_mapping?: Record<string, unknown> }).column_mapping,
-  );
+  // `config` carries the role bindings (the role table's included), so a column
+  // counts as bound the moment it is bound, saved or not.
   const bound = (role: 'value' | 'category' | 'chain'): boolean =>
-    Boolean(columnMapping?.[role]) || str(config?.[`${role}_col`]) !== null;
+    str(config?.[`${role}_col`]) !== null;
 
   const colourMode = str(config?.color_mode) ?? 'plddt';
   const classes = Array.isArray(config?.residue_classes)
@@ -113,7 +112,7 @@ const RamachandranSettings: React.FC<ProteinKindSettingsProps> = ({
         label="Marker size"
         description="Point diameter in pixels"
         value={markerSize}
-        onChange={(v) => onChange({ marker_size: typeof v === 'number' ? v : undefined })}
+        onChange={(v) => onChange({ marker_size: typeof v === 'number' ? v : DEFAULT_MARKER_SIZE })}
         min={2}
         max={20}
         allowDecimal={false}

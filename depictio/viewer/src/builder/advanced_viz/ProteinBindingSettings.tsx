@@ -60,7 +60,8 @@ export function isProteinKind(kind: string): kind is ProteinKind {
 
 export interface ProteinBindingSettingsProps {
   vizKind: ProteinKind;
-  /** The config the tile renders with (saved or catalog blob plus overrides). */
+  /** What Save will write: the role bindings, the saved or catalog blob and
+   *  the overrides, merged. */
   config: Record<string, unknown> | null;
   /** Writes config fields; `undefined` drops a key the saved config never had. */
   onChange: (patch: Record<string, unknown>) => void;
@@ -131,7 +132,7 @@ const ProteinBindingSettings: React.FC<ProteinBindingSettingsProps> = ({
                 { value: 'structure_msa', label: 'Structure and alignment' },
               ]}
               value={layout}
-              onChange={(v) => onChange({ layout: v ?? undefined })}
+              onChange={(v) => v && onChange({ layout: v })}
               allowDeselect={false}
               size="xs"
             />
@@ -199,8 +200,10 @@ const ProteinBindingSettings: React.FC<ProteinBindingSettingsProps> = ({
               <TextInput
                 label="Entity column"
                 value={str(config?.entity_col_for_selection) ?? 'entity'}
+                // Emptied, the name falls back to its default: unsetting a
+                // saved key writes null, which the model refuses.
                 onChange={(e) =>
-                  onChange({ entity_col_for_selection: e.currentTarget.value || undefined })
+                  onChange({ entity_col_for_selection: e.currentTarget.value || 'entity' })
                 }
                 size="xs"
               />
@@ -208,7 +211,7 @@ const ProteinBindingSettings: React.FC<ProteinBindingSettingsProps> = ({
                 label="Position column"
                 value={str(config?.position_col_for_selection) ?? 'position'}
                 onChange={(e) =>
-                  onChange({ position_col_for_selection: e.currentTarget.value || undefined })
+                  onChange({ position_col_for_selection: e.currentTarget.value || 'position' })
                 }
                 size="xs"
               />
