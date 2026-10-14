@@ -1,0 +1,22 @@
+id: proteinfold_msa
+name: Multiple sequence alignments of the MSA-based engines
+mode: protein/msa
+description: >-
+  The alignment AlphaFold2, ColabFold and RoseTTAFold All-Atom folded each
+  target from, one row per aligned sequence (the query first), decoded from
+  the integer-coded tables and capped at 500 rows, with identity and coverage
+  against the query. The alignment id is the id of the structure folded from
+  it, so a column brush selects those residues on the structure.
+find:
+  path_glob: "**/*_msa.tsv"
+recipe: proteinfold/msa.py
+fixture: msa.tsv
+renders_as:
+  - { id: folding_msa, component: advanced_viz, kind: msa,
+      roles: {msa_id: msa_id, seq_id: seq_id, sequence: aligned_sequence, rank: rank, identity: identity} }
+  - { id: msa_depth, component: card, column: depth, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: msa_coverage, component: card, column: coverage, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: figure, visu_type: histogram, dict_kwargs: {x: identity, color: engine} }
+  - { component: table }

@@ -4,6 +4,7 @@ import ComponentSkeleton from '../ComponentSkeleton';
 
 import { InteractiveFilter, StoredMetadata } from '../../api';
 import { useAvailableSet, useFunnelState } from '../../availableValues';
+import { isAlwaysSelected, singlePick } from './alwaysSelected';
 import { orderCategoricalOptions } from './categoricalOptions';
 import { FunnelAvailabilityBadge, FunnelOptionMarker } from './funnelDecorations';
 import {
@@ -31,6 +32,10 @@ const MultiSelectRenderer: React.FC<{
 
   const selected =
     (filters.find((f) => f.index === metadata.index)?.value as string[]) || [];
+  // `always_selected`: one value, never none. The host makes the automatic
+  // pick (`AlwaysSelectedPickers`); here a user's change is kept to one value
+  // and the clear button goes.
+  const alwaysSelected = isAlwaysSelected(metadata);
 
   // Grey out values that the filter's source DC declares but that aren't
   // present in the dashboard's joined data — see `availableValues.tsx`.
@@ -91,10 +96,11 @@ const MultiSelectRenderer: React.FC<{
                 )
               : undefined
           }
+          clearable={!alwaysSelected}
           onChange={(next) =>
             onChange?.({
               index: metadata.index,
-              value: next,
+              value: alwaysSelected ? singlePick(next, optionItems) : next,
               column_name: metadata.column_name,
               interactive_component_type: metadata.interactive_component_type,
               filter_expr: metadata.filter_expr,

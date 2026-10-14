@@ -1,0 +1,18 @@
+id: proteinfold_engine_plddt
+name: Residue confidence per engine
+mode: protein/residues
+description: >-
+  The per-residue pLDDT of each engine's top-ranked structure, one curve per
+  engine (and per chain on a complex), averaged over windows past 200 residues.
+  Kept apart from the residue table, with the engine only in the curve label,
+  so that an engine picked on the residue table leaves every engine's curve
+  for the same target on screen.
+find:
+  path_glob: "**/top_ranked_structures/*.pdb"
+recipe: proteinfold/engine_plddt.py
+fixture: engine_plddt.tsv
+renders_as:
+  - { id: plddt_by_engine, component: advanced_viz, kind: profile,
+      roles: {series: series, x: position, y: plddt} }
+  - { component: figure, visu_type: box, dict_kwargs: {x: series, y: plddt, color: series} }
+  - { component: table }

@@ -564,3 +564,59 @@ or defaults depends on the validation run any more.
 Open: the calls-track gene lane is fixed to `hg38` until the viz model accepts a free assembly
 string there; the upset and heatmap collections are fixed and do not follow the pickers; somatic
 collections still carry no tiles.
+
+
+## Protein view (2026-10-14)
+
+The coding variants get a tab of their own: a scatter of the lollipop's genes picks one, its
+predicted structure loads beside it and the lollipop narrows to it.
+
+| Item | Change |
+|---|---|
+| Protein tab | New, group `Annotation`, `tab_order` 8 (Locus is 9). Strip of four cards (genes plotted by worst impact class, coding calls by caller, median caller agreement, allele fraction), `Genes and structure` (gene scatter w4 beside the `molecule_3d` w4), `Along the protein` (lollipop w8), collapsed `Coding variant table`. Left-panel filters: caller and impact class. 16 rows open |
+| Genes tab | The lollipop, the impact class filter and the coding variant table moved to Protein. 13 rows open (was 19) |
+| Why a tab | The three protein tiles stack in two rows of at least 5 to 6, which takes the Genes tab from 19 to at least 23 open rows against the budget of 20 (RULES.md section 11), and the UpSet or the heatmap may not be collapsed to make room |
+| `protein_genes` | New optional collection, one row per gene of `snpeff_protein_lollipop` (`recipes/protein_genes.py`): distinct variants and positions, calls, share of calls two or more callers made, samples, callers, HIGH and MODERATE variants, worst impact class, median VAF. Declared after the lollipop, as the DC order test requires. Whole-run: no sample or caller column |
+| `snpeff/protein_lollipop` | Gains `ref_aa`, the reference residue of the protein change, so the structure tile can check its numbering. Fixture and `coding_variant_structure` render updated |
+| `snpeff/coding_variant_structure` | New render of the lollipop collection: `molecule_3d`, `entity` and `gene` on `gene`, `position` on `aa_pos`, `ref_aa`, impact class as category, VAF as value |
+| Colours | `category_colors` gains `worst_impact` (same three classes as `impact`) for the scatter |
+| Docs | Protein paragraph, tab table, cross-selection and routes rewritten |
+
+### Validation performed
+
+- `dashboard validate --offline` on `dashboards/base.yaml`: passes.
+- `depictio ingest --template nf-core/sarek/3.10.0 --dry-run` on the fetched megatest: 8/8 steps.
+- The recipes, run on the real annotated VCFs (the 10 snpEff-annotated files, 371,068 lines): `snpeff_ann_variants`
+  371,068 rows, `snpeff_protein_lollipop` 13,993 x 10, `protein_genes` 40 x 11, all passing
+  `validate_schema`. No file beyond the manifest was fetched.
+- `pytest depictio/tests -k "sarek or template_conventions or shipped_dashboard or template_dc_order or
+  nfcore or catalog or recipe or snpeff or protein"`: 3,014 passed, 4 skipped, 1 failed
+  (`test_recipe_seeds_are_the_catalog_fixtures`: the conformance project's seed of
+  `snpeff_protein_lollipop` has to be regenerated for the new `ref_aa` column; generated files are not
+  committed here). `depictio/tests/recipes/test_sarek_recipes.py` (10 tests) pins the recipes and the
+  wiring: gene column shared by the scatter, lollipop and structure, `gene_col` and `ref_aa_col` on the
+  structure, columns of the cards, no header controls, the 2,700-residue note.
+- Not covered: a live ingest and a render with the resolver on (no stack in this session). The resolver
+  strategies were run directly against AlphaFold DB and UniProt for the 40 genes (below).
+
+### Findings
+
+- SK-D21. SnpEff's protein numbering is not always the model's. Of the 28 genes that got a model,
+  17 place every variant on a matching residue; 11 do not (LILRB1 57 of 60 positions on a different residue,
+  PLIN4 26 of 27, PRSS1 11 of 24, HLA-DQB1 12 of 38, HLA-A 2 of 23). Without a reference residue the
+  tile would draw those spheres on the wrong residue, so the lollipop recipe now emits `ref_aa` and the
+  tile lists the mismatches under a "numbering mismatch" badge instead.
+- SK-D22. 12 of the 40 genes get no model: 10 are proteins past about 2,700 residues (the canonical
+  sequence has no AlphaFold DB entry; the tile reads "No structure found: AlphaFold DB has no model for
+  <accession>") and 2 are clone-based gene names with no reviewed UniProt entry ("UniProt has no reviewed
+  entry for gene ..."). The lollipop still draws them.
+- SK-D23. Five long genes resolve to a model of a shorter isoform (MUC4 to AF-Q99102-13-F1, 1,176
+  residues, AHNAK2, FLG, IGFN1, MYO15B). The resolver takes the first AlphaFold DB entry of the
+  accession, so the tile draws that isoform: 427 of the 467 MUC4 positions fall past its end and are
+  counted under "outside the model", the rest are checked by `ref_aa`. Resolver behaviour, outside the
+  template; a canonical-only match would show "No structure found" instead.
+- SK-D24. Before a gene is picked, the structure tile opens on the first gene of the table, which sorts
+  alphabetically. Ensembl clone-based names (AC..., AL...) sort first, so with the resolver on the tile can
+  open on "No structure found" until a point of the scatter is clicked. The intro says to click one.
+- About half of the megatest lollipop's positions (808 of 1,599, on the genes that got a model) are
+  placeable on a model; the rest are the mismatches and outside positions above.

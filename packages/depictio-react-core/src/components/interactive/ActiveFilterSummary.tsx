@@ -18,6 +18,7 @@ import {
   filterDisplayLabel,
   formatFilterValue,
 } from '../../activeFilters';
+import { isAlwaysSelected } from './alwaysSelected';
 import { INTERACTIVE_FRAME, interactiveAccent, interactiveIcon } from './frame';
 import ShareFiltersLink from './ShareFiltersLink';
 
@@ -152,6 +153,9 @@ const ActiveFilterSummary: React.FC<ActiveFilterSummaryProps> = ({
                 ? interactiveIcon(meta)
                 : 'mdi:filter-variant';
             const accent = meta ? interactiveAccent(meta) : undefined;
+            // An `always_selected` filter cannot be cleared, only changed in
+            // its control: no clear button for it.
+            const clearable = fromSelection || !isAlwaysSelected(meta);
             return (
               <Group
                 key={`${f.index}:${f.source ?? ''}`}
@@ -196,16 +200,22 @@ const ActiveFilterSummary: React.FC<ActiveFilterSummaryProps> = ({
                     {value}
                   </Text>
                 )}
-                <ActionIcon
-                  variant="subtle"
-                  color="gray"
-                  size="xs"
-                  aria-label={`Clear filter ${label}`}
-                  onClick={() => onClear({ ...f, value: null })}
-                  style={{ flexShrink: 0 }}
-                >
-                  <Icon icon="mdi:close" width={12} height={12} />
-                </ActionIcon>
+                {/* The slot stays, so the values of every row end at one edge. */}
+                {!clearable && (
+                  <Box w={18} style={{ flexShrink: 0 }} aria-hidden />
+                )}
+                {clearable && (
+                  <ActionIcon
+                    variant="subtle"
+                    color="gray"
+                    size="xs"
+                    aria-label={`Clear filter ${label}`}
+                    onClick={() => onClear({ ...f, value: null })}
+                    style={{ flexShrink: 0 }}
+                  >
+                    <Icon icon="mdi:close" width={12} height={12} />
+                  </ActionIcon>
+                )}
               </Group>
             );
           })}

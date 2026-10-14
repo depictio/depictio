@@ -55,12 +55,18 @@ export function categoricalDisplay(
   return count <= chips ? 'chips' : 'list';
 }
 
-/** `multi` toggles membership; `single` picks one value (or none). */
-export type ChipSelectionMode = 'multi' | 'single';
+/** `multi` toggles membership; `single` picks one value (or none); `one`
+ *  picks one value and never none (an `always_selected` Select). */
+export type ChipSelectionMode = 'multi' | 'single' | 'one';
 
-/** A MultiSelect stays multi. A Select or a SegmentedControl is one-of-N. */
-export function chipSelectionMode(interactiveType: string | undefined): ChipSelectionMode {
-  return interactiveType === 'MultiSelect' ? 'multi' : 'single';
+/** A MultiSelect stays multi. A Select or a SegmentedControl is one-of-N, and
+ *  a Select that is `always_selected` one-of-N that cannot be emptied. */
+export function chipSelectionMode(
+  interactiveType: string | undefined,
+  alwaysSelected = false,
+): ChipSelectionMode {
+  if (interactiveType === 'MultiSelect') return 'multi';
+  return alwaysSelected && interactiveType === 'Select' ? 'one' : 'single';
 }
 
 /** The selected values a stored filter value stands for, whichever shape the
@@ -73,12 +79,14 @@ export function selectedValues(value: unknown): string[] {
 }
 
 /** The selection after clicking `value`. Clicking the only selected value in
- *  single mode clears it — nothing selected means all, as everywhere else. */
+ *  single mode clears it — nothing selected means all, as everywhere else. In
+ *  `one` mode a click always holds that value, the held one included. */
 export function toggleChip(
   selected: readonly string[],
   value: string,
   mode: ChipSelectionMode,
 ): string[] {
+  if (mode === 'one') return [value];
   const has = selected.includes(value);
   if (mode === 'single') return has && selected.length === 1 ? [] : [value];
   return has ? selected.filter((v) => v !== value) : [...selected, value];

@@ -1,0 +1,37 @@
+id: hmmer_hmmalign_hits
+name: Family member coverage of the HMM
+mode: protein/domains
+description: >-
+  One row per member of every family alignment (hmmalign against the family
+  HMM): the stretch of the model it covers (first and last match state, and the
+  share of the model between them), the member's residues at those two states
+  and its length. The columns of a domain hit table without the search
+  statistics (E-value and score are null), so the lane under an HMM logo draws
+  the members' coverage and a domain architecture shows which members are
+  fragments.
+find:
+  path_glob: "**/full_msa/raw/hmmer_hmmalign/*/*.sto.gz"
+  path_glob_alt:
+    - "**/hmmalign/*/*.sto.gz"
+recipe: hmmer/hmmalign_hits.py
+fixture: hmmalign_hits.tsv
+renders_as:
+  - id: member_architecture
+    component: advanced_viz
+    kind: domain_architecture
+    roles:
+      entity: entity
+      start: ali_from
+      end: ali_to
+      label: label
+      protein_length: protein_length
+      hmm_from: hmm_from
+      hmm_to: hmm_to
+      hmm_length: hmm_length
+      hmm_coverage: hmm_coverage
+  - { id: member_count, component: card, column: entity, aggregation: count,
+      secondary_layout: top_n, breakdown_col: label, top_n_count: 3 }
+  - { id: model_coverage, component: card, column: hmm_coverage, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: figure, visu_type: box, dict_kwargs: {x: label, y: hmm_coverage, color: label} }
+  - { component: table }

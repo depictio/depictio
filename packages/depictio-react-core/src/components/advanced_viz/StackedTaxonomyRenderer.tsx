@@ -26,6 +26,14 @@ import { usePersistedVizControl } from './usePersistedVizControl';
 import { withRanksInOrder } from './phylo/view';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import { demandForPx } from './contentDemand';
+import {
+  isDenseTaxonomyAxis,
+  taxonomyAxisTitle,
+  taxonomyLegend,
+  taxonomyLegendTopPx,
+  visibleTaxonomyControls,
+  type TaxonomyLegendPos,
+} from './stackedTaxonomyOptions';
 
 /** The stacked bars run vertically: samples are the x axis, so the tile's
  *  height is furniture, not a count. This is the plot area a stack of
@@ -35,6 +43,9 @@ const TAXONOMY_PLOT_PX = 300;
 /** One entry of the legend, a column right of the plot at 10 px: under the
  *  plot it fought the tilted sample labels for the same band. */
 const LEGEND_ITEM_PX = 16;
+/** Entries per row of a legend drawn in rows (`legend_pos: bottom`), roughly:
+ *  a 10 px taxon name and its swatch across a w8 tile. */
+const LEGEND_ROW_ITEMS = 5;
 /** The legend's title and its padding. */
 const LEGEND_CHROME_PX = 30;
 /** One annotation strip: tall enough for its 10 px labels. */
@@ -80,6 +91,14 @@ interface StackedTaxonomyConfig {
    *  view always repeats some; pinning the taxa a reader compares keeps them
    *  apart and keeps them the same colour across dashboards. */
   taxon_palette?: Record<string, string> | null;
+  /** Controls the tile does not offer; the config value still applies. */
+  hidden_controls?: string[] | null;
+  /** Label of the rank picker, 'Rank' when unset. */
+  rank_label?: string | null;
+  /** Sample axis title: unset reads 'Sample', an empty string shows none. */
+  x_title?: string | null;
+  /** The legend in a column right of the bars (default) or in rows under them. */
+  legend_pos?: TaxonomyLegendPos;
 }
 
 interface Props {
@@ -248,6 +267,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
 
   const { figure, allRanks, seriesCount, stripCount } = useMemo(() => {
     if (!rows) return { figure: null, allRanks: [] as string[], seriesCount: 0, stripCount: 0 };
+    const legendPos = config.legend_pos ?? 'right';
     const samples = (rows[config.sample_id_col] || []).map((v) => String(v ?? '')) as string[];
     // A lineage that stops above the shown rank ("Eukaryota;") has a blank leaf.
     // Named, so it gets a legend entry a reader can identify rather than an
@@ -472,6 +492,11 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
       });
     }
 
+    // Past 40 bars the tilted sample labels run into each other: they go (the
+    // hover still names each bar), and a legend in rows moves above the bars.
+    const denseAxis = isDenseTaxonomyAxis(orderedSamples.length);
+    const legendTopPx = taxonomyLegendTopPx(legendPos, denseAxis, showLegend);
+
     return {
       // The legend and the strips are what actually grows this tile, so the
       // figure reports them back rather than the renderer re-deriving them.
@@ -484,12 +509,13 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
           barmode: 'stack' as const,
           // Automargins: the tilted sample ids, the strip names and the legend
           // take what they need instead of a guess that clipped them.
-          margin: { l: 60, r: 20, t: stripKey ? 44 : 30, b: 30 },
+          margin: { l: 60, r: 20, t: (stripKey ? 44 : 30) + legendTopPx, b: 30 },
           annotations: stripLabels,
           xaxis: {
             ...plotlyAxisOverrides(isDark, theme),
-            title: { text: 'Sample' },
+            title: { text: taxonomyAxisTitle(config.x_title) },
             tickangle: -45,
+            showticklabels: !denseAxis,
             automargin: true,
             // Pinned to the bottom of the plot area, below any bottom strip,
             // and to the bars' sample order so the strips line up with them.
@@ -522,16 +548,9 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
               },
           showlegend: showLegend,
           // The taxa's key, titled with the rank they are, in a column right of
-          // the plot: under it, it collided with the tilted sample labels.
-          legend: {
-            orientation: 'v',
-            x: 1.02,
-            xanchor: 'left',
-            y: 1,
-            yanchor: 'top',
-            title: { text: `${activeRank ?? 'Taxon'} ` },
-            font: { size: 10 },
-          },
+          // the plot by default: under it, it collided with the tilted sample
+          // labels. `legend_pos: bottom` puts it in rows under the figure.
+          legend: taxonomyLegend(legendPos, denseAxis, activeRank ?? 'Taxon'),
           ...(stripKey
             ? {
                 legend2: {
@@ -558,42 +577,59 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   // whether the bars are read as proportions. Most used first: a docked panel
   // shows the first few (DockedControls). Change one of those and it is a
   // different figure; the legend and the log scale only change how it looks.
+  // A tile stacking something other than taxa (CCS outcomes per library)
+  // hides the controls that mean nothing for it (`hidden_controls`); their
+  // config values still apply.
+  const shown = useMemo(
+    () => visibleTaxonomyControls(config.hidden_controls),
+    [config.hidden_controls],
+  );
+  const rankLabel = config.rank_label || 'Rank';
   const primaryControls = useMemo(
-    () => (
-      <>
-        <VizSelect
-          label="Rank"
-          value={rank}
-          onChange={setRank}
-          data={allRanks}
-          clearable
-        />
-        <VizNumberInput
-          label="Top-N taxa"
-          value={topN}
-          onChange={(v) => setTopN(Math.max(1, Number(v) || 20))}
-          min={1}
-          max={50}
-        />
-        <VizSelect
-          label="Sort samples"
-          value={sampleSort}
-          onChange={(v) => v && setSampleSort(v as SampleSort)}
-          data={[
-            { value: 'input', label: 'Input order' },
-            { value: 'total_abundance', label: 'Total abundance' },
-            { value: 'first_taxon', label: 'Top taxon' },
-          ]}
-          allowDeselect={false}
-        />
-        <VizSwitch
-          checked={normalise}
-          onChange={(e) => setNormalise(e.currentTarget.checked)}
-          label="Normalise"
-        />
-      </>
-    ),
-    [rank, sampleSort, topN, normalise, allRanks],
+    () =>
+      Object.values(shown).some(Boolean) ? (
+        <>
+          {shown.rank ? (
+            <VizSelect
+              label={rankLabel}
+              value={rank}
+              onChange={setRank}
+              data={allRanks}
+              clearable
+            />
+          ) : null}
+          {shown.top_n ? (
+            <VizNumberInput
+              label="Top-N taxa"
+              value={topN}
+              onChange={(v) => setTopN(Math.max(1, Number(v) || 20))}
+              min={1}
+              max={50}
+            />
+          ) : null}
+          {shown.sample_sort ? (
+            <VizSelect
+              label="Sort samples"
+              value={sampleSort}
+              onChange={(v) => v && setSampleSort(v as SampleSort)}
+              data={[
+                { value: 'input', label: 'Input order' },
+                { value: 'total_abundance', label: 'Total abundance' },
+                { value: 'first_taxon', label: 'Top taxon' },
+              ]}
+              allowDeselect={false}
+            />
+          ) : null}
+          {shown.normalise ? (
+            <VizSwitch
+              checked={normalise}
+              onChange={(e) => setNormalise(e.currentTarget.checked)}
+              label="Normalise"
+            />
+          ) : null}
+        </>
+      ) : undefined,
+    [rank, sampleSort, topN, normalise, allRanks, rankLabel, shown],
   );
 
   const controls = useMemo(
@@ -620,20 +656,31 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   // height: the demand is the plot area, or the legend's column when that is
   // taller (it only has the plot area's height), plus what the annotation
   // strips take off it.
+  // A legend in rows (`legend_pos: bottom`) adds its rows to the plot area
+  // instead.
+  const legendRows = config.legend_pos === 'bottom';
   const contentDemand = useMemo(
     () =>
       figure
         ? demandForPx(
-            Math.max(
-              TAXONOMY_PLOT_PX,
-              showLegend
-                ? FRAME_HEADER_PX + PLOT_CHROME_PX + LEGEND_CHROME_PX + seriesCount * LEGEND_ITEM_PX
-                : 0,
-            ) +
+            (legendRows
+              ? TAXONOMY_PLOT_PX +
+                (showLegend
+                  ? LEGEND_CHROME_PX + Math.ceil(seriesCount / LEGEND_ROW_ITEMS) * LEGEND_ITEM_PX
+                  : 0)
+              : Math.max(
+                  TAXONOMY_PLOT_PX,
+                  showLegend
+                    ? FRAME_HEADER_PX +
+                        PLOT_CHROME_PX +
+                        LEGEND_CHROME_PX +
+                        seriesCount * LEGEND_ITEM_PX
+                    : 0,
+                )) +
               stripCount * (STRIP_BAND_PX + STRIP_GAP_PX),
           )
         : undefined,
-    [figure, showLegend, seriesCount, stripCount],
+    [figure, showLegend, seriesCount, stripCount, legendRows],
   );
 
   // Themed once per figure so the annotation layer can memoise on them.

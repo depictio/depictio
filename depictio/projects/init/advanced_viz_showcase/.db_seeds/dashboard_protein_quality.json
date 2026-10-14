@@ -1,0 +1,642 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8de5"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8de5"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "qual-text",
+      "component_type": "text",
+      "title": "Structure confidence",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "Confidence of the model",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "How far to trust the predicted structure of the demo protein. The error matrix (synthetic: low inside each confident segment, high between segments and around the low-confidence ends) beside the structure and its written sequence; a synthetic S4PRED-style prediction against the call from the structure's own geometry, with two deliberate disagreements; the sequence track; then the backbone torsions computed in the browser beside the confidence profile. Brush the matrix diagonal, the ribbon or the track, or click a point or a letter, to select that range in every tile; hover marks it.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null,
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "qual-pae",
+      "component_type": "advanced_viz",
+      "title": "Predicted aligned error",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_residues_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dd2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per residue of the demo structure: amino acid, pLDDT and an approximate secondary structure",
+        "data_collection_tag": "protein_residues_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dd2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Expected position error of the scored residue (x) when the model is aligned on the aligned residue (y), with the pLDDT of each residue along the axes. Synthetic. Brush a square on the diagonal to select that stretch of residues.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Confidence of the model",
+      "viz_kind": "pae_matrix",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "pae_matrix",
+        "entity_col": "entity",
+        "position_col": "position",
+        "value_col": "plddt",
+        "chain_col": null,
+        "pae_wf_id": "646b0f3c1e4a2d7f8e5b8d01",
+        "pae_dc_id": "646b0f3c1e4a2d7f8e5b8de3",
+        "pae_dc_tag": null,
+        "max_pae": null,
+        "colour_scale": null,
+        "brush": "diagonal",
+        "show_plddt": true,
+        "selection_enabled": true,
+        "follow_selection": true
+      },
+      "controls_placement": "popover",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "qual-3d",
+      "component_type": "advanced_viz",
+      "title": "Structure and its sequence",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_residues_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dd2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per residue of the demo structure: amino acid, pLDDT and an approximate secondary structure",
+        "data_collection_tag": "protein_residues_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dd2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The model coloured by per-residue confidence over its written sequence, one clickable letter per residue. The residues picked in the matrix or the ribbon are drawn as red ball and stick.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Confidence of the model",
+      "viz_kind": "molecule_3d",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "molecule_3d",
+        "structure_source": "file",
+        "structure_wf_id": "646b0f3c1e4a2d7f8e5b8d01",
+        "structure_dc_id": "646b0f3c1e4a2d7f8e5b8dd1",
+        "structure_dc_tag": null,
+        "entity_col": "entity",
+        "uniprot_col": null,
+        "gene_col": null,
+        "sequence_col": null,
+        "taxon": 9606,
+        "position_col": "position",
+        "chain_col": "chain",
+        "value_col": null,
+        "category_col": null,
+        "ref_aa_col": null,
+        "alt_aa_col": null,
+        "label_col": null,
+        "color_mode": "plddt",
+        "colour_scale": null,
+        "representation": "cartoon",
+        "representations": [
+          "cartoon"
+        ],
+        "highlight_site": true,
+        "spin": false,
+        "show_variants": false,
+        "show_labels": false,
+        "layout": "structure_text",
+        "msa_wf_id": null,
+        "msa_dc_id": null,
+        "msa_dc_tag": null,
+        "selection_enabled": true,
+        "follow_selection": true
+      },
+      "controls_placement": "popover",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "qual-ss",
+      "component_type": "advanced_viz",
+      "title": "Secondary structure",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_ss_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8de4"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Secondary structure of the demo protein from two sources: a synthetic S4PRED-style prediction with probabilities (two deliberate disagreements) and the call from the structure's CA geometry",
+        "data_collection_tag": "protein_ss_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8de4"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The synthetic S4PRED-style prediction as a ribbon shaded by confidence over its helix, strand and coil probabilities, compared with the call from the structure, and an agreement lane where they differ. Brush a stretch to select it in every tile.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Confidence of the model",
+      "viz_kind": "secondary_structure",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "secondary_structure",
+        "entity_col": "entity",
+        "position_col": "position",
+        "residue_col": null,
+        "state_col": "ss_code",
+        "source_col": "ss_source",
+        "reference_source": "S4PRED",
+        "p_helix_col": "p_helix",
+        "p_strand_col": "p_strand",
+        "p_coil_col": "p_coil",
+        "confidence_col": "ss_probability",
+        "show_probabilities": true,
+        "show_agreement": true,
+        "show_segments": true,
+        "show_composition": true,
+        "selection_enabled": true,
+        "follow_selection": true
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "qual-rama",
+      "component_type": "advanced_viz",
+      "title": "Ramachandran plot",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_residues_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dd2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per residue of the demo structure: amino acid, pLDDT and an approximate secondary structure",
+        "data_collection_tag": "protein_residues_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dd2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The phi and psi angles of every residue, computed in the browser from the backbone of the structure, coloured by pLDDT. Glycine and proline have their own symbols; the favoured regions are approximate, not MolProbity contours.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Confidence of the model",
+      "viz_kind": "ramachandran",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "ramachandran",
+        "structure_source": "file",
+        "structure_wf_id": "646b0f3c1e4a2d7f8e5b8d01",
+        "structure_dc_id": "646b0f3c1e4a2d7f8e5b8dd1",
+        "structure_dc_tag": null,
+        "uniprot_col": null,
+        "gene_col": null,
+        "sequence_col": null,
+        "taxon": 9606,
+        "entity_col": "entity",
+        "position_col": "position",
+        "chain_col": "chain",
+        "value_col": null,
+        "category_col": null,
+        "color_mode": "plddt",
+        "show_regions": true,
+        "residue_classes": null,
+        "marker_size": 6,
+        "selection_enabled": true,
+        "follow_selection": true
+      },
+      "controls_placement": "popover",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "qual-seq",
+      "component_type": "advanced_viz",
+      "title": "Sequence with confidence, structure and domains",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_residues_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dd2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per residue of the demo structure: amino acid, pLDDT and an approximate secondary structure",
+        "data_collection_tag": "protein_residues_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dd2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The amino-acid sequence over a pLDDT lane, the secondary structure as helix and strand glyphs and the domain spans. Brush a stretch to select it in every tile.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Confidence of the model",
+      "viz_kind": "sequence_track",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "sequence_track",
+        "entity_col": "entity",
+        "position_col": "position",
+        "residue_col": "residue",
+        "value_col": "plddt",
+        "category_col": "secondary_structure",
+        "value_label": "pLDDT",
+        "domains_wf_id": "646b0f3c1e4a2d7f8e5b8d01",
+        "domains_dc_id": "646b0f3c1e4a2d7f8e5b8dd5",
+        "domains_dc_tag": null,
+        "domain_start_col": "start",
+        "domain_end_col": "end",
+        "domain_label_col": "domain",
+        "variants_wf_id": null,
+        "variants_dc_id": null,
+        "variants_dc_tag": null,
+        "variant_position_col": "position",
+        "variant_label_col": "label",
+        "variant_category_col": "category",
+        "selection_enabled": true,
+        "follow_selection": true
+      },
+      "controls_placement": "popover",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "qual-plddt",
+      "component_type": "advanced_viz",
+      "title": "Confidence along the sequence",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_residues_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dd2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per residue of the demo structure: amino acid, pLDDT and an approximate secondary structure",
+        "data_collection_tag": "protein_residues_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dd2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The pLDDT of each residue as a line on the residue axis. A pick made in any tile is shaded, a hovered residue is marked.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Confidence of the model",
+      "viz_kind": "profile",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "profile",
+        "series_col": "entity",
+        "x_col": "position",
+        "y_col": "plddt",
+        "lower_col": null,
+        "upper_col": null,
+        "reference_x": null,
+        "reference_label": null,
+        "shaded_bands": [],
+        "log_x": false,
+        "log_y": false,
+        "band_opacity": 0.2,
+        "line_width": 2.0,
+        "x_title": "Residue",
+        "y_title": "pLDDT",
+        "legend_pos": "none",
+        "selection_enabled": false,
+        "selection_column": null,
+        "residue_axis": true,
+        "derivative": false,
+        "derivative_window": 5
+      },
+      "controls_placement": "popover",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "qual-f-position",
+      "component_type": "interactive",
+      "title": "Residue range",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_residues_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dd2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per residue of the demo structure: amino acid, pLDDT and an approximate secondary structure",
+        "data_collection_tag": "protein_residues_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dd2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Residue scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "position",
+      "column_type": "int64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Residue filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "icon_name": "mdi:ruler",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-qual-f-position",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-qual-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-qual-pae",
+      "x": 0,
+      "y": 2,
+      "w": 4,
+      "h": 7,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-qual-3d",
+      "x": 4,
+      "y": 2,
+      "w": 4,
+      "h": 7,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-qual-ss",
+      "x": 0,
+      "y": 9,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-qual-rama",
+      "x": 0,
+      "y": 17,
+      "w": 4,
+      "h": 7,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-qual-seq",
+      "x": 0,
+      "y": 14,
+      "w": 8,
+      "h": 3,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-qual-plddt",
+      "x": 4,
+      "y": 17,
+      "w": 4,
+      "h": 7,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Structure confidence",
+  "subtitle": "The predicted aligned error, two secondary-structure calls and the backbone torsions of one model, linked residue by residue.",
+  "icon": "mdi:check-decagram",
+  "icon_color": "orange",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 49,
+  "main_tab_name": null,
+  "tab_icon": "mdi:check-decagram",
+  "tab_icon_color": "orange",
+  "tab_group": null,
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Residue scope",
+      "icon": "mdi:filter-variant",
+      "color": "orange",
+      "description": "Narrows the residue range every tile shows",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Confidence of the model",
+      "icon": "mdi:check-decagram",
+      "color": "orange",
+      "description": "Predicted aligned error, secondary structure and backbone torsions of one model",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "category_colors": null,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

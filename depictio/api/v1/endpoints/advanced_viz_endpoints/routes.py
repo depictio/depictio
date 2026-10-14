@@ -1854,3 +1854,13 @@ def get_phylogeny_newick(
             detail="The phylogeny file's stored location is not one this server may read.",
         )
     raise HTTPException(status_code=404, detail="Phylogeny file not found")
+
+
+# POST /structure/resolve (molecule_3d): lives in its own module, see its docstring.
+from depictio.api.v1.endpoints.advanced_viz_endpoints.structure_resolver import (  # noqa: E402
+    resolve_structure,
+)
+
+advanced_viz_endpoint_router.add_api_route(
+    "/structure/resolve", resolve_structure, methods=["POST"]
+)

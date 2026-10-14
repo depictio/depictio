@@ -279,3 +279,80 @@ def test_retired_kinds_resolve_to_a_live_kind():
         assert cfg.viz_kind == survivor
         for key, value in overrides.items():
             assert getattr(cfg, key) == value
+
+
+# ---------------------------------------------------------------------------
+# What the builder's protein settings panels write
+# ---------------------------------------------------------------------------
+#
+# The panels write config keys straight into the builder's overrides. Unsetting
+# a key the saved config holds writes null (`patchOverrides` in configBlob.ts),
+# and a field that takes no null then has the whole save refused. A panel that
+# clears such a field writes its default instead; these tests keep it that way.
+
+BUILDER = REPO / "depictio" / "viewer" / "src" / "builder" / "advanced_viz"
+PROTEIN_PANELS = [
+    BUILDER / "ProteinBindingSettings.tsx",
+    *sorted((BUILDER / "protein").glob("*.tsx")),
+]
+PROTEIN_KINDS = (
+    "molecule_3d",
+    "msa",
+    "sequence_track",
+    "hmm_logo",
+    "secondary_structure",
+    "domain_architecture",
+    "pae_matrix",
+    "ramachandran",
+)
+
+
+def _accepts_null(model: type, key: str) -> bool:
+    return type(None) in get_args(model.model_fields[key].annotation)
+
+
+def test_settings_panels_only_unset_nullable_fields():
+    """A key a panel can write as null or unset takes null on every protein model."""
+    writes = {
+        key
+        for path in PROTEIN_PANELS
+        for key in re.findall(r"onChange\(\{\s*(\w+):[^}]*?\b(?:undefined|null)\b", _code(path))
+    }
+    assert writes, "no `onChange({ key: ... })` write found; has the panels' shape changed?"
+    refused = []
+    for key in sorted(writes):
+        declaring = [KIND_MODELS[k] for k in PROTEIN_KINDS if key in KIND_MODELS[k].model_fields]
+        assert declaring, f"a settings panel writes {key!r}, which no protein model declares"
+        refused += [f"{m.__name__}.{key}" for m in declaring if not _accepts_null(m, key)]
+    assert not refused, (
+        f"settings panels can write null to fields that refuse it: {refused}. "
+        f"Write the field's default when the input is cleared."
+    )
+
+
+def test_panel_columns_are_fields_of_their_kind():
+    """configBlob.ts PANEL_COLUMNS names real fields, and a role among them takes null.
+
+    The builder's role table writes a panel-owned column's row through the
+    panel's overrides, and clearing that row unbinds it with an explicit null.
+    """
+    from depictio.models.components.advanced_viz.schemas import (
+        _OPTIONAL_ROLES,
+        CANONICAL_SCHEMAS,
+    )
+
+    src = (BUILDER / "configBlob.ts").read_text()
+    table = re.search(r"const PANEL_COLUMNS[^=]*=\s*new Map\(\[(.*?)\n\]\);", src, re.DOTALL)
+    assert table, "could not find the PANEL_COLUMNS table in configBlob.ts"
+    entries = re.findall(r"\[\s*'(\w+)',\s*new Set\(\[(.*?)\]\)", table.group(1), re.DOTALL)
+    assert entries, "PANEL_COLUMNS parsed empty"
+    for kind, body in entries:
+        model = KIND_MODELS[kind]
+        roles = set(CANONICAL_SCHEMAS.get(kind, {})) | set(_OPTIONAL_ROLES.get(kind, {}))
+        for key in re.findall(r"'(\w+)'", body):
+            assert key in model.model_fields, f"PANEL_COLUMNS: {kind} has no field {key!r}"
+            if key.removesuffix("_col") in roles:
+                assert _accepts_null(model, key), (
+                    f"PANEL_COLUMNS: {model.__name__}.{key} is a role the role table can "
+                    f"clear to null, but the field refuses null"
+                )

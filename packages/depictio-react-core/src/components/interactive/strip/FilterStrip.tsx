@@ -23,6 +23,7 @@ import { Icon } from '@iconify/react';
 import type { FilterSectionSpec, InteractiveFilter, StoredMetadata } from '../../../api';
 import { isFilterActive } from '../../../activeFilters';
 import SectionIcon from '../../SectionIcon';
+import { isAlwaysSelected } from '../alwaysSelected';
 import { interactiveAccent, interactiveIcon, interactiveTitle } from '../frame';
 import {
   StripCategorical,
@@ -187,9 +188,12 @@ export const FilterStrip: React.FC<FilterStripProps> = ({
   // move the labels already on screen.
   const labels = useMemo(() => members.map((m) => stripLabel(m, interactiveTitle(m))), [members]);
   const badgeColumn = members.some(stripShowsIcon);
-  const activeCount = members.filter((m) => isMemberActive(filters, m)).length;
   const foldedActive = folded.filter((m) => isMemberActive(filters, m)).length;
-  const canReset = Boolean(onReset) && activeCount > 0;
+  // An `always_selected` filter is never off, so it alone does not offer a
+  // Reset that could not clear it.
+  const canReset =
+    Boolean(onReset) &&
+    members.some((m) => !isAlwaysSelected(m) && isMemberActive(filters, m));
 
   return (
     // A plain element rather than a Mantine Paper: the viewer strips every

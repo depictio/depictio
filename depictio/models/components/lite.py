@@ -794,6 +794,15 @@ class InteractiveLiteComponent(BaseLiteComponent):
         description="Initial ``[low, high]`` for RangeSlider (numbers) or DateRangePicker "
         "(ISO dates).",
     )
+    always_selected: bool = Field(
+        default=False,
+        description="Select only: the filter always holds exactly one value. Whenever it "
+        "is empty (first load, 'Reset all', cleared) or holds a value its list no longer "
+        "offers, it takes the first enabled option of its own list; it cannot be cleared, "
+        "and a new pick replaces the current one. For tab-local pickers feeding tiles that "
+        "show one unit at a time (one structure, one family): a data-derived default that "
+        "fits any run, where a ``default_value`` would name one run's unit.",
+    )
 
     # Styling (optional)
     title_size: str | None = Field(default=None, description="Title size")
@@ -859,6 +868,17 @@ class InteractiveLiteComponent(BaseLiteComponent):
             raise ValueError(
                 f"A list default_value is only valid for Select / MultiSelect, not {kind}."
             )
+        if self.always_selected:
+            if kind != "Select":
+                raise ValueError(
+                    f"always_selected is only valid for a Select, not {kind}: a MultiSelect "
+                    "holds any number of values and other controls have no option list."
+                )
+            if isinstance(self.default_value, list) and len(self.default_value) > 1:
+                raise ValueError(
+                    "always_selected holds exactly one value, so its default_value names "
+                    f"one, not {len(self.default_value)}."
+                )
         return self
 
     def default_state_payload(self) -> dict[str, Any] | None:

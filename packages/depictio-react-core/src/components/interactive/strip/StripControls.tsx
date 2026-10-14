@@ -23,6 +23,7 @@ import { useBrandScopeAttributes } from '../../branding/BrandScope';
 import { useCategoryDotColors } from '../../../hooks/useCategoryColors';
 import {
   MAX_STRIP_CHIPS,
+  type ChipSelectionMode,
   categoricalDisplay,
   chipFilterValue,
   chipSelectionMode,
@@ -31,6 +32,7 @@ import {
   selectedValues,
   toggleChip,
 } from '../categoricalOptions';
+import { isAlwaysSelected } from '../alwaysSelected';
 import { coerceBool } from '../CheckboxSwitchRenderer';
 import DatePickerRenderer from '../DatePickerRenderer';
 import {
@@ -103,7 +105,9 @@ export const StripCategorical: React.FC<StripControlProps> = ({
   // while the funnel greys other values out. Null: no dots for this column.
   const dots = useCategoryDotColors(metadata.column_name, options, MAX_STRIP_CHIPS);
   const selected = selectedValues(filterValueOf(filters, metadata.index));
-  const mode = chipSelectionMode(type);
+  // `always_selected` (`one`): a click picks that value and never clears it,
+  // and the picker offers no Clear. The host makes the automatic pick.
+  const mode = chipSelectionMode(type, isAlwaysSelected(metadata));
   const emit = (next: string[]) =>
     onFilterChange?.(filterEvent(metadata, chipFilterValue(next, type)));
 
@@ -120,7 +124,7 @@ export const StripCategorical: React.FC<StripControlProps> = ({
         available={availableSet}
         dots={dots}
         selected={selected}
-        multiple={mode === 'multi'}
+        mode={mode}
         label={label}
         onChange={emit}
       />
@@ -172,7 +176,8 @@ const PICKER_SHOWN = 2;
  * column, over a count and a Clear: as coloured chips for a short column
  * (`chips`), as plain rows under a search field for a long one (`list`), a
  * tick on the picked values either way. A one-of-N filter closes on pick; a
- * multi one stays open.
+ * multi one stays open. An `always_selected` one (`one`) offers no Clear, and
+ * a click on its value keeps it.
  */
 const StripSelect: React.FC<{
   variant: 'chips' | 'list';
@@ -180,14 +185,14 @@ const StripSelect: React.FC<{
   available: Set<string> | null;
   dots: Map<string, string> | null;
   selected: string[];
-  multiple: boolean;
+  mode: ChipSelectionMode;
   label: string;
   onChange: (next: string[]) => void;
-}> = ({ variant, options, available, dots, selected, multiple, label, onChange }) => {
+}> = ({ variant, options, available, dots, selected, mode, label, onChange }) => {
   const scope = useBrandScopeAttributes();
   const [opened, setOpened] = useState(false);
   const [query, setQuery] = useState('');
-  const mode = multiple ? 'multi' : 'single';
+  const multiple = mode === 'multi';
   const q = query.trim().toLowerCase();
   const shown = q ? options.filter((v) => v.toLowerCase().includes(q)) : options;
   const dotStyle = (value: string) =>
@@ -326,7 +331,7 @@ const StripSelect: React.FC<{
           <span>
             {selected.length > 0 ? `${selected.length} of ${options.length}` : `All ${options.length}`}
           </span>
-          {selected.length > 0 && (
+          {selected.length > 0 && mode !== 'one' && (
             <button type="button" className="depictio-strip-picker__clear" onClick={() => onChange([])}>
               Clear
             </button>

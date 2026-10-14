@@ -1,0 +1,1524 @@
+version: 1
+# nf-core/proteinannotator 1.1.0, on the family rules of depictio/projects/nf-core/RULES.md
+# (ampliseq/2.18.0 is the reference implementation).
+#
+# Funnel: the input filter and what the databases say about each kept protein
+# (Data & QC) -> the domains of five databases (Domains) -> the predicted
+# secondary structure (Secondary structure) -> one protein folded in 3D with its
+# domains (Structure). The sample hub (`samples`) and the optional design table
+# (`metadata`) carry the persistent sample filters; their links reach every
+# sample-keyed collection.
+#
+# Routes: a run with --skip_s4pred prunes the S4PRED collections, and with them
+# the Secondary structure tab (every tile binds them), the secondary structure
+# row of the Findings and its highlight; the Structure tab keeps its sequence
+# and domains. A run with --skip_interproscan prunes the InterProScan matches:
+# the domain table keeps its hmmsearch domains and the step that names the
+# matches leaves the Pipeline card. A run without METADATA_FILE prunes the
+# design table, the group filters and the Samples card.
+main_dashboard:
+  title: nf-core/proteinannotator
+  subtitle: Protein sequences, filtered, searched for domains and given a predicted secondary structure
+  project_tag: Protein Annotation
+  main_tab_name: Overview
+  tab_icon: mdi:compass-outline
+  tab_icon_color: brandPrimary
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_panel_default: collapsed
+  content_width_default: compact
+  show_tab_header: false
+  # Declared once here, read by every tab of the family: figures, advanced viz
+  # and filter chips all colour a value the same way.
+  category_colors:
+    '{GROUP_COL}': auto
+    # The annotation databases, wherever a column names one: the domain table
+    # (database, source), the protein summary (top_domain_database).
+    database:
+      pfam: '#1c7ed6'
+      funfam: '#ae3ec9'
+      nmpfams: '#0ca678'
+      metagroot: '#f59f00'
+      interproscan: '#e64980'
+    source:
+      pfam: '#1c7ed6'
+      funfam: '#ae3ec9'
+      nmpfams: '#0ca678'
+      metagroot: '#f59f00'
+      interproscan: '#e64980'
+    top_domain_database:
+      pfam: '#1c7ed6'
+      funfam: '#ae3ec9'
+      nmpfams: '#0ca678'
+      metagroot: '#f59f00'
+      interproscan: '#e64980'
+    # The three states S4PRED calls, in the colours of the sequence track's glyphs.
+    category:
+      Helix: '#d6336c'
+      Strand: '#fab005'
+      Coil: '#868e96'
+    stage:
+      before: '#adb5bd'
+      after: '#1c7ed6'
+    annotation_status:
+      annotated: '#0ca678'
+      unannotated: '#868e96'
+  # Persistent: drawn in every tab's filter panel, picks kept across tabs. The
+  # sample hub is always there; the design filter disappears with the design.
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab
+    persistent: true
+    pin: top
+  grid_sections:
+  - name: Key figures
+    icon: mdi:counter
+    color: gray
+    appearance: plain
+    card_variant: headline
+    filter_bar: true
+    visible_filters: 2
+    description: The run in four numbers. The filters here narrow these four only.
+  - name: Findings
+    icon: mdi:star-outline
+    color: gray
+    appearance: plain
+    figure_style: minimal
+    filter_bar: true
+    visible_filters: 2
+    description: What the data says, each with the tab that shows it, then the figures behind it.
+  - name: How to read this dashboard
+    icon: mdi:information-outline
+    color: gray
+    appearance: plain
+    description: The tabs by group, each with the question it answers.
+  # Declared on the main tab, which no route removes.
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: gray
+    description: The design table and the per-sample summary every tab filters through
+    collapsed: true
+    persistent: true
+    pin: bottom
+    exclude_tabs:
+    - Overview
+  components:
+  # First in component order on purpose: the Guide demos the first categorical
+  # filter that shares a data collection with the first card (Samples, below).
+  - component_type: interactive
+    workflow_tag: proteinannotator
+    data_collection_tag: metadata
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Key figures
+    tag: pa-ov-kf-group
+    index: pa-ov-kf-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: proteinannotator
+    data_collection_tag: metadata
+    interactive_component_type: MultiSelect
+    column_name: '{METADATA_ID_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+      strip_label: Sample
+    section: Key figures
+    tag: pa-ov-kf-sample
+    index: pa-ov-kf-sample
+    title: Sample
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # The pipeline's wordmark, read from its repository; where it cannot load (no
+  # internet), the title is drawn as text.
+  - component_type: text
+    title: nf-core/proteinannotator
+    logo: https://raw.githubusercontent.com/nf-core/proteinannotator/master/docs/images/nf-core-proteinannotator_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/proteinannotator/master/docs/images/nf-core-proteinannotator_logo_dark.png
+    order: 1
+    body: >
+      Protein sequences filtered, searched against four HMM libraries and InterProScan, and given
+      a predicted secondary structure: which domains each protein carries and how much of it the
+      databases describe. [Run parameters](params:)
+    tag: pa-ov-hero
+    index: pa-ov-hero
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/proteinannotator filters protein FASTA files, annotates them with hmmsearch and InterProScan and predicts their secondary structure. This page sums up one run; each tab behind it answers one question.
+
+      The sample filters in the left panel apply to every tab. A bar above a section narrows that section only.
+    tag: pa-ov-about
+    index: pa-ov-about
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash.
+  - component_type: text
+    surface: card
+    values:
+      samples: {dc: samples, column: sample_id, aggregation: nunique, format: integer}
+      n_prot: {dc: proteinannotator_proteins, column: entity, aggregation: nunique, format: integer}
+    body: |
+      ### The run
+      - ![](icon:mdi:test-tube) **Samples** {{samples}}
+      - ![](icon:mdi:shape-outline) **Proteins** {{n_prot}}
+      - ![](icon:mdi:ruler) **Length** {{param:min_seq_length}} to {{param:max_seq_length}}
+      - ![](icon:mdi:check-decagram) **E-value** {{param:hmmsearch_evalue_cutoff}}
+      - ![](icon:mdi:puzzle-outline) **InterProScan** {{param:interproscan_applications}}
+    tag: pa-ov-run
+    index: pa-ov-run
+    layout: {x: 5, y: 1, w: 3, h: 3}
+  # The marks take the family's colour (the header's), not the theme's blue. A
+  # step citing a value goes with its collection when the run skipped the tool.
+  - component_type: text
+    surface: card
+    accent: green
+    values:
+      n_ipr: {dc: interproscan_matches, column: label, aggregation: count, format: integer}
+      n_res: {dc: s4pred_secondary_structure, column: position, aggregation: count, format: si}
+    body: |
+      ### Five steps from sequences to structure
+      Each step names its settings and the tab that shows its result.
+
+      ::: steps
+      1. ![](icon:mdi:filter-variant) **Filter** Length window and duplicates · [Settings](params:min_seq) · [Input filtering](tab:Input filtering)
+      2. ![](icon:mdi:database-search-outline) **Search** hmmsearch against four HMM libraries · [Settings](params:hmmsearch) · [Domains](tab:Domains)
+      3. ![](icon:mdi:puzzle-outline) **Match** InterProScan, {{n_ipr}} signature matches · [Settings](params:interproscan) · [Domains](tab:Domains)
+      4. ![](icon:mdi:waves) **Predict** S4PRED, {{n_res}} residues called · [Settings](params:s4pred) · [Secondary structure](tab:Secondary structure)
+      5. ![](icon:mdi:cube-outline) **Fold** One protein at a time, on demand · [Structure](tab:Structure)
+      :::
+    tag: pa-ov-steps
+    index: pa-ov-steps
+    layout: {x: 0, y: 4, w: 8, h: 3}
+  # Key figures: one card per stage of the funnel, each opening the tab that
+  # explains it. The icon colour is that tab's colour.
+  - component_type: card
+    workflow_tag: proteinannotator
+    data_collection_tag: metadata
+    aggregation: nunique
+    column_name: '{METADATA_ID_COL}'
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: '{GROUP_COL}'
+    display:
+      icon_name: mdi:test-tube
+      icon_color: orange
+      caption: in the design table, by {GROUP_COL_DISPLAY}
+      link: tab:Input filtering
+    section: Key figures
+    tag: pa-ov-kf-samples
+    index: pa-ov-kf-samples
+    title: Samples
+    description: Samples of the run, one input FASTA each. The bar splits them by {GROUP_COL_DISPLAY}.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  # The attrition reads left to right: sequences given, kept by the length and
+  # duplicate filter, then given a domain by at least one database.
+  - component_type: card
+    workflow_tag: proteinannotator
+    data_collection_tag: samples
+    use: proteinannotator/sample_summary
+    aggregation: sum
+    column_name: input_sequences
+    column_type: int64
+    secondary_layout: attrition
+    attrition_cols: [kept_sequences, annotated_proteins]
+    display:
+      icon_name: mdi:shape-outline
+      icon_color: blue
+      caption: given, kept by the filter, then annotated
+      link: tab:Input filtering
+    section: Key figures
+    tag: pa-ov-kf-proteins
+    index: pa-ov-kf-proteins
+    title: Proteins
+    description: Protein sequences in the input, those the length and duplicate filter kept, and those a database gave a domain.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_domains
+    use: proteinannotator/domains
+    aggregation: count
+    column_name: domain_id
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: database
+    top_n_count: 5
+    display:
+      icon_name: mdi:puzzle-outline
+      icon_color: violet
+      caption: domains, by database
+      link: tab:Domains
+    section: Key figures
+    tag: pa-ov-kf-domains
+    index: pa-ov-kf-domains
+    title: Domains
+    description: Domain spans from the four HMM libraries and InterProScan. The bar splits them by the database that reports them.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  # annotated_pct is a percentage per protein, so the median is of proteins, not
+  # of residues.
+  - component_type: card
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_proteins
+    use: proteinannotator/proteins
+    aggregation: median
+    column_name: annotated_pct
+    column_type: float64
+    filter_expr: col('length') > 0
+    secondary_layout: coverage
+    coverage_max: 100
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: green
+      caption: median share of a protein in a domain
+      link: tab:Input filtering
+      decimals: 1
+    section: Key figures
+    tag: pa-ov-kf-cover
+    index: pa-ov-kf-cover
+    title: Residues in a domain (%)
+    description: Median share of a protein's residues that at least one domain covers, over the proteins in view.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Findings filter bar: the group, then the database.
+  - component_type: interactive
+    workflow_tag: proteinannotator
+    data_collection_tag: metadata
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Findings
+    tag: pa-ov-findings-group
+    index: pa-ov-findings-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_domains
+    interactive_component_type: MultiSelect
+    column_name: database
+    column_type: object
+    display:
+      icon_name: mdi:database-outline
+      custom_color: grape
+      strip_label: Database
+    section: Findings
+    tag: pa-ov-findings-database
+    index: pa-ov-findings-database
+    title: Database
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # One result row per finding, each citing one data collection, so the import
+  # removes a row with its data. Every row states a measure and lets the value
+  # fill in.
+  - component_type: text
+    surface: card
+    values:
+      n_removed: {dc: samples, column: removed_sequences, aggregation: sum, format: integer}
+      cover: {dc: proteinannotator_proteins, column: annotated_pct, aggregation: median, format: 'decimals:0'}
+      n_dom: {dc: proteinannotator_domains, column: domain_id, aggregation: count, format: integer}
+      top_db: {dc: proteinannotator_domains, column: database, aggregation: top}
+      db_share: {dc: proteinannotator_domains, column: database, aggregation: top_share, format: percent}
+      top_state: {dc: s4pred_secondary_structure, column: category, aggregation: top}
+      st_share: {dc: s4pred_secondary_structure, column: category, aggregation: top_share, format: percent}
+      n_fold: {dc: proteinannotator_proteins, column: entity, aggregation: nunique,
+        filter_expr: "col('length') <= 400", format: integer}
+    body: |
+      - **{{cover}}%** of a protein's residues sit in a domain – median per protein, after the filter removed {{n_removed}} sequences [Input filtering](tab:Input filtering)
+      - **{{n_dom}}** domains, the most from {{top_db}} ({{db_share}}) – the database that reports the most [Domains](tab:Domains)
+      - **{{st_share}}** of residues are predicted {{top_state}} – the commonest S4PRED state [Secondary structure](tab:Secondary structure)
+      - **{{n_fold}}** proteins are short enough for ESMFold to fold from their sequence – 400 residues at most [Structure](tab:Structure)
+    section: Findings
+    tag: pa-ov-findings
+    index: pa-ov-findings
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # One highlight per analysis tab, in the order of the rows above. The tiles of
+  # a row share a stored height.
+  - component_type: highlight
+    section: Findings
+    source_tab: Input filtering
+    source_component: pa-in-av-length-cover
+    caption: One point per protein by length and share in a domain, coloured by the database of its best domain; low points are mostly outside known families.
+    hide_legend: true
+    tag: pa-ov-hl-cover
+    index: pa-ov-hl-cover
+    layout: {x: 0, y: 2, w: 4, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Domains
+    source_component: pa-dom-av-architecture
+    caption: Each protein's domains along its chain, coloured by database; a zigzag edge marks a partial match of the HMM.
+    hide_legend: true
+    tag: pa-ov-hl-domains
+    index: pa-ov-hl-domains
+    layout: {x: 4, y: 2, w: 4, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Secondary structure
+    source_component: pa-ss-fig-composition
+    caption: Residues per protein by predicted state, as shares of each chain.
+    hide_legend: true
+    tag: pa-ov-hl-states
+    index: pa-ov-hl-states
+    layout: {x: 0, y: 7, w: 4, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Structure
+    source_component: pa-st-av-sequence
+    caption: One protein along its chain, with its predicted state, the probability of that state and every domain span.
+    hide_legend: true
+    tag: pa-ov-hl-chain
+    index: pa-ov-hl-chain
+    layout: {x: 4, y: 7, w: 4, h: 5}
+  # Link-only tab tiles: each tile prints its tab's subtitle, the question the
+  # tab answers. A tab the run does not have is left out.
+  - component_type: text
+    body: |
+      ### Data & QC
+      - [Input filtering](tab:Input filtering)
+
+      ### Annotation
+      - [Domains](tab:Domains)
+      - [Secondary structure](tab:Secondary structure)
+      - [Structure](tab:Structure)
+    section: How to read this dashboard
+    tag: pa-ov-how-to-read
+    index: pa-ov-how-to-read
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Persistent sample filters, the group first.
+  - component_type: interactive
+    workflow_tag: proteinannotator
+    data_collection_tag: metadata
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+    section: Sample filters
+    group: Sample scope
+    tag: pa-filter-group
+    index: sample-filters-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: proteinannotator
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample_id
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+    section: Sample filters
+    group: Sample scope
+    tag: pa-filter-sample
+    index: sample-filters-sample
+    title: Sample
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  # Row selection feeds the Analysis panel.
+  - component_type: table
+    workflow_tag: proteinannotator
+    data_collection_tag: metadata
+    row_selection_enabled: true
+    row_selection_column: '{METADATA_ID_COL}'
+    section: Sample sheet
+    tag: pa-sheet-design
+    index: pa-sheet-design
+    title: Design table
+    description: One row per sample as the design file declares it. Ticking rows narrows every tab to those samples.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: proteinannotator
+    data_collection_tag: samples
+    use: proteinannotator/sample_summary
+    row_selection_enabled: true
+    row_selection_column: sample_id
+    section: Sample sheet
+    tag: pa-sheet-samples
+    index: pa-sheet-samples
+    title: Sample summary
+    description: One row per sample with what the filter kept and how much of it the databases annotated.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+
+tabs:
+# =========================================================================
+# Data & QC
+# =========================================================================
+- title: Input filtering
+  subtitle: Which sequences passed the filter, and how well are they annotated?
+  tab_group: Data & QC
+  tab_order: 1
+  tab_icon: mdi:filter-variant
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Protein scope
+    icon: mdi:tune
+    color: orange
+    description: Keep proteins inside a length or annotation band
+  grid_sections:
+  - name: Filter at a glance
+    icon: mdi:counter
+    color: orange
+    description: What the filter removed, and the proteins it kept
+  - name: Filter yield
+    icon: mdi:chart-bar
+    color: orange
+    description: Sequences before and after the length and duplicate filter, per sample
+  - name: Annotated share
+    icon: mdi:chart-scatter-plot
+    color: orange
+    description: Length against the share of the protein in a domain; pick a point to read it
+  - name: Protein table
+    icon: mdi:table
+    color: gray
+    description: Every protein with its annotation summary
+    collapsed: true
+  components:
+  - component_type: interactive
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_proteins
+    interactive_component_type: RangeSlider
+    column_name: length
+    column_type: int64
+    display:
+      icon_name: mdi:ruler
+      custom_color: cyan
+    placement: left
+    section: Protein scope
+    group: Proteins
+    tag: pa-in-filter-length
+    index: pa-in-filter-length
+    title: Protein length (residues)
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_proteins
+    interactive_component_type: RangeSlider
+    column_name: annotated_pct
+    column_type: float64
+    display:
+      icon_name: mdi:percent
+      custom_color: green
+    placement: left
+    section: Protein scope
+    group: Proteins
+    tag: pa-in-filter-cover
+    index: pa-in-filter-cover
+    title: Residues in a domain (%)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_proteins
+    interactive_component_type: MultiSelect
+    column_name: annotation_status
+    column_type: object
+    display:
+      icon_name: mdi:check-decagram
+      custom_color: lime
+    placement: left
+    section: Protein scope
+    group: Proteins
+    tag: pa-in-filter-status
+    index: pa-in-filter-status
+    title: Annotation status
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: text
+    order: 1
+    body: >
+      [SeqFu](https://github.com/telatin/seqfu2) counts the sequences before and after the length
+      window and the optional duplicate removal, so a sequence dropped here never reaches a search.
+      The scatter then shows how much of each kept protein the databases describe. Pick a point to
+      read that protein beside it.
+    tag: pa-in-intro
+    index: pa-in-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  # Four different readings of the filter and its proteins, each with its own
+  # icon and secondary.
+  - component_type: card
+    workflow_tag: proteinannotator
+    data_collection_tag: samples
+    use: proteinannotator/sample_summary
+    aggregation: sum
+    column_name: removed_sequences
+    column_type: int64
+    secondary_layout: threshold
+    threshold_value: 0.5
+    threshold_direction: max
+    display:
+      icon_name: mdi:filter-remove-outline
+      icon_color: orange
+      caption: samples the filter left whole
+    section: Filter at a glance
+    tag: pa-in-card-removed
+    index: pa-in-card-removed
+    title: Sequences removed
+    description: Sequences the length window or the duplicate removal dropped. The strip counts the samples that lost none.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_proteins
+    use: proteinannotator/proteins
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: length
+    column_type: int64
+    display:
+      icon_name: mdi:ruler
+      icon_color: blue
+      caption: median residues, with its spread
+      decimals: 0
+    section: Filter at a glance
+    tag: pa-in-card-length
+    index: pa-in-card-length
+    title: Protein length
+    description: Median length of the kept proteins. The box shows how it spreads.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinannotator
+    data_collection_tag: samples
+    use: proteinannotator/sample_summary
+    aggregation: sum
+    column_name: kept_residues
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: sample_id
+    top_n_count: 3
+    display:
+      icon_name: mdi:dna
+      icon_color: teal
+      caption: residues kept, by sample
+      format: si
+    section: Filter at a glance
+    tag: pa-in-card-residues
+    index: pa-in-card-residues
+    title: Residues kept
+    description: Residues in the kept sequences, every search ran on. The bars rank the samples.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_proteins
+    use: proteinannotator/proteins
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: domain_hits
+    column_type: int64
+    display:
+      icon_name: mdi:puzzle-outline
+      icon_color: grape
+      caption: median per protein, with its spread
+      decimals: 0
+    section: Filter at a glance
+    tag: pa-in-card-hits
+    index: pa-in-card-hits
+    title: Domains per protein
+    description: Median number of domains, from all databases, a kept protein carries.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: proteinannotator
+    data_collection_tag: seqfu_stats
+    use: seqfu/stats
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: sequences
+      color: stage
+      barmode: group
+      labels: {sample: Sample, sequences: Sequences, stage: ''}
+    section: Filter yield
+    tag: pa-in-fig-yield
+    index: pa-in-fig-yield
+    title: Sequences before and after the filter
+    description: Sequence count per sample in the input FASTA and in the filtered FASTA the searches ran on.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: advanced_viz
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_proteins
+    use: proteinannotator/length_vs_cover
+    config:
+      x_title: Length (residues)
+      y_title: Residues in a domain (%)
+      selection_enabled: true
+      selection_column: entity
+      legend_pos: bottom
+    section: Annotated share
+    tag: pa-in-av-length-cover
+    index: pa-in-av-length-cover
+    title: Length against annotated share
+    description: One point per protein, coloured by the database of its best domain. Low points are mostly outside any known family.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_proteins
+    use: proteinannotator/protein_record
+    config:
+      id_col: entity
+      title_col: entity
+      selection_source: any
+      linked_component: pa-in-av-length-cover
+      sections:
+        Protein: [entity, sample, description, length, annotation_status]
+        Domains: [domain_hits, databases_hit, top_domain, top_domain_database, top_domain_evalue, annotated_pct]
+        Per database: [pfam_hits, funfam_hits, nmpfams_hits, metagroot_hits, interproscan_hits]
+        Secondary structure: [helix_pct, strand_pct, coil_pct]
+    section: Annotated share
+    tag: pa-in-av-record
+    index: pa-in-av-record
+    title: Protein record
+    description: The picked protein, with its best domain and its hits per database.
+    layout: {x: 5, y: 0, w: 3, h: 6}
+  - component_type: table
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_proteins
+    use: proteinannotator/proteins
+    row_selection_enabled: true
+    row_selection_column: entity
+    section: Protein table
+    tag: pa-in-table-proteins
+    index: pa-in-table-proteins
+    title: Proteins
+    description: One row per protein with its domain hits per database, annotated share and secondary structure.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+
+# =========================================================================
+# Annotation
+# =========================================================================
+- title: Domains
+  subtitle: Which domains does each protein carry, and do the databases agree?
+  tab_group: Annotation
+  tab_order: 2
+  tab_icon: mdi:puzzle-outline
+  tab_icon_color: violet
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Domain scope
+    icon: mdi:tune
+    color: violet
+    description: Keep domains from chosen databases, families or significance
+  grid_sections:
+  - name: Domains at a glance
+    icon: mdi:counter
+    color: violet
+    description: Domains, families, spans and databases per protein
+  - name: Domain architecture
+    icon: mdi:chart-timeline-variant
+    color: violet
+    description: Each protein's domains along its chain; click one to select its span and family
+  - name: Database agreement
+    icon: mdi:set-merge
+    color: violet
+    description: Which databases annotate which proteins, and how much of each
+  - name: Domain calls
+    icon: mdi:chart-scatter-plot
+    color: violet
+    description: Significance against span for every domain
+  - name: Domain detail
+    icon: mdi:table
+    color: gray
+    description: Every domain with its span, E-value and database
+    collapsed: true
+  - name: hmmsearch hits
+    icon: mdi:database-outline
+    color: gray
+    description: Every domain hmmsearch reported, before the inclusion threshold
+    collapsed: true
+  components:
+  - component_type: interactive
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_domains
+    interactive_component_type: MultiSelect
+    column_name: database
+    column_type: object
+    display:
+      icon_name: mdi:database-outline
+      custom_color: grape
+    placement: left
+    section: Domain scope
+    group: Domains
+    tag: pa-dom-filter-database
+    index: pa-dom-filter-database
+    title: Database
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_domains
+    interactive_component_type: MultiSelect
+    column_name: label
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: pink
+    placement: left
+    section: Domain scope
+    group: Domains
+    tag: pa-dom-filter-family
+    index: pa-dom-filter-family
+    title: Family or signature
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_domains
+    interactive_component_type: RangeSlider
+    column_name: neg_log10_evalue
+    column_type: float64
+    display:
+      icon_name: mdi:check-decagram
+      custom_color: orange
+    placement: left
+    section: Domain scope
+    group: Domains
+    tag: pa-dom-filter-evalue
+    index: pa-dom-filter-evalue
+    title: Significance (-log10 E-value)
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_domains
+    interactive_component_type: RangeSlider
+    column_name: span
+    column_type: int64
+    display:
+      icon_name: mdi:ruler
+      custom_color: blue
+    placement: left
+    section: Domain scope
+    group: Domains
+    tag: pa-dom-filter-span
+    index: pa-dom-filter-span
+    title: Domain span (residues)
+    layout: {x: 0, y: 9, w: 1, h: 3}
+  - component_type: text
+    order: 1
+    body: >
+      [hmmsearch](http://hmmer.org) reports domains against four HMM libraries and
+      [InterProScan](https://www.ebi.ac.uk/interpro/) adds its member databases; an hmmsearch domain
+      counts when it passes HMMER's inclusion E-value of 0.01. Click a domain on the architecture to
+      select its span and family across the tab, or switch its view to group the proteins by
+      architecture. A protein that only one database reaches rests on a single source.
+    tag: pa-dom-intro
+    index: pa-dom-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: card
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_domains
+    use: proteinannotator/domains
+    aggregation: count
+    column_name: domain_id
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: database
+    top_n_count: 5
+    display:
+      icon_name: mdi:puzzle-outline
+      icon_color: violet
+      caption: domains, by database
+    section: Domains at a glance
+    tag: pa-dom-card-count
+    index: pa-dom-card-count
+    title: Domains
+    description: Domain spans from every database in view. The bars rank the databases.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_domains
+    use: proteinannotator/domains
+    aggregation: nunique
+    column_name: label
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: database
+    display:
+      icon_name: mdi:family-tree
+      icon_color: pink
+      caption: families, by database
+    section: Domains at a glance
+    tag: pa-dom-card-families
+    index: pa-dom-card-families
+    title: Distinct families
+    description: Different families or signatures found. The ring splits them by database.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_domains
+    use: proteinannotator/domains
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: span
+    column_type: int64
+    display:
+      icon_name: mdi:ruler
+      icon_color: blue
+      caption: median residues, with its spread
+      decimals: 0
+    section: Domains at a glance
+    tag: pa-dom-card-span
+    index: pa-dom-card-span
+    title: Domain span
+    description: Median length of a domain on its protein. The box shows how it spreads.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_proteins
+    use: proteinannotator/proteins
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: databases_hit
+    column_type: int64
+    display:
+      icon_name: mdi:database-outline
+      icon_color: grape
+      caption: median per protein, with its spread
+      decimals: 0
+    section: Domains at a glance
+    tag: pa-dom-card-databases
+    index: pa-dom-card-databases
+    title: Databases per protein
+    description: How many databases give a protein at least one domain.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # The architecture reads the unified domain table: the E-value column is
+  # `evalue` (hmmsearch independent E-value, or the InterProScan match value),
+  # and the HMM span columns are null for InterProScan rows, which then draw as
+  # complete matches. A click selects the protein and the span on the residue
+  # tables and the family on the tiles of this table.
+  - component_type: advanced_viz
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_domains
+    use: proteinannotator/domain_architecture
+    config:
+      entity_col: entity
+      start_col: start
+      end_col: end
+      label_col: label
+      protein_length_col: protein_length
+      hmm_from_col: hmm_from
+      hmm_to_col: hmm_to
+      hmm_length_col: hmm_length
+      hmm_coverage_col: hmm_coverage
+      evalue_col: evalue
+      source_col: database
+      description_col: description
+      accession_col: accession
+      view: proteins
+      scale: shared
+      color_by: source
+      partial_coverage: 0.9
+      position_col_for_selection: position
+      label_selection: true
+      selection_enabled: true
+      follow_selection: true
+    section: Domain architecture
+    tag: pa-dom-av-architecture
+    index: pa-dom-av-architecture
+    title: Domain architecture of each protein
+    description: One backbone per protein on a shared scale, its domains coloured by database. A zigzag edge marks a partial match of the HMM. The View control groups proteins by architecture.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_domains
+    use: proteinannotator/domain_record
+    config:
+      id_col: domain_id
+      title_col: label
+      selection_source: any
+      linked_component: pa-dom-av-architecture
+      sections:
+        Domain: [label, accession, description, database, source]
+        Location: [entity, sample, start, end, span, protein_length]
+        Evidence: [evalue, score, hmm_coverage, hmm_from, hmm_to, hmm_length]
+      link_templates:
+        accession: "https://www.ebi.ac.uk/interpro/search/text/{value}"
+    section: Domain architecture
+    tag: pa-dom-av-domain-record
+    index: pa-dom-av-domain-record
+    title: Domain record
+    description: The domain picked on the architecture, with a link to its family entry.
+    layout: {x: 5, y: 0, w: 3, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_database_coverage
+    use: proteinannotator/coverage_heatmap
+    config:
+      cluster_rows: true
+      cluster_cols: false
+      cluster_method: ward
+      normalize: none
+      colorscale: Blues
+    section: Database agreement
+    tag: pa-dom-av-coverage
+    index: pa-dom-av-coverage
+    title: Share of each protein each database annotates
+    description: One row per protein, one column per database, the colour the fraction of residues its domains cover.
+    layout: {x: 0, y: 0, w: 4, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_database_sets
+    use: proteinannotator/database_upset
+    config:
+      sort_by: cardinality
+      show_set_sizes: true
+      show_values: true
+    section: Database agreement
+    tag: pa-dom-av-upset
+    index: pa-dom-av-upset
+    title: Databases that agree on a protein
+    description: Proteins per combination of databases annotating them.
+    layout: {x: 4, y: 0, w: 4, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_domains
+    use: proteinannotator/domain_significance
+    config:
+      x_title: Domain span (residues)
+      y_title: Significance (-log10 E-value)
+      selection_enabled: true
+      selection_column: domain_id
+      legend_pos: bottom
+    section: Domain calls
+    tag: pa-dom-av-significance
+    index: pa-dom-av-significance
+    title: Significance against span
+    description: One point per domain, coloured by database. Long confident spans are whole-protein families, short confident ones motifs, and low points borderline calls.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_domains
+    use: proteinannotator/domains
+    row_selection_enabled: true
+    row_selection_column: domain_id
+    section: Domain detail
+    tag: pa-dom-table-domains
+    index: pa-dom-table-domains
+    title: Domains
+    description: One row per domain with its protein, database, span, HMM span and E-value.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: proteinannotator
+    data_collection_tag: hmmer_hmmsearch_domtbl
+    use: hmmer/domain_score_scatter
+    config:
+      x_title: HMM coverage
+      y_title: Domain bit score
+      legend_pos: bottom
+    section: hmmsearch hits
+    tag: pa-dom-av-hmmer
+    index: pa-dom-av-hmmer
+    title: Bit score against HMM coverage
+    description: Every reported domain, below the inclusion threshold too. Hits that cover little of the HMM with a low score are fragments.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    workflow_tag: proteinannotator
+    data_collection_tag: hmmer_hmmsearch_domtbl
+    use: hmmer/hmmsearch_domtbl
+    section: hmmsearch hits
+    tag: pa-dom-table-hmmer
+    index: pa-dom-table-hmmer
+    title: hmmsearch domain table
+    description: Every domain line hmmsearch wrote, with its conditional and independent E-values and HMM, alignment and envelope spans.
+    layout: {x: 0, y: 5, w: 8, h: 6}
+
+- title: Secondary structure
+  subtitle: Which stretches of each protein fold as helix, strand or coil?
+  tab_group: Annotation
+  tab_order: 3
+  tab_icon: mdi:waves
+  tab_icon_color: cyan
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Protein pick
+    icon: mdi:tune
+    color: cyan
+    description: Choose the protein and the residue window the tab shows
+  grid_sections:
+  - name: Prediction at a glance
+    icon: mdi:counter
+    color: cyan
+    description: How many residues S4PRED called, and how sure it is
+  - name: Predicted structure
+    icon: mdi:waves
+    color: cyan
+    description: The ribbon of one protein over the probability behind each call
+  - name: Along the chain
+    icon: mdi:dna
+    color: cyan
+    description: The sequence with its predicted state and the domains that cover it
+  - name: Composition
+    icon: mdi:chart-bar
+    color: cyan
+    description: Helix, strand and coil as shares of each protein
+  - name: Residue table
+    icon: mdi:table
+    color: gray
+    description: Every residue with its state and the three state probabilities
+    collapsed: true
+  components:
+  - component_type: interactive
+    workflow_tag: proteinannotator
+    data_collection_tag: s4pred_secondary_structure
+    interactive_component_type: Select
+    column_name: entity
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: indigo
+    placement: left
+    section: Protein pick
+    group: Protein
+    tag: pa-ss-filter-protein
+    index: pa-ss-filter-protein
+    title: Protein
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: proteinannotator
+    data_collection_tag: s4pred_secondary_structure
+    interactive_component_type: RangeSlider
+    column_name: position
+    column_type: int64
+    display:
+      icon_name: mdi:ruler
+      custom_color: yellow
+    placement: left
+    section: Protein pick
+    group: Protein
+    tag: pa-ss-filter-position
+    index: pa-ss-filter-position
+    title: Residue window
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: text
+    order: 1
+    data_collection_tag: s4pred_secondary_structure
+    workflow_tag: proteinannotator
+    body: >
+      [S4PRED](https://github.com/psipred/s4pred) calls every residue helix, strand or coil and
+      keeps the probability of each state. The ribbon fades where the call is unsure; brush a stretch
+      to select it on the sequence track below, or click a segment to pick its range. The track also
+      draws the domains, so a helix or strand reads against the family that covers it.
+    tag: pa-ss-intro
+    index: pa-ss-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: card
+    workflow_tag: proteinannotator
+    data_collection_tag: s4pred_secondary_structure
+    use: s4pred/secondary_structure
+    aggregation: count
+    column_name: position
+    column_type: int64
+    secondary_layout: composition
+    breakdown_col: category
+    top_n_count: 3
+    display:
+      icon_name: mdi:dna
+      icon_color: cyan
+      caption: residues, by predicted state
+      format: si
+    section: Prediction at a glance
+    tag: pa-ss-card-residues
+    index: pa-ss-card-residues
+    title: Residues called
+    description: Residues S4PRED predicted a state for. The bar splits them by helix, strand and coil.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinannotator
+    data_collection_tag: s4pred_secondary_structure
+    use: s4pred/secondary_structure
+    aggregation: median
+    column_name: value
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 0.7
+    threshold_warn: 0.5
+    threshold_direction: min
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: teal
+      caption: residues called at 0.7 or more, 0.5 to 0.7 and below
+      decimals: 2
+    section: Prediction at a glance
+    tag: pa-ss-card-confidence
+    index: pa-ss-card-confidence
+    title: State probability
+    description: Median probability of the state called for a residue. The strip counts residues by confidence band.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinannotator
+    data_collection_tag: s4pred_secondary_structure
+    use: s4pred/secondary_structure
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: p_helix
+    column_type: float64
+    filter_expr: col('category') == 'Helix'
+    display:
+      icon_name: mdi:waves
+      icon_color: pink
+      caption: median per helix residue, with its spread
+      decimals: 2
+    section: Prediction at a glance
+    tag: pa-ss-card-helix
+    index: pa-ss-card-helix
+    title: Helix probability
+    description: How sure S4PRED is about the residues it calls helix.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinannotator
+    data_collection_tag: s4pred_secondary_structure
+    use: s4pred/secondary_structure
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: p_strand
+    column_type: float64
+    filter_expr: col('category') == 'Strand'
+    display:
+      icon_name: mdi:chart-bar
+      icon_color: yellow
+      caption: median per strand residue, with its spread
+      decimals: 2
+    section: Prediction at a glance
+    tag: pa-ss-card-strand
+    index: pa-ss-card-strand
+    title: Strand probability
+    description: How sure S4PRED is about the residues it calls strand, the state it finds hardest.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # The tile shows one protein: the one the Protein filter names, else the one
+  # picked in its own control, else the first. It reads the same columns as the
+  # sequence track below, so a brush or a segment pick moves the track.
+  - component_type: advanced_viz
+    workflow_tag: proteinannotator
+    data_collection_tag: s4pred_secondary_structure
+    use: s4pred/ss_ribbon
+    config:
+      entity_col: entity
+      position_col: position
+      residue_col: residue
+      state_col: ss_code
+      p_helix_col: p_helix
+      p_strand_col: p_strand
+      p_coil_col: p_coil
+      confidence_col: value
+      show_probabilities: true
+      show_agreement: false
+      show_segments: true
+      show_composition: true
+      selection_enabled: true
+      follow_selection: true
+    section: Predicted structure
+    tag: pa-ss-av-ribbon
+    index: pa-ss-av-ribbon
+    title: Secondary structure of the protein
+    description: Helices, strands and coil along the chain, shaded by confidence, over the probability of each state. Brush a stretch to select it.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: proteinannotator
+    data_collection_tag: s4pred_secondary_structure
+    use: s4pred/ss_sequence_track
+    config:
+      entity_col: entity
+      position_col: position
+      residue_col: residue
+      category_col: category
+      value_col: value
+      value_label: State probability
+      domains_dc_tag: proteinannotator_domains
+      domain_start_col: start
+      domain_end_col: end
+      domain_label_col: label
+      selection_enabled: true
+      follow_selection: true
+    section: Along the chain
+    tag: pa-ss-av-track
+    index: pa-ss-av-track
+    title: Sequence, predicted state and domains
+    description: The same protein along its chain, with the predicted state, its probability and every domain span.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: figure
+    workflow_tag: proteinannotator
+    data_collection_tag: s4pred_secondary_structure
+    use: s4pred/secondary_structure
+    visu_type: histogram
+    dict_kwargs:
+      y: entity
+      color: category
+      barnorm: percent
+      labels: {entity: Protein, category: ''}
+    section: Composition
+    tag: pa-ss-fig-composition
+    index: pa-ss-fig-composition
+    title: Predicted states per protein
+    description: Share of each protein's residues called helix, strand or coil.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: table
+    workflow_tag: proteinannotator
+    data_collection_tag: s4pred_secondary_structure
+    use: s4pred/secondary_structure
+    section: Residue table
+    tag: pa-ss-table-residues
+    index: pa-ss-table-residues
+    title: Residues
+    description: One row per residue with its called state and the three state probabilities.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+
+- title: Structure
+  subtitle: Where do the domains sit on one protein's 3D structure?
+  tab_group: Annotation
+  tab_order: 4
+  tab_icon: mdi:cube-outline
+  tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Protein pick
+    icon: mdi:tune
+    color: indigo
+    description: Choose the protein and the residue window the structure and the sequence show
+  grid_sections:
+  - name: Structure at a glance
+    icon: mdi:counter
+    color: indigo
+    description: The proteins in view, their residues and how deeply domains overlap
+  - name: Structure and sequence
+    icon: mdi:dna
+    color: indigo
+    description: Pick a protein, then read its structure and its sequence lanes, linked residue by residue
+  - name: Residue table
+    icon: mdi:table
+    color: gray
+    description: Every residue with its state, confidence and covering domain
+    collapsed: true
+  components:
+  - component_type: interactive
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_proteins
+    interactive_component_type: Select
+    column_name: entity
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: indigo
+    placement: left
+    section: Protein pick
+    group: Protein
+    tag: pa-st-filter-protein
+    index: pa-st-filter-protein
+    title: Protein
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_proteins
+    interactive_component_type: RangeSlider
+    column_name: length
+    column_type: int64
+    # The structure is folded on demand by ESMFold, which takes sequences of up
+    # to 400 residues: the tab opens on the proteins it can fold.
+    default_range: [1, 400]
+    display:
+      icon_name: mdi:ruler
+      custom_color: cyan
+    placement: left
+    section: Protein pick
+    group: Protein
+    tag: pa-st-filter-length
+    index: pa-st-filter-length
+    title: Protein length (residues)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_residues
+    interactive_component_type: RangeSlider
+    column_name: position
+    column_type: int64
+    display:
+      icon_name: mdi:format-list-numbered
+      custom_color: yellow
+    placement: left
+    section: Protein pick
+    group: Protein
+    tag: pa-st-filter-position
+    index: pa-st-filter-position
+    title: Residue window
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: text
+    order: 1
+    body: >
+      ESMFold folds the picked protein from its sequence, for proteins of up to 400 residues, so
+      the length filter opens on that range. Folding needs the server's structure resolver, which
+      an administrator turns on with `DEPICTIO_STRUCTURE_RESOLVER_ENABLED`; when it is off the tile
+      says so and the sequence track keeps working. Click a protein on the scatter, then a residue
+      in 3D or on the sequence to select it in all three.
+    tag: pa-st-intro
+    index: pa-st-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: card
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_proteins
+    use: proteinannotator/proteins
+    aggregation: count
+    column_name: entity
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: top_domain_database
+    top_n_count: 5
+    display:
+      icon_name: mdi:shape-outline
+      icon_color: indigo
+      caption: proteins, by database of the best domain
+    section: Structure at a glance
+    tag: pa-st-card-proteins
+    index: pa-st-card-proteins
+    title: Proteins in view
+    description: Proteins inside the length window. The bars rank the databases their best domain comes from.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_residues
+    use: proteinannotator/residues
+    aggregation: count
+    column_name: domain
+    column_type: object
+    secondary_layout: completeness
+    display:
+      icon_name: mdi:dna
+      icon_color: teal
+      caption: residues with a domain, of all residues
+      format: si
+    section: Structure at a glance
+    tag: pa-st-card-covered
+    index: pa-st-card-covered
+    title: Residues in a domain
+    description: Residues at least one domain covers. The strip shows the share left outside any domain.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_residues
+    use: proteinannotator/residues
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: domains_here
+    column_type: int64
+    display:
+      icon_name: mdi:layers-outline
+      icon_color: grape
+      caption: median per residue, with its spread
+      decimals: 0
+    section: Structure at a glance
+    tag: pa-st-card-depth
+    index: pa-st-card-depth
+    title: Domains per residue
+    description: How many domains, from all databases, overlap a residue.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_proteins
+    use: proteinannotator/proteins
+    aggregation: max
+    column_name: length
+    column_type: int64
+    secondary_layout: coverage
+    coverage_max: 400
+    display:
+      icon_name: mdi:ruler
+      icon_color: orange
+      caption: longest protein, of the 400 residues ESMFold takes
+    section: Structure at a glance
+    tag: pa-st-card-longest
+    index: pa-st-card-longest
+    title: Longest protein
+    description: Length of the longest protein in view, against the longest sequence ESMFold folds.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_proteins
+    use: proteinannotator/length_vs_cover
+    config:
+      x_title: Length (residues)
+      y_title: Residues in a domain (%)
+      selection_enabled: true
+      selection_column: entity
+      legend_pos: bottom
+    section: Structure and sequence
+    tag: pa-st-av-length-cover
+    index: pa-st-av-length-cover
+    title: Proteins to fold
+    description: One point per protein within the length window, coloured by the database of its best domain. Click one to show it beside.
+    layout: {x: 0, y: 0, w: 4, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_residues
+    use: proteinannotator/predicted_structure
+    config:
+      structure_source: resolve
+      sequence_col: sequence
+      entity_col: entity
+      position_col: position
+      category_col: domain
+      color_mode: category
+      representations: [cartoon]
+      show_variants: false
+      highlight_site: true
+      layout: structure_text
+      selection_enabled: true
+      follow_selection: true
+    section: Structure and sequence
+    tag: pa-st-av-structure
+    index: pa-st-av-structure
+    title: Predicted structure
+    description: The picked protein folded from its sequence over its written sequence, one colour per domain; residues outside any domain stay grey and the picked residue turns red.
+    layout: {x: 4, y: 0, w: 4, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_residues
+    use: proteinannotator/residue_sequence_track
+    config:
+      entity_col: entity
+      position_col: position
+      residue_col: residue
+      category_col: category
+      value_col: value
+      value_label: State probability
+      domains_dc_tag: proteinannotator_domains
+      domain_start_col: start
+      domain_end_col: end
+      domain_label_col: label
+      selection_enabled: true
+      follow_selection: true
+    section: Structure and sequence
+    tag: pa-st-av-sequence
+    index: pa-st-av-sequence
+    title: Sequence, secondary structure and domains
+    description: The same protein along its chain, with the predicted state, its probability and every domain span.
+    layout: {x: 0, y: 5, w: 8, h: 5}
+  - component_type: table
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_residues
+    use: proteinannotator/residues
+    section: Residue table
+    tag: pa-st-table-residues
+    index: pa-st-table-residues
+    title: Residues
+    description: One row per residue with its state, probability, best covering domain and the number of domains overlapping it.
+    layout: {x: 0, y: 0, w: 8, h: 6}

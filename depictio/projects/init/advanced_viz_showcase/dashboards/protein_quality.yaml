@@ -1,0 +1,242 @@
+# Structure confidence: one tab of the advanced-visualisation showcase.
+#
+# Regenerate the seed after editing:
+#   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
+#
+# The component `index` values are pinned rather than auto-generated: they are
+# what keeps a regenerated seed byte-identical to the shipped one.
+#
+# How far to trust a predicted structure, on the demo protein of the protein
+# structure tab: the predicted aligned error, the structure with its written
+# sequence, two secondary-structure calls compared, the backbone torsions and the
+# sequence track. The residue tiles read the residue table of that tab; the
+# secondary-structure table is a separate collection that shares only `entity`
+# and `position` with it, which is what carries a residue pick from one tile to
+# the others. Companion collections are bound by id, as the seed generator
+# resolves no `*_dc_tag`.
+#
+# Compact tiles (w of 4 or less) keep their controls behind the settings icon:
+# `controls_placement: popover` is set on the component AND in its config, as a
+# docked or header strip would take the height of a canvas that has little.
+title: 'Structure confidence'
+subtitle: 'The predicted aligned error, two secondary-structure calls and the backbone torsions of one model, linked residue by residue.'
+icon: 'mdi:check-decagram'
+icon_color: 'orange'
+icon_variant: filled
+workflow_system: python
+dashboard_id: '646b0f3c1e4a2d7f8e5b8de5'
+is_main_tab: false
+tab_order: 49
+parent_dashboard_tag: volcano
+tab_icon: 'mdi:check-decagram'
+tab_icon_color: 'orange'
+
+# Left-panel filter section. Deliberately not `persistent`: the tabs of this
+# family read different collections whose column names collide while their
+# value domains do not overlap, so a control fanned out from one tab would show
+# up everywhere and bite on nothing.
+filter_sections:
+  - name: 'Residue scope'
+    icon: 'mdi:filter-variant'
+    color: 'orange'
+    description: 'Narrows the residue range every tile shows'
+
+grid_sections:
+  - name: 'Confidence of the model'
+    icon: 'mdi:check-decagram'
+    color: 'orange'
+    description: 'Predicted aligned error, secondary structure and backbone torsions of one model'
+
+components:
+  - tag: text-protein-quality
+    index: qual-text
+    component_type: text
+    title: 'Structure confidence'
+    order: 3
+    alignment: left
+    vertical_alignment: top
+    section: 'Confidence of the model'
+    body: >
+      How far to trust the predicted structure of the demo protein. The error matrix (synthetic: low
+      inside each confident segment, high between segments and around the low-confidence ends) beside
+      the structure and its written sequence; a synthetic S4PRED-style prediction against the call from
+      the structure's own geometry, with two deliberate disagreements; the sequence track; then the
+      backbone torsions computed in the browser beside the confidence profile. Brush the matrix
+      diagonal, the ribbon or the track, or click a point or a letter, to select that range in every
+      tile; hover marks it.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
+
+  - tag: viz-quality-pae
+    index: 'qual-pae'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'protein_residues_demo'
+    title: 'Predicted aligned error'
+    description: 'Expected position error of the scored residue (x) when the model is aligned on the aligned residue (y), with the pLDDT of each residue along the axes. Synthetic. Brush a square on the diagonal to select that stretch of residues.'
+    section: 'Confidence of the model'
+    viz_kind: 'pae_matrix'
+    controls_placement: popover
+    config:
+      viz_kind: "pae_matrix"
+      controls_placement: popover
+      entity_col: "entity"
+      position_col: "position"
+      value_col: "plddt"
+      pae_wf_id: "646b0f3c1e4a2d7f8e5b8d01"
+      pae_dc_id: "646b0f3c1e4a2d7f8e5b8de3"
+      brush: "diagonal"
+      show_plddt: true
+      selection_enabled: true
+      follow_selection: true
+    layout: { x: 0, y: 2, w: 4, h: 7 }
+
+  - tag: viz-quality-structure
+    index: 'qual-3d'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'protein_residues_demo'
+    title: 'Structure and its sequence'
+    description: 'The model coloured by per-residue confidence over its written sequence, one clickable letter per residue. The residues picked in the matrix or the ribbon are drawn as red ball and stick.'
+    section: 'Confidence of the model'
+    viz_kind: 'molecule_3d'
+    controls_placement: popover
+    config:
+      viz_kind: "molecule_3d"
+      controls_placement: popover
+      structure_source: "file"
+      structure_wf_id: "646b0f3c1e4a2d7f8e5b8d01"
+      structure_dc_id: "646b0f3c1e4a2d7f8e5b8dd1"
+      entity_col: "entity"
+      position_col: "position"
+      chain_col: "chain"
+      color_mode: "plddt"
+      representation: "cartoon"
+      representations: ["cartoon"]
+      highlight_site: true
+      spin: false
+      show_variants: false
+      layout: "structure_text"
+      selection_enabled: true
+      follow_selection: true
+    layout: { x: 4, y: 2, w: 4, h: 7 }
+
+  - tag: viz-quality-secondary-structure
+    index: 'qual-ss'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'protein_ss_demo'
+    title: 'Secondary structure'
+    description: 'The synthetic S4PRED-style prediction as a ribbon shaded by confidence over its helix, strand and coil probabilities, compared with the call from the structure, and an agreement lane where they differ. Brush a stretch to select it in every tile.'
+    section: 'Confidence of the model'
+    viz_kind: 'secondary_structure'
+    config:
+      viz_kind: "secondary_structure"
+      entity_col: "entity"
+      position_col: "position"
+      residue_col: null
+      state_col: "ss_code"
+      source_col: "ss_source"
+      reference_source: "S4PRED"
+      p_helix_col: "p_helix"
+      p_strand_col: "p_strand"
+      p_coil_col: "p_coil"
+      confidence_col: "ss_probability"
+      show_probabilities: true
+      show_agreement: true
+      show_segments: true
+      show_composition: true
+      selection_enabled: true
+      follow_selection: true
+    layout: { x: 0, y: 9, w: 8, h: 5 }
+
+  - tag: viz-quality-ramachandran
+    index: 'qual-rama'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'protein_residues_demo'
+    title: 'Ramachandran plot'
+    description: 'The phi and psi angles of every residue, computed in the browser from the backbone of the structure, coloured by pLDDT. Glycine and proline have their own symbols; the favoured regions are approximate, not MolProbity contours.'
+    section: 'Confidence of the model'
+    viz_kind: 'ramachandran'
+    controls_placement: popover
+    config:
+      viz_kind: "ramachandran"
+      controls_placement: popover
+      structure_source: "file"
+      structure_wf_id: "646b0f3c1e4a2d7f8e5b8d01"
+      structure_dc_id: "646b0f3c1e4a2d7f8e5b8dd1"
+      entity_col: "entity"
+      position_col: "position"
+      chain_col: "chain"
+      color_mode: "plddt"
+      show_regions: true
+      selection_enabled: true
+      follow_selection: true
+    layout: { x: 0, y: 17, w: 4, h: 7 }
+
+  - tag: viz-quality-sequence
+    index: 'qual-seq'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'protein_residues_demo'
+    title: 'Sequence with confidence, structure and domains'
+    description: 'The amino-acid sequence over a pLDDT lane, the secondary structure as helix and strand glyphs and the domain spans. Brush a stretch to select it in every tile.'
+    section: 'Confidence of the model'
+    viz_kind: 'sequence_track'
+    controls_placement: popover
+    config:
+      viz_kind: "sequence_track"
+      controls_placement: popover
+      entity_col: "entity"
+      position_col: "position"
+      residue_col: "residue"
+      value_col: "plddt"
+      value_label: "pLDDT"
+      category_col: "secondary_structure"
+      domains_wf_id: "646b0f3c1e4a2d7f8e5b8d01"
+      domains_dc_id: "646b0f3c1e4a2d7f8e5b8dd5"
+      domain_start_col: "start"
+      domain_end_col: "end"
+      domain_label_col: "domain"
+      selection_enabled: true
+      follow_selection: true
+    layout: { x: 0, y: 14, w: 8, h: 3 }
+
+  - tag: viz-quality-plddt
+    index: 'qual-plddt'
+    component_type: advanced_viz
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'protein_residues_demo'
+    title: 'Confidence along the sequence'
+    description: 'The pLDDT of each residue as a line on the residue axis. A pick made in any tile is shaded, a hovered residue is marked.'
+    section: 'Confidence of the model'
+    viz_kind: 'profile'
+    controls_placement: popover
+    config:
+      viz_kind: "profile"
+      controls_placement: popover
+      series_col: "entity"
+      x_col: "position"
+      y_col: "plddt"
+      x_title: "Residue"
+      y_title: "pLDDT"
+      residue_axis: true
+      legend_pos: "none"
+    layout: { x: 4, y: 17, w: 4, h: 7 }
+
+  - tag: filter-quality-position
+    index: qual-f-position
+    component_type: interactive
+    workflow_tag: advanced_viz_demo
+    data_collection_tag: 'protein_residues_demo'
+    interactive_component_type: RangeSlider
+    column_name: 'position'
+    column_type: 'int64'
+    title: 'Residue range'
+    placement: left
+    section: 'Residue scope'
+    group: 'Residue filters'
+    display:
+      title_size: md
+      icon_name: 'mdi:ruler'
+    layout: { x: 0, y: 0, w: 1, h: 3 }

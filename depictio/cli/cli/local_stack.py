@@ -617,13 +617,17 @@ def inherited_env() -> dict[str, str]:
 # switch (DEPICTIO_VERSION_CHECK_ENABLED=false), the remote-data policy, which
 # says the public and credentialed buckets run folders may be read from
 # (DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS, DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS),
-# and the component export API (DEPICTIO_FASTAPI_EMBED_ENABLED and its framing
-# allowlist), for someone embedding their own figures in a page they serve.
+# the component export API (DEPICTIO_FASTAPI_EMBED_ENABLED and its framing
+# allowlist), for someone embedding their own figures in a page they serve, and
+# the protein structure resolver (DEPICTIO_STRUCTURE_RESOLVER_ENABLED), an opt-in
+# that sends accessions, gene names or sequences to AlphaFold DB, UniProt or
+# ESMFold.
 INHERITED_SETTINGS = (
     "DEPICTIO_TELEMETRY_",
     "DEPICTIO_VERSION_CHECK_",
     "DEPICTIO_REMOTE_",
     "DEPICTIO_FASTAPI_EMBED_",
+    "DEPICTIO_STRUCTURE_RESOLVER_",
 )
 
 

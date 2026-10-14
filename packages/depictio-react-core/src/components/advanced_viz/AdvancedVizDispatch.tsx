@@ -1,4 +1,5 @@
 import React from 'react';
+import { Center, Loader } from '@mantine/core';
 
 import { InteractiveFilter, StoredMetadata } from '../../api';
 import { wrapWithChrome } from '../chrome';
@@ -44,6 +45,8 @@ import CnvProfileRenderer from './CnvProfileRenderer';
 import GenomeChordRenderer from './GenomeChordRenderer';
 import RecordCardRenderer from './RecordCardRenderer';
 import ParallelCoordinatesRenderer from './ParallelCoordinatesRenderer';
+import MsaRenderer from './MsaRenderer';
+import SequenceTrackRenderer from './SequenceTrackRenderer';
 import {
   AdvancedVizDataPopover,
   AdvancedVizDockToggle,
@@ -142,6 +145,54 @@ interface AdvancedVizDispatchProps {
   groupRender?: GroupRenderState;
 }
 
+// 3Dmol.js is heavy and only a protein tab needs it, so the molecule_3d
+// renderer is its own async chunk rather than part of this one, the same way
+// ComponentRenderer lazy-loads JBrowse. The Suspense boundary keeps the
+// fallback inside the tile instead of blanking the whole dispatch.
+const Molecule3DRendererLazy = React.lazy(() => import('./Molecule3DRenderer'));
+const Molecule3DRenderer: React.FC<any> = (props) => (
+  <React.Suspense
+    fallback={
+      <Center h="100%">
+        <Loader size="sm" />
+      </Center>
+    }
+  >
+    <Molecule3DRendererLazy {...props} />
+  </React.Suspense>
+);
+
+// The five newer protein kinds are lazy chunks too, so a dashboard without one
+// pays nothing for them. Same shape as molecule_3d above, built by one helper,
+// and each wrapper keeps its renderer's file name:
+// `test_advanced_viz_config_alignment` resolves a kind to its source file from
+// the name the RENDERERS table below uses.
+const lazyTile = (
+  Lazy: React.LazyExoticComponent<React.ComponentType<any>>,
+): React.FC<any> => {
+  const Tile: React.FC<any> = (props) => (
+    <React.Suspense
+      fallback={
+        <Center h="100%">
+          <Loader size="sm" />
+        </Center>
+      }
+    >
+      <Lazy {...props} />
+    </React.Suspense>
+  );
+  return Tile;
+};
+const HmmLogoRenderer = lazyTile(React.lazy(() => import('./HmmLogoRenderer')));
+const SecondaryStructureRenderer = lazyTile(
+  React.lazy(() => import('./SecondaryStructureRenderer')),
+);
+const DomainArchitectureRenderer = lazyTile(
+  React.lazy(() => import('./DomainArchitectureRenderer')),
+);
+const PaeMatrixRenderer = lazyTile(React.lazy(() => import('./PaeMatrixRenderer')));
+const RamachandranRenderer = lazyTile(React.lazy(() => import('./RamachandranRenderer')));
+
 /**
  * `viz_kind` → renderer. Every renderer takes the same
  * `{ metadata, filters, refreshTick, onFilterChange?, groupRender? }` props, so the dispatch
@@ -200,6 +251,14 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   genome_chord: GenomeChordRenderer,
   record_card: RecordCardRenderer,
   parallel_coordinates: ParallelCoordinatesRenderer,
+  molecule_3d: Molecule3DRenderer,
+  msa: MsaRenderer,
+  sequence_track: SequenceTrackRenderer,
+  hmm_logo: HmmLogoRenderer,
+  secondary_structure: SecondaryStructureRenderer,
+  domain_architecture: DomainArchitectureRenderer,
+  pae_matrix: PaeMatrixRenderer,
+  ramachandran: RamachandranRenderer,
 };
 
 /**

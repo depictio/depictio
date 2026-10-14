@@ -71,6 +71,7 @@ const RecordCardLinkSettings: React.FC<RecordCardLinkSettingsProps> = ({
 
   const linkedRaw = typeof config?.linked_component === 'string' ? config.linked_component : null;
   const linked: SelectionEmitter | undefined = findEmitter(emitters, linkedRaw);
+  const linkedPicksResidues = linked?.source === 'residue_selection';
   const source = (
     typeof config?.selection_source === 'string' ? config.selection_source : 'any'
   ) as RecordCardSelectionSource;
@@ -85,7 +86,14 @@ const RecordCardLinkSettings: React.FC<RecordCardLinkSettingsProps> = ({
     // so the gesture filter follows the pick.
     onChange({
       linked_component: value,
-      ...(emitter ? { selection_source: emitter.source } : {}),
+      // A residue pick is followed by any linked card, so `any` rather than a
+      // source value the model does not have.
+      ...(emitter
+        ? {
+            selection_source:
+              emitter.source === 'residue_selection' ? 'any' : emitter.source,
+          }
+        : {}),
     });
   };
 
@@ -133,7 +141,13 @@ const RecordCardLinkSettings: React.FC<RecordCardLinkSettingsProps> = ({
               </Text>
             </Alert>
           ) : null}
-          {linked && linked.column && idCol && linked.column !== idCol ? (
+          {linked && linkedPicksResidues ? (
+            <Text size="xs" c="dimmed">
+              {linked.label} picks residues: the card shows the rows of its collection in the
+              picked range, matched on the entity and position columns rather than on its id column.
+            </Text>
+          ) : null}
+          {linked && !linkedPicksResidues && linked.column && idCol && linked.column !== idCol ? (
             <Text size="xs" c="dimmed">
               {linked.label} selects on "{linked.column}" while the card matches on "{idCol}".
               The card only finds a record when those values line up, directly or through a

@@ -148,6 +148,35 @@ class TestPlanUploads:
         assert skipped == []
         assert uploads[0]["index_key"] is None
 
+    @pytest.mark.parametrize(
+        ("fmt", "name"),
+        [("pdb", "Q9XYZ1.pdb"), ("pdb", "Q9XYZ1.pdb.gz"), ("mmcif", "Q9XYZ1.cif.gz")],
+    )
+    def test_structure_files_upload_without_an_index(self, tmp_path, fmt, name):
+        structure = tmp_path / name
+        structure.write_bytes(b"0" * 16)
+        uploads, skipped = plan_indexed_file_uploads(
+            [_FileDoc(str(structure))], DC_ID, DCIndexedFileConfig(format=fmt)
+        )
+        assert skipped == []
+        assert uploads[0]["sample"] == "Q9XYZ1"
+        assert uploads[0]["index_key"] is None
+
+    @pytest.mark.parametrize(
+        "name",
+        ["demo_protein.pae.tsv", "demo_protein.pae.tsv.gz", "demo_protein.pae.json"],
+    )
+    def test_pae_files_upload_without_an_index_under_the_entity_id(self, tmp_path, name):
+        pae = tmp_path / name
+        pae.write_bytes(b"0" * 16)
+        uploads, skipped = plan_indexed_file_uploads(
+            [_FileDoc(str(pae))], DC_ID, DCIndexedFileConfig(format="pae")
+        )
+        assert skipped == []
+        assert uploads[0]["sample"] == "demo_protein"
+        assert uploads[0]["key"].endswith(f"/demo_protein/{name}")
+        assert uploads[0]["index_key"] is None
+
     def test_missing_index_is_skipped_not_uploaded(self, tmp_path):
         vcf = tmp_path / "S1.vcf.gz"
         vcf.write_bytes(b"0" * 16)

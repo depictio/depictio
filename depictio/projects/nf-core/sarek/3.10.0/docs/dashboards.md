@@ -15,7 +15,8 @@ The family rules are in `depictio/projects/nf-core/RULES.md`.
 | Variant calls | Call quality | Do the callsets look like clean germline calls? |
 | Variant calls | Caller concordance | Which calls do the callers share, and where do they differ? |
 | Annotation | Consequences | What do the calls do to the transcripts? |
-| Annotation | Genes | Which genes carry the calls, and where on the protein? |
+| Annotation | Genes | Which genes carry the calls, and which do the callers share? |
+| Annotation | Protein | Where on the protein do the coding variants sit? |
 | Annotation | Locus | What do depth and calls show at one region? |
 
 The design comes from sarek's own CSV manifests (`csv/recalibrated.csv`,
@@ -111,9 +112,41 @@ summary and annotated call tables. Filters: caller and SnpEff section.
 **Genes.** Strip: the genes with a call (the commonest biotypes), the HIGH-impact variants
 (split by caller), the top gene burden (the most coding variants on one gene, the callers'
 maxima) and the protein changes (a ring by impact class). Then the gene by callset burden
-heatmap (log1p colour, so one long gene does not wash out the rest), the UpSet of genes the
-callers share (fixed), and the coding variants along the protein. Collapsed: the per-gene
-burden and protein position tables. Filters: biotype, caller and impact class.
+heatmap (log1p colour, so one long gene does not wash out the rest) and the UpSet of genes the
+callers share (fixed). Collapsed: the per-gene burden table, whose row selection narrows the
+cards. Filters: biotype and caller. A high burden on long, repetitive genes is a mappability
+signal before it is a biological one.
+
+**Protein.** Strip: the genes on the protein view (a bar by the worst impact class on each),
+the coding calls (split by caller), the median share of a gene's calls that two or more callers
+made (out of 100) and the allele fraction (box plot). Then the genes and their predicted
+structure: a scatter of the lollipop's genes (distinct coding variants on a log axis against the
+share of calls two or more callers made, coloured by the worst impact class on each), and beside
+it the picked gene's structure over its written sequence, with the same variants as spheres on
+their residues, coloured by impact class. Then the lollipop, one lane per gene, narrowed to the
+picked gene. Collapsed: the coding variants with a protein position, one row per call. Filters:
+caller and impact class. A gene low on the scatter carries variants one caller sees, which is
+often a mapping or repeat artefact.
+
+The scatter and the first and third cards read a per-gene summary of the lollipop's collection
+(`protein_genes`, built by `recipes/protein_genes.py`) over the whole run: the sample and caller
+pickers do not narrow them, a gene picked on the scatter does.
+
+The structure is fetched by gene symbol from AlphaFold DB (CC-BY 4.0; human unless the tile's
+`taxon` says otherwise) when the server runs with `DEPICTIO_STRUCTURE_RESOLVER_ENABLED=true`.
+The gene symbol leaves the server, which is why the resolver is off by default: the tile then
+says the lookup is disabled and the rest of the tab works. AlphaFold DB holds no model of the
+canonical sequence of a protein longer than about 2,700 residues (the giant structural proteins
+and mucins), nor of a gene with no reviewed UniProt entry (a clone-based gene name). The tile then
+reads "No structure found" with the reason and the lollipop still draws the gene, or, for some
+genes, it draws the model of a shorter isoform. The variants carry the reference residue SnpEff
+names (`ref_aa`), which the tile checks against the model: SnpEff counts along an Ensembl
+transcript and AlphaFold DB along the UniProt sequence, so on some genes the numbering differs.
+A variant the model places on another residue is listed under a "numbering mismatch" badge
+instead of being drawn on the wrong one, and a position past the model's end under "outside the
+model".
+Until a point of the scatter is clicked, the structure tile opens on the first gene of the table, in
+alphabetical order, which may be one without a model.
 
 **Locus.** A depth navigator in 1 Mb windows drives three tracks on one axis through the
 region links: the depth per interval, the calls over the gene lane and the annotated VCFs read
@@ -126,7 +159,7 @@ region and recount it on every brush or locus entry. Filters: caller and variant
 
 | Route | What changes |
 |---|---|
-| No SnpEff (`--tools` without `snpeff`) | No Consequences or Genes tab, no shared-calls UpSet or annotated VCF track, no HIGH-impact row or impact highlight on the Overview. |
+| No SnpEff (`--tools` without `snpeff`) | No Consequences, Genes or Protein tab, no shared-calls UpSet or annotated VCF track, no HIGH-impact row or impact highlight on the Overview. |
 | VCFtools skipped | No FILTER partitions, quality sweep or FILTER filter on Call quality; the FILTER highlight is dropped. |
 | No X/Y sex check | No sex-check scatter or table on Coverage. |
 | Somatic outputs | Loaded when present (ASCAT, CNVkit, MSIsensor-pro, NGSCheckMate), with no tiles yet. |
@@ -148,8 +181,11 @@ collection and, through the project links, the collections downstream of it. The
 selects on `sample_id`, which the links carry to every collection and the MultiQC panels; the
 contig, sex-check, FILTER and distribution tables and the sex-check scatter on `sample`; the
 bcftools and SnpEff summary tables on `caller`; the rainfall plot, the impact scatter and the
-call tables on `variant_key`; the per-gene table on `gene_name`, which reaches the protein
-lollipop. The variant record on Consequences shows the call picked in the scatter beside it.
+call tables on `variant_key`; the per-gene table on `gene_name`. The variant record on
+Consequences shows the call picked in the scatter beside it. On the Protein tab the gene
+scatter selects on `gene`, which moves the lollipop and the structure to that gene, and the
+lollipop and the structure emit a residue selection on `gene` and `aa_pos`, which the other of
+the two and the coding-variant table follow.
 
 ## Controls
 

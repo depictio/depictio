@@ -1,0 +1,16 @@
+id: proteinannotator_database_coverage
+name: Protein x database coverage
+mode: protein/database-matrix
+description: >-
+  Protein by database matrix: the fraction of each protein's residues covered
+  by the domains of each database the pipeline searched (Pfam, FunFam,
+  NMPFamsDB, MetagRoot, InterProScan). Clustered, proteins group by which
+  databases describe them and how completely; a skipped database is a column
+  of zeros.
+find:
+  path_glob: "**/domain_annotation/*/*.domtbl.gz"
+recipe: proteinannotator/database_coverage.py
+fixture: database_coverage.tsv
+renders_as:
+  - { id: coverage_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: entity} }
+  - { component: table }

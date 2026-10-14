@@ -1,0 +1,708 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8de0"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8de0"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "fam-text",
+      "component_type": "text",
+      "title": "Protein families",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "Families and architectures",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Two profile HMMs, DemoFamA (residues 30 to 101 of the demo protein) and DemoFamB (102 to 172), shown as logos with the domain hits that matched them, the same hits drawn as domain architectures, and the demo protein in 3D. The HMMs are estimated from the demo alignment by the fixture script, not by hmmbuild, and the hits are synthetic: scores follow identity times coverage. Click a state in the logo, a domain or a residue in 3D to select that range in every tile; hover marks it. The other 33 proteins are members of the alignment and have no structure, so only the demo protein follows into 3D; six of them are fragments, whose domains match only part of the model (zigzag edge).\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null,
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "fam-logo",
+      "component_type": "advanced_viz",
+      "title": "Profile HMM logo",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_family_hmm_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8de1"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "The profile of two demo HMMs (DemoFamA over residues 30 to 101, DemoFamB over 102 to 172) as one row per match state and letter, mapped onto the demo protein. Estimated from the demo alignment by the fixture script, not hmmbuild",
+        "data_collection_tag": "protein_family_hmm_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8de1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One stack per match state, letter heights from the emission probabilities (relative entropy above background), the insert probability and expected insert length beside it, and the hits that matched the model under it. Pick the model in the tile; click or brush states to select those residues of the demo protein.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Families and architectures",
+      "viz_kind": "hmm_logo",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "hmm_logo",
+        "profile_source": "hmm",
+        "entity_col": "entity",
+        "position_col": "position",
+        "model_col": "hmm_name",
+        "state_col": "hmm_position",
+        "letter_col": "hmm_letter",
+        "emission_col": "emission",
+        "insert_prob_col": "insert_prob",
+        "insert_length_col": "insert_length",
+        "occupancy_col": "occupancy",
+        "consensus_col": "consensus",
+        "rf_col": "rf",
+        "cs_col": "cs",
+        "msa_id_col": "msa_id",
+        "seq_id_col": "seq_id",
+        "sequence_col": "aligned_sequence",
+        "rank_col": "rank",
+        "height_mode": "relent_abovebg",
+        "color_scheme": "clustal",
+        "show_indel_rows": true,
+        "show_consensus": true,
+        "hits_wf_id": "646b0f3c1e4a2d7f8e5b8d01",
+        "hits_dc_id": "646b0f3c1e4a2d7f8e5b8de2",
+        "hits_dc_tag": null,
+        "hits_model_col": "label",
+        "hits_entity_col": "entity",
+        "hits_from_col": "hmm_from",
+        "hits_to_col": "hmm_to",
+        "hits_length_col": "hmm_length",
+        "hits_evalue_col": "i_evalue",
+        "hits_score_col": "dom_score",
+        "hits_ali_from_col": "ali_from",
+        "hits_ali_to_col": "ali_to",
+        "hits_evalue_max": 0.01,
+        "max_hits": 200,
+        "selection_enabled": true,
+        "follow_selection": true
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "fam-arch",
+      "component_type": "advanced_viz",
+      "title": "Domain architecture of each protein",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_family_hits_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8de2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Domain hits of the 34 members of the demo alignment against the two demo HMMs, plus 3 synthetic extra families (OtherFamC, D and E) on 10 of them, in the hmmsearch domain table columns. 6 members are truncated fragments, so their hits match only part of the HMM. Scores, E-values and accuracies are synthetic, monotone in identity times coverage; ~6 distinct architectures",
+        "data_collection_tag": "protein_family_hits_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8de2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One backbone per protein, all on the scale of the longest one, its domains coloured by family. A zigzag edge marks a partial match of the HMM on that side. Click a domain to select its span and its family.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Families and architectures",
+      "viz_kind": "domain_architecture",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "domain_architecture",
+        "entity_col": "entity",
+        "start_col": "start",
+        "end_col": "end",
+        "label_col": "label",
+        "protein_length_col": "protein_length",
+        "hmm_from_col": "hmm_from",
+        "hmm_to_col": "hmm_to",
+        "hmm_length_col": "hmm_length",
+        "hmm_coverage_col": "hmm_coverage",
+        "evalue_col": "i_evalue",
+        "source_col": "source",
+        "description_col": "description",
+        "accession_col": "accession",
+        "view": "proteins",
+        "max_architectures": 15,
+        "max_proteins": 2000,
+        "evalue_threshold": null,
+        "sources": null,
+        "scale": "shared",
+        "color_by": "label",
+        "partial_coverage": 0.9,
+        "position_col_for_selection": "position",
+        "label_selection": true,
+        "selection_enabled": true,
+        "follow_selection": true
+      },
+      "controls_placement": "popover",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "fam-3d",
+      "component_type": "advanced_viz",
+      "title": "Structure of the demo protein",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_residues_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dd2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "One row per residue of the demo structure: amino acid, pLDDT and an approximate secondary structure",
+        "data_collection_tag": "protein_residues_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dd2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The model coloured by per-residue confidence. The residues picked in the logo or on a domain are drawn as red ball and stick.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Families and architectures",
+      "viz_kind": "molecule_3d",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "molecule_3d",
+        "structure_source": "file",
+        "structure_wf_id": "646b0f3c1e4a2d7f8e5b8d01",
+        "structure_dc_id": "646b0f3c1e4a2d7f8e5b8dd1",
+        "structure_dc_tag": null,
+        "entity_col": "entity",
+        "uniprot_col": null,
+        "gene_col": null,
+        "sequence_col": null,
+        "taxon": 9606,
+        "position_col": "position",
+        "chain_col": "chain",
+        "value_col": null,
+        "category_col": null,
+        "ref_aa_col": null,
+        "alt_aa_col": null,
+        "label_col": null,
+        "color_mode": "plddt",
+        "colour_scale": null,
+        "representation": "cartoon",
+        "representations": [
+          "cartoon"
+        ],
+        "highlight_site": true,
+        "spin": false,
+        "show_variants": false,
+        "show_labels": false,
+        "layout": "structure",
+        "msa_wf_id": null,
+        "msa_dc_id": null,
+        "msa_dc_tag": null,
+        "selection_enabled": true,
+        "follow_selection": true
+      },
+      "controls_placement": "popover",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "fam-hits",
+      "component_type": "table",
+      "title": "Domain hits",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_family_hits_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8de2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Domain hits of the 34 members of the demo alignment against the two demo HMMs, plus 3 synthetic extra families (OtherFamC, D and E) on 10 of them, in the hmmsearch domain table columns. 6 members are truncated fragments, so their hits match only part of the HMM. Scores, E-values and accuracies are synthetic, monotone in identity times coverage; ~6 distinct architectures",
+        "data_collection_tag": "protein_family_hits_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8de2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One row per domain hit, in the hmmsearch domain table columns. Scores and E-values are synthetic.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Families and architectures",
+      "columns": [
+        "entity",
+        "label",
+        "source",
+        "accession",
+        "start",
+        "end",
+        "protein_length",
+        "hmm_from",
+        "hmm_to",
+        "hmm_length",
+        "hmm_coverage",
+        "dom_score",
+        "i_evalue",
+        "acc"
+      ],
+      "page_size": 100,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "fam-archs",
+      "component_type": "advanced_viz",
+      "title": "Architectures",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_family_hits_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8de2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Domain hits of the 34 members of the demo alignment against the two demo HMMs, plus 3 synthetic extra families (OtherFamC, D and E) on 10 of them, in the hmmsearch domain table columns. 6 members are truncated fragments, so their hits match only part of the HMM. Scores, E-values and accuracies are synthetic, monotone in identity times coverage; ~6 distinct architectures",
+        "data_collection_tag": "protein_family_hits_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8de2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The proteins grouped by their ordered list of families, with the number of proteins sharing each architecture.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Families and architectures",
+      "viz_kind": "domain_architecture",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "domain_architecture",
+        "entity_col": "entity",
+        "start_col": "start",
+        "end_col": "end",
+        "label_col": "label",
+        "protein_length_col": "protein_length",
+        "hmm_from_col": "hmm_from",
+        "hmm_to_col": "hmm_to",
+        "hmm_length_col": "hmm_length",
+        "hmm_coverage_col": "hmm_coverage",
+        "evalue_col": "i_evalue",
+        "source_col": "source",
+        "description_col": "description",
+        "accession_col": "accession",
+        "view": "architectures",
+        "max_architectures": 15,
+        "max_proteins": 2000,
+        "evalue_threshold": null,
+        "sources": null,
+        "scale": "shared",
+        "color_by": "label",
+        "partial_coverage": 0.9,
+        "position_col_for_selection": "position",
+        "label_selection": true,
+        "selection_enabled": true,
+        "follow_selection": true
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "fam-f-label",
+      "component_type": "interactive",
+      "title": "Family",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_family_hits_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8de2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Domain hits of the 34 members of the demo alignment against the two demo HMMs, plus 3 synthetic extra families (OtherFamC, D and E) on 10 of them, in the hmmsearch domain table columns. 6 members are truncated fragments, so their hits match only part of the HMM. Scores, E-values and accuracies are synthetic, monotone in identity times coverage; ~6 distinct architectures",
+        "data_collection_tag": "protein_family_hits_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8de2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Family scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "label",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Family filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "icon_name": "mdi:tag-multiple-outline",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "fam-f-source",
+      "component_type": "interactive",
+      "title": "Annotation source",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_family_hits_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8de2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Domain hits of the 34 members of the demo alignment against the two demo HMMs, plus 3 synthetic extra families (OtherFamC, D and E) on 10 of them, in the hmmsearch domain table columns. 6 members are truncated fragments, so their hits match only part of the HMM. Scores, E-values and accuracies are synthetic, monotone in identity times coverage; ~6 distinct architectures",
+        "data_collection_tag": "protein_family_hits_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8de2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Family scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "source",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Family filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "icon_name": "mdi:database-outline",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "fam-f-score",
+      "component_type": "interactive",
+      "title": "Domain score (bits)",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "protein_family_hits_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8de2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Domain hits of the 34 members of the demo alignment against the two demo HMMs, plus 3 synthetic extra families (OtherFamC, D and E) on 10 of them, in the hmmsearch domain table columns. 6 members are truncated fragments, so their hits match only part of the HMM. Scores, E-values and accuracies are synthetic, monotone in identity times coverage; ~6 distinct architectures",
+        "data_collection_tag": "protein_family_hits_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8de2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Family scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "dom_score",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Hit filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": true,
+      "slider_mode": null,
+      "icon_name": "mdi:counter",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-fam-f-label",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-fam-f-source",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-fam-f-score",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-fam-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-fam-logo",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 7,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-fam-arch",
+      "x": 0,
+      "y": 9,
+      "w": 5,
+      "h": 7,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-fam-3d",
+      "x": 5,
+      "y": 9,
+      "w": 3,
+      "h": 7,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-fam-hits",
+      "x": 0,
+      "y": 16,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-fam-archs",
+      "x": 0,
+      "y": 21,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Protein families",
+  "subtitle": "Profile HMM logos, the hits that matched them and their domain architectures, beside the structure they map onto.",
+  "icon": "mdi:family-tree",
+  "icon_color": "teal",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 48,
+  "main_tab_name": null,
+  "tab_icon": "mdi:family-tree",
+  "tab_icon_color": "teal",
+  "tab_group": null,
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Family scope",
+      "icon": "mdi:filter-variant",
+      "color": "teal",
+      "description": "Narrows the domain hits, and with them the architectures and the hit lane under the logo",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Families and architectures",
+      "icon": "mdi:family-tree",
+      "color": "teal",
+      "description": "Two profile HMMs as logos, the domain hits of 34 proteins, and the structure they map onto",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "category_colors": null,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

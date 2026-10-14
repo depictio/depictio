@@ -8,6 +8,12 @@ which would put every lane on a different scale.
 
 The gene universe is capped because the kind switches to a single-gene picker
 above a handful of lanes and because a lane with one stem says nothing.
+
+``ref_aa`` is the residue SnpEff names at the position (``p.Trp344Arg`` ->
+``Trp``). A structure tile checks it against the model it draws, so a variant
+whose numbering the model does not share (SnpEff counts along an Ensembl
+transcript, a predicted structure along the UniProt isoform) is listed as a
+mismatch instead of being drawn on the wrong residue.
 """
 
 from __future__ import annotations
@@ -38,6 +44,11 @@ SOURCES: list[RecipeSource] = [
 #: Genes kept, ranked by how many coding variants they carry across the run.
 TOP_GENES = 40
 
+#: ``p.Trp344Arg`` -> ``Trp``.
+_REF_AA_RE = r"^p\.([A-Z][a-z]{2})\d+"
+#: The stop codon a stop-loss names is no residue of the model.
+_STOP = "Ter"
+
 # OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
@@ -47,6 +58,7 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "impact": pl.Utf8,
     "consequence": pl.Utf8,
     "hgvs_p": pl.Utf8,
+    "ref_aa": pl.Utf8,
     "variant_key": pl.Utf8,
     "vaf": pl.Float64,
 }
@@ -69,9 +81,13 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .select("gene")
     )
 
+    ref = pl.col("hgvs_p").str.extract(_REF_AA_RE, 1)
     return (
         coding.join(top, on="gene", how="inner")
+        .with_columns(
+            pl.when(ref != _STOP).then(ref).alias("ref_aa"),
+            pl.col("vaf").cast(pl.Float64),
+        )
         .select(list(OUTPUT_SCHEMA))
-        .with_columns(pl.col("vaf").cast(pl.Float64))
         .sort(["gene", "aa_pos", "sample", "caller"])
     )

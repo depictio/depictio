@@ -1,0 +1,33 @@
+id: hmmer_hmmsearch_domtbl
+name: Domain hits (hmmsearch)
+mode: protein/domains
+description: >-
+  One row per domain hit of an hmmsearch run: the sequence, the family HMM and
+  the database it came from, the envelope span on the sequence, the
+  independent E-value and bit score of the domain, and how much of the HMM the
+  alignment covers. The envelope columns are the domain span a sequence track
+  draws.
+find:
+  path_glob: "**/domain_annotation/*/*.domtbl.gz"
+  path_glob_alt:
+    - "**/*.domtbl.gz"
+    - "**/*.domtbl"
+recipe: hmmer/hmmsearch_domtbl.py
+fixture: hmmsearch_domtbl.tsv
+renders_as:
+  # Bit score against HMM coverage separates full-length family hits (right,
+  # high) from fragments that only touch a few HMM states (left).
+  - { id: domain_score_scatter, component: advanced_viz, kind: scatter_xy,
+      roles: {x: hmm_coverage, y: dom_score, label: label, color: source} }
+  # One backbone per protein with its domains by family; a zigzag edge marks a partial match
+  # of the HMM, drawn from hmm_from / hmm_to / hmm_length.
+  - { id: domain_architecture, component: advanced_viz, kind: domain_architecture,
+      roles: {entity: entity, start: start, end: end, label: label, protein_length: protein_length, hmm_from: hmm_from, hmm_to: hmm_to, hmm_length: hmm_length, hmm_coverage: hmm_coverage, evalue: i_evalue, source: source, description: description, accession: accession} }
+  - { id: domain_hits, component: card, column: entity, aggregation: count,
+      secondary_layout: top_n, breakdown_col: source, top_n_count: 4, headline: true }
+  - { id: domain_families, component: card, column: label, aggregation: nunique,
+      secondary_layout: donut, breakdown_col: source }
+  - { id: domain_score, component: card, column: dom_score, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: figure, visu_type: box, dict_kwargs: {x: source, y: dom_score, color: source} }
+  - { component: table }

@@ -1,0 +1,21 @@
+id: purple_protein_changes
+name: Protein changes of somatic variants
+mode: purple
+description: >-
+  The somatic calls whose canonical HGVS protein change names a residue, in the
+  protein module's variant contract: the gene as entity, the residue number,
+  the one-letter reference and alternate residues, PAVE's coding effect as
+  category, the purity-adjusted allele frequency as value and the short change
+  as label. This is the table the lollipop and the 3D structure bind, so a
+  residue picked in one moves the other.
+find:
+  path_glob: "**/purple/*.purple.somatic.vcf.gz"
+recipe: purple/protein_changes.py
+fixture: protein_changes.tsv
+renders_as:
+  - { id: protein_change_needles, component: advanced_viz, kind: lollipop, roles: {feature_id: entity, position: position, category: category, label: label, effect: value} }
+  - { id: protein_change_structure, component: advanced_viz, kind: molecule_3d, roles: {position: position, entity: entity, gene: entity, value: value, category: category, ref_aa: ref_aa, alt_aa: alt_aa, label: label} }
+  - { id: protein_change_count, component: card, column: label, aggregation: count, secondary_layout: top_n, breakdown_col: category, top_n_count: 3 }
+  - { id: protein_gene_filter, component: interactive, interactive_type: Select, column_name: entity }
+  - { id: protein_category_filter, component: interactive, interactive_type: MultiSelect, column_name: category }
+  - { id: protein_change_table, component: table, row_selection_enabled: true, row_selection_column: label }

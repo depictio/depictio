@@ -7,6 +7,7 @@
  */
 
 import type { FilterSectionSpec, PersistentSection, StoredMetadata } from '../api';
+import { isAlwaysSelected } from '../components/interactive/alwaysSelected';
 import { isStripSection } from '../components/interactive/strip/stripLayout';
 import { tabLinkKey } from '../components/tabLinks';
 import { advancedVizSelectionColumn, supportsSelectionGrouping } from '../selection';
@@ -24,8 +25,13 @@ export interface GuideFilterDemoPick {
 const CATEGORICAL = new Set(['MultiSelect', 'Select', 'SegmentedControl']);
 
 const isCard = (m: StoredMetadata) => m.component_type === 'card' && Boolean(m.dc_id);
+// An `always_selected` Select is no demo: it cannot be cleared, so the
+// demo's Reset and its "n / N" readout would never show the unfiltered figure.
 const isControl = (m: StoredMetadata) =>
-  m.component_type === 'interactive' && Boolean(m.dc_id) && Boolean(m.column_name);
+  m.component_type === 'interactive' &&
+  Boolean(m.dc_id) &&
+  Boolean(m.column_name) &&
+  !isAlwaysSelected(m);
 const isCategorical = (m: StoredMetadata) =>
   CATEGORICAL.has(String(m.interactive_component_type ?? ''));
 

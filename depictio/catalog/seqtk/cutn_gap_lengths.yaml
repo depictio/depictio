@@ -1,0 +1,25 @@
+id: seqtk_cutn_gap_lengths
+name: Assembly gap lengths
+mode: assembly/gaps
+description: >-
+  The length distribution of the N runs of each assembly, binned on a log10
+  scale (four bins per decade). Scaffolding methods leave characteristic gap
+  sizes (a fixed filler length, estimated sizes, large reference placeholders),
+  so the curve tells how an assembly was scaffolded, which the gap count does
+  not. The share of each assembly's runs of N per bin is given alongside the
+  count, which puts every assembly on one scale.
+find:
+  path_glob: "**/cutn/*.bed"
+recipe: seqtk/cutn_gap_lengths.py
+fixture: cutn_gap_lengths.tsv
+renders_as:
+  # One row per assembly, log10 length bins across, the share of its runs of N
+  # as colour: a fixed filler is one dark cell, estimated sizes a spread, and
+  # assemblies with a handful or a hundred thousand gaps share one scale.
+  - { id: gap_length_matrix, component: advanced_viz, kind: signal_matrix,
+      roles: {region_id: genome, position: log10_gap_length, value: gaps_pct} }
+  - { id: gap_length_profile, component: advanced_viz, kind: profile,
+      roles: {series: genome, x: gap_length_bp, y: gaps} }
+  - { component: figure, visu_type: line,
+      dict_kwargs: {x: log10_gap_length, y: gaps, color: genome, title: Assembly gaps per log10 length bin} }
+  - { component: table }

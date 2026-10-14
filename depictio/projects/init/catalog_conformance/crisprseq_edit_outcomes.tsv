@@ -1,0 +1,15 @@
+sample	outcome	level	reads	pct
+SRR3696709	Wild type	Outcome	234	64.3
+SRR3696709	Template-based	Outcome	0	0.0
+SRR3696709	Deletion-insertion	Outcome	3	0.824
+SRR3696709	Insertion, in-frame	Outcome	1	0.275
+SRR3696709	Insertion, frameshift	Outcome	0	0.0
+SRR3696709	Deletion, in-frame	Outcome	5	1.37
+SRR3696709	Deletion, frameshift	Outcome	121	33.2
+SRR3696724	Wild type	Outcome	1585	16.4
+SRR3696724	Template-based	Outcome	0	0.0
+SRR3696724	Deletion-insertion	Outcome	612	6.33
+SRR3696724	Insertion, in-frame	Outcome	132	1.37
+SRR3696724	Insertion, frameshift	Outcome	431	4.46
+SRR3696724	Deletion, in-frame	Outcome	3014	31.2
+SRR3696724	Deletion, frameshift	Outcome	3896	40.3

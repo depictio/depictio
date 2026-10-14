@@ -141,6 +141,14 @@ describe('splitPanels', () => {
       'genome_chord',
       'record_card',
       'parallel_coordinates',
+      'molecule_3d',
+      'msa',
+      'sequence_track',
+      'hmm_logo',
+      'secondary_structure',
+      'domain_architecture',
+      'pae_matrix',
+      'ramachandran',
     ];
 
     it('places every model kind in its bucket, and no kind twice', () => {

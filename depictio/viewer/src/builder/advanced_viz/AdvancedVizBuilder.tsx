@@ -51,7 +51,15 @@ import DesignShell from '../shared/DesignShell';
 import PreviewPanel from '../shared/PreviewPanel';
 import AdvancedVizPreview from './AdvancedVizPreview';
 import { BuilderSection, BuilderSections } from '../shared/BuilderSections';
-import { bindingSchemaDcId, mergedPresetConfig, rolesFromConfigBlob } from './configBlob';
+import {
+  bindingSchemaDcId,
+  buildAdvancedVizConfigBlob,
+  mergedPresetConfig,
+  panelColumnOfRole,
+  patchOverrides,
+  rolesFromConfigBlob,
+} from './configBlob';
+import { roleModeOf, splitRoles } from './kindModes';
 import {
   RankedKind,
   matchBadge,
@@ -68,6 +76,7 @@ import {
   usePhyloProjectDcs,
 } from './PhylogeneticSections';
 import RecordCardLinkSettings from './RecordCardLinkSettings';
+import ProteinBindingSettings, { isProteinKind } from './ProteinBindingSettings';
 
 /** Acceptable polars dtype names per canonical role (mirrors
  *  depictio/models/components/advanced_viz/schemas.py). */
@@ -205,6 +214,56 @@ function detectEmbeddingMode(
  *  `taxon` is the column naming its tips. Absent kinds and roles show the key. */
 const ROLE_DISPLAY_NAMES: Record<string, Record<string, string>> = {
   phylogenetic: { taxon: 'Tip name column', color: 'Colour by', label: 'Label by' },
+  // A profile HMM's long table: one row per match state and letter. The last
+  // four are the alignment mode's roles (`profile_source: msa`).
+  hmm_logo: {
+    state: 'HMM state',
+    letter: 'Residue letter',
+    emission: 'Emission probability',
+    model: 'Model name',
+    insert_prob: 'Insert probability',
+    insert_length: 'Expected insert length',
+    occupancy: 'Match occupancy',
+    consensus: 'Consensus residue',
+    rf: 'Reference annotation (RF)',
+    cs: 'Consensus structure (CS)',
+    msa_id: 'Alignment id',
+    seq_id: 'Sequence id',
+    sequence: 'Aligned sequence',
+    rank: 'Row order',
+  },
+  secondary_structure: {
+    state: 'Secondary structure state',
+    residue: 'Residue letter',
+    source: 'Prediction source',
+    p_helix: 'P(helix)',
+    p_strand: 'P(strand)',
+    p_coil: 'P(coil)',
+    confidence: 'Confidence',
+  },
+  // One row per domain hit (a hmmsearch domain table or a plain domain list).
+  domain_architecture: {
+    start: 'Domain start',
+    end: 'Domain end',
+    label: 'Domain label',
+    protein_length: 'Protein length',
+    hmm_from: 'HMM match start',
+    hmm_to: 'HMM match end',
+    hmm_length: 'HMM length',
+    hmm_coverage: 'HMM coverage',
+    evalue: 'E-value',
+    source: 'Annotation source',
+    description: 'Description',
+    accession: 'Accession',
+  },
+  pae_matrix: { value: 'pLDDT (axis strips)' },
+  ramachandran: {
+    value: 'Colour value',
+    category: 'Colour category',
+    uniprot: 'UniProt accession',
+    gene: 'Gene symbol',
+    sequence: 'Protein sequence',
+  },
 };
 
 /** Compact binding label: the role name, a red asterisk or a grey "optional",
@@ -328,25 +387,19 @@ const AdvancedVizBuilder: React.FC = () => {
     [patchConfig],
   );
 
-  // Record-card link fields. Same override layer as above, except that
-  // `undefined` means "unset": the key is dropped when the saved config never
-  // had it, and nulled when it did, so clearing a link neither leaves the old
-  // one in place nor writes a key the saved component did not carry.
-  const setRecordCardFields = useCallback(
+  // Record-card link and protein settings fields. Same override layer as
+  // above, except that `undefined` means "unset" (see `patchOverrides`): the
+  // key is dropped when the saved config never had it, and nulled when it did.
+  const setOverrideFields = useCallback(
     (patch: Record<string, unknown>) => {
       const c = useBuilderStore.getState().config as {
         preset_config?: Record<string, unknown> | null;
         config?: Record<string, unknown> | null;
         viz_overrides?: Record<string, unknown> | null;
       };
-      const inherited = c.preset_config ?? c.config ?? {};
-      const next: Record<string, unknown> = { ...(c.viz_overrides ?? {}) };
-      for (const [key, value] of Object.entries(patch)) {
-        if (value !== undefined) next[key] = value;
-        else if (inherited[key] != null) next[key] = null;
-        else delete next[key];
-      }
-      patchConfig({ viz_overrides: next });
+      patchConfig({
+        viz_overrides: patchOverrides(c.preset_config ?? c.config, c.viz_overrides, patch),
+      });
     },
     [patchConfig],
   );
@@ -473,25 +526,22 @@ const AdvancedVizBuilder: React.FC = () => {
     [suggestions],
   );
   const descriptor = selectedKind ? (kindMap.get(selectedKind) ?? null) : null;
-  // [role, acceptedDtypes, description][] for the selected kind, split required
-  // vs optional. Description feeds each binding's rich tooltip.
-  const requiredRoles = useMemo<[string, string[], string][]>(
-    () =>
-      descriptor
-        ? Object.entries(descriptor.roles)
-            .filter(([, spec]) => spec.required)
-            .map(([role, spec]) => [role, spec.dtypes, spec.description ?? ''])
-        : [],
-    [descriptor],
+  // The preview must render exactly what Save will persist, so both go through
+  // the one merge helper rather than each spelling the layering out.
+  const mergedPreset = useMemo(
+    () => mergedPresetConfig(config),
+    [config.preset_config, config.config, config.viz_overrides],
   );
-  const optionalRoles = useMemo<[string, string[], string][]>(
-    () =>
-      descriptor
-        ? Object.entries(descriptor.roles)
-            .filter(([, spec]) => !spec.required)
-            .map(([role, spec]) => [role, spec.dtypes, spec.description ?? ''])
-        : [],
-    [descriptor],
+  // [role, acceptedDtypes, description][] for the selected kind, split required
+  // vs optional. Description feeds each binding's rich tooltip. A few kinds ask
+  // for other columns depending on a config field (an HMM logo computed from an
+  // alignment instead of a profile); that field selects the role mode, see
+  // kindModes.ts.
+  const roleMode = roleModeOf(selectedKind, mergedPreset);
+  const msaDescriptor = kindMap.get('msa') ?? null;
+  const { required: requiredRoles, optional: optionalRoles } = useMemo(
+    () => splitRoles(descriptor, roleMode, msaDescriptor),
+    [descriptor, roleMode, msaDescriptor],
   );
 
   const columnMapping = useMemo(
@@ -499,11 +549,30 @@ const AdvancedVizBuilder: React.FC = () => {
     [config.column_mapping],
   );
 
-  // The preview must render exactly what Save will persist, so both go through
-  // the one merge helper rather than each spelling the layering out.
-  const mergedPreset = useMemo(
-    () => mergedPresetConfig(config),
-    [config.preset_config, config.config, config.viz_overrides],
+  // What Save will write: the bindings, the saved or catalog blob and the
+  // author's overrides, layered by the save path's own helper. The settings
+  // panels read this rather than `mergedPreset`, which has no bindings, so a
+  // column bound in the role table counts there as soon as it is bound (the
+  // secondary-structure reference source, the Ramachandran colour modes), and a
+  // panel shows the value the tile will be saved with.
+  const effectiveConfig = useMemo(
+    () => buildAdvancedVizConfigBlob(selectedKind ?? undefined, columnMapping, mergedPreset),
+    [selectedKind, columnMapping, mergedPreset],
+  );
+
+  // A role whose column a settings panel owns (configBlob.ts PANEL_COLUMNS) is
+  // read from and written to the config layer, the panel's store, instead of
+  // `column_mapping`: the row and the panel's picker are two views of one key.
+  // Clearing it here unbinds it (null), as the panel's own picker does; every
+  // such column is nullable on its model.
+  const roleValue = useCallback(
+    (role: string): string | string[] | undefined => {
+      const key = panelColumnOfRole(selectedKind, role);
+      if (!key) return columnMapping[role];
+      const value = effectiveConfig[key];
+      return typeof value === 'string' && value ? value : undefined;
+    },
+    [selectedKind, columnMapping, effectiveConfig],
   );
 
   // Unpack a config blob back into the role map: a saved component being edited
@@ -554,7 +623,12 @@ const AdvancedVizBuilder: React.FC = () => {
     if (!selectedKind || !schema) return;
     if (Object.keys(columnMapping).length > 0) return;
 
-    const candidates = scoreMap.get(selectedKind)?.role_candidates ?? {};
+    // An HMM logo built from an alignment binds the msa kind's roles, which the
+    // suggester ranks under that kind.
+    const candidates = {
+      ...(roleMode === 'msa' ? scoreMap.get('msa')?.role_candidates : undefined),
+      ...scoreMap.get(selectedKind)?.role_candidates,
+    };
     const liveEmbeddingSuggest =
       selectedKind === 'embedding' && embeddingMode === 'live';
     const rolesToSuggest = liveEmbeddingSuggest
@@ -580,7 +654,7 @@ const AdvancedVizBuilder: React.FC = () => {
     if (Object.keys(suggest).length > 0) {
       patchConfig({ column_mapping: { ...columnMapping, ...suggest } });
     }
-  }, [selectedKind, schema, columnMapping, patchConfig, embeddingMode, requiredRoles, scoreMap]);
+  }, [selectedKind, schema, columnMapping, patchConfig, embeddingMode, requiredRoles, roleMode, scoreMap]);
 
   const setKind = (kind: AdvancedVizKind | null) => {
     // Re-picking a kind invalidates the catalog/saved preset (its control
@@ -604,6 +678,11 @@ const AdvancedVizBuilder: React.FC = () => {
   };
 
   const setRole = (role: string, value: string | string[] | null) => {
+    const panelKey = panelColumnOfRole(selectedKind, role);
+    if (panelKey) {
+      setOverrideFields({ [panelKey]: typeof value === 'string' && value ? value : null });
+      return;
+    }
     const next: Record<string, string | string[]> = { ...columnMapping };
     if (value == null || (Array.isArray(value) && value.length === 0)) {
       delete next[role];
@@ -668,7 +747,7 @@ const AdvancedVizBuilder: React.FC = () => {
     const errors: string[] = [];
     const warnings: string[] = [];
     const checkBinding = (role: string, accepted: string[], optional: boolean) => {
-      const val = columnMapping[role];
+      const val = roleValue(role);
       const prefix = optional ? 'Optional column' : 'Column';
       if (!val) {
         if (!optional) errors.push(`Required role "${role}" is not bound`);
@@ -719,7 +798,7 @@ const AdvancedVizBuilder: React.FC = () => {
       errors.push('Pick a compute method (PCA / UMAP / t-SNE / PCoA)');
     }
     return { errors, warnings, ok: errors.length === 0 };
-  }, [selectedKind, schema, nothingToBind, columnMapping, liveEmbedding, requiredRoles, optionalRoles]);
+  }, [selectedKind, schema, nothingToBind, columnMapping, roleValue, liveEmbedding, requiredRoles, optionalRoles]);
 
   const setSaveError = useBuilderStore((s) => s.setSaveError);
   useEffect(() => {
@@ -792,10 +871,10 @@ const AdvancedVizBuilder: React.FC = () => {
       nothingToBind ||
       (requiredRoles.length > 0 &&
       requiredRoles.every(([role]) => {
-        const v = columnMapping[role];
+        const v = roleValue(role);
         return Array.isArray(v) ? v.length > 0 : Boolean(v);
       })),
-    [nothingToBind, requiredRoles, columnMapping],
+    [nothingToBind, requiredRoles, roleValue],
   );
 
   /** Render a titled grid of kind tiles with a match badge (named, shape,
@@ -1020,8 +1099,8 @@ const AdvancedVizBuilder: React.FC = () => {
           )}
           placeholder="Pick a column"
           value={
-            typeof columnMapping[role] === 'string'
-              ? (columnMapping[role] as string)
+            typeof roleValue(role) === 'string'
+              ? (roleValue(role) as string)
               : null
           }
           onChange={(v) => setRole(role, v)}
@@ -1042,8 +1121,8 @@ const AdvancedVizBuilder: React.FC = () => {
           )}
           placeholder="Pick a column"
           value={
-            typeof columnMapping[role] === 'string'
-              ? (columnMapping[role] as string)
+            typeof roleValue(role) === 'string'
+              ? (roleValue(role) as string)
               : null
           }
           onChange={(v) => setRole(role, v)}
@@ -1334,9 +1413,17 @@ const AdvancedVizBuilder: React.FC = () => {
 
       {selectedKind === 'record_card' ? (
         <RecordCardLinkSettings
-          config={mergedPreset}
+          config={effectiveConfig}
           idCol={typeof columnMapping.id === 'string' ? columnMapping.id : null}
-          onChange={setRecordCardFields}
+          onChange={setOverrideFields}
+        />
+      ) : null}
+
+      {selectedKind && isProteinKind(selectedKind) ? (
+        <ProteinBindingSettings
+          vizKind={selectedKind}
+          config={effectiveConfig}
+          onChange={setOverrideFields}
         />
       ) : null}
     </Stack>

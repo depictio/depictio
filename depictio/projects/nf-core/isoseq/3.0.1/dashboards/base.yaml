@@ -1,0 +1,1325 @@
+version: 1
+# nf-core/isoseq 3.0.1, on the family rules of depictio/projects/nf-core/RULES.md
+# (ampliseq/2.18.0 is the reference implementation).
+#
+# Funnel: the CCS and primer reports of every chunk (MultiQC) -> the read yield
+# per library, insert lengths and poly(A) tails (Reads) -> the isoforms TAMA
+# merges and their structural category against the reference (Isoforms) -> the
+# genes they belong to and their structures (Genes). The sample hub (`samples`)
+# carries the persistent sample filters and the design factors; its links reach
+# every sample-keyed collection.
+#
+# Routes: a run with --skip_multiqc prunes the MultiQC collection and with it the
+# MultiQC tab. A run started from lima, refine or mapping has no CCS (or refine)
+# reports: the collections are pruned, the Reads tab keeps what the run wrote,
+# and the lines of the Overview that cite them go with them. A run without
+# METADATA_FILE has no design table: the hub carries one constant group, so the
+# group filter shows a single value. A minimap2 run publishes no reference GTF:
+# every isoform is `unclassified` unless REFERENCE_GTF is given.
+main_dashboard:
+  title: nf-core/isoseq
+  subtitle: PacBio Iso-Seq reads, from circular consensus to the isoforms TAMA builds
+  project_tag: Iso-Seq Full-Length Transcriptomes
+  main_tab_name: Overview
+  tab_icon: mdi:compass-outline
+  tab_icon_color: brandPrimary
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_panel_default: collapsed
+  content_width_default: compact
+  show_tab_header: false
+  # Declared once here, read by every tab of the family: figures, advanced viz
+  # and filter chips all colour a value the same way. The structural categories
+  # are one vocabulary under several column names.
+  category_colors:
+    '{GROUP_COL}': auto
+    structural_category:
+      FSM: '#228be6'
+      ISM: '#15aabf'
+      NIC: '#40c057'
+      NNC: '#fd7e14'
+      genic: '#be4bdb'
+      antisense: '#7950f2'
+      intergenic: '#fab005'
+      unclassified: '#868e96'
+    top_category:
+      FSM: '#228be6'
+      ISM: '#15aabf'
+      NIC: '#40c057'
+      NNC: '#fd7e14'
+      genic: '#be4bdb'
+      antisense: '#7950f2'
+      intergenic: '#fab005'
+      unclassified: '#868e96'
+    # The structure view also draws the reference transcripts of each gene.
+    transcript_class:
+      FSM: '#228be6'
+      ISM: '#15aabf'
+      NIC: '#40c057'
+      NNC: '#fd7e14'
+      genic: '#be4bdb'
+      antisense: '#7950f2'
+      intergenic: '#fab005'
+      unclassified: '#868e96'
+      reference: '#adb5bd'
+    gene_status:
+      annotated: '#0ca678'
+      novel: '#f08c00'
+  # Persistent: drawn in every tab's filter panel, picks kept across tabs. The
+  # sample hub is always there and carries the design factors.
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab
+    persistent: true
+    pin: top
+  grid_sections:
+  - name: Key figures
+    icon: mdi:counter
+    color: gray
+    appearance: plain
+    card_variant: headline
+    filter_bar: true
+    visible_filters: 2
+    description: The run in four numbers. The filters here narrow these four only.
+  - name: Findings
+    icon: mdi:star-outline
+    color: gray
+    appearance: plain
+    figure_style: minimal
+    filter_bar: true
+    visible_filters: 2
+    description: What the data says, each with the tab that shows it, then the figures behind it.
+  - name: How to read this dashboard
+    icon: mdi:information-outline
+    color: gray
+    appearance: plain
+    description: The tabs by group, each with the question it answers.
+  # Declared on the main tab, which no route removes.
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: gray
+    description: The design factors and the per-sample summary every tab filters through
+    collapsed: true
+    persistent: true
+    pin: bottom
+    exclude_tabs:
+    - Overview
+  components:
+  # First in component order on purpose: the Guide demos the first categorical
+  # filter that shares a data collection with the first card (Samples, below).
+  - component_type: interactive
+    workflow_tag: isoseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Key figures
+    tag: is-ov-kf-group
+    index: is-ov-kf-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: isoseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+      strip_label: Sample
+    section: Key figures
+    tag: is-ov-kf-sample
+    index: is-ov-kf-sample
+    title: Sample
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # The pipeline's wordmark, read from its repository; where it cannot load (no
+  # internet), the title is drawn as text.
+  - component_type: text
+    title: nf-core/isoseq
+    logo: https://raw.githubusercontent.com/nf-core/isoseq/master/docs/images/nf-core-isoseq_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/isoseq/master/docs/images/nf-core-isoseq_logo_dark.png
+    order: 1
+    body: >
+      PacBio Iso-Seq reads turned into a full-length transcriptome: consensus reads, primer and
+      chimera filtering, mapping, and the isoforms TAMA builds, each given a structural category
+      against the reference. [Run parameters](params:)
+    tag: is-ov-hero
+    index: is-ov-hero
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/isoseq builds full-length transcript models from PacBio Iso-Seq reads. This page sums up one run; each tab behind it answers one question.
+
+      The sample filters in the left panel apply to every tab. A bar above a section narrows that section only.
+    tag: is-ov-about
+    index: is-ov-about
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash.
+  - component_type: text
+    surface: card
+    values:
+      samples: {dc: samples, column: sample, aggregation: nunique, format: integer}
+      n_iso: {dc: tama_transcripts, column: transcript_id, aggregation: count, format: si}
+    body: |
+      ### The run
+      - ![](icon:mdi:test-tube) **Samples** {{samples}}
+      - ![](icon:mdi:dna) **Isoforms** {{n_iso}}
+      - ![](icon:mdi:check-decagram) **Min. passes** {{param:min_passes}}
+      - ![](icon:mdi:vector-polyline) **Aligner** {{param:aligner}}
+      - ![](icon:mdi:book-open-variant) **Genome** {{param:genome}}
+    tag: is-ov-run
+    index: is-ov-run
+    layout: {x: 5, y: 1, w: 3, h: 3}
+  # The marks take the family's colour (the header's), not the theme's blue. A
+  # step citing a value goes with its collection when the run skipped the tool.
+  - component_type: text
+    surface: card
+    accent: green
+    values:
+      n_ccs: {dc: pbccs_zmw_yield, column: zmw_passed, aggregation: sum, format: si}
+      n_flnc: {dc: isoseq_refine_summary, column: flnc_reads, aggregation: sum, format: si}
+      n_iso: {dc: tama_transcripts, column: transcript_id, aggregation: count, format: si}
+      n_genes: {dc: tama_genes, column: gene_id, aggregation: nunique, format: si}
+    body: |
+      ### Six steps from subreads to isoforms
+      Each step names its settings and the tab that shows its result.
+
+      ::: steps
+      1. ![](icon:mdi:dna) **Consensus** ccs, {{n_ccs}} HiFi reads · [Settings](params:min_passes) · [Reads](tab:Reads)
+      2. ![](icon:mdi:content-cut) **Primers** lima keeps reads with both · [Settings](params:primers)
+      3. ![](icon:mdi:filter-check-outline) **Refine** {{n_flnc}} non-chimeric reads · [Reads](tab:Reads)
+      4. ![](icon:mdi:map-marker-path) **Map** {{param:aligner}} to the genome · [Settings](params:aligner)
+      5. ![](icon:mdi:set-merge) **Collapse** TAMA, {{n_iso}} isoforms · [Settings](params:splice_junction) · [Isoforms](tab:Isoforms)
+      6. ![](icon:mdi:family-tree) **Assign** {{n_genes}} genes · [Genes](tab:Genes)
+      :::
+    tag: is-ov-steps
+    index: is-ov-steps
+    layout: {x: 0, y: 4, w: 8, h: 3}
+  # Key figures: one card per stage of the funnel, each opening the tab that
+  # explains it. The icon colour is that tab's colour.
+  - component_type: card
+    workflow_tag: isoseq
+    data_collection_tag: samples
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: '{GROUP_COL}'
+    display:
+      icon_name: mdi:test-tube
+      icon_color: orange
+      caption: in the run, by {GROUP_COL_DISPLAY}
+      link: tab:Reads
+    section: Key figures
+    tag: is-ov-kf-samples
+    index: is-ov-kf-samples
+    title: Samples
+    description: Samples of the run, one TAMA annotation each. The bar splits them by {GROUP_COL_DISPLAY}.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  # The attrition reads left to right: full-length non-chimeric reads, then the
+  # share of them that ended in a final isoform.
+  - component_type: card
+    workflow_tag: isoseq
+    data_collection_tag: samples
+    aggregation: sum
+    column_name: flnc_reads
+    column_type: int64
+    secondary_layout: attrition
+    attrition_cols: [collapsed_reads]
+    display:
+      icon_name: mdi:filter-check-outline
+      icon_color: teal
+      caption: non-chimeric, then in an isoform
+      link: tab:Reads
+    section: Key figures
+    tag: is-ov-kf-flnc
+    index: is-ov-kf-flnc
+    title: FLNC reads
+    description: Full-length reads with both primers and no chimera, and those TAMA collapsed into a final isoform.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: isoseq
+    data_collection_tag: tama_transcripts
+    use: tama/transcripts
+    aggregation: count
+    column_name: transcript_id
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: structural_category
+    display:
+      icon_name: mdi:shape-outline
+      icon_color: violet
+      caption: isoforms, by structural category
+      link: tab:Isoforms
+    section: Key figures
+    tag: is-ov-kf-isoforms
+    index: is-ov-kf-isoforms
+    title: Isoforms
+    description: Final isoforms of every sample. The bar splits them by the structural category against the reference.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  # collapsed_pct is a percentage per sample, so the median is of samples, not
+  # of reads.
+  - component_type: card
+    workflow_tag: isoseq
+    data_collection_tag: samples
+    aggregation: median
+    column_name: collapsed_pct
+    column_type: float64
+    filter_expr: col('flnc_reads') > 0
+    secondary_layout: coverage
+    coverage_max: 100
+    display:
+      icon_name: mdi:set-merge
+      icon_color: indigo
+      caption: median share of reads in an isoform
+      link: tab:Reads
+      decimals: 0
+    section: Key figures
+    tag: is-ov-kf-collapsed
+    index: is-ov-kf-collapsed
+    title: Reads in an isoform (%)
+    description: Median share of a sample's FLNC reads that mapped and survived TAMA collapse, over the samples in view.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Findings filter bar: the group, then the sample.
+  - component_type: interactive
+    workflow_tag: isoseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Findings
+    tag: is-ov-findings-group
+    index: is-ov-findings-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: isoseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+      strip_label: Sample
+    section: Findings
+    tag: is-ov-findings-sample
+    index: is-ov-findings-sample
+    title: Sample
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # One result row per finding, each citing one data collection, so the import
+  # removes a row with its data. Every row states a measure and lets the value
+  # fill in.
+  - component_type: text
+    surface: card
+    values:
+      ccs_pass: {dc: pbccs_zmw_yield, column: pct_passed, aggregation: median, format: 'decimals:0'}
+      collapse: {dc: samples, column: collapsed_pct, aggregation: median,
+        filter_expr: "col('flnc_reads') > 0", format: 'decimals:0'}
+      top_cat: {dc: tama_transcripts, column: structural_category, aggregation: top}
+      cat_share: {dc: tama_transcripts, column: structural_category, aggregation: top_share, format: percent}
+      multi: {dc: tama_genes, column: gene_id, aggregation: count,
+        filter_expr: "col('isoforms') > 1", format: si}
+      n_genes: {dc: tama_genes, column: gene_id, aggregation: nunique, format: si}
+    body: |
+      - **{{ccs_pass}}%** of ZMWs give a CCS read – median per library [Reads](tab:Reads)
+      - **{{collapse}}%** of FLNC reads end in a final isoform – median per sample [Reads](tab:Reads)
+      - **{{cat_share}}** of isoforms are {{top_cat}} – the commonest structural category [Isoforms](tab:Isoforms)
+      - **{{multi}}** of {{n_genes}} genes carry several isoforms [Genes](tab:Genes)
+    section: Findings
+    tag: is-ov-findings
+    index: is-ov-findings
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # One highlight per row slot, in the order of the rows above. The tiles of a
+  # row share a stored height.
+  - component_type: highlight
+    section: Findings
+    source_tab: Reads
+    source_component: is-rd-av-insert
+    caption: One curve per sample, in 100 bp bins; the peak is the size the library was selected for.
+    hide_legend: true
+    tag: is-ov-hl-insert
+    index: is-ov-hl-insert
+    layout: {x: 0, y: 2, w: 4, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Isoforms
+    source_component: is-iso-av-categories
+    caption: Isoforms per sample by structural category; switch the rank to count FLNC reads instead.
+    tag: is-ov-hl-categories
+    index: is-ov-hl-categories
+    layout: {x: 4, y: 2, w: 4, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Isoforms
+    source_component: is-iso-av-plane
+    caption: One point per isoform by length and FLNC reads; novel isoforms high on the plot are well supported.
+    tag: is-ov-hl-plane
+    index: is-ov-hl-plane
+    layout: {x: 0, y: 7, w: 4, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Genes
+    source_component: is-gene-av-plane
+    caption: One point per gene by FLNC reads and isoforms; genes above the cloud are the most diverse.
+    tag: is-ov-hl-genes
+    index: is-ov-hl-genes
+    layout: {x: 4, y: 7, w: 4, h: 5}
+  # Link-only tab tiles: each tile prints its tab's subtitle, the question the
+  # tab answers. A tab the run does not have is left out.
+  - component_type: text
+    body: |
+      ### Data & QC
+      - [MultiQC](tab:MultiQC)
+      - [Reads](tab:Reads)
+
+      ### Transcriptome
+      - [Isoforms](tab:Isoforms)
+      - [Genes](tab:Genes)
+    section: How to read this dashboard
+    tag: is-ov-how-to-read
+    index: is-ov-how-to-read
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Persistent sample filters, the group first.
+  - component_type: interactive
+    workflow_tag: isoseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+    section: Sample filters
+    group: Sample scope
+    tag: is-filter-group
+    index: sample-filters-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: isoseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+    section: Sample filters
+    group: Sample scope
+    tag: is-filter-sample
+    index: sample-filters-sample
+    title: Sample
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  # Row selection feeds the Analysis panel.
+  - component_type: table
+    workflow_tag: isoseq
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Sample sheet
+    tag: is-sheet-samples
+    index: is-sheet-samples
+    title: Sample summary
+    description: One row per sample, its design factors first, then from the ZMWs read to the isoforms built. Ticking rows narrows every tab to those samples.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+
+tabs:
+# =========================================================================
+# Data & QC
+# =========================================================================
+- title: MultiQC
+  subtitle: Did every CCS chunk pass the filters and keep its primers?
+  tab_group: Data & QC
+  tab_order: 1
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  grid_sections:
+  - name: CCS filtering
+    icon: mdi:filter-variant
+    color: orange
+    description: ZMWs each CCS chunk passed, and why the others were filtered
+  - name: Primer demultiplexing
+    icon: mdi:shield-check-outline
+    color: orange
+    description: CCS reads lima kept as full-length, per chunk
+  components:
+  # The tab's intro: the method, with its links, and how to read the tab.
+  - component_type: text
+    order: 1
+    body: >
+      [MultiQC](https://seqera.io/multiqc/) gathers the reports of [ccs](https://ccs.how) and
+      [lima](https://lima.how), one bar per CCS chunk, because the pipeline splits every library
+      into chunks to run ccs in parallel. A chunk that stands out points at a compute problem more
+      often than at the library.
+    tag: is-mqc-intro
+    index: is-mqc-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    workflow_tag: isoseq
+    data_collection_tag: multiqc_data
+    use: multiqc/ccs
+    selected_module: ccs
+    selected_plot: ZMWs filtered and passed
+    section: CCS filtering
+    tag: is-mqc-ccs
+    index: is-mqc-ccs
+    title: ZMWs passed and filtered per chunk
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: isoseq
+    data_collection_tag: multiqc_data
+    use: multiqc/lima
+    selected_module: lima
+    selected_plot: ZMW filtering
+    section: Primer demultiplexing
+    tag: is-mqc-lima
+    index: is-mqc-lima
+    title: Reads lima kept and rejected per chunk
+    layout: {x: 0, y: 0, w: 8, h: 4}
+
+# =========================================================================
+# Reads: from ZMWs to full-length non-chimeric reads, and what they look like.
+# =========================================================================
+- title: Reads
+  subtitle: How many reads survive each step, and how long are they?
+  tab_group: Data & QC
+  tab_order: 2
+  tab_icon: mdi:filter-variant
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Read scope
+    icon: mdi:tune
+    color: teal
+    description: Keep samples inside a yield band
+  grid_sections:
+  - name: Reads at a glance
+    icon: mdi:counter
+    color: teal
+    description: The read funnel and the per-sample yield, one box per measure
+  - name: CCS outcome
+    icon: mdi:chart-bar
+    color: teal
+    description: Where the ZMWs of every library went, stacked to 100 %
+  - name: Read lengths
+    icon: mdi:ruler
+    color: teal
+    description: The size selection of the library and the poly(A) tails TAMA trimmed
+  - name: Sample detail
+    icon: mdi:information-outline
+    color: gray
+    description: Pick a sample on the plane, read its funnel beside it
+    collapsed: true
+  - name: Read tables
+    icon: mdi:table
+    color: gray
+    description: The per-library CCS and refine counts
+    collapsed: true
+  components:
+  - component_type: interactive
+    workflow_tag: isoseq
+    data_collection_tag: samples
+    interactive_component_type: RangeSlider
+    column_name: ccs_pass_pct
+    column_type: float64
+    display:
+      icon_name: mdi:check-decagram
+      custom_color: green
+    placement: left
+    section: Read scope
+    group: Yield
+    tag: is-rd-filter-ccs
+    index: is-rd-filter-ccs
+    title: ZMWs giving a CCS read (%)
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: isoseq
+    data_collection_tag: samples
+    interactive_component_type: RangeSlider
+    column_name: collapsed_pct
+    column_type: float64
+    display:
+      icon_name: mdi:set-merge
+      custom_color: indigo
+    placement: left
+    section: Read scope
+    group: Yield
+    tag: is-rd-filter-collapsed
+    index: is-rd-filter-collapsed
+    title: Reads in an isoform (%)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: isoseq
+    data_collection_tag: samples
+    interactive_component_type: RangeSlider
+    column_name: median_insert_bp
+    column_type: int64
+    display:
+      icon_name: mdi:ruler
+      custom_color: cyan
+    placement: left
+    section: Read scope
+    group: Yield
+    tag: is-rd-filter-insert
+    index: is-rd-filter-insert
+    title: Median insert length (bp)
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: text
+    order: 1
+    body: >
+      [ccs](https://ccs.how) turns each ZMW into one consensus read, [lima](https://lima.how) keeps
+      the reads with both primers and [isoseq refine](https://isoseq.how) removes chimeras and
+      poly(A) tails. The cards follow the funnel; the bars show where ZMWs were lost. Short inserts
+      point at degraded RNA or a size selection that failed.
+    tag: is-rd-intro
+    index: is-rd-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  # Four different readings of the funnel, each with its own icon and secondary.
+  - component_type: card
+    workflow_tag: isoseq
+    data_collection_tag: samples
+    aggregation: sum
+    column_name: zmw_input
+    column_type: int64
+    secondary_layout: attrition
+    attrition_cols: [ccs_reads, fl_reads, flnc_reads, collapsed_reads]
+    display:
+      icon_name: mdi:filter-variant
+      icon_color: teal
+      caption: ZMWs, then CCS, full-length, FLNC and collapsed reads
+    section: Reads at a glance
+    tag: is-rd-card-funnel
+    index: is-rd-card-funnel
+    title: ZMWs read
+    description: ZMWs the movie held, and how many reached each later step of the funnel.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: isoseq
+    data_collection_tag: pbccs_zmw_yield
+    use: pbccs/zmw_yield
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: pct_passed
+    column_type: float64
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: blue
+      caption: median per library, with its spread
+      decimals: 1
+    section: Reads at a glance
+    tag: is-rd-card-ccs
+    index: is-rd-card-ccs
+    title: ZMWs giving a CCS read (%)
+    description: Median share of a library's ZMWs that passed every CCS filter. The box shows how libraries spread.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: isoseq
+    data_collection_tag: isoseq_refine_summary
+    use: isoseq/refine_summary
+    aggregation: median
+    secondary_layout: histogram
+    column_name: pct_flnc
+    column_type: float64
+    display:
+      icon_name: mdi:content-cut
+      icon_color: grape
+      caption: libraries, by share kept as non-chimeric
+      decimals: 1
+    section: Reads at a glance
+    tag: is-rd-card-flnc
+    index: is-rd-card-flnc
+    title: Non-chimeric reads (%)
+    description: Median share of a library's full-length reads that refine kept as non-chimeric.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: isoseq
+    data_collection_tag: samples
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: median_insert_bp
+    column_type: int64
+    display:
+      icon_name: mdi:ruler
+      icon_color: orange
+      caption: median bp per sample, with its spread
+      decimals: 0
+    section: Reads at a glance
+    tag: is-rd-card-insert
+    index: is-rd-card-insert
+    title: Median insert length
+    description: Length of the cDNA left once primers and poly(A) are trimmed, as the median of the samples.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: isoseq
+    data_collection_tag: pbccs_zmw_outcomes
+    use: pbccs/ccs_outcome_bars
+    # One composition level and a fixed set of CCS filters: the taxonomy
+    # controls (rank, sort, top-N) mean nothing here, so the tile hides them.
+    config:
+      top_n: 12
+      sort_by: abundance
+      normalise_to_one: true
+      sample_sort: first_taxon
+      hidden_controls: [rank, sample_sort, top_n]
+      x_title: Library
+    section: CCS outcome
+    tag: is-rd-av-ccs-outcome
+    index: is-rd-av-ccs-outcome
+    title: CCS outcome per library
+    description: Share of each library's ZMWs that passed, or the filter that removed them; libraries ordered by their passed share.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: isoseq
+    data_collection_tag: isoseq_insert_length
+    use: isoseq/insert_length_profile
+    config:
+      x_title: Insert length (bp)
+      y_title: FLNC reads (% of sample)
+      selection_enabled: true
+      selection_column: sample
+      legend_pos: bottom
+    section: Read lengths
+    tag: is-rd-av-insert
+    index: is-rd-av-insert
+    title: FLNC insert length
+    description: One curve per sample, in 100 bp bins, as a share of its reads.
+    layout: {x: 0, y: 0, w: 4, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: isoseq
+    data_collection_tag: tama_polya_tails
+    use: tama/polya_tail_profile
+    config:
+      x_title: Poly(A) tail removed (nt)
+      y_title: Reads (% of sample)
+      selection_enabled: true
+      selection_column: sample
+      legend_pos: bottom
+    section: Read lengths
+    tag: is-rd-av-polya
+    index: is-rd-av-polya
+    title: Poly(A) tail left to trim
+    description: One curve per sample; the last point pools tails of 100 nt or more.
+    layout: {x: 4, y: 0, w: 4, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: isoseq
+    data_collection_tag: samples
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: flnc_reads
+      y_col: collapsed_pct
+      label_col: sample
+      size_col: isoforms
+      x_title: FLNC reads
+      y_title: FLNC reads in a final isoform (%)
+      log_x: true
+      selection_enabled: true
+      selection_column: sample
+      legend_pos: bottom
+    section: Sample detail
+    tag: is-rd-detail-plane
+    index: is-rd-detail-plane
+    title: Depth and collapse rate per sample
+    description: One point per sample, sized by the isoforms it yielded. A sample low on both axes mapped few reads.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: isoseq
+    data_collection_tag: samples
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: is-rd-detail-plane
+      id_col: sample
+      selection_source: scatter_selection
+      sections:
+        Read funnel: [libraries, zmw_input, ccs_reads, ccs_pass_pct, fl_reads, flnc_reads, flnc_pct, collapsed_reads, collapsed_pct, median_insert_bp]
+        Transcriptome: [isoforms, genes, annotated_genes, fsm_pct, novel_isoform_pct, novel_read_pct]
+    section: Sample detail
+    tag: is-rd-detail-record
+    index: is-rd-detail-record
+    title: Sample record
+    description: The picked sample as a fact panel.
+    layout: {x: 5, y: 0, w: 3, h: 6}
+  - component_type: table
+    workflow_tag: isoseq
+    data_collection_tag: pbccs_zmw_yield
+    use: pbccs/zmw_yield
+    section: Read tables
+    tag: is-rd-table-ccs
+    index: is-rd-table-ccs
+    title: CCS yield per library
+    description: ZMWs read, passed and filtered per samplesheet row, summed over the CCS chunks.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: isoseq
+    data_collection_tag: isoseq_refine_summary
+    use: isoseq/refine_summary
+    section: Read tables
+    tag: is-rd-table-refine
+    index: is-rd-table-refine
+    title: Full-length reads per library
+    description: FL, FLNC and poly(A) FLNC counts per samplesheet row, from isoseq refine.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+
+# =========================================================================
+# Transcriptome
+# =========================================================================
+- title: Isoforms
+  subtitle: How much of the transcriptome is new, and how well supported?
+  tab_group: Transcriptome
+  tab_order: 3
+  tab_icon: mdi:dna
+  tab_icon_color: violet
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Isoform scope
+    icon: mdi:tune
+    color: violet
+    description: Keep isoforms of some categories, structures or support
+  grid_sections:
+  - name: Isoforms at a glance
+    icon: mdi:counter
+    color: violet
+    description: How many isoforms, how well supported, and how new
+  - name: Structural categories
+    icon: mdi:chart-bar
+    color: violet
+    description: Known, novel and unassigned isoforms, by count and by read
+  - name: Length and support
+    icon: mdi:chart-scatter-plot
+    color: violet
+    description: Pick an isoform on the plane, read its record beside it
+  - name: Length per category
+    icon: mdi:chart-box-outline
+    color: violet
+    description: Summed exon length of the isoforms of every category
+  - name: Isoform table
+    icon: mdi:table
+    color: gray
+    description: Every isoform with its category, structure and support
+    collapsed: true
+  components:
+  - component_type: interactive
+    workflow_tag: isoseq
+    data_collection_tag: tama_transcripts
+    use: tama/transcripts
+    interactive_component_type: MultiSelect
+    column_name: structural_category
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: grape
+    placement: left
+    section: Isoform scope
+    group: Isoforms
+    tag: is-iso-filter-category
+    index: is-iso-filter-category
+    title: Structural category
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: isoseq
+    data_collection_tag: tama_transcripts
+    interactive_component_type: MultiSelect
+    column_name: exon_structure
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: pink
+    placement: left
+    section: Isoform scope
+    group: Isoforms
+    tag: is-iso-filter-exons
+    index: is-iso-filter-exons
+    title: Exon structure
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: isoseq
+    data_collection_tag: tama_transcripts
+    interactive_component_type: RangeSlider
+    column_name: read_support
+    column_type: int64
+    display:
+      icon_name: mdi:chart-bar
+      custom_color: blue
+    placement: left
+    section: Isoform scope
+    group: Isoforms
+    tag: is-iso-filter-support
+    index: is-iso-filter-support
+    title: FLNC reads per isoform
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: isoseq
+    data_collection_tag: tama_transcripts
+    interactive_component_type: RangeSlider
+    column_name: transcript_length
+    column_type: int64
+    display:
+      icon_name: mdi:ruler
+      custom_color: cyan
+    placement: left
+    section: Isoform scope
+    group: Isoforms
+    tag: is-iso-filter-length
+    index: is-iso-filter-length
+    title: Isoform length (bp)
+    layout: {x: 0, y: 9, w: 1, h: 3}
+  - component_type: text
+    order: 1
+    body: >
+      [TAMA](https://github.com/GenomeRIK/tama) collapses the mapped reads into transcript models
+      and merges them per sample, and each isoform is compared with the reference annotation. FSM
+      and ISM repeat an annotated intron chain, NIC and NNC are new combinations or new splice
+      sites. Change the rank of the bars to count FLNC reads instead of isoforms.
+    tag: is-iso-intro
+    index: is-iso-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Most isoforms hold one read, so a median or a box would sit on 1: the cards
+  # count isoforms past a support cut-off, and measure length, where the median
+  # means something.
+  - component_type: card
+    workflow_tag: isoseq
+    data_collection_tag: tama_transcripts
+    use: tama/transcripts
+    aggregation: count
+    column_name: transcript_id
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: structural_category
+    display:
+      icon_name: mdi:dna
+      icon_color: violet
+      caption: isoforms, by structural category
+    section: Isoforms at a glance
+    tag: is-iso-card-count
+    index: is-iso-card-count
+    title: Isoforms
+    description: Final isoforms of the samples in view. The bar splits them by the structural category against the reference.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: isoseq
+    data_collection_tag: tama_transcripts
+    use: tama/transcripts
+    aggregation: count
+    column_name: transcript_id
+    column_type: object
+    filter_expr: col('read_support') >= 3
+    secondary_layout: top_n
+    breakdown_col: structural_category
+    top_n_count: 4
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: blue
+      caption: isoforms with 3 or more reads, by category
+    section: Isoforms at a glance
+    tag: is-iso-card-supported
+    index: is-iso-card-supported
+    title: Well-supported isoforms
+    description: Isoforms backed by at least three FLNC reads, the ones worth following up. The bars rank the categories that hold most of them.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: isoseq
+    data_collection_tag: tama_transcripts
+    use: tama/transcripts
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: transcript_length
+    column_type: int64
+    display:
+      icon_name: mdi:ruler
+      icon_color: cyan
+      caption: median bp, with its spread
+      decimals: 0
+    section: Isoforms at a glance
+    tag: is-iso-card-length
+    index: is-iso-card-length
+    title: Isoform length
+    description: Median summed exon length of the isoforms in view. The box shows how it spreads.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: isoseq
+    data_collection_tag: samples
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: novel_read_pct
+    column_type: float64
+    filter_expr: col('collapsed_reads') > 0
+    display:
+      icon_name: mdi:star-outline
+      icon_color: orange
+      caption: median per sample, with its spread
+      decimals: 0
+    section: Isoforms at a glance
+    tag: is-iso-card-novel
+    index: is-iso-card-novel
+    title: Reads on NIC and NNC isoforms (%)
+    description: Median share of a sample's collapsed reads that sit on a novel isoform. The box shows how samples spread.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: isoseq
+    data_collection_tag: tama_category_composition
+    use: tama/category_bars
+    # The rank column is the level (isoforms or FLNC reads), so its picker is
+    # labelled so; the categories are a fixed set, coloured by category_colors.
+    config:
+      default_rank: Isoforms
+      rank_label: Level
+      top_n: 12
+      sort_by: abundance
+      normalise_to_one: true
+      sample_sort: first_taxon
+      hidden_controls: [sample_sort, top_n]
+    section: Structural categories
+    tag: is-iso-av-categories
+    index: is-iso-av-categories
+    title: Structural category composition
+    description: Stacked to 100 % per sample; the rank switches between isoforms and FLNC reads.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: isoseq
+    data_collection_tag: tama_transcripts
+    use: tama/isoform_support_plane
+    config:
+      x_title: Isoform length (bp)
+      y_title: FLNC reads
+      log_y: true
+      marker_size: 5
+      selection_enabled: true
+      selection_column: transcript_id
+      legend_pos: bottom
+    section: Length and support
+    tag: is-iso-av-plane
+    index: is-iso-av-plane
+    title: Isoform length against read support
+    description: One point per isoform, coloured by structural category. Click one to read its record.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: isoseq
+    data_collection_tag: tama_transcripts
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: is-iso-av-plane
+      id_col: transcript_id
+      title_col: gene_name
+      selection_source: scatter_selection
+      sections:
+        Isoform: [sample, transcript_id, gene_name, gene_id, structural_category, ref_transcript_id, exon_structure]
+        Structure: [chrom, start, end, strand, exons, transcript_length, junctions, known_junctions]
+        Support: [read_support, source_models]
+    section: Length and support
+    tag: is-iso-av-record
+    index: is-iso-av-record
+    title: Isoform record
+    description: The picked isoform as a fact panel.
+    layout: {x: 5, y: 0, w: 3, h: 6}
+  - component_type: figure
+    workflow_tag: isoseq
+    data_collection_tag: tama_transcripts
+    use: tama/transcripts
+    visu_type: box
+    dict_kwargs:
+      x: structural_category
+      y: transcript_length
+      color: structural_category
+      category_orders: {structural_category: [FSM, ISM, NIC, NNC, genic, antisense, intergenic, unclassified]}
+      labels: {structural_category: Structural category, transcript_length: Isoform length (bp)}
+    section: Length per category
+    tag: is-iso-fig-length
+    index: is-iso-fig-length
+    title: Isoform length per structural category
+    description: ISM isoforms run shorter than FSM when they are fragments of the full model.
+    layout: {x: 0, y: 0, w: 8, h: 4, fit: auto}
+  - component_type: table
+    workflow_tag: isoseq
+    data_collection_tag: tama_transcripts
+    use: tama/transcripts
+    section: Isoform table
+    tag: is-iso-table
+    index: is-iso-table
+    title: Isoforms
+    description: Every final isoform with its gene, structural category, exon structure and FLNC read support.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+
+- title: Genes
+  subtitle: Which genes carry the isoform diversity, and how does each look?
+  tab_group: Transcriptome
+  tab_order: 4
+  tab_icon: mdi:family-tree
+  tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Gene scope
+    icon: mdi:tune
+    color: indigo
+    description: Keep genes by status, isoform count or novelty
+  grid_sections:
+  - name: Genes at a glance
+    icon: mdi:counter
+    color: indigo
+    description: How many genes, how many isoforms each, and how dominant the first one is
+  - name: Isoform diversity
+    icon: mdi:chart-scatter-plot
+    color: indigo
+    description: Read support against isoform count, one point per gene
+  - name: Gene structures
+    icon: mdi:dna
+    color: indigo
+    description: The isoforms of one gene beside its reference transcripts
+  - name: Gene detail
+    icon: mdi:table
+    color: gray
+    description: Pick a gene in the table, read its record beside it
+    collapsed: true
+  components:
+  - component_type: interactive
+    workflow_tag: isoseq
+    data_collection_tag: tama_genes
+    use: tama/genes
+    interactive_component_type: MultiSelect
+    column_name: gene_status
+    column_type: object
+    display:
+      icon_name: mdi:family-tree
+      custom_color: grape
+    placement: left
+    section: Gene scope
+    group: Genes
+    tag: is-gene-filter-status
+    index: is-gene-filter-status
+    title: Gene status
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: isoseq
+    data_collection_tag: tama_genes
+    interactive_component_type: RangeSlider
+    column_name: isoforms
+    column_type: int64
+    display:
+      icon_name: mdi:dna
+      custom_color: pink
+    placement: left
+    section: Gene scope
+    group: Genes
+    tag: is-gene-filter-isoforms
+    index: is-gene-filter-isoforms
+    title: Isoforms per gene
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: isoseq
+    data_collection_tag: tama_genes
+    interactive_component_type: RangeSlider
+    column_name: novel_isoforms
+    column_type: int64
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: orange
+    placement: left
+    section: Gene scope
+    group: Genes
+    tag: is-gene-filter-novel
+    index: is-gene-filter-novel
+    title: NIC and NNC isoforms
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: isoseq
+    data_collection_tag: tama_genes
+    interactive_component_type: RangeSlider
+    column_name: read_support
+    column_type: int64
+    display:
+      icon_name: mdi:chart-bar
+      custom_color: blue
+    placement: left
+    section: Gene scope
+    group: Genes
+    tag: is-gene-filter-support
+    index: is-gene-filter-support
+    title: FLNC reads over the gene
+    layout: {x: 0, y: 9, w: 1, h: 3}
+  - component_type: text
+    order: 1
+    body: >
+      A gene is the reference gene TAMA assigned the isoforms to, or the TAMA gene they were merged
+      into when they share nothing with the annotation. Lasso genes on the plane to narrow the
+      structures below to them. Each structure draws the isoforms by read support above the
+      reference transcripts of the gene.
+    tag: is-gene-intro
+    index: is-gene-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Most genes carry one isoform, so a median sits on 1 (and on 100 % for the
+  # dominant share): the cards take the mean, count the genes with several
+  # isoforms and read the dominant share over those only.
+  - component_type: card
+    workflow_tag: isoseq
+    data_collection_tag: tama_genes
+    use: tama/genes
+    aggregation: count
+    column_name: gene_id
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: gene_status
+    display:
+      icon_name: mdi:family-tree
+      icon_color: indigo
+      caption: genes, annotated and novel
+    section: Genes at a glance
+    tag: is-gene-card-genes
+    index: is-gene-card-genes
+    title: Genes
+    description: Genes of the samples in view. The bar splits them into reference genes and genes TAMA found.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: isoseq
+    data_collection_tag: tama_genes
+    use: tama/genes
+    aggregation: average
+    secondary_layout: histogram
+    column_name: isoforms
+    column_type: int64
+    display:
+      icon_name: mdi:dna
+      icon_color: blue
+      caption: genes, by isoforms they carry
+      decimals: 1
+    section: Genes at a glance
+    tag: is-gene-card-isoforms
+    index: is-gene-card-isoforms
+    title: Isoforms per gene
+    description: Mean number of isoforms a gene carries. The histogram shows the long tail of the diverse genes.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: isoseq
+    data_collection_tag: tama_genes
+    use: tama/genes
+    aggregation: count
+    column_name: gene_id
+    column_type: object
+    filter_expr: col('isoforms') > 1
+    secondary_layout: top_n
+    breakdown_col: top_category
+    top_n_count: 3
+    display:
+      icon_name: mdi:set-merge
+      icon_color: cyan
+      caption: genes, by the category carrying most reads
+    section: Genes at a glance
+    tag: is-gene-card-multi
+    index: is-gene-card-multi
+    title: Genes with several isoforms
+    description: Genes with two isoforms or more. The bars split them by the structural category that carries most of their reads.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: isoseq
+    data_collection_tag: tama_genes
+    use: tama/genes
+    aggregation: average
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: dominant_isoform_pct
+    column_type: float64
+    filter_expr: col('isoforms') > 1
+    display:
+      icon_name: mdi:star-outline
+      icon_color: orange
+      caption: mean per gene, with its spread
+      decimals: 0
+    section: Genes at a glance
+    tag: is-gene-card-dominant
+    index: is-gene-card-dominant
+    title: Reads on the dominant isoform (%)
+    description: Mean share of a gene's reads on its best-supported isoform, over genes with several. The box shows how it spreads.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: isoseq
+    data_collection_tag: tama_genes
+    use: tama/gene_isoform_plane
+    config:
+      x_title: FLNC reads over the gene
+      y_title: Isoforms
+      log_x: true
+      marker_size: 6
+      top_n_labels: 5
+      selection_enabled: true
+      selection_column: gene_id
+      legend_pos: bottom
+    section: Isoform diversity
+    tag: is-gene-av-plane
+    index: is-gene-av-plane
+    title: Isoforms against read support per gene
+    description: One point per sample and gene, coloured by the category carrying most of its reads.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: isoseq
+    data_collection_tag: tama_transcript_blocks
+    use: tama/isoform_structures
+    config:
+      max_transcripts: 30
+      colour_by: transcript_class
+    section: Gene structures
+    tag: is-gene-av-structures
+    index: is-gene-av-structures
+    title: Isoform structures of one gene
+    description: One lane per isoform and per reference transcript, exons on a base-pair axis.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: isoseq
+    data_collection_tag: tama_genes
+    use: tama/genes
+    row_selection_enabled: true
+    row_selection_column: gene_id
+    section: Gene detail
+    tag: is-gene-table
+    index: is-gene-table
+    title: Genes
+    description: One row per sample and gene with its isoform counts by category. Select a row to open its record and draw its lanes.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: isoseq
+    data_collection_tag: tama_genes
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: is-gene-table
+      id_col: gene_id
+      title_col: gene_name
+      selection_source: table_selection
+      sections:
+        Gene: [sample, gene_name, gene_id, gene_status, chrom, start, end, strand]
+        Isoforms: [isoforms, fsm_isoforms, ism_isoforms, nic_isoforms, nnc_isoforms, novel_isoforms, top_category]
+        Support: [read_support, dominant_isoform_pct]
+    section: Gene detail
+    tag: is-gene-av-record
+    index: is-gene-av-record
+    title: Gene record
+    description: The picked gene as a fact panel, one card per sample.
+    layout: {x: 5, y: 0, w: 3, h: 6}

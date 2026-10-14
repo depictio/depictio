@@ -65,5 +65,8 @@
     "react-resizable": "^3.0.5",
     "typescript": "^5.3.0",
     "vitest": "^2.1.9"
+  },
+  "dependencies": {
+    "3dmol": "^2.5.5"
   }
 }

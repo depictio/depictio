@@ -1,0 +1,17 @@
+id: purple_cnv_segments
+name: Allele-specific copy-number segments
+mode: purple
+description: >-
+  PURPLE's fitted copy-number segments turned into the canonical copy-number
+  profile contract. The absolute, purity-adjusted copy number becomes a log2
+  ratio against a diploid baseline, the fitted BAF comes through, and the major
+  and minor allele copy numbers are kept for the allele-specific locus view, so
+  loss of heterozygosity reads as a BAF split at unchanged total copy number.
+find:
+  path_glob: "**/purple/*.purple.cnv.somatic.tsv"
+recipe: purple/cnv_segments.py
+fixture: cnv_segments.tsv
+renders_as:
+  - { id: purple_cn_profile, component: advanced_viz, kind: cnv_profile, roles: {sample: sample, chrom: chrom, start: start, end: end, log2: log2, baf: baf, copy_number: copy_number, segment: segment, label: label} }
+  - { id: segment_cn_spread, component: card, column: copy_number, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table, columns: [sample, chrom, start, end, copy_number, major_copy_number, minor_copy_number, baf, label] }

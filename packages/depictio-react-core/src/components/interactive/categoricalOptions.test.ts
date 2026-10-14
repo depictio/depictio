@@ -68,6 +68,16 @@ describe('chip selection', () => {
     expect(toggleChip(['a'], 'a', 'single')).toEqual([]);
   });
 
+  it('never empties an always_selected Select in a filter bar', () => {
+    expect(chipSelectionMode('Select', true)).toBe('one');
+    // The flag means nothing on the other categorical types.
+    expect(chipSelectionMode('MultiSelect', true)).toBe('multi');
+    expect(chipSelectionMode('SegmentedControl', true)).toBe('single');
+    expect(toggleChip(['a'], 'b', 'one')).toEqual(['b']);
+    expect(toggleChip(['a'], 'a', 'one')).toEqual(['a']);
+    expect(toggleChip([], 'a', 'one')).toEqual(['a']);
+  });
+
   it('reads every stored value shape as a list of selected values', () => {
     expect(selectedValues(['a', 'b'])).toEqual(['a', 'b']);
     expect(selectedValues('a')).toEqual(['a']);

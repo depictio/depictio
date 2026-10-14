@@ -1,0 +1,3 @@
+sampleId	type	rawTelomereLength	finalTelomereLength	fullFragments	cRichPartialFragments	gRichPartialFragments	totalTelomericReads	purity	ploidy	duplicateProportion	meanReadDepth	gc50ReadDepth
+NORMAL1	ref	437.06	437.06	2494	2025	965	6048	1	2	0.0197	44.51	42.2
+TUMOR1	tumor	1900.08	1900.08	25615	4674	2533	53371	1	2.82	0.0356	88.23	80.71

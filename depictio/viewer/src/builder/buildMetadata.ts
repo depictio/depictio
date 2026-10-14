@@ -270,6 +270,7 @@ export function buildInteractive(
     strip_label?: string;
     strip_icon?: boolean;
     show_histogram?: boolean;
+    always_selected?: boolean;
   }>(state.config);
   // Mirror Dash design_interactive: the form surfaces only the basics, no
   // default value/range, marks, or scale. Those are derived at render time.
@@ -318,6 +319,11 @@ export function buildInteractive(
     // `loadExisting` seeds the config bag from the stored metadata, and
     // without this line saving an edit would silently drop the setting.
     show_histogram: c.show_histogram,
+    // Stored only while on and while the control is still a Select: the model
+    // rejects the flag on any other control, so switching the variant away
+    // must not carry it into a save the backend then refuses.
+    always_selected:
+      c.interactive_component_type === 'Select' && c.always_selected === true ? true : undefined,
   };
 }
 

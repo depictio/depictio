@@ -196,7 +196,17 @@ const SELECTION_SOURCES = new Set([
   'table_selection',
   'map_selection',
   'image_selection',
+  // A protein tile's residue pick. Only its entity half is a value set; the
+  // position half is a `[start, end]` span, which as group members would mean
+  // "residue start or residue end", so it is left out below.
+  'residue_selection',
 ]);
+
+/** A `[low, high]` span rather than picked values (a residue range half). */
+function isRangeHalf(f: InteractiveFilter): boolean {
+  const component = f.interactive_component_type ?? f.metadata?.interactive_component_type;
+  return component === 'RangeSlider';
+}
 
 /** Active selection-event filters a group can be created from: they carry a
  *  non-empty array of values and a resolvable column. */
@@ -207,6 +217,7 @@ export function selectableSelectionFilters(
     (f) =>
       f.source !== undefined &&
       SELECTION_SOURCES.has(f.source) &&
+      !isRangeHalf(f) &&
       Array.isArray(f.value) &&
       f.value.length > 0 &&
       Boolean(f.column_name ?? f.metadata?.selection_column ?? f.metadata?.column_name),
