@@ -113,7 +113,7 @@ family origin.
 **Family alignment.** Strip: the aligned sequences (the families with most rows), their identity to
 the representative (its spread), the residue conservation (its distribution) and the column
 occupancy (its spread). Then two histograms of the representative's residues, by conservation score
-and by column occupancy, coloured by class, and a `Family workbench` (`display: workbench`, held
+and by column occupancy, coloured by class, and a `Fold, track and alignment` section (`display: linked`, held
 within one screen height) with the predicted structure of the picked family's representative,
 coloured by conservation, on the left and the family scatter, the sequence track and the alignment
 stacked on the right, so a pick or a brush in one is read in the others without scrolling. The structure is folded on demand from the representative's sequence by the structure
@@ -129,7 +129,7 @@ conservation class, the members' identity to the representative and their length
 their spread). The model's own descriptors (match states, seed and effective sequences) are one
 value per family: the pinned family table, narrowed to the family's row, holds them, and the scope
 banner of the tab prints the family's member count and model length (`banner_facts` on the `Family`
-filter). Then a `Family workbench` (`display: workbench`, held within one screen height) with the
+filter). Then a `Profile, fold and alignment` section (`display: linked`, held within one screen height) with the
 predicted structure of the representative, coloured by conservation class, on the left and the
 profile logo of the family HMM (one stack of letters per match state with the insert, occupancy
 and consensus lanes and, under it, the members the hmmalign alignment placed on the model), the

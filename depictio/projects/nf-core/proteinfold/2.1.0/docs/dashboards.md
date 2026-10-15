@@ -106,7 +106,7 @@ Filters: engine and model rank.
 **Structure.** The tab reads one target (see "Single-unit pickers" below). Strip: the median
 residue pLDDT (its spread), the residues split by AlphaFold confidence band, the residues under
 pLDDT 50 ranked by engine and the best mean pLDDT of the target's structures, the engines ranked
-by theirs. Then a `Structure workbench` (`display: workbench`, held within one screen height) with the
+by theirs. Then a `Structures and confidence` section (`display: linked`, held within one screen height) with the
 picked structure in 3D over its written sequence on the left and, stacked on the right, a table with one row
 per engine's top-ranked structure (mean pLDDT, the shares of residues at 70 or more and under 50, pTM), the
 sequence with its pLDDT lane, the per-engine pLDDT profile and the Ramachandran plot of the picked structure

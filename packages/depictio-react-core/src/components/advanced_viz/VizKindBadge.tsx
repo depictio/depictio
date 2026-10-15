@@ -11,7 +11,7 @@ import type { VizKindLabel } from './vizKindTag';
 export const AdvancedVizKindContext = createContext<VizKindLabel | null>(null);
 
 /**
- * The visualization's type, after the title of a tile in a workbench section:
+ * The visualization's type, after the title of a tile in a linked view section:
  * a small kind icon and one word ("3D", "HMM", "PAE"). It names the view, so
  * it reads as a type label rather than as a status: the accent is the
  * section's own colour (the tile sits in a section of that colour, and the

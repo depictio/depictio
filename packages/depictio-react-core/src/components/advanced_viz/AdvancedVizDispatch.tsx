@@ -311,7 +311,7 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     ? metadata.controls_placement
     : null;
   const componentIndex = String(metadata.index ?? '');
-  // A workbench cell has little room: unless the author placed the controls
+  // A linked view cell has little room: unless the author placed the controls
   // or the reader chose, they start folded, one click away behind the menu in
   // the tile's header. Everywhere else they start open, as before.
   //

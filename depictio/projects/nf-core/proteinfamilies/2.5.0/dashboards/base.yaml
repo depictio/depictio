@@ -1130,11 +1130,11 @@ tabs:
     icon: mdi:chart-bar
     color: grape
     description: How the representative's residues spread over the conservation scale
-  - name: Family workbench
+  - name: Fold, track and alignment
     icon: mdi:view-dashboard-outline
     color: grape
     description: Pick a family, then read its fold, sequence track and alignment side by side, linked by residue
-    display: workbench
+    display: linked
   - name: Residue table
     icon: mdi:table
     color: gray
@@ -1275,7 +1275,7 @@ tabs:
     title: Residues by column occupancy
     description: Low occupancy marks columns most members gap.
     layout: {x: 4, y: 0, w: 4, h: 4}
-  # The workbench holds the plot, the 3D tile, the track and the alignment on one
+  # The linked view holds the plot, the 3D tile, the track and the alignment on one
   # screen: a click on a family narrows the residue and alignment tables to it
   # through the family links, and the structure, track and alignment follow.
   - component_type: advanced_viz
@@ -1290,7 +1290,7 @@ tabs:
       legend_pos: bottom
       selection_enabled: true
       selection_column: family
-    section: Family workbench
+    section: Fold, track and alignment
     tag: pf-aln-av-families
     index: aln-families
     title: Families by size and conservation
@@ -1309,7 +1309,7 @@ tabs:
       layout: structure_text
       selection_enabled: true
       follow_selection: true
-    section: Family workbench
+    section: Fold, track and alignment
     tag: pf-aln-av-structure
     index: aln-structure
     title: Predicted structure of the representative
@@ -1323,7 +1323,7 @@ tabs:
       value_label: Conservation
       selection_enabled: true
       follow_selection: true
-    section: Family workbench
+    section: Fold, track and alignment
     tag: pf-aln-av-track
     index: aln-track
     title: Representative sequence with conservation
@@ -1343,7 +1343,7 @@ tabs:
       position_col_for_selection: position
       selection_enabled: true
       follow_selection: true
-    section: Family workbench
+    section: Fold, track and alignment
     tag: pf-aln-av-msa
     index: aln-msa
     title: Family alignment
@@ -1379,11 +1379,11 @@ tabs:
     icon: mdi:counter
     color: indigo
     description: The picked family's conservation, residue by residue, and its members
-  - name: Family workbench
+  - name: Profile, fold and alignment
     icon: mdi:view-dashboard-outline
     color: indigo
     description: The profile logo, the folded representative, its sequence track and the family alignment side by side, linked by residue
-    display: workbench
+    display: linked
   - name: Hits table
     icon: mdi:table
     color: gray
@@ -1535,7 +1535,7 @@ tabs:
       max_hits: 200
       selection_enabled: true
       follow_selection: true
-    section: Family workbench
+    section: Profile, fold and alignment
     tag: pf-hmm-av-logo
     index: hmm-logo
     title: Profile HMM logo
@@ -1556,7 +1556,7 @@ tabs:
       layout: structure
       selection_enabled: true
       follow_selection: true
-    section: Family workbench
+    section: Profile, fold and alignment
     tag: pf-hmm-av-structure
     index: hmm-structure
     title: Predicted structure of the representative
@@ -1570,7 +1570,7 @@ tabs:
       value_label: Conservation
       selection_enabled: true
       follow_selection: true
-    section: Family workbench
+    section: Profile, fold and alignment
     tag: pf-hmm-av-track
     index: hmm-track
     title: Representative sequence with conservation
@@ -1590,7 +1590,7 @@ tabs:
       position_col_for_selection: position
       selection_enabled: true
       follow_selection: true
-    section: Family workbench
+    section: Profile, fold and alignment
     tag: pf-hmm-av-msa
     index: hmm-msa
     title: Family alignment

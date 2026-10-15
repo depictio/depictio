@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { taggedVizKinds, vizKindLabel, vizKindTag } from './vizKindTag';
 
 describe('vizKindTag', () => {
-  it('names the protein kinds a workbench holds', () => {
+  it('names the protein kinds a linked view holds', () => {
     expect(vizKindTag('molecule_3d')).toBe('3D');
     expect(vizKindTag('hmm_logo')).toBe('HMM');
     expect(vizKindTag('msa')).toBe('MSA');

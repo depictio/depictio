@@ -9,9 +9,9 @@ import React, {
 import { ActionIcon, Group, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { WORKBENCH_MIN_PANE_PX } from './sectionGroups';
+import { LINKED_VIEW_MIN_PANE_PX } from './sectionGroups';
 import {
-  WORKBENCH_GUTTER_PX,
+  LINKED_VIEW_GUTTER_PX,
   autofitTree,
   axisOf,
   floorDeficit,
@@ -31,17 +31,17 @@ import {
   treeFractions,
   treeRects,
   withFractions,
-} from './workbenchSplit';
+} from './linkedViewSplit';
 import type {
   FloorOf,
   SplitFractions,
   SplitNode,
   SplitTree,
   SplitUnit,
-} from './workbenchSplit';
-import './workbenchPanes.css';
+} from './linkedViewSplit';
+import './linkedViewPanes.css';
 
-export { WORKBENCH_GUTTER_PX };
+export { LINKED_VIEW_GUTTER_PX };
 
 /**
  * How the gutters behave.
@@ -52,25 +52,25 @@ export { WORKBENCH_GUTTER_PX };
  *   back where the dashboard has it.
  * - `static`: no handles, only the gap.
  */
-export type WorkbenchPanesMode = 'edit' | 'view' | 'static';
+export type LinkedViewPanesMode = 'edit' | 'view' | 'static';
 
-/** What the panes and the header's controls both read: the workbench's split,
+/** What the panes and the header's controls both read: the linked view's split,
  *  where it stands and where its sizes are kept. */
-export interface WorkbenchSplitInput {
-  /** The workbench's split tree, from its stored layout (`buildSplitTree`). */
+export interface LinkedViewSplitInput {
+  /** The linked view's split tree, from its stored layout (`buildSplitTree`). */
   tree: SplitTree;
-  /** Height of the whole workbench, px: its rows at the fitted row height. */
+  /** Height of the whole linked view, px: its rows at the fitted row height. */
   height: number;
   /** The least each tile keeps by default, px, by layout key. A tile not listed
-   *  keeps `WORKBENCH_MIN_PANE_PX`; 0 leaves a tile (a card, a text) as short
+   *  keeps `LINKED_VIEW_MIN_PANE_PX`; 0 leaves a tile (a card, a text) as short
    *  as its stored size makes it. */
   floors?: Readonly<Record<string, number>>;
-  mode: WorkbenchPanesMode;
+  mode: LinkedViewPanesMode;
   /** `view`: where the reader's gutter positions are kept. */
   storageKey?: string;
 }
 
-export interface WorkbenchPanesProps extends WorkbenchSplitInput {
+export interface LinkedViewPanesProps extends LinkedViewSplitInput {
   /** The grid cell of every tile, by the layout key the tree holds. */
   cells: ReadonlyMap<string, React.ReactElement>;
   /** One grid column and one stored row in the unit the tree is counted in:
@@ -144,7 +144,7 @@ function useStoredSplit(key: string | undefined, signature: string): SplitFracti
  * the tiles' floors at this height; `current` adds a reader's own positions
  * (`view`). `stable` is `tree` held still across renders that rebuild it.
  */
-export function useWorkbenchSplit({ tree, height, floors, mode, storageKey }: WorkbenchSplitInput) {
+export function useLinkedViewSplit({ tree, height, floors, mode, storageKey }: LinkedViewSplitInput) {
   // The parent rebuilds the tree on every render; panes and storage care about
   // its content.
   const treeKey = JSON.stringify(tree);
@@ -153,7 +153,7 @@ export function useWorkbenchSplit({ tree, height, floors, mode, storageKey }: Wo
   const signature = useMemo(() => splitSignature(stable), [stable]);
   const floorsKey = JSON.stringify(floors ?? null);
   const floorOf = useMemo<FloorOf>(
-    () => (key) => floors?.[key] ?? WORKBENCH_MIN_PANE_PX,
+    () => (key) => floors?.[key] ?? LINKED_VIEW_MIN_PANE_PX,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [floorsKey],
   );
@@ -167,14 +167,14 @@ export function useWorkbenchSplit({ tree, height, floors, mode, storageKey }: Wo
 }
 
 interface CommitTarget {
-  mode: WorkbenchPanesMode;
+  mode: LinkedViewPanesMode;
   base: SplitTree;
   signature: string;
   storageKey?: string;
   onCommit?: (tree: SplitTree) => void;
 }
 
-/** Make `next` the workbench's layout: written to the dashboard in whole units
+/** Make `next` the linked view's layout: written to the dashboard in whole units
  *  in the editor, kept in this browser for a reader. */
 function commitSplit(next: SplitTree, to: CommitTarget): void {
   if (to.mode === 'edit') {
@@ -198,7 +198,7 @@ interface Drag {
 }
 
 /**
- * A workbench drawn as nested panes with a draggable gutter between neighbours,
+ * A linked view drawn as nested panes with a draggable gutter between neighbours,
  * instead of react-grid-layout: dragging one moves a shared edge and every tile
  * against it follows, so a tile that sits at the wrong height is fixed once for
  * the whole stack. Tiles keep the cell the grid builds for them (chrome, hover
@@ -214,7 +214,7 @@ interface Drag {
  * throttled to a frame: Plotly, AG Grid, 3Dmol and the canvases listen for that
  * and not for their box.
  */
-const WorkbenchPanes: React.FC<WorkbenchPanesProps> = ({
+const LinkedViewPanes: React.FC<LinkedViewPanesProps> = ({
   tree,
   cells,
   height,
@@ -224,7 +224,7 @@ const WorkbenchPanes: React.FC<WorkbenchPanesProps> = ({
   onCommit,
   storageKey,
 }) => {
-  const { base, current, signature, floorOf } = useWorkbenchSplit({
+  const { base, current, signature, floorOf } = useLinkedViewSplit({
     tree,
     height,
     floors,
@@ -383,11 +383,11 @@ const WorkbenchPanes: React.FC<WorkbenchPanesProps> = ({
     const pane: React.CSSProperties = { flex: `${grow} 1 0px`, minWidth: 0, minHeight: 0 };
     if (node.kind === 'leaf') {
       const cell = cells.get(node.key);
-      if (!cell) return <div key={`tile-${node.key}`} className="depictio-workbench-pane" style={pane} />;
+      if (!cell) return <div key={`tile-${node.key}`} className="depictio-linked-view-pane" style={pane} />;
       const props = cell.props as { className?: string; style?: React.CSSProperties };
       return React.cloneElement(cell as React.ReactElement<Record<string, unknown>>, {
         key: `tile-${node.key}`,
-        className: ['react-grid-item', 'depictio-workbench-pane', props.className]
+        className: ['react-grid-item', 'depictio-linked-view-pane', props.className]
           .filter(Boolean)
           .join(' '),
         // The cell is built to fill a grid box (`height: 100%`); here it is a
@@ -399,7 +399,7 @@ const WorkbenchPanes: React.FC<WorkbenchPanesProps> = ({
     return (
       <div
         key={`split-${pathKey(path)}`}
-        className="depictio-workbench-node"
+        className="depictio-linked-view-node"
         data-dir={node.dir}
         style={{ ...pane, display: 'flex', flexDirection: node.dir }}
       >
@@ -414,8 +414,8 @@ const WorkbenchPanes: React.FC<WorkbenchPanesProps> = ({
           return (
             <React.Fragment key={`gutter-${i}`}>
               <div
-                className="depictio-workbench-gutter"
-                data-testid="workbench-gutter"
+                className="depictio-linked-view-gutter"
+                data-testid="linked-view-gutter"
                 data-dir={node.dir}
                 data-active={active === id ? '' : undefined}
                 data-static={interactive ? undefined : ''}
@@ -434,7 +434,7 @@ const WorkbenchPanes: React.FC<WorkbenchPanesProps> = ({
                       ? 'Drag to resize, double-click to reset'
                       : 'Drag to resize'
                 }
-                style={{ flex: `0 0 ${WORKBENCH_GUTTER_PX}px` }}
+                style={{ flex: `0 0 ${LINKED_VIEW_GUTTER_PX}px` }}
                 onPointerDown={interactive ? (e) => begin(e, path, gutter) : undefined}
                 onPointerMove={interactive ? move : undefined}
                 onPointerUp={interactive ? end : undefined}
@@ -453,10 +453,10 @@ const WorkbenchPanes: React.FC<WorkbenchPanesProps> = ({
   return (
     <div
       className={
-        'depictio-workbench-split react-grid-layout' +
-        (live ? ' depictio-workbench-split--dragging' : '')
+        'depictio-linked-view-split react-grid-layout' +
+        (live ? ' depictio-linked-view-split--dragging' : '')
       }
-      data-testid="workbench-split"
+      data-testid="linked-view-split"
       data-mode={mode}
       style={{ height, width: '100%' }}
     >
@@ -465,7 +465,7 @@ const WorkbenchPanes: React.FC<WorkbenchPanesProps> = ({
   );
 };
 
-export interface WorkbenchControlsProps extends WorkbenchSplitInput {
+export interface LinkedViewControlsProps extends LinkedViewSplitInput {
   /** `edit`: the layout the section had when the dashboard was opened, which
    *  Reset writes back. */
   baseline?: SplitTree | null;
@@ -477,7 +477,7 @@ export interface WorkbenchControlsProps extends WorkbenchSplitInput {
 }
 
 /**
- * The two actions of a workbench's header, beside the section's other controls:
+ * The two actions of a linked view's header, beside the section's other controls:
  * Reset puts the split back to the dashboard's default, Autofit sizes each stack
  * from what its tiles ask for.
  *
@@ -487,14 +487,14 @@ export interface WorkbenchControlsProps extends WorkbenchSplitInput {
  * is greyed out, not hidden, while it would change nothing, so the header does
  * not shift as tiles load.
  */
-export const WorkbenchControls: React.FC<WorkbenchControlsProps> = ({
+export const LinkedViewControls: React.FC<LinkedViewControlsProps> = ({
   baseline,
   demands,
   onCommit,
   ...input
 }) => {
   const { mode, storageKey } = input;
-  const { stable, signature, base, current, stored, floorOf } = useWorkbenchSplit(input);
+  const { stable, signature, base, current, stored, floorOf } = useLinkedViewSplit(input);
   const edit = mode === 'edit';
 
   const asked = useMemo(
@@ -568,11 +568,11 @@ export const WorkbenchControls: React.FC<WorkbenchControlsProps> = ({
   );
 
   return (
-    <Group gap={2} wrap="nowrap" data-testid="workbench-controls">
-      {button('Fit tiles to their content', fitTip, 'mdi:arrow-expand-vertical', canFit, fit, 'workbench-autofit')}
-      {button('Reset tile sizes', resetTip, 'mdi:restore', canReset, reset, 'workbench-reset')}
+    <Group gap={2} wrap="nowrap" data-testid="linked-view-controls">
+      {button('Fit tiles to their content', fitTip, 'mdi:arrow-expand-vertical', canFit, fit, 'linked-view-autofit')}
+      {button('Reset tile sizes', resetTip, 'mdi:restore', canReset, reset, 'linked-view-reset')}
     </Group>
   );
 };
 
-export default WorkbenchPanes;
+export default LinkedViewPanes;

@@ -970,7 +970,7 @@ const EditorApp: React.FC = () => {
 
   /** The same write-back for a field of the component itself rather than of
    *  its config: where its viz controls sit (`controls_placement`), picked from
-   *  a workbench tile's controls menu. A null value clears the field. */
+   *  a linked view tile's controls menu. A null value clears the field. */
   const handleVizComponentDraft = useCallback(
     (componentId: string, patch: VizComponentPatch) => {
       const cur = dashboardRef.current;

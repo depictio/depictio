@@ -95,7 +95,7 @@ describe('the stored choice of view', () => {
 });
 
 describe('resolveControls', () => {
-  it('folds a workbench cell the author left unsaid, and opens everything else', () => {
+  it('folds a linked view cell the author left unsaid, and opens everything else', () => {
     expect(resolveControls(null, null, true)).toEqual({ placement: null, collapsed: true });
     expect(resolveControls(null, null, false)).toEqual({ placement: null, collapsed: false });
   });

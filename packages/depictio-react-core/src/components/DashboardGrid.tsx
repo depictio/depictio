@@ -62,7 +62,7 @@ import {
 } from './autofit';
 import { DensityContext } from './density';
 import {
-  WORKBENCH_MIN_PANE_PX,
+  LINKED_VIEW_MIN_PANE_PX,
   effectiveDisplay,
   fitRowPx,
   layoutRows,
@@ -70,17 +70,17 @@ import {
   rowFloorPx,
 } from './sectionGroups';
 import type { LayoutOverride } from './sectionGroups';
-import WorkbenchPanes, { WorkbenchControls } from './WorkbenchPanes';
-import type { WorkbenchPanesMode } from './WorkbenchPanes';
+import LinkedViewPanes, { LinkedViewControls } from './LinkedViewPanes';
+import type { LinkedViewPanesMode } from './LinkedViewPanes';
 import {
-  WORKBENCH_GUTTER_PX,
+  LINKED_VIEW_GUTTER_PX,
   buildSplitTree,
   splitSignature,
   treeLayouts,
   treeMinHeightPx,
-  workbenchSplitStorageKey,
-} from './workbenchSplit';
-import type { SplitTree } from './workbenchSplit';
+  linkedViewSplitStorageKey,
+} from './linkedViewSplit';
+import type { SplitTree } from './linkedViewSplit';
 import {
   applyRecordPanels,
   findSidePanels,
@@ -98,23 +98,23 @@ import type { FoldedRecordPanel, RecordPanelState } from './RecordPanel';
  *  collide with `sectionKey(name)`. */
 const UNSECTIONED_REST_KEY = '\u0000unsectioned-rest';
 
-/** What a workbench section's frame (header, paddings) is taken to cost until
+/** What a linked view section's frame (header, paddings) is taken to cost until
  *  it has been measured, in px. */
 const FALLBACK_CHROME_PX = 64;
 /** A scrolling container shorter than this is not a screen worth fitting to. */
 const MIN_FIT_VIEWPORT_PX = 240;
 
-/** How a workbench section is laid out this render: its layout, the panes it
+/** How a linked view section is laid out this render: its layout, the panes it
  *  is cut into (null where react-grid-layout draws it), the least each tile
  *  keeps, and how a change to the split is written. */
-interface WorkbenchPlan {
+interface LinkedViewPlan {
   layout: Layout[];
   width: number;
   /** Row height, px, of the section's grid: fitted to the screen, and never
    *  under what the tiles' floors need. */
   rowPx: number;
   tree: SplitTree | null;
-  mode: WorkbenchPanesMode | null;
+  mode: LinkedViewPanesMode | null;
   /** The least each tile keeps by default, px, by layout key. */
   floors: Record<string, number>;
   /** Height of the panes, px; 0 without a tree. */
@@ -233,7 +233,7 @@ interface DashboardGridProps {
   collapseStorageKey?: string | null;
   /**
    * The reader's `?layout=` pick for grid sections that declare
-   * `display: 'workbench'` (`sectionGroups.ts`): `classic` draws them as
+   * `display: 'linked'` (`sectionGroups.ts`): `classic` draws them as
    * ordinary sections, null keeps what the dashboard declares. Has no effect
    * on a dashboard without them.
    */
@@ -354,9 +354,9 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // rightmost component in every section loses its edge. Measured rather than
   // restated from the CSS, so the treatment can change without this drifting.
   const [sectionInset, setSectionInset] = useState(0);
-  // The same for a workbench, whose frame pads its tiles less (sectionAccordion.css,
-  // glass.css): measured on a workbench of its own, null until there is one.
-  const [workbenchInset, setWorkbenchInset] = useState<number | null>(null);
+  // The same for a linked view, whose frame pads its tiles less (sectionAccordion.css,
+  // glass.css): measured on a linked view of its own, null until there is one.
+  const [linkedViewInset, setLinkedViewInset] = useState<number | null>(null);
   const measureRef = useRef<() => void>(() => {});
   useEffect(() => {
     if (!wrapperRef.current || typeof ResizeObserver === 'undefined') return;
@@ -367,14 +367,14 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       if (!next || next <= 0) return;
       setContainerWidth(Math.floor(next));
       // Every ordinary section draws the same chrome, so one of them answers
-      // for all; a workbench draws a tighter one, and answers for itself.
-      const probe = wrapper.querySelector('[data-section-grid]:not([data-workbench-grid])');
+      // for all; a linked view draws a tighter one, and answers for itself.
+      const probe = wrapper.querySelector('[data-section-grid]:not([data-linked-view-grid])');
       if (probe) {
         setSectionInset(Math.max(0, Math.round(next - probe.getBoundingClientRect().width)));
       }
-      const bench = wrapper.querySelector('[data-workbench-grid]');
+      const bench = wrapper.querySelector('[data-linked-view-grid]');
       if (bench) {
-        setWorkbenchInset(Math.max(0, Math.round(next - bench.getBoundingClientRect().width)));
+        setLinkedViewInset(Math.max(0, Math.round(next - bench.getBoundingClientRect().width)));
       }
     };
     measureRef.current = measure;
@@ -587,16 +587,16 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // Latest grid order per section, so a drag in one section can be merged with
   // the others' current positions into the single flat array we persist.
   const sectionLayoutsRef = useRef<Map<string, Layout[]>>(new Map());
-  // Workbench sections drawn as split panes (`renderWorkbench`). They report
+  // Linked view sections drawn as split panes (`renderLinkedView`). They report
   // only when one of their gutters is moved, not on every change of layout like
   // a react-grid-layout does, so the order remembered above goes stale for them:
   // another section's drag must merge their stored layout, not that.
   const splitSectionsRef = useRef<Set<string>>(new Set());
-  // The editor's Reset restores a workbench to the layout it was opened with.
+  // The editor's Reset restores a linked view to the layout it was opened with.
   // Held per section for as long as this grid lives: the first layout it sees,
   // replaced when the section is re-cut or changes from outside (a restored
   // version), never by the section's own gutters (`ours` marks those writes).
-  const workbenchBaselines = useRef(
+  const linkedViewBaselines = useRef(
     new Map<string, { structure: string; baseline: SplitTree; seen: string; ours: boolean }>(),
   );
 
@@ -839,10 +839,10 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     [onTileFixed],
   );
 
-  // ---- Workbench sections (`display`, see sectionGroups.ts) ----
+  // ---- Linked view sections (`display`, see sectionGroups.ts) ----
   //
   // Linked tiles that stay close enough for a brush on one to show on the others
-  // without scrolling. A workbench is a view of the stored layout, which it never
+  // without scrolling. A linked view is a view of the stored layout, which it never
   // rewrites: the section is laid out at a row height that fits the screen.
   //
   // It needs the 8-column layout. Below it (a phone, a narrow pane) its tiles
@@ -851,18 +851,18 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
 
   /** How a section is drawn: its `display`, the reader's `?layout=` and the
    *  room there is deciding. Anything this cannot place is an ordinary section. */
-  const kindOf = (section: ComponentSection): 'grid' | 'workbench' =>
+  const kindOf = (section: ComponentSection): 'grid' | 'linked' =>
     groupDisplay(section, layoutOverride, groupsWide, onGrid) ?? 'grid';
-  const hasWorkbench = sections.some((s) => kindOf(s) === 'workbench');
+  const hasLinkedView = sections.some((s) => kindOf(s) === 'linked');
 
-  // The part of the scrolling container a reader sees, which is what a workbench
+  // The part of the scrolling container a reader sees, which is what a linked view
   // is fitted to. The container is the nearest ancestor that scrolls (the app's
   // dashboard body), the window when none does. What its padding and its
   // `scroll-padding` set aside (a gutter, the glass shell's floating dock) is not
   // visible room, so the height excludes both, whichever is larger on each edge.
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   useLayoutEffect(() => {
-    if (!hasWorkbench) return;
+    if (!hasLinkedView) return;
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
     const scroller = scrollParentOf(wrapper);
@@ -889,36 +889,36 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       observer?.disconnect();
       window.removeEventListener('resize', read);
     };
-  }, [hasWorkbench]);
+  }, [hasLinkedView]);
 
-  // What a workbench's frame costs in height (header, paddings, borders, the
+  // What a linked view's frame costs in height (header, paddings, borders, the
   // section's own filter bar): the tiles get what is left of the visible height.
   // Read from the DOM after every render, since it depends on the theme and on
   // which sections are open, and kept only when it changed.
-  const [workbenchChrome, setWorkbenchChrome] = useState(0);
+  const [linkedViewChrome, setLinkedViewChrome] = useState(0);
   useLayoutEffect(() => {
-    if (!hasWorkbench) return;
+    if (!hasLinkedView) return;
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
     let chrome = 0;
-    wrapper.querySelectorAll('[data-workbench-grid]').forEach((grid) => {
+    wrapper.querySelectorAll('[data-linked-view-grid]').forEach((grid) => {
       const item = grid.closest('.depictio-section-item');
       if (item) chrome = Math.max(chrome, frameHeight(item));
     });
-    setWorkbenchChrome((prev) => (prev === chrome ? prev : chrome));
+    setLinkedViewChrome((prev) => (prev === chrome ? prev : chrome));
   });
 
-  // A workbench fills the visible height: its rows (the layout's, counted in the
+  // A linked view fills the visible height: its rows (the layout's, counted in the
   // unit the grid lays out in) and the gaps between them share what the frame
   // leaves. Never less than its tiles need to keep their own minimum
   // (`floorRowPx`): a stack of three is taller than a laptop's screen, and the
   // reader scrolls a little instead of reading three slivers.
   const normalRowPx = readOnly ? SPLIT_ROW_PX : GRID_ROW_PX;
-  const workbenchRowPx = (layout: Layout[], floorRowPx: number) =>
+  const linkedViewRowPx = (layout: Layout[], floorRowPx: number) =>
     viewportHeight
       ? fitRowPx(
           layoutRows(layout),
-          viewportHeight - (workbenchChrome || FALLBACK_CHROME_PX),
+          viewportHeight - (linkedViewChrome || FALLBACK_CHROME_PX),
           GRID_ROW_GAP_PX,
           normalRowPx,
           1,
@@ -1065,7 +1065,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       ? Math.max(
           100,
           containerWidth -
-            (kindOf(section) === 'workbench' ? (workbenchInset ?? sectionInset) : sectionInset),
+            (kindOf(section) === 'linked' ? (linkedViewInset ?? sectionInset) : sectionInset),
         )
       : containerWidth;
 
@@ -1243,16 +1243,16 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
             : renderAccordion(run.sections),
         );
 
-  /** How a workbench section is laid out: shared by its body and its header's
+  /** How a linked view section is laid out: shared by its body and its header's
    *  controls, so both see one answer per render. */
-  const workbenchPlans = new Map<string, WorkbenchPlan>();
-  const planFor = (section: ComponentSection): WorkbenchPlan => {
-    const cached = workbenchPlans.get(section.key);
+  const linkedViewPlans = new Map<string, LinkedViewPlan>();
+  const planFor = (section: ComponentSection): LinkedViewPlan => {
+    const cached = linkedViewPlans.get(section.key);
     if (cached) return cached;
     const layout = layoutsForSection(section.members, section.spec, false);
     const width = gridWidth(section);
     const found = buildSplitTree(layout);
-    const mode: WorkbenchPanesMode | null =
+    const mode: LinkedViewPanesMode | null =
       !found || found.root.kind !== 'split'
         ? null
         : readOnly
@@ -1267,25 +1267,25 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     const floors: Record<string, number> = {};
     for (const l of layout) {
       const type = types.get(l.i);
-      floors[l.i] = type === 'card' || type === 'text' ? 0 : WORKBENCH_MIN_PANE_PX;
+      floors[l.i] = type === 'card' || type === 'text' ? 0 : LINKED_VIEW_MIN_PANE_PX;
     }
-    const floorOf = (key: string) => floors[key] ?? WORKBENCH_MIN_PANE_PX;
+    const floorOf = (key: string) => floors[key] ?? LINKED_VIEW_MIN_PANE_PX;
     // The row height the tiles' floors ask for: summed down each stack of panes,
     // or the tightest tile where react-grid-layout draws it.
     const floorRowPx = tree
-      ? rowFloorPx(treeMinHeightPx(tree, floorOf, WORKBENCH_GUTTER_PX), tree.h, GRID_ROW_GAP_PX)
+      ? rowFloorPx(treeMinHeightPx(tree, floorOf, LINKED_VIEW_GUTTER_PX), tree.h, GRID_ROW_GAP_PX)
       : minRowPxForTiles(layout, floorOf, GRID_ROW_GAP_PX);
-    const rowPx = workbenchRowPx(layout, floorRowPx);
+    const rowPx = linkedViewRowPx(layout, floorRowPx);
 
     let baseline: SplitTree | null = null;
     const id = `${dashboardId}:${section.key}`;
     if (tree && mode === 'edit') {
       const structure = splitSignature(tree);
       const seen = JSON.stringify(tree.root);
-      let held = workbenchBaselines.current.get(id);
+      let held = linkedViewBaselines.current.get(id);
       if (!held || held.structure !== structure) {
         held = { structure, baseline: tree, seen, ours: false };
-        workbenchBaselines.current.set(id, held);
+        linkedViewBaselines.current.set(id, held);
       } else if (held.seen !== seen) {
         // Moved by one of this section's gutters (or its Reset), or from outside.
         if (!held.ours) held.baseline = tree;
@@ -1298,7 +1298,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     // Written like a resize of the grid: a tile whose height changed leaves
     // autofit (`handleResizeStop`), then the section's layout is reported.
     const commit = (next: SplitTree) => {
-      const held = workbenchBaselines.current.get(id);
+      const held = linkedViewBaselines.current.get(id);
       if (held) held.ours = true;
       const moved = treeLayouts(next, layout);
       const was = new Map(layout.map((l) => [l.i, l]));
@@ -1308,7 +1308,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       }
       handleSectionLayoutChange(section.key, moved, width);
     };
-    const plan: WorkbenchPlan = {
+    const plan: LinkedViewPlan = {
       layout,
       width,
       rowPx,
@@ -1320,18 +1320,18 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       baseline,
       commit,
     };
-    workbenchPlans.set(section.key, plan);
+    linkedViewPlans.set(section.key, plan);
     return plan;
   };
 
-  /** A workbench: the section's stored layout at a row height that fits the
+  /** A linked view: the section's stored layout at a row height that fits the
    *  visible screen, and tall enough that each tile keeps its minimum. Not
    *  autofitted (growing a tile would push the section off the screen it was
    *  fitted to).
    *
    *  A layout that cuts into its tiles by straight edge-to-edge lines (every
-   *  shipped workbench does) is drawn as split panes with a draggable gutter
-   *  between neighbours (`WorkbenchPanes`): one drag moves a shared edge, so a
+   *  shipped linked view does) is drawn as split panes with a draggable gutter
+   *  between neighbours (`LinkedViewPanes`): one drag moves a shared edge, so a
    *  stack of tiles is resized in one go. A reader's gutters are their own
    *  (this browser's storage, never the dashboard); the editor's snap to grid
    *  units and are saved like a resize of the grid. Tiles are not moved to
@@ -1340,7 +1340,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
    *  grid too narrow to save, stays on react-grid-layout as before: its units
    *  and columns are the stored ones, so a drag still writes the right
    *  position. */
-  const renderWorkbench = (section: ComponentSection) => {
+  const renderLinkedView = (section: ComponentSection) => {
     const plan = planFor(section);
     if (!plan.tree || !plan.mode) {
       splitSectionsRef.current.delete(section.key);
@@ -1363,7 +1363,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     }
     return (
       <DensityContext.Provider value="compact">
-        <WorkbenchPanes
+        <LinkedViewPanes
           tree={plan.tree}
           cells={cells}
           height={plan.height}
@@ -1373,18 +1373,18 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
           unit={{ x: 1, y: readOnly ? ROW_SPLIT : 1 }}
           mode={plan.mode}
           onCommit={plan.commit}
-          storageKey={workbenchSplitStorageKey(dashboardId, section.key)}
+          storageKey={linkedViewSplitStorageKey(dashboardId, section.key)}
         />
       </DensityContext.Provider>
     );
   };
 
-  /** Reset and Autofit, in the header of a workbench drawn as panes. */
-  const renderWorkbenchControls = (section: ComponentSection) => {
+  /** Reset and Autofit, in the header of a linked view drawn as panes. */
+  const renderLinkedViewControls = (section: ComponentSection) => {
     const plan = planFor(section);
     if (!plan.tree || !plan.mode) return null;
     return (
-      <WorkbenchControls
+      <LinkedViewControls
         tree={plan.tree}
         baseline={plan.baseline}
         height={plan.height}
@@ -1392,18 +1392,18 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
         demands={autoHeights}
         mode={plan.mode}
         onCommit={plan.commit}
-        storageKey={workbenchSplitStorageKey(dashboardId, section.key)}
+        storageKey={linkedViewSplitStorageKey(dashboardId, section.key)}
       />
     );
   };
 
   /** What sits beside a section's fold control: the host's (the editor's "…")
-   *  and, for an open workbench, its own Reset and Autofit before it. */
-  const sectionActions = (section: ComponentSection, kind: 'grid' | 'workbench') => {
+   *  and, for an open linked view, its own Reset and Autofit before it. */
+  const sectionActions = (section: ComponentSection, kind: 'grid' | 'linked') => {
     const host = renderSectionActions?.(section.sectionName ?? null);
     const own =
-      kind === 'workbench' && sectionCollapse.isOpen(section.key)
-        ? renderWorkbenchControls(section)
+      kind === 'linked' && sectionCollapse.isOpen(section.key)
+        ? renderLinkedViewControls(section)
         : null;
     return own ? (
       <Group gap={4} wrap="nowrap" align="center">
@@ -1454,7 +1454,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
               color={resolveSectionColor(section.spec?.color, section.sectionName)}
               actions={sectionActions(section, kind)}
               plain={isPlain(section)}
-              className={kind === 'workbench' ? 'is-workbench' : undefined}
+              className={kind === 'linked' ? 'is-linked-view' : undefined}
             >
               <Accordion.Control>
                 {kind === 'grid' ? (
@@ -1474,9 +1474,9 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
                     can be read off the DOM — see `sectionInset`. Absent until
                     the section has been opened once: see `renderedSections`. */}
                 {(isPlain(section) || renderedSections.has(section.key)) &&
-                  (kind === 'workbench' ? (
-                    <div data-section-grid data-workbench-grid>
-                      {renderWorkbench(section)}
+                  (kind === 'linked' ? (
+                    <div data-section-grid data-linked-view-grid>
+                      {renderLinkedView(section)}
                     </div>
                   ) : (
                     <div data-section-grid>{renderGrid(section)}</div>
@@ -1581,8 +1581,8 @@ const SectionFilteredBadge: React.FC<{
 };
 
 /**
- * The heading of a workbench section: the same `SectionHeader`, on one line.
- * The description moves into a tooltip on an info glyph (a workbench spends its
+ * The heading of a linked view section: the same `SectionHeader`, on one line.
+ * The description moves into a tooltip on an info glyph (a linked view spends its
  * height on its tiles).
  */
 const GroupSectionHeader: React.FC<{
@@ -1801,22 +1801,22 @@ export function normalizeLayout(
 }
 
 /**
- * Whether a section draws as a workbench, from its `display` and the reader's
+ * Whether a section draws as a linked view, from its `display` and the reader's
  * `?layout=`. Null for everything else: a section needs a name, tiles of its
- * own, and a layout wide enough to hold a workbench; a plain heading and a
+ * own, and a layout wide enough to hold a linked view; a plain heading and a
  * persistent section (also drawn by other tabs' hosts, which know no
- * workbenches) stay as they are.
+ * linked views) stay as they are.
  */
 function groupDisplay(
   section: ComponentSection,
   override: LayoutOverride,
   wide: boolean,
   onGrid: (m: StoredMetadata) => boolean,
-): 'workbench' | null {
+): 'linked' | null {
   const spec = section.spec;
   if (!wide || !section.sectionName || !section.members.some(onGrid)) return null;
   if (spec?.appearance === 'plain' || spec?.persistent) return null;
-  return effectiveDisplay(spec, override) === 'workbench' ? 'workbench' : null;
+  return effectiveDisplay(spec, override) === 'linked' ? 'linked' : null;
 }
 
 /** A computed length in px; 0 for `auto`, empty or anything that is not one. */

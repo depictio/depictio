@@ -115,7 +115,7 @@ every other tab.
    tables and the family on the domain table, scatter and record card beside it. The View control
    groups proteins by architecture. The architecture, the domain record beside it, the protein x
    database heatmap and the UpSet plot (which databases agree) sit in one `Architecture and
-   agreement` section (`display: workbench`, held within one screen height), so the per-protein
+   agreement` section (`display: linked`, held within one screen height), so the per-protein
    views stay side by side. Significance against span, which picks domains across proteins,
    keeps its own section and separates families from motifs and borderline calls. The domain
    table and the raw hmmsearch hits are collapsed.
@@ -123,7 +123,7 @@ every other tab.
    The tab shows one protein: its `Protein` filter is `always_selected` and opens on the shortest
    protein (`default_by: position`, ascending), and the scope card prints the protein's sample
    (the S4PRED table has one row per residue, so it holds no other per-protein value). The
-   `Predicted structure` section (`display: workbench`, held within one screen height) stacks the
+   `Predicted structure` section (`display: linked`, held within one screen height) stacks the
    S4PRED ribbon of the protein over the probability of each state, with its segment list, on the
    `sequence_track`, which also draws the domain spans; a brush or a segment pick selects the same
    residues on both. The stacked bar of the state shares and the residue table keep their own
@@ -132,7 +132,7 @@ every other tab.
    protein: its `Protein` filter is `always_selected` and opens on the shortest protein
    (`default_by: length`, ascending), so the first fold is within the ESMFold limit, and the scope
    card prints its length, domain hits, annotated share and best domain (`banner_facts`). The
-   `Structure and domains` section (`display: workbench`, held within one screen height) puts the
+   `Structure and domains` section (`display: linked`, held within one screen height) puts the
    structure (coloured by best domain, over its written sequence) beside the sequence track
    (state, probability and domain spans), linked residue by residue: clicking a residue in 3D, a
    letter of the sequence or brushing the track selects the same residues in both. The strip

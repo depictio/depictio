@@ -1,30 +1,30 @@
 /**
- * Grid sections that keep linked tiles together: `display: 'workbench'`. Pure
+ * Grid sections that keep linked tiles together: `display: 'linked'`. Pure
  * geometry, so the grid, the viewer's `?layout=` switch and the tests all apply
  * one rule.
  *
- * - `workbench`: the section's tiles share one screen height. Row height is
+ * - `linked`: the section's tiles share one screen height. Row height is
  *   fitted so the stored layout, whatever its row count, fills the visible part
  *   of the scrolling container (`fitRowPx`), but never so low that a tile drops
- *   under `WORKBENCH_MIN_PANE_PX`: a stack of three is taller than a laptop's
+ *   under `LINKED_VIEW_MIN_PANE_PX`: a stack of three is taller than a laptop's
  *   screen, and the reader scrolls a little instead of reading three slivers.
  *
- * A workbench is a view of the stored layout: nothing here is ever persisted.
+ * A linked view is a view of the stored layout: nothing here is ever persisted.
  */
 import type { FilterSectionSpec } from '../api';
 
-/** The reader's `?layout=` override: `classic` draws workbench sections as
+/** The reader's `?layout=` override: `classic` draws linked view sections as
  *  ordinary ones, null keeps what the dashboard declares. */
 export type LayoutOverride = 'classic' | null;
 
 /** A section's `display` once the override is applied. Anything that is not a
- *  workbench (`grid`, `strip`, unset) passes through untouched. */
+ *  linked view (`grid`, `strip`, unset) passes through untouched. */
 export function effectiveDisplay(
   spec: Pick<FilterSectionSpec, 'display'> | null | undefined,
   override: LayoutOverride,
 ): FilterSectionSpec['display'] {
   const declared = spec?.display;
-  if (declared !== 'workbench') return declared;
+  if (declared !== 'linked') return declared;
   return override === 'classic' ? 'grid' : declared;
 }
 
@@ -40,21 +40,21 @@ export interface GroupTile {
 
 /** Fewest pixels a row is squeezed to: below this a tile is not worth
  *  reading, and the section overflows its screen instead. The tiles' own floor
- *  (`WORKBENCH_MIN_PANE_PX`) is what usually holds a row up; this is the least
+ *  (`LINKED_VIEW_MIN_PANE_PX`) is what usually holds a row up; this is the least
  *  a row keeps when nothing else does. */
 export const MIN_FIT_ROW_PX = 28;
 
 /** How much taller than its normal height a row may stretch to fill a tall
- *  screen. Past this a short section would just look inflated. A workbench
+ *  screen. Past this a short section would just look inflated. A linked view
  *  exists to fill its screen, so this is generous. */
 export const MAX_FIT_ROW_RATIO = 2;
 
-/** Least height, in px, that a workbench gives each of its tiles by default.
+/** Least height, in px, that a linked view gives each of its tiles by default.
  *  Below it a figure's header, its axes and its lanes crowd each other, and a
  *  track or an alignment spills past its box. A reader may still drag a gutter
- *  below it, and the workbench is made as tall as its stacks need, not as tall
+ *  below it, and the linked view is made as tall as its stacks need, not as tall
  *  as the screen. */
-export const WORKBENCH_MIN_PANE_PX = 280;
+export const LINKED_VIEW_MIN_PANE_PX = 280;
 
 /**
  * The row height at which `totalRows` rows, and the `gapPx` between them, fill
@@ -70,7 +70,7 @@ export const WORKBENCH_MIN_PANE_PX = 280;
  *
  * `floorPx` is the row height the tiles need to keep their own minimum
  * (`rowFloorPx`, `minRowPxForTiles`). It wins over the screen and over the
- * stretch cap: a workbench whose stacks need more than the screen has is
+ * stretch cap: a linked view whose stacks need more than the screen has is
  * taller than the screen, and the reader scrolls.
  */
 export function fitRowPx(
@@ -107,7 +107,7 @@ export function rowFloorPx(heightPx: number, totalRows: number, gapPx: number): 
  * The row height at which every tile of a grid layout is at least its own
  * floor tall: a tile `h` rows high spans `h * row + (h - 1) * gap`, so its row
  * must be `(floor - (h - 1) * gap) / h`. The tightest tile sets it. This is the
- * minimum row height of a workbench that react-grid-layout draws (a layout
+ * minimum row height of a linked view that react-grid-layout draws (a layout
  * that cannot be cut into panes), where there is no split to sum over.
  * `floorOf` answers per tile key; 0 leaves a tile as short as it is.
  */

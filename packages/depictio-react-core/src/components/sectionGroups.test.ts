@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MAX_FIT_ROW_RATIO,
   MIN_FIT_ROW_PX,
-  WORKBENCH_MIN_PANE_PX,
+  LINKED_VIEW_MIN_PANE_PX,
   effectiveDisplay,
   fitRowPx,
   layoutRows,
@@ -15,14 +15,14 @@ const tile = (i: string, x: number, y: number, w: number, h: number) => ({ i, x,
 
 describe('effectiveDisplay', () => {
   it('keeps what the dashboard declares without an override', () => {
-    expect(effectiveDisplay({ display: 'workbench' }, null)).toBe('workbench');
+    expect(effectiveDisplay({ display: 'linked' }, null)).toBe('linked');
   });
 
-  it('draws a workbench as an ordinary section under classic', () => {
-    expect(effectiveDisplay({ display: 'workbench' }, 'classic')).toBe('grid');
+  it('draws a linked view as an ordinary section under classic', () => {
+    expect(effectiveDisplay({ display: 'linked' }, 'classic')).toBe('grid');
   });
 
-  it('never touches a section that is not a workbench', () => {
+  it('never touches a section that is not a linked view', () => {
     for (const override of ['classic', null] as const) {
       expect(effectiveDisplay({ display: 'strip' }, override)).toBe('strip');
       expect(effectiveDisplay({ display: 'grid' }, override)).toBe('grid');
@@ -71,7 +71,7 @@ describe('fitRowPx', () => {
     expect(fitRowPx(20, 300, 4, 100, 1, 60)).toBe(60);
   });
 
-  it('lets the floor beat the stretch cap: a tall stack makes a tall workbench', () => {
+  it('lets the floor beat the stretch cap: a tall stack makes a tall linked view', () => {
     expect(fitRowPx(2, 900, 4, 100, 1, 240)).toBe(240);
   });
 
@@ -122,7 +122,7 @@ describe('rowFloorPx', () => {
 });
 
 describe('minRowPxForTiles', () => {
-  const floor = () => WORKBENCH_MIN_PANE_PX;
+  const floor = () => LINKED_VIEW_MIN_PANE_PX;
 
   it('lets the tightest tile set the row: a tile h rows high spans h * row + (h - 1) * gap', () => {
     // 280 over 3 rows and 2 gaps of 4: (280 - 8) / 3 = 90.7; over 2 rows, 138.
@@ -135,7 +135,7 @@ describe('minRowPxForTiles', () => {
   });
 
   it('skips a tile with no floor, and a layout with none', () => {
-    const none = (key: string) => (key === 'card' ? 0 : WORKBENCH_MIN_PANE_PX);
+    const none = (key: string) => (key === 'card' ? 0 : LINKED_VIEW_MIN_PANE_PX);
     expect(minRowPxForTiles([tile('card', 0, 0, 2, 1), tile('b', 2, 0, 6, 3)], none, 4)).toBe(91);
     expect(minRowPxForTiles([], floor, 4)).toBe(0);
     expect(minRowPxForTiles([tile('x', 0, 0, 8, 0)], floor, 4)).toBe(0);

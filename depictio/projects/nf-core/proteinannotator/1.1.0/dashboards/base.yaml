@@ -730,7 +730,7 @@ tabs:
     icon: mdi:chart-timeline-variant
     color: violet
     description: Each protein's domains along its chain with the record of the picked domain, beside which databases annotate which proteins and how much of each
-    display: workbench
+    display: linked
   - name: Domain calls
     icon: mdi:chart-scatter-plot
     color: violet
@@ -1069,7 +1069,7 @@ tabs:
     icon: mdi:waves
     color: cyan
     description: The ribbon of the picked protein over the probability behind each call, with its sequence, predicted state and covering domains below
-    display: workbench
+    display: linked
   - name: Composition
     icon: mdi:chart-bar
     color: cyan
@@ -1328,7 +1328,7 @@ tabs:
     icon: mdi:view-dashboard-outline
     color: indigo
     description: The picked protein folded in 3D beside its sequence, predicted state and domain spans, linked residue by residue
-    display: workbench
+    display: linked
   - name: Protein summary
     icon: mdi:table
     color: gray

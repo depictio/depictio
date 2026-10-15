@@ -13,7 +13,7 @@ import { createContext, type ReactNode } from 'react';
  *
  * `overlay` is the one placement that is not a dock: the panel floats over the
  * plot, top right, and the figure keeps its full size. It suits a tile with
- * little room (a workbench cell) where a column or a row of controls would
+ * little room (a linked view cell) where a column or a row of controls would
  * take the plot's.
  */
 export type ControlsPlacement = 'auto' | 'right' | 'top' | 'popover' | 'overlay';
@@ -86,7 +86,7 @@ export function serializeChoice(choice: ControlsChoice): string {
  * Where the controls go and whether they are folded, from the viewer's choice,
  * the component's own `controls_placement` and the section's density.
  *
- * With no choice, a workbench cell starts folded unless the author stated a
+ * With no choice, a linked view cell starts folded unless the author stated a
  * placement (`auto`, `right`, `top` and `overlay` start open: the author asked
  * for them); everywhere else they start open, as they always did.
  */

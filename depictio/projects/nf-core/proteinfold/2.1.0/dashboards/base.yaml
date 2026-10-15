@@ -638,11 +638,11 @@ tabs:
     icon: mdi:counter
     color: violet
     description: Per-residue confidence of the structures in scope
-  - name: Structure workbench
+  - name: Structures and confidence
     icon: mdi:view-dashboard-outline
     color: violet
     description: The engines' structures, the picked one in 3D, its sequence, every engine's confidence and its backbone torsions side by side
-    display: workbench
+    display: linked
   - name: Alignment
     icon: mdi:dna
     color: gray
@@ -787,7 +787,7 @@ tabs:
     title: Best mean pLDDT
     description: Mean pLDDT of the target's most confident structure, the engines ranked by theirs.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  # The workbench holds the table, the 3D tile, the track and the two plots on one
+  # The linked view holds the table, the 3D tile, the track and the two plots on one
   # screen: a row click emits that structure's entity (`table_selection`), which
   # the 3D tile, the sequence track, the Ramachandran plot and the alignment
   # follow by column name. The id column drives the
@@ -800,7 +800,7 @@ tabs:
     columns: [engine, mean_plddt, confident_pct, very_low_pct, ptm]
     row_selection_enabled: true
     row_selection_column: entity
-    section: Structure workbench
+    section: Structures and confidence
     tag: pf-st-table-structures
     index: st-structures
     title: Structures of the target, one row per engine
@@ -820,7 +820,7 @@ tabs:
       show_variants: false
       selection_enabled: true
       follow_selection: true
-    section: Structure workbench
+    section: Structures and confidence
     tag: pf-st-av-structure
     index: st-structure
     title: Picked structure coloured by pLDDT
@@ -834,7 +834,7 @@ tabs:
       value_label: pLDDT
       selection_enabled: true
       follow_selection: true
-    section: Structure workbench
+    section: Structures and confidence
     tag: pf-st-av-sequence
     index: st-sequence
     title: Sequence with its pLDDT lane
@@ -856,7 +856,7 @@ tabs:
       show_regions: true
       selection_enabled: true
       follow_selection: true
-    section: Structure workbench
+    section: Structures and confidence
     tag: pf-st-av-rama
     index: st-ramachandran
     title: Ramachandran plot of the picked structure
@@ -871,7 +871,7 @@ tabs:
       y_title: pLDDT
       legend_pos: bottom
       residue_axis: true
-    section: Structure workbench
+    section: Structures and confidence
     tag: pf-st-av-engine-profile
     index: st-engine-profile
     title: pLDDT per residue of every engine

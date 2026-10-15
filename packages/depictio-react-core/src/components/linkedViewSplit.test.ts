@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { WORKBENCH_MIN_PANE_PX, fitRowPx, rowFloorPx } from './sectionGroups';
+import { LINKED_VIEW_MIN_PANE_PX, fitRowPx, rowFloorPx } from './sectionGroups';
 import {
-  WORKBENCH_GUTTER_PX,
+  LINKED_VIEW_GUTTER_PX,
   apportion,
   autofitTree,
   buildSplitTree,
@@ -30,9 +30,9 @@ import {
   treeRects,
   uniformFloor,
   withFractions,
-  workbenchSplitStorageKey,
-} from './workbenchSplit';
-import type { SplitNode, SplitTree } from './workbenchSplit';
+  linkedViewSplitStorageKey,
+} from './linkedViewSplit';
+import type { SplitNode, SplitTree } from './linkedViewSplit';
 
 const tile = (i: string, x: number, y: number, w: number, h: number) => ({ i, x, y, w, h });
 const geometry = (tiles: ReturnType<typeof tile>[]) =>
@@ -46,7 +46,7 @@ const shape = (node: SplitNode): unknown =>
 
 // proteinfamilies (Family alignment, Profile HMM): a tall structure beside a
 // stack of three.
-const familyWorkbench = [
+const familyLinkedView = [
   tile('families', 3, 0, 5, 4),
   tile('structure', 0, 0, 3, 9),
   tile('track', 3, 4, 5, 2),
@@ -54,7 +54,7 @@ const familyWorkbench = [
 ];
 
 // proteinfold (Structure): a table over the structure and a stack of three.
-const foldWorkbench = [
+const foldLinkedView = [
   tile('table', 0, 0, 8, 2),
   tile('structure', 0, 2, 3, 7),
   tile('sequence', 3, 2, 5, 2),
@@ -63,7 +63,7 @@ const foldWorkbench = [
 ];
 
 // proteinannotator (Structure): a table over two side-by-side tiles.
-const annotatorWorkbench = [
+const annotatorLinkedView = [
   tile('table', 0, 0, 8, 3),
   tile('structure', 0, 3, 3, 5),
   tile('sequence', 3, 3, 5, 5),
@@ -78,7 +78,7 @@ const grid2x2 = [
 
 describe('buildSplitTree', () => {
   it('cuts a tall tile and a stack of three into one row over one column of three', () => {
-    const tree = buildSplitTree(familyWorkbench);
+    const tree = buildSplitTree(familyLinkedView);
     expect(tree).not.toBeNull();
     expect([tree!.w, tree!.h]).toEqual([8, 9]);
     expect(shape(tree!.root)).toEqual({
@@ -88,7 +88,7 @@ describe('buildSplitTree', () => {
   });
 
   it('puts a full-width table above the split it sits over', () => {
-    const tree = buildSplitTree(foldWorkbench);
+    const tree = buildSplitTree(foldLinkedView);
     expect(shape(tree!.root)).toEqual({
       column: [
         'table',
@@ -102,7 +102,7 @@ describe('buildSplitTree', () => {
   });
 
   it('splits a table over two side-by-side tiles', () => {
-    const tree = buildSplitTree(annotatorWorkbench);
+    const tree = buildSplitTree(annotatorLinkedView);
     expect(shape(tree!.root)).toEqual({
       column: ['table', { row: ['structure', 'sequence'], sizes: [3, 5] }],
       sizes: [3, 5],
@@ -126,8 +126,8 @@ describe('buildSplitTree', () => {
   });
 
   it('takes the order of the tiles from their positions, not from the array', () => {
-    const forward = buildSplitTree(familyWorkbench);
-    const reversed = buildSplitTree([...familyWorkbench].reverse());
+    const forward = buildSplitTree(familyLinkedView);
+    const reversed = buildSplitTree([...familyLinkedView].reverse());
     expect(shape(reversed!.root)).toEqual(shape(forward!.root));
   });
 
@@ -172,7 +172,7 @@ describe('buildSplitTree', () => {
   });
 
   it('counts in half rows the way a read-only grid does', () => {
-    const half = familyWorkbench.map((t) => ({ ...t, y: t.y * 2, h: t.h * 2 }));
+    const half = familyLinkedView.map((t) => ({ ...t, y: t.y * 2, h: t.h * 2 }));
     const tree = buildSplitTree(half);
     expect([tree!.w, tree!.h]).toEqual([8, 18]);
     expect(shape(tree!.root)).toEqual({
@@ -182,15 +182,15 @@ describe('buildSplitTree', () => {
   });
 
   it('does not modify what it is given', () => {
-    const input = familyWorkbench.map((t) => ({ ...t }));
+    const input = familyLinkedView.map((t) => ({ ...t }));
     buildSplitTree(input);
-    expect(input).toEqual(familyWorkbench);
+    expect(input).toEqual(familyLinkedView);
   });
 });
 
 describe('treeRects / treeLayouts', () => {
   it('puts every tile back where the layout had it', () => {
-    for (const layout of [familyWorkbench, foldWorkbench, annotatorWorkbench, grid2x2]) {
+    for (const layout of [familyLinkedView, foldLinkedView, annotatorLinkedView, grid2x2]) {
       const tree = buildSplitTree(layout)!;
       expect(geometry(treeLayouts(tree, layout))).toEqual(geometry(layout));
       expect(treeRects(tree).size).toBe(layout.length);
@@ -198,7 +198,7 @@ describe('treeRects / treeLayouts', () => {
   });
 
   it('keeps every other property of a tile', () => {
-    const layout = familyWorkbench.map((t) => ({ ...t, static: false, moved: true }));
+    const layout = familyLinkedView.map((t) => ({ ...t, static: false, moved: true }));
     const out = treeLayouts(buildSplitTree(layout)!, layout);
     expect(out.every((t) => t.static === false && t.moved === true)).toBe(true);
   });
@@ -206,7 +206,7 @@ describe('treeRects / treeLayouts', () => {
 
 describe('minSpan', () => {
   it('adds along the split axis and takes the larger across it', () => {
-    const tree = buildSplitTree(familyWorkbench)!;
+    const tree = buildSplitTree(familyLinkedView)!;
     // Structure (1) beside the stack (1 across): 2 columns; the stack is three tiles tall.
     expect(minSpan(tree.root, 'x')).toBe(2);
     expect(minSpan(tree.root, 'y')).toBe(3);
@@ -216,7 +216,7 @@ describe('minSpan', () => {
 
 describe('moveGutter', () => {
   it('moves the gutter between a tall tile and a stack of three: the whole stack follows', () => {
-    const out = moveGutter(familyWorkbench, [], 0, 1);
+    const out = moveGutter(familyLinkedView, [], 0, 1);
     expect(geometry(out)).toEqual({
       structure: [0, 0, 4, 9],
       families: [4, 0, 4, 4],
@@ -226,7 +226,7 @@ describe('moveGutter', () => {
   });
 
   it('moves it back the other way', () => {
-    const out = moveGutter(familyWorkbench, [], 0, -2);
+    const out = moveGutter(familyLinkedView, [], 0, -2);
     expect(geometry(out)).toEqual({
       structure: [0, 0, 1, 9],
       families: [1, 0, 7, 4],
@@ -236,7 +236,7 @@ describe('moveGutter', () => {
   });
 
   it('moves a gutter inside the stack: the tile above grows, the one below shrinks and shifts', () => {
-    const out = moveGutter(familyWorkbench, [1], 0, 1);
+    const out = moveGutter(familyLinkedView, [1], 0, 1);
     expect(geometry(out)).toEqual({
       structure: [0, 0, 3, 9],
       families: [3, 0, 5, 5],
@@ -246,7 +246,7 @@ describe('moveGutter', () => {
   });
 
   it('moves the second gutter of the stack without touching the first', () => {
-    const out = moveGutter(familyWorkbench, [1], 1, -1);
+    const out = moveGutter(familyLinkedView, [1], 1, -1);
     expect(geometry(out)).toEqual({
       structure: [0, 0, 3, 9],
       families: [3, 0, 5, 4],
@@ -256,7 +256,7 @@ describe('moveGutter', () => {
   });
 
   it('moves the gutter between a table and the split under it: both sides of the split follow', () => {
-    const out = moveGutter(foldWorkbench, [], 0, 1);
+    const out = moveGutter(foldLinkedView, [], 0, 1);
     expect(geometry(out)).toEqual({
       table: [0, 0, 8, 3],
       structure: [0, 3, 3, 6],
@@ -267,7 +267,7 @@ describe('moveGutter', () => {
   });
 
   it('moves the vertical gutter under a table', () => {
-    const out = moveGutter(annotatorWorkbench, [1], 0, 2);
+    const out = moveGutter(annotatorLinkedView, [1], 0, 2);
     expect(geometry(out)).toEqual({
       table: [0, 0, 8, 3],
       structure: [0, 3, 5, 5],
@@ -349,14 +349,14 @@ describe('moveGutter', () => {
   });
 
   it('keeps every tile at least one column and one row', () => {
-    const wide = moveGutter(familyWorkbench, [], 0, -10);
+    const wide = moveGutter(familyLinkedView, [], 0, -10);
     expect(wide.find((t) => t.i === 'structure')!.w).toBe(1);
-    const far = moveGutter(familyWorkbench, [], 0, 10);
+    const far = moveGutter(familyLinkedView, [], 0, 10);
     // The stack keeps one column.
     expect(far.find((t) => t.i === 'structure')!.w).toBe(7);
     expect(far.find((t) => t.i === 'msa')!.w).toBe(1);
 
-    const down = moveGutter(familyWorkbench, [1], 0, 10);
+    const down = moveGutter(familyLinkedView, [1], 0, 10);
     // The track below the gutter keeps one row; the tile above takes the rest.
     expect(geometry(down)).toEqual({
       structure: [0, 0, 3, 9],
@@ -364,13 +364,13 @@ describe('moveGutter', () => {
       track: [3, 5, 5, 1],
       msa: [3, 6, 5, 3],
     });
-    const up = moveGutter(familyWorkbench, [1], 0, -10);
+    const up = moveGutter(familyLinkedView, [1], 0, -10);
     expect(up.find((t) => t.i === 'families')!.h).toBe(1);
     expect(up.find((t) => t.i === 'track')!.h).toBe(5);
   });
 
   it('honours a larger unit: a stored row is two half rows on a read-only grid', () => {
-    const half = familyWorkbench.map((t) => ({ ...t, y: t.y * 2, h: t.h * 2 }));
+    const half = familyLinkedView.map((t) => ({ ...t, y: t.y * 2, h: t.h * 2 }));
     const down = moveGutter(half, [1], 0, 100, { x: 1, y: 2 });
     expect(down.find((t) => t.i === 'track')!.h).toBe(2);
     const up = moveGutter(half, [1], 0, -100, { x: 1, y: 2 });
@@ -389,14 +389,14 @@ describe('moveGutter', () => {
   });
 
   it('rounds to whole grid units', () => {
-    expect(geometry(moveGutter(familyWorkbench, [], 0, 1.4)).structure).toEqual([0, 0, 4, 9]);
-    expect(geometry(moveGutter(familyWorkbench, [], 0, 0.4)).structure).toEqual([0, 0, 3, 9]);
+    expect(geometry(moveGutter(familyLinkedView, [], 0, 1.4)).structure).toEqual([0, 0, 4, 9]);
+    expect(geometry(moveGutter(familyLinkedView, [], 0, 0.4)).structure).toEqual([0, 0, 3, 9]);
   });
 
   it('leaves every tile whole: the tiles still tile the same box', () => {
     for (const [layout, path, g, delta] of [
-      [familyWorkbench, [1], 0, 1],
-      [foldWorkbench, [], 0, -1],
+      [familyLinkedView, [1], 0, 1],
+      [foldLinkedView, [], 0, -1],
       [grid2x2, [0], 0, 2],
     ] as const) {
       const out = moveGutter(layout, path, g, delta);
@@ -409,7 +409,7 @@ describe('moveGutter', () => {
   });
 
   it('keeps every other property and does not mutate its input', () => {
-    const layout = familyWorkbench.map((t) => ({ ...t, static: false }));
+    const layout = familyLinkedView.map((t) => ({ ...t, static: false }));
     const before = layout.map((t) => ({ ...t }));
     const out = moveGutter(layout, [], 0, 1);
     expect(layout).toEqual(before);
@@ -418,12 +418,12 @@ describe('moveGutter', () => {
   });
 
   it('returns the layout unchanged for a path or gutter that names nothing', () => {
-    expect(moveGutter(familyWorkbench, [0], 0, 1)).toEqual(familyWorkbench); // a leaf
-    expect(moveGutter(familyWorkbench, [5], 0, 1)).toEqual(familyWorkbench);
-    expect(moveGutter(familyWorkbench, [], 4, 1)).toEqual(familyWorkbench);
-    expect(moveGutter(familyWorkbench, [], -1, 1)).toEqual(familyWorkbench);
-    expect(moveGutter(familyWorkbench, [], 0, 0)).toEqual(familyWorkbench);
-    expect(moveGutter(familyWorkbench, [], 0, Number.NaN)).toEqual(familyWorkbench);
+    expect(moveGutter(familyLinkedView, [0], 0, 1)).toEqual(familyLinkedView); // a leaf
+    expect(moveGutter(familyLinkedView, [5], 0, 1)).toEqual(familyLinkedView);
+    expect(moveGutter(familyLinkedView, [], 4, 1)).toEqual(familyLinkedView);
+    expect(moveGutter(familyLinkedView, [], -1, 1)).toEqual(familyLinkedView);
+    expect(moveGutter(familyLinkedView, [], 0, 0)).toEqual(familyLinkedView);
+    expect(moveGutter(familyLinkedView, [], 0, Number.NaN)).toEqual(familyLinkedView);
   });
 
   it('returns the layout unchanged when it has no split tree', () => {
@@ -440,7 +440,7 @@ describe('moveGutter', () => {
 
 describe('gutterRange', () => {
   it('is how far a gutter may go back and forward', () => {
-    const tree = buildSplitTree(familyWorkbench)!;
+    const tree = buildSplitTree(familyLinkedView)!;
     // Structure (3 wide) may lose 2; the stack (5 wide, each tile 5) may lose 4.
     expect(gutterRange(tree, [], 0)).toEqual({ min: -2, max: 4 });
     // Families (4 tall) may lose 3; track (2 tall) may lose 1.
@@ -449,7 +449,7 @@ describe('gutterRange', () => {
   });
 
   it('is nothing for a gutter that is not there', () => {
-    const tree = buildSplitTree(familyWorkbench)!;
+    const tree = buildSplitTree(familyLinkedView)!;
     expect(gutterRange(tree, [], 3)).toEqual({ min: 0, max: 0 });
     expect(gutterRange(tree, [0], 0)).toEqual({ min: 0, max: 0 });
   });
@@ -457,7 +457,7 @@ describe('gutterRange', () => {
 
 describe('moveGutterTree', () => {
   it('reports what it applied after clamping, and fractions are allowed', () => {
-    const tree = buildSplitTree(familyWorkbench)!;
+    const tree = buildSplitTree(familyLinkedView)!;
     const moved = moveGutterTree(tree, [], 0, 9);
     expect(moved.delta).toBe(4);
     const half = moveGutterTree(tree, [], 0, 0.5);
@@ -467,13 +467,13 @@ describe('moveGutterTree', () => {
   });
 
   it('returns the very same tree when nothing moves', () => {
-    const tree = buildSplitTree(familyWorkbench)!;
+    const tree = buildSplitTree(familyLinkedView)!;
     expect(moveGutterTree(tree, [], 0, 0).tree).toBe(tree);
     expect(moveGutterTree(tree, [3], 0, 1).tree).toBe(tree);
   });
 
   it('does not mutate the tree it is given', () => {
-    const tree = buildSplitTree(familyWorkbench)!;
+    const tree = buildSplitTree(familyLinkedView)!;
     const before = JSON.stringify(tree);
     moveGutterTree(tree, [1], 0, 1);
     expect(JSON.stringify(tree)).toBe(before);
@@ -481,7 +481,7 @@ describe('moveGutterTree', () => {
 });
 
 describe('personal positions', () => {
-  const tree = buildSplitTree(familyWorkbench)!;
+  const tree = buildSplitTree(familyLinkedView)!;
 
   it('names a tree by its shape and keys, not by its sizes', () => {
     const moved = moveGutterTree(tree, [], 0, 1).tree;
@@ -540,7 +540,7 @@ describe('personal positions', () => {
   it('ignores fractions that do not fit the split and keeps the dashboard proportions', () => {
     expect(withFractions(tree, null)).toBe(tree);
     const odd = withFractions(tree, { root: [0.5], '1': [0.5, 0.5, Number.NaN], other: [1] });
-    expect(geometry(treeLayouts(odd, familyWorkbench))).toEqual(geometry(familyWorkbench));
+    expect(geometry(treeLayouts(odd, familyLinkedView))).toEqual(geometry(familyLinkedView));
     const tiny = withFractions(tree, { root: [0.001, 0.999] });
     expect(treeRects(tiny).get('structure')!.w).toBe(3);
   });
@@ -575,8 +575,8 @@ describe('personal positions', () => {
   });
 
   it('keys storage by dashboard and section', () => {
-    expect(workbenchSplitStorageKey('d1', 'Family workbench')).toBe(
-      'depictio:workbench-split:d1:Family workbench',
+    expect(linkedViewSplitStorageKey('d1', 'Family linked view')).toBe(
+      'depictio:linked-view-split:d1:Family linked view',
     );
   });
 
@@ -602,7 +602,7 @@ describe('personal positions', () => {
 
 describe('nodeAt', () => {
   it('walks child indexes from the root', () => {
-    const tree = buildSplitTree(familyWorkbench)!;
+    const tree = buildSplitTree(familyLinkedView)!;
     expect(nodeAt(tree.root, [])).toBe(tree.root);
     expect(nodeAt(tree.root, [0])).toEqual({ kind: 'leaf', key: 'structure' });
     expect((nodeAt(tree.root, [1]) as { dir: string }).dir).toBe('column');
@@ -614,8 +614,8 @@ describe('nodeAt', () => {
 
 // ---- Floors ----------------------------------------------------------------
 
-const G = WORKBENCH_GUTTER_PX;
-const FLOOR = WORKBENCH_MIN_PANE_PX;
+const G = LINKED_VIEW_GUTTER_PX;
+const FLOOR = LINKED_VIEW_MIN_PANE_PX;
 
 /** Every tile of `tree` is placed inside the box and together they fill it: the
  *  tree still describes one rectangle after its sizes were bent. */
@@ -632,28 +632,28 @@ function expectOneRectangle(tree: SplitTree) {
 
 describe('paneNeedPx / treeMinHeightPx', () => {
   it('adds the tiles of a stack and the gutters between them', () => {
-    const tree = buildSplitTree(familyWorkbench)!;
+    const tree = buildSplitTree(familyLinkedView)!;
     expect(treeMinHeightPx(tree)).toBe(3 * FLOOR + 2 * G);
     // The stack is the tall side of the row.
     expect(paneNeedPx((tree.root as { children: SplitNode[] }).children[0])).toBe(FLOOR);
   });
 
   it('stacks a full-width table on top of the tallest side', () => {
-    const tree = buildSplitTree(foldWorkbench)!;
+    const tree = buildSplitTree(foldLinkedView)!;
     expect(treeMinHeightPx(tree)).toBe(FLOOR + G + 3 * FLOOR + 2 * G);
   });
 
   it('takes a tile of one part for the whole of a lone tile, and nothing for a tile with no floor', () => {
     expect(treeMinHeightPx(buildSplitTree([tile('only', 0, 0, 8, 4)])!)).toBe(FLOOR);
-    const tree = buildSplitTree(foldWorkbench)!;
+    const tree = buildSplitTree(foldLinkedView)!;
     const noTable = (key: string) => (key === 'table' ? 0 : FLOOR);
     expect(treeMinHeightPx(tree, noTable)).toBe(G + 3 * FLOOR + 2 * G);
     expect(uniformFloor('anything')).toBe(FLOOR);
   });
 
   it('is the same in half rows: the need is in px, not in units', () => {
-    const half = familyWorkbench.map((t) => ({ ...t, y: t.y * 2, h: t.h * 2 }));
-    expect(treeMinHeightPx(buildSplitTree(half)!)).toBe(treeMinHeightPx(buildSplitTree(familyWorkbench)!));
+    const half = familyLinkedView.map((t) => ({ ...t, y: t.y * 2, h: t.h * 2 }));
+    expect(treeMinHeightPx(buildSplitTree(half)!)).toBe(treeMinHeightPx(buildSplitTree(familyLinkedView)!));
   });
 });
 
@@ -698,7 +698,7 @@ describe('shareWithFloors', () => {
 });
 
 describe('floorTree', () => {
-  const family = buildSplitTree(familyWorkbench)!;
+  const family = buildSplitTree(familyLinkedView)!;
   const stack = (tree: SplitTree) => (tree.root as { children: SplitNode[] }).children[1] as {
     sizes: number[];
   };
@@ -747,7 +747,7 @@ describe('floorTree', () => {
   });
 
   it('keeps nested stacks consistent: a part of a column is rescaled to the room it was given', () => {
-    const fold = buildSplitTree(foldWorkbench)!;
+    const fold = buildSplitTree(foldLinkedView)!;
     for (const height of [1132, 1300, 2000]) {
       const floored = floorTree(fold, height);
       expectOneRectangle(floored);
@@ -773,7 +773,7 @@ describe('floorTree', () => {
   });
 
   it('honours a floor per tile', () => {
-    const tree = buildSplitTree(foldWorkbench)!;
+    const tree = buildSplitTree(foldLinkedView)!;
     const table = (key: string) => (key === 'table' ? 120 : FLOOR);
     const need = treeMinHeightPx(tree, table);
     expect(need).toBe(120 + G + 3 * FLOOR + 2 * G);
@@ -785,13 +785,13 @@ describe('floorTree', () => {
 
 const ONE = { x: 1, y: 1 };
 
-describe('the shipped workbenches on a laptop', () => {
+describe('the shipped linked views on a laptop', () => {
   // The rows the grid would pick: `fitRowPx` with the floor the tree asks for,
   // in whole rows (the editor, 100 px) and in half rows (a reader, 48 px).
   const cases: [string, ReturnType<typeof tile>[], number][] = [
-    ['family', familyWorkbench, 9],
-    ['fold', foldWorkbench, 9],
-    ['annotator', annotatorWorkbench, 8],
+    ['family', familyLinkedView, 9],
+    ['fold', foldLinkedView, 9],
+    ['annotator', annotatorLinkedView, 8],
   ];
   for (const [name, layout, rows] of cases) {
     for (const [mode, rowPx, scale] of [
@@ -815,7 +815,7 @@ describe('the shipped workbenches on a laptop', () => {
   }
 
   it('needs more than the old fit gave a three-stack: three floors and two gutters', () => {
-    const tree = buildSplitTree(familyWorkbench)!;
+    const tree = buildSplitTree(familyLinkedView)!;
     const need = treeMinHeightPx(tree);
     const old = 9 * 67 + 8 * 4;
     expect(need).toBeGreaterThan(old);
@@ -824,7 +824,7 @@ describe('the shipped workbenches on a laptop', () => {
 });
 
 describe('moveGutterWithin', () => {
-  const family = buildSplitTree(familyWorkbench)!;
+  const family = buildSplitTree(familyLinkedView)!;
   const height = 1000;
   const floored = floorTree(family, height);
   const keeps = (next: SplitTree) => floorDeficit(next, height) <= floorDeficit(floored, height) + 1e-6;
@@ -859,7 +859,7 @@ describe('moveGutterWithin', () => {
 });
 
 describe('autofitTree', () => {
-  const family = buildSplitTree(familyWorkbench)!;
+  const family = buildSplitTree(familyLinkedView)!;
   const demandOf = (map: Record<string, number>) => (key: string) => map[key];
 
   it('gives the tiles that ask what they ask for and the others what is left', () => {
@@ -902,10 +902,10 @@ describe('autofitTree', () => {
   });
 
   it('counts a nested stack as the sum of its tiles, and a side-by-side part as its tallest', () => {
-    const fold = buildSplitTree(foldWorkbench)!;
+    const fold = buildSplitTree(foldLinkedView)!;
     // The structure is not asked; the stack beside it asks for 3 x 320 + 2
     // gutters (968), the table 300, so the root stack asks for 1268 and the
-    // 1272 px workbench has exactly that, less its one gutter.
+    // 1272 px linked view has exactly that, less its one gutter.
     const out = autofitTree(
       fold,
       1272,
@@ -943,14 +943,14 @@ describe('apportion / snapTree', () => {
   });
 
   it('snaps a bent tree to whole units, each split keeping its total, and a whole tree to itself', () => {
-    const family = buildSplitTree(familyWorkbench)!;
+    const family = buildSplitTree(familyLinkedView)!;
     const bent = floorTree(family, 1000);
     const snapped = snapTree(bent);
     const stack = (snapped.root as { children: SplitNode[] }).children[1] as { sizes: number[] };
     expect(stack.sizes.every(Number.isInteger)).toBe(true);
     expect(stack.sizes.reduce((a, b) => a + b, 0)).toBe(9);
     expect(sameSizes(snapTree(family), family)).toBe(true);
-    const fold = snapTree(floorTree(buildSplitTree(foldWorkbench)!, 1300));
+    const fold = snapTree(floorTree(buildSplitTree(foldLinkedView)!, 1300));
     expectOneRectangle(fold);
     for (const r of treeRects(fold).values()) {
       for (const v of [r.x, r.y, r.w, r.h]) expect(Number.isInteger(v)).toBe(true);
@@ -958,8 +958,8 @@ describe('apportion / snapTree', () => {
   });
 
   it('writes back to a layout the editor can store', () => {
-    const family = buildSplitTree(familyWorkbench)!;
-    const out = treeLayouts(snapTree(floorTree(family, 1000)), familyWorkbench);
+    const family = buildSplitTree(familyLinkedView)!;
+    const out = treeLayouts(snapTree(floorTree(family, 1000)), familyLinkedView);
     for (const t of out) {
       for (const v of [t.x, t.y, t.w, t.h]) expect(Number.isInteger(v)).toBe(true);
     }
@@ -967,7 +967,7 @@ describe('apportion / snapTree', () => {
 });
 
 describe('sameSizes', () => {
-  const family = buildSplitTree(familyWorkbench)!;
+  const family = buildSplitTree(familyLinkedView)!;
 
   it('is true for the same cut and sizes, give or take a tolerance', () => {
     expect(sameSizes(family, family)).toBe(true);

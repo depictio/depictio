@@ -1,9 +1,9 @@
 /**
- * `?layout=` of this page: how workbench sections are drawn.
+ * `?layout=` of this page: how linked view sections are drawn.
  *
- * A dashboard declares its linked tiles as `display: workbench` (one screen
+ * A dashboard declares its linked tiles as `display: linked` (one screen
  * height). The reader can compare it with the plain grid on the same tab:
- * `?layout=classic` draws workbenches as ordinary sections, and `?layout=yaml`
+ * `?layout=classic` draws linked views as ordinary sections, and `?layout=yaml`
  * (or `default`) goes back to what the dashboard declares.
  *
  * Read like `?chrome=` (chrome/variants/index.ts) and kept for the browser

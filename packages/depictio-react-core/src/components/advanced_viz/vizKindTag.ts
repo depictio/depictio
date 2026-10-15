@@ -1,6 +1,6 @@
 /**
  * The short type label an advanced-viz tile shows after its title in a
- * workbench section (compact density), so a reader can tell the linked views
+ * linked view section (compact density), so a reader can tell the linked views
  * of one structure apart at a glance ("3D", "PAE", "Track") without opening
  * each tile's metadata: a word or an acronym, and a small icon for the kind.
  *
@@ -26,7 +26,7 @@ export interface VizKindLabel {
 const label = (tag: string, icon: string): VizKindLabel => ({ tag, icon });
 
 const VIZ_KIND: Readonly<Record<string, VizKindLabel>> = {
-  // Protein kinds, the workbench's usual contents.
+  // Protein kinds, the linked view's usual contents.
   molecule_3d: label('3D', 'tabler:cube-3d-sphere'),
   hmm_logo: label('HMM', 'tabler:letter-case'),
   msa: label('MSA', 'tabler:align-justified'),

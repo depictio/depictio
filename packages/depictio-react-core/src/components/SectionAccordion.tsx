@@ -74,7 +74,7 @@ export const SectionAccordionItem: React.FC<{
   children: React.ReactNode;
   /** `appearance: plain`: no frame, no chevron, a heading over its tiles. */
   plain?: boolean;
-  /** Extra class on the item: `is-workbench` tightens its paddings and draws
+  /** Extra class on the item: `is-linked-view` tightens its paddings and draws
    *  its tiles flatter and closer (sectionAccordion.css, glass.css). Appended to
    *  `is-plain` when both apply. */
   className?: string;

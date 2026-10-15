@@ -155,11 +155,11 @@ const SectionForm: React.FC<SectionFormProps> = ({
   // Grid sections only: tiles on the grid, or the section as one filter bar.
   const [layout, setLayout] = useState<Layout>(initial?.display === 'strip' ? 'bar' : 'tiles');
   const isStrip = kind === 'grid' && layout === 'bar';
-  // A group display (`workbench`: the tiles share one screen height) is written
+  // A group display (`linked`: the tiles share one screen height) is written
   // in the dashboard's YAML and has no control here. Kept as it is so saving
   // this form does not quietly turn the section back into a plain grid.
-  const groupDisplay: 'workbench' | undefined =
-    kind === 'grid' && initial?.display === 'workbench' ? initial.display : undefined;
+  const groupDisplay: 'linked' | undefined =
+    kind === 'grid' && initial?.display === 'linked' ? initial.display : undefined;
   // Grid sections of tiles only: a bar of the section's own filters.
   const [filterBar, setFilterBar] = useState(Boolean(initial?.filter_bar));
   const hasOwnBar = kind === 'grid' && !isStrip && filterBar;
@@ -220,7 +220,7 @@ const SectionForm: React.FC<SectionFormProps> = ({
             card_variant: kind === 'grid' && cardVariant && !isStrip ? cardVariant : undefined,
             // Unwritten for the default grid, so a section saved from this
             // form stays readable by a server that predates filter bars. A
-            // workbench the form does not offer is carried over.
+            // linked view the form does not offer is carried over.
             display: isStrip ? 'strip' : groupDisplay,
             // Same: unwritten unless on.
             filter_bar: hasOwnBar ? true : undefined,
@@ -454,7 +454,7 @@ const SectionForm: React.FC<SectionFormProps> = ({
                   )}
                   {groupDisplay && (
                     <Text size="xs" c="dimmed" lh={1.4} data-testid="section-group-display">
-                      Set in the dashboard’s YAML as a workbench: its tiles share one screen
+                      Set in the dashboard’s YAML as a linked view: its tiles share one screen
                       height. Saving keeps it.
                     </Text>
                   )}

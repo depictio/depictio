@@ -1469,7 +1469,7 @@ const App: React.FC = () => {
   // The tab's scope: its `always_selected` filters, shown in a banner under
   // the header.
   const scope = useMemo(() => scopeUnits(summaryMetadata, filterScopes), [summaryMetadata, filterScopes]);
-  // `?layout=classic`: view a workbench section as a plain section, to compare
+  // `?layout=classic`: view a linked view section as a plain section, to compare
   // the arrangements on the same tab.
   const layoutOverride = useLayoutOverride();
 

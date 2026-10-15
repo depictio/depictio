@@ -251,7 +251,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   badges,
 }) => {
   const publish = useContext(AdvancedVizExtrasContext);
-  // A workbench or a docked column asks for a one-line header (`density.ts`).
+  // A linked view or a docked column asks for a one-line header (`density.ts`).
   const compact = useDensity() === 'compact';
   const dock = useContext(ControlsDockContext);
   // A view switch a router put ahead of this renderer's controls (see
@@ -373,7 +373,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   const dockOpen = docked && !dock?.collapsed;
   const overlayOpen = overlaid && !dock?.collapsed;
   // The chrome's settings icon only shows on hover, which a reader of a
-  // workbench cell does not find: its header carries a menu that is always
+  // linked view cell does not find: its header carries a menu that is always
   // there, to hide the controls or to put them over, above or beside the plot.
   // Not offered where the tile cannot take a choice (split into panels).
   const pickView = dock?.setView;

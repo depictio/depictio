@@ -15,7 +15,7 @@ import './plotlyStrictMode';
 export { default as DashboardGrid, SectionSummary } from './components/DashboardGrid';
 export { DensityContext, useDensity } from './components/density';
 export type { Density } from './components/density';
-// Workbench sections (`display` on a grid section): the pure rules the
+// Linked view sections (`display` on a grid section): the pure rules the
 // viewer's `?layout=` switch shares with the grid.
 export { effectiveDisplay } from './components/sectionGroups';
 export type { LayoutOverride } from './components/sectionGroups';

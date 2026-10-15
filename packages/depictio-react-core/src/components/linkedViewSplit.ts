@@ -1,9 +1,9 @@
 /**
- * The split tree of a workbench: its tiles as nested panes with a draggable
+ * The split tree of a linked view: its tiles as nested panes with a draggable
  * gutter between every two neighbours. Pure geometry, so the grid, the gutter
  * handles and the tests all apply one rule.
  *
- * A workbench's stored layout is a set of rectangles on 8 columns. When it can
+ * A linked view's stored layout is a set of rectangles on 8 columns. When it can
  * be cut into its tiles by straight lines that run edge to edge (a guillotine
  * layout), those lines are the gutters: a full-height vertical cut first, else
  * a full-width horizontal one, then the same inside each part. Several cuts at
@@ -13,7 +13,7 @@
  *
  * A layout that is not a guillotine one (a pinwheel), or that does not fill its
  * bounding box (a hole, a section narrower than the grid), has no tree: the
- * caller keeps drawing it with react-grid-layout. The four shipped workbenches
+ * caller keeps drawing it with react-grid-layout. The four shipped linked views
  * (a tall structure beside a stack, optionally under a full-width table) are
  * all guillotine layouts.
  *
@@ -25,7 +25,7 @@
  * sizes are bent to honour them (`floorTree`), measured and shared out in px.
  */
 import { GRID_MAX_COLS } from '../gridConfig';
-import { WORKBENCH_MIN_PANE_PX } from './sectionGroups';
+import { LINKED_VIEW_MIN_PANE_PX } from './sectionGroups';
 import type { GroupTile } from './sectionGroups';
 
 /** `row`: children side by side, sized by width. `column`: children stacked,
@@ -461,8 +461,8 @@ export function resetGutter(
 }
 
 /** Where a dashboard's reader keeps their gutter positions for one section. */
-export function workbenchSplitStorageKey(dashboardId: string, sectionKey: string): string {
-  return `depictio:workbench-split:${dashboardId}:${sectionKey}`;
+export function linkedViewSplitStorageKey(dashboardId: string, sectionKey: string): string {
+  return `depictio:linked-view-split:${dashboardId}:${sectionKey}`;
 }
 
 /** What is written under the storage key. */
@@ -495,8 +495,8 @@ export function parseStoredSplit(raw: string | null | undefined, signature: stri
 //
 // A stack of three tiles on a laptop's screen leaves each one a sliver, and a
 // track or an alignment in it spills past its box. So every tile has a floor, in
-// px (`WORKBENCH_MIN_PANE_PX` unless the caller knows better, a card or a text
-// tile has none): the workbench is made as tall as its stacks need to honour
+// px (`LINKED_VIEW_MIN_PANE_PX` unless the caller knows better, a card or a text
+// tile has none): the linked view is made as tall as its stacks need to honour
 // them, and the stored proportions are bent to them, the way a flex column with
 // a `min-height` on each child shares its room (`shareWithFloors`).
 //
@@ -505,13 +505,13 @@ export function parseStoredSplit(raw: string | null | undefined, signature: stri
 // or a tight stack of three would have no room to move at all.
 
 /** Thickness of a gutter, in px. Also the gap between two neighbouring tiles. */
-export const WORKBENCH_GUTTER_PX = 4;
+export const LINKED_VIEW_GUTTER_PX = 4;
 
 /** The least height, in px, the tile of a layout key keeps by default. */
 export type FloorOf = (key: string) => number;
 
-/** Every tile keeps `WORKBENCH_MIN_PANE_PX`. */
-export const uniformFloor: FloorOf = () => WORKBENCH_MIN_PANE_PX;
+/** Every tile keeps `LINKED_VIEW_MIN_PANE_PX`. */
+export const uniformFloor: FloorOf = () => LINKED_VIEW_MIN_PANE_PX;
 
 const sumOf = (values: readonly number[]): number => values.reduce((a, b) => a + b, 0);
 
@@ -525,7 +525,7 @@ const positive = (v: unknown): v is number => typeof v === 'number' && Number.is
 export function paneNeedPx(
   node: SplitNode,
   floorOf: FloorOf = uniformFloor,
-  gutterPx: number = WORKBENCH_GUTTER_PX,
+  gutterPx: number = LINKED_VIEW_GUTTER_PX,
 ): number {
   if (node.kind === 'leaf') {
     const floor = floorOf(node.key);
@@ -537,11 +537,11 @@ export function paneNeedPx(
     : sumOf(needs) + (needs.length - 1) * gutterPx;
 }
 
-/** The height, in px, a whole tree needs: the workbench is never shorter. */
+/** The height, in px, a whole tree needs: the linked view is never shorter. */
 export function treeMinHeightPx(
   tree: SplitTree,
   floorOf: FloorOf = uniformFloor,
-  gutterPx: number = WORKBENCH_GUTTER_PX,
+  gutterPx: number = LINKED_VIEW_GUTTER_PX,
 ): number {
   return paneNeedPx(tree.root, floorOf, gutterPx);
 }
@@ -604,7 +604,7 @@ export function floorTree(
   tree: SplitTree,
   heightPx: number,
   floorOf: FloorOf = uniformFloor,
-  gutterPx: number = WORKBENCH_GUTTER_PX,
+  gutterPx: number = LINKED_VIEW_GUTTER_PX,
 ): SplitTree {
   if (!(heightPx > 0) || !(tree.h > 0)) return tree;
   const walk = (node: SplitNode, units: number, px: number): SplitNode => {
@@ -630,7 +630,7 @@ export function floorTree(
 export function leafHeights(
   tree: SplitTree,
   heightPx: number,
-  gutterPx: number = WORKBENCH_GUTTER_PX,
+  gutterPx: number = LINKED_VIEW_GUTTER_PX,
 ): Map<string, number> {
   const out = new Map<string, number>();
   const walk = (node: SplitNode, px: number) => {
@@ -656,7 +656,7 @@ export function floorDeficit(
   tree: SplitTree,
   heightPx: number,
   floorOf: FloorOf = uniformFloor,
-  gutterPx: number = WORKBENCH_GUTTER_PX,
+  gutterPx: number = LINKED_VIEW_GUTTER_PX,
 ): number {
   let short = 0;
   for (const [key, px] of leafHeights(tree, heightPx, gutterPx)) {
@@ -709,7 +709,7 @@ export function autofitTree(
   heightPx: number,
   demandOf: (key: string) => number | null | undefined,
   floorOf: FloorOf = uniformFloor,
-  gutterPx: number = WORKBENCH_GUTTER_PX,
+  gutterPx: number = LINKED_VIEW_GUTTER_PX,
 ): SplitTree {
   if (!(heightPx > 0) || !(tree.h > 0)) return tree;
   const demand = (node: SplitNode): number | null => {

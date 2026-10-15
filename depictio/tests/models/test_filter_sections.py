@@ -339,7 +339,7 @@ class TestGridSections:
 
 
 class TestSectionDisplay:
-    @pytest.mark.parametrize("display", ["grid", "strip", "workbench"])
+    @pytest.mark.parametrize("display", ["grid", "strip", "linked"])
     def test_every_layout_is_accepted_and_survives_a_round_trip(self, display):
         dash = _dashboard(
             [_figure("f", section="QC")],
