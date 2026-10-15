@@ -61,7 +61,7 @@ run. Sheet columns beyond `id` and `fasta` are kept, so any of them can become `
 
 ## Overview
 
-The landing page, opening at wide width (1600 px, see "Page width" below) with the filter panel collapsed:
+The landing page, at compact width with the filter panel collapsed:
 
 - **Hero**: what the run is, and a link to the run parameters.
 - **About this dashboard** and **The run**: two cards side by side. The first says what the
@@ -77,9 +77,11 @@ The landing page, opening at wide width (1600 px, see "Page width" below) with t
   these four only.
 - **Findings**: result rows computed under the filters, each with a link to its tab: the
   structures and engines, the median mean pLDDT with the share of residues under 50, the mean
-  PAE and the models ranked. Below them, four figures in two rows: the mean pLDDT of every model
-  per engine beside the first structure in 3D, then the PAE matrix of the first structure beside
-  the top model of each engine per target. The bar of this section filters by assembly and
+  PAE and the models ranked. Below them, four figures in two rows, each a wide tile (five of the
+  eight columns) beside a narrow one (three): the first structure in 3D beside the mean pLDDT of
+  every model per engine, then the PAE matrix of the first structure beside the top model of each
+  engine per target. The 3D structure over its written sequence and the PAE matrix take the wide
+  side, the box and bar plots the narrow one. The bar of this section filters by assembly and
   engine.
 - **How to read this dashboard**: one tile per tab, by group, each showing its question.
 
@@ -104,24 +106,25 @@ Filters: engine and model rank.
 **Structure.** The tab reads one target (see "Single-unit pickers" below). Strip: the median
 residue pLDDT (its spread), the residues split by AlphaFold confidence band, the residues under
 pLDDT 50 ranked by engine and the best mean pLDDT of the target's structures, the engines ranked
-by theirs. Then one point per engine's top-ranked structure (mean pLDDT against the share of
-residues under 50) beside the picked structure in 3D over its written sequence, and the sequence
+by theirs. Then a table with one row per engine's top-ranked structure (mean pLDDT, the shares of
+residues at 70 or more and under 50, pTM) above the picked structure in 3D over its written sequence, and the sequence
 with its pLDDT lane. A second section holds the Ramachandran plot of the picked structure (phi and psi are
 computed in the browser from the PDB's backbone, coloured by pLDDT) beside the per-engine
 pLDDT profile. Collapsed: the alignment the structure was folded from and the residue table.
 
-The scatter is the engine picker. `proteinfold_structure_scores` holds one row per top-ranked
-structure, read from the same PDBs, so every point has a file to open. Its click selection is on
-`entity`, the column the 3D tile names its structure by, so a click opens that structure; the
+The table is the engine picker. `proteinfold_structure_scores` holds one row per top-ranked
+structure, read from the same PDBs, so every row has a file to open. Its row selection is on
+`entity` (hidden from the grid), the column the 3D tile names its structure by, so a click opens
+that structure; the
 sequence track, the Ramachandran plot and the alignment follow the same column. An engine picker
-on the left would narrow the plot to one point, so the tab has none. The tab's `Target` filter
-is `always_selected`: the plot draws one point per engine on that target, and the tiles that
+on the left would narrow the table to one row, so the tab has none. The tab's `Target` filter
+is `always_selected`: the table lists one row per engine on that target, and the tiles that
 show one structure at a time (3D, track, Ramachandran, alignment) open on its first structure
-until a point is clicked.
+until a row is clicked. Sort a column header to rank the engines.
 
 The picker is a filter on the residues, so `template.yaml` links it onward: to the engine curves
-and to the structure plot and the best-structure card (`target`, a direct link), and to the
-alignment and the PAE matrix (`entity`, reached as that target's structures). A point of the plot
+and to the structure table and the best-structure card (`target`, a direct link), and to the
+alignment and the PAE matrix (`entity`, reached as that target's structures). A row of the table
 is therefore always a structure of the picked target, and a click never leaves the other tiles on
 another target. ESMFold writes no alignment: its structure opens the alignment tile on its
 empty-state message, not on rows.
@@ -187,13 +190,6 @@ a pick replaces it, the filter cannot be cleared, and a held value that leaves t
 replaced by the first again. The tiles that show one structure at a time therefore always agree
 on it, and the curves and points of a tab are one target's. The pinned `Sample filters` and the
 Overview's filter bars stay optional, so the Overview and Model scores read every target.
-
-## Page width
-
-The dashboard opens at `wide` (1600 px) instead of the family's `compact` (1080 px): the 3D
-structure over its written sequence and the PAE matrix, both w4 tiles on the Overview, need the
-room. The viewer can still pick another width. The Overview keeps its row budget; the Findings
-tiles stay w4 so each row fills the 8 columns.
 
 ## Method notes
 

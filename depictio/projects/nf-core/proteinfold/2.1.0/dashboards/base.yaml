@@ -11,11 +11,11 @@ version: 1
 #
 # Structure tiles (the 3D view, the sequence track, the alignment, the PAE
 # matrix, the Ramachandran plot) each show one structure at a time: the one a
-# click on the structure plot or a filter on `entity` names, else the first.
+# click on a row of the structure table or a filter on `entity` names, else the first.
 # The persistent target filter is optional, so the Overview and Model scores
 # read every target in scope; the Structure, Predicted error and Engines
 # comparison tabs each hold a single-unit picker (`always_selected`) and open on
-# the first option, these tiles on the first structure until a point is picked.
+# the first option, these tiles on the first structure until a row is picked.
 #
 # The MultiQC report is not a tab: proteinfold's custom content is one plot
 # per target, named after the target, and a template never names a value of
@@ -31,11 +31,7 @@ main_dashboard:
   icon_color: green
   workflow_system: nf-core
   filter_panel_default: collapsed
-  # Wide, not the family's compact: the 3D structure over its sequence and the PAE
-  # matrix (w4 tiles of the Overview, wider on their own tabs) need the room; at
-  # 1080 px the sequence wraps tight and the matrix labels crowd. See
-  # VALIDATION_REPORT.md.
-  content_width_default: wide
+  content_width_default: compact
   show_tab_header: false
   # Declared once here, read by every tab of the family. The engines get a
   # palette each (one per engine and AlphaFold2 mode), the pLDDT bands the
@@ -322,8 +318,18 @@ main_dashboard:
     tag: pf-ov-findings
     index: ov-findings
     layout: {x: 0, y: 0, w: 8, h: 2}
-  # One highlight per analysis tab, in the order of the rows above. The tiles
-  # of a row share a stored height.
+  # One highlight per analysis tab, in the order of the rows above. Two rows of
+  # w5 + w3 instead of two w4: the 3D structure over its sequence and the PAE
+  # matrix take the wide side, the two box and bar plots the narrow one (see
+  # VALIDATION_REPORT.md). The tiles of a row share a stored height.
+  - component_type: highlight
+    section: Findings
+    source_tab: Structure
+    source_component: st-structure
+    caption: The first structure in scope, coloured by pLDDT; open the Structure tab to pick another.
+    tag: pf-ov-hl-structure
+    index: ov-hl-structure
+    layout: {x: 0, y: 2, w: 5, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Model scores
@@ -332,15 +338,7 @@ main_dashboard:
     hide_legend: true
     tag: pf-ov-hl-engines
     index: ov-hl-engines
-    layout: {x: 0, y: 2, w: 4, h: 4}
-  - component_type: highlight
-    section: Findings
-    source_tab: Structure
-    source_component: st-structure
-    caption: The first structure in scope, coloured by pLDDT; open the Structure tab to pick another.
-    tag: pf-ov-hl-structure
-    index: ov-hl-structure
-    layout: {x: 4, y: 2, w: 4, h: 4}
+    layout: {x: 5, y: 2, w: 3, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Predicted error
@@ -348,7 +346,7 @@ main_dashboard:
     caption: Error of one residue given the alignment on another; dark blocks on the diagonal are confident domains.
     tag: pf-ov-hl-pae
     index: ov-hl-pae
-    layout: {x: 0, y: 6, w: 4, h: 4}
+    layout: {x: 0, y: 7, w: 5, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Engines comparison
@@ -357,7 +355,7 @@ main_dashboard:
     hide_legend: true
     tag: pf-ov-hl-best
     index: ov-hl-best
-    layout: {x: 4, y: 6, w: 4, h: 4}
+    layout: {x: 5, y: 7, w: 3, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers.
   - component_type: text
@@ -643,7 +641,7 @@ tabs:
   - name: Structure and sequence
     icon: mdi:microscope
     color: violet
-    description: One point per structure; the clicked one in 3D over its sequence
+    description: One row per structure; the picked one in 3D over its sequence
   - name: Backbone and engines
     icon: mdi:chart-line
     color: violet
@@ -663,20 +661,20 @@ tabs:
     order: 1
     body: >
       The tab reads one target, the first of the list until another is picked on the left;
-      click a point on the plot to open that engine's structure in 3D, coloured by pLDDT.
+      click a row of the table to open that engine's structure in 3D, coloured by pLDDT.
       A residue picked in 3D, on the sequence, on the Ramachandran plot or in the alignment is
       selected in every tile. The Ramachandran regions are approximate, a glance at backbone
       quality and not a validation.
     tag: pf-st-intro
     index: st-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
-  # No engine picker: the plot is the engine picker (an engine filter would
-  # narrow it to one point). The target is always_selected: every tile reads one
-  # sequence (the plot one point per engine, the profile one curve per engine),
+  # No engine picker: the table is the engine picker (an engine filter would
+  # narrow it to one row). The target is always_selected: every tile reads one
+  # sequence (the table one row per engine, the profile one curve per engine),
   # the first target of the list until another is picked, on any run. The picker
   # sits on the residues; its links (template.yaml) carry it to the structure
-  # plot, the engine curves and, as that target's structures, the alignment, so
-  # a point of the plot is always a structure of the picked target.
+  # table, the engine curves and, as that target's structures, the alignment, so
+  # a row of the table is always a structure of the picked target.
   - component_type: interactive
     workflow_tag: proteinfold
     data_collection_tag: proteinfold_residues
@@ -792,31 +790,24 @@ tabs:
     title: Best mean pLDDT
     description: Mean pLDDT of the target's most confident structure, the engines ranked by theirs.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  # The plot and the 3D tile share the section width: a click on a point emits
-  # that structure's entity, which the 3D tile, the sequence track and the
-  # alignment follow by column name.
-  - component_type: advanced_viz
+  # The table and the 3D tile share the section width: a row click emits that
+  # structure's entity (`table_selection`), which the 3D tile, the sequence
+  # track and the alignment follow by column name. The id column drives the
+  # selection but stays out of the grid. The target filter reaches the rows
+  # through the residues -> structure scores link, so the table lists the
+  # picked target's structures only.
+  - component_type: table
     workflow_tag: proteinfold
     data_collection_tag: proteinfold_structure_scores
-    viz_kind: scatter_xy
-    config:
-      viz_kind: scatter_xy
-      x_col: mean_plddt
-      y_col: very_low_pct
-      label_col: structure
-      color_col: engine
-      marker_size: 12
-      x_title: Mean pLDDT
-      y_title: Residues under pLDDT 50 (%)
-      legend_pos: bottom
-      selection_enabled: true
-      selection_column: entity
+    columns: [engine, mean_plddt, confident_pct, very_low_pct, ptm]
+    row_selection_enabled: true
+    row_selection_column: entity
     section: Structure and sequence
-    tag: pf-st-av-structures
+    tag: pf-st-table-structures
     index: st-structures
-    title: Structures of the target, one point per engine
-    description: Mean confidence against the share of likely disordered residues. Bottom right is confident throughout. Click a point to open its structure.
-    layout: {x: 0, y: 0, w: 4, h: 6}
+    title: Structures of the target, one row per engine
+    description: Mean pLDDT, residues at 70 or more and under 50 (%) and pTM of each engine's top model. Click a row to open its structure.
+    layout: {x: 0, y: 0, w: 8, h: 3}
   - component_type: advanced_viz
     workflow_tag: proteinfold
     data_collection_tag: proteinfold_residues
@@ -835,8 +826,8 @@ tabs:
     tag: pf-st-av-structure
     index: st-structure
     title: Picked structure coloured by pLDDT
-    description: The structure clicked on the plot (the first in scope until then), over its written sequence. Picked residues are drawn red on both.
-    layout: {x: 4, y: 0, w: 4, h: 6}
+    description: The structure picked in the table (the first in scope until then), over its written sequence. Picked residues are drawn red on both.
+    layout: {x: 0, y: 3, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: proteinfold
     data_collection_tag: proteinfold_residues
@@ -850,7 +841,7 @@ tabs:
     index: st-sequence
     title: Sequence with its pLDDT lane
     description: The picked structure's sequence, its pLDDT per residue and its confidence band. Brush a stretch to select it in 3D.
-    layout: {x: 0, y: 6, w: 8, h: 4}
+    layout: {x: 0, y: 9, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: proteinfold
     data_collection_tag: proteinfold_residues

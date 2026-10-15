@@ -293,7 +293,7 @@ workflows:
               "ipsae": "ipSAE interface score, complexes only"
 
       # One row per structure the 3D tile can open (read from the same PDBs),
-      # so a click on the Structure tab's plot always names an uploaded file.
+      # so a click on a row of the Structure tab's table always names an uploaded file.
       - data_collection_tag: "proteinfold_structure_scores"
         description: "One row per top-ranked structure: chains, length, mean pLDDT, confident and disordered shares, model count, pTM and ipTM of the top model"
         config:
@@ -509,8 +509,8 @@ links:
     description: "Follow the picked structure's target on the per-engine curves"
     enabled: true
   # The Structure tab's target picker sits on the residues: this link carries
-  # its pick to the structure plot and to the best-structure card, so the plot
-  # lists the picked target's structures only and a click on a point always
+  # its pick to the structure table and to the best-structure card, so the table
+  # lists the picked target's structures only and a click on a row always
   # names a structure the other tiles hold residues for. A link resolves to the
   # first declared link of a pair of collections, so the pair below (residues to
   # the alignment and the PAE matrix) stays on `entity`, which a target pick
@@ -520,7 +520,7 @@ links:
     target_dc_tag: "proteinfold_structure_scores"
     target_type: "table"
     link_config: {resolver: "direct"}
-    description: "Follow the picked target on the structure plot"
+    description: "Follow the picked target on the structure table"
     enabled: true
   # ...and narrows the alignment and the PAE matrix to that structure (a target
   # pick on the residues reaches them as that target's structures).

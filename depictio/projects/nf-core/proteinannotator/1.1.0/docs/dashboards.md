@@ -88,7 +88,10 @@ template has no MultiQC tab; the SeqFu tables carry the same numbers.
 
 The Overview follows the family layout (`RULES.md` section 3): hero, About and run cards, a five
 step pipeline flow, four key figures with a group and sample filter bar, four findings with a
-highlight each, and a link list of the tabs. The persistent sample filters and the collapsed
+highlight each, and a link list of the tabs. The page stays at compact width; the findings
+highlights sit in two rows of w3 + w5 instead of the family's w4 + w4, so the domain
+architecture and the sequence track, which lay a protein out along its chain, get five of the
+eight columns (the length against annotated share scatter and the state shares take three). The persistent sample filters and the collapsed
 sample sheet (design table and per-sample summary) sit in the left panel and at the bottom of
 every other tab.
 

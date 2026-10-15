@@ -25,20 +25,32 @@ Overview highlights, the linked structure tiles) is not part of this report.
 
 ## Deliberate deviations from RULES.md
 
-- `content_width_default: wide` (1600 px) instead of the family's `compact`: the Overview's
-  3D structure and PAE matrix tiles and the Structure tab's 3D-over-sequence tile read too
-  tight at 1080 px. The Findings highlights stay w4 (two per 8-column row, 24-row budget kept).
+- Findings figures sit in two rows of **w5 + w3** instead of two w4 tiles per row. The Overview
+  stays at compact width (1080 px), where the 3D structure over its written sequence and the PAE
+  matrix read too tight in a half row. They take the five-column side (the structure beside the
+  engine box plot, the PAE matrix beside the best-model bars); the two plots that read at a
+  third of the row take the three-column side. Each row still fills the 8 columns and the
+  Overview stays at 24 rows (structure row h5, PAE row h4). A full-width w8 row for the
+  structure was weighed and dropped: with the other three tiles re-flowed into two more rows it
+  needs 28 rows.
+
+## Link resolution
+
 - A link resolves to the first declared link of a pair of collections, so residues to
   structure scores is its own link on `target`, while residues to the alignment and the PAE
   matrix stay on `entity` (a target pick reaches them by translation).
+- The Structure tab picks its structure on a table of `proteinfold_structure_scores` (row
+  selection on `entity`, the id hidden from the grid), where a scatter stood earlier: same
+  selection, same follower tiles. The table spans the width (a lint rule), so the 3D tile now
+  spans it too (the tab is 22 open rows, over the 20 of RULES.md). Not yet checked on a running stack.
 
-## Row budgets (stored heights, stored at the 8-column grid)
+## Row budgets (stored heights, compact width)
 
 | Tab | Open rows | Open sections |
 | --- | --- | --- |
-| Overview | 23 | Hero, About, Pipeline, Key figures, Findings, How to read |
+| Overview | 24 | Hero, About, Pipeline, Key figures, Findings, How to read |
 | Model scores | 13 | 3 |
-| Structure | 19 | 3 (the alignment and the residue table are collapsed) |
+| Structure | 22 | 3 (the alignment and the residue table are collapsed) |
 | Predicted error | 14 | 3 |
 | Engines comparison | 17 | 3 (the model table and record are collapsed) |
 
