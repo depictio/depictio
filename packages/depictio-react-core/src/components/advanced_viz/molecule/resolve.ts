@@ -14,6 +14,17 @@ import { authFetch } from '../../../api';
 
 const RESOLVE_URL = '/depictio/api/v1/advanced_viz/structure/resolve';
 
+/**
+ * Longest sequence the public ESM Atlas service folds. The server enforces it
+ * (`esmfold_max_length`, `DEPICTIO_STRUCTURE_RESOLVER_ESMFOLD_MAX_LENGTH`, 400
+ * by default) and answers a longer sequence with a 400 naming its length and
+ * the limit, which the tile shows as an explanation rather than a failure.
+ * This copy only steers which protein a tile opens on by itself (see
+ * `foldable.ts`); it never refuses one, so a server with a raised limit still
+ * folds what the reader picks.
+ */
+export const ESMFOLD_MAX_RESIDUES = 400;
+
 export interface ResolveRequest {
   uniprot?: string | null;
   gene?: string | null;

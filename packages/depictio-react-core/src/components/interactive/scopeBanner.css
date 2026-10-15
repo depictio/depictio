@@ -40,8 +40,9 @@
 .depictio-scope-banner__identity {
   display: flex;
   flex-direction: column;
+  flex: 0 1 auto;
   min-width: 0;
-  max-width: min(100%, 44ch);
+  max-width: 100%;
 }
 
 .depictio-scope-banner__eyebrow {
@@ -56,6 +57,13 @@
   min-width: 0;
   font-size: var(--mantine-h3-font-size);
   line-height: 1.25;
+}
+
+/* Never truncated: a unit's name is often an identifier with no spaces, so it
+ * breaks anywhere rather than spilling out of a narrow screen. */
+.depictio-scope-banner__name,
+.depictio-scope-banner__option {
+  overflow-wrap: anywhere;
 }
 
 /* The name is the picker: it reads as a heading, and shows it is one only on

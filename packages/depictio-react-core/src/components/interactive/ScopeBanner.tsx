@@ -70,7 +70,6 @@ const UnitPicker: React.FC<{
       component="span"
       className="depictio-scope-banner__name"
       fw={700}
-      truncate="end"
       data-testid="scope-banner-value"
     >
       {value ?? '…'}
@@ -82,7 +81,7 @@ const UnitPicker: React.FC<{
     <Combobox
       store={combobox}
       position="bottom-start"
-      width={320}
+      width="target"
       withinPortal
       onOptionSubmit={(v) => {
         combobox.closeDropdown();
@@ -103,7 +102,8 @@ const UnitPicker: React.FC<{
           <Icon icon="tabler:selector" width={18} height={18} aria-hidden />
         </UnstyledButton>
       </Combobox.Target>
-      <Combobox.Dropdown>
+      {/* As wide as the name it opens from, never narrower than a readable list. */}
+      <Combobox.Dropdown miw={320} maw="min(640px, calc(100vw - 32px))">
         <Combobox.Search
           value={search}
           onChange={(e) => setSearch(e.currentTarget.value)}
@@ -120,7 +120,11 @@ const UnitPicker: React.FC<{
                 disabled={o.disabled}
                 active={o.value === value}
               >
-                <Text size="sm" fw={o.value === value ? 600 : undefined} truncate="end">
+                <Text
+                  size="sm"
+                  fw={o.value === value ? 600 : undefined}
+                  className="depictio-scope-banner__option"
+                >
                   {o.value}
                 </Text>
               </Combobox.Option>

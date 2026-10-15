@@ -12,6 +12,13 @@
  * otherwise. A filter naming one entity, or the reader's own pick, still wins
  * in each tile; this only decides the opening.
  *
+ * A tile whose source cannot draw every entity (a structure tile that folds
+ * a bare sequence only up to a length limit) claims with `priority` when that
+ * limit moved its opening off the default one: its claim replaces an ordinary
+ * claim, so the other tiles follow it to an entity it can draw instead of the
+ * dashboard opening on two different proteins. Between two priority claims
+ * the first still wins.
+ *
  * The claimant owns the key: it may move it (its opening changes when the
  * dashboard's pickers change what is in scope) and releases it when it
  * unmounts, so another tile can claim it. A tile reloading (its own opening
@@ -29,8 +36,10 @@ export interface OpeningEntityStore {
   /** The entity in force for `key`, or null when no tile claimed it. */
   get(key: string): string | null;
   /** Claim `key` for `owner` with `entity`. The first claimant wins; later
-   *  claims by the same owner move the value. Returns the value in force. */
-  claim(key: string, owner: string, entity: string): string;
+   *  claims by the same owner move the value. A `priority` claim also takes
+   *  the key from an ordinary claimant (never from another priority one).
+   *  Returns the value in force. */
+  claim(key: string, owner: string, entity: string, priority?: boolean): string;
   /** Drop `owner`'s claim on `key` (a no-op for anyone else). */
   release(key: string, owner: string): void;
   subscribe(listener: () => void): () => void;
@@ -38,19 +47,24 @@ export interface OpeningEntityStore {
 }
 
 export function createOpeningEntityStore(): OpeningEntityStore {
-  const claims = new Map<string, { owner: string; entity: string }>();
+  const claims = new Map<string, { owner: string; entity: string; priority: boolean }>();
   const listeners = new Set<() => void>();
   const notify = () => {
     for (const l of [...listeners]) l();
   };
   return {
     get: (key) => claims.get(key)?.entity ?? null,
-    claim(key, owner, entity) {
+    claim(key, owner, entity, priority = false) {
       const current = claims.get(key);
-      if (current && current.owner !== owner) return current.entity;
-      if (current?.entity === entity) return entity;
-      claims.set(key, { owner, entity });
-      notify();
+      if (current && current.owner !== owner && !(priority && !current.priority)) {
+        return current.entity;
+      }
+      if (current?.owner === owner && current.entity === entity && current.priority === priority) {
+        return entity;
+      }
+      claims.set(key, { owner, entity, priority });
+      // A takeover of the same entity changes the owner, not what is shown.
+      if (current?.entity !== entity) notify();
       return entity;
     },
     release(key, owner) {
@@ -96,13 +110,17 @@ const nullSnapshot = () => null;
  * `own` is what the tile would open on by itself, once it knows (null while
  * it is still loading: nothing new is claimed then, an earlier claim stays). `held` is every entity the
  * tile can show; the shared value is adopted only when it is among them.
- * `key` null, or no provider above, turns sharing off.
+ * `key` null, or no provider above, turns sharing off. `priority` makes the
+ * tile's claim win over an ordinary one (see the store's `claim`); `held`
+ * then lists only what the tile can draw, so it never adopts an opening it
+ * cannot.
  */
 export function useSharedOpeningEntity(
   key: string | null | undefined,
   owner: string,
   own: string | null,
   held: readonly string[] | null,
+  priority = false,
 ): string | null {
   const ctx = useContext(OpeningEntityContext);
   const store = key ? ctx : null;
@@ -116,10 +134,11 @@ export function useSharedOpeningEntity(
   useEffect(() => {
     if (!store || !key || own === null) return;
     // The store ignores a claim against another owner, so this only takes a
-    // vacant key or moves this tile's own claim. Re-run when the key falls
-    // vacant, so a waiting tile takes over from one that unmounted.
-    store.claim(key, owner, own);
-  }, [store, key, owner, own, vacant]);
+    // vacant key or moves this tile's own claim (or, with `priority`, takes an
+    // ordinary one). Re-run when the key falls vacant, so a waiting tile takes
+    // over from one that unmounted.
+    store.claim(key, owner, own, priority);
+  }, [store, key, owner, own, priority, vacant]);
   // Released on unmount (and on a key change) only, so moving the claim
   // never passes through a vacant key another tile could grab.
   useEffect(() => {

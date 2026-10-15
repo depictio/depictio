@@ -36,6 +36,7 @@ import {
   useStructureText,
   useThreeDmolStatus,
 } from './molecule/hooks';
+import { chooseDefaultEntity, renderableEntities, unfoldableEntities } from './molecule/foldable';
 import { createHoverGate } from './molecule/hoverGate';
 import { modelCredit, modelExplanation } from './molecule/resolve';
 import {
@@ -156,6 +157,9 @@ const COMPACT_WIDTH = 560;
 const COMPACT_HEIGHT = 440;
 
 const MAX_TOOLTIP_VARIANTS = 4;
+
+/** No entity the source refuses: every protein of a structure file collection is drawable. */
+const NO_ENTITIES: ReadonlySet<string> = new Set();
 
 interface HoverState {
   residue: ResidueRef;
@@ -362,23 +366,35 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     () => residueEntityFromFilters(filters, entityCol),
     [filters, entityCol],
   );
+  // Proteins the resolver has nothing to draw (resolve mode: no accession, no
+  // gene, and a sequence longer than ESMFold folds). Only the automatic
+  // choices below steer clear of them; a filter or a pick is honoured as is.
+  const unrenderable = useMemo(
+    () => (fileMode ? NO_ENTITIES : unfoldableEntities(rows)),
+    [fileMode, rows],
+  );
   // What this tile opens on by itself, once both its rows and its structure
   // list are in (null before: nothing is shared while half loaded), agreed
   // with the dashboard's other protein tiles under the entity column name so
   // they all open on the same entity. A filter or the reader's pick wins.
+  // The first entity in the default order the source can draw, so the tile
+  // does not start on a protein it cannot fold; `steered` (that moved the
+  // choice) makes its claim win over another tile's, which would otherwise
+  // pull this tile back onto the one it cannot draw.
   const openingReady = !rowsLoading && (!fileMode || previewOnly || !manifest.loading);
-  const ownOpening = useMemo(
+  const { entity: ownOpening, steered } = useMemo(
     () =>
       openingReady
-        ? chooseEntity({ fromFilters: null, picked: null, rowEntities, available })
-        : null,
-    [openingReady, rowEntities, available],
+        ? chooseDefaultEntity({ rowEntities, available, unrenderable })
+        : { entity: null, steered: false },
+    [openingReady, rowEntities, available, unrenderable],
   );
   const opening = useSharedOpeningEntity(
     entityCol,
     index,
     ownOpening,
-    openingReady ? available : null,
+    openingReady ? renderableEntities(available, unrenderable) : null,
+    steered,
   );
   const entity = chooseEntity({
     fromFilters,
@@ -386,6 +402,7 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     rowEntities,
     available,
     opening,
+    unrenderable,
   });
   // A dashboard filter naming an entity with no structure must not silently
   // show another protein instead.
