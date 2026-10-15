@@ -14,7 +14,7 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
-import { ShieldCheck, Trash2, UserRound } from 'lucide-react';
+import { ShieldCheck, Trash2, UserPlus, UserRound } from 'lucide-react';
 
 import {
   listAllUsers,
@@ -24,6 +24,7 @@ import {
 import type { AdminUser } from 'depictio-react-core';
 
 import { STROKE, useGlassPages } from '../chrome/variants/glass/pages';
+import CreateUserModal from './CreateUserModal';
 import DeleteUserModal from './DeleteUserModal';
 import Facts from './Facts';
 
@@ -51,6 +52,7 @@ const AdminUsersPanel: React.FC<AdminUsersPanelProps> = ({ currentUserEmail }) =
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
+  const [createOpened, setCreateOpened] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
@@ -155,6 +157,23 @@ const AdminUsersPanel: React.FC<AdminUsersPanelProps> = ({ currentUserEmail }) =
 
   return (
     <>
+      <Group justify="flex-end" mb="sm">
+        <Button
+          size={glass ? 'sm' : 'xs'}
+          color={glass ? undefined : 'teal'}
+          leftSection={
+            glass ? (
+              <UserPlus size={15} strokeWidth={STROKE} aria-hidden />
+            ) : (
+              <Icon icon="mdi:account-plus-outline" width={14} />
+            )
+          }
+          onClick={() => setCreateOpened(true)}
+          data-testid="admin-create-user-btn"
+        >
+          Add user
+        </Button>
+      </Group>
       <Accordion radius="md" variant="separated" multiple className={glass ? 'ga-rows' : undefined}>
         {sortedUsers.map((user) => {
           const userId = user.id ?? user._id;
@@ -252,6 +271,9 @@ const AdminUsersPanel: React.FC<AdminUsersPanelProps> = ({ currentUserEmail }) =
                         ),
                       },
                       { label: 'Verified', value: user.is_verified ? 'Yes' : 'No' },
+                      ...(user.must_change_password
+                        ? [{ label: 'Password', value: 'Must be changed at next sign-in' }]
+                        : []),
                       ...(glass ? [] : [{ label: 'User status', value: statusControl }]),
                     ]}
                   />
@@ -298,6 +320,14 @@ const AdminUsersPanel: React.FC<AdminUsersPanelProps> = ({ currentUserEmail }) =
           );
         })}
       </Accordion>
+      <CreateUserModal
+        opened={createOpened}
+        onClose={() => setCreateOpened(false)}
+        onCreated={() => {
+          setCreateOpened(false);
+          refresh();
+        }}
+      />
       <DeleteUserModal
         opened={Boolean(deleteTarget)}
         user={deleteTarget}

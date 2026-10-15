@@ -3591,6 +3591,10 @@ export interface AuthStatusResponse {
     /** A public-mode guest: a temporary account that expires. Older backends
      *  omit it, which reads as "not a guest". */
     is_temporary?: boolean;
+    /** An admin created the account with a password the person did not
+     *  choose. The SPA sends them to their profile to replace it. Older
+     *  backends omit it, which reads as "no". */
+    must_change_password?: boolean;
   } | null;
   is_public_mode: boolean;
   is_single_user_mode: boolean;
@@ -5906,6 +5910,34 @@ export async function deleteUser(userId: string): Promise<void> {
     method: 'DELETE',
   });
   if (!res.ok) await throwHttpError(res, 'Failed to delete user');
+}
+
+export interface AdminCreateUserInput {
+  email: string;
+  /** The starting password, sent in plaintext over TLS like login. */
+  password: string;
+  display_name?: string;
+  is_admin?: boolean;
+  /** Ask the person to replace the password at their first sign-in. The
+   *  server defaults this to true. */
+  must_change_password?: boolean;
+}
+
+/** Create an account with an initial password (admin only). Throws
+ *  Error(<detail>) so the caller can show the server's reason, e.g. the 409
+ *  for an email that already has an account. */
+export async function adminCreateUser(input: AdminCreateUserInput): Promise<{
+  user_id: string;
+  email: string;
+  is_admin: boolean;
+  must_change_password: boolean;
+}> {
+  const res = await authFetch(`${API_BASE}/auth/admin/create_user`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create the account');
+  return res.json();
 }
 
 /** Toggle the `is_admin` flag on a user. The backend's path takes the new

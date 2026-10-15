@@ -642,6 +642,7 @@ export {
   // Profile + CLI tokens
   fetchCurrentUserFull,
   editPassword,
+  adminCreateUser,
   fetchMyAvatarBlob,
   uploadMyAvatar,
   deleteMyAvatar,
@@ -1057,6 +1058,7 @@ export type {
   CreateDataCollectionResult,
   // Admin types
   AdminUser,
+  AdminCreateUserInput,
   AdminProject,
   AdminDashboard,
   ExampleProject,
