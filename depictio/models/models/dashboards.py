@@ -211,6 +211,20 @@ def exportable_text_values(values: Any) -> dict[str, dict[str, Any]] | None:
     return out or None
 
 
+def _banner_facts_payload(facts: Any) -> list[dict[str, Any]]:
+    """An interactive component's `banner_facts` as stored: dicts, unset `format` left out.
+
+    Takes the parsed specs or the stored dicts alike, so the same call serves both
+    directions of the lite/full conversion.
+    """
+    out: list[dict[str, Any]] = []
+    for fact in facts or []:
+        raw = fact.model_dump() if isinstance(fact, BaseModel) else fact
+        if isinstance(raw, dict):
+            out.append({k: v for k, v in raw.items() if v is not None})
+    return out
+
+
 class FilterSectionSpec(BaseModel):
     """Presentation of one left-panel filter section, or one grid section.
 
@@ -306,7 +320,7 @@ class FilterSectionSpec(BaseModel):
         "matches them without being told. Unset leaves each card to its own `variant`. "
         "Grid sections only.",
     )
-    display: Literal["grid", "strip"] | None = Field(
+    display: Literal["grid", "strip", "workbench", "dock"] | None = Field(
         default=None,
         description="How a grid section lays out its members. Unset or `grid`: one tile "
         "each on the dashboard grid. `strip`: a filter bar -- the interactive "
@@ -314,7 +328,11 @@ class FilterSectionSpec(BaseModel):
         "compact row of controls (label, chips or a thin slider, dividers between), "
         "ignoring their grid coordinates. Their values filter the whole tab, as the "
         "panel's do. Any non-interactive members still render as tiles below the bar. "
-        "Grid sections only.",
+        "`workbench`: holds the section's tiles within one screen height so linked "
+        "views stay side by side (grid sections of tiles only). `dock`: keeps the "
+        "section's tiles in a sticky column beside the scrolling sections. Both "
+        "`workbench` and `dock` fall back to a normal stacked section on narrow "
+        "screens. Grid sections only.",
     )
     filter_bar: bool | None = Field(
         default=None,
@@ -1530,6 +1548,8 @@ class DashboardDataLite(BaseModel):
                         lite_comp["default_by"] = comp["default_by"]
                         if comp.get("default_order") == "asc":
                             lite_comp["default_order"] = "asc"
+                    if comp.get("banner_facts"):
+                        lite_comp["banner_facts"] = _banner_facts_payload(comp["banner_facts"])
                 display = collect_display_fields(
                     comp, ["title_size", "custom_color", "icon_name", "strip_label"]
                 )
@@ -1987,6 +2007,8 @@ class DashboardDataLite(BaseModel):
                         full_comp["default_by"] = comp_dict["default_by"]
                         if comp_dict.get("default_order") == "asc":
                             full_comp["default_order"] = "asc"
+                    if comp_dict.get("banner_facts"):
+                        full_comp["banner_facts"] = _banner_facts_payload(comp_dict["banner_facts"])
                 for f in ["title_size", "custom_color", "icon_name", "strip_label"]:
                     if comp_dict.get(f):
                         full_comp[f] = comp_dict[f]

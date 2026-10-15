@@ -1105,14 +1105,11 @@ tabs:
     icon: mdi:chart-bar
     color: grape
     description: How the representative's residues spread over the conservation scale
-  - name: Structure and sequence
-    icon: mdi:dna
+  - name: Family workbench
+    icon: mdi:view-split-vertical
     color: grape
-    description: Pick a family, then read its fold and sequence track linked by residue
-  - name: Alignment
-    icon: mdi:relation-many-to-many
-    color: grape
-    description: The representative on the first row, the members below it
+    description: Pick a family, then read its fold, sequence track and alignment side by side, linked by residue
+    display: workbench
   - name: Residue table
     icon: mdi:table
     color: gray
@@ -1253,9 +1250,9 @@ tabs:
     title: Residues by column occupancy
     description: Low occupancy marks columns most members gap.
     layout: {x: 4, y: 0, w: 4, h: 4}
-  # The plot and the 3D tile share the section width: a click on a family
-  # narrows the residue and alignment tables to it through the family links,
-  # and the structure, track and alignment follow.
+  # The workbench holds the plot, the 3D tile, the track and the alignment on one
+  # screen: a click on a family narrows the residue and alignment tables to it
+  # through the family links, and the structure, track and alignment follow.
   - component_type: advanced_viz
     workflow_tag: proteinfamilies
     data_collection_tag: families
@@ -1268,12 +1265,12 @@ tabs:
       legend_pos: bottom
       selection_enabled: true
       selection_column: family
-    section: Structure and sequence
+    section: Family workbench
     tag: pf-aln-av-families
     index: aln-families
     title: Families by size and conservation
     description: One point per family. Click one to open its structure, sequence and alignment.
-    layout: {x: 0, y: 0, w: 4, h: 5}
+    layout: {x: 3, y: 0, w: 5, h: 4}
   - component_type: advanced_viz
     workflow_tag: proteinfamilies
     data_collection_tag: family_residues
@@ -1287,12 +1284,12 @@ tabs:
       layout: structure_text
       selection_enabled: true
       follow_selection: true
-    section: Structure and sequence
+    section: Family workbench
     tag: pf-aln-av-structure
     index: aln-structure
     title: Predicted structure of the representative
     description: Folded on demand from the picked family's representative and coloured by residue conservation.
-    layout: {x: 4, y: 0, w: 4, h: 5}
+    layout: {x: 0, y: 0, w: 3, h: 9}
   - component_type: advanced_viz
     workflow_tag: proteinfamilies
     data_collection_tag: family_residues
@@ -1301,12 +1298,12 @@ tabs:
       value_label: Conservation
       selection_enabled: true
       follow_selection: true
-    section: Structure and sequence
+    section: Family workbench
     tag: pf-aln-av-track
     index: aln-track
     title: Representative sequence with conservation
     description: The representative's residues, a conservation lane and its conserved, intermediate or variable class.
-    layout: {x: 0, y: 5, w: 8, h: 3}
+    layout: {x: 3, y: 4, w: 5, h: 2}
   - component_type: advanced_viz
     workflow_tag: proteinfamilies
     data_collection_tag: family_msa
@@ -1321,12 +1318,12 @@ tabs:
       position_col_for_selection: position
       selection_enabled: true
       follow_selection: true
-    section: Alignment
+    section: Family workbench
     tag: pf-aln-av-msa
     index: aln-msa
     title: Family alignment
     description: Brushing columns selects the same residues on the track and the structure.
-    layout: {x: 0, y: 0, w: 8, h: 5}
+    layout: {x: 3, y: 6, w: 5, h: 3}
   - component_type: table
     workflow_tag: proteinfamilies
     data_collection_tag: family_residues
@@ -1357,23 +1354,11 @@ tabs:
     icon: mdi:counter
     color: indigo
     description: The picked family's conservation, residue by residue, and its members
-  - name: Profile logo
-    icon: mdi:chart-bar
+  - name: Family workbench
+    icon: mdi:view-split-vertical
     color: indigo
-    description: One stack of letters per match state, the members' coverage of the model below it
-  - name: Structure
-    icon: mdi:dna
-    color: indigo
-    description: The family's representative folded, linked to the logo by residue
-  - name: Residues
-    icon: mdi:relation-many-to-many
-    color: indigo
-    description: The representative's sequence with its conservation
-  - name: Family alignment
-    icon: mdi:relation-many-to-many
-    color: indigo
-    description: The hmmer-recruited members aligned to the representative
-    collapsed: true
+    description: The profile logo, the folded representative, its sequence track and the family alignment side by side, linked by residue
+    display: workbench
   - name: Hits table
     icon: mdi:table
     color: gray
@@ -1384,9 +1369,9 @@ tabs:
     order: 1
     body: >
       [hmmbuild](http://hmmer.org) turns each family's seed alignment into a profile HMM, drawn here
-      as a sequence logo: tall stacks are conserved states. The tab shows one family, the first of
-      the largest one until another is picked on the left; brushing states selects the representative
-      residues they sit on in the structure and the track.
+      as a sequence logo: tall stacks are conserved states. The tab shows one family, the largest one
+      until another is picked on the left; brushing states selects the representative residues they
+      sit on in the structure, the track and the alignment.
     tag: pf-hmm-intro
     index: hmm-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1396,13 +1381,17 @@ tabs:
   # run's family). The list stays alphabetical. The tiles
   # follow it on hmm_name, entity and label through the families links. No size
   # filter beside it: a range that left the picked family out would empty the
-  # tab.
+  # tab. banner_facts print the picked family's size and model length in the
+  # scope banner, read from its row of the families collection.
   - component_type: interactive
     workflow_tag: proteinfamilies
     data_collection_tag: families
     interactive_component_type: Select
     always_selected: true
     default_by: size
+    banner_facts:
+    - {column: size, label: Members, format: integer}
+    - {column: model_length, label: Model length, format: integer}
     column_name: family
     column_type: object
     display:
@@ -1521,12 +1510,12 @@ tabs:
       max_hits: 200
       selection_enabled: true
       follow_selection: true
-    section: Profile logo
+    section: Family workbench
     tag: pf-hmm-av-logo
     index: hmm-logo
     title: Profile HMM logo
     description: Letter heights are relative entropy above background; the lanes show insert behaviour, occupancy and the members that matched each state.
-    layout: {x: 0, y: 0, w: 8, h: 7}
+    layout: {x: 3, y: 0, w: 5, h: 4}
   # No family landscape here: the picker holds one family, so it would draw one
   # point. The Families and Family alignment tabs keep it, as a picker.
   - component_type: advanced_viz
@@ -1542,12 +1531,12 @@ tabs:
       layout: structure
       selection_enabled: true
       follow_selection: true
-    section: Structure
+    section: Family workbench
     tag: pf-hmm-av-structure
     index: hmm-structure
     title: Predicted structure of the representative
     description: Folded on demand from the family's representative and coloured by conservation class.
-    layout: {x: 0, y: 0, w: 8, h: 5}
+    layout: {x: 0, y: 0, w: 3, h: 9}
   - component_type: advanced_viz
     workflow_tag: proteinfamilies
     data_collection_tag: family_residues
@@ -1556,12 +1545,12 @@ tabs:
       value_label: Conservation
       selection_enabled: true
       follow_selection: true
-    section: Residues
+    section: Family workbench
     tag: pf-hmm-av-track
     index: hmm-track
     title: Representative sequence with conservation
     description: States brushed on the logo are drawn red on the sequence.
-    layout: {x: 0, y: 0, w: 8, h: 3}
+    layout: {x: 3, y: 4, w: 5, h: 2}
   - component_type: advanced_viz
     workflow_tag: proteinfamilies
     data_collection_tag: family_msa
@@ -1576,12 +1565,12 @@ tabs:
       position_col_for_selection: position
       selection_enabled: true
       follow_selection: true
-    section: Family alignment
+    section: Family workbench
     tag: pf-hmm-av-msa
     index: hmm-msa
     title: Family alignment
     description: The representative on the first row, the members below it.
-    layout: {x: 0, y: 0, w: 8, h: 5}
+    layout: {x: 3, y: 6, w: 5, h: 3}
   - component_type: table
     workflow_tag: proteinfamilies
     data_collection_tag: hmmalign_hits

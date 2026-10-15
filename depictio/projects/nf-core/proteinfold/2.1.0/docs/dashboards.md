@@ -106,11 +106,12 @@ Filters: engine and model rank.
 **Structure.** The tab reads one target (see "Single-unit pickers" below). Strip: the median
 residue pLDDT (its spread), the residues split by AlphaFold confidence band, the residues under
 pLDDT 50 ranked by engine and the best mean pLDDT of the target's structures, the engines ranked
-by theirs. Then a table with one row per engine's top-ranked structure (mean pLDDT, the shares of
-residues at 70 or more and under 50, pTM) above the picked structure in 3D over its written sequence, and the sequence
-with its pLDDT lane. A second section holds the Ramachandran plot of the picked structure (phi and psi are
-computed in the browser from the PDB's backbone, coloured by pLDDT) beside the per-engine
-pLDDT profile. Collapsed: the alignment the structure was folded from and the residue table.
+by theirs. Then a `Structure workbench` (`display: workbench`, held within one screen height) with the
+picked structure in 3D over its written sequence on the left and, stacked on the right, a table with one row
+per engine's top-ranked structure (mean pLDDT, the shares of residues at 70 or more and under 50, pTM), the
+sequence with its pLDDT lane, the per-engine pLDDT profile and the Ramachandran plot of the picked structure
+(phi and psi are computed in the browser from the PDB's backbone, coloured by pLDDT), so a pick in one is
+read in the others without scrolling. Collapsed: the alignment the structure was folded from and the residue table.
 
 The table is the engine picker. `proteinfold_structure_scores` holds one row per top-ranked
 structure, read from the same PDBs, so every row has a file to open. Its row selection is on

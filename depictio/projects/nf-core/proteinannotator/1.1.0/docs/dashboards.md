@@ -119,10 +119,11 @@ every other tab.
    each state, with its segment list; a brush or a segment pick selects the residues on the
    `sequence_track` below, which also draws the domain spans. A stacked bar compares the state
    shares of the proteins. The residue table is collapsed.
-4. **Structure.** *Where do the domains sit on one protein's 3D structure?* A table of the
-   proteins (sample, length, annotated share, best domain) picks the protein; its structure
+4. **Structure.** *Where do the domains sit on one protein's 3D structure?* A `Structure workbench`
+   section (`display: workbench`, held within one screen height) puts a table of the
+   proteins (sample, length, annotated share, best domain) that picks the protein beside its structure
    (coloured by best domain, over its written sequence) and the sequence track (state,
-   probability and domain spans) stand linked residue by residue. Clicking a residue in 3D, a letter of the
+   probability and domain spans), all linked residue by residue. Clicking a residue in 3D, a letter of the
    sequence or brushing the track selects the same residues in all three. The residue table is
    collapsed.
 

@@ -638,14 +638,11 @@ tabs:
     icon: mdi:counter
     color: violet
     description: Per-residue confidence of the structures in scope
-  - name: Structure and sequence
-    icon: mdi:microscope
+  - name: Structure workbench
+    icon: mdi:view-split-vertical
     color: violet
-    description: One row per structure; the picked one in 3D over its sequence
-  - name: Backbone and engines
-    icon: mdi:chart-line
-    color: violet
-    description: Backbone torsions of the picked structure, and every engine's confidence along it
+    description: The engines' structures, the picked one in 3D, its sequence, every engine's confidence and its backbone torsions side by side
+    display: workbench
   - name: Alignment
     icon: mdi:dna
     color: gray
@@ -790,9 +787,10 @@ tabs:
     title: Best mean pLDDT
     description: Mean pLDDT of the target's most confident structure, the engines ranked by theirs.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  # The table and the 3D tile share the section width: a row click emits that
-  # structure's entity (`table_selection`), which the 3D tile, the sequence
-  # track and the alignment follow by column name. The id column drives the
+  # The workbench holds the table, the 3D tile, the track and the two plots on one
+  # screen: a row click emits that structure's entity (`table_selection`), which
+  # the 3D tile, the sequence track, the Ramachandran plot and the alignment
+  # follow by column name. The id column drives the
   # selection but stays out of the grid. The target filter reaches the rows
   # through the residues -> structure scores link, so the table lists the
   # picked target's structures only.
@@ -802,12 +800,12 @@ tabs:
     columns: [engine, mean_plddt, confident_pct, very_low_pct, ptm]
     row_selection_enabled: true
     row_selection_column: entity
-    section: Structure and sequence
+    section: Structure workbench
     tag: pf-st-table-structures
     index: st-structures
     title: Structures of the target, one row per engine
     description: Mean pLDDT, residues at 70 or more and under 50 (%) and pTM of each engine's top model. Click a row to open its structure.
-    layout: {x: 0, y: 0, w: 8, h: 3}
+    layout: {x: 3, y: 0, w: 5, h: 2}
   - component_type: advanced_viz
     workflow_tag: proteinfold
     data_collection_tag: proteinfold_residues
@@ -822,12 +820,12 @@ tabs:
       show_variants: false
       selection_enabled: true
       follow_selection: true
-    section: Structure and sequence
+    section: Structure workbench
     tag: pf-st-av-structure
     index: st-structure
     title: Picked structure coloured by pLDDT
     description: The structure picked in the table (the first in scope until then), over its written sequence. Picked residues are drawn red on both.
-    layout: {x: 0, y: 3, w: 8, h: 6}
+    layout: {x: 0, y: 0, w: 3, h: 9}
   - component_type: advanced_viz
     workflow_tag: proteinfold
     data_collection_tag: proteinfold_residues
@@ -836,12 +834,12 @@ tabs:
       value_label: pLDDT
       selection_enabled: true
       follow_selection: true
-    section: Structure and sequence
+    section: Structure workbench
     tag: pf-st-av-sequence
     index: st-sequence
     title: Sequence with its pLDDT lane
     description: The picked structure's sequence, its pLDDT per residue and its confidence band. Brush a stretch to select it in 3D.
-    layout: {x: 0, y: 9, w: 8, h: 4}
+    layout: {x: 3, y: 2, w: 5, h: 2}
   - component_type: advanced_viz
     workflow_tag: proteinfold
     data_collection_tag: proteinfold_residues
@@ -858,12 +856,12 @@ tabs:
       show_regions: true
       selection_enabled: true
       follow_selection: true
-    section: Backbone and engines
+    section: Structure workbench
     tag: pf-st-av-rama
     index: st-ramachandran
     title: Ramachandran plot of the picked structure
     description: Backbone torsions of each residue, coloured by pLDDT; the regions are approximate. Select points to find them in 3D.
-    layout: {x: 0, y: 0, w: 4, h: 6}
+    layout: {x: 3, y: 6, w: 5, h: 3}
   - component_type: advanced_viz
     workflow_tag: proteinfold
     data_collection_tag: proteinfold_engine_plddt
@@ -873,12 +871,12 @@ tabs:
       y_title: pLDDT
       legend_pos: bottom
       residue_axis: true
-    section: Backbone and engines
+    section: Structure workbench
     tag: pf-st-av-engine-profile
     index: st-engine-profile
     title: pLDDT per residue of every engine
     description: One curve per engine, and per chain on a complex. Regions where the engines part are the least settled.
-    layout: {x: 4, y: 0, w: 4, h: 6}
+    layout: {x: 3, y: 4, w: 5, h: 2}
   - component_type: advanced_viz
     workflow_tag: proteinfold
     data_collection_tag: proteinfold_msa
