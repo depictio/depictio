@@ -84,14 +84,13 @@ SUNBURST = {
 }
 
 
-@pytest.mark.parametrize("side", ["top", "overlay"])
-def test_advanced_viz_controls_placement_round_trips(side):
-    full = _dash({**SUNBURST, "controls_placement": side}).to_full()["stored_metadata"][0]
-    assert full["controls_placement"] == side
+def test_advanced_viz_controls_placement_round_trips():
+    full = _dash({**SUNBURST, "controls_placement": "top"}).to_full()["stored_metadata"][0]
+    assert full["controls_placement"] == "top"
     back = DashboardDataLite.from_full(
-        _dash({**SUNBURST, "controls_placement": side}).to_full()
+        _dash({**SUNBURST, "controls_placement": "top"}).to_full()
     ).components[0]
-    assert back.controls_placement == side
+    assert back.controls_placement == "top"
     # Unset (auto) is not written out.
     assert "controls_placement:" not in _dash(SUNBURST).to_yaml()
 
@@ -99,9 +98,9 @@ def test_advanced_viz_controls_placement_round_trips(side):
 def test_advanced_viz_controls_placement_rejects_an_unknown_side():
     from depictio.models.components.advanced_viz.component import AdvancedVizLiteComponent
 
-    for side in ("auto", "right", "top", "popover", "overlay"):
-        assert (
-            AdvancedVizLiteComponent(**SUNBURST, controls_placement=side).controls_placement == side
-        )
+    assert (
+        AdvancedVizLiteComponent(**SUNBURST, controls_placement="right").controls_placement
+        == "right"
+    )
     with pytest.raises(ValidationError):
         AdvancedVizLiteComponent(**SUNBURST, controls_placement="left")

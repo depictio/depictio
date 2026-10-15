@@ -585,9 +585,8 @@ export interface StoredMetadata {
   /** Figures: draw without the legend. */
   hide_legend?: boolean;
   /** Advanced viz: where the viz controls sit (see
-   *  components/advanced_viz/controlsDock.ts). Unset: `auto`. `overlay`
-   *  floats them over the plot. */
-  controls_placement?: 'auto' | 'right' | 'top' | 'popover' | 'overlay' | null;
+   *  components/advanced_viz/controlsDock.ts). Unset: `auto`. */
+  controls_placement?: 'auto' | 'right' | 'top' | 'popover' | null;
   /** Highlights (`component_type: 'highlight'`): the tab the figure shown
    *  lives on, by name and by id, and the figure on it, by index or title.
    *  See components/highlight.ts. */

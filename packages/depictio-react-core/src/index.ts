@@ -338,13 +338,6 @@ export type {
   VizConfigDraftSink,
   VizConfigPatch,
 } from './components/advanced_viz/AdvancedVizConfigDraft';
-// The same write-back for fields of the component itself, beside its config
-// (where its viz controls sit, `controls_placement`).
-export { AdvancedVizComponentDraftProvider } from './components/advanced_viz/AdvancedVizComponentDraft';
-export type {
-  VizComponentDraftSink,
-  VizComponentPatch,
-} from './components/advanced_viz/AdvancedVizComponentDraft';
 // The phylogenetic viz's sources and ranks, for the builder. Pure modules, so
 // the same light-import reasoning applies.
 export {

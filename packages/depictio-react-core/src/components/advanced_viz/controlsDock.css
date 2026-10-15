@@ -35,6 +35,12 @@
 .dpx-viz-dock--top .dpx-viz-dock__head {
   margin-bottom: 2px;
 }
+.dpx-viz-dock__head-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
 .dpx-viz-dock__title {
   display: inline-flex;
   align-items: center;

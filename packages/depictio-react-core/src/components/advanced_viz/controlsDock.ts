@@ -10,13 +10,8 @@ import { createContext, type ReactNode } from 'react';
  * costs little height). Too narrow for either, or a landing-page card meant
  * to be read at a glance, they stay behind the icon. The icon folds a docked
  * panel away and back.
- *
- * `overlay` is the one placement that is not a dock: the panel floats over the
- * plot, top right, and the figure keeps its full size. It suits a tile with
- * little room (a linked view cell) where a column or a row of controls would
- * take the plot's.
  */
-export type ControlsPlacement = 'auto' | 'right' | 'top' | 'popover' | 'overlay';
+export type ControlsPlacement = 'auto' | 'right' | 'top' | 'popover';
 export type DockSide = 'right' | 'top';
 
 /** A tile at least this share of its row's width spans it. */
@@ -42,7 +37,7 @@ export function resolveDock(
   { rowShare, width, showcase }: DockMeasure,
 ): DockSide | null {
   const p = placement ?? 'auto';
-  if (p === 'popover' || p === 'overlay') return null;
+  if (p === 'popover') return null;
   if (p === 'right' || p === 'top') return p;
   if (showcase || rowShare == null || width <= 0) return null;
   if (rowShare >= FULL_ROW_SHARE && width >= MIN_RIGHT_DOCK_PX) return 'right';
@@ -50,91 +45,19 @@ export function resolveDock(
 }
 
 export function isControlsPlacement(v: unknown): v is ControlsPlacement {
-  return v === 'auto' || v === 'right' || v === 'top' || v === 'popover' || v === 'overlay';
+  return v === 'auto' || v === 'right' || v === 'top' || v === 'popover';
 }
 
-/**
- * The view a compact tile's header menu offers, in the menu's order. `hidden`
- * is the folded state; the other three are where the controls are drawn.
- */
-export type ControlsView = 'hidden' | 'overlay' | 'top' | 'right';
-export const CONTROLS_VIEWS: readonly ControlsView[] = ['hidden', 'overlay', 'top', 'right'];
-
-/**
- * What a reader (or an editor's session) picked: a view, or `open` for the
- * fold button's "show" (the controls in the component's own placement, which
- * on `auto` the tile's width decides).
- *
- * Kept per component in localStorage under the key the fold always used, so
- * the stored string extends the old one: `1` folded, `0` opened on purpose,
- * and now `overlay`, `top`, `right`. An old reader meeting a new value finds
- * nothing it knows and falls back to the layout's default.
- */
-export type ControlsChoice = ControlsView | 'open';
-
-export function parseChoice(raw: string | null | undefined): ControlsChoice | null {
-  if (raw === '1') return 'hidden';
-  if (raw === '0') return 'open';
-  return raw === 'overlay' || raw === 'top' || raw === 'right' ? raw : null;
-}
-
-export function serializeChoice(choice: ControlsChoice): string {
-  return choice === 'hidden' ? '1' : choice === 'open' ? '0' : choice;
-}
-
-/**
- * Where the controls go and whether they are folded, from the viewer's choice,
- * the component's own `controls_placement` and the section's density.
- *
- * With no choice, a linked view cell starts folded unless the author stated a
- * placement (`auto`, `right`, `top` and `overlay` start open: the author asked
- * for them); everywhere else they start open, as they always did.
- */
-export function resolveControls(
-  choice: ControlsChoice | null,
-  stored: ControlsPlacement | null,
-  compact: boolean,
-): { placement: ControlsPlacement | null; collapsed: boolean } {
-  if (choice === 'hidden') return { placement: stored, collapsed: true };
-  if (choice === 'open') return { placement: stored, collapsed: false };
-  if (choice) return { placement: choice, collapsed: false };
-  return { placement: stored, collapsed: compact && stored === null };
-}
-
-/**
- * The placement an editor saves on the component for a menu pick. `hidden`
- * is `popover`, which is what that value says: behind the icon. The other
- * views are their own placement.
- */
-export function placementForView(view: ControlsView): ControlsPlacement {
-  return view === 'hidden' ? 'popover' : view;
-}
-
-/** The view on screen now, which is what the menu checks: folded or with
- *  nothing to show (a tile too narrow to dock) is `hidden`. */
-export function currentView(
-  overlay: boolean,
-  dockSide: DockSide | null,
-  collapsed: boolean,
-): ControlsView {
-  if (collapsed) return 'hidden';
-  if (overlay) return 'overlay';
-  return dockSide ?? 'hidden';
-}
-
-/** Handed by the dispatch to the frame: the placement in force (the
- *  component's own, or the one a viewer picked), and whether the panel is
- *  folded away. */
+/** Handed by the dispatch to the frame: the component's setting, and whether
+ *  the viewer folded the docked panel away. */
 export interface ControlsDockState {
   placement: ControlsPlacement | null;
   collapsed: boolean;
-  /** Folds the docked panel away or brings it back, in the view it was last
-   *  shown in: the chrome's settings icon. */
-  toggle?: () => void;
-  /** Picks where the controls are drawn: the menu a compact header draws (the
-   *  chrome's settings icon is hover-only). Absent where the tile cannot take
-   *  a choice, e.g. one split into panels. */
-  setView?: (view: ControlsView) => void;
+  /** The tile's own tools (settings, data), handed to a one-line compact
+   *  header so they are always in view: the chrome's action row only shows on
+   *  hover, which a reader of a linked view cell does not find. Unset
+   *  elsewhere, where the chrome keeps them. */
+  headerActions?: ReactNode;
 }
 
 export const ControlsDockContext = createContext<ControlsDockState | null>(null);

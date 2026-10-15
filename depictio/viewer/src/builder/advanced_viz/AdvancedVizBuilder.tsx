@@ -361,7 +361,7 @@ const AdvancedVizBuilder: React.FC = () => {
     preset_config?: Record<string, unknown> | null;
     config?: Record<string, unknown> | null;
     viz_overrides?: Record<string, unknown> | null;
-    controls_placement?: 'auto' | 'right' | 'top' | 'overlay' | 'popover' | null;
+    controls_placement?: 'auto' | 'right' | 'top' | 'popover' | null;
   };
   const patchConfig = useBuilderStore((s) => s.patchConfig);
   const mode = useBuilderStore((s) => s.mode);
@@ -1342,7 +1342,6 @@ const AdvancedVizBuilder: React.FC = () => {
                   { value: 'auto', label: 'Auto' },
                   { value: 'right', label: 'Right' },
                   { value: 'top', label: 'Top' },
-                  { value: 'overlay', label: 'Overlay' },
                   { value: 'popover', label: 'Behind icon' },
                 ]}
                 data-testid="advanced-viz-controls-placement"
@@ -1350,8 +1349,7 @@ const AdvancedVizBuilder: React.FC = () => {
               <Text size="xs" c="dimmed">
                 Auto: beside the plot when the tile spans its row, above it when it is
                 narrower, behind the settings icon on a minimal card or a small tile.
-                Overlay floats them over the plot without shrinking it. The icon folds
-                a docked panel away.
+                The icon folds a docked panel away.
               </Text>
             </Stack>
           </BuilderSection>

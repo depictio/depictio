@@ -23,18 +23,12 @@ import { useAdvancedVizCaption, useAdvancedVizShowcase } from './advancedVizShow
 import { CARD_FRAME } from '../cardFrame';
 import FigureHeader from '../FigureHeader';
 import { useDensity } from '../density';
-import {
-  ControlsDockContext,
-  ControlsLeadContext,
-  currentView,
-  resolveDock,
-} from './controlsDock';
+import { ControlsDockContext, ControlsLeadContext, resolveDock } from './controlsDock';
 import DockedControls from './DockedControls';
-import ControlsOverlay from './ControlsOverlay';
-import ControlsViewMenu from './ControlsViewMenu';
 import VizKindBadge from './VizKindBadge';
 import './controlsDock.css';
 import {
+  ControlsPlacementPicker,
   InlineControlsRail,
   InlineControlsStrip,
   RAIL_WIDTH_PX,
@@ -297,7 +291,8 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   // Where this tile's controls are drawn. Resolved once by the dispatch (which
   // holds the config and the dashboard default) and read here and there, so
   // the strip and the popover cannot disagree about which tier lives where.
-  const { placement } = useControlsPlacement();
+  const placementState = useControlsPlacement();
+  const { placement } = placementState;
   const regionEcho = useRegionEcho();
 
   const encoding = useMemo(
@@ -362,30 +357,12 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
       ) : null,
     [primaryControls, controls],
   );
-  const hasDockable = placement === 'popover' && Boolean(docking || lead);
-  const dockSide = hasDockable
-    ? resolveDock(dock?.placement, { ...measure, showcase: Boolean(showcase) })
-    : null;
-  // `overlay` is not a side: the panel floats over the plot, which keeps its
-  // full size, so it needs no room and works at any width.
-  const overlaid = hasDockable && dock?.placement === 'overlay';
+  const dockSide =
+    placement === 'popover' && (docking || lead)
+      ? resolveDock(dock?.placement, { ...measure, showcase: Boolean(showcase) })
+      : null;
   const docked = dockSide != null;
   const dockOpen = docked && !dock?.collapsed;
-  const overlayOpen = overlaid && !dock?.collapsed;
-  // The chrome's settings icon only shows on hover, which a reader of a
-  // linked view cell does not find: its header carries a menu that is always
-  // there, to hide the controls or to put them over, above or beside the plot.
-  // Not offered where the tile cannot take a choice (split into panels).
-  const pickView = dock?.setView;
-  const controlsMenu =
-    compact && hasDockable && pickView ? (
-      <ControlsViewMenu
-        view={currentView(overlaid, dockSide, Boolean(dock?.collapsed))}
-        onPick={pickView}
-      />
-    ) : null;
-  // Closing is the fold, not a choice of view: it is not saved on the component.
-  const foldControls = dock?.toggle;
 
   // Publish what this renderer has, not how to draw it. AdvancedVizDispatch
   // turns the payload back into the popovers; the inspector turns the same
@@ -395,8 +372,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     const payload: AdvancedVizExtrasPayload = {};
     if (cosmeticControls) payload.controls = cosmeticControls;
     if (stripControls) payload.primaryControls = stripControls;
-    // Controls drawn on the tile, docked or floating: the icon folds them.
-    if (docked || overlaid) payload.docked = true;
+    if (docked) payload.docked = true;
     if (dataRows) {
       payload.data = { rows: dataRows, columns: dataColumns, tierAnnotation };
     }
@@ -414,7 +390,6 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     cosmeticControls,
     stripControls,
     docked,
-    overlaid,
     dataRows,
     dataColumns,
     tierAnnotation,
@@ -603,9 +578,10 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     ) : null
   ) : compact ? (
     // One line: title, the visualization's type, what is on screen, the
-    // status chips, the controls button. The subtitle moves to the title's
-    // tooltip, the tier counts and the inline controls keep their own lines
-    // under it.
+    // status chips, then the tile's own tools (settings, data), which the
+    // dispatch moves here from the hover-only chrome row. The subtitle moves
+    // to the title's tooltip, the tier counts and the inline controls keep
+    // their own lines under it.
     <Stack gap={2} mb={4}>
       <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }} pr={28}>
         {title ? (
@@ -628,7 +604,11 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
           </Text>
         ) : null}
         {statusBadges}
-        {controlsMenu}
+        {dock?.headerActions ? (
+          <Group gap={4} wrap="nowrap" style={{ marginLeft: 'auto', flex: 'none' }}>
+            {dock.headerActions}
+          </Group>
+        ) : null}
       </Group>
       {countBadges}
       {strip}
@@ -752,31 +732,26 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
           }}
         >
           {dockOpen && dockSide === 'top' ? (
-            <DockedControls controls={docking} lead={lead} side="top" />
+            <DockedControls
+              controls={docking}
+              lead={lead}
+              side="top"
+              headerAction={<ControlsPlacementPicker state={placementState} />}
+            />
           ) : null}
           <div
             ref={plotSlotRef}
-            style={{
-              flex: '1 1 auto',
-              minHeight: 0,
-              minWidth: 0,
-              position: 'relative',
-              // While the overlay is open its stacking is settled inside the
-              // slot, above Plotly's modebar and below Mantine's dropdowns.
-              ...(overlayOpen ? { isolation: 'isolate' } : null),
-            }}
+            style={{ flex: '1 1 auto', minHeight: 0, minWidth: 0, position: 'relative' }}
           >
             {body}
-            {overlayOpen ? (
-              <ControlsOverlay
-                controls={docking}
-                lead={lead}
-                onClose={() => foldControls?.()}
-              />
-            ) : null}
           </div>
           {dockOpen && dockSide === 'right' ? (
-            <DockedControls controls={docking} lead={lead} side="right" />
+            <DockedControls
+              controls={docking}
+              lead={lead}
+              side="right"
+              headerAction={<ControlsPlacementPicker state={placementState} />}
+            />
           ) : null}
           {rail ? (
             <div

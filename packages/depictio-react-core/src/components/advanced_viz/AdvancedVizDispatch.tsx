@@ -56,16 +56,8 @@ import {
 import { vizKindLabel } from './vizKindTag';
 import { AdvancedVizKindContext } from './VizKindBadge';
 import { useDensity } from '../density';
-import {
-  ControlsDockContext,
-  isControlsPlacement,
-  parseChoice,
-  placementForView,
-  resolveControls,
-  serializeChoice,
-} from './controlsDock';
-import type { ControlsChoice, ControlsDockState, ControlsView } from './controlsDock';
-import { useAdvancedVizComponentDraft } from './AdvancedVizComponentDraft';
+import { ControlsDockContext, isControlsPlacement } from './controlsDock';
+import type { ControlsDockState } from './controlsDock';
 import type { AdvancedVizExtrasPayload } from './AdvancedVizExtras';
 import { useAdvancedVizInspector } from './AdvancedVizInspectorBridge';
 import {
@@ -106,25 +98,23 @@ import {
   tabLinkName,
 } from './advancedVizShowcase';
 
-/** The viewer's choice of how a tile's controls show, kept per component in
- *  this browser: `1` folded, `0` opened on purpose, or the view picked from
- *  the header menu (`overlay`, `top`, `right`); nothing when they never chose
- *  (null: the component's own placement and the layout's default apply, see
- *  `resolveControls`). Storage can be missing or refuse (a private window):
- *  then the choice lasts as long as the page. */
+/** The viewer's fold of a tile's docked controls, kept per component in this
+ *  browser. Storage can be missing or refuse (a private window): then the
+ *  fold lasts as long as the page. */
 const DOCK_FOLD_KEY = (index: string) => `depictio.vizControls.folded.${index}`;
-function readChoice(index: string): ControlsChoice | null {
+function readFolded(index: string): boolean {
   try {
-    return parseChoice(window.localStorage.getItem(DOCK_FOLD_KEY(index)));
+    return window.localStorage.getItem(DOCK_FOLD_KEY(index)) === '1';
   } catch {
-    return null;
+    return false;
   }
 }
-function writeChoice(index: string, choice: ControlsChoice): void {
+function writeFolded(index: string, folded: boolean): void {
   try {
-    window.localStorage.setItem(DOCK_FOLD_KEY(index), serializeChoice(choice));
+    if (folded) window.localStorage.setItem(DOCK_FOLD_KEY(index), '1');
+    else window.localStorage.removeItem(DOCK_FOLD_KEY(index));
   } catch {
-    // Not remembered; the choice still applies to this page.
+    // Not remembered; the fold still applies to this page.
   }
 }
 
@@ -305,61 +295,24 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   groupRender,
 }) => {
   const [published, setPublished] = React.useState<AdvancedVizExtrasPayload | null>(null);
-  // Where a `popover` tile draws its controls (`controls_placement` on the
+  // Where a `popover` tile docks its controls (`controls_placement` on the
   // component, see controlsDock.ts); null when the author left it unsaid.
-  const dockPlacement = isControlsPlacement(metadata.controls_placement)
+  // A linked view cell has little room: unless the author placed them, its
+  // controls stay behind the settings button in the tile's header, whose
+  // popover heads them with the usual placement picker (popover, rail, under
+  // the title). Everywhere else an unsaid placement docks where it fits.
+  const compact = useDensity() === 'compact';
+  const ownDock = isControlsPlacement(metadata.controls_placement)
     ? metadata.controls_placement
     : null;
-  const componentIndex = String(metadata.index ?? '');
-  // A linked view cell has little room: unless the author placed the controls
-  // or the reader chose, they start folded, one click away behind the menu in
-  // the tile's header. Everywhere else they start open, as before.
-  //
-  // The choice of view (hidden, over, above or beside the plot) is the
-  // reader's, kept in this browser, except where a component sink is mounted
-  // (the editor): there it is the author's, saved as the component's
-  // `controls_placement` and never read from or written to this browser, so a
-  // placement picked in the builder is not shadowed by an old local pick. Until
-  // the save lands in `metadata` the pick is held here.
-  const compact = useDensity() === 'compact';
-  const writeComponent = useAdvancedVizComponentDraft();
-  const authoring = writeComponent != null;
-  const [chosen, setChosen] = React.useState<ControlsChoice | null>(() =>
-    authoring ? null : readChoice(componentIndex),
-  );
-  React.useEffect(() => {
-    if (authoring) setChosen(null);
-  }, [authoring, dockPlacement]);
-  // What the fold button brings back: the last view shown, `open` before any.
-  const lastShown = React.useRef<ControlsChoice>(
-    chosen && chosen !== 'hidden' ? chosen : 'open',
-  );
-  const { placement: controlsPlacement, collapsed: folded } = resolveControls(
-    chosen,
-    dockPlacement,
-    compact,
-  );
-  const choose = React.useCallback(
-    (next: ControlsChoice) => {
-      if (next !== 'hidden') lastShown.current = next;
-      setChosen(next);
-      if (!authoring) writeChoice(componentIndex, next);
-    },
-    [authoring, componentIndex],
-  );
-  const toggleFolded = React.useCallback(
-    () => choose(folded ? lastShown.current : 'hidden'),
-    [choose, folded],
-  );
-  // The menu's pick, which is more than a fold: saved on the component where
-  // that is possible, as the placement it stands for (`hidden` is `popover`).
-  const pickView = React.useCallback(
-    (view: ControlsView) => {
-      choose(view);
-      writeComponent?.(componentIndex, { controls_placement: placementForView(view) });
-    },
-    [choose, writeComponent, componentIndex],
-  );
+  const dockPlacement = ownDock ?? (compact ? 'popover' : null);
+  const [folded, setFolded] = React.useState(() => readFolded(String(metadata.index ?? '')));
+  const toggleFolded = React.useCallback(() => {
+    setFolded((f) => {
+      writeFolded(String(metadata.index ?? ''), !f);
+      return !f;
+    });
+  }, [metadata.index]);
 
   // Forward to the inspector, when the app mounted one. Keyed by component so
   // the panel can show whichever component is selected.
@@ -477,15 +430,15 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   const split = Boolean(Renderer) && !splitIneffective && shouldSplitIntoPanels(panels, vizKind);
   const handleIneffective = React.useCallback(() => setSplitIneffective(true), []);
   // Split into panels, each would dock its own copy of the controls: they
-  // stay behind the icon instead.
+  // stay behind the icon instead. In a linked view the tile's tools (and with
+  // them the placement picker) move from the hover row into the header.
   const dockState = React.useMemo<ControlsDockState>(
     () => ({
-      placement: split ? 'popover' : controlsPlacement,
+      placement: split ? 'popover' : dockPlacement,
       collapsed: folded,
-      toggle: toggleFolded,
-      setView: split ? undefined : pickView,
+      headerActions: compact ? popovers : undefined,
     }),
-    [split, controlsPlacement, folded, toggleFolded, pickView],
+    [split, dockPlacement, folded, compact, popovers],
   );
   // A kind that takes the groups neither as panels nor as colour (see
   // `groupingModeForKind`). Only a Split display asks the question: in the
@@ -626,9 +579,11 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
         }
       : undefined;
 
-  const combinedExtras = popovers || extraActions ? (
+  // In a linked view the popovers are in the tile's header (see `dockState`).
+  const rowPopovers = compact ? null : popovers;
+  const combinedExtras = rowPopovers || extraActions ? (
     <>
-      {popovers}
+      {rowPopovers}
       {extraActions}
     </>
   ) : undefined;
