@@ -188,6 +188,25 @@ class TestGate:
             "fold.example.org",
         }
 
+    def test_upstream_is_scheme_and_host_only(self):
+        conf = StructureResolverSettings(
+            esmfold_url="https://user:pw@fold.example.org:8443/pdb/?token=s3cret",
+            afdb_base_url="http://afdb.example.org/base/",
+        )
+        assert sr._upstream(conf, "esmfold") == {
+            "host": "fold.example.org",
+            "url": "https://fold.example.org",
+        }
+        assert sr._upstream(conf, "afdb") == {
+            "host": "afdb.example.org",
+            "url": "http://afdb.example.org",
+        }
+
+    def test_upstream_is_null_for_an_unknown_origin(self):
+        conf = StructureResolverSettings()
+        assert sr._upstream(conf, None) is None
+        assert sr._upstream(conf, "something") is None
+
     def test_route_is_on_the_advanced_viz_router(self):
         from depictio.api.v1.endpoints.advanced_viz_endpoints.routes import (
             advanced_viz_endpoint_router,
@@ -205,6 +224,7 @@ class TestResolution:
         out = _resolve(uniprot=f" {ACC.lower()} ")
         assert out["source"] == "afdb"
         assert out["origin"] == "afdb"
+        assert out["upstream"] == {"host": "alphafold.ebi.ac.uk", "url": AFDB}
         assert out["accession"] == ACC
         assert out["sequence"] == "MKW"
         assert out["format"] == "pdb"
@@ -234,6 +254,7 @@ class TestResolution:
         assert out["source"] == "esmfold"
         assert out["accession"] is None
         assert out["sequence"] == "GSC"
+        assert out["upstream"] == {"host": "api.esmatlas.com", "url": "https://api.esmatlas.com"}
         esm_call = upstreams.calls[-1]
         assert esm_call.content == b"GSC"
         assert esm_call.headers["content-type"] == "text/plain"
@@ -246,6 +267,7 @@ class TestResolution:
         assert len(upstreams.calls) == calls
         assert again["source"] == "cache"
         assert again["origin"] == "afdb"
+        assert again["upstream"] == first["upstream"]
         assert (again["url"], again["accession"], again["sequence"]) == (
             first["url"],
             first["accession"],

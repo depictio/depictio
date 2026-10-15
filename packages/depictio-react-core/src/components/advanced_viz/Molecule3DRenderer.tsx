@@ -1105,6 +1105,7 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     colorMode: colourMode,
     accession: resolved.data?.accession,
     categoryLabel: config.category_col,
+    upstream: resolved.data?.upstream,
   });
   const echo = [
     entity,

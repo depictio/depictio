@@ -18,6 +18,7 @@ import {
   rampColour,
   type LaneFlags,
 } from './layout';
+import { COLLAPSED_TRACK_PX } from './tracks';
 
 const NONE: LaneFlags = {
   consensus: false,
@@ -169,6 +170,94 @@ describe('layoutLanes', () => {
     expect(laneAt(l, 0)?.key).toBe('logo');
     expect(laneAt(l, l.byKey.consensus!.y + 1)?.key).toBe('consensus');
     expect(laneAt(l, 1000)).toBeNull();
+  });
+});
+
+describe('layoutLanes tracks', () => {
+  const ALL = { consensus: true, rf: true, cs: true, insertProb: true, insertLength: true, occupancy: true };
+  const flags = { ...NONE, ...ALL, hits: true, hitRows: 4 };
+
+  it('is unchanged without hidden or collapsed tracks', () => {
+    const plain = layoutLanes(420, flags);
+    const empty = layoutLanes(420, { ...flags, hiddenTracks: [], collapsedTracks: [] });
+    expect(empty).toEqual(plain);
+    expect(plain.strips).toEqual({});
+    expect(plain.tracks.map((t) => t.track)).toEqual(['consensus', 'insert', 'occupancy', 'hits', 'ruler']);
+  });
+
+  it('gives the room of a hidden track to the logo', () => {
+    const before = layoutLanes(420, flags);
+    const after = layoutLanes(420, { ...flags, hiddenTracks: ['consensus'] });
+    expect(after.byKey.consensus).toBeUndefined();
+    expect(after.byKey.rf).toBeUndefined();
+    expect(after.byKey.logo!.h).toBeGreaterThan(before.byKey.logo!.h);
+    const last = after.lanes[after.lanes.length - 1];
+    expect(last.y + last.h).toBe(420);
+    expect(after.natural).toBeLessThan(before.natural);
+  });
+
+  it('swaps a collapsed track for one strip and frees the rest', () => {
+    const before = layoutLanes(420, flags);
+    const after = layoutLanes(420, { ...flags, collapsedTracks: ['insert'] });
+    expect(after.byKey.insertProb).toBeUndefined();
+    expect(after.strips.insert).toEqual({ key: 'strip', track: 'insert', y: after.strips.insert!.y, h: COLLAPSED_TRACK_PX });
+    expect(after.byKey.logo!.h).toBe(before.byKey.logo!.h + LANE_PX.insertProb + LANE_PX.insertLength - COLLAPSED_TRACK_PX);
+    expect(after.tracks.find((t) => t.track === 'insert')).toMatchObject({ collapsed: true, h: COLLAPSED_TRACK_PX });
+    const last = after.lanes[after.lanes.length - 1];
+    expect(last.y + last.h).toBe(420);
+  });
+
+  it('lets hidden win over collapsed', () => {
+    const l = layoutLanes(420, { ...flags, hiddenTracks: ['occupancy'], collapsedTracks: ['occupancy'] });
+    expect(l.strips.occupancy).toBeUndefined();
+    expect(l.tracks.some((t) => t.track === 'occupancy')).toBe(false);
+  });
+
+  it('collapses the hits to a strip: no bars, no rows, no coverage lane', () => {
+    const l = layoutLanes(420, { ...flags, collapsedTracks: ['hits'] });
+    expect(l.byKey.coverage).toBeUndefined();
+    expect(l.byKey.hits).toBeUndefined();
+    expect(l.strips.hits).toBeDefined();
+    expect(l.hitRowsShown).toBe(0);
+    expect(l.hitRowsTotal).toBe(0);
+    expect(hitRowAt(l, l.strips.hits!.y + 2)).toBe(-1);
+    expect(laneAt(l, l.strips.hits!.y + 2)?.key).toBe('strip');
+  });
+
+  it('keeps only the logo above the ruler when every other track is hidden', () => {
+    const l = layoutLanes(300, { ...flags, hiddenTracks: ['consensus', 'insert', 'occupancy', 'hits'] });
+    expect(l.lanes.map((x) => x.key)).toEqual(['logo', 'ruler']);
+    expect(l.byKey.logo!.h).toBe(300 - LANE_PX.ruler);
+  });
+
+  it('keeps the logo when everything, the ruler included, is hidden', () => {
+    const l = layoutLanes(300, { ...flags, hiddenTracks: ['consensus', 'insert', 'occupancy', 'hits', 'ruler'] });
+    expect(l.lanes.map((x) => x.key)).toEqual(['logo']);
+    expect(l.byKey.logo).toEqual({ key: 'logo', y: 0, h: 300 });
+    expect(l.gridBottom).toBe(300);
+  });
+
+  it('shows the hits alone with its bars when the other tracks are hidden', () => {
+    const l = layoutLanes(420, { ...flags, hiddenTracks: ['consensus', 'insert', 'occupancy', 'ruler'] });
+    expect(l.lanes.map((x) => x.key)).toEqual(['logo', 'coverage', 'hits']);
+    expect(l.hitRowsShown).toBeGreaterThan(0);
+    const lane = l.byKey.hits!;
+    expect(hitRowAt(l, hitBarTop(lane, 0))).toBe(0);
+  });
+
+  it('puts the grid bottom at the ruler, or at its strip', () => {
+    expect(layoutLanes(300, NONE).gridBottom).toBe(300 - LANE_PX.ruler);
+    const l = layoutLanes(300, { ...NONE, collapsedTracks: ['ruler'] });
+    expect(l.gridBottom).toBe(300 - COLLAPSED_TRACK_PX);
+  });
+
+  it('is natural at its own height with tracks hidden or collapsed', () => {
+    for (const extra of [{ hiddenTracks: ['insert'] }, { collapsedTracks: ['hits', 'consensus'] }, { collapsedTracks: ['occupancy'] }] as Partial<LaneFlags>[]) {
+      const f = { ...flags, hitRows: 8, ...extra };
+      const natural = layoutLanes(0, f).natural;
+      const at = layoutLanes(natural, f);
+      expect(at.byKey.logo!.h).toBeGreaterThanOrEqual(150 - 1);
+    }
   });
 });
 

@@ -23,6 +23,12 @@ export interface ResolveRequest {
 
 export type ResolveOrigin = 'afdb' | 'esmfold';
 
+/** The public service that produced a model: scheme and host only. */
+export interface ResolveUpstream {
+  host: string;
+  url: string;
+}
+
 export interface ResolvedStructure {
   /** Presigned URL of the PDB model. */
   url: string;
@@ -30,6 +36,8 @@ export interface ResolvedStructure {
   source: ResolveOrigin | 'cache';
   /** Where the model itself came from, also on a cache hit. */
   origin: ResolveOrigin | null;
+  /** The external service behind `origin`; null when the server does not know it. */
+  upstream?: ResolveUpstream | null;
   accession: string | null;
   /** One-letter sequence of the model. */
   sequence: string;
@@ -90,39 +98,89 @@ function colourWording(mode: string | null | undefined, categoryLabel?: string |
   }
 }
 
+/** A link shown under the explanation note. */
+export interface ExplanationLink {
+  label: string;
+  href: string;
+}
+
+/** The info note of a 3D tile: a paragraph and the links that back it up. */
+export interface ModelExplanationNote {
+  text: string;
+  links: ExplanationLink[];
+}
+
 /**
  * The plain-language note behind a 3D tile's info button: where the structure
- * comes from and how to read it. `origin` is the resolved model's origin, or
- * `'file'` for a structure file written by the run; null when not known.
+ * comes from, whether the protein left the server to get it, and how to read
+ * it. `origin` is the resolved model's origin, or `'file'` for a structure file
+ * written by the run; null when not known. `upstream` is the server's name of
+ * the external service (its host is quoted in the sentence about the call).
  */
 export function modelExplanation(
   origin: ResolveOrigin | 'file' | null | undefined,
-  opts: { colorMode?: string | null; accession?: string | null; categoryLabel?: string | null } = {},
-): string | null {
+  opts: {
+    colorMode?: string | null;
+    accession?: string | null;
+    categoryLabel?: string | null;
+    upstream?: ResolveUpstream | null;
+  } = {},
+): ModelExplanationNote | null {
   const colours = colourWording(opts.colorMode, opts.categoryLabel);
+  const host = opts.upstream?.host || null;
   if (origin === 'esmfold') {
-    return (
-      'Predicted from the protein sequence alone by ESMFold (a protein language model; no ' +
-      'alignment or database is searched), run on a public service and cached on this ' +
-      'server. A prediction, not an experimental structure. ' +
-      `Colours show ${colours}.`
-    );
+    return {
+      text:
+        'Predicted from the protein sequence alone by ESMFold (a protein language model; no ' +
+        'alignment or database is searched). External call: the protein sequence is sent to ' +
+        `the public ESM Atlas service (${host ? `${host}, ` : ''}run by Meta) to be folded; ` +
+        'nothing else leaves the server. The result is cached on this server, so the same ' +
+        'sequence is not sent twice. A prediction, not an experimental structure. ' +
+        `Colours show ${colours}.`,
+      links: [
+        { label: 'ESM Atlas', href: 'https://esmatlas.com' },
+        { label: 'ESMFold paper', href: 'https://doi.org/10.1126/science.ade2574' },
+      ],
+    };
   }
   if (origin === 'afdb') {
     const subject = opts.accession ? `AlphaFold DB prediction for ${opts.accession}` : 'AlphaFold DB prediction';
-    return (
-      `${subject}, looked up from the UniProt accession (CC-BY 4.0). ` +
-      `A prediction, not an experimental structure. Colours show ${colours}.`
-    );
+    return {
+      text:
+        `${subject}, looked up from the UniProt accession (CC-BY 4.0). External call: the ` +
+        `UniProt accession is sent to AlphaFold DB (${host ? `${host}, ` : ''}EMBL-EBI) to fetch ` +
+        'the model. The result is cached on this server. ' +
+        `A prediction, not an experimental structure. Colours show ${colours}.`,
+      links: [
+        opts.accession
+          ? {
+              label: `AlphaFold DB entry ${opts.accession}`,
+              href: `https://alphafold.ebi.ac.uk/entry/${encodeURIComponent(opts.accession)}`,
+            }
+          : { label: 'AlphaFold DB', href: 'https://alphafold.ebi.ac.uk' },
+      ],
+    };
   }
   if (origin === 'file') {
-    return `Structure file written by the run; coloured by ${colours}.`;
+    return {
+      text:
+        `Structure file written by the run; coloured by ${colours}. ` +
+        "Read from the run's output files; nothing is sent anywhere.",
+      links: [],
+    };
   }
   return null;
 }
 
 function asOrigin(value: unknown): ResolveOrigin | null {
   return value === 'afdb' || value === 'esmfold' ? value : null;
+}
+
+function asUpstream(value: unknown): ResolveUpstream | null {
+  const v = value as { host?: unknown; url?: unknown } | null | undefined;
+  return v && typeof v.host === 'string' && typeof v.url === 'string'
+    ? { host: v.host, url: v.url }
+    : null;
 }
 
 async function detailOf(res: Response): Promise<string | null> {
@@ -208,6 +266,7 @@ export function resolveStructure(
       source: body.source ?? 'cache',
       // An upstream answer names the model's origin in `source` only.
       origin: asOrigin(body.origin) ?? asOrigin(body.source),
+      upstream: asUpstream(body.upstream),
       accession: body.accession ?? null,
       sequence: body.sequence ?? '',
       format: 'pdb' as const,

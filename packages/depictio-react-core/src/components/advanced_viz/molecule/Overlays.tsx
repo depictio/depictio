@@ -5,10 +5,11 @@
  */
 
 import React from 'react';
-import { ActionIcon, Box, Group, Paper, Popover, Stack, Text, Tooltip } from '@mantine/core';
+import { ActionIcon, Anchor, Box, Group, Paper, Popover, Stack, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { LegendSpec } from './residueData';
+import type { ModelExplanationNote } from './resolve';
 
 const SWATCH: React.CSSProperties = {
   width: 10,
@@ -145,7 +146,10 @@ export const MoleculeTooltip: React.FC<{
  * Model credit (bottom right). With `info`, a small info button next to it
  * opens a note on where the structure comes from and how to read it.
  */
-export const MoleculeCredit: React.FC<{ text: string | null; info?: string | null }> = ({
+export const MoleculeCredit: React.FC<{
+  text: string | null;
+  info?: ModelExplanationNote | null;
+}> = ({
   text,
   info = null,
 }) =>
@@ -161,7 +165,7 @@ export const MoleculeCredit: React.FC<{ text: string | null; info?: string | nul
         </Text>
       ) : null}
       {info ? (
-        <Popover width={260} position="top-end" withArrow shadow="md" withinPortal>
+        <Popover width={300} position="top-end" withArrow shadow="md" withinPortal>
           <Popover.Target>
             <ActionIcon
               size="xs"
@@ -174,7 +178,24 @@ export const MoleculeCredit: React.FC<{ text: string | null; info?: string | nul
             </ActionIcon>
           </Popover.Target>
           <Popover.Dropdown p="xs">
-            <Text size="xs">{info}</Text>
+            <Stack gap={6}>
+              <Text size="xs">{info.text}</Text>
+              {info.links.length ? (
+                <Group gap={10} wrap="wrap">
+                  {info.links.map((link) => (
+                    <Anchor
+                      key={link.href}
+                      href={link.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      size="xs"
+                    >
+                      {link.label}
+                    </Anchor>
+                  ))}
+                </Group>
+              ) : null}
+            </Stack>
           </Popover.Dropdown>
         </Popover>
       ) : null}

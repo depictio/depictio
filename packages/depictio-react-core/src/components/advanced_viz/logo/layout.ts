@@ -6,6 +6,14 @@
 
 import type { RGB } from '../protein/residueColours';
 import type { HeightMode } from './heights';
+import {
+  COLLAPSED_TRACK_PX,
+  stackTracks,
+  trackSpans,
+  trackState,
+  type TrackKey,
+  type TrackSpan,
+} from './tracks';
 
 export type LaneKey =
   | 'logo'
@@ -17,12 +25,16 @@ export type LaneKey =
   | 'occupancy'
   | 'coverage'
   | 'hits'
-  | 'ruler';
+  | 'ruler'
+  /** A collapsed track: a thin strip standing for all of its lanes. */
+  | 'strip';
 
 export interface Lane {
   key: LaneKey;
   y: number;
   h: number;
+  /** The track a collapsed `strip` stands for. */
+  track?: TrackKey;
 }
 
 export interface LaneFlags {
@@ -36,10 +48,29 @@ export interface LaneFlags {
   hits: boolean;
   /** Packed rows of hit bars. */
   hitRows: number;
+  /** Tracks left out entirely (wins over `collapsedTracks`). */
+  hiddenTracks?: readonly TrackKey[];
+  /** Tracks reduced to a thin strip. */
+  collapsedTracks?: readonly TrackKey[];
 }
 
+/** The track each lane belongs to (null: the logo, never hidden). */
+export const TRACK_OF_LANE: Readonly<Record<LaneKey, TrackKey | null>> = {
+  logo: null,
+  consensus: 'consensus',
+  rf: 'consensus',
+  cs: 'consensus',
+  insertProb: 'insert',
+  insertLength: 'insert',
+  occupancy: 'occupancy',
+  coverage: 'hits',
+  hits: 'hits',
+  ruler: 'ruler',
+  strip: null,
+};
+
 /** Fixed lane heights, CSS px. */
-export const LANE_PX: Readonly<Record<Exclude<LaneKey, 'logo' | 'hits'>, number>> = {
+export const LANE_PX: Readonly<Record<Exclude<LaneKey, 'logo' | 'hits' | 'strip'>, number>> = {
   consensus: 14,
   rf: 12,
   cs: 12,
@@ -73,7 +104,14 @@ export const HITS_NATURAL_ROWS = 8;
 
 export interface LaneLayout {
   lanes: Lane[];
+  /** The expanded lanes by name (collapsed tracks are in `strips`). */
   byKey: Partial<Record<LaneKey, Lane>>;
+  /** The strip of each collapsed track. */
+  strips: Partial<Record<TrackKey, Lane>>;
+  /** Every track on the panel with its extent, expanded or collapsed. */
+  tracks: TrackSpan[];
+  /** Top of the ruler (or of its strip), else the bottom of the last lane. */
+  gridBottom: number;
   /** Pitch of the hit bar rows, the height of a bar within it, how many rows
    *  fit and how many the packing holds (0 and 0 when no bar fits). */
   hitRowPx: number;
@@ -84,7 +122,7 @@ export interface LaneLayout {
   natural: number;
 }
 
-const ORDER: readonly LaneKey[] = [
+const ORDER: readonly Exclude<LaneKey, 'strip'>[] = [
   'logo',
   'consensus',
   'rf',
@@ -107,8 +145,14 @@ const ORDER: readonly LaneKey[] = [
  * rows leave, and never so much that the logo falls under 55 % of the panel
  * (or `LOGO_MIN_PX`). Rows that do not fit are not drawn; `hitRowsShown` of
  * `hitRowsTotal` is what the lane label summarises.
+ *
+ * Tracks (`tracks.ts`) may be hidden, which removes their lanes, or collapsed,
+ * which swaps them for one `COLLAPSED_TRACK_PX` strip; the logo takes what they
+ * free. The same stack answers drawing, hit testing, hover and `natural`.
  */
 export function layoutLanes(height: number, flags: LaneFlags): LaneLayout {
+  const hiddenTracks = new Set<TrackKey>(flags.hiddenTracks ?? []);
+  const collapsedTracks = new Set<TrackKey>(flags.collapsedTracks ?? []);
   const on: Record<LaneKey, boolean> = {
     logo: true,
     consensus: flags.consensus,
@@ -120,16 +164,28 @@ export function layoutLanes(height: number, flags: LaneFlags): LaneLayout {
     coverage: flags.hits,
     hits: flags.hits && flags.hitRows > 0,
     ruler: true,
+    strip: false,
   };
-  let fixed = 0;
+  // What a lane is drawn as: its own rows, a strip shared by its track, or nothing.
+  const stateOf = (key: LaneKey) => trackState(TRACK_OF_LANE[key], hiddenTracks, collapsedTracks);
+  const expanded = (key: LaneKey) => on[key] && stateOf(key) === 'shown';
+  const stripTracks = new Set<TrackKey>();
   for (const key of ORDER) {
-    if (key !== 'logo' && key !== 'hits' && key !== 'coverage' && on[key]) fixed += LANE_PX[key];
+    const track = TRACK_OF_LANE[key];
+    if (on[key] && track != null && stateOf(key) === 'collapsed') stripTracks.add(track);
   }
-  const coverageH = on.coverage ? LANE_PX.coverage : 0;
+  let fixed = stripTracks.size * COLLAPSED_TRACK_PX;
+  for (const key of ORDER) {
+    if (key !== 'logo' && key !== 'hits' && key !== 'coverage' && expanded(key)) {
+      fixed += LANE_PX[key];
+    }
+  }
+  const coverageH = expanded('coverage') ? LANE_PX.coverage : 0;
   const rows = Math.max(0, Math.floor(flags.hitRows));
+  const barsOn = expanded('hits');
   let hitRowsShown = 0;
   let hitsH = 0;
-  if (on.hits) {
+  if (barsOn) {
     const free = height - fixed;
     const logoMin = Math.max(LOGO_MIN_PX, LOGO_MIN_SHARE * height);
     const block = Math.min(free * HITS_MAX_SHARE, free - logoMin);
@@ -138,20 +194,32 @@ export function layoutLanes(height: number, flags: LaneFlags): LaneLayout {
     hitsH = hitRowsShown > 0 ? hitRowsShown * HIT_ROW_PX + HITS_PAD : 0;
   }
   const logoH = Math.max(20, height - fixed - coverageH - hitsH);
-  const lanes: Lane[] = [];
-  let y = 0;
-  for (const key of ORDER) {
-    if (!on[key]) continue;
-    const h = key === 'logo' ? logoH : key === 'hits' ? hitsH : key === 'coverage' ? coverageH : LANE_PX[key];
-    if (h <= 0) continue;
-    lanes.push({ key, y, h });
-    y += h;
-  }
+  // One vertical stack drives drawing, hit testing, hover and the natural height.
+  const stack = stackTracks(
+    ORDER.filter((key) => on[key]).map((key) => ({
+      lane: key,
+      track: TRACK_OF_LANE[key],
+      h: key === 'logo' ? logoH : key === 'hits' ? hitsH : key === 'coverage' ? LANE_PX.coverage : LANE_PX[key],
+    })),
+    hiddenTracks,
+    collapsedTracks,
+  );
+  const lanes: Lane[] = stack.slots.map((s) =>
+    s.collapsed
+      ? { key: 'strip', y: s.y, h: s.h, track: s.track as TrackKey }
+      : { key: s.lane as LaneKey, y: s.y, h: s.h },
+  );
+  const strips: Partial<Record<TrackKey, Lane>> = {};
+  for (const l of lanes) if (l.key === 'strip' && l.track) strips[l.track] = l;
+  const byKey: Partial<Record<LaneKey, Lane>> = {};
+  for (const l of lanes) if (l.key !== 'strip') byKey[l.key] = l;
+  const tracks = trackSpans(stack.slots);
+  const rulerSpan = tracks.find((t) => t.track === 'ruler');
   // The height at which the preferred rows are all drawn: a logo of its
   // natural height, and both shares of the block honoured.
   let natural = LOGO_NATURAL_PX + fixed;
-  if (on.coverage) {
-    const naturalRows = on.hits ? Math.min(rows, HITS_NATURAL_ROWS) : 0;
+  if (coverageH > 0) {
+    const naturalRows = barsOn ? Math.min(rows, HITS_NATURAL_ROWS) : 0;
     const block = coverageH + (naturalRows > 0 ? naturalRows * HIT_ROW_PX + HITS_PAD : 0);
     natural = Math.max(
       LOGO_NATURAL_PX + fixed + block,
@@ -161,11 +229,14 @@ export function layoutLanes(height: number, flags: LaneFlags): LaneLayout {
   }
   return {
     lanes,
-    byKey: Object.fromEntries(lanes.map((l) => [l.key, l])),
+    byKey,
+    strips,
+    tracks,
+    gridBottom: rulerSpan ? rulerSpan.y : stack.total,
     hitRowPx: hitRowsShown > 0 ? HIT_ROW_PX : 0,
     hitBarPx: hitRowsShown > 0 ? HIT_BAR_PX : 0,
     hitRowsShown,
-    hitRowsTotal: on.hits ? rows : 0,
+    hitRowsTotal: barsOn ? rows : 0,
     natural: Math.ceil(natural),
   };
 }

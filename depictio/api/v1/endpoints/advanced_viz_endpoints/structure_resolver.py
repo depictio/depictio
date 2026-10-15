@@ -566,6 +566,22 @@ def _single_flight(digest: str) -> Iterator[None]:
 # ---------------------------------------------------------------------------
 
 
+def _upstream(cfg: StructureResolverSettings, origin: str | None) -> dict[str, str] | None:
+    """Host and origin URL of the service that produced a model, for the viewer's
+    "this was an external call" note. Scheme and host only: never a path, a
+    query string or credentials. None when the origin is not one we know."""
+    if origin == "esmfold":
+        url = cfg.esmfold_url
+    elif origin == "afdb":
+        url = cfg.afdb_base_url
+    else:
+        return None
+    parts = urlsplit(url)
+    if not parts.scheme or not parts.hostname:
+        return None
+    return {"host": parts.hostname, "url": f"{parts.scheme}://{parts.hostname}"}
+
+
 def _response(cfg: StructureResolverSettings, digest: str, sidecar: dict, source: str) -> dict:
     pdb_key, _ = _keys(cfg, digest)
     return {
@@ -574,6 +590,9 @@ def _response(cfg: StructureResolverSettings, digest: str, sidecar: dict, source
         # Where the model came from, also on a cache hit (AlphaFold DB models
         # are CC-BY 4.0: the viewer credits them).
         "origin": sidecar.get("source"),
+        # The public service that produced it (host only), so the viewer can say
+        # which external call was made; read from the settings, not the sidecar.
+        "upstream": _upstream(cfg, sidecar.get("source")),
         "accession": sidecar.get("accession"),
         "sequence": sidecar.get("sequence") or "",
         "format": "pdb",

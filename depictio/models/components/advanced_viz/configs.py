@@ -3386,6 +3386,10 @@ class SequenceTrackConfig(_BaseVizConfig):
 # ---------------------------------------------------------------------------
 
 
+HmmLogoTrack = Literal["consensus", "insert", "occupancy", "hits", "ruler"]
+"""A lane group of the HMM logo panel that can be hidden or collapsed."""
+
+
 class HmmLogoConfig(_BaseVizConfig):
     """The sequence logo of one profile HMM, with an optional lane of the hits it matched.
 
@@ -3526,6 +3530,24 @@ class HmmLogoConfig(_BaseVizConfig):
         ge=1,
         description="Shortest run of low-information states that `collapse_below_ic` folds",
     )
+    hidden_tracks: list[HmmLogoTrack] = Field(
+        default_factory=list,
+        description=(
+            "Tracks (lanes) of the panel left out entirely so the logo takes the "
+            "room: `consensus` (consensus, RF and CS rows), `insert` (insert "
+            "probability and length), `occupancy` (occupancy or deletion bars), "
+            "`hits` (coverage area and hit bars), `ruler`. The logo itself is "
+            "never hidden. Also a tile control"
+        ),
+    )
+    collapsed_tracks: list[HmmLogoTrack] = Field(
+        default_factory=list,
+        description=(
+            "Tracks reduced to a thin named strip (the hits strip keeps a tiny "
+            "density summary); a header button on each track opens it again. "
+            "A track in `hidden_tracks` stays hidden. Also a tile control"
+        ),
+    )
     hits_wf_id: str | None = Field(
         default=None, description="Workflow id of the domain hits table (optional)"
     )
@@ -3586,6 +3608,17 @@ class HmmLogoConfig(_BaseVizConfig):
     follow_selection: bool = Field(
         default=True, description="Mark the states of an incoming residue_selection or hover"
     )
+
+    @model_validator(mode="after")
+    def _tracks_are_listed_once(self) -> HmmLogoConfig:
+        for name in ("hidden_tracks", "collapsed_tracks"):
+            tracks = getattr(self, name)
+            if len(set(tracks)) != len(tracks):
+                raise ValueError(f"{name} must not list a track twice")
+        overlap = sorted(set(self.hidden_tracks) & set(self.collapsed_tracks))
+        if overlap:
+            raise ValueError(f"a track cannot be both hidden and collapsed: {', '.join(overlap)}")
+        return self
 
     @model_validator(mode="after")
     def _window_is_ordered(self) -> HmmLogoConfig:

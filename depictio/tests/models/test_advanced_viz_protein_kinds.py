@@ -344,6 +344,8 @@ def test_hmm_logo_defaults():
     # Nothing hidden and nothing folded unless a dashboard asks.
     assert (c.window_start, c.window_end) == (None, None)
     assert (c.collapse_below_ic, c.collapse_min_run) == (None, 4)
+    # Every track is drawn, expanded.
+    assert (c.hidden_tracks, c.collapsed_tracks) == ([], [])
     assert c.controls_placement == "popover"
 
 
@@ -366,6 +368,30 @@ def test_hmm_logo_window_and_fold_validate():
         {"window_end": 0},
         {"collapse_min_run": 0},
         {"collapse_below_ic": -0.1},
+    ):
+        with pytest.raises(ValidationError):
+            _cfg("hmm_logo", **bad)
+
+
+def test_hmm_logo_tracks_validate():
+    from pydantic import ValidationError
+
+    from depictio.models.components.advanced_viz.configs import HmmLogoConfig
+
+    names = get_args(get_args(HmmLogoConfig.model_fields["hidden_tracks"].annotation)[0])
+    assert names == ("consensus", "insert", "occupancy", "hits", "ruler")
+    assert get_args(get_args(HmmLogoConfig.model_fields["collapsed_tracks"].annotation)[0]) == names
+
+    ok = _cfg("hmm_logo", hidden_tracks=["consensus", "ruler"], collapsed_tracks=["hits", "insert"])
+    assert (ok.hidden_tracks, ok.collapsed_tracks) == (["consensus", "ruler"], ["hits", "insert"])
+    # Each list is its own default, never shared between configs.
+    assert _cfg("hmm_logo").hidden_tracks is not _cfg("hmm_logo").hidden_tracks
+    for bad in (
+        {"hidden_tracks": ["logo"]},
+        {"collapsed_tracks": ["deletion"]},
+        {"hidden_tracks": ["hits", "hits"]},
+        {"collapsed_tracks": ["insert", "insert"]},
+        {"hidden_tracks": ["hits"], "collapsed_tracks": ["hits", "insert"]},
     ):
         with pytest.raises(ValidationError):
             _cfg("hmm_logo", **bad)

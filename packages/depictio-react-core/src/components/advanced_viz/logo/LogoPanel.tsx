@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { alpha, Box, Paper, Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
+import { Icon } from '@iconify/react';
+import { ActionIcon, alpha, Box, Paper, Text, Tooltip, useMantineColorScheme, useMantineTheme } from '@mantine/core';
+
+import { useFullscreenPortalTarget } from '../../chrome/useFullscreenPortalTarget';
 
 import { fitCellWidth, prepareCanvas, rulerStep, scrollToReveal } from '../protein/canvas';
 import { useDrawScheduler, useViewSize } from '../protein/canvasHooks';
@@ -43,6 +46,7 @@ import {
   type Lane,
 } from './layout';
 import { logoColours } from './logoTheme';
+import { TRACK_LABELS, type TrackKey } from './tracks';
 import {
   letterColours,
   residueRangeOfStates,
@@ -53,7 +57,9 @@ import {
 } from './profileModel';
 
 /** Left gutter: lane labels and the logo's y axis. */
-const GUTTER_PX = 62;
+const GUTTER_PX = 76;
+/** Width kept free at the right of the gutter for a track's collapse button. */
+const TRACK_BUTTON_PX = 14;
 /** Below this many px per state, letters become stacked colour bars. */
 export const DENSITY_PX = 6;
 const MAX_FIT_PX = 40;
@@ -116,6 +122,11 @@ export interface LogoPanelProps {
   expanded?: readonly string[];
   /** A click on a stub. */
   onExpandStub?: (stub: StubSegment) => void;
+  /** Tracks left out of the panel, and tracks reduced to a thin strip. */
+  hiddenTracks?: readonly TrackKey[];
+  collapsedTracks?: readonly TrackKey[];
+  /** Toggle one track between expanded and collapsed; omit for no header buttons. */
+  onToggleTrack?: (track: TrackKey) => void;
 }
 
 interface BrushState {
@@ -188,6 +199,9 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
   hidden,
   expanded,
   onExpandStub,
+  hiddenTracks,
+  collapsedTracks,
+  onToggleTrack,
 }) => {
   const theme = useMantineTheme();
   const { colorScheme } = useMantineColorScheme();
@@ -197,6 +211,7 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const view = useViewSize(scrollRef);
+  const fsPortalTarget = useFullscreenPortalTarget();
 
   // ---- derived model -------------------------------------------------------
   const k = profile.letters.length;
@@ -241,8 +256,10 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
         occupancy: showIndelRows && profile.occupancy != null,
         hits: hits != null,
         hitRows: packing?.rows ?? 0,
+        hiddenTracks,
+        collapsedTracks,
       }),
-    [view.h, showConsensus, showIndelRows, profile, hits, packing],
+    [view.h, showConsensus, showIndelRows, profile, hits, packing, hiddenTracks, collapsedTracks],
   );
   // Hits the bars show, for the lane label: rows past the budget are summarised.
   const hitsDrawn = useMemo(
@@ -316,7 +333,7 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
     };
     const anyColumn = segs.some((sg) => sg.kind === 'states');
     const lanes = layout.byKey;
-    const gridBottom = (lanes.ruler?.y ?? view.h);
+    const gridBottom = layout.gridBottom;
     const brush = brushRef.current;
     const hover = hoverRef.current;
 
@@ -459,11 +476,11 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
       });
     }
 
-    // Hit coverage: depth per state as a stepped area.
-    const cov = lanes.coverage;
-    if (cov && coverage && maxDepth > 0 && anyColumn) {
-      const barH = cov.h - 5;
-      const yOf = (d: number) => cov.y + 3 + barH - (d / maxDepth) * barH;
+    // Hit coverage: depth per state as a stepped area, in the coverage lane or,
+    // collapsed, as the density summary of the hits strip.
+    const coverageArea = (top: number, barH: number) => {
+      if (!coverage || maxDepth <= 0 || !anyColumn) return;
+      const yOf = (d: number) => top + barH - (d / maxDepth) * barH;
       // One area per run of letters: a stub breaks it.
       for (const sg of segs) {
         if (sg.kind !== 'states') continue;
@@ -471,13 +488,13 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
         if (b < a) continue;
         const x0 = GUTTER_PX + sg.x + (a - sg.start) * cw - sx;
         ctx.beginPath();
-        ctx.moveTo(x0, cov.y + 3 + barH);
+        ctx.moveTo(x0, top + barH);
         for (let i = a; i <= b; i++) {
           const d = coverage[profile.states[i] - 1] ?? 0;
           ctx.lineTo(x0 + (i - a) * cw, yOf(d));
           ctx.lineTo(x0 + (i - a + 1) * cw, yOf(d));
         }
-        ctx.lineTo(x0 + (b - a + 1) * cw, cov.y + 3 + barH);
+        ctx.lineTo(x0 + (b - a + 1) * cw, top + barH);
         ctx.closePath();
         ctx.fillStyle = colours.coverageFill;
         ctx.fill();
@@ -485,6 +502,21 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
         ctx.lineWidth = 1;
         ctx.stroke();
       }
+    };
+    const cov = lanes.coverage;
+    if (cov) coverageArea(cov.y + 3, cov.h - 5);
+
+    // Collapsed tracks: a thin tinted strip; the hits one keeps a tiny density summary.
+    for (const [track, strip] of Object.entries(layout.strips) as Array<[TrackKey, Lane]>) {
+      ctx.fillStyle = colours.hoverFill;
+      ctx.fillRect(GUTTER_PX, strip.y, gridW, strip.h);
+      ctx.strokeStyle = colours.grid;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(GUTTER_PX, Math.round(strip.y) + 0.5);
+      ctx.lineTo(view.w, Math.round(strip.y) + 0.5);
+      ctx.stroke();
+      if (track === 'hits') coverageArea(strip.y + 2, strip.h - 3);
     }
 
     // Hit bars, packed in rows, coloured by E-value, partial ends jagged.
@@ -651,10 +683,25 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
       occupancy: occupancyMode === 'delete' ? 'Delete P' : 'Occupancy',
       coverage: hitsLaneLabel(coverageCount, hitsDrawn),
     };
+    const labelRoom = GUTTER_PX - 8 - (onToggleTrack ? TRACK_BUTTON_PX : 0);
     for (const l of layout.lanes) {
+      if (l.key === 'strip' && l.track) {
+        ctx.font = `9px ${colours.font}`;
+        const name =
+          l.track === 'hits'
+            ? `Hits ${coverageCount}`
+            : l.track === 'occupancy'
+              ? (labels.occupancy ?? TRACK_LABELS.occupancy)
+              : l.track === 'ruler'
+                ? 'Ruler'
+                : TRACK_LABELS[l.track].replace(' rows', '');
+        ctx.fillText(name, 4, l.y + l.h / 2 + 0.5);
+        ctx.font = `10px ${colours.font}`;
+        continue;
+      }
       const text = labels[l.key];
       if (!text) continue;
-      if (ctx.measureText(text).width > GUTTER_PX - 8 && text.includes(HITS_LABEL_SEPARATOR)) {
+      if (ctx.measureText(text).width > labelRoom && text.includes(HITS_LABEL_SEPARATOR)) {
         // The summary does not fit the gutter on one line: count above, drawn below.
         const [head, tail] = text.split(HITS_LABEL_SEPARATOR);
         ctx.fillText(head, 4, l.y + l.h / 2 - 5.5);
@@ -719,6 +766,7 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
     coverage,
     coverageCount,
     hitsDrawn,
+    onToggleTrack,
     maxDepth,
     maxInsertLength,
     hits,
@@ -915,6 +963,41 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
           />
         </div>
       </div>
+      {onToggleTrack
+        ? layout.tracks.map((span) => (
+            <Tooltip
+              key={span.track}
+              label={span.collapsed ? 'Expand track' : 'Collapse track'}
+              withArrow
+              position="right"
+              openDelay={300}
+              portalProps={{ target: fsPortalTarget }}
+            >
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size={TRACK_BUTTON_PX}
+                radius="xs"
+                aria-label={`${span.collapsed ? 'Expand' : 'Collapse'} ${TRACK_LABELS[span.track]} track`}
+                aria-expanded={!span.collapsed}
+                data-testid={`hmm-logo-track-toggle-${span.track}`}
+                onClick={() => onToggleTrack(span.track)}
+                style={{
+                  position: 'absolute',
+                  zIndex: 3,
+                  left: GUTTER_PX - TRACK_BUTTON_PX - 2,
+                  top: span.y + (Math.min(span.h, TRACK_BUTTON_PX) - TRACK_BUTTON_PX) / 2,
+                }}
+              >
+                <Icon
+                  icon={span.collapsed ? 'tabler:chevron-right' : 'tabler:chevron-down'}
+                  width={10}
+                  height={10}
+                />
+              </ActionIcon>
+            </Tooltip>
+          ))
+        : null}
       {tip && tooltip ? (
         <Paper
           withBorder

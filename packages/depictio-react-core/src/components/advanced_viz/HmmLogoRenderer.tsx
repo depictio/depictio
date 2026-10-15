@@ -15,6 +15,7 @@ import { demandForPx } from './contentDemand';
 import {
   VizControlCell,
   VizControlGroup,
+  VizMultiSelect,
   VizNumberInput,
   VizSegmented,
   VizSelect,
@@ -27,6 +28,7 @@ import { coverageDepth, formatEvalue, hitsFromFrame, selectHits, type LogoHit } 
 import { layoutLanes } from './logo/layout';
 import LogoPanel, { type LogoHover } from './logo/LogoPanel';
 import { profileFromMsa, profileFromRows, residueRangeOfStates, stateSpanOfRange } from './logo/profileModel';
+import { cleanTracks, TRACK_KEYS, TRACK_LABELS, type TrackKey } from './logo/tracks';
 import type { MsaColourScheme, MsaRow, ResidueRange } from './protein';
 import {
   distinctColumns,
@@ -76,6 +78,8 @@ interface HmmLogoConfig {
   window_end?: number | null;
   collapse_below_ic?: number | null;
   collapse_min_run?: number;
+  hidden_tracks?: TrackKey[];
+  collapsed_tracks?: TrackKey[];
   hits_wf_id?: string | null;
   hits_dc_id?: string | null;
   hits_dc_tag?: string | null;
@@ -312,6 +316,15 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
   const [windowEnd, setWindowEnd] = usePersistedVizControl<number | null>(metadata, 'window_end', null);
   const [collapseBelowIc, setCollapseBelowIc] = usePersistedVizControl<number | null>(metadata, 'collapse_below_ic', null);
   const [collapseMinRun, setCollapseMinRun] = usePersistedVizControl<number>(metadata, 'collapse_min_run', 4);
+  // Tracks (lanes of the panel) taken out, or reduced to a thin strip.
+  const [hiddenTracksRaw, setHiddenTracks] = usePersistedVizControl<TrackKey[]>(metadata, 'hidden_tracks', []);
+  const [collapsedTracksRaw, setCollapsedTracks] = usePersistedVizControl<TrackKey[]>(
+    metadata,
+    'collapsed_tracks',
+    [],
+  );
+  const hiddenTracks = useMemo(() => cleanTracks(hiddenTracksRaw), [hiddenTracksRaw]);
+  const collapsedTracks = useMemo(() => cleanTracks(collapsedTracksRaw), [collapsedTracksRaw]);
   // Session only: ranges hidden by hand (column indices) and the folded runs the
   // user opened. Reset when the model, the window or the fold rule changes.
   const [hidden, setHidden] = useState<readonly HiddenRange[]>([]);
@@ -704,6 +717,51 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
     [publish, profile, profileEntity, positionCol],
   );
 
+  // ---- tracks -------------------------------------------------------------------------
+  // The tracks the panel can draw for this profile (a null column or a switched
+  // off row set has no track to hide).
+  const availableTracks = useMemo<TrackKey[]>(() => {
+    if (!profile) return [];
+    const present: Record<TrackKey, boolean> = {
+      consensus: showConsensus && (profile.consensus != null || profile.rf != null || profile.cs != null),
+      insert: showIndelRows && (profile.insertProb != null || profile.insertLength != null),
+      occupancy: showIndelRows && profile.occupancy != null,
+      hits: Boolean(hitsDcId),
+      ruler: true,
+    };
+    return TRACK_KEYS.filter((t) => present[t]);
+  }, [profile, showConsensus, showIndelRows, hitsDcId]);
+  const shownTracks = useMemo(
+    () => availableTracks.filter((t) => !hiddenTracks.includes(t)),
+    [availableTracks, hiddenTracks],
+  );
+  const setShownTracks = useCallback(
+    (values: string[]) => {
+      const keep = hiddenTracks.filter((t) => !availableTracks.includes(t));
+      const next = cleanTracks([...keep, ...availableTracks.filter((t) => !values.includes(t))]);
+      setHiddenTracks(next);
+      // The config refuses a track that is both hidden and collapsed.
+      if (collapsedTracks.some((t) => next.includes(t))) {
+        setCollapsedTracks(collapsedTracks.filter((t) => !next.includes(t)));
+      }
+    },
+    [hiddenTracks, collapsedTracks, availableTracks, setHiddenTracks, setCollapsedTracks],
+  );
+  const onToggleTrack = useCallback(
+    (track: TrackKey) => {
+      setCollapsedTracks(
+        collapsedTracks.includes(track) ? collapsedTracks.filter((t) => t !== track) : cleanTracks([...collapsedTracks, track]),
+      );
+    },
+    [collapsedTracks, setCollapsedTracks],
+  );
+  const collapseAllTracks = useCallback(
+    () => setCollapsedTracks(cleanTracks([...collapsedTracks, ...shownTracks])),
+    [collapsedTracks, shownTracks, setCollapsedTracks],
+  );
+  const expandAllTracks = useCallback(() => setCollapsedTracks([]), [setCollapsedTracks]);
+  const allCollapsed = shownTracks.every((t) => collapsedTracks.includes(t));
+
   // ---- chrome ----------------------------------------------------------------------
   const modelChoices = picker.entities && picker.entities.length > 1 ? picker.entities : null;
   const primaryControls = useMemo(
@@ -786,6 +844,33 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
               ]}
             />
           ) : null}
+        </VizControlGroup>
+        <VizControlGroup title="Tracks">
+          <VizMultiSelect
+            label="Shown tracks"
+            aria-label="Shown tracks"
+            value={shownTracks}
+            onChange={setShownTracks}
+            data={availableTracks.map((t) => ({ value: t, label: TRACK_LABELS[t] }))}
+            placeholder={shownTracks.length ? undefined : 'Logo only'}
+            clearable={false}
+          />
+          <VizControlCell>
+            <Button
+              size="xs"
+              variant="light"
+              onClick={collapseAllTracks}
+              disabled={shownTracks.length === 0 || allCollapsed}
+              title="Reduce every shown track to a thin strip; the logo takes the room"
+            >
+              Collapse all tracks
+            </Button>
+          </VizControlCell>
+          <VizControlCell>
+            <Button size="xs" variant="light" onClick={expandAllTracks} disabled={collapsedTracks.length === 0}>
+              Expand all tracks
+            </Button>
+          </VizControlCell>
         </VizControlGroup>
         <VizControlGroup title="Hide parts">
           <StateBoundInput
@@ -872,6 +957,13 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
       showIndelRows,
       setShowIndelRows,
       profile?.occupancy,
+      shownTracks,
+      setShownTracks,
+      availableTracks,
+      collapseAllTracks,
+      allCollapsed,
+      expandAllTracks,
+      collapsedTracks.length,
       occupancyMode,
       hitsDcId,
       evalueMax,
@@ -939,9 +1031,11 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
       occupancy: showIndelRows && profile.occupancy != null,
       hits: Boolean(hitsDcId),
       hitRows: Math.min(hitSelection.drawn.length, 16),
+      hiddenTracks,
+      collapsedTracks,
     }).natural;
     return demandForPx(natural + CHROME_PX);
-  }, [profile, showConsensus, showIndelRows, hitsDcId, hitSelection.drawn.length]);
+  }, [profile, showConsensus, showIndelRows, hitsDcId, hitSelection.drawn.length, hiddenTracks, collapsedTracks]);
 
   const onDrawn = useCallback(() => setDrawn(true), []);
 
@@ -1013,6 +1107,9 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
             hidden={hidden}
             expanded={expanded}
             onExpandStub={onExpandStub}
+            hiddenTracks={hiddenTracks}
+            collapsedTracks={collapsedTracks}
+            onToggleTrack={onToggleTrack}
           />
         </Box>
       ) : null}

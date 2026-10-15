@@ -87,32 +87,81 @@ describe('resolveStructure', () => {
   });
 
   describe('modelExplanation', () => {
+    const ESM_UPSTREAM = { host: 'api.esmatlas.com', url: 'https://api.esmatlas.com' };
+
     it('explains an ESMFold prediction and the colour mode in use', () => {
-      const text = modelExplanation('esmfold', { colorMode: 'plddt' });
-      expect(text).toContain('Predicted from the protein sequence alone by ESMFold');
-      expect(text).toContain('not an experimental structure');
-      expect(text).toContain('Colours show pLDDT confidence');
-      expect(modelExplanation('esmfold', { colorMode: 'category', categoryLabel: 'domain' })).toContain(
-        'Colours show domain.',
-      );
+      const note = modelExplanation('esmfold', { colorMode: 'plddt' });
+      expect(note?.text).toContain('Predicted from the protein sequence alone by ESMFold');
+      expect(note?.text).toContain('not an experimental structure');
+      expect(note?.text).toContain('Colours show pLDDT confidence');
+      expect(
+        modelExplanation('esmfold', { colorMode: 'category', categoryLabel: 'domain' })?.text,
+      ).toContain('Colours show domain.');
     });
 
-    it('names the accession of an AlphaFold DB model', () => {
-      const text = modelExplanation('afdb', { accession: 'P04637', colorMode: 'plddt' });
-      expect(text).toContain('AlphaFold DB prediction for P04637');
-      expect(text).toContain('CC-BY 4.0');
-      expect(modelExplanation('afdb')).toContain('AlphaFold DB prediction,');
+    it('says plainly that the sequence leaves the server for ESM Atlas, with the host', () => {
+      const note = modelExplanation('esmfold', { upstream: ESM_UPSTREAM });
+      expect(note?.text).toContain(
+        'the protein sequence is sent to the public ESM Atlas service ' +
+          '(api.esmatlas.com, run by Meta) to be folded; nothing else leaves the server. ' +
+          'The result is cached on this server, so the same sequence is not sent twice.',
+      );
+      expect(note?.links).toEqual([
+        { label: 'ESM Atlas', href: 'https://esmatlas.com' },
+        { label: 'ESMFold paper', href: 'https://doi.org/10.1126/science.ade2574' },
+      ]);
     });
 
-    it('keeps the file mode text short and generic', () => {
-      expect(modelExplanation('file', { colorMode: 'chain' })).toBe(
-        'Structure file written by the run; coloured by chain.',
+    it('still names the external call when the server sent no upstream', () => {
+      expect(modelExplanation('esmfold')?.text).toContain('ESM Atlas service (run by Meta)');
+    });
+
+    it('names the accession and the external call of an AlphaFold DB model', () => {
+      const note = modelExplanation('afdb', {
+        accession: 'P04637',
+        colorMode: 'plddt',
+        upstream: { host: 'alphafold.ebi.ac.uk', url: 'https://alphafold.ebi.ac.uk' },
+      });
+      expect(note?.text).toContain('AlphaFold DB prediction for P04637');
+      expect(note?.text).toContain('CC-BY 4.0');
+      expect(note?.text).toContain(
+        'the UniProt accession is sent to AlphaFold DB (alphafold.ebi.ac.uk, EMBL-EBI)',
       );
+      expect(note?.links).toEqual([
+        {
+          label: 'AlphaFold DB entry P04637',
+          href: 'https://alphafold.ebi.ac.uk/entry/P04637',
+        },
+      ]);
+      const bare = modelExplanation('afdb');
+      expect(bare?.text).toContain('AlphaFold DB prediction,');
+      expect(bare?.links).toEqual([{ label: 'AlphaFold DB', href: 'https://alphafold.ebi.ac.uk' }]);
+    });
+
+    it('keeps the file mode text short, generic and free of any external call', () => {
+      const note = modelExplanation('file', { colorMode: 'chain' });
+      expect(note?.text).toBe(
+        'Structure file written by the run; coloured by chain. ' +
+          "Read from the run's output files; nothing is sent anywhere.",
+      );
+      expect(note?.links).toEqual([]);
+      expect(note?.text).not.toContain('External call');
     });
 
     it('gives nothing for an unknown origin', () => {
       expect(modelExplanation(null)).toBeNull();
       expect(modelExplanation(undefined, { colorMode: 'plddt' })).toBeNull();
     });
+  });
+
+  it('keeps the upstream host the server names, and null when it names none', async () => {
+    const upstream = { host: 'api.esmatlas.com', url: 'https://api.esmatlas.com' };
+    const withUpstream = vi.fn(async () => json(200, { ...OK_BODY, origin: 'esmfold', upstream }));
+    expect((await resolveStructure({ uniprot: 'P04637' }, { fetcher: withUpstream })).upstream).toEqual(
+      upstream,
+    );
+    clearResolveMemo();
+    const without = vi.fn(async () => json(200, OK_BODY));
+    expect((await resolveStructure({ uniprot: 'P04637' }, { fetcher: without })).upstream).toBeNull();
   });
 });
