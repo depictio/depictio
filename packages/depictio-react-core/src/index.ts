@@ -10,6 +10,8 @@
 import './styles/realtime-highlight.css';
 // Before any Plot mounts: re-attach Plotly listeners after StrictMode's remount.
 import './plotlyStrictMode';
+// Before any Plot mounts: plain wheel scrolls the page, Ctrl / Cmd + wheel zooms.
+import './plotlyZoomGate';
 
 // Grid + top-level renderer
 export { default as DashboardGrid, SectionSummary } from './components/DashboardGrid';

@@ -20,6 +20,8 @@
  * few shapes it changes, not every mark.
  */
 
+import { isZoomWheel } from '../../zoomGate';
+import { attachZoomGate } from '../../zoomGateDom';
 import type { StructureFormat } from './structureText';
 
 export type Representation = 'cartoon' | 'trace' | 'stick' | 'sphere' | 'surface';
@@ -383,15 +385,17 @@ export async function createStructureViewer(
   const onPointerUp = () => {
     pressAt = null;
   };
-  const onWheel = () => {
-    userMoved = true;
+  // Only a zoom wheel moves the camera: a plain one is kept from 3Dmol by the
+  // zoom gate below and scrolls the page instead.
+  const onWheel = (e: WheelEvent) => {
+    if (isZoomWheel(e)) userMoved = true;
   };
   const hostListeners: [string, EventListener][] = [
     ['pointerdown', onPointerDown as EventListener],
     ['pointermove', onPointerMove as EventListener],
     ['pointerup', onPointerUp],
     ['pointercancel', onPointerUp],
-    ['wheel', onWheel],
+    ['wheel', onWheel as EventListener],
   ];
   const canListen = typeof container.addEventListener === 'function';
   if (canListen) {
@@ -399,6 +403,10 @@ export async function createStructureViewer(
       container.addEventListener(type, fn, { passive: true, capture: true });
     }
   }
+  // 3Dmol zooms on a plain wheel (and traps the page scroll doing it). The
+  // gate on its host keeps that wheel from the canvas, so Ctrl / Cmd + wheel
+  // and a two-finger pinch zoom, and the first hover shows how.
+  const detachZoomGate = attachZoomGate(container);
   const fitCamera = () => {
     viewer.zoomTo(focusSpan ? frameSelection(focusSpan) : {}, 0);
   };
@@ -615,6 +623,7 @@ export async function createStructureViewer(
     dispose() {
       if (disposed) return;
       disposed = true;
+      detachZoomGate();
       if (canListen) {
         for (const [type, fn] of hostListeners) {
           container.removeEventListener(type, fn, { capture: true });

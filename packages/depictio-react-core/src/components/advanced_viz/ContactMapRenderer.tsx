@@ -79,7 +79,6 @@ const PLOT_CONFIG = {
   responsive: true,
   displayModeBar: true,
   modeBarButtonsToRemove: ['select2d', 'lasso2d', 'autoScale2d'],
-  scrollZoom: false,
 };
 
 const DEFAULT_MAX_BINS = 500;

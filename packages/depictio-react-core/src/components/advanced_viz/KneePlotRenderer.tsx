@@ -41,7 +41,6 @@ const PLOT_CONFIG = {
   responsive: true,
   displayModeBar: true,
   modeBarButtonsToRemove: ['select2d', 'lasso2d', 'autoScale2d'],
-  scrollZoom: false,
 };
 
 const PALETTE = TAB10_PALETTE;

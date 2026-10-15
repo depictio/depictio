@@ -25,6 +25,7 @@ import {
 } from '../../api';
 import { resolveCategoricalPalette, stableColorMap, type StableColorMap } from '../../colors';
 import { filtersExcludingOwn } from '../../selection';
+import { isZoomWheel } from '../zoomGate';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import {
   VizControlGroup,
@@ -1202,9 +1203,9 @@ const PhyloTreeRenderer: React.FC<Props & { view: PhyloView }> = ({
     };
   }, [figure, zoomEnabled, layout, viewEpoch, viewStamp]);
 
-  // Scroll-zoom is opt-in via the toolbar toggle — always-on wheel capture
-  // steals page scroll (see RarefactionRenderer for the rationale). The hover
-  // modebar is hidden: the toolbar is the single control point.
+  // Zoom is opt-in via the toolbar toggle. Once on, it follows the zoom gate
+  // like every figure (a plain wheel scrolls the page, Ctrl / Cmd + wheel
+  // zooms). The hover modebar is hidden: the toolbar is the single control point.
   //
   // `scrollZoom` stays off even when zoom is enabled: Plotly's own wheel
   // handler relayouts once per wheel event, and a trackpad emits them far
@@ -1330,6 +1331,9 @@ const PhyloTreeRenderer: React.FC<Props & { view: PhyloView }> = ({
     };
 
     const onWheel = (ev: WheelEvent) => {
+      // The Plot-level gate already keeps a plain wheel from reaching here; the
+      // check keeps this handler correct on its own.
+      if (!isZoomWheel(ev)) return;
       ev.preventDefault();
       const rect = gd.getBoundingClientRect();
       const px = ev.clientX - rect.left;

@@ -2,10 +2,17 @@
  * Ctrl / Cmd + wheel zoom for the panels that scroll a canvas horizontally
  * (the MSA and the HMM logo). A plain wheel is left alone so the page and the
  * panel keep scrolling; a trackpad pinch arrives as a wheel event with
- * `ctrlKey` set, so it zooms the same way.
+ * `ctrlKey` set, so it zooms the same way. The panels show the shared zoom
+ * hint on first hover (components/zoomGate.ts).
  */
 
 import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
+
+import { isZoomWheel } from '../../zoomGate';
+import { useZoomGate } from '../../zoomGateDom';
+
+// The platform helpers live with the zoom gate now; kept importable from here.
+export { isApplePlatform, zoomModifierLabel } from '../../zoomGate';
 
 /** Wheel `deltaMode` 1 reports lines, not pixels. */
 const LINE_PX = 16;
@@ -49,28 +56,6 @@ export function scrollLeftAfterZoom(
   return Math.max(0, col * newCw + gutter - anchorX);
 }
 
-/** The slice of `navigator` the platform check reads. */
-interface PlatformInfo {
-  platform?: string;
-  userAgent?: string;
-}
-
-/** Whether the platform is a Mac (iPadOS reports a Mac platform too). */
-export function isApplePlatform(nav?: PlatformInfo): boolean {
-  const n = nav ?? (typeof navigator === 'undefined' ? undefined : navigator);
-  if (!n) return false;
-  return /mac|iphone|ipad|ipod/i.test(`${n.platform ?? ''} ${n.userAgent ?? ''}`);
-}
-
-/**
- * The name of the key that turns the wheel into a zoom on this platform:
- * the Command symbol on a Mac, `Ctrl` elsewhere. (Both work everywhere; the
- * hint shows the one the user's keyboard has.)
- */
-export function zoomModifierLabel(nav?: PlatformInfo): string {
-  return isApplePlatform(nav) ? '\u2318' : 'Ctrl';
-}
-
 export interface ModifierWheelZoomOptions {
   /** The column width now rendered, in px (the fitted width when the slider is at 0). */
   value: number;
@@ -110,12 +95,19 @@ export function useModifierWheelZoom(
     el.scrollLeft = scrollLeftAfterZoom(p.scrollLeft, p.x, opts.current.gutter, p.cw, value);
   }, [value, scrollRef]);
 
+  // Only the hint: a plain wheel already scrolls the panel and the page here,
+  // and a touch screen has no pinch on this canvas (the width slider is its zoom).
+  useZoomGate(scrollRef, {
+    block: false,
+    canZoom: (touch) => !touch && Boolean(opts.current.setValue),
+  });
+
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       const o = opts.current;
-      if (!o.setValue || !(e.ctrlKey || e.metaKey)) return;
+      if (!o.setValue || !isZoomWheel(e)) return;
       // Only now: a plain wheel must keep scrolling, and a ctrl-wheel must not
       // zoom the whole page.
       e.preventDefault();

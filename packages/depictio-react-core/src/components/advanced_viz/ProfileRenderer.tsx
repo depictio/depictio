@@ -101,21 +101,19 @@ const PLOT_STYLE = { width: '100%', height: '100%' };
 
 // Two configs rather than one: a component that cannot emit a selection has no
 // use for the box/lasso buttons, and a component that can must keep them.
-// Scroll-zoom stays off in both — capturing the wheel breaks page scrolling
-// when the pointer happens to sit over the tile.
+// Neither sets `scrollZoom`: the zoom gate (plotlyZoomGate) lets a plain wheel
+// scroll the page and zooms on Ctrl / Cmd + wheel.
 const PLOT_CONFIG_PLAIN = {
   displaylogo: false,
   responsive: true,
   displayModeBar: true,
   modeBarButtonsToRemove: ['select2d', 'lasso2d', 'autoScale2d'],
-  scrollZoom: false,
 };
 const PLOT_CONFIG_SELECT = {
   displaylogo: false,
   responsive: true,
   displayModeBar: true,
   modeBarButtonsToRemove: ['lasso2d', 'autoScale2d'],
-  scrollZoom: false,
 };
 
 // Shaded x ranges are furniture, not data: they read as a tint behind the
