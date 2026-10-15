@@ -53,7 +53,8 @@ the B-factor column, which is what `color_mode: plddt` reads.
 
 `depictio/recipes/lib/protein_structure.py` builds the first five straight from a PDB
 (`RESIDUE_SCHEMA`), rescaling a 0 to 1 pLDDT to 0 to 100 when every B-factor of a model lies in
-[0, 1]. `sequence_track` reads `chain` by that fixed name on a complex.
+[0, 1]. `sequence_track` reads `chain` by that fixed name on a complex and stacks one strip per chain
+(each on its own numbering, "All chains" by default, a select narrows it to one).
 
 **Variant table:** `entity`, `position`, `ref_aa`, `alt_aa`, a consequence column, a label
 column (a protein change), optionally a numeric column that sizes the marks.

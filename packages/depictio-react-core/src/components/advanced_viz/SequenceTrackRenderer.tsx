@@ -25,11 +25,11 @@ import {
   type StripVariant,
 } from './protein';
 import { panelColours } from './protein/panelTheme';
+import { chainsOfEntity, chainsShown, onChain, residuesByChain } from './protein/chainStrips';
 import {
   chainSelectionFilter,
   distinctColumns,
   firstValueOf,
-  frameLength,
   hasOwnResiduePick,
   numberOrNull,
   rowIndicesWhere,
@@ -80,11 +80,18 @@ const DOMAIN_SOURCE_COLUMN = 'source';
 const VARIANT_REF_COLUMN = 'ref_aa';
 const VARIANT_ALT_COLUMN = 'alt_aa';
 /** Optional chain column of the residue table (contract section 1). A complex
- *  numbers each chain on its own, so the strip draws one chain at a time. */
+ *  numbers each chain on its own, so each chain gets a strip (and an axis) of
+ *  its own. */
 const CHAIN_COLUMN = 'chain';
-/** Tile furniture around the strip: frame header, legend. */
+/** Value of the chain select for "every chain" (never a chain id). */
+const ALL_CHAINS = '__all__';
+const ALL_CHAINS_LABEL = 'All chains';
+/** Tile furniture around the strips: frame header, legend. */
 const CHROME_PX = 96;
 const STRIP_NATURAL_PX = 150;
+/** Least height of one chain's block (label + strip) before the stack scrolls. */
+const CHAIN_BLOCK_MIN_PX = 150;
+const CHAIN_LABEL_PX = 16;
 
 type Frame = Record<string, unknown[]>;
 
@@ -131,6 +138,66 @@ function useCompanionRows(
  * hover publishes on the highlight bus, and both come back in from the other
  * protein tiles as a shaded range and a crosshair.
  */
+interface ChainBlockProps
+  extends Pick<
+    React.ComponentProps<typeof SequenceStrip>,
+    | 'residues'
+    | 'domains'
+    | 'variants'
+    | 'valueLabel'
+    | 'valueScale'
+    | 'selectedRange'
+    | 'highlight'
+    | 'cellWidth'
+    | 'showLetters'
+    | 'followSelection'
+    | 'onDrawn'
+  > {
+  chain: string | null;
+  /** Caption above the strip; null on a single chain (no extra chrome). */
+  label: string | null;
+  /** Strips in the stack: each takes an equal share of the tile, down to a floor. */
+  count: number;
+  onHover: (chain: string | null, hover: StripHover | null) => void;
+  onBrush?: (chain: string | null, range: ResidueRange | null) => void;
+}
+
+/** One chain's strip, with its own axis; hover and brush are tagged with the chain. */
+const ChainBlock: React.FC<ChainBlockProps> = ({ chain, label, count, onHover, onBrush, ...strip }) => {
+  const hover = useCallback((h: StripHover | null) => onHover(chain, h), [onHover, chain]);
+  const brush = useCallback((r: ResidueRange | null) => onBrush?.(chain, r), [onBrush, chain]);
+  const stacked = count > 1;
+  return (
+    <Box
+      data-chain={chain ?? undefined}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        width: '100%',
+        height: stacked ? `${100 / count}%` : '100%',
+        minHeight: stacked ? CHAIN_BLOCK_MIN_PX : 0,
+      }}
+    >
+      {label ? (
+        <Text
+          size="xs"
+          fw={600}
+          c="dimmed"
+          px={4}
+          style={{ flex: `0 0 ${CHAIN_LABEL_PX}px`, lineHeight: `${CHAIN_LABEL_PX}px` }}
+        >
+          {label}
+        </Text>
+      ) : null}
+      <Box style={{ flex: '1 1 auto', minHeight: 0, position: 'relative' }}>
+        <Box style={{ position: 'absolute', inset: 0 }}>
+          <SequenceStrip {...strip} onHover={hover} onBrush={onBrush ? brush : undefined} height="100%" />
+        </Box>
+      </Box>
+    </Box>
+  );
+};
+
 const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange }) => {
   const theme = useMantineTheme();
   const { colorScheme } = useMantineColorScheme();
@@ -157,6 +224,7 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
   // Pixels per residue; 0 fits the whole protein to the tile width.
   const [zoom, setZoom] = useState<number>(0);
   const [drawn, setDrawn] = useState(false);
+  // null: every chain of a complex, each on its own strip.
   const [pickedChain, setPickedChain] = useState<string | null>(null);
 
   // The tile's own residue pick never narrows its own fetch, and no residue
@@ -255,44 +323,31 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
     [picker.entity, frame, entityCol],
   );
 
-  // Chains of the entity on screen, in table order; the strip shows one.
-  const chains = useMemo<string[]>(() => {
-    const col = frame?.[CHAIN_COLUMN];
-    if (!frame || !col) return [];
-    const seen = new Set<string>();
-    for (const i of rowIndicesWhere(frame, entityCol, entity)) {
-      const c = stringOrNull(col[i]);
-      if (c != null) seen.add(c);
-    }
-    return Array.from(seen);
-  }, [frame, entityCol, entity]);
+  // Chains of the entity on screen, in table order; a complex draws a strip each.
+  const chains = useMemo<string[]>(
+    () => chainsOfEntity(frame, entityCol, CHAIN_COLUMN, entity),
+    [frame, entityCol, entity],
+  );
+  // A chain another tile picked narrows a track already narrowed to one chain;
+  // one showing every chain keeps them all and only shades the picked one.
   useEffect(() => {
-    if (followedChain) setPickedChain(followedChain);
+    if (followedChain) setPickedChain((prev) => (prev === null ? prev : followedChain));
   }, [followedChain]);
-  const chain = pickedChain && chains.includes(pickedChain) ? pickedChain : (chains[0] ?? null);
   const multiChain = chains.length > 1;
-
-  const residues = useMemo<StripResidue[]>(() => {
-    if (!frame || frameLength(frame) === 0) return [];
-    const pos = frame[positionCol] ?? [];
-    const chainOf = multiChain ? frame[CHAIN_COLUMN] : undefined;
-    const letters = residueCol ? frame[residueCol] : undefined;
-    const values = valueCol ? frame[valueCol] : undefined;
-    const cats = categoryCol ? frame[categoryCol] : undefined;
-    const out: StripResidue[] = [];
-    for (const i of rowIndicesWhere(frame, entityCol, entity)) {
-      const p = numberOrNull(pos[i]);
-      if (p == null) continue;
-      if (chainOf && stringOrNull(chainOf[i]) !== chain) continue;
-      out.push({
-        position: p,
-        letter: letters ? stringOrNull(letters[i]) : null,
-        value: values ? numberOrNull(values[i]) : null,
-        category: cats ? stringOrNull(cats[i]) : null,
-      });
-    }
-    return out;
-  }, [frame, positionCol, residueCol, valueCol, categoryCol, entityCol, entity, multiChain, chain]);
+  const strips = useMemo(
+    () =>
+      residuesByChain(
+        frame,
+        { entityCol, positionCol, chainCol: CHAIN_COLUMN, residueCol, valueCol, categoryCol },
+        entity,
+        chains,
+        pickedChain,
+      ),
+    [frame, entityCol, positionCol, residueCol, valueCol, categoryCol, entity, chains, pickedChain],
+  );
+  const shownChains = useMemo(() => chainsShown(chains, pickedChain), [chains, pickedChain]);
+  // Every drawn residue, for the legend and the count.
+  const residues = useMemo<StripResidue[]>(() => strips.flatMap((s) => s.residues), [strips]);
 
   // ---- companion tables ------------------------------------------------------
   const domainCols = useMemo(
@@ -385,27 +440,27 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
     if (!follow && !ownResidue) return null;
     const r = residueRangeFromFilters(filters, entityCol, positionCol);
     if (!r || (r.entity && entity && r.entity !== entity)) return null;
-    if (multiChain) {
-      const picked = residueEntityFromFilters(filters, CHAIN_COLUMN);
-      if (picked && picked !== chain) return null;
-    }
     return { start: r.start, end: r.end };
-  }, [filters, entityCol, positionCol, follow, ownResidue, entity, multiChain, chain]);
+  }, [filters, entityCol, positionCol, follow, ownResidue, entity]);
+  // On a complex the range is in one chain's own numbering: only that strip shades it.
+  const selectedChain = useMemo(
+    () => (multiChain ? residueEntityFromFilters(filters, CHAIN_COLUMN) : null),
+    [filters, multiChain],
+  );
 
   const incoming = useHighlight(index, follow);
   const highlight = useMemo(() => {
     if (!incoming || (incoming.entity && entity && incoming.entity !== entity)) return null;
     // An event on another position column is on another axis entirely.
     if (incoming.positionColumn && incoming.positionColumn !== positionCol) return null;
-    // On a complex, residues of another chain are not on this strip.
-    if (multiChain && incoming.chain && incoming.chain !== chain) return null;
     return { start: incoming.start, end: incoming.end, rowKeys: incoming.rowKeys };
-  }, [incoming, entity, positionCol, multiChain, chain]);
+  }, [incoming, entity, positionCol]);
+  const highlightChain = incoming?.chain ?? null;
 
   // ---- selections out --------------------------------------------------------
   const publish = usePublishHighlight(index);
   const onHover = useCallback(
-    (h: StripHover | null) => {
+    (chain: string | null, h: StripHover | null) => {
       if (!h) {
         publish(null);
         return;
@@ -419,11 +474,11 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
         positionColumn: positionCol,
       });
     },
-    [publish, entity, chain, positionCol],
+    [publish, entity, positionCol],
   );
 
   const onBrush = useCallback(
-    (range: ResidueRange | null) => {
+    (chain: string | null, range: ResidueRange | null) => {
       if (!onFilterChange) return;
       const pair = residueRangeFilters(index, {
         entityColumn: entityCol,
@@ -439,7 +494,7 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
         onFilterChange(chainSelectionFilter(index, metadata.dc_id, CHAIN_COLUMN, range ? chain : null));
       }
     },
-    [onFilterChange, index, entityCol, positionCol, entity, metadata.dc_id, multiChain, chain],
+    [onFilterChange, index, entityCol, positionCol, entity, metadata.dc_id, multiChain],
   );
 
   // ---- legend ----------------------------------------------------------------
@@ -492,15 +547,18 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
           {multiChain ? (
             <VizSelect
               label="Chain"
-              value={chain}
-              onChange={(v) => v && setPickedChain(v)}
-              data={chains}
+              value={shownChains.length === 1 ? shownChains[0] : ALL_CHAINS}
+              onChange={(v) => v && setPickedChain(v === ALL_CHAINS ? null : v)}
+              data={[
+                { value: ALL_CHAINS, label: ALL_CHAINS_LABEL },
+                ...chains.map((c) => ({ value: c, label: c })),
+              ]}
               allowDeselect={false}
             />
           ) : null}
         </>
       ) : null,
-    [entityChoices, picker.setEntity, entity, multiChain, chain, chains],
+    [entityChoices, picker.setEntity, entity, multiChain, shownChains, chains],
   );
 
   const controls = useMemo(
@@ -537,13 +595,18 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
 
   const echo = useMemo(() => {
     if (!residues.length && !variants.length) return undefined;
-    const parts = [entity, multiChain && chain ? `chain ${chain}` : null, `${residues.length} residues`];
+    const chainPart = !multiChain
+      ? null
+      : shownChains.length === 1
+        ? `chain ${shownChains[0]}`
+        : `${shownChains.length} chains`;
+    const parts = [entity, chainPart, `${residues.length} residues`];
     if (variants.length) parts.push(`${variants.length} variants`);
     if (selectedRange) {
       parts.push(`residues ${selectedRange.start}-${selectedRange.end ?? selectedRange.start}`);
     }
     return parts.filter(Boolean).join(' · ');
-  }, [entity, multiChain, chain, residues.length, variants.length, selectedRange]);
+  }, [entity, multiChain, shownChains, residues.length, variants.length, selectedRange]);
 
   const companionError = domainsFetch.error || variantsFetch.error;
   const badges = useMemo(
@@ -558,7 +621,10 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
     [companionError],
   );
 
-  const contentDemand = useMemo(() => demandForPx(STRIP_NATURAL_PX + CHROME_PX), []);
+  const contentDemand = useMemo(
+    () => demandForPx(STRIP_NATURAL_PX * Math.max(1, strips.length) + CHROME_PX),
+    [strips.length],
+  );
   const onDrawn = useCallback(() => setDrawn(true), []);
   const empty = residues.length === 0 && variants.length === 0 && domains.length === 0;
 
@@ -583,26 +649,39 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
           data-sequence-ready={drawn ? 'true' : undefined}
           style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', minHeight: 0 }}
         >
-          {/* Absolutely filled so the strip gets a definite height to spread
-              its lanes over, whatever the flex engine makes of percentages. */}
+          {/* Absolutely filled so each strip gets a definite height to spread
+              its lanes over, whatever the flex engine makes of percentages. A
+              complex stacks one block per chain, scrolling once they no
+              longer fit. */}
           <Box style={{ flex: '1 1 auto', minHeight: 60, position: 'relative' }}>
-            <Box style={{ position: 'absolute', inset: 0 }}>
-              <SequenceStrip
-                residues={residues}
-                domains={domains}
-                variants={variants}
-                valueLabel={config.value_label ?? valueCol}
-                valueScale={plddt ? 'plddt' : valueScale}
-                selectedRange={selectedRange}
-                highlight={highlight}
-                onHover={onHover}
-                onBrush={brushEnabled ? onBrush : undefined}
-                height="100%"
-                cellWidth={zoom > 0 ? zoom : undefined}
-                showLetters={showLetters}
-                followSelection={follow}
-                onDrawn={onDrawn}
-              />
+            <Box
+              style={{
+                position: 'absolute',
+                inset: 0,
+                overflowY: strips.length > 1 ? 'auto' : 'hidden',
+              }}
+            >
+              {strips.map(({ chain, residues: chainResidues }) => (
+                <ChainBlock
+                  key={chain ?? ''}
+                  label={multiChain && chain ? `Chain ${chain}` : null}
+                  count={strips.length}
+                  chain={chain}
+                  residues={chainResidues}
+                  domains={domains}
+                  variants={variants}
+                  valueLabel={config.value_label ?? valueCol}
+                  valueScale={plddt ? 'plddt' : valueScale}
+                  selectedRange={onChain(multiChain, selectedChain, chain) ? selectedRange : null}
+                  highlight={onChain(multiChain, highlightChain, chain) ? highlight : null}
+                  onHover={onHover}
+                  onBrush={brushEnabled ? onBrush : undefined}
+                  cellWidth={zoom > 0 ? zoom : undefined}
+                  showLetters={showLetters}
+                  followSelection={follow}
+                  onDrawn={onDrawn}
+                />
+              ))}
             </Box>
           </Box>
           {legend.length ? (
