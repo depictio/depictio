@@ -25,7 +25,15 @@ import {
   type StripVariant,
 } from './protein';
 import { panelColours } from './protein/panelTheme';
-import { chainsOfEntity, chainsShown, onChain, residuesByChain } from './protein/chainStrips';
+import ZoomHintLabel from './protein/ZoomHint';
+import {
+  chainsOfEntity,
+  chainsShown,
+  createScrollSync,
+  onChain,
+  residuesByChain,
+  SEQUENCE_RESIDUE_WIDTH_MAX_PX,
+} from './protein/chainStrips';
 import {
   chainSelectionFilter,
   distinctColumns,
@@ -149,6 +157,8 @@ interface ChainBlockProps
     | 'selectedRange'
     | 'highlight'
     | 'cellWidth'
+    | 'onCellWidthChange'
+    | 'scrollSync'
     | 'showLetters'
     | 'followSelection'
     | 'onDrawn'
@@ -223,6 +233,8 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
   const [showLetters, setShowLetters] = useState(true);
   // Pixels per residue; 0 fits the whole protein to the tile width.
   const [zoom, setZoom] = useState<number>(0);
+  // One horizontal scroll for the strips of a complex.
+  const scrollSync = useMemo(createScrollSync, []);
   const [drawn, setDrawn] = useState(false);
   // null: every chain of a complex, each on its own strip.
   const [pickedChain, setPickedChain] = useState<string | null>(null);
@@ -565,11 +577,13 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
     () => (
       <VizControlGroup title="Display">
         <VizSlider
-          label="Residue width"
+          label={<ZoomHintLabel>Residue width</ZoomHintLabel>}
+          aria-label="Residue width"
+          title="Ctrl/Cmd + wheel to zoom"
           value={zoom}
           onChange={setZoom}
           min={0}
-          max={24}
+          max={SEQUENCE_RESIDUE_WIDTH_MAX_PX}
           step={1}
           thumbLabel={(v) => (v === 0 ? 'Fit' : `${v} px`)}
         />
@@ -677,6 +691,8 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
                   onHover={onHover}
                   onBrush={brushEnabled ? onBrush : undefined}
                   cellWidth={zoom > 0 ? zoom : undefined}
+                  onCellWidthChange={setZoom}
+                  scrollSync={strips.length > 1 ? scrollSync : undefined}
                   showLetters={showLetters}
                   followSelection={follow}
                   onDrawn={onDrawn}

@@ -1,5 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Box, ColorSwatch, Group, Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
+import {
+  Box,
+  Button,
+  ColorSwatch,
+  Group,
+  Text,
+  useMantineColorScheme,
+  useMantineTheme,
+} from '@mantine/core';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
@@ -12,7 +20,13 @@ import {
 } from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { demandForPx } from './contentDemand';
-import { VizControlGroup, VizSelect, VizSlider, VizSwitch } from './controls/VizControls';
+import {
+  VizControlCell,
+  VizControlGroup,
+  VizSelect,
+  VizSlider,
+  VizSwitch,
+} from './controls/VizControls';
 import { MIN_LETTER_PX } from './protein/canvas';
 import { panelColours } from './protein/panelTheme';
 import {
@@ -26,12 +40,11 @@ import { rgbCss } from './protein/residueColours';
 import { SS_GLYPH_FILLS } from './protein/ssGlyphs';
 import type { ResidueRange } from './protein/types';
 import { useEntityPicker } from './protein/useEntityPicker';
+import ZoomHintLabel from './protein/ZoomHint';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { compositionBadges } from './secstruct/compositionBadges';
-import SecondaryStructurePanel, {
-  DEFAULT_RIBBON_PX,
-  naturalPanelHeight,
-} from './secstruct/SecondaryStructurePanel';
+import SecondaryStructurePanel, { naturalPanelHeight } from './secstruct/SecondaryStructurePanel';
+import { DEFAULT_RIBBON_PX } from './secstruct/ribbonHeight';
 import SegmentList, { SEGMENT_LIST_MAX_PX } from './secstruct/SegmentList';
 import {
   agreementOf,
@@ -39,7 +52,13 @@ import {
   segmentsOf,
   type SsColumns,
 } from './secstruct/ssModel';
-import { pinnedStateColours } from './secstruct/stateColours';
+import StateColourInput from './secstruct/StateColourInput';
+import {
+  effectiveStateColours,
+  SS_COLOUR_CLASSES,
+  withStateColour,
+  type StateColourMap,
+} from './secstruct/stateColours';
 
 /**
  * Mirrors `SecondaryStructureConfig` in depictio/models/components/advanced_viz/configs.py
@@ -64,7 +83,8 @@ interface SecondaryStructureConfig {
   shade_confidence?: boolean;
   show_coil_segments?: boolean;
   residue_width?: number;
-  ribbon_height?: number;
+  ribbon_height?: number | null;
+  state_colors?: Record<string, string>;
   min_segment_length?: number;
   selection_enabled?: boolean;
   follow_selection?: boolean;
@@ -138,10 +158,18 @@ const SecondaryStructureRenderer: React.FC<Props> = ({
   const [coilSegments, setCoilSegments] = usePersistedVizControl(metadata, 'show_coil_segments', false);
   // Pixels per residue; 0 fits the whole protein to the tile width.
   const [zoom, setZoom] = usePersistedVizControl<number>(metadata, 'residue_width', 0);
-  const [ribbonHeight, setRibbonHeight] = usePersistedVizControl<number>(
+  // Null until chosen: the ribbon then keeps its default height and grows into
+  // spare room; a chosen height is drawn exactly.
+  const [ribbonHeight, setRibbonHeight] = usePersistedVizControl<number | null>(
     metadata,
     'ribbon_height',
-    DEFAULT_RIBBON_PX,
+    null,
+  );
+  // Class name to CSS colour, seeded from the config and rewritten by the Colours controls.
+  const [userColours, setUserColours] = usePersistedVizControl<StateColourMap>(
+    metadata,
+    'state_colors',
+    {},
   );
   const [minSegment, setMinSegment] = usePersistedVizControl<number>(metadata, 'min_segment_length', 1);
   const [pickedReference, setPickedReference] = useState<string | null>(null);
@@ -341,9 +369,12 @@ const SecondaryStructureRenderer: React.FC<Props> = ({
   // spells the state out. Values are read as states, so Helix and H both count.
   const pinnedByState = usePinnedCategoryColors(stateCol);
   const pinnedByCategory = usePinnedCategoryColors('category');
+  // User / tile colours over the config's, over the dashboard's pins; classes
+  // nobody colours keep the tile's defaults.
   const stateColours = useMemo(
-    () => pinnedStateColours(pinnedByCategory, pinnedByState),
-    [pinnedByCategory, pinnedByState],
+    () =>
+      effectiveStateColours([pinnedByCategory, pinnedByState], config.state_colors, userColours),
+    [pinnedByCategory, pinnedByState, config.state_colors, userColours],
   );
   const hasTurn = useMemo(
     () => model.sources.some((s) => s.states.includes('turn')),
@@ -395,62 +426,109 @@ const SecondaryStructureRenderer: React.FC<Props> = ({
     [entityChoices, picker.setEntity, entity, sources, mainSource, model.names],
   );
 
+  // One input per class the tile draws, showing the colour in effect.
+  const colourClasses = useMemo(
+    () =>
+      legend.length
+        ? SS_COLOUR_CLASSES.filter((c) => c.state !== 'turn' || hasTurn).map((c) => ({
+            ...c,
+            colour: legend.find((l) => l.label === c.label)?.colour ?? '',
+          }))
+        : [],
+    [legend, hasTurn],
+  );
+  const swatches = useMemo(
+    () =>
+      ['red', 'pink', 'grape', 'violet', 'indigo', 'blue', 'cyan', 'teal', 'green', 'lime', 'yellow', 'orange']
+        .map((hue) => theme.colors[hue]?.[6])
+        .filter((c): c is string => Boolean(c)),
+    [theme],
+  );
+
   const controls = useMemo(
     () => (
-      <VizControlGroup title="Display">
-        <VizSlider
-          label="Residue width"
-          value={zoom}
-          onChange={setZoom}
-          min={0}
-          max={24}
-          step={1}
-          thumbLabel={(v) => (v === 0 ? 'Fit' : `${v} px`)}
-        />
-        <VizSlider
-          label="Ribbon height"
-          value={ribbonHeight}
-          onChange={setRibbonHeight}
-          min={16}
-          max={64}
-          step={2}
-          thumbLabel={(v) => `${v} px`}
-        />
-        <VizSwitch
-          label="Letters"
-          checked={showLetters}
-          onChange={(e) => setShowLetters(e.currentTarget.checked)}
-          disabled={!residueCol || !hasLetters}
-        />
-        <VizSwitch
-          label="Confidence shading"
-          checked={shadeConfidence}
-          onChange={(e) => setShadeConfidence(e.currentTarget.checked)}
-          disabled={!hasConfidence}
-        />
-        {showSegments ? (
-          <>
-            <VizSwitch
-              label="Coil segments"
-              checked={coilSegments}
-              onChange={(e) => setCoilSegments(e.currentTarget.checked)}
+      <>
+        <VizControlGroup title="Display">
+          <VizSlider
+            label={<ZoomHintLabel>Residue width</ZoomHintLabel>}
+            aria-label="Residue width"
+            title="Ctrl/Cmd + wheel to zoom"
+            value={zoom}
+            onChange={setZoom}
+            min={0}
+            max={24}
+            step={1}
+            thumbLabel={(v) => (v === 0 ? 'Fit' : `${v} px`)}
+          />
+          <VizSlider
+            label="Ribbon height"
+            value={ribbonHeight ?? DEFAULT_RIBBON_PX}
+            onChange={setRibbonHeight}
+            min={16}
+            max={64}
+            step={2}
+            thumbLabel={(v) => `${v} px`}
+          />
+          <VizSwitch
+            label="Letters"
+            checked={showLetters}
+            onChange={(e) => setShowLetters(e.currentTarget.checked)}
+            disabled={!residueCol || !hasLetters}
+          />
+          <VizSwitch
+            label="Confidence shading"
+            checked={shadeConfidence}
+            onChange={(e) => setShadeConfidence(e.currentTarget.checked)}
+            disabled={!hasConfidence}
+          />
+          {showSegments ? (
+            <>
+              <VizSwitch
+                label="Coil segments"
+                checked={coilSegments}
+                onChange={(e) => setCoilSegments(e.currentTarget.checked)}
+              />
+              <VizSlider
+                label="Min segment"
+                value={minSegment}
+                onChange={setMinSegment}
+                min={1}
+                max={50}
+                step={1}
+                thumbLabel={(v) => `${v} aa`}
+              />
+            </>
+          ) : null}
+        </VizControlGroup>
+        <VizControlGroup title="Colours">
+          {colourClasses.map(({ key, label, state, colour }) => (
+            <StateColourInput
+              key={key}
+              label={label}
+              colour={colour}
+              swatches={swatches}
+              onCommit={(c) => setUserColours(withStateColour(userColours, state, c))}
             />
-            <VizSlider
-              label="Min segment"
-              value={minSegment}
-              onChange={setMinSegment}
-              min={1}
-              max={50}
-              step={1}
-              thumbLabel={(v) => `${v} aa`}
-            />
-          </>
-        ) : null}
-      </VizControlGroup>
+          ))}
+          <VizControlCell>
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              disabled={!Object.keys(userColours).length}
+              onClick={() => setUserColours({})}
+            >
+              Reset colours
+            </Button>
+          </VizControlCell>
+        </VizControlGroup>
+      </>
     ),
     [
       zoom,
       ribbonHeight,
+      colourClasses,
+      swatches,
+      userColours,
       showLetters,
       residueCol,
       hasLetters,
@@ -551,6 +629,7 @@ const SecondaryStructureRenderer: React.FC<Props> = ({
                 onBrush={brushEnabled ? onPick : undefined}
                 height="100%"
                 cellWidth={zoom > 0 ? zoom : undefined}
+                onCellWidthChange={setZoom}
                 followSelection={follow}
                 onDrawn={onDrawn}
               />

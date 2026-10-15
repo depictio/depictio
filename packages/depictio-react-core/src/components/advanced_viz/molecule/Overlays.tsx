@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { ActionIcon, Box, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
+import { ActionIcon, Box, Group, Paper, Popover, Stack, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { LegendSpec } from './residueData';
@@ -141,15 +141,44 @@ export const MoleculeTooltip: React.FC<{
   );
 };
 
-export const MoleculeCredit: React.FC<{ text: string | null }> = ({ text }) =>
-  text ? (
-    <Text
-      size="xs"
-      c="dimmed"
+/**
+ * Model credit (bottom right). With `info`, a small info button next to it
+ * opens a note on where the structure comes from and how to read it.
+ */
+export const MoleculeCredit: React.FC<{ text: string | null; info?: string | null }> = ({
+  text,
+  info = null,
+}) =>
+  text || info ? (
+    <Group
+      gap={4}
+      wrap="nowrap"
       style={{ position: 'absolute', right: 6, bottom: 4, zIndex: 2, pointerEvents: 'none' }}
     >
-      {text}
-    </Text>
+      {text ? (
+        <Text size="xs" c="dimmed">
+          {text}
+        </Text>
+      ) : null}
+      {info ? (
+        <Popover width={260} position="top-end" withArrow shadow="md" withinPortal>
+          <Popover.Target>
+            <ActionIcon
+              size="xs"
+              variant="subtle"
+              color="gray"
+              aria-label="About this structure"
+              style={{ pointerEvents: 'auto' }}
+            >
+              <Icon icon="tabler:info-circle" width={14} height={14} />
+            </ActionIcon>
+          </Popover.Target>
+          <Popover.Dropdown p="xs">
+            <Text size="xs">{info}</Text>
+          </Popover.Dropdown>
+        </Popover>
+      ) : null}
+    </Group>
   ) : null;
 
 export const MoleculeViewButtons: React.FC<{

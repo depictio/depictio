@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearResolveMemo,
   modelCredit,
+  modelExplanation,
   resolveKey,
   ResolveError,
   resolveStructure,
@@ -83,5 +84,35 @@ describe('resolveStructure', () => {
     expect(modelCredit('afdb')).toBe('Model: AlphaFold DB, CC-BY 4.0');
     expect(modelCredit('esmfold')).toBe('Model: ESMFold');
     expect(modelCredit(null)).toBeNull();
+  });
+
+  describe('modelExplanation', () => {
+    it('explains an ESMFold prediction and the colour mode in use', () => {
+      const text = modelExplanation('esmfold', { colorMode: 'plddt' });
+      expect(text).toContain('Predicted from the protein sequence alone by ESMFold');
+      expect(text).toContain('not an experimental structure');
+      expect(text).toContain('Colours show pLDDT confidence');
+      expect(modelExplanation('esmfold', { colorMode: 'category', categoryLabel: 'domain' })).toContain(
+        'Colours show domain.',
+      );
+    });
+
+    it('names the accession of an AlphaFold DB model', () => {
+      const text = modelExplanation('afdb', { accession: 'P04637', colorMode: 'plddt' });
+      expect(text).toContain('AlphaFold DB prediction for P04637');
+      expect(text).toContain('CC-BY 4.0');
+      expect(modelExplanation('afdb')).toContain('AlphaFold DB prediction,');
+    });
+
+    it('keeps the file mode text short and generic', () => {
+      expect(modelExplanation('file', { colorMode: 'chain' })).toBe(
+        'Structure file written by the run; coloured by chain.',
+      );
+    });
+
+    it('gives nothing for an unknown origin', () => {
+      expect(modelExplanation(null)).toBeNull();
+      expect(modelExplanation(undefined, { colorMode: 'plddt' })).toBeNull();
+    });
   });
 });

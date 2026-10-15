@@ -64,6 +64,63 @@ export function modelCredit(origin: ResolveOrigin | null | undefined): string | 
   return null;
 }
 
+/** What the colours of the 3D structure say, in words, for the explanation text. */
+function colourWording(mode: string | null | undefined, categoryLabel?: string | null): string {
+  switch (mode) {
+    case 'plddt':
+      return 'pLDDT confidence (how sure the model is of each residue)';
+    case 'category':
+      return categoryLabel || 'category';
+    case 'value':
+      return 'the measured value';
+    case 'chain':
+      return 'chain';
+    case 'spectrum':
+      return 'position along the chain';
+    case 'secondary_structure':
+      return 'secondary structure';
+    case 'residue_type':
+      return 'residue type';
+    case 'hydrophobicity':
+      return 'hydrophobicity';
+    case 'uniform':
+      return 'a single colour';
+    default:
+      return 'the selected colour mode';
+  }
+}
+
+/**
+ * The plain-language note behind a 3D tile's info button: where the structure
+ * comes from and how to read it. `origin` is the resolved model's origin, or
+ * `'file'` for a structure file written by the run; null when not known.
+ */
+export function modelExplanation(
+  origin: ResolveOrigin | 'file' | null | undefined,
+  opts: { colorMode?: string | null; accession?: string | null; categoryLabel?: string | null } = {},
+): string | null {
+  const colours = colourWording(opts.colorMode, opts.categoryLabel);
+  if (origin === 'esmfold') {
+    return (
+      'Predicted from the protein sequence alone by ESMFold (a protein language model; no ' +
+      'alignment or database is searched), run on a public service and cached on this ' +
+      'server. A prediction, not an experimental structure. ' +
+      `Colours show ${colours}.`
+    );
+  }
+  if (origin === 'afdb') {
+    const subject = opts.accession ? `AlphaFold DB prediction for ${opts.accession}` : 'AlphaFold DB prediction';
+    return (
+      `${subject}, looked up from the UniProt accession (CC-BY 4.0). ` +
+      `A prediction, not an experimental structure. Colours show ${colours}.`
+    );
+  }
+  if (origin === 'file') {
+    return `Structure file written by the run; coloured by ${colours}.`;
+  }
+  return null;
+}
+
 function asOrigin(value: unknown): ResolveOrigin | null {
   return value === 'afdb' || value === 'esmfold' ? value : null;
 }

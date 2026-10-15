@@ -3690,11 +3690,14 @@ class SecondaryStructureConfig(_BaseVizConfig):
         le=24,
         description="Pixels per residue; 0 fits the whole protein to the tile width",
     )
-    ribbon_height: int = Field(
-        default=30,
+    ribbon_height: int | None = Field(
+        default=None,
         ge=16,
         le=64,
-        description="Height in pixels of the main ribbon lane, which may grow to fill spare room",
+        description=(
+            "Height in pixels of the main ribbon lane, drawn exactly. Null keeps "
+            "the default 30 px lane, which grows to fill spare room up to 52 px"
+        ),
     )
     min_segment_length: int = Field(
         default=1,
@@ -3702,12 +3705,31 @@ class SecondaryStructureConfig(_BaseVizConfig):
         le=50,
         description="Leave out of the segment list the segments shorter than this many residues",
     )
+    state_colors: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "CSS colour per secondary-structure class (Helix, Strand, Turn, Coil; "
+            "state codes such as H or E read as their class). Over the colours the "
+            "dashboard pins for the state column; a class left out keeps the "
+            "pinned or default colour. The viewer can recolour on the tile"
+        ),
+    )
     selection_enabled: bool = Field(
         default=True, description="Brushing the ribbon emits a residue_selection"
     )
     follow_selection: bool = Field(
         default=True, description="Mark the residues of an incoming residue_selection or hover"
     )
+
+    @field_validator("state_colors")
+    @classmethod
+    def _state_colors_non_empty(cls, v: dict[str, str]) -> dict[str, str]:
+        for key, colour in v.items():
+            if not key.strip():
+                raise ValueError("state_colors keys must be non-empty class names")
+            if not colour.strip():
+                raise ValueError(f"state_colors[{key!r}] must be a non-empty colour string")
+        return v
 
     @model_validator(mode="after")
     def _check_reference(self) -> "SecondaryStructureConfig":
@@ -3820,6 +3842,17 @@ class DomainArchitectureConfig(_BaseVizConfig):
         description=(
             "`shared` draws every backbone on the longest protein's scale, "
             "`per_protein` stretches each backbone to the full width"
+        ),
+    )
+    residue_width: int = Field(
+        default=0,
+        ge=0,
+        le=24,
+        description=(
+            "Pixels per residue of the longest protein; 0 fits the tracks to the tile "
+            "width, a larger value makes the tile scroll sideways under a fixed label "
+            "column. With `scale: per_protein` every backbone is that long in total "
+            "(the width of the longest protein at this many pixels per residue)"
         ),
     )
     color_by: Literal["label", "source"] = Field(

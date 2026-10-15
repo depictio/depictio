@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { chainsOfEntity, chainsShown, onChain, residuesByChain } from './chainStrips';
+import { chainsOfEntity, chainsShown, createScrollSync, onChain, residuesByChain } from './chainStrips';
 
 const frame = {
   entity: ['P1', 'P1', 'P1', 'P1', 'P1', 'P2'],
@@ -67,5 +67,64 @@ describe('onChain', () => {
     expect(onChain(true, 'B', 'B')).toBe(true);
     expect(onChain(true, 'B', 'A')).toBe(false);
     expect(onChain(true, null, 'A')).toBe(true);
+  });
+});
+
+/** A scroll container that clamps like a browser and raises its scroll event
+ *  to the sync, as the panel's `onScroll` does. */
+function fakeStrip(max: number) {
+  const strip = {
+    max,
+    raw: 0,
+    get scrollLeft() {
+      return strip.raw;
+    },
+    set scrollLeft(x: number) {
+      strip.raw = Math.max(0, Math.min(strip.max, x));
+    },
+  };
+  return strip;
+}
+
+describe('createScrollSync', () => {
+  it('moves the peers to the scroll of the strip the reader scrolled', () => {
+    const sync = createScrollSync();
+    const a = fakeStrip(500);
+    const b = fakeStrip(500);
+    sync.register(a);
+    sync.register(b);
+    a.scrollLeft = 120;
+    sync.follow(a);
+    expect(b.scrollLeft).toBe(120);
+  });
+
+  it('clamps a shorter chain and does not bounce its limit back', () => {
+    const sync = createScrollSync();
+    const long = fakeStrip(500);
+    const short = fakeStrip(100);
+    sync.register(long);
+    sync.register(short);
+    long.scrollLeft = 300;
+    sync.follow(long);
+    expect(short.scrollLeft).toBe(100);
+    // The browser raises short's own scroll event for that write: it is an echo.
+    sync.follow(short);
+    expect(long.scrollLeft).toBe(300);
+    // A later scroll by the reader on the short strip is followed again.
+    short.scrollLeft = 40;
+    sync.follow(short);
+    expect(long.scrollLeft).toBe(40);
+  });
+
+  it('leaves a strip that has left the stack alone', () => {
+    const sync = createScrollSync();
+    const a = fakeStrip(500);
+    const b = fakeStrip(500);
+    sync.register(a);
+    const leave = sync.register(b);
+    leave();
+    a.scrollLeft = 80;
+    sync.follow(a);
+    expect(b.scrollLeft).toBe(0);
   });
 });

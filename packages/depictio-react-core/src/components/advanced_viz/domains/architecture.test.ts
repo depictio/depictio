@@ -20,6 +20,7 @@ import {
   lengthGutter,
   lengthLabel,
   normaliseCoverage,
+  normaliseResidueWidth,
   packLanes,
   parseDomainHits,
   partialEdges,
@@ -30,14 +31,17 @@ import {
   representative,
   residueAt,
   residueX,
+  RESIDUE_WIDTH_MAX_PX,
   rowAt,
   rowHeight,
   rowOffsets,
   rowWindow,
   sortProteins,
   trackBox,
+  trackLayout,
   UNLABELLED,
   valueCounts,
+  visibleResidues,
   type DomainColumns,
   type DomainHit,
   type ProteinArch,
@@ -651,5 +655,76 @@ describe('labelColumnPx', () => {
     expect(labelColumnPx(400, 100)).toBe(72);
     expect(labelColumnPx(400, 0)).toBe(72);
     expect(labelColumnPx(Infinity, 625)).toBe(138);
+  });
+});
+
+describe('residue width', () => {
+  const VIEW_W = 620;
+  const LABEL_COL = 96;
+  const opts = { rightPadPx: 8, gutterPx: 40, sharedLength: 256 };
+
+  it('holds a whole number of px in 0..max, 0 for anything unusable', () => {
+    expect(normaliseResidueWidth(7.6)).toBe(8);
+    expect(normaliseResidueWidth(0)).toBe(0);
+    expect(normaliseResidueWidth(-3)).toBe(0);
+    expect(normaliseResidueWidth(1000)).toBe(RESIDUE_WIDTH_MAX_PX);
+    expect(normaliseResidueWidth(null)).toBe(0);
+    expect(normaliseResidueWidth(undefined)).toBe(0);
+    expect(normaliseResidueWidth('abc')).toBe(0);
+    expect(normaliseResidueWidth('12')).toBe(12);
+  });
+
+  it('keeps the fitted layout at width 0, and does not scroll', () => {
+    const fitted = trackBox(VIEW_W, LABEL_COL, { rightPadPx: 8, gutterPx: 40 });
+    expect(trackLayout(VIEW_W, LABEL_COL, { ...opts, residueWidth: 0 })).toEqual({
+      ...fitted,
+      contentW: VIEW_W,
+      scrolls: false,
+    });
+    expect(trackLayout(VIEW_W, LABEL_COL, opts).scrolls).toBe(false);
+  });
+
+  it('makes the track N px per residue of the longest protein, with the gutter whole', () => {
+    const box = trackLayout(VIEW_W, LABEL_COL, { ...opts, residueWidth: 8 });
+    expect(box.x).toBe(LABEL_COL + 6);
+    expect(box.w).toBe(8 * 256);
+    expect(box.contentW).toBe(box.x + box.w + 40 + 8);
+    expect(box.scrolls).toBe(true);
+    expect(pxPerResidue(box.w, 'shared', 100, 256)).toBe(8);
+  });
+
+  it('stays in the tile when the explicit width is narrower than it', () => {
+    const box = trackLayout(VIEW_W, LABEL_COL, { ...opts, residueWidth: 1, sharedLength: 100 });
+    expect(box.w).toBe(100);
+    expect(box.contentW).toBe(VIEW_W);
+    expect(box.scrolls).toBe(false);
+  });
+
+  it('draws every backbone as wide as the longest on the per-protein scale', () => {
+    const box = trackLayout(VIEW_W, LABEL_COL, { ...opts, residueWidth: 4 });
+    for (const length of [65, 120, 256]) {
+      const ppr = pxPerResidue(box.w, 'per_protein', length, 256);
+      expect(residueX(box.x, ppr, length)).toBeCloseTo(box.x + 4 * 256, 9);
+    }
+  });
+
+  it('maps a click back to the residue under it, scrolled or not', () => {
+    const box = trackLayout(VIEW_W, LABEL_COL, { ...opts, residueWidth: 10 });
+    const scrollLeft = 530;
+    const origin = box.x - scrollLeft;
+    for (const pos of [0, 37.5, 120, 256]) {
+      const x = residueX(origin, 10, pos);
+      expect(residueAt(origin, 10, x)).toBeCloseTo(pos, 9);
+    }
+  });
+
+  it('finds the residues between two screen columns, clamped to the protein', () => {
+    // Residue 0 sits 200 px left of the label column's edge (x = 100).
+    const [a, b] = visibleResidues(-100, 10, 100, 500, 256);
+    expect(a).toBeCloseTo(20, 9);
+    expect(b).toBeCloseTo(60, 9);
+    expect(visibleResidues(300, 10, 100, 500, 256)).toEqual([0, 20]);
+    expect(visibleResidues(-5000, 10, 100, 500, 256)).toEqual([256, 256]);
+    expect(visibleResidues(0, 0, 0, 100, 256)).toEqual([0, 0]);
   });
 });

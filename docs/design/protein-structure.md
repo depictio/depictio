@@ -223,7 +223,9 @@ to read), a value lane, a category lane, domain spans and variant lollipops. The
 the AlphaFold confidence bands (above 90, 70 to 90, 50 to 70, below 50) when `value_label`
 contains "pLDDT", else a colour scale. The category lane draws helix and strand glyphs when every
 value reads as a DSSP or S4PRED class (`H`, `G`, `I`, `E`, `B`, `T`, `S`, `C`, or the words), else
-categorical blocks. The domain and variant companions are fetched with the tile's filters plus a
+categorical blocks. The `Residue width` slider (0 fits the tile, up to 24 px per residue; a view
+setting, not a config field) also answers to Ctrl or Cmd + wheel, and the strips of a complex share
+that width and one horizontal scroll. The domain and variant companions are fetched with the tile's filters plus a
 scope filter on the entity column, so they must carry the same entity column name.
 
 `msa` shows one alignment at a time, the one whose `msa_id` another tile or a sidebar selector
@@ -296,8 +298,8 @@ without the column it lacks. Every config also inherits `controls_placement` fro
 | kind | renderer | config fields (defaults) |
 | --- | --- | --- |
 | `hmm_logo` | canvas `LogoPanel` | `profile_source` (`hmm` \| `msa`), `entity_col` (`entity`), `position_col` (`position`), `model_col` (`hmm_name`), `state_col` (`hmm_position`), `letter_col` (`hmm_letter`), `emission_col` (`emission`), `insert_prob_col` (`insert_prob`), `insert_length_col` (`insert_length`), `occupancy_col` (`occupancy`), `consensus_col` (`consensus`), `rf_col` (`rf`), `cs_col` (`cs`), `msa_id_col` (`msa_id`), `seq_id_col` (`seq_id`), `sequence_col` (`aligned_sequence`), `rank_col` (`rank`), `height_mode` (`relent_abovebg` \| `relent_all` \| `probability`), `color_scheme` (`clustal`, the `msa` kind's schemes), `show_indel_rows` (true), `show_consensus` (true), `window_start` / `window_end` (null, 1-based states), `collapse_below_ic` (null, bits), `collapse_min_run` (4), `hits_dc_id` / `hits_wf_id` / `hits_dc_tag`, `hits_model_col` (`label`), `hits_entity_col` (`entity`), `hits_from_col` (`hmm_from`), `hits_to_col` (`hmm_to`), `hits_length_col` (`hmm_length`), `hits_evalue_col` (`i_evalue`), `hits_score_col` (`dom_score`), `hits_ali_from_col` (`ali_from`), `hits_ali_to_col` (`ali_to`), `hits_evalue_max` (0.01), `max_hits` (200, 1 to 2000), `selection_enabled` (true), `follow_selection` (true) |
-| `domain_architecture` | canvas `DomainArchitecturePanel` | `entity_col` (`entity`), `start_col` (`start`), `end_col` (`end`), `label_col` (`label`), `protein_length_col` (`protein_length`), `hmm_from_col` (`hmm_from`), `hmm_to_col` (`hmm_to`), `hmm_length_col` (`hmm_length`), `hmm_coverage_col` (`hmm_coverage`), `evalue_col` (`i_evalue`), `source_col` (`source`), `description_col` (`description`), `accession_col` (`accession`), `view` (`proteins` \| `architectures`), `max_architectures` (15, 1 to 100), `max_proteins` (2000, 1 to 20000), `evalue_threshold`, `sources`, `scale` (`shared` \| `per_protein`), `color_by` (`label` \| `source`), `partial_coverage` (0.9), `position_col_for_selection` (`position`), `label_selection` (true), `selection_column` (null uses `label_col`), `selection_enabled` (true), `follow_selection` (true) |
-| `secondary_structure` | canvas `SecondaryStructurePanel` and a Mantine segment list | `entity_col` (`entity`), `position_col` (`position`), `residue_col` (`residue`), `state_col` (`ss_code`), `source_col`, `reference_source`, `p_helix_col` (`p_helix`), `p_strand_col` (`p_strand`), `p_coil_col` (`p_coil`), `confidence_col`, `show_probabilities` (true), `show_agreement` (true), `show_segments` (true), `show_composition` (true), `show_letters` (true), `shade_confidence` (true), `show_coil_segments` (false), `residue_width` (0 fits the tile, 0 to 24), `ribbon_height` (30, 16 to 64), `min_segment_length` (1, 1 to 50), `selection_enabled` (true), `follow_selection` (true) |
+| `domain_architecture` | canvas `DomainArchitecturePanel` | `entity_col` (`entity`), `start_col` (`start`), `end_col` (`end`), `label_col` (`label`), `protein_length_col` (`protein_length`), `hmm_from_col` (`hmm_from`), `hmm_to_col` (`hmm_to`), `hmm_length_col` (`hmm_length`), `hmm_coverage_col` (`hmm_coverage`), `evalue_col` (`i_evalue`), `source_col` (`source`), `description_col` (`description`), `accession_col` (`accession`), `view` (`proteins` \| `architectures`), `max_architectures` (15, 1 to 100), `max_proteins` (2000, 1 to 20000), `evalue_threshold`, `sources`, `scale` (`shared` \| `per_protein`), `residue_width` (0, 0 to 24), `color_by` (`label` \| `source`), `partial_coverage` (0.9), `position_col_for_selection` (`position`), `label_selection` (true), `selection_column` (null uses `label_col`), `selection_enabled` (true), `follow_selection` (true) |
+| `secondary_structure` | canvas `SecondaryStructurePanel` and a Mantine segment list | `entity_col` (`entity`), `position_col` (`position`), `residue_col` (`residue`), `state_col` (`ss_code`), `source_col`, `reference_source`, `p_helix_col` (`p_helix`), `p_strand_col` (`p_strand`), `p_coil_col` (`p_coil`), `confidence_col`, `show_probabilities` (true), `show_agreement` (true), `show_segments` (true), `show_composition` (true), `show_letters` (true), `shade_confidence` (true), `show_coil_segments` (false), `residue_width` (0 fits the tile, 0 to 24), `ribbon_height` (null: a 30 px lane that grows into spare room up to 52 px; 16 to 64 is drawn exactly), `min_segment_length` (1, 1 to 50), `state_colors` (`{}`, class to CSS colour), `selection_enabled` (true), `follow_selection` (true) |
 | `pae_matrix` | canvas `PaePanel` | `entity_col` (`entity`), `position_col` (`position`), `value_col`, `chain_col`, `pae_dc_id` / `pae_wf_id` / `pae_dc_tag`, `max_pae`, `colour_scale`, `brush` (`diagonal` \| `rectangle`), `show_plddt` (true), `selection_enabled` (true), `follow_selection` (true) |
 | `ramachandran` | Plotly SVG `scatter` | `structure_source` (`file` \| `resolve`), `structure_dc_id` / `structure_wf_id` / `structure_dc_tag`, `uniprot_col`, `gene_col`, `sequence_col`, `taxon` (9606), `entity_col` (`entity`), `position_col` (`position`), `chain_col`, `value_col`, `category_col`, `color_mode` (`plddt` \| `residue_class` \| `secondary_structure` \| `value` \| `category` \| `chain`), `show_regions` (true), `residue_classes` (null: all four), `marker_size` (6, 2 to 20), `selection_enabled` (true), `follow_selection` (true) |
 
@@ -493,6 +495,12 @@ columns are read:
   order, stable). `max_proteins` caps the rows: the first in that order plus any protein picked
   elsewhere, and a badge says "N of M proteins". `scale: shared` puts every backbone on the longest
   protein's scale with a residue ruler, `per_protein` stretches each to the full width.
+- *Residue width.* `residue_width` is the pixels per residue of the longest protein; 0 fits the
+  tracks to the tile. Above 0 the track is `residue_width` times the longest length wide and the
+  tile scrolls sideways under a fixed label column, the ruler following; Ctrl or Cmd + wheel (a
+  trackpad pinch too) zooms it about the residue under the pointer, a plain wheel keeps scrolling.
+  On the `per_protein` scale every backbone is that same total width, so the width still means
+  pixels per residue of the longest protein and the shorter ones are stretched to match.
 - *Architectures view* (`view: architectures`). The architecture of a protein is its hit labels
   in start order joined by `~` (`SH3_1~SH2~Pkinase`), after the E-value and source filters. Groups
   are ordered by count, ties by the string, and each is drawn with its median-length member (lower
@@ -598,8 +606,10 @@ list (the ribbon still draws it). Colours come from the shared glyph fills (`SS_
 RasMol structure colours the sequence track uses) and the panel theme, unless the dashboard pins
 the states: `category_colors` entries for `Helix`, `Strand`, `Turn` or `Coil` (or their codes) on
 the state column or on `category` colour the glyphs, the probability lanes, the legend and the
-segment list, class by class, so a state left unpinned keeps its default. Agree and differ take
-the theme's teal and red.
+segment list, class by class, so a state left unpinned keeps its default. The config's
+`state_colors` (class to CSS colour) ranks over those pins, and the tile's Colours controls (one
+Mantine colour input per drawn class, with a reset) write the same map. Agree and differ take the
+theme's teal and red.
 
 **Interactions.** A brush or a click on the canvas picks a residue range (a click on the picked
 residue clears it); a click on a segment picks its range and a second click clears it. All three
@@ -609,10 +619,13 @@ and the hover and the range of other tiles come back as a marked residue and a s
 scrolled into view with `follow_selection`. The tile keeps all its rows: it drops its own pick
 (`filtersExcludingOwnResidue`) and every position selection (`withoutPositionSelections`) before
 fetching, and shades the range instead. Controls: entity, reference source, residue width,
-ribbon height, letters, confidence shading, coil segments, minimum segment length. The last
-six are persisted (`show_letters`, `shade_confidence`, `show_coil_segments`, `residue_width`,
-`ribbon_height`, `min_segment_length`): a dashboard author's change is saved with the component,
-and each key's default is what the tile did before it existed.
+ribbon height, letters, confidence shading, coil segments, minimum segment length, colours.
+Ctrl or Cmd with the wheel zooms the residue width about the residue under the cursor; a plain
+wheel keeps scrolling. A ribbon height that has been chosen is drawn exactly; until then the lane
+is 30 px and grows into spare room up to 52 px. The last seven are persisted (`show_letters`,
+`shade_confidence`, `show_coil_segments`, `residue_width`, `ribbon_height`, `min_segment_length`,
+`state_colors`): a dashboard author's change is saved with the component, and each key's default
+is what the tile did before it existed.
 
 **Design choices.** The model is pure: per-source state arrays aligned on one ascending position
 list, so that agreement, composition and segments are loops over arrays and the canvas reads

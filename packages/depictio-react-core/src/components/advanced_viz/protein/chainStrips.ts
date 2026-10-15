@@ -6,7 +6,7 @@
  */
 
 import { numberOrNull, rowIndicesWhere, stringOrNull } from './rendererData';
-import type { StripResidue } from './types';
+import type { ScrollSync, ScrollSyncTarget, StripResidue } from './types';
 
 /** Columns a residue frame is read from; unset roles are left out. */
 export interface ChainFrameColumns {
@@ -16,6 +16,41 @@ export interface ChainFrameColumns {
   residueCol?: string | null;
   valueCol?: string | null;
   categoryCol?: string | null;
+}
+
+/** Widest residue width the sequence track offers, CSS px per residue. */
+export const SEQUENCE_RESIDUE_WIDTH_MAX_PX = 24;
+
+/**
+ * Chains differ in length, so a peer may clamp to a smaller `scrollLeft` than
+ * the one it was given. The scroll event that write raises would bounce the
+ * clamped value back to its source, so the value each peer was left at is
+ * remembered and its own event is not followed.
+ */
+export function createScrollSync(): ScrollSync {
+  const peers = new Set<ScrollSyncTarget>();
+  const written = new Map<ScrollSyncTarget, number>();
+  return {
+    register(el) {
+      peers.add(el);
+      return () => {
+        peers.delete(el);
+        written.delete(el);
+      };
+    },
+    follow(el) {
+      const echo = written.get(el) === el.scrollLeft;
+      written.delete(el);
+      if (echo) return;
+      const x = el.scrollLeft;
+      for (const peer of peers) {
+        if (peer === el || peer.scrollLeft === x) continue;
+        const before = peer.scrollLeft;
+        peer.scrollLeft = x;
+        if (peer.scrollLeft !== before) written.set(peer, peer.scrollLeft);
+      }
+    },
+  };
 }
 
 export interface ChainStrip {

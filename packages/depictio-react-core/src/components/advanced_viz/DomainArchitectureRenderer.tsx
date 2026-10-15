@@ -48,10 +48,12 @@ import {
   groupKey,
   hasSources,
   isPartial,
+  normaliseResidueWidth,
   parseDomainHits,
   partialEdges,
   proteinLengths,
   proteinRows,
+  RESIDUE_WIDTH_MAX_PX,
   sortProteins,
   buildProteins,
   valueCounts,
@@ -72,6 +74,7 @@ import {
   stringOrNull,
   withoutPositionSelections,
 } from './protein/rendererData';
+import ZoomHintLabel from './protein/ZoomHint';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
 /**
@@ -98,6 +101,7 @@ interface DomainArchitectureConfig {
   evalue_threshold?: number | null;
   sources?: string[] | null;
   scale?: 'shared' | 'per_protein';
+  residue_width?: number;
   color_by?: 'label' | 'source';
   partial_coverage?: number;
   position_col_for_selection?: string;
@@ -188,6 +192,12 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
   const [view, setView] = usePersistedVizControl<View>(metadata, 'view', 'proteins');
   const [colourBy, setColourBy] = usePersistedVizControl<ColourBy>(metadata, 'color_by', 'label');
   const [scale, setScale] = usePersistedVizControl<Scale>(metadata, 'scale', 'shared');
+  const [residueWidthRaw, setResidueWidth] = usePersistedVizControl<number>(
+    metadata,
+    'residue_width',
+    0,
+  );
+  const residueWidth = normaliseResidueWidth(residueWidthRaw);
   const [evalueThreshold, setEvalueThreshold] = usePersistedVizControl<number | null>(
     metadata,
     'evalue_threshold',
@@ -680,6 +690,21 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
               { value: 'per_protein', label: 'Per protein' },
             ]}
           />
+          <VizSlider
+            label={<ZoomHintLabel>Residue width</ZoomHintLabel>}
+            aria-label="Residue width"
+            title={
+              scale === 'shared'
+                ? 'Pixels per residue; Fit sizes the longest protein to the tile. Ctrl/Cmd + wheel to zoom'
+                : 'Pixels per residue of the longest protein, every backbone stretched to the same width; Fit sizes them to the tile. Ctrl/Cmd + wheel to zoom'
+            }
+            value={residueWidth}
+            onChange={setResidueWidth}
+            min={0}
+            max={RESIDUE_WIDTH_MAX_PX}
+            step={1}
+            thumbLabel={(v) => (v === 0 ? 'Fit' : `${v} px`)}
+          />
           {view === 'architectures' ? (
             <VizSlider
               label="Architectures"
@@ -711,6 +736,8 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
       setSources,
       scale,
       setScale,
+      residueWidth,
+      setResidueWidth,
       view,
       maxArchitectures,
       setMaxArchitectures,
@@ -874,6 +901,8 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
               <DomainArchitecturePanel
                 rows={rows}
                 scale={scale}
+                residueWidth={residueWidth}
+                onResidueWidthChange={setResidueWidth}
                 partialCoverage={partialCoverage}
                 colourOf={colourOf}
                 evalueColumn={evalueCol}

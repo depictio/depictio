@@ -273,6 +273,8 @@ def test_a_pae_matrix_needs_its_pae_collection():
         ("domain_architecture", {"partial_coverage": -0.1}),
         ("domain_architecture", {"view": "tree"}),
         ("domain_architecture", {"scale": "log"}),
+        ("domain_architecture", {"residue_width": -1}),
+        ("domain_architecture", {"residue_width": 25}),
         ("domain_architecture", {"color_by": "evalue"}),
         ("pae_matrix", {"max_pae": 0}),
         ("pae_matrix", {"brush": "lasso"}),
@@ -295,6 +297,8 @@ def test_bounds_and_choices_are_enforced(kind: str, fields: dict[str, Any]):
         ("hmm_logo", {"hits_evalue_max": None, "max_hits": 2000}),
         ("hmm_logo", {"profile_source": "msa", "height_mode": "probability"}),
         ("domain_architecture", {"max_architectures": 100, "evalue_threshold": 1e-5}),
+        ("domain_architecture", {"residue_width": 24, "scale": "per_protein"}),
+        ("domain_architecture", {"residue_width": 0}),
         ("domain_architecture", {"sources": ["Pfam", "SMART"], "view": "architectures"}),
         ("pae_matrix", {"max_pae": 31.75, "colour_scale": "Viridis", "brush": "rectangle"}),
         ("ramachandran", {"residue_classes": ["glycine", "pre_proline"], "marker_size": 20}),
@@ -388,6 +392,29 @@ def test_secondary_structure_defaults():
     assert (c.p_helix_col, c.p_strand_col, c.p_coil_col) == ("p_helix", "p_strand", "p_coil")
     assert (c.show_probabilities, c.show_agreement) == (True, True)
     assert (c.show_segments, c.show_composition) == (True, True)
+    assert c.ribbon_height is None
+    assert c.state_colors == {}
+
+
+def test_secondary_structure_state_colors():
+    c = _cfg("secondary_structure", state_colors={"Helix": "#112233", "E": "teal"})
+    assert c.state_colors == {"Helix": "#112233", "E": "teal"}
+    # Instances do not share the default map.
+    assert _cfg("secondary_structure").state_colors is not _cfg("secondary_structure").state_colors
+
+
+@pytest.mark.parametrize("bad", [{"Helix": ""}, {"Helix": "   "}, {"": "#112233"}, {" ": "red"}])
+def test_secondary_structure_state_colors_reject_empty_entries(bad: dict[str, str]):
+    with pytest.raises(ValidationError):
+        _cfg("secondary_structure", state_colors=bad)
+
+
+@pytest.mark.parametrize("height", [15, 65])
+def test_secondary_structure_ribbon_height_bounds(height: int):
+    assert _cfg("secondary_structure", ribbon_height=16).ribbon_height == 16
+    assert _cfg("secondary_structure", ribbon_height=64).ribbon_height == 64
+    with pytest.raises(ValidationError):
+        _cfg("secondary_structure", ribbon_height=height)
 
 
 def test_domain_architecture_defaults():
@@ -411,6 +438,7 @@ def test_domain_architecture_defaults():
     )
     assert (c.description_col, c.accession_col) == ("description", "accession")
     assert (c.view, c.scale, c.color_by) == ("proteins", "shared", "label")
+    assert c.residue_width == 0
     assert (c.max_architectures, c.max_proteins) == (15, 2000)
     assert (c.evalue_threshold, c.sources, c.partial_coverage) == (None, None, 0.9)
     assert (c.position_col_for_selection, c.label_selection) == ("position", True)

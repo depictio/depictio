@@ -36,7 +36,7 @@ import {
   useStructureText,
   useThreeDmolStatus,
 } from './molecule/hooks';
-import { modelCredit } from './molecule/resolve';
+import { modelCredit, modelExplanation } from './molecule/resolve';
 import {
   buildColouring,
   checkVariants,
@@ -1101,6 +1101,11 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   }
 
   const credit = fileMode ? null : modelCredit(resolved.data?.origin);
+  const creditInfo = modelExplanation(fileMode ? 'file' : resolved.data?.origin, {
+    colorMode: colourMode,
+    accession: resolved.data?.accession,
+    categoryLabel: config.category_col,
+  });
   const echo = [
     entity,
     !fileMode && resolved.data?.accession && resolved.data.accession !== entity
@@ -1264,7 +1269,7 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       {drawn ? (
         <>
           <MoleculeLegend legend={colouring.legend} compact={compact} />
-          <MoleculeCredit text={credit} />
+          <MoleculeCredit text={credit} info={creditInfo} />
           <MoleculeViewButtons
             onReset={() => viewerRef.current?.resetView()}
             onSnapshot={snapshot}

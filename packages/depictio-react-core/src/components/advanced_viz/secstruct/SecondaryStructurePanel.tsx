@@ -11,6 +11,7 @@ import {
   visibleWindow,
 } from '../protein/canvas';
 import { useDrawScheduler, useViewSize } from '../protein/canvasHooks';
+import { useModifierWheelZoom } from '../protein/useWheelZoom';
 import { panelColours, type PanelColours } from '../protein/panelTheme';
 import { rgbCss, type SecondaryStructure } from '../protein/residueColours';
 import type { Run } from '../protein/sequence';
@@ -30,13 +31,12 @@ import {
   type SsAgreement,
   type SsModel,
 } from './ssModel';
+import { baseRibbonHeight, DEFAULT_RIBBON_PX, mainRibbonLaneHeight } from './ribbonHeight';
 
 const LABEL_PX = 88;
 const RULER_PX = 18;
 const LETTERS_PX = 14;
-/** The main ribbon's height unless `ribbonHeight` says otherwise. */
-export const DEFAULT_RIBBON_PX = 30;
-const MAIN_RIBBON_MAX_PX = 52;
+export { DEFAULT_RIBBON_PX };
 const EXTRA_RIBBON_PX = 16;
 const AGREEMENT_PX = 12;
 const PROB_PX = 44;
@@ -51,13 +51,13 @@ const COIL_AREA_ALPHA = 0.55;
 /** Height the panel needs for its lanes, with no spare room to spread. */
 export function naturalPanelHeight(opts: {
   /** Height of the main ribbon; defaults to `DEFAULT_RIBBON_PX`. */
-  ribbonHeight?: number;
+  ribbonHeight?: number | null;
   letters: boolean;
   extraSources: number;
   agreement: boolean;
   probabilities: boolean;
 }): number {
-  let h = RULER_PX + LANE_GAP + (opts.ribbonHeight ?? DEFAULT_RIBBON_PX) + LANE_GAP;
+  let h = RULER_PX + LANE_GAP + baseRibbonHeight(opts.ribbonHeight) + LANE_GAP;
   if (opts.letters) h += LETTERS_PX + LANE_GAP;
   h += Math.max(0, opts.extraSources) * (EXTRA_RIBBON_PX + LANE_GAP);
   if (opts.agreement) h += AGREEMENT_PX + LANE_GAP;
@@ -92,10 +92,11 @@ export interface SecondaryStructurePanelProps {
   showLetters?: boolean;
   /** Shade each residue's glyph by its confidence. */
   shadeConfidence?: boolean;
-  /** Height of the main ribbon lane; it still grows into spare room up to
-   *  `MAIN_RIBBON_MAX_PX`, unless this is already taller. */
-  ribbonHeight?: number;
-  /** Colours of the classes the dashboard pins; the others keep the defaults. */
+  /** Height of the main ribbon lane, drawn exactly. Null or omitted: the
+   *  default height, growing into spare room up to `MAIN_RIBBON_MAX_PX`. */
+  ribbonHeight?: number | null;
+  /** Colours of the classes the tile, its config or the dashboard sets; the
+   *  others keep the defaults. */
   stateColours?: SsStateColours;
   selectedRange?: ResidueRange | null;
   highlight?: ProteinHighlight | null;
@@ -108,6 +109,8 @@ export interface SecondaryStructurePanelProps {
   height?: number | string;
   /** Pixels per residue; defaults to fitting the width. */
   cellWidth?: number;
+  /** Ctrl / Cmd + wheel asks for this many px per residue (whole pixels; 0 fits). */
+  onCellWidthChange?: (px: number) => void;
   /** Scroll an incoming `selectedRange` / `highlight` into view. Default true. */
   followSelection?: boolean;
   /** Called once the first frame with data has been drawn. */
@@ -129,7 +132,7 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
   showAgreement = true,
   showLetters = true,
   shadeConfidence = true,
-  ribbonHeight = DEFAULT_RIBBON_PX,
+  ribbonHeight,
   stateColours,
   selectedRange,
   highlight,
@@ -137,6 +140,7 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
   onBrush,
   height,
   cellWidth,
+  onCellWidthChange,
   followSelection = true,
   onDrawn,
 }) => {
@@ -169,6 +173,15 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
   const gridW = Math.max(0, view.w - LABEL_PX);
   const cw = cellWidth && cellWidth > 0 ? cellWidth : fitCellWidth(gridW, count, 0.05, 24);
   const contentW = LABEL_PX + count * cw;
+  // The floor is the smallest fitted width, so zooming out from "fit" rounds
+  // to 0 (fit) instead of jumping to a wider column.
+  useModifierWheelZoom(scrollRef, {
+    value: cw,
+    setValue: onCellWidthChange,
+    min: 0.05,
+    max: 24,
+    gutter: LABEL_PX,
+  });
 
   // ---- data ------------------------------------------------------------------
   const hasLetters = showLetters && model.letters.some((l) => l != null);
@@ -217,7 +230,7 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
       spec.push({
         key: 'ribbon',
         title: s.name,
-        h: k === 0 ? ribbonHeight : EXTRA_RIBBON_PX,
+        h: k === 0 ? baseRibbonHeight(ribbonHeight) : EXTRA_RIBBON_PX,
         source: k,
       }),
     );
@@ -238,7 +251,8 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
     const growMain = probSource >= 0 ? 0.35 : 1;
     const grow = (key: LaneKey, source: number): number => {
       if (key === 'ribbon' && source === 0) {
-        return Math.max(0, Math.min(MAIN_RIBBON_MAX_PX - ribbonHeight, spare * growMain));
+        // A chosen height is drawn exactly; only the default grows.
+        return mainRibbonLaneHeight(ribbonHeight, spare, growMain) - baseRibbonHeight(ribbonHeight);
       }
       if (key === 'probabilities') return Math.min(PROB_MAX_PX - PROB_PX, spare * 0.65);
       return 0;
