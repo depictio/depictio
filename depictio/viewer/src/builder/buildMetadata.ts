@@ -271,6 +271,8 @@ export function buildInteractive(
     strip_icon?: boolean;
     show_histogram?: boolean;
     always_selected?: boolean;
+    default_by?: string;
+    default_order?: 'asc' | 'desc';
   }>(state.config);
   // Mirror Dash design_interactive: the form surfaces only the basics, no
   // default value/range, marks, or scale. Those are derived at render time.
@@ -324,6 +326,16 @@ export function buildInteractive(
     // must not carry it into a save the backend then refuses.
     always_selected:
       c.interactive_component_type === 'Select' && c.always_selected === true ? true : undefined,
+    // Set in YAML only (no builder control): kept through an edit while the
+    // flag it ranks for is on.
+    default_by:
+      c.interactive_component_type === 'Select' && c.always_selected === true
+        ? c.default_by
+        : undefined,
+    default_order:
+      c.interactive_component_type === 'Select' && c.always_selected === true
+        ? c.default_order
+        : undefined,
   };
 }
 

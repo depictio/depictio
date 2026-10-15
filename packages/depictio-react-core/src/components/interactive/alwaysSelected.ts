@@ -26,6 +26,30 @@ export interface PickableOption {
   disabled?: boolean;
 }
 
+/**
+ * The options in the order an automatic pick walks them: the ranked values
+ * first, best first (those the option list holds), then the rest as listed. An
+ * `always_selected` Select with `default_by` keeps its alphabetical list for
+ * the reader and starts on the best-ranked option that is still enabled.
+ * `ranking` null leaves the list as it is.
+ */
+export function rankPickOptions<T extends PickableOption>(
+  options: readonly T[],
+  ranking: readonly string[] | null,
+): T[] {
+  if (!ranking || ranking.length === 0) return [...options];
+  const byValue = new Map(options.map((o) => [o.value, o]));
+  const ranked: T[] = [];
+  for (const v of ranking) {
+    const o = byValue.get(v);
+    if (o) {
+      ranked.push(o);
+      byValue.delete(v);
+    }
+  }
+  return [...ranked, ...options.filter((o) => byValue.has(o.value))];
+}
+
 /** True when the component opts into `always_selected` (Select only). */
 export function isAlwaysSelected(
   m: Pick<StoredMetadata, 'interactive_component_type' | 'always_selected'> | null | undefined,
@@ -43,7 +67,8 @@ export function ownFilterValues(filters: readonly InteractiveFilter[], index: st
  * The value an `always_selected` Select should emit on its own, or `null` when
  * it should do nothing: the flag is off, the options are still loading, the
  * filter holds a value that is still on offer, or there is nothing to pick.
- * The first enabled option wins; a greyed-out one (absent from the joined
+ * The first enabled option wins (`rankPickOptions` puts a `default_by` ranking
+ * first); a greyed-out one (absent from the joined
  * data) is only taken when every option is greyed out.
  *
  * A held value that is greyed out or gone from the list is replaced by the

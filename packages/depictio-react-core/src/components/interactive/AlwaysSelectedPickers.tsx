@@ -14,9 +14,9 @@ import React, { useEffect, useMemo, useRef } from 'react';
 
 import type { InteractiveFilter, StoredMetadata } from '../../api';
 import { useAvailableSet } from '../../availableValues';
-import { autoPickValue, isAlwaysSelected, ownFilterValues } from './alwaysSelected';
+import { autoPickValue, isAlwaysSelected, ownFilterValues, rankPickOptions } from './alwaysSelected';
 import { filterEvent, orderCategoricalOptions } from './categoricalOptions';
-import { useUniqueValues } from './useInteractiveData';
+import { useRankedValues, useUniqueValues } from './useInteractiveData';
 
 const AlwaysSelectedPicker: React.FC<{
   metadata: StoredMetadata;
@@ -31,17 +31,27 @@ const AlwaysSelectedPicker: React.FC<{
     metadata.filter_expr,
   );
   const availableSet = useAvailableSet(metadata.dc_id, metadata.column_name, metadata.index);
+  // `default_by`: the pick walks the options best-ranked first.
+  const { data: ranking, loading: rankLoading } = useRankedValues(
+    metadata.dc_id,
+    metadata.column_name,
+    metadata.default_by,
+    metadata.default_order,
+  );
   const ordered = useMemo(
     () =>
-      orderCategoricalOptions(options, availableSet).map((value) => ({
-        value,
-        disabled: availableSet ? !availableSet.has(value) : false,
-      })),
-    [options, availableSet],
+      rankPickOptions(
+        orderCategoricalOptions(options, availableSet).map((value) => ({
+          value,
+          disabled: availableSet ? !availableSet.has(value) : false,
+        })),
+        ranking,
+      ),
+    [options, availableSet, ranking],
   );
   const pick = autoPickValue({
     enabled: true,
-    loading,
+    loading: loading || rankLoading,
     selected: ownFilterValues(filters, metadata.index),
     options: ordered,
   });

@@ -1385,14 +1385,15 @@ tabs:
     body: >
       [hmmbuild](http://hmmer.org) turns each family's seed alignment into a profile HMM, drawn here
       as a sequence logo: tall stacks are conserved states. The tab shows one family, the first of
-      the list until another is picked on the left; brushing states selects the representative
+      the largest one until another is picked on the left; brushing states selects the representative
       residues they sit on in the structure and the track.
     tag: pf-hmm-intro
     index: hmm-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
   # always_selected: the logo, the structure and the track show one family, so
-  # the picker always names one, the first of its list until another is picked
-  # (on any run, where a default_value would name one run's family). The tiles
+  # the picker always names one, the family with the most members until another
+  # is picked (default_by: size; on any run, where a default_value would name one
+  # run's family). The list stays alphabetical. The tiles
   # follow it on hmm_name, entity and label through the families links. No size
   # filter beside it: a range that left the picked family out would empty the
   # tab.
@@ -1401,6 +1402,7 @@ tabs:
     data_collection_tag: families
     interactive_component_type: Select
     always_selected: true
+    default_by: size
     column_name: family
     column_type: object
     display:

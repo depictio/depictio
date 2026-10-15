@@ -118,7 +118,7 @@ empty state. Residues picked in the structure, on the track or by brushing align
 selected in all three. Collapsed: the residue table. Filter: identity to the representative.
 
 **Profile HMM.** The tab shows one family: its `Family` filter is `always_selected`, so it opens
-on the first family of its list on any run, a pick replaces it and it cannot be cleared, and the
+on the family with the most members (`default_by: size`) on any run, a pick replaces it and it cannot be cleared, and the
 logo, the structure and the track always agree on the family. Strip, for that family: the
 conservation of its representative's residues (their spread), those residues split by
 conservation class, the members' identity to the representative and their length (both with
