@@ -1492,7 +1492,7 @@ tabs:
     tag: pa-st-av-structure
     index: pa-st-av-structure
     title: Predicted structure
-    description: The picked protein folded from its sequence over its written sequence, one colour per domain; residues outside any domain stay grey and the picked residue turns red.
+    description: An ESMFold prediction made from the picked protein's sequence alone, not an experimental structure, coloured by domain (grey outside any domain) with the picked residue in red.
     layout: {x: 0, y: 6, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: proteinannotator
