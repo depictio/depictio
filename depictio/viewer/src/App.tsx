@@ -151,6 +151,7 @@ import { usePageTitle } from './branding';
 import { DashboardGuide, useGuideRoute } from './guide';
 import { LandingHint, useLandingHint } from './landing';
 import { DashboardSpotlight } from './spotlight';
+import { useLayoutOverride } from './layoutOverride';
 import { findComponentElement, focusComponent } from './spotlight/focus';
 import type { SettingsSectionKey } from './chrome/SettingsDrawer';
 import VersionPreviewBanner from './versions/VersionPreviewBanner';
@@ -1459,6 +1460,9 @@ const App: React.FC = () => {
   // The tab's scope: its `always_selected` filters, shown in a banner under
   // the header and as a chip on the tiles that follow them.
   const scope = useMemo(() => scopeUnits(summaryMetadata, filterScopes), [summaryMetadata, filterScopes]);
+  // `?layout=classic|dock`: view a workbench section as a plain section or as
+  // a docked column, to compare the arrangements on the same tab.
+  const layoutOverride = useLayoutOverride();
   const scopeChip = useMemo(
     () => (scope.length > 0 ? { color: scopeChipColor(scope) } : null),
     [scope],
@@ -1756,6 +1760,7 @@ const App: React.FC = () => {
             <DashboardGrid
               dashboardId={dashboardId!}
               metadataList={rightComponents}
+              layoutOverride={layoutOverride}
               layoutData={dashboard.right_panel_layout_data}
               gridSections={dashboard.grid_sections}
               beforeSections={topSectionsHost}

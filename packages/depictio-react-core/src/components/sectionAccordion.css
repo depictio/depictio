@@ -153,3 +153,51 @@
 .depictio-section-item.is-plain .mantine-Accordion-label {
   padding-block: 0;
 }
+
+/* --------------------------------------------- workbench and dock sections */
+
+/* Linked tiles that share one screen (`display: workbench`) or a sticky column
+   (`display: dock`) spend their height on the tiles, not on the frame: the
+   header is one line and the body keeps only a thin margin above and below its
+   tiles. Block paddings only. The inline ones stay those of any section, so a
+   grid's width inside a workbench or dock is the one DashboardGrid measured on
+   an ordinary section (`sectionInset`). */
+.depictio-section-accordion:not(.is-compact) .depictio-section-item:is(.is-workbench, .is-dock):not(.is-plain) .depictio-section-control,
+.depictio-section-accordion:not(.is-compact) .depictio-section-item:is(.is-workbench, .is-dock):not(.is-plain)[data-active] .depictio-section-control {
+  padding-block: calc(var(--mantine-spacing-xs) / 2);
+}
+
+.depictio-section-accordion:not(.is-compact) .depictio-section-item:is(.is-workbench, .is-dock):not(.is-plain) .depictio-section-content {
+  padding-block: var(--mantine-spacing-xs);
+}
+
+/* The dock: DashboardGrid turns its wrapper into two columns (the scrolling
+   sections, the dock) and sets their widths. The dock column sticks to the top
+   of the scrolling container and is as tall as the part of it that shows, so
+   what it holds stays in view while the rest scrolls; it scrolls itself only
+   when its tiles cannot be squeezed any further. */
+.depictio-dock-layout > * {
+  min-width: 0;
+}
+
+.depictio-dock-column {
+  position: sticky;
+  align-self: start;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+}
+
+.depictio-dock-column .depictio-section-accordion:not(.is-compact) .depictio-section-item + .depictio-section-item {
+  margin-top: var(--mantine-spacing-xs);
+}
+
+/* Docked and rebased tiles are never moved: the editor must not write the
+   position of a layout it has transformed. Their drag handle would do nothing.
+   `!important`: the handle's own display is an inline style. */
+.depictio-dock-column .react-grid-dragHandle,
+.depictio-dock-rest .react-grid-dragHandle {
+  display: none !important;
+}

@@ -184,6 +184,7 @@ import './chrome/chrome.css';
 import { usePageTitle } from './branding';
 import { DashboardGuide, useGuideRoute } from './guide';
 import { DashboardSpotlight } from './spotlight';
+import { useLayoutOverride } from './layoutOverride';
 import type { GuideAuthorSettings, SettingsSectionKey } from './chrome/SettingsDrawer';
 import { focusComponent } from './lib/focusComponent';
 import {
@@ -3208,6 +3209,8 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   refreshTick,
   onOpenComponentHistory,
 }) => {
+  // `?layout=classic|dock`, as in the viewer.
+  const layoutOverride = useLayoutOverride();
   const allComponents = useMemo(
     () => [...cardComponents, ...otherComponents, ...barComponents],
     [cardComponents, otherComponents, barComponents],
@@ -3257,6 +3260,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
     <DashboardGrid
       dashboardId={dashboardId}
       metadataList={allComponents}
+      layoutOverride={layoutOverride}
       layoutData={layoutData}
       gridSections={gridSections}
       beforeSections={beforeSections}

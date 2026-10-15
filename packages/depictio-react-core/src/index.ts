@@ -15,6 +15,10 @@ import './plotlyStrictMode';
 export { default as DashboardGrid, SectionSummary } from './components/DashboardGrid';
 export { DensityContext, useDensity } from './components/density';
 export type { Density } from './components/density';
+// Workbench and dock sections (`display` on a grid section): the pure rules the
+// viewer's `?layout=` switch shares with the grid.
+export { effectiveDisplay } from './components/sectionGroups';
+export type { LayoutOverride } from './components/sectionGroups';
 export type { ComponentSection } from './utils/groupInteractive';
 // Content-aware sizing: the demand channel renderers publish on, and the two
 // predicates a host needs to offer "size this tile to its content" as an action.

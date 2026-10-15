@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Responsive as ResponsiveGridLayout } from 'react-grid-layout';
 import {
   GRID_BREAKPOINTS,
@@ -59,6 +59,16 @@ import {
   GRID_ROW_PX,
   SPLIT_ROW_PX,
 } from './autofit';
+import { DensityContext } from './density';
+import {
+  dockSplit,
+  dockWidthFraction,
+  effectiveDisplay,
+  fitRowPx,
+  layoutRows,
+  rebaseOutsideBand,
+} from './sectionGroups';
+import type { Band, LayoutOverride } from './sectionGroups';
 import {
   applyRecordPanels,
   findSidePanels,
@@ -75,6 +85,20 @@ import type { FoldedRecordPanel, RecordPanelState } from './RecordPanel';
  *  opening text has been split off — never a real section name, so it can't
  *  collide with `sectionKey(name)`. */
 const UNSECTIONED_REST_KEY = '\u0000unsectioned-rest';
+
+/** Space between the scrolling column and the dock column. The grid's own
+ *  horizontal margin, so a docked tile sits a tile's gap from its neighbours. */
+const DOCK_GAP_PX = 12;
+/** Padding of the dock column, so a section's hairline ring is not clipped by
+ *  the column's own scrolling. */
+const DOCK_PAD_PX = 2;
+/** Narrowest the scrolling column may get for a dock to be worth drawing. */
+const MIN_DOCK_COLUMN_PX = 480;
+/** What a workbench or dock section's frame (header, paddings) is taken to cost
+ *  until it has been measured, in px. */
+const FALLBACK_CHROME_PX = 64;
+/** A scrolling container shorter than this is not a screen worth fitting to. */
+const MIN_FIT_VIEWPORT_PX = 240;
 
 interface DashboardGridProps {
   dashboardId: string;
@@ -182,6 +206,13 @@ interface DashboardGridProps {
    * fold or unfold them on the dashboard.
    */
   collapseStorageKey?: string | null;
+  /**
+   * The reader's `?layout=` pick for grid sections that declare
+   * `display: 'workbench'` or `'dock'` (`sectionGroups.ts`): `classic` draws
+   * them as ordinary sections, `dock` turns workbenches into docks, null keeps
+   * what the dashboard declares. Has no effect on a dashboard without them.
+   */
+  layoutOverride?: LayoutOverride;
 }
 
 /**
@@ -250,6 +281,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   filterScopes,
   onResetFilters,
   collapseStorageKey,
+  layoutOverride = null,
 }) => {
   // Filter-bar members ride along in `metadataList` so they bucket into their
   // section, but they are drawn by the bar and never laid out on the grid:
@@ -297,6 +329,9 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // rightmost component in every section loses its edge. Measured rather than
   // restated from the CSS, so the treatment can change without this drifting.
   const [sectionInset, setSectionInset] = useState(0);
+  // Width the dock column leaves its sections (see `layoutOverride`), 0 without
+  // a dock. Measured rather than derived: the column may reserve a scrollbar.
+  const [dockInner, setDockInner] = useState(0);
   const measureRef = useRef<() => void>(() => {});
   useEffect(() => {
     if (!wrapperRef.current || typeof ResizeObserver === 'undefined') return;
@@ -306,10 +341,19 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       const next = wrapper.getBoundingClientRect().width;
       if (!next || next <= 0) return;
       setContainerWidth(Math.floor(next));
-      // Every section draws the same chrome, so one of them answers for all.
-      const probe = wrapper.querySelector('[data-section-grid]');
+      const dockEl = wrapper.querySelector<HTMLElement>('[data-grid-column="dock"]');
+      const dockRoom = dockEl ? Math.max(0, dockEl.clientWidth - 2 * DOCK_PAD_PX) : 0;
+      setDockInner(dockRoom);
+      // Every section draws the same chrome (a workbench or dock only tightens
+      // its block paddings), so one of them answers for all.
+      const probe =
+        wrapper.querySelector('[data-section-grid]') ?? wrapper.querySelector('[data-dock-grid]');
       if (probe) {
-        setSectionInset(Math.max(0, Math.round(next - probe.getBoundingClientRect().width)));
+        // With a dock the wrapper is two columns, and the room a section has to
+        // spend is its column's, not the wrapper's.
+        const column = probe.closest('[data-grid-column]');
+        const room = !column ? next : column === dockEl ? dockRoom : column.getBoundingClientRect().width;
+        setSectionInset(Math.max(0, Math.round(room - probe.getBoundingClientRect().width)));
       }
     };
     measureRef.current = measure;
@@ -759,6 +803,166 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     [onTileFixed],
   );
 
+  // ---- Workbench and dock sections (`display`, see sectionGroups.ts) ----
+  //
+  // Linked tiles that stay close enough for a brush on one to show on the others
+  // without scrolling. Both are views of the stored layout, which they never
+  // rewrite: a workbench lays the section out at a row height that fits the
+  // screen, and a dock lifts the section's anchor tile (with whatever shares its
+  // columns) into a sticky column, the rest staying in the scrolling one.
+  //
+  // Both need the 8-column layout. Below it (a phone, a narrow pane) their tiles
+  // stack as in any other section.
+  const groupsWide = breakpointForWidth(containerWidth) === GRID_WIDEST_BREAKPOINT;
+
+  const dockEntries = useMemo<DockEntry[]>(() => {
+    const entries: DockEntry[] = [];
+    for (const section of sections) {
+      if (groupDisplay(section, layoutOverride, groupsWide, onGrid) !== 'dock') continue;
+      // The stored heights, not the fitted ones: which tile anchors the dock must
+      // not change as content publishes its size.
+      const split = dockSplit(baseLayoutForSection(section.members, section.spec, false));
+      if (!split.band || split.docked.length === 0) continue;
+      entries.push({
+        section,
+        band: split.band,
+        // Static, so the editor never writes the position of a layout that was
+        // rebased to the dock's columns.
+        docked: compactVerticallyForStatic(split.docked).map((l) => ({ ...l, static: true })),
+        restIds: new Set(split.rest.map((l) => l.i)),
+      });
+    }
+    return entries;
+  }, [sections, layoutOverride, groupsWide, onGrid, baseLayoutForSection]);
+
+  const dockFraction = dockEntries.reduce((w, e) => Math.max(w, dockWidthFraction(e.docked)), 0);
+  const dockW = Math.round(containerWidth * dockFraction);
+  // In the editor the scrolling column must stay wide enough to be the widest
+  // breakpoint: below it a drag is never persisted (`handleSectionLayoutChange`),
+  // so a narrower column would take edits it silently drops. Readers have no such
+  // limit, their layout is only ever a view.
+  const scrollingWidth = containerWidth - dockW - DOCK_GAP_PX;
+  const dockActive =
+    dockEntries.length > 0 &&
+    scrollingWidth >= MIN_DOCK_COLUMN_PX &&
+    (readOnly || scrollingWidth > GRID_BREAKPOINTS[GRID_WIDEST_BREAKPOINT]);
+  const dockedKeys = useMemo(
+    () => new Set(dockActive ? dockEntries.map((e) => e.section.key) : []),
+    [dockActive, dockEntries],
+  );
+  /** How a section is drawn: its `display`, the reader's `?layout=` and the
+   *  room there is deciding. Anything this cannot place is an ordinary section. */
+  const kindOf = (section: ComponentSection): 'grid' | 'workbench' | 'dock' => {
+    const display = groupDisplay(section, layoutOverride, groupsWide, onGrid);
+    if (display === 'dock') return dockedKeys.has(section.key) ? 'dock' : 'grid';
+    return display ?? 'grid';
+  };
+  /** A docked section none of whose tiles stay in the scrolling column. */
+  const dockedAway = (section: ComponentSection) =>
+    dockEntries.find((e) => e.section.key === section.key)?.restIds.size === 0;
+  const hasWorkbench = sections.some((s) => kindOf(s) === 'workbench');
+  const groupsActive = hasWorkbench || dockActive;
+
+  // The part of the scrolling container a reader sees, which is what a group is
+  // fitted to. The container is the nearest ancestor that scrolls (the app's
+  // dashboard body), the window when none does. What its padding and its
+  // `scroll-padding` set aside (a gutter, the glass shell's floating dock) is not
+  // visible room, so `height` excludes both, whichever is larger on each edge.
+  // `top` is the sticky offset that clears them: sticky positions are measured
+  // from the padding's inner edge, so only what exceeds the padding is added.
+  const [viewport, setViewport] = useState<{ height: number; top: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!groupsActive) return;
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+    const scroller = scrollParentOf(wrapper);
+    const read = () => {
+      const style = scroller ? getComputedStyle(scroller) : null;
+      const padTop = style ? pxOf(style.paddingTop) : 0;
+      const keepTop = style ? Math.max(padTop, pxOf(style.scrollPaddingTop)) : 0;
+      const keepBottom = style
+        ? Math.max(pxOf(style.paddingBottom), pxOf(style.scrollPaddingBottom))
+        : 0;
+      const height = Math.floor(
+        (scroller ? scroller.clientHeight : window.innerHeight) - keepTop - keepBottom,
+      );
+      const next = height >= MIN_FIT_VIEWPORT_PX ? { height, top: keepTop - padTop } : null;
+      setViewport((prev) =>
+        prev?.height === next?.height && prev?.top === next?.top ? prev : next,
+      );
+    };
+    read();
+    const observer =
+      scroller && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(read) : null;
+    if (scroller) observer?.observe(scroller);
+    window.addEventListener('resize', read);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', read);
+    };
+  }, [groupsActive]);
+
+  // What a workbench's and the dock's frames cost in height (headers, paddings,
+  // borders, a section's own filter bar): the tiles get what is left of the
+  // visible height. Read from the DOM after every render, since it depends on
+  // the theme and on which sections are open, and kept only when it changed.
+  const [chrome, setChrome] = useState({ workbench: 0, dock: 0 });
+  useLayoutEffect(() => {
+    if (!groupsActive) return;
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+    let workbench = 0;
+    wrapper.querySelectorAll('[data-workbench-grid]').forEach((grid) => {
+      const item = grid.closest('.depictio-section-item');
+      if (item) workbench = Math.max(workbench, frameHeight(item));
+    });
+    let dock = 0;
+    const items = Array.from(
+      wrapper.querySelectorAll('[data-grid-column="dock"] .depictio-section-accordion > .depictio-section-item'),
+    );
+    if (items.length > 0) {
+      const gap = items.length > 1 ? pxOf(getComputedStyle(items[1]).marginTop) : 0;
+      dock =
+        items.reduce((sum, item) => sum + frameHeight(item), 0) +
+        (items.length - 1) * gap +
+        2 * DOCK_PAD_PX;
+    }
+    setChrome((prev) => (prev.workbench === workbench && prev.dock === dock ? prev : { workbench, dock }));
+  });
+  // The dock's width, and with it the room of every section's grid, changes
+  // without the wrapper resizing.
+  useEffect(() => {
+    measureRef.current();
+  }, [dockActive, dockW]);
+
+  // A workbench fills the visible height: its rows (the layout's, counted in the
+  // unit the grid lays out in) and the gaps between them share what the frame
+  // leaves.
+  const normalRowPx = readOnly ? SPLIT_ROW_PX : GRID_ROW_PX;
+  const workbenchRowPx = (layout: Layout[]) =>
+    viewport
+      ? fitRowPx(
+          layoutRows(layout),
+          viewport.height - (chrome.workbench || FALLBACK_CHROME_PX),
+          GRID_ROW_GAP_PX,
+          normalRowPx,
+        )
+      : normalRowPx;
+  // Docked sections share the column's height: their open ones' rows together.
+  const openDockEntries = dockActive
+    ? dockEntries.filter((e) => sectionCollapse.isOpen(e.section.key))
+    : [];
+  const dockRowPx =
+    viewport && openDockEntries.length > 0
+      ? fitRowPx(
+          openDockEntries.reduce((rows, e) => rows + layoutRows(e.docked), 0),
+          viewport.height - (chrome.dock || FALLBACK_CHROME_PX * dockEntries.length),
+          GRID_ROW_GAP_PX,
+          normalRowPx,
+          openDockEntries.length,
+        )
+      : normalRowPx;
+
   const showOverlays = editMode && typeof renderItemOverlay === 'function';
   const rootClass =
     'depictio-dashboard-grid' + (editMode ? ' depictio-edit-mode' : '');
@@ -893,49 +1097,56 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // and get the room left inside it; the unsectioned bucket has no box and
   // spans the wrapper.
   // A filter bar's other members sit under the bar, outside any section box.
+  // With a dock the scrolling sections are the left column's, and what is
+  // measured is the room inside one of them (see `measure`).
+  const columnWidth = dockActive ? scrollingWidth : containerWidth;
   const gridWidth = (section: ComponentSection) =>
     section.sectionName && !isStripSection(section.spec)
-      ? Math.max(100, containerWidth - sectionInset)
-      : containerWidth;
+      ? Math.max(100, columnWidth - sectionInset)
+      : columnWidth;
 
-  const renderGrid = (section: ComponentSection) =>
-    !section.members.some(onGrid) ? (
-      // Only shown in edit mode (`includeEmpty`). Without a body a freshly
-      // created section is an accordion item that opens onto nothing, which
-      // reads as broken rather than as empty. A section holding only its bar's
-      // filters has no tiles either, and readers see just the bar.
-      editMode ? (
-        <Paper withBorder radius="md" p="lg" bg="var(--mantine-color-default-hover)">
-          <Text size="sm" c="dimmed" ta="center">
-            No components yet — move one here from its ⋮ menu, or pick this section
-            while creating one.
-          </Text>
-        </Paper>
-      ) : null
-    ) : (
+  /**
+   * One react-grid-layout over `layouts`, which every grid of the dashboard is
+   * drawn with. `persistKey` wires it to the editor's save path; without one it
+   * reports nothing, which is what a layout this grid has transformed (a dock's
+   * columns, the tiles left of it) needs, so the editor can never write it.
+   */
+  const renderTiles = (o: {
+    layouts: Record<string, Layout[]>;
+    breakpoints?: Record<string, number>;
+    cols?: Record<string, number>;
+    rowHeight: number;
+    width: number;
+    /** False pins the tiles whatever the editor allows. */
+    editable?: boolean;
+    persistKey?: string;
+    children: React.ReactNode;
+  }) => (
     <ResponsiveGridLayout
       className="layout"
-      layouts={responsiveLayouts(layoutsForSection(section.members, section.spec))}
+      layouts={o.layouts}
       // Shared geometry (see gridConfig.ts): `lg` keeps the authoring 8-column
       // grid down to narrow content widths so opening the panels shrinks
       // components instead of wrapping them; fewer columns are a phone-only
       // fallback.
-      breakpoints={GRID_BREAKPOINTS}
-      cols={GRID_COL_COUNTS}
+      breakpoints={o.breakpoints ?? GRID_BREAKPOINTS}
+      cols={o.cols ?? GRID_COL_COUNTS}
       // Half rows when read-only: the unit `layoutsForSection` counts in.
-      rowHeight={readOnly ? SPLIT_ROW_PX : GRID_ROW_PX}
-      width={gridWidth(section)}
+      rowHeight={o.rowHeight}
+      width={o.width}
       // Asymmetric grid gap: horizontal stays at 12 px (visual breathing room
       // between side-by-side cards / plots) but vertical drops to 4 px so
       // stacked rows feel tightly packed — short text intros, Manhattan→
       // filter-strip transitions, etc. no longer have a wasteful gap.
       margin={[12, GRID_ROW_GAP_PX]}
       containerPadding={[0, 0]}
-      isDraggable={isDraggable}
-      isResizable={isResizable}
+      isDraggable={isDraggable && o.editable !== false}
+      isResizable={isResizable && o.editable !== false}
       compactType="vertical"
-      onLayoutChange={(current) =>
-        handleSectionLayoutChange(section.key, current, gridWidth(section))
+      onLayoutChange={
+        o.persistKey === undefined
+          ? undefined
+          : (current) => handleSectionLayoutChange(o.persistKey!, current, o.width)
       }
       // Live-resize: Plotly's useResizeHandler and AG Grid only listen to
       // the WINDOW ``resize`` event, not container size changes. While the
@@ -952,8 +1163,10 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       // prop, then `onLayoutMaybeChanged`), which is what lets the merge tell
       // this tile's new height apart from every other tile's fitted one on
       // that pass.
-      onResizeStop={(_layout, oldItem, newItem) =>
-        handleResizeStop(oldItem, newItem, gridWidth(section))
+      onResizeStop={
+        o.persistKey === undefined
+          ? undefined
+          : (_layout, oldItem, newItem) => handleResizeStop(oldItem, newItem, o.width)
       }
       // Drag is gated to a dedicated handle (see ComponentChrome's
       // `react-grid-dragHandle` action). Cells themselves are NOT draggable
@@ -962,12 +1175,44 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       draggableHandle=".react-grid-dragHandle"
       resizeHandles={['s', 'e', 'w', 'n', 'sw', 'se', 'nw', 'ne']}
     >
-      {(cellsBySection.get(section.key) ?? [])
+      {o.children}
+    </ResponsiveGridLayout>
+  );
+
+  /** The cells of `section` that `layout` places, in the order they were built. */
+  const cellsFor = (section: ComponentSection, layout: Layout[]) => {
+    const placed = new Set(layout.map((l) => l.i));
+    return (cellsBySection.get(section.key) ?? [])
+      .filter((cell) => placed.has(cell.id))
+      .map((cell) => cell.node);
+  };
+
+  const renderGrid = (section: ComponentSection) =>
+    !section.members.some(onGrid) ? (
+      // Only shown in edit mode (`includeEmpty`). Without a body a freshly
+      // created section is an accordion item that opens onto nothing, which
+      // reads as broken rather than as empty. A section holding only its bar's
+      // filters has no tiles either, and readers see just the bar.
+      editMode ? (
+        <Paper withBorder radius="md" p="lg" bg="var(--mantine-color-default-hover)">
+          <Text size="sm" c="dimmed" ta="center">
+            No components yet — move one here from its ⋮ menu, or pick this section
+            while creating one.
+          </Text>
+        </Paper>
+      ) : null
+    ) : (
+    renderTiles({
+      layouts: responsiveLayouts(layoutsForSection(section.members, section.spec)),
+      rowHeight: normalRowPx,
+      width: gridWidth(section),
+      persistKey: section.key,
+      children: (cellsBySection.get(section.key) ?? [])
         // A folded record card has no layout item (`applyRecordPanels`), and
         // react-grid-layout would place a child without one on its own.
         .filter((cell) => !sidePanels.has(cell.id) || recordPanelState.expanded(cell.id))
-        .map((cell) => cell.node)}
-    </ResponsiveGridLayout>
+        .map((cell) => cell.node),
+    })
     );
 
   const leadBucket = sections.find((s) => !s.sectionName && s.key !== UNSECTIONED_REST_KEY);
@@ -1047,74 +1292,198 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
             : renderAccordion(run.sections),
         );
 
-  const renderAccordion = (list: ComponentSection[]) =>
-    list.length === 0 ? null : (
+  /** A workbench: the section's stored layout at a row height that fits the
+   *  visible screen. Not autofitted (growing a tile would push the section off
+   *  the screen it was fitted to), and editable: its units and columns are the
+   *  stored ones, so a drag still writes the right position. */
+  const renderWorkbench = (section: ComponentSection) => {
+    const layout = layoutsForSection(section.members, section.spec, false);
+    return (
+      <DensityContext.Provider value="compact">
+        {renderTiles({
+          layouts: responsiveLayouts(layout),
+          rowHeight: workbenchRowPx(layout),
+          width: gridWidth(section),
+          persistKey: section.key,
+          children: cellsFor(section, layout),
+        })}
+      </DensityContext.Provider>
+    );
+  };
+
+  /** What the dock leaves of a section in the scrolling column: its other
+   *  tiles, rebased onto the 8 columns, as tall as their content asks. Pinned,
+   *  like the docked ones: this layout is a transformed copy. */
+  const renderDockRest = (section: ComponentSection) => {
+    const entry = dockEntries.find((e) => e.section.key === section.key);
+    if (!entry) return null;
+    const kept = layoutsForSection(section.members, section.spec).filter((l) =>
+      entry.restIds.has(l.i),
+    );
+    const layout = compactVerticallyForStatic(rebaseOutsideBand(kept, entry.band)).map((l) => ({
+      ...l,
+      static: true,
+    }));
+    return (
+      <DensityContext.Provider value="compact">
+        {renderTiles({
+          layouts: responsiveLayouts(layout),
+          rowHeight: normalRowPx,
+          width: gridWidth(section),
+          editable: false,
+          children: cellsFor(section, layout),
+        })}
+      </DensityContext.Provider>
+    );
+  };
+
+  /** The dock: its sections stacked, each holding the tiles docked from it on a
+   *  grid of its anchor's columns, fitted to the height the column has. */
+  const renderDockColumn = () => {
+    const room = Math.max(100, (dockInner || dockW - 2 * DOCK_PAD_PX) - sectionInset);
+    return (
+      <div
+        className="depictio-dock-column"
+        data-grid-column="dock"
+        data-testid="dock-column"
+        style={{ top: viewport?.top ?? 0, height: viewport?.height, padding: DOCK_PAD_PX }}
+      >
+        <SectionAccordion
+          key="dock"
+          value={dockEntries.filter((e) => sectionCollapse.isOpen(e.section.key)).map((e) => e.section.key)}
+          onChange={(open) =>
+            applyAccordionValue(
+              open,
+              dockEntries.map((e) => e.section.key),
+              sectionCollapse,
+            )
+          }
+        >
+          {dockEntries.map(({ section, band, docked, restIds }) => (
+            <SectionAccordionItem
+              key={section.key}
+              value={section.key}
+              color={resolveSectionColor(section.spec?.color, section.sectionName)}
+              // One "…" per section: the scrolling column's heading carries it
+              // while the section has tiles there.
+              actions={restIds.size === 0 ? renderSectionActions?.(section.sectionName ?? null) : undefined}
+              className="is-dock"
+            >
+              <Accordion.Control>
+                <GroupSectionHeader
+                  section={section}
+                  docked
+                  badge={<SectionFilteredBadge section={section} filters={shownFilters} onGrid={onGrid} />}
+                />
+              </Accordion.Control>
+              <Accordion.Panel>
+                {renderedSections.has(section.key) && (
+                  <div data-dock-grid>
+                    <DensityContext.Provider value="compact">
+                      {renderTiles({
+                        layouts: { lg: docked },
+                        // One breakpoint and one column per column of the
+                        // anchor's band: the tiles keep the band's proportions.
+                        breakpoints: { lg: 0 },
+                        cols: { lg: band.w },
+                        rowHeight: dockRowPx,
+                        width: room,
+                        editable: false,
+                        children: cellsFor(section, docked),
+                      })}
+                    </DensityContext.Provider>
+                  </div>
+                )}
+              </Accordion.Panel>
+            </SectionAccordionItem>
+          ))}
+        </SectionAccordion>
+      </div>
+    );
+  };
+
+  const renderAccordion = (list: ComponentSection[]) => {
+    // A section whose every tile docked has nothing left to draw in this column.
+    const shown = list.filter((s) => kindOf(s) !== 'dock' || !dockedAway(s));
+    return shown.length === 0 ? null : (
       <SectionAccordion
-        key={list[0].key}
+        key={shown[0].key}
         // A plain section has no fold: always open, and left out of the
         // persisted collapse state.
-        value={list
+        value={shown
           .filter((s) => isPlain(s) || sectionCollapse.isOpen(s.key))
           .map((s) => s.key)}
         onChange={(open) =>
           applyAccordionValue(
             open,
-            list.filter((s) => !isPlain(s)).map((s) => s.key),
+            shown.filter((s) => !isPlain(s)).map((s) => s.key),
             sectionCollapse,
           )
         }
       >
-        {list.map((section) => (
-          <SectionAccordionItem
-            key={section.key}
-            value={section.key}
-            color={resolveSectionColor(section.spec?.color, section.sectionName)}
-            actions={renderSectionActions?.(section.sectionName ?? null)}
-            plain={isPlain(section)}
-          >
-            <Accordion.Control>
-              <SectionHeader
-                spec={section.spec}
-                name={section.sectionName}
-                badge={<SectionFilteredBadge section={section} filters={shownFilters} onGrid={onGrid} />}
-                // Only while folded: expanded, these numbers are already on
-                // screen as the cards themselves. Folding a section must not
-                // cost you the figures it was showing.
-                trailing={
-                  !isPlain(section) && !sectionCollapse.isOpen(section.key) ? (
-                    <SectionSummary
-                      section={{ ...section, members: section.members.filter(onGrid) }}
-                      cardValues={cardValues}
-                    />
-                  ) : undefined
-                }
+        {shown.map((section) => {
+          const kind = kindOf(section);
+          const badge = (
+            <SectionFilteredBadge section={section} filters={shownFilters} onGrid={onGrid} />
+          );
+          // Only while folded: expanded, these numbers are already on
+          // screen as the cards themselves. Folding a section must not
+          // cost you the figures it was showing.
+          const trailing =
+            !isPlain(section) && !sectionCollapse.isOpen(section.key) ? (
+              <SectionSummary
+                section={{ ...section, members: section.members.filter(onGrid) }}
+                cardValues={cardValues}
               />
-            </Accordion.Control>
-            <Accordion.Panel>
-              {renderSectionBar(section)}
-              {/* Plain wrapper so the width available inside the section box
-                  can be read off the DOM — see `sectionInset`. Absent until
-                  the section has been opened once: see `renderedSections`. */}
-              {(isPlain(section) || renderedSections.has(section.key)) && (
-                <div data-section-grid>{renderGrid(section)}</div>
-              )}
-            </Accordion.Panel>
-          </SectionAccordionItem>
-        ))}
+            ) : undefined;
+          return (
+            <SectionAccordionItem
+              key={section.key}
+              value={section.key}
+              color={resolveSectionColor(section.spec?.color, section.sectionName)}
+              actions={renderSectionActions?.(section.sectionName ?? null)}
+              plain={isPlain(section)}
+              className={kind === 'grid' ? undefined : kind === 'workbench' ? 'is-workbench' : 'is-dock'}
+            >
+              <Accordion.Control>
+                {kind === 'grid' ? (
+                  <SectionHeader
+                    spec={section.spec}
+                    name={section.sectionName}
+                    badge={badge}
+                    trailing={trailing}
+                  />
+                ) : (
+                  <GroupSectionHeader section={section} badge={badge} trailing={trailing} />
+                )}
+              </Accordion.Control>
+              <Accordion.Panel>
+                {renderSectionBar(section)}
+                {/* Plain wrapper so the width available inside the section box
+                    can be read off the DOM — see `sectionInset`. Absent until
+                    the section has been opened once: see `renderedSections`. */}
+                {(isPlain(section) || renderedSections.has(section.key)) &&
+                  (kind === 'grid' ? (
+                    <div data-section-grid>{renderGrid(section)}</div>
+                  ) : kind === 'workbench' ? (
+                    <div data-section-grid data-workbench-grid>
+                      {renderWorkbench(section)}
+                    </div>
+                  ) : (
+                    <div data-section-grid className="depictio-dock-rest">
+                      {renderDockRest(section)}
+                    </div>
+                  ))}
+              </Accordion.Panel>
+            </SectionAccordionItem>
+          );
+        })}
       </SectionAccordion>
     );
+  };
 
-  return (
-    // One hover-highlight bus per dashboard view: the protein tiles (3D
-    // structure, MSA, sequence track, lollipop, profile) point at the same
-    // residues through it without a filter round-trip. See highlight/bus.ts.
-    <HighlightProvider>
-    <RecordPanelContext.Provider value={recordPanelState}>
-    <div
-      ref={wrapperRef}
-      className={rootClass}
-      style={{ width: '100%', overflowX: 'hidden' }}
-    >
+  const body = (
+    <>
       {leadBucket && renderGrid(leadBucket)}
       {foldable.length > 0 && (
         <Group justify="flex-end" mb={4}>
@@ -1149,7 +1518,44 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       )}
       {restBucket && renderGrid(restBucket)}
       {renderSections(ownSections)}
-    </div>
+    </>
+  );
+
+  return (
+    // One hover-highlight bus per dashboard view: the protein tiles (3D
+    // structure, MSA, sequence track, lollipop, profile) point at the same
+    // residues through it without a filter round-trip. See highlight/bus.ts.
+    <HighlightProvider>
+    <RecordPanelContext.Provider value={recordPanelState}>
+    {dockActive ? (
+      // With a dock the wrapper is two columns: the dashboard as it always was
+      // on the left, the dock on the right, sticking while the left scrolls.
+      // `clip` rather than `hidden`: hidden makes the wrapper a scroll container
+      // (an unused one, its height being its content's), and a sticky column
+      // sticks to the nearest of those instead of the page's own.
+      <div
+        ref={wrapperRef}
+        className={`${rootClass} depictio-dock-layout`}
+        style={{
+          width: '100%',
+          overflowX: 'clip',
+          display: 'grid',
+          gridTemplateColumns: `minmax(0, 1fr) ${dockW}px`,
+          columnGap: DOCK_GAP_PX,
+        }}
+      >
+        <div data-grid-column="left">{body}</div>
+        {renderDockColumn()}
+      </div>
+    ) : (
+      <div
+        ref={wrapperRef}
+        className={rootClass}
+        style={{ width: '100%', overflowX: 'hidden' }}
+      >
+        {body}
+      </div>
+    )}
     </RecordPanelContext.Provider>
     </HighlightProvider>
   );
@@ -1193,6 +1599,60 @@ const SectionFilteredBadge: React.FC<{
         Filtered
       </Badge>
     </Tooltip>
+  );
+};
+
+/**
+ * The heading of a workbench or dock section: the same `SectionHeader`, on one
+ * line. The description moves into a tooltip on an info glyph (a group spends
+ * its height on its tiles), and a dock's column says what it is.
+ */
+const GroupSectionHeader: React.FC<{
+  section: ComponentSection;
+  badge?: React.ReactNode;
+  trailing?: React.ReactNode;
+  /** The dock column's copy of the heading. */
+  docked?: boolean;
+}> = ({ section, badge, trailing, docked = false }) => {
+  const description = section.spec?.description;
+  return (
+    <SectionHeader
+      spec={section.spec ? { ...section.spec, description: undefined } : section.spec}
+      name={section.sectionName}
+      badge={
+        <>
+          {description ? (
+            <Tooltip label={description} withArrow multiline w={260} openDelay={400}>
+              <Icon
+                icon="mdi:information-outline"
+                width={14}
+                height={14}
+                color="var(--mantine-color-dimmed)"
+                style={{ flexShrink: 0 }}
+              />
+            </Tooltip>
+          ) : null}
+          {docked ? (
+            <Tooltip
+              label="Docked: this section's main tiles stay in view while the page scrolls"
+              withArrow
+              multiline
+              w={260}
+            >
+              <Icon
+                icon="mdi:dock-right"
+                width={14}
+                height={14}
+                color="var(--mantine-color-dimmed)"
+                style={{ flexShrink: 0 }}
+              />
+            </Tooltip>
+          ) : null}
+          {badge}
+        </>
+      }
+      trailing={trailing}
+    />
   );
 };
 
@@ -1378,6 +1838,77 @@ export function normalizeLayout(
   // non-static there, RGL compacts naturally after every drag/resize.
   if (interactive || !pack) return merged;
   return widenLoneRows(compactVerticallyForStatic(merged), hadRowMate);
+}
+
+/** What the dock keeps of one section: its anchor's columns, the tiles that
+ *  share them (laid out on a grid of `band.w` columns), and which of the
+ *  section's other tiles stay behind in the scrolling column. */
+interface DockEntry {
+  section: ComponentSection;
+  band: Band;
+  docked: Layout[];
+  restIds: Set<string>;
+}
+
+/**
+ * Whether a section draws as a workbench or a dock, from its `display` and the
+ * reader's `?layout=`. Null for everything else: a section needs a name, tiles
+ * of its own, and a layout wide enough to hold a group; a plain heading and a
+ * persistent section (also drawn by other tabs' hosts, which know no groups)
+ * stay as they are. A dock holding its own filter bar cannot give the bar a
+ * place, so it is a workbench.
+ */
+function groupDisplay(
+  section: ComponentSection,
+  override: LayoutOverride,
+  wide: boolean,
+  onGrid: (m: StoredMetadata) => boolean,
+): 'workbench' | 'dock' | null {
+  const spec = section.spec;
+  if (!wide || !section.sectionName || !section.members.some(onGrid)) return null;
+  if (spec?.appearance === 'plain' || spec?.persistent) return null;
+  const display = effectiveDisplay(spec, override);
+  if (display === 'workbench') return 'workbench';
+  if (display === 'dock') return hasSectionBar(spec) ? 'workbench' : 'dock';
+  return null;
+}
+
+/** A computed length in px; 0 for `auto`, empty or anything that is not one. */
+function pxOf(value: string | null | undefined): number {
+  const n = parseFloat(value ?? '');
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** The nearest ancestor that scrolls vertically, null when the page does. */
+function scrollParentOf(el: HTMLElement): HTMLElement | null {
+  for (let node = el.parentElement; node; node = node.parentElement) {
+    const overflowY = getComputedStyle(node).overflowY;
+    if (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') return node;
+  }
+  return null;
+}
+
+/**
+ * The height a section item spends on everything but its tiles: borders, the
+ * header and, while open, the body's paddings and whatever sits above the grid
+ * (a section's own filter bar). Summed from parts that do not move while the
+ * body folds, so it is stable through the accordion's own height transition.
+ */
+function frameHeight(item: Element): number {
+  const style = getComputedStyle(item);
+  let height = pxOf(style.borderTopWidth) + pxOf(style.borderBottomWidth);
+  height += item.querySelector<HTMLElement>('.depictio-section-control')?.offsetHeight ?? 0;
+  if (!item.hasAttribute('data-active')) return height;
+  const content = item.querySelector<HTMLElement>('.depictio-section-content');
+  if (!content) return height;
+  const padding = getComputedStyle(content);
+  height += pxOf(padding.paddingTop) + pxOf(padding.paddingBottom);
+  for (const child of Array.from(content.children) as HTMLElement[]) {
+    if (!child.hasAttribute('data-section-grid') && !child.hasAttribute('data-dock-grid')) {
+      height += child.offsetHeight;
+    }
+  }
+  return height;
 }
 
 /**

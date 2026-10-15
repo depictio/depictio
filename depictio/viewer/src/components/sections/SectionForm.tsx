@@ -155,6 +155,14 @@ const SectionForm: React.FC<SectionFormProps> = ({
   // Grid sections only: tiles on the grid, or the section as one filter bar.
   const [layout, setLayout] = useState<Layout>(initial?.display === 'strip' ? 'bar' : 'tiles');
   const isStrip = kind === 'grid' && layout === 'bar';
+  // A group display (`workbench`: the tiles share one screen height, `dock`: a
+  // sticky column) is written in the dashboard's YAML and has no control here.
+  // Kept as it is so saving this form does not quietly turn the section back
+  // into a plain grid.
+  const groupDisplay: 'workbench' | 'dock' | undefined =
+    kind === 'grid' && (initial?.display === 'workbench' || initial?.display === 'dock')
+      ? initial.display
+      : undefined;
   // Grid sections of tiles only: a bar of the section's own filters.
   const [filterBar, setFilterBar] = useState(Boolean(initial?.filter_bar));
   const hasOwnBar = kind === 'grid' && !isStrip && filterBar;
@@ -214,8 +222,9 @@ const SectionForm: React.FC<SectionFormProps> = ({
             // Grid sections only, and unwritten when each card keeps its own.
             card_variant: kind === 'grid' && cardVariant && !isStrip ? cardVariant : undefined,
             // Unwritten for the default grid, so a section saved from this
-            // form stays readable by a server that predates filter bars.
-            display: isStrip ? 'strip' : undefined,
+            // form stays readable by a server that predates filter bars. A
+            // workbench or dock the form does not offer is carried over.
+            display: isStrip ? 'strip' : groupDisplay,
             // Same: unwritten unless on.
             filter_bar: hasOwnBar ? true : undefined,
             // Only for a section with a bar, and only when the author set it.
@@ -241,6 +250,7 @@ const SectionForm: React.FC<SectionFormProps> = ({
     excludeTabs,
     cardVariant,
     isStrip,
+    groupDisplay,
     hasOwnBar,
     visibleFilters,
     figureStyle,
@@ -444,6 +454,14 @@ const SectionForm: React.FC<SectionFormProps> = ({
                       checked={collapsed}
                       onChange={setCollapsed}
                     />
+                  )}
+                  {groupDisplay && (
+                    <Text size="xs" c="dimmed" lh={1.4} data-testid="section-group-display">
+                      {groupDisplay === 'workbench'
+                        ? 'Set in the dashboard’s YAML as a workbench: its tiles share one screen height.'
+                        : 'Set in the dashboard’s YAML as a dock: its tallest tile stays in view in a column beside the scrolling sections.'}{' '}
+                      Saving keeps it.
+                    </Text>
                   )}
                 </>
               )}
