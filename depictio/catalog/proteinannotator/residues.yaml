@@ -7,6 +7,10 @@ description: >-
   residue and how many domains overlap there, and the protein's full sequence.
   The structure tile folds the shown protein from the sequence column and
   colours it by domain; the sequence track draws the state and domain lanes.
+  The structure tile (predicted_structure, kind molecule_3d, structure_source:
+  resolve) makes an external call: it sends the protein sequence to a public
+  service (ESMFold on ESM Atlas), and stays off unless an administrator sets
+  DEPICTIO_STRUCTURE_RESOLVER_ENABLED.
 find:
   path_glob: "**/qc/*/*.fasta"
   path_glob_alt:

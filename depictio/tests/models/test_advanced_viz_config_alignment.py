@@ -170,6 +170,18 @@ def test_persisted_controls_survive_their_model(kind: str):
     VIZ_CONFIG.validate_python(blob)
 
 
+def test_hmm_logo_persists_its_track_controls():
+    """The track pickers write `hidden_tracks` / `collapsed_tracks` through the persisted hook."""
+    body = _kind_code("hmm_logo")
+    keys = set(re.findall(r"usePersistedVizControl[^(]*\(\s*metadata,\s*'([a-z_0-9]+)'", body))
+    assert {"hidden_tracks", "collapsed_tracks"} <= keys
+    # A saved dashboard that holds both, at the shape the controls write, validates.
+    cfg = VIZ_CONFIG.validate_python(
+        {"viz_kind": "hmm_logo", "hidden_tracks": ["ruler"], "collapsed_tracks": ["hits", "insert"]}
+    )
+    assert (cfg.hidden_tracks, cfg.collapsed_tracks) == (["ruler"], ["hits", "insert"])
+
+
 # ---------------------------------------------------------------------------
 # Registry reachability
 # ---------------------------------------------------------------------------

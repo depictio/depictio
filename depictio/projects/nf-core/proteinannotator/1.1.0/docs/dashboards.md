@@ -61,8 +61,11 @@ structure file named after the protein, share one `entity`. The original id stay
   **off by default**: an administrator turns it on with `DEPICTIO_STRUCTURE_RESOLVER_ENABLED=true`.
   With it off the tile shows an explanation ("Structure lookup is disabled on this server") and
   the sequence track and the other tabs are unaffected. ESMFold takes sequences of up to 400
-  residues, so the tab's length filter opens capped at 400; widen it to list longer proteins,
-  whose structure tile then explains why it is empty.
+  residues. This is an external call: the sequence is sent to the public ESM Atlas service
+  (`api.esmatlas.com`, run by Meta), and the tile's info popover names the service and links to it.
+  The tab's length filter has no default window, so every protein is listed; the
+  structure tile of a longer one explains why it is empty, and the Longest protein card flags
+  a protein above the limit.
 
 ## Variables
 
@@ -87,7 +90,10 @@ template has no MultiQC tab; the SeqFu tables carry the same numbers.
 
 The Overview follows the family layout (`RULES.md` section 3): hero, About and run cards, a five
 step pipeline flow, four key figures with a group and sample filter bar, four findings with a
-highlight each, and a link list of the tabs. The persistent sample filters and the collapsed
+highlight each, and a link list of the tabs. The page stays at compact width; the findings
+highlights sit in two rows of w3 + w5 instead of the family's w4 + w4, so the domain
+architecture and the sequence track, which lay a protein out along its chain, get five of the
+eight columns (the length against annotated share scatter and the state shares take three). The persistent sample filters and the collapsed
 sample sheet (design table and per-sample summary) sit in the left panel and at the bottom of
 every other tab.
 
@@ -113,10 +119,10 @@ every other tab.
    each state, with its segment list; a brush or a segment pick selects the residues on the
    `sequence_track` below, which also draws the domain spans. A stacked bar compares the state
    shares of the proteins. The residue table is collapsed.
-4. **Structure.** *Where do the domains sit on one protein's 3D structure?* A scatter of the
-   proteins within ESMFold's length limit picks the protein; its structure (coloured by best
-   domain, over its written sequence) and the full-width sequence track (state, probability and
-   domain spans) stand linked residue by residue. Clicking a residue in 3D, a letter of the
+4. **Structure.** *Where do the domains sit on one protein's 3D structure?* A table of the
+   proteins (sample, length, annotated share, best domain) picks the protein; its structure
+   (coloured by best domain, over its written sequence) and the sequence track (state,
+   probability and domain spans) stand linked residue by residue. Clicking a residue in 3D, a letter of the
    sequence or brushing the track selects the same residues in all three. The residue table is
    collapsed.
 

@@ -27,6 +27,12 @@ A residue range picked on a protein tile (``source: "residue_selection"``, an
 entity ``MultiSelect`` and a position ``RangeSlider``, see ``residueRangeFilters``
 in packages/depictio-react-core/src/selection.ts) is the same kind of filter on
 protein coordinates, and is scoped by the same rule.
+
+The heatmap and the UpSet are a second case (``scope_residue_filters``): they
+summarise a whole collection (one cell per sample and column, one bar per set
+intersection), so a click on a domain or residue span in another tile must not
+narrow them to the one protein it names. They ignore the whole residue gesture
+and keep every real dashboard filter.
 """
 
 from __future__ import annotations
@@ -43,6 +49,12 @@ _LOCUS_SOURCES = frozenset({GENOME_SELECTION_SOURCE, RESIDUE_SELECTION_SOURCE})
 # Component types a region never reaches unless they opt in (figures only when
 # they do not encode a region column, see ``_figure_encodes``).
 _SCOPED_TYPES = frozenset({"card", "figure", "interactive"})
+
+# advanced_viz kinds that never follow a residue pick. The dispatcher names them
+# ``upset`` and the export path ``upset_plot``. Every other kind (molecule_3d,
+# sequence_track, msa, hmm_logo, domain_architecture, secondary_structure, ...)
+# is driven by the pick and is deliberately absent.
+_RESIDUE_BLIND_KINDS = frozenset({"complex_heatmap", "upset", "upset_plot"})
 
 
 def is_region_filter(f: Any) -> bool:
@@ -108,3 +120,33 @@ def scope_region_filters(
         if _figure_encodes(component, columns):
             return list(filters)
     return [f for f in filters if not is_region_filter(f)]
+
+
+def is_residue_gesture_filter(f: Any) -> bool:
+    """True for a residue pick (either half) or a selection emitted with it.
+
+    ``paired_with`` marks the label a ``domain_architecture`` domain click adds
+    beside its span (``pairedWithResiduePick`` in selection.ts). The viewer
+    drops it together with the pick, so it belongs to the same gesture.
+    """
+    if not isinstance(f, dict):
+        return False
+    meta = f.get("metadata") or {}
+    if (f.get("source") or meta.get("source")) == RESIDUE_SELECTION_SOURCE:
+        return True
+    return (f.get("paired_with") or meta.get("paired_with")) == RESIDUE_SELECTION_SOURCE
+
+
+def scope_residue_filters(filters: list[dict], viz_kind: str | None) -> list[dict]:
+    """``filters`` without the residue gesture for kinds that ignore it.
+
+    The pick travels as an entity ``MultiSelect`` plus a position ``RangeSlider``
+    (both ``residue_selection``) and, for a domain click, a paired label
+    selection. The entity half goes too: link resolution would carry it to the
+    heatmap's collection as a one-protein row filter, and
+    ``_narrow_wide_matrix_columns`` would read set names into a column subset.
+    Strip before link resolution, like ``scope_region_filters``.
+    """
+    if viz_kind not in _RESIDUE_BLIND_KINDS:
+        return list(filters)
+    return [f for f in filters if not is_residue_gesture_filter(f)]

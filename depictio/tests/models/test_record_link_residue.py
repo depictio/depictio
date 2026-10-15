@@ -125,3 +125,28 @@ def test_a_domain_pick_links_a_card_on_the_label_column():
     card = _card("domains", id_col="label")
     card["data_collection_tag"] = "domains"
     assert linked_component_problems([domains, card]) == []
+    # The card has to key on the effective selection column, not any column.
+    card["config"]["id_col"] = "domain_id"
+    problems = linked_component_problems([domains, card])
+    assert len(problems) == 1 and "selects on 'label'" in problems[0]
+
+
+def test_a_domain_pick_links_a_card_on_the_selection_column_when_named():
+    config = {"viz_kind": "domain_architecture", "selection_column": "domain_id"}
+    domains = _viz("domains", config, dc="domains")
+    assert emitted_selection_column(domains) == "domain_id"
+    card = _card("domains", id_col="domain_id")
+    card["data_collection_tag"] = "domains"
+    assert linked_component_problems([domains, card]) == []
+    # The label no longer identifies the pick, so a card keyed on it is reported.
+    card["config"]["id_col"] = "label"
+    problems = linked_component_problems([domains, card])
+    assert len(problems) == 1 and "selects on 'domain_id'" in problems[0]
+
+
+def test_a_domain_pick_with_label_selection_off_leaves_the_card_id_col_free():
+    config = {"viz_kind": "domain_architecture", "label_selection": False}
+    domains = _viz("domains", config, dc="domains")
+    card = _card("domains", id_col="domain_id")
+    card["data_collection_tag"] = "domains"
+    assert linked_component_problems([domains, card]) == []

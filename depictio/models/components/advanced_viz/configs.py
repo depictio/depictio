@@ -3386,6 +3386,10 @@ class SequenceTrackConfig(_BaseVizConfig):
 # ---------------------------------------------------------------------------
 
 
+HmmLogoTrack = Literal["consensus", "insert", "occupancy", "hits", "ruler"]
+"""A lane group of the HMM logo panel that can be hidden or collapsed."""
+
+
 class HmmLogoConfig(_BaseVizConfig):
     """The sequence logo of one profile HMM, with an optional lane of the hits it matched.
 
@@ -3496,6 +3500,54 @@ class HmmLogoConfig(_BaseVizConfig):
         description="Show the insert probability, expected insert length and occupancy lanes",
     )
     show_consensus: bool = Field(default=True, description="Show the consensus residue row")
+    window_start: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "First match state drawn (1-based); states before it are left out. "
+            "null starts at the first state. Also a tile control"
+        ),
+    )
+    window_end: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Last match state drawn (1-based); states after it are left out. "
+            "null runs to the last state. Also a tile control"
+        ),
+    )
+    collapse_below_ic: float | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Fold runs of states whose information content is under this many "
+            "bits (relative entropy) into a narrow stub that a click opens; "
+            "null folds nothing. Also a tile control"
+        ),
+    )
+    collapse_min_run: int = Field(
+        default=4,
+        ge=1,
+        description="Shortest run of low-information states that `collapse_below_ic` folds",
+    )
+    hidden_tracks: list[HmmLogoTrack] = Field(
+        default_factory=list,
+        description=(
+            "Tracks (lanes) of the panel left out entirely so the logo takes the "
+            "room: `consensus` (consensus, RF and CS rows), `insert` (insert "
+            "probability and length), `occupancy` (occupancy or deletion bars), "
+            "`hits` (coverage area and hit bars), `ruler`. The logo itself is "
+            "never hidden. Also a tile control"
+        ),
+    )
+    collapsed_tracks: list[HmmLogoTrack] = Field(
+        default_factory=list,
+        description=(
+            "Tracks reduced to a thin named strip (the hits strip keeps a tiny "
+            "density summary); a header button on each track opens it again. "
+            "A track in `hidden_tracks` stays hidden. Also a tile control"
+        ),
+    )
     hits_wf_id: str | None = Field(
         default=None, description="Workflow id of the domain hits table (optional)"
     )
@@ -3556,6 +3608,27 @@ class HmmLogoConfig(_BaseVizConfig):
     follow_selection: bool = Field(
         default=True, description="Mark the states of an incoming residue_selection or hover"
     )
+
+    @model_validator(mode="after")
+    def _tracks_are_listed_once(self) -> HmmLogoConfig:
+        for name in ("hidden_tracks", "collapsed_tracks"):
+            tracks = getattr(self, name)
+            if len(set(tracks)) != len(tracks):
+                raise ValueError(f"{name} must not list a track twice")
+        overlap = sorted(set(self.hidden_tracks) & set(self.collapsed_tracks))
+        if overlap:
+            raise ValueError(f"a track cannot be both hidden and collapsed: {', '.join(overlap)}")
+        return self
+
+    @model_validator(mode="after")
+    def _window_is_ordered(self) -> HmmLogoConfig:
+        if (
+            self.window_start is not None
+            and self.window_end is not None
+            and self.window_start > self.window_end
+        ):
+            raise ValueError("window_start must not come after window_end")
+        return self
 
 
 class SecondaryStructureConfig(_BaseVizConfig):
@@ -3633,12 +3706,63 @@ class SecondaryStructureConfig(_BaseVizConfig):
     show_composition: bool = Field(
         default=True, description="Show the percentage of helix, strand and coil residues"
     )
+    show_letters: bool = Field(
+        default=True,
+        description="Write the one-letter sequence under the ruler once the cells are wide enough",
+    )
+    shade_confidence: bool = Field(
+        default=True, description="Shade each residue of the ribbon by its confidence"
+    )
+    show_coil_segments: bool = Field(
+        default=False,
+        description="List the coil stretches in the segment list, not only helices and strands",
+    )
+    residue_width: int = Field(
+        default=0,
+        ge=0,
+        le=24,
+        description="Pixels per residue; 0 fits the whole protein to the tile width",
+    )
+    ribbon_height: int | None = Field(
+        default=None,
+        ge=16,
+        le=64,
+        description=(
+            "Height in pixels of the main ribbon lane, drawn exactly. Null keeps "
+            "the default 30 px lane, which grows to fill spare room up to 52 px"
+        ),
+    )
+    min_segment_length: int = Field(
+        default=1,
+        ge=1,
+        le=50,
+        description="Leave out of the segment list the segments shorter than this many residues",
+    )
+    state_colors: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "CSS colour per secondary-structure class (Helix, Strand, Turn, Coil; "
+            "state codes such as H or E read as their class). Over the colours the "
+            "dashboard pins for the state column; a class left out keeps the "
+            "pinned or default colour. The viewer can recolour on the tile"
+        ),
+    )
     selection_enabled: bool = Field(
         default=True, description="Brushing the ribbon emits a residue_selection"
     )
     follow_selection: bool = Field(
         default=True, description="Mark the residues of an incoming residue_selection or hover"
     )
+
+    @field_validator("state_colors")
+    @classmethod
+    def _state_colors_non_empty(cls, v: dict[str, str]) -> dict[str, str]:
+        for key, colour in v.items():
+            if not key.strip():
+                raise ValueError("state_colors keys must be non-empty class names")
+            if not colour.strip():
+                raise ValueError(f"state_colors[{key!r}] must be a non-empty colour string")
+        return v
 
     @model_validator(mode="after")
     def _check_reference(self) -> "SecondaryStructureConfig":
@@ -3753,6 +3877,17 @@ class DomainArchitectureConfig(_BaseVizConfig):
             "`per_protein` stretches each backbone to the full width"
         ),
     )
+    residue_width: int = Field(
+        default=0,
+        ge=0,
+        le=24,
+        description=(
+            "Pixels per residue of the longest protein; 0 fits the tracks to the tile "
+            "width, a larger value makes the tile scroll sideways under a fixed label "
+            "column. With `scale: per_protein` every backbone is that long in total "
+            "(the width of the longest protein at this many pixels per residue)"
+        ),
+    )
     color_by: Literal["label", "source"] = Field(
         default="label", description="What the domain colour encodes"
     )
@@ -3770,7 +3905,16 @@ class DomainArchitectureConfig(_BaseVizConfig):
         ),
     )
     label_selection: bool = Field(
-        default=True, description="A domain pick also emits a point selection on `label_col`"
+        default=True,
+        description="A domain pick also emits a point selection, on `selection_column` or `label_col`",
+    )
+    selection_column: str | None = Field(
+        default=None,
+        description=(
+            "Column the point selection of a domain pick is made on, and the one a "
+            "linked record card keys on. Null uses `label_col`, which several hits "
+            "of a protein can share; name a per-hit key to pick exactly one domain"
+        ),
     )
     selection_enabled: bool = Field(
         default=True, description="Clicking a domain emits a residue_selection over its span"

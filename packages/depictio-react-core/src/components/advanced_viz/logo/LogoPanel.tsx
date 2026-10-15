@@ -1,10 +1,26 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { alpha, Box, Paper, Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
+import { Icon } from '@iconify/react';
+import { ActionIcon, alpha, Box, Paper, Text, Tooltip, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 
-import { fitCellWidth, prepareCanvas, rulerStep, scrollToReveal, visibleWindow } from '../protein/canvas';
+import { useFullscreenPortalTarget } from '../../chrome/useFullscreenPortalTarget';
+
+import { fitCellWidth, prepareCanvas, rulerStep, scrollToReveal } from '../protein/canvas';
 import { useDrawScheduler, useViewSize } from '../protein/canvasHooks';
+import { useModifierWheelZoom } from '../protein/useWheelZoom';
 import { rgbCss } from '../protein/residueColours';
 import type { MsaColourScheme, ProteinHighlight, ResidueRange } from '../protein/types';
+import {
+  columnsInView,
+  extentAtX,
+  indexAtX,
+  placeColumns,
+  planColumns,
+  spanOfIndices,
+  STUB_PX,
+  visibleSegments,
+  type HiddenRange,
+  type StubSegment,
+} from './collapse';
 import { atlasCellPx, atlasKey, GlyphAtlas, glyphAtlasFor } from './glyphAtlas';
 import { columnHeights, logoHeights, type HeightMode } from './heights';
 import {
@@ -30,8 +46,10 @@ import {
   type Lane,
 } from './layout';
 import { logoColours } from './logoTheme';
+import { TRACK_LABELS, type TrackKey } from './tracks';
 import {
   letterColours,
+  residueRangeOfStates,
   stateColumnLookup,
   stateSpanOfRange,
   topLetters,
@@ -39,7 +57,9 @@ import {
 } from './profileModel';
 
 /** Left gutter: lane labels and the logo's y axis. */
-const GUTTER_PX = 62;
+const GUTTER_PX = 76;
+/** Width kept free at the right of the gutter for a track's collapse button. */
+const TRACK_BUTTON_PX = 14;
 /** Below this many px per state, letters become stacked colour bars. */
 export const DENSITY_PX = 6;
 const MAX_FIT_PX = 40;
@@ -87,13 +107,35 @@ export interface LogoPanelProps {
   onClickHit?: (hit: LogoHit) => void;
   /** Px per state; 0 or undefined fits the model to the width. */
   cellWidth?: number;
+  /** Ctrl / Cmd + wheel asks for this many px per state (whole pixels). */
+  onCellWidthChange?: (px: number) => void;
   followSelection?: boolean;
   onDrawn?: () => void;
+  /** Draw only the states numbered `windowStart..windowEnd` (1-based); null is open. */
+  windowStart?: number | null;
+  windowEnd?: number | null;
+  /** Fold runs of at least `collapseMinRun` states whose information is under this many bits. */
+  collapseBelowIc?: number | null;
+  collapseMinRun?: number;
+  /** State index ranges hidden by hand, and the auto runs the user opened. */
+  hidden?: readonly HiddenRange[];
+  expanded?: readonly string[];
+  /** A click on a stub. */
+  onExpandStub?: (stub: StubSegment) => void;
+  /** Tracks left out of the panel, and tracks reduced to a thin strip. */
+  hiddenTracks?: readonly TrackKey[];
+  collapsedTracks?: readonly TrackKey[];
+  /** Toggle one track between expanded and collapsed; omit for no header buttons. */
+  onToggleTrack?: (track: TrackKey) => void;
 }
 
 interface BrushState {
+  /** Column under the press (-1 outside the grid or over a stub). */
   startCol: number;
-  endCol: number;
+  /** Where the press and the pointer are, px from the first drawn column. */
+  startGx: number;
+  endGx: number;
+  stub: StubSegment | null;
   x: number;
   y: number;
   moved: boolean;
@@ -103,10 +145,15 @@ interface BrushState {
 
 interface PointerAt {
   col: number | null;
+  stub: StubSegment | null;
   lane: Lane | null;
   hit: LogoHit | null;
   x: number;
   y: number;
+  /** Pointer x in px from the first drawn column. */
+  gx: number;
+  /** Over a drawn column or a stub (not the gutter or past the last column). */
+  over: boolean;
 }
 
 const fmt = (v: number | null | undefined, digits = 2): string =>
@@ -142,8 +189,19 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
   onClear,
   onClickHit,
   cellWidth,
+  onCellWidthChange,
   followSelection = true,
   onDrawn,
+  windowStart = null,
+  windowEnd = null,
+  collapseBelowIc = null,
+  collapseMinRun = 4,
+  hidden,
+  expanded,
+  onExpandStub,
+  hiddenTracks,
+  collapsedTracks,
+  onToggleTrack,
 }) => {
   const theme = useMantineTheme();
   const { colorScheme } = useMantineColorScheme();
@@ -153,6 +211,7 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const view = useViewSize(scrollRef);
+  const fsPortalTarget = useFullscreenPortalTarget();
 
   // ---- derived model -------------------------------------------------------
   const k = profile.letters.length;
@@ -197,8 +256,10 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
         occupancy: showIndelRows && profile.occupancy != null,
         hits: hits != null,
         hitRows: packing?.rows ?? 0,
+        hiddenTracks,
+        collapsedTracks,
       }),
-    [view.h, showConsensus, showIndelRows, profile, hits, packing],
+    [view.h, showConsensus, showIndelRows, profile, hits, packing, hiddenTracks, collapsedTracks],
   );
   // Hits the bars show, for the lane label: rows past the budget are summarised.
   const hitsDrawn = useMemo(
@@ -206,8 +267,35 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
     [packing, layout.hitRowsShown],
   );
   const gridW = Math.max(0, view.w - GUTTER_PX);
-  const cw = cellWidth && cellWidth > 0 ? cellWidth : fitCellWidth(gridW, m, 1, MAX_FIT_PX);
-  const contentW = GUTTER_PX + m * cw;
+  // Which columns are drawn (window, folded runs, hidden ranges); the state
+  // width fits what is left once the stubs have their fixed width.
+  const plan = useMemo(
+    () =>
+      planColumns({
+        states: profile.states,
+        windowStart,
+        windowEnd,
+        information,
+        belowIc: collapseBelowIc,
+        minRun: collapseMinRun,
+        hidden,
+        expanded,
+      }),
+    [profile.states, windowStart, windowEnd, information, collapseBelowIc, collapseMinRun, hidden, expanded],
+  );
+  const cw =
+    cellWidth && cellWidth > 0
+      ? cellWidth
+      : fitCellWidth(Math.max(0, gridW - plan.stubs * STUB_PX), plan.shown, 1, MAX_FIT_PX);
+  const columns = useMemo(() => placeColumns(plan, cw), [plan, cw]);
+  const contentW = GUTTER_PX + columns.width;
+  useModifierWheelZoom(scrollRef, {
+    value: cw,
+    setValue: onCellWidthChange,
+    min: 1,
+    max: 40,
+    gutter: GUTTER_PX,
+  });
 
   const selectedSpan = useMemo(() => stateSpanOfRange(profile.positions, selectedRange), [profile.positions, selectedRange]);
   const highlightSpan = useMemo(() => stateSpanOfRange(profile.positions, highlight), [profile.positions, highlight]);
@@ -233,19 +321,29 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
       new GlyphAtlas({ fontFamily: colours.font, cellPx: atlasCellPx(dpr) }),
     );
     const sx = el.scrollLeft;
-    const [c0, c1] = visibleWindow(sx, gridW, cw, m, 1);
-    const colX = (i: number) => GUTTER_PX + i * cw - sx;
+    const segs = visibleSegments(columns, sx, gridW);
+    const stubs = segs.filter((sg): sg is StubSegment => sg.kind === 'stub');
+    // Every drawn column in the viewport, left to right, with its left edge.
+    const eachColumn = (fn: (i: number, x: number, firstOfRun: boolean) => void) => {
+      for (const sg of segs) {
+        if (sg.kind !== 'states') continue;
+        const [a, b] = columnsInView(columns, sg, sx, gridW);
+        for (let i = a; i <= b; i++) fn(i, GUTTER_PX + sg.x + (i - sg.start) * cw - sx, i === sg.start);
+      }
+    };
+    const anyColumn = segs.some((sg) => sg.kind === 'states');
     const lanes = layout.byKey;
-    const gridBottom = (lanes.ruler?.y ?? view.h);
+    const gridBottom = layout.gridBottom;
     const brush = brushRef.current;
     const hover = hoverRef.current;
 
-    // Column bands shared by every lane.
+    // Column bands shared by every lane (a span over a stub covers it whole).
     const bands: Array<[number, number, string]> = [];
     if (selectedSpan) bands.push([selectedSpan[0], selectedSpan[1], colours.accentFill]);
     if (highlightSpan) bands.push([highlightSpan[0], highlightSpan[1], colours.highlightFill]);
     if (brush?.moved) {
-      bands.push([Math.min(brush.startCol, brush.endCol), Math.max(brush.startCol, brush.endCol), colours.accentFill]);
+      const extent = extentAtX(columns, brush.startGx, brush.endGx);
+      if (extent) bands.push([extent[0], extent[1], colours.accentFill]);
     }
     if (hover?.col != null && !brush && !hover.hit) bands.push([hover.col, hover.col, colours.hoverFill]);
 
@@ -254,13 +352,15 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
     ctx.rect(GUTTER_PX, 0, gridW, view.h);
     ctx.clip();
     for (const [a, b, fill] of bands) {
+      const span = spanOfIndices(columns, a, b);
+      if (!span) continue;
       ctx.fillStyle = fill;
-      ctx.fillRect(colX(a), 0, (b - a + 1) * cw, gridBottom);
+      ctx.fillRect(GUTTER_PX + span.x0 - sx, 0, span.x1 - span.x0, gridBottom);
     }
 
     // Logo: stacks of letters, the tallest on top.
     const logo = lanes.logo;
-    if (logo && c1 >= c0) {
+    if (logo && anyColumn) {
       const base = logo.y + logo.h;
       const scale = (logo.h - LOGO_TOP_PAD) / axis.top;
       ctx.strokeStyle = colours.grid;
@@ -274,8 +374,7 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
       ctx.stroke();
       const dense = cw < DENSITY_PX;
       const pad = cw >= 12 ? 1 : 0;
-      for (let i = c0; i <= c1; i++) {
-        const x = colX(i);
+      eachColumn((i, x) => {
         let y = base;
         for (let j = 0; j < k; j++) {
           const a = heights.order[i * k + j];
@@ -289,7 +388,7 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
             ctx.fillRect(x, y, cw, h);
           }
         }
-      }
+      });
     }
 
     // Consensus, RF and CS rows: characters when they fit.
@@ -300,9 +399,9 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
       ctx.font = `600 ${fontPx}px ${colours.monoFont}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      for (let i = c0; i <= c1; i++) {
+      eachColumn((i, x) => {
         const v = values[i];
-        if (!v) continue;
+        if (!v) return;
         let fill = colours.text;
         if (coloured) {
           const a = profile.letters.indexOf(v.toUpperCase());
@@ -313,12 +412,12 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
         }
         if (legible) {
           ctx.fillStyle = fill;
-          ctx.fillText(v, colX(i) + cw / 2, lane.y + lane.h / 2 + 0.5);
+          ctx.fillText(v, x + cw / 2, lane.y + lane.h / 2 + 0.5);
         } else if (coloured) {
           ctx.fillStyle = fill;
-          ctx.fillRect(colX(i), lane.y + 3, cw, lane.h - 6);
+          ctx.fillRect(x, lane.y + 3, cw, lane.h - 6);
         }
-      }
+      });
     };
     textRow(lanes.consensus, profile.consensus, true);
     textRow(lanes.rf, profile.rf, false);
@@ -337,19 +436,19 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
       ctx.font = `9px ${colours.font}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      for (let i = c0; i <= c1; i++) {
+      eachColumn((i, x) => {
         const v = values[i];
-        if (v == null) continue;
+        if (v == null) return;
         const t = share(v);
         if (t > 0) {
           ctx.fillStyle = alpha(colour, 0.12 + 0.88 * t);
-          ctx.fillRect(colX(i), lane.y + 1, cw, lane.h - 2);
+          ctx.fillRect(x, lane.y + 1, cw, lane.h - 2);
         }
         if (writeValues) {
           ctx.fillStyle = t > 0.6 ? colours.text : colours.dimmed;
-          ctx.fillText(label(v), colX(i) + cw / 2, lane.y + lane.h / 2 + 0.5);
+          ctx.fillText(label(v), x + cw / 2, lane.y + lane.h / 2 + 0.5);
         }
-      }
+      });
     };
     strip(lanes.insertProb, profile.insertProb, colours.insert, (v) => Math.max(0, Math.min(1, v)), (v) =>
       v.toFixed(2).replace(/^0\./, '.'),
@@ -367,35 +466,57 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
     if (occ && profile.occupancy) {
       ctx.fillStyle = colours.bars;
       const barH = occ.h - 4;
-      for (let i = c0; i <= c1; i++) {
-        const o = profile.occupancy[i];
-        if (o == null) continue;
+      eachColumn((i, x) => {
+        const o = profile.occupancy![i];
+        if (o == null) return;
         const v = Math.max(0, Math.min(1, occupancyMode === 'delete' ? 1 - o : o));
         const h = v * barH;
-        if (h <= 0) continue;
-        ctx.fillRect(colX(i) + (cw > 3 ? 0.5 : 0), occ.y + 2 + barH - h, cw > 3 ? cw - 1 : cw, h);
-      }
+        if (h <= 0) return;
+        ctx.fillRect(x + (cw > 3 ? 0.5 : 0), occ.y + 2 + barH - h, cw > 3 ? cw - 1 : cw, h);
+      });
     }
 
-    // Hit coverage: depth per state as a stepped area.
-    const cov = lanes.coverage;
-    if (cov && coverage && maxDepth > 0 && c1 >= c0) {
-      const barH = cov.h - 5;
-      const yOf = (d: number) => cov.y + 3 + barH - (d / maxDepth) * barH;
-      ctx.beginPath();
-      ctx.moveTo(colX(c0), cov.y + 3 + barH);
-      for (let i = c0; i <= c1; i++) {
-        const d = coverage[profile.states[i] - 1] ?? 0;
-        ctx.lineTo(colX(i), yOf(d));
-        ctx.lineTo(colX(i) + cw, yOf(d));
+    // Hit coverage: depth per state as a stepped area, in the coverage lane or,
+    // collapsed, as the density summary of the hits strip.
+    const coverageArea = (top: number, barH: number) => {
+      if (!coverage || maxDepth <= 0 || !anyColumn) return;
+      const yOf = (d: number) => top + barH - (d / maxDepth) * barH;
+      // One area per run of letters: a stub breaks it.
+      for (const sg of segs) {
+        if (sg.kind !== 'states') continue;
+        const [a, b] = columnsInView(columns, sg, sx, gridW);
+        if (b < a) continue;
+        const x0 = GUTTER_PX + sg.x + (a - sg.start) * cw - sx;
+        ctx.beginPath();
+        ctx.moveTo(x0, top + barH);
+        for (let i = a; i <= b; i++) {
+          const d = coverage[profile.states[i] - 1] ?? 0;
+          ctx.lineTo(x0 + (i - a) * cw, yOf(d));
+          ctx.lineTo(x0 + (i - a + 1) * cw, yOf(d));
+        }
+        ctx.lineTo(x0 + (b - a + 1) * cw, top + barH);
+        ctx.closePath();
+        ctx.fillStyle = colours.coverageFill;
+        ctx.fill();
+        ctx.strokeStyle = colours.bars;
+        ctx.lineWidth = 1;
+        ctx.stroke();
       }
-      ctx.lineTo(colX(c1) + cw, cov.y + 3 + barH);
-      ctx.closePath();
-      ctx.fillStyle = colours.coverageFill;
-      ctx.fill();
-      ctx.strokeStyle = colours.bars;
+    };
+    const cov = lanes.coverage;
+    if (cov) coverageArea(cov.y + 3, cov.h - 5);
+
+    // Collapsed tracks: a thin tinted strip; the hits one keeps a tiny density summary.
+    for (const [track, strip] of Object.entries(layout.strips) as Array<[TrackKey, Lane]>) {
+      ctx.fillStyle = colours.hoverFill;
+      ctx.fillRect(GUTTER_PX, strip.y, gridW, strip.h);
+      ctx.strokeStyle = colours.grid;
       ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(GUTTER_PX, Math.round(strip.y) + 0.5);
+      ctx.lineTo(view.w, Math.round(strip.y) + 0.5);
       ctx.stroke();
+      if (track === 'hits') coverageArea(strip.y + 2, strip.h - 3);
     }
 
     // Hit bars, packed in rows, coloured by E-value, partial ends jagged.
@@ -406,12 +527,18 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
       hits.forEach((h, idx) => {
         const row = packing.rowOf[idx];
         if (row >= layout.hitRowsShown) return;
-        const x0 = colX(colOfState(h.from));
-        const x1 = colX(colOfState(h.to)) + cw;
+        // A hit across a stub runs over it; one outside the window is not drawn.
+        const span = spanOfIndices(columns, colOfState(h.from), colOfState(h.to));
+        if (!span) return;
+        const x0 = GUTTER_PX + span.x0 - sx;
+        const x1 = GUTTER_PX + span.x1 - sx;
         if (x1 < GUTTER_PX || x0 > view.w) return;
         const y = hitBarTop(lane, row);
         ctx.fillStyle = rgbCss(rampColour(colours.evalueRamp, evalueT(h.evalue)));
         const edges = partialEdges(h, modelLength);
+        // The window's cut is not the hit's own end.
+        if (span.clippedStart) edges.left = false;
+        if (span.clippedEnd) edges.right = false;
         const tooth = Math.min(3, barH / 2, (x1 - x0) / 4);
         if ((edges.left || edges.right) && barH >= 4 && tooth >= 1.5) {
           // Pfam-style jagged end where the hit stops short of the model.
@@ -449,15 +576,16 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
     }
 
     // Crosshair of a hover elsewhere.
-    if (highlightSpan && logo) {
+    const highlightPx = highlightSpan ? spanOfIndices(columns, highlightSpan[0], highlightSpan[1]) : null;
+    if (highlightPx && logo) {
       ctx.strokeStyle = colours.highlight;
       ctx.lineWidth = 1.5;
-      ctx.strokeRect(colX(highlightSpan[0]), logo.y + 0.75, (highlightSpan[1] - highlightSpan[0] + 1) * cw, gridBottom - logo.y - 1.5);
+      ctx.strokeRect(GUTTER_PX + highlightPx.x0 - sx, logo.y + 0.75, highlightPx.x1 - highlightPx.x0, gridBottom - logo.y - 1.5);
     }
 
     // Ruler: HMM states above, reference residues below.
     const ruler = lanes.ruler;
-    if (ruler && c1 >= c0) {
+    if (ruler && anyColumn) {
       const half = ruler.h / 2;
       const step = rulerStep(cw);
       ctx.font = `10px ${colours.font}`;
@@ -473,10 +601,11 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
       };
       let lastState = -Infinity;
       let lastResidue = -Infinity;
-      for (let i = c0; i <= c1; i++) {
-        const x = Math.round(colX(i) + cw / 2) + 0.5;
+      eachColumn((i, colLeft, firstOfRun) => {
+        const x = Math.round(colLeft + cw / 2) + 0.5;
         const state = profile.states[i];
-        if ((state % step === 0 || i === 0) && x - lastState >= 28) {
+        // The first column of every run is labelled, so a stub never leaves the reader without a bearing.
+        if ((state % step === 0 || firstOfRun) && x - lastState >= 28) {
           ctx.beginPath();
           ctx.moveTo(x, ruler.y);
           ctx.lineTo(x, ruler.y + 3);
@@ -485,9 +614,56 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
           lastState = x;
         }
         const pos = profile.positions[i];
-        if (pos != null && (pos % step === 0 || i === 0) && x - lastResidue >= 28) {
+        if (pos != null && (pos % step === 0 || firstOfRun) && x - lastResidue >= 28) {
           label(String(pos), x, ruler.y + ruler.h - 3);
           lastResidue = x;
+        }
+      });
+    }
+
+    // Folded runs: a dimmed, hatched strip over every lane, with the number of
+    // states when the logo lane is tall enough to carry it sideways.
+    for (const stub of stubs) {
+      const x = GUTTER_PX + stub.x - sx;
+      const hovered = hover?.stub?.key === stub.key;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, 0, stub.w, gridBottom);
+      ctx.clip();
+      ctx.fillStyle = hovered ? colours.accentFill : colours.hoverFill;
+      ctx.fillRect(x, 0, stub.w, gridBottom);
+      ctx.strokeStyle = hovered ? colours.accent : colours.grid;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let yy = 0; yy < gridBottom + stub.w; yy += 6) {
+        ctx.moveTo(x, yy);
+        ctx.lineTo(x + stub.w, yy - stub.w);
+      }
+      ctx.stroke();
+      ctx.restore();
+      ctx.strokeStyle = hovered ? colours.accent : colours.dimmed;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(Math.round(x) + 0.5, 0);
+      ctx.lineTo(Math.round(x) + 0.5, gridBottom);
+      ctx.moveTo(Math.round(x + stub.w) - 0.5, 0);
+      ctx.lineTo(Math.round(x + stub.w) - 0.5, gridBottom);
+      ctx.stroke();
+      if (logo) {
+        const text = `${stub.count} ${stub.count === 1 ? 'state' : 'states'}`;
+        ctx.font = `9px ${colours.font}`;
+        if (ctx.measureText(text).width + 8 <= logo.h) {
+          ctx.save();
+          ctx.translate(x + stub.w / 2, logo.y + logo.h / 2);
+          ctx.rotate(-Math.PI / 2);
+          ctx.fillStyle = colours.dimmed;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          // A plain fill would hatch through the digits: knock a pill out first.
+          const tw = ctx.measureText(text).width;
+          ctx.clearRect(-tw / 2 - 2, -6, tw + 4, 12);
+          ctx.fillText(text, 0, 0.5);
+          ctx.restore();
         }
       }
     }
@@ -507,10 +683,25 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
       occupancy: occupancyMode === 'delete' ? 'Delete P' : 'Occupancy',
       coverage: hitsLaneLabel(coverageCount, hitsDrawn),
     };
+    const labelRoom = GUTTER_PX - 8 - (onToggleTrack ? TRACK_BUTTON_PX : 0);
     for (const l of layout.lanes) {
+      if (l.key === 'strip' && l.track) {
+        ctx.font = `9px ${colours.font}`;
+        const name =
+          l.track === 'hits'
+            ? `Hits ${coverageCount}`
+            : l.track === 'occupancy'
+              ? (labels.occupancy ?? TRACK_LABELS.occupancy)
+              : l.track === 'ruler'
+                ? 'Ruler'
+                : TRACK_LABELS[l.track].replace(' rows', '');
+        ctx.fillText(name, 4, l.y + l.h / 2 + 0.5);
+        ctx.font = `10px ${colours.font}`;
+        continue;
+      }
       const text = labels[l.key];
       if (!text) continue;
-      if (ctx.measureText(text).width > GUTTER_PX - 8 && text.includes(HITS_LABEL_SEPARATOR)) {
+      if (ctx.measureText(text).width > labelRoom && text.includes(HITS_LABEL_SEPARATOR)) {
         // The summary does not fit the gutter on one line: count above, drawn below.
         const [head, tail] = text.split(HITS_LABEL_SEPARATOR);
         ctx.fillText(head, 4, l.y + l.h / 2 - 5.5);
@@ -560,7 +751,7 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
     view,
     gridW,
     cw,
-    m,
+    columns,
     k,
     layout,
     colours,
@@ -575,6 +766,7 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
     coverage,
     coverageCount,
     hitsDrawn,
+    onToggleTrack,
     maxDepth,
     maxInsertLength,
     hits,
@@ -592,12 +784,13 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
 
   // ---- follow an incoming selection / highlight ------------------------------
   const followSpan = highlightSpan ?? selectedSpan;
+  const followPx = followSpan ? spanOfIndices(columns, followSpan[0], followSpan[1]) : null;
   useEffect(() => {
     const el = scrollRef.current;
-    if (!followSelection || !el || !followSpan || gridW <= 0) return;
-    const next = scrollToReveal(el.scrollLeft, gridW, followSpan[0] * cw, (followSpan[1] + 1) * cw);
+    if (!followSelection || !el || !followPx || gridW <= 0) return;
+    const next = scrollToReveal(el.scrollLeft, gridW, followPx.x0, followPx.x1);
     if (next != null) el.scrollLeft = next;
-  }, [followSelection, followSpan?.[0], followSpan?.[1], cw, gridW]);
+  }, [followSelection, followPx?.x0, followPx?.x1, gridW]);
 
   // ---- pointer ---------------------------------------------------------------
   const pointerAt = useCallback(
@@ -606,17 +799,19 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
       const x = rect ? e.clientX - rect.left : 0;
       const y = rect ? e.clientY - rect.top : 0;
       const sx = scrollRef.current?.scrollLeft ?? 0;
-      const raw = Math.floor((x - GUTTER_PX + sx) / cw);
-      const col = x >= GUTTER_PX && raw >= 0 && raw < m ? raw : null;
+      const gx = x - GUTTER_PX + sx;
+      const found = x >= GUTTER_PX ? indexAtX(columns, gx) : null;
+      const stub = found?.segment.kind === 'stub' ? found.segment : null;
+      const col = found && !stub ? found.index : null;
       const lane = laneAt(layout, y);
       let hit: LogoHit | null = null;
       if (col != null && lane?.key === 'hits' && hits && packing) {
         const row = hitRowAt(layout, y);
         if (row >= 0) hit = hitAt(hits, packing, row, profile.states[col]);
       }
-      return { col, lane, hit, x, y };
+      return { col, stub, lane, hit, x, y, gx, over: found != null };
     },
-    [cw, m, layout, hits, packing, profile.states],
+    [columns, layout, hits, packing, profile.states],
   );
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -624,12 +819,14 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
     const at = pointerAt(e);
     brushRef.current = {
       startCol: at.col ?? -1,
-      endCol: at.col ?? -1,
+      startGx: at.gx,
+      endGx: at.gx,
+      stub: at.stub,
       x: at.x,
       y: at.y,
       moved: false,
       hit: at.hit,
-      inGrid: at.col != null,
+      inGrid: at.over,
     };
     e.currentTarget.setPointerCapture?.(e.pointerId);
   };
@@ -642,14 +839,13 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
         brush.moved = true;
       }
       if (brush.moved) {
-        const sx = scrollRef.current?.scrollLeft ?? 0;
-        brush.endCol = Math.max(0, Math.min(m - 1, Math.floor((at.x - GUTTER_PX + sx) / cw)));
+        brush.endGx = at.gx;
         requestDraw();
         return;
       }
     }
     hoverRef.current = at;
-    setTooltip(at.col != null ? at : null);
+    setTooltip(at.col != null || at.stub ? at : null);
     onHover?.(at.col != null ? { index: at.col, hit: at.hit } : null);
     requestDraw();
   };
@@ -660,10 +856,13 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
     e.currentTarget.releasePointerCapture?.(e.pointerId);
     if (!brush) return;
     if (brush.moved && onPickStates) {
-      onPickStates(brush.startCol, brush.endCol);
+      const extent = extentAtX(columns, brush.startGx, brush.endGx);
+      if (extent) onPickStates(extent[0], extent[1]);
+    } else if (brush.stub && onExpandStub) {
+      onExpandStub(brush.stub);
     } else if (brush.hit && onClickHit) {
       onClickHit(brush.hit);
-    } else if (brush.inGrid && onPickStates) {
+    } else if (brush.inGrid && brush.startCol >= 0 && onPickStates) {
       onPickStates(brush.startCol, brush.startCol);
     } else if (!brush.inGrid) {
       onClear?.();
@@ -681,6 +880,18 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
 
   // ---- tooltip -----------------------------------------------------------------
   const tip = useMemo(() => {
+    if (tooltip?.stub) {
+      const stub = tooltip.stub;
+      const first = profile.states[stub.start];
+      const last = profile.states[stub.end];
+      const lines = [`${stub.count} ${stub.count === 1 ? 'state' : 'states'} folded`];
+      lines.push(first === last ? `State ${first}` : `States ${first}-${last}`);
+      const residues = residueRangeOfStates(profile.positions, stub.start, stub.end);
+      if (residues) lines.push(`Residues ${residues.start}-${residues.end}`);
+      lines.push(stub.source === 'auto' ? `Information under ${fmt(collapseBelowIc)} bits` : 'Hidden by hand');
+      lines.push(onExpandStub ? 'Click to expand' : '');
+      return lines.filter(Boolean);
+    }
     if (!tooltip || tooltip.col == null) return null;
     const i = tooltip.col;
     const h = tooltip.hit;
@@ -723,7 +934,7 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
       lines.push(`Covered by ${coverage[state - 1] ?? 0} of ${coverageCount} hits`);
     }
     return lines;
-  }, [tooltip, profile, hasPositions, information, coverage, coverageCount, modelLength]);
+  }, [tooltip, profile, hasPositions, information, coverage, coverageCount, modelLength, collapseBelowIc, onExpandStub]);
 
   return (
     <Box className="depictio-hmm-logo-panel" pos="relative" style={{ width: '100%', height: '100%', minHeight: 0 }}>
@@ -736,13 +947,13 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
           <canvas
             ref={canvasRef}
             role="img"
-            aria-label={`HMM logo of ${profile.model ?? 'the model'}, ${m} match states`}
+            aria-label={`HMM logo of ${profile.model ?? 'the model'}, ${m} match states${plan.shown < m ? `, ${plan.shown} drawn` : ''}`}
             style={{
               position: 'sticky',
               left: 0,
               top: 0,
               display: 'block',
-              cursor: onPickStates ? 'crosshair' : 'default',
+              cursor: tooltip?.stub && onExpandStub ? 'pointer' : onPickStates ? 'crosshair' : 'default',
               touchAction: 'none',
             }}
             onPointerDown={onPointerDown}
@@ -752,6 +963,41 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
           />
         </div>
       </div>
+      {onToggleTrack
+        ? layout.tracks.map((span) => (
+            <Tooltip
+              key={span.track}
+              label={span.collapsed ? 'Expand track' : 'Collapse track'}
+              withArrow
+              position="right"
+              openDelay={300}
+              portalProps={{ target: fsPortalTarget }}
+            >
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size={TRACK_BUTTON_PX}
+                radius="xs"
+                aria-label={`${span.collapsed ? 'Expand' : 'Collapse'} ${TRACK_LABELS[span.track]} track`}
+                aria-expanded={!span.collapsed}
+                data-testid={`hmm-logo-track-toggle-${span.track}`}
+                onClick={() => onToggleTrack(span.track)}
+                style={{
+                  position: 'absolute',
+                  zIndex: 3,
+                  left: GUTTER_PX - TRACK_BUTTON_PX - 2,
+                  top: span.y + (Math.min(span.h, TRACK_BUTTON_PX) - TRACK_BUTTON_PX) / 2,
+                }}
+              >
+                <Icon
+                  icon={span.collapsed ? 'tabler:chevron-right' : 'tabler:chevron-down'}
+                  width={10}
+                  height={10}
+                />
+              </ActionIcon>
+            </Tooltip>
+          ))
+        : null}
       {tip && tooltip ? (
         <Paper
           withBorder

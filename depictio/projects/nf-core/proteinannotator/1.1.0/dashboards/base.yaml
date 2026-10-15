@@ -345,7 +345,9 @@ main_dashboard:
     index: pa-ov-findings
     layout: {x: 0, y: 0, w: 8, h: 2}
   # One highlight per analysis tab, in the order of the rows above. The tiles of
-  # a row share a stored height.
+  # a row share a stored height. Each row is w3 + w5, not w4 + w4: the domain
+  # architecture and the sequence track lay a protein out along its chain and
+  # take the wider share (see VALIDATION_REPORT.md, Deliberate deviations).
   - component_type: highlight
     section: Findings
     source_tab: Input filtering
@@ -354,7 +356,7 @@ main_dashboard:
     hide_legend: true
     tag: pa-ov-hl-cover
     index: pa-ov-hl-cover
-    layout: {x: 0, y: 2, w: 4, h: 5}
+    layout: {x: 0, y: 2, w: 3, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Domains
@@ -363,7 +365,7 @@ main_dashboard:
     hide_legend: true
     tag: pa-ov-hl-domains
     index: pa-ov-hl-domains
-    layout: {x: 4, y: 2, w: 4, h: 5}
+    layout: {x: 3, y: 2, w: 5, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Secondary structure
@@ -372,7 +374,7 @@ main_dashboard:
     hide_legend: true
     tag: pa-ov-hl-states
     index: pa-ov-hl-states
-    layout: {x: 0, y: 7, w: 4, h: 5}
+    layout: {x: 0, y: 7, w: 3, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Structure
@@ -381,7 +383,7 @@ main_dashboard:
     hide_legend: true
     tag: pa-ov-hl-chain
     index: pa-ov-hl-chain
-    layout: {x: 4, y: 7, w: 4, h: 5}
+    layout: {x: 3, y: 7, w: 5, h: 5}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tab the run does not have is left out.
   - component_type: text
@@ -900,7 +902,8 @@ tabs:
   # `evalue` (hmmsearch independent E-value, or the InterProScan match value),
   # and the HMM span columns are null for InterProScan rows, which then draw as
   # complete matches. A click selects the protein and the span on the residue
-  # tables and the family on the tiles of this table.
+  # tables and the domain, by `domain_id`, on the tiles of this table (several
+  # hits share a label, so the label alone cannot name the one that was clicked).
   - component_type: advanced_viz
     workflow_tag: proteinannotator
     data_collection_tag: proteinannotator_domains
@@ -925,6 +928,7 @@ tabs:
       partial_coverage: 0.9
       position_col_for_selection: position
       label_selection: true
+      selection_column: domain_id
       selection_enabled: true
       follow_selection: true
     section: Domain architecture
@@ -1303,7 +1307,7 @@ tabs:
   - name: Structure and sequence
     icon: mdi:dna
     color: indigo
-    description: Pick a protein, then read its structure and its sequence lanes, linked residue by residue
+    description: Pick a protein in the table, then read its structure and its sequence lanes, linked residue by residue
   - name: Residue table
     icon: mdi:table
     color: gray
@@ -1332,9 +1336,9 @@ tabs:
     interactive_component_type: RangeSlider
     column_name: length
     column_type: int64
-    # The structure is folded on demand by ESMFold, which takes sequences of up
-    # to 400 residues: the tab opens on the proteins it can fold.
-    default_range: [1, 400]
+    # No default window: ESMFold folds up to 400 residues, but a longer protein
+    # stays listed (the structure tile says why it cannot fold it) rather than
+    # dropping out of the table without a word.
     display:
       icon_name: mdi:ruler
       custom_color: cyan
@@ -1364,11 +1368,13 @@ tabs:
   - component_type: text
     order: 1
     body: >
-      ESMFold folds the picked protein from its sequence, for proteins of up to 400 residues, so
-      the length filter opens on that range. Folding needs the server's structure resolver, which
-      an administrator turns on with `DEPICTIO_STRUCTURE_RESOLVER_ENABLED`; when it is off the tile
-      says so and the sequence track keeps working. Click a protein on the scatter, then a residue
-      in 3D or on the sequence to select it in all three.
+      ESMFold folds the picked protein from its sequence, by sending the sequence to the public ESM
+      Atlas service (api.esmatlas.com), for proteins of up to 400 residues; a
+      longer one stays in the table and its structure tile says it cannot be folded. Folding needs
+      the server's structure resolver, which an administrator turns on with
+      `DEPICTIO_STRUCTURE_RESOLVER_ENABLED`; when it is off the tile says so and the sequence track
+      keeps working. Click a protein in the table, then a residue in 3D or on the sequence to select
+      it in all three.
     tag: pa-st-intro
     index: pa-st-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1438,34 +1444,34 @@ tabs:
     aggregation: max
     column_name: length
     column_type: int64
-    secondary_layout: coverage
-    coverage_max: 400
+    secondary_layout: threshold
+    threshold_value: 400
+    threshold_direction: max
     display:
       icon_name: mdi:ruler
       icon_color: orange
-      caption: longest protein, of the 400 residues ESMFold takes
+      caption: longest protein; ESMFold folds up to 400 residues
     section: Structure at a glance
     tag: pa-st-card-longest
     index: pa-st-card-longest
     title: Longest protein
     description: Length of the longest protein in view, against the longest sequence ESMFold folds.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  - component_type: advanced_viz
+  - component_type: table
     workflow_tag: proteinannotator
     data_collection_tag: proteinannotator_proteins
-    use: proteinannotator/length_vs_cover
-    config:
-      x_title: Length (residues)
-      y_title: Residues in a domain (%)
-      selection_enabled: true
-      selection_column: entity
-      legend_pos: bottom
+    use: proteinannotator/proteins
+    # The id column drives the selection but stays out of the grid: it is the
+    # FASTA header, where the sample column holds a readable name.
+    columns: [sample, length, annotated_pct, top_domain_database, top_domain, domain_hits, databases_hit, annotation_status]
+    row_selection_enabled: true
+    row_selection_column: entity
     section: Structure and sequence
-    tag: pa-st-av-length-cover
-    index: pa-st-av-length-cover
+    tag: pa-st-table-proteins
+    index: pa-st-table-proteins
     title: Proteins to fold
-    description: One point per protein within the length window, coloured by the database of its best domain. Click one to show it beside.
-    layout: {x: 0, y: 0, w: 4, h: 5}
+    description: One row per protein within the length window, with its length, annotated share and best domain. Click a row to show it below.
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: proteinannotator
     data_collection_tag: proteinannotator_residues
@@ -1487,8 +1493,8 @@ tabs:
     tag: pa-st-av-structure
     index: pa-st-av-structure
     title: Predicted structure
-    description: The picked protein folded from its sequence over its written sequence, one colour per domain; residues outside any domain stay grey and the picked residue turns red.
-    layout: {x: 4, y: 0, w: 4, h: 5}
+    description: An ESMFold prediction made from the picked protein's sequence alone, not an experimental structure, coloured by domain (grey outside any domain) with the picked residue in red. Folding sends the sequence to the public ESM Atlas service.
+    layout: {x: 0, y: 6, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: proteinannotator
     data_collection_tag: proteinannotator_residues
@@ -1511,7 +1517,7 @@ tabs:
     index: pa-st-av-sequence
     title: Sequence, secondary structure and domains
     description: The same protein along its chain, with the predicted state, its probability and every domain span.
-    layout: {x: 0, y: 5, w: 8, h: 5}
+    layout: {x: 0, y: 11, w: 8, h: 5}
   - component_type: table
     workflow_tag: proteinannotator
     data_collection_tag: proteinannotator_residues

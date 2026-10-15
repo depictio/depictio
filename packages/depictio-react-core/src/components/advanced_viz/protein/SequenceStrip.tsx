@@ -27,8 +27,10 @@ import {
   valueExtent,
   type Run,
 } from './sequence';
+import { SEQUENCE_RESIDUE_WIDTH_MAX_PX } from './chainStrips';
 import { drawCoil, drawSecondaryStructureRuns } from './ssGlyphs';
 import type { SequenceStripProps, StripDomain, StripHover, StripResidue } from './types';
+import { useModifierWheelZoom } from './useWheelZoom';
 
 const LABEL_PX = 72;
 const RULER_PX = 18;
@@ -92,6 +94,8 @@ const SequenceStrip: React.FC<SequenceStripProps> = ({
   onClickVariant,
   height,
   cellWidth,
+  onCellWidthChange,
+  scrollSync,
   showLetters = true,
   followSelection = true,
   onDrawn,
@@ -173,6 +177,18 @@ const SequenceStrip: React.FC<SequenceStripProps> = ({
   const gridW = Math.max(0, view.w - LABEL_PX);
   const cw = cellWidth && cellWidth > 0 ? cellWidth : fitCellWidth(gridW, count, 0.05, 24);
   const contentW = LABEL_PX + count * cw;
+  useModifierWheelZoom(scrollRef, {
+    value: cw,
+    setValue: onCellWidthChange,
+    min: 1,
+    max: SEQUENCE_RESIDUE_WIDTH_MAX_PX,
+    gutter: LABEL_PX,
+  });
+  // The chains of a complex scroll together.
+  useEffect(() => {
+    const el = scrollRef.current;
+    return el && scrollSync ? scrollSync.register(el) : undefined;
+  }, [scrollSync]);
 
   const brushRef = useRef<{
     start: number;
@@ -606,7 +622,10 @@ const SequenceStrip: React.FC<SequenceStripProps> = ({
     >
       <div
         ref={scrollRef}
-        onScroll={() => requestDraw()}
+        onScroll={(e) => {
+          scrollSync?.follow(e.currentTarget);
+          requestDraw();
+        }}
         style={{ position: 'absolute', inset: 0, overflowX: 'auto', overflowY: 'hidden' }}
       >
         <div style={{ position: 'relative', width: contentW, height: '100%', minWidth: '100%' }}>

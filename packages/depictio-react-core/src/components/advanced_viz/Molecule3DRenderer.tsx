@@ -36,7 +36,7 @@ import {
   useStructureText,
   useThreeDmolStatus,
 } from './molecule/hooks';
-import { modelCredit } from './molecule/resolve';
+import { modelCredit, modelExplanation } from './molecule/resolve';
 import {
   buildColouring,
   checkVariants,
@@ -534,17 +534,16 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   );
 
   // ---- Marks ----------------------------------------------------------------------
-  const candidates = useMemo(
+  const markable = useMemo(
     () =>
-      showVariants
-        ? markRows(entityRows, {
-            hasAltColumn: Boolean(config.alt_aa_col),
-            colourMode,
-            residueCount: residues.length,
-          })
-        : [],
-    [showVariants, entityRows, config.alt_aa_col, colourMode, residues.length],
+      markRows(entityRows, {
+        hasAltColumn: Boolean(config.alt_aa_col),
+        colourMode,
+        residueCount: residues.length,
+      }),
+    [entityRows, config.alt_aa_col, colourMode, residues.length],
   );
+  const candidates = useMemo(() => (showVariants ? markable : []), [showVariants, markable]);
   const variantCheck = useMemo(() => checkVariants(candidates, residues), [candidates, residues]);
   // Colour universe = the whole fetched frame, so a consequence keeps its hue
   // when the entity changes.
@@ -1102,6 +1101,12 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   }
 
   const credit = fileMode ? null : modelCredit(resolved.data?.origin);
+  const creditInfo = modelExplanation(fileMode ? 'file' : resolved.data?.origin, {
+    colorMode: colourMode,
+    accession: resolved.data?.accession,
+    categoryLabel: config.category_col,
+    upstream: resolved.data?.upstream,
+  });
   const echo = [
     entity,
     !fileMode && resolved.data?.accession && resolved.data.accession !== entity
@@ -1216,18 +1221,21 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
           />
         </VizControlGroup>
       ) : null}
-      <VizControlGroup title="Marks">
-        <VizSwitch
-          checked={showVariants}
-          onChange={(e) => setShowVariants(e.currentTarget.checked)}
-          label="Variants"
-        />
-        <VizSwitch
-          checked={showLabels}
-          onChange={(e) => setShowLabels(e.currentTarget.checked)}
-          label="Labels"
-        />
-      </VizControlGroup>
+      {/* Nothing to mark (no alternate residue bound, or a category on most residues): the switches would do nothing. */}
+      {markable.length > 0 ? (
+        <VizControlGroup title="Marks">
+          <VizSwitch
+            checked={showVariants}
+            onChange={(e) => setShowVariants(e.currentTarget.checked)}
+            label="Variants"
+          />
+          <VizSwitch
+            checked={showLabels}
+            onChange={(e) => setShowLabels(e.currentTarget.checked)}
+            label="Labels"
+          />
+        </VizControlGroup>
+      ) : null}
       <VizControlGroup title="View">
         <VizSwitch
           checked={followSelection}
@@ -1262,7 +1270,7 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       {drawn ? (
         <>
           <MoleculeLegend legend={colouring.legend} compact={compact} />
-          <MoleculeCredit text={credit} />
+          <MoleculeCredit text={credit} info={creditInfo} />
           <MoleculeViewButtons
             onReset={() => viewerRef.current?.resetView()}
             onSnapshot={snapshot}

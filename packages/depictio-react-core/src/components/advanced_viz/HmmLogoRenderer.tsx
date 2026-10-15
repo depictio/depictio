@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Box, Text } from '@mantine/core';
+import { Box, Button, Text } from '@mantine/core';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { usePublishHighlight, useHighlight } from '../../highlight/bus';
@@ -12,12 +12,23 @@ import {
 } from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { demandForPx } from './contentDemand';
-import { VizControlGroup, VizNumberInput, VizSegmented, VizSelect, VizSlider, VizSwitch } from './controls/VizControls';
+import {
+  VizControlCell,
+  VizControlGroup,
+  VizMultiSelect,
+  VizNumberInput,
+  VizSegmented,
+  VizSelect,
+  VizSlider,
+  VizSwitch,
+} from './controls/VizControls';
+import { addHidden, expandStub, type HiddenRange, type StubSegment } from './logo/collapse';
 import type { HeightMode } from './logo/heights';
 import { coverageDepth, formatEvalue, hitsFromFrame, selectHits, type LogoHit } from './logo/hitsModel';
 import { layoutLanes } from './logo/layout';
 import LogoPanel, { type LogoHover } from './logo/LogoPanel';
-import { profileFromMsa, profileFromRows, residueRangeOfStates } from './logo/profileModel';
+import { profileFromMsa, profileFromRows, residueRangeOfStates, stateSpanOfRange } from './logo/profileModel';
+import { cleanTracks, TRACK_KEYS, TRACK_LABELS, type TrackKey } from './logo/tracks';
 import type { MsaColourScheme, MsaRow, ResidueRange } from './protein';
 import {
   distinctColumns,
@@ -34,6 +45,7 @@ import {
   withoutPositionSelections,
 } from './protein/rendererData';
 import { useEntityPicker } from './protein/useEntityPicker';
+import ZoomHintLabel from './protein/ZoomHint';
 import { usePersistedVizControl, useVizConfigWriter } from './usePersistedVizControl';
 
 /**
@@ -62,6 +74,12 @@ interface HmmLogoConfig {
   color_scheme?: MsaColourScheme;
   show_indel_rows?: boolean;
   show_consensus?: boolean;
+  window_start?: number | null;
+  window_end?: number | null;
+  collapse_below_ic?: number | null;
+  collapse_min_run?: number;
+  hidden_tracks?: TrackKey[];
+  collapsed_tracks?: TrackKey[];
   hits_wf_id?: string | null;
   hits_dc_id?: string | null;
   hits_dc_tag?: string | null;
@@ -109,6 +127,45 @@ const SCHEMES: { value: MsaColourScheme; label: string }[] = [
 ];
 
 const EVALUE_PRESETS = [1, 0.1, 0.01, 1e-3, 1e-5, 1e-10, 1e-20];
+
+/**
+ * A state-number box that commits on blur or Enter, not per keystroke: typing
+ * "30" in the end box passes through "3", which would be clamped under the
+ * start and persisted. An empty box is an open side of the window.
+ */
+const StateBoundInput: React.FC<{
+  label: string;
+  value: number | null;
+  placeholder: string;
+  min: number;
+  max: number;
+  onCommit: (next: number | null) => void;
+}> = ({ label, value, placeholder, min, max, onCommit }) => {
+  const [draft, setDraft] = useState<number | string>(value ?? '');
+  useEffect(() => setDraft(value ?? ''), [value]);
+  const commit = () => {
+    const n = typeof draft === 'number' ? Math.round(draft) : NaN;
+    const next = Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : null;
+    setDraft(next ?? '');
+    if (next !== value) onCommit(next);
+  };
+  return (
+    <VizNumberInput
+      label={label}
+      value={draft}
+      placeholder={placeholder}
+      onChange={setDraft}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit();
+      }}
+      min={min}
+      max={max}
+      allowDecimal={false}
+      hideControls
+    />
+  );
+};
 
 /** A config column that may be switched off with `null` (undefined keeps the default). */
 const optionalColumn = (value: string | null | undefined, fallback: string): string | null =>
@@ -254,6 +311,24 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
   const [showIndelRows, setShowIndelRows] = usePersistedVizControl<boolean>(metadata, 'show_indel_rows', true);
   const [showConsensus, setShowConsensus] = usePersistedVizControl<boolean>(metadata, 'show_consensus', true);
   const [maxHits, setMaxHits] = usePersistedVizControl<number>(metadata, 'max_hits', 200);
+  // Parts of the profile left out of the drawing; null is open / off.
+  const [windowStart, setWindowStart] = usePersistedVizControl<number | null>(metadata, 'window_start', null);
+  const [windowEnd, setWindowEnd] = usePersistedVizControl<number | null>(metadata, 'window_end', null);
+  const [collapseBelowIc, setCollapseBelowIc] = usePersistedVizControl<number | null>(metadata, 'collapse_below_ic', null);
+  const [collapseMinRun, setCollapseMinRun] = usePersistedVizControl<number>(metadata, 'collapse_min_run', 4);
+  // Tracks (lanes of the panel) taken out, or reduced to a thin strip.
+  const [hiddenTracksRaw, setHiddenTracks] = usePersistedVizControl<TrackKey[]>(metadata, 'hidden_tracks', []);
+  const [collapsedTracksRaw, setCollapsedTracks] = usePersistedVizControl<TrackKey[]>(
+    metadata,
+    'collapsed_tracks',
+    [],
+  );
+  const hiddenTracks = useMemo(() => cleanTracks(hiddenTracksRaw), [hiddenTracksRaw]);
+  const collapsedTracks = useMemo(() => cleanTracks(collapsedTracksRaw), [collapsedTracksRaw]);
+  // Session only: ranges hidden by hand (column indices) and the folded runs the
+  // user opened. Reset when the model, the window or the fold rule changes.
+  const [hidden, setHidden] = useState<readonly HiddenRange[]>([]);
+  const [expanded, setExpanded] = useState<readonly string[]>([]);
   // `null` is a real value here (draw every hit), which the persisted-control
   // hook would read as "unset": seeded by hand, written back on a pick.
   const writeConfig = useVizConfigWriter(metadata);
@@ -315,8 +390,10 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
   const followed = followedName ?? (source === 'hmm' ? modelOfEntity : null);
   // An alignment is an entity like the msa tile's, so it agrees on the opening
   // one with the other protein tiles; a model is not (sharing model names under
-  // the entity key would hold that key against the protein tiles), and opens
-  // on the first.
+  // the entity key would hold that key against the protein tiles). Both open on
+  // the one still in scope: a sidebar family reaches this table through a link
+  // the server applies, so the model list (unscoped) cannot tell which model
+  // the dashboard narrowed to, and opening on its first would draw nothing.
   const picker = useEntityPicker(
     metadata.dc_id,
     scopeCol,
@@ -324,7 +401,7 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
     refreshTick,
     source === 'msa'
       ? { wfId: metadata.wf_id, vizKind: 'hmm_logo', filters: fetchFilters, shareKey: entityCol, owner: index }
-      : undefined,
+      : { wfId: metadata.wf_id, vizKind: 'hmm_logo', filters: fetchFilters },
   );
 
   // ---- profile rows -------------------------------------------------------------
@@ -448,6 +525,8 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
   const profileEntity = profile?.entity ?? null;
   useEffect(() => setShownEntity(profileEntity), [profileEntity]);
   useEffect(() => setDrawn(false), [modelName]);
+  useEffect(() => setHidden([]), [modelName]);
+  useEffect(() => setExpanded([]), [modelName, windowStart, windowEnd, collapseBelowIc, collapseMinRun]);
   const modelLength = profile && profile.states.length ? profile.states[profile.states.length - 1] : 0;
 
   // ---- hits companion -------------------------------------------------------------
@@ -585,6 +664,31 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
     if (ownResidue) emit(entityCol, null, null);
   }, [ownResidue, emit, entityCol]);
 
+  const onExpandStub = useCallback(
+    (stub: StubSegment) => {
+      const next = expandStub({ hidden, expanded }, stub);
+      setHidden(next.hidden);
+      setExpanded(next.expanded);
+    },
+    [hidden, expanded],
+  );
+  // The states the shaded range covers, which "Hide selection" folds.
+  const selectedStates = useMemo(
+    () => (profile ? stateSpanOfRange(profile.positions, selectedRange) : null),
+    [profile, selectedRange],
+  );
+  const hideSelection = useCallback(() => {
+    if (selectedStates) setHidden((h) => addHidden(h, selectedStates));
+  }, [selectedStates]);
+  const showAll = useCallback(() => {
+    setWindowStart(null);
+    setWindowEnd(null);
+    setCollapseBelowIc(null);
+    setHidden([]);
+    setExpanded([]);
+  }, [setWindowStart, setWindowEnd, setCollapseBelowIc]);
+  const folded = windowStart != null || windowEnd != null || collapseBelowIc != null || hidden.length > 0;
+
   const publish = usePublishHighlight(index);
   const onHover = useCallback(
     (h: LogoHover | null) => {
@@ -614,6 +718,51 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
     },
     [publish, profile, profileEntity, positionCol],
   );
+
+  // ---- tracks -------------------------------------------------------------------------
+  // The tracks the panel can draw for this profile (a null column or a switched
+  // off row set has no track to hide).
+  const availableTracks = useMemo<TrackKey[]>(() => {
+    if (!profile) return [];
+    const present: Record<TrackKey, boolean> = {
+      consensus: showConsensus && (profile.consensus != null || profile.rf != null || profile.cs != null),
+      insert: showIndelRows && (profile.insertProb != null || profile.insertLength != null),
+      occupancy: showIndelRows && profile.occupancy != null,
+      hits: Boolean(hitsDcId),
+      ruler: true,
+    };
+    return TRACK_KEYS.filter((t) => present[t]);
+  }, [profile, showConsensus, showIndelRows, hitsDcId]);
+  const shownTracks = useMemo(
+    () => availableTracks.filter((t) => !hiddenTracks.includes(t)),
+    [availableTracks, hiddenTracks],
+  );
+  const setShownTracks = useCallback(
+    (values: string[]) => {
+      const keep = hiddenTracks.filter((t) => !availableTracks.includes(t));
+      const next = cleanTracks([...keep, ...availableTracks.filter((t) => !values.includes(t))]);
+      setHiddenTracks(next);
+      // The config refuses a track that is both hidden and collapsed.
+      if (collapsedTracks.some((t) => next.includes(t))) {
+        setCollapsedTracks(collapsedTracks.filter((t) => !next.includes(t)));
+      }
+    },
+    [hiddenTracks, collapsedTracks, availableTracks, setHiddenTracks, setCollapsedTracks],
+  );
+  const onToggleTrack = useCallback(
+    (track: TrackKey) => {
+      setCollapsedTracks(
+        collapsedTracks.includes(track) ? collapsedTracks.filter((t) => t !== track) : cleanTracks([...collapsedTracks, track]),
+      );
+    },
+    [collapsedTracks, setCollapsedTracks],
+  );
+  const collapseAllTracks = useCallback(
+    () => setCollapsedTracks(cleanTracks([...collapsedTracks, ...shownTracks])),
+    [collapsedTracks, shownTracks, setCollapsedTracks],
+  );
+  const expandAllTracks = useCallback(() => setCollapsedTracks([]), [setCollapsedTracks]);
+  const allCollapsed = shownTracks.every((t) => collapsedTracks.includes(t));
 
   // ---- chrome ----------------------------------------------------------------------
   const modelChoices = picker.entities && picker.entities.length > 1 ? picker.entities : null;
@@ -666,7 +815,9 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
       <>
         <VizControlGroup title="Display">
           <VizSlider
-            label="State width"
+            label={<ZoomHintLabel>State width</ZoomHintLabel>}
+            aria-label="State width"
+            title="Ctrl/Cmd + wheel to zoom"
             value={zoom}
             onChange={setZoom}
             min={0}
@@ -696,6 +847,91 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
             />
           ) : null}
         </VizControlGroup>
+        <VizControlGroup title="Tracks">
+          <VizMultiSelect
+            label="Shown tracks"
+            aria-label="Shown tracks"
+            value={shownTracks}
+            onChange={setShownTracks}
+            data={availableTracks.map((t) => ({ value: t, label: TRACK_LABELS[t] }))}
+            placeholder={shownTracks.length ? undefined : 'Logo only'}
+            clearable={false}
+          />
+          <VizControlCell>
+            <Button
+              size="xs"
+              variant="light"
+              onClick={collapseAllTracks}
+              disabled={shownTracks.length === 0 || allCollapsed}
+              title="Reduce every shown track to a thin strip; the logo takes the room"
+            >
+              Collapse all tracks
+            </Button>
+          </VizControlCell>
+          <VizControlCell>
+            <Button size="xs" variant="light" onClick={expandAllTracks} disabled={collapsedTracks.length === 0}>
+              Expand all tracks
+            </Button>
+          </VizControlCell>
+        </VizControlGroup>
+        <VizControlGroup title="Hide parts">
+          <StateBoundInput
+            label="From state"
+            value={windowStart}
+            placeholder="1"
+            min={1}
+            max={Math.max(1, windowEnd ?? modelLength)}
+            onCommit={setWindowStart}
+          />
+          <StateBoundInput
+            label="To state"
+            value={windowEnd}
+            placeholder={modelLength ? String(modelLength) : ''}
+            min={Math.max(1, windowStart ?? 1)}
+            max={Math.max(1, modelLength)}
+            onCommit={setWindowEnd}
+          />
+          <VizNumberInput
+            label="Fold below (bits)"
+            title="Fold runs of states whose information is under this many bits"
+            value={collapseBelowIc ?? ''}
+            placeholder="Off"
+            onChange={(v) => setCollapseBelowIc(typeof v === 'number' && v >= 0 ? v : null)}
+            min={0}
+            step={0.1}
+            decimalScale={2}
+          />
+          {collapseBelowIc != null ? (
+            <VizNumberInput
+              label="Shortest run"
+              value={collapseMinRun}
+              onChange={(v) => typeof v === 'number' && setCollapseMinRun(Math.max(1, Math.round(v)))}
+              min={1}
+              allowDecimal={false}
+            />
+          ) : null}
+          <VizControlCell>
+            <Button
+              size="xs"
+              variant="light"
+              onClick={hideSelection}
+              disabled={!selectedStates}
+              title="Fold the shaded states into a stub; click a stub to open it"
+            >
+              Hide selection
+            </Button>
+          </VizControlCell>
+          <VizControlCell>
+            <Button size="xs" variant="light" onClick={() => setExpanded([])} disabled={expanded.length === 0}>
+              Fold opened runs again
+            </Button>
+          </VizControlCell>
+          <VizControlCell>
+            <Button size="xs" variant="light" onClick={showAll} disabled={!folded}>
+              Show all
+            </Button>
+          </VizControlCell>
+        </VizControlGroup>
         {hitsDcId ? (
           <VizControlGroup title="Hits">
             <VizSelect
@@ -723,6 +959,13 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
       showIndelRows,
       setShowIndelRows,
       profile?.occupancy,
+      shownTracks,
+      setShownTracks,
+      availableTracks,
+      collapseAllTracks,
+      allCollapsed,
+      expandAllTracks,
+      collapsedTracks.length,
       occupancyMode,
       hitsDcId,
       evalueMax,
@@ -730,6 +973,20 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
       evalueOptions,
       maxHits,
       setMaxHits,
+      windowStart,
+      setWindowStart,
+      windowEnd,
+      setWindowEnd,
+      modelLength,
+      collapseBelowIc,
+      setCollapseBelowIc,
+      collapseMinRun,
+      setCollapseMinRun,
+      selectedStates,
+      hideSelection,
+      expanded.length,
+      showAll,
+      folded,
     ],
   );
 
@@ -776,9 +1033,11 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
       occupancy: showIndelRows && profile.occupancy != null,
       hits: Boolean(hitsDcId),
       hitRows: Math.min(hitSelection.drawn.length, 16),
+      hiddenTracks,
+      collapsedTracks,
     }).natural;
     return demandForPx(natural + CHROME_PX);
-  }, [profile, showConsensus, showIndelRows, hitsDcId, hitSelection.drawn.length]);
+  }, [profile, showConsensus, showIndelRows, hitsDcId, hitSelection.drawn.length, hiddenTracks, collapsedTracks]);
 
   const onDrawn = useCallback(() => setDrawn(true), []);
 
@@ -840,8 +1099,19 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
             onClickHit={pickEnabled ? onClickHit : undefined}
             onClear={pickEnabled ? onClear : undefined}
             cellWidth={zoom > 0 ? zoom : undefined}
+            onCellWidthChange={setZoom}
             followSelection={follow}
             onDrawn={onDrawn}
+            windowStart={windowStart}
+            windowEnd={windowEnd}
+            collapseBelowIc={collapseBelowIc}
+            collapseMinRun={collapseMinRun}
+            hidden={hidden}
+            expanded={expanded}
+            onExpandStub={onExpandStub}
+            hiddenTracks={hiddenTracks}
+            collapsedTracks={collapsedTracks}
+            onToggleTrack={onToggleTrack}
           />
         </Box>
       ) : null}

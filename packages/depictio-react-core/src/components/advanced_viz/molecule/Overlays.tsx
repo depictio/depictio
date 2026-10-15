@@ -5,10 +5,25 @@
  */
 
 import React from 'react';
-import { ActionIcon, Box, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
+import {
+  ActionIcon,
+  Anchor,
+  Box,
+  Code,
+  Collapse,
+  CopyButton,
+  Group,
+  Paper,
+  Popover,
+  Stack,
+  Text,
+  Tooltip,
+  UnstyledButton,
+} from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { LegendSpec } from './residueData';
+import type { ExplanationDetail, ModelExplanationNote } from './resolve';
 
 const SWATCH: React.CSSProperties = {
   width: 10,
@@ -141,15 +156,130 @@ export const MoleculeTooltip: React.FC<{
   );
 };
 
-export const MoleculeCredit: React.FC<{ text: string | null }> = ({ text }) =>
-  text ? (
-    <Text
-      size="xs"
-      c="dimmed"
+/**
+ * The "Technical details" of an external call: collapsed by default, so the
+ * popover stays short, but one click away from the exact endpoint. The endpoint
+ * is shown as text (and copyable), never linked: it is not a page to open.
+ */
+const TechnicalDetails: React.FC<{ details: ExplanationDetail[] }> = ({ details }) => {
+  const [open, setOpen] = React.useState(false);
+  const panelId = React.useId();
+  if (!details.length) return null;
+  return (
+    <Box>
+      <UnstyledButton
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={panelId}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+      >
+        <Icon icon={open ? 'tabler:chevron-down' : 'tabler:chevron-right'} width={12} height={12} />
+        <Text size="xs" c="dimmed" fw={500}>
+          {open ? 'Hide details' : 'Show details'}
+        </Text>
+      </UnstyledButton>
+      <Collapse in={open} id={panelId}>
+        <Box component="dl" m={0} mt={6}>
+          <Stack gap={6}>
+            {details.map((row) => (
+              <Box key={row.label}>
+                <Text component="dt" size="xs" c="dimmed" fw={600}>
+                  {row.label}
+                </Text>
+                <Box component="dd" m={0}>
+                  {row.code ? (
+                    <Group gap={4} wrap="nowrap" align="flex-start">
+                      <Code block style={{ flex: 1, minWidth: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                        {row.value}
+                      </Code>
+                      <CopyButton value={row.value} timeout={1500}>
+                        {({ copied, copy }) => (
+                          <Tooltip label={copied ? 'Copied' : 'Copy'} withinPortal>
+                            <ActionIcon
+                              size="xs"
+                              variant="subtle"
+                              color="gray"
+                              aria-label={`Copy ${row.label.toLowerCase()}`}
+                              onClick={copy}
+                            >
+                              <Icon icon={copied ? 'tabler:check' : 'tabler:copy'} width={12} height={12} />
+                            </ActionIcon>
+                          </Tooltip>
+                        )}
+                      </CopyButton>
+                    </Group>
+                  ) : (
+                    <Text size="xs">{row.value}</Text>
+                  )}
+                </Box>
+              </Box>
+            ))}
+          </Stack>
+        </Box>
+      </Collapse>
+    </Box>
+  );
+};
+
+/**
+ * Model credit (bottom right). With `info`, a small info button next to it
+ * opens a note on where the structure comes from and how to read it.
+ */
+export const MoleculeCredit: React.FC<{
+  text: string | null;
+  info?: ModelExplanationNote | null;
+}> = ({
+  text,
+  info = null,
+}) =>
+  text || info ? (
+    <Group
+      gap={4}
+      wrap="nowrap"
       style={{ position: 'absolute', right: 6, bottom: 4, zIndex: 2, pointerEvents: 'none' }}
     >
-      {text}
-    </Text>
+      {text ? (
+        <Text size="xs" c="dimmed">
+          {text}
+        </Text>
+      ) : null}
+      {info ? (
+        <Popover width={300} position="top-end" withArrow shadow="md" withinPortal>
+          <Popover.Target>
+            <ActionIcon
+              size="xs"
+              variant="subtle"
+              color="gray"
+              aria-label="About this structure"
+              style={{ pointerEvents: 'auto' }}
+            >
+              <Icon icon="tabler:info-circle" width={14} height={14} />
+            </ActionIcon>
+          </Popover.Target>
+          <Popover.Dropdown p="xs">
+            <Stack gap={6}>
+              <Text size="xs">{info.text}</Text>
+              {info.links.length ? (
+                <Group gap={10} wrap="wrap">
+                  {info.links.map((link) => (
+                    <Anchor
+                      key={link.href}
+                      href={link.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      size="xs"
+                    >
+                      {link.label}
+                    </Anchor>
+                  ))}
+                </Group>
+              ) : null}
+              <TechnicalDetails details={info.details} />
+            </Stack>
+          </Popover.Dropdown>
+        </Popover>
+      ) : null}
+    </Group>
   ) : null;
 
 export const MoleculeViewButtons: React.FC<{

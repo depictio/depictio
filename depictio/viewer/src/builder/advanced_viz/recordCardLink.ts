@@ -105,8 +105,8 @@ function advancedVizEmits(m: StoredMetadata): { emits: boolean; column: string |
       break;
     case 'domain_architecture':
       // A click on a domain picks its span (a residue range) and the domain
-      // by its label, which is the column the pick names.
-      column = str(config.label_col) ?? 'label';
+      // by its label (or `selection_column`), the column the pick names.
+      column = named ?? str(config.label_col) ?? 'label';
       break;
     case 'msa':
       column = str(config.seq_id_col) ?? 'seq_id';

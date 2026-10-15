@@ -48,10 +48,12 @@ import {
   groupKey,
   hasSources,
   isPartial,
+  normaliseResidueWidth,
   parseDomainHits,
   partialEdges,
   proteinLengths,
   proteinRows,
+  RESIDUE_WIDTH_MAX_PX,
   sortProteins,
   buildProteins,
   valueCounts,
@@ -72,6 +74,7 @@ import {
   stringOrNull,
   withoutPositionSelections,
 } from './protein/rendererData';
+import ZoomHintLabel from './protein/ZoomHint';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
 /**
@@ -98,10 +101,12 @@ interface DomainArchitectureConfig {
   evalue_threshold?: number | null;
   sources?: string[] | null;
   scale?: 'shared' | 'per_protein';
+  residue_width?: number;
   color_by?: 'label' | 'source';
   partial_coverage?: number;
   position_col_for_selection?: string;
   label_selection?: boolean;
+  selection_column?: string | null;
   selection_enabled?: boolean;
   follow_selection?: boolean;
 }
@@ -180,12 +185,19 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
   const follow = config.follow_selection !== false;
   const selectionEnabled = Boolean(onFilterChange) && config.selection_enabled !== false;
   const labelSelection = config.label_selection !== false;
-  // The label column the point selection lands on (undefined when selection is off).
+  // The column the point selection lands on: `selection_column`, else the label
+  // (undefined when selection is off).
   const labelSelectionColumn = onFilterChange ? advancedVizSelectionColumn(metadata) : undefined;
 
   const [view, setView] = usePersistedVizControl<View>(metadata, 'view', 'proteins');
   const [colourBy, setColourBy] = usePersistedVizControl<ColourBy>(metadata, 'color_by', 'label');
   const [scale, setScale] = usePersistedVizControl<Scale>(metadata, 'scale', 'shared');
+  const [residueWidthRaw, setResidueWidth] = usePersistedVizControl<number>(
+    metadata,
+    'residue_width',
+    0,
+  );
+  const residueWidth = normaliseResidueWidth(residueWidthRaw);
   const [evalueThreshold, setEvalueThreshold] = usePersistedVizControl<number | null>(
     metadata,
     'evalue_threshold',
@@ -217,8 +229,14 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
   // to look, ringed and shaded, not a subset. A sidebar filter on those
   // columns has no source and still narrows.
   const fetchFilters = useMemo(
-    () => withoutPositionSelections(withoutOwn, [positionCol, entityCol, labelCol]),
-    [withoutOwn, positionCol, entityCol, labelCol],
+    () =>
+      withoutPositionSelections(withoutOwn, [
+        positionCol,
+        entityCol,
+        labelCol,
+        labelSelectionColumn,
+      ]),
+    [withoutOwn, positionCol, entityCol, labelCol, labelSelectionColumn],
   );
   const fetchFiltersKey = JSON.stringify(fetchFilters);
 
@@ -230,6 +248,7 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
         startCol,
         endCol,
         labelCol,
+        labelSelectionColumn,
         proteinLengthCol,
         hmmFromCol,
         hmmToCol,
@@ -246,6 +265,7 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
       startCol,
       endCol,
       labelCol,
+      labelSelectionColumn,
       proteinLengthCol,
       hmmFromCol,
       hmmToCol,
@@ -499,8 +519,10 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
   // Drop the point selection this tile holds (a label, or a group).
   const clearOwnPoint = useCallback(() => {
     if (!onFilterChange || !ownPoint.values.length) return;
-    onFilterChange(advancedVizSelectionFilter(metadata, ownPoint.column ?? labelCol, []));
-  }, [onFilterChange, ownPoint, metadata, labelCol]);
+    onFilterChange(
+      advancedVizSelectionFilter(metadata, ownPoint.column ?? labelSelectionColumn ?? labelCol, []),
+    );
+  }, [onFilterChange, ownPoint, metadata, labelCol, labelSelectionColumn]);
 
   const onClickDomain = useCallback(
     (protein: ProteinArch, hit: DomainHit) => {
@@ -511,14 +533,17 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
         pickedDomain.start === hit.start &&
         pickedDomain.end === hit.end;
       emitRange(protein.entity, same ? null : hit.start, same ? null : hit.end);
-      // The domain by name, beside its span: the raw label value, so a hit
-      // shown under its accession (no label) selects nothing it does not hold.
+      // The domain by name, beside its span: the raw value of the selection
+      // column (the label unless `selection_column` names a per-hit key), so a
+      // hit shown under its accession selects nothing it does not hold.
       // Paired with the span, so a later pick anywhere drops both.
-      const label = stringOrNull(frame?.[labelCol]?.[hit.row]);
-      if (labelSelection && labelSelectionColumn && label != null) {
+      const picked = labelSelectionColumn
+        ? stringOrNull(frame?.[labelSelectionColumn]?.[hit.row])
+        : null;
+      if (labelSelection && labelSelectionColumn && picked != null) {
         onFilterChange(
           pairedWithResiduePick(
-            advancedVizSelectionFilter(metadata, labelSelectionColumn, same ? [] : [label]),
+            advancedVizSelectionFilter(metadata, labelSelectionColumn, same ? [] : [picked]),
           ),
         );
       } else {
@@ -530,7 +555,6 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
       pickedDomain,
       emitRange,
       frame,
-      labelCol,
       labelSelection,
       labelSelectionColumn,
       metadata,
@@ -666,6 +690,21 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
               { value: 'per_protein', label: 'Per protein' },
             ]}
           />
+          <VizSlider
+            label={<ZoomHintLabel>Residue width</ZoomHintLabel>}
+            aria-label="Residue width"
+            title={
+              scale === 'shared'
+                ? 'Pixels per residue; Fit sizes the longest protein to the tile. Ctrl/Cmd + wheel to zoom'
+                : 'Pixels per residue of the longest protein, every backbone stretched to the same width; Fit sizes them to the tile. Ctrl/Cmd + wheel to zoom'
+            }
+            value={residueWidth}
+            onChange={setResidueWidth}
+            min={0}
+            max={RESIDUE_WIDTH_MAX_PX}
+            step={1}
+            thumbLabel={(v) => (v === 0 ? 'Fit' : `${v} px`)}
+          />
           {view === 'architectures' ? (
             <VizSlider
               label="Architectures"
@@ -697,6 +736,8 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
       setSources,
       scale,
       setScale,
+      residueWidth,
+      setResidueWidth,
       view,
       maxArchitectures,
       setMaxArchitectures,
@@ -860,6 +901,8 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
               <DomainArchitecturePanel
                 rows={rows}
                 scale={scale}
+                residueWidth={residueWidth}
+                onResidueWidthChange={setResidueWidth}
                 partialCoverage={partialCoverage}
                 colourOf={colourOf}
                 evalueColumn={evalueCol}

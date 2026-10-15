@@ -22,6 +22,7 @@ import {
   visibleWindow,
 } from './canvas';
 import { useDrawScheduler, useViewSize } from './canvasHooks';
+import { useModifierWheelZoom } from './useWheelZoom';
 import { panelColours, type PanelColours } from './panelTheme';
 import { isGap, rgbCss, schemeColour, type ColumnProfile, type RGB } from './residueColours';
 import type { MsaHover, MsaPanelProps } from './types';
@@ -39,6 +40,12 @@ const DRAG_PX = 3;
 type Zone = 'cell' | 'id' | 'header' | 'corner';
 
 /** A press in progress: where it started, whether it became a column brush. */
+/** Zoom wiring on top of the shared panel props. */
+interface MsaPanelZoomProps {
+  /** Ctrl / Cmd + wheel asks for this many px per column (whole pixels). */
+  onCellWidthChange?: (px: number) => void;
+}
+
 interface BrushState {
   startCol: number;
   endCol: number;
@@ -129,7 +136,7 @@ function buildCellImage(
  * crosshair, a column brush reported in reference residues and a row click.
  * Controlled: the caller passes the selection and the highlight back in.
  */
-const MsaPanel: React.FC<MsaPanelProps> = ({
+const MsaPanel: React.FC<MsaPanelProps & MsaPanelZoomProps> = ({
   rows,
   referenceIndex,
   chains,
@@ -142,6 +149,7 @@ const MsaPanel: React.FC<MsaPanelProps> = ({
   onClickRow,
   height = '100%',
   cellWidth,
+  onCellWidthChange,
   showConsensus = true,
   showConservation = true,
   followSelection = true,
@@ -217,6 +225,13 @@ const MsaPanel: React.FC<MsaPanelProps> = ({
   const cw = cellWidth && cellWidth > 0 ? cellWidth : fitCellWidth(gridW, width, 1, 16);
   const ch = ROW_PX;
   const contentW = idWidth + width * cw;
+  useModifierWheelZoom(scrollRef, {
+    value: cw,
+    setValue: onCellWidthChange,
+    min: 1,
+    max: 16,
+    gutter: idWidth,
+  });
   const contentH = headerH + rows.length * ch;
 
   // ---- interaction state (refs: a pointer move redraws, it does not re-render)

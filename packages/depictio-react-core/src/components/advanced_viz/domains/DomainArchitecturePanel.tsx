@@ -11,9 +11,12 @@ import {
 } from '../protein/canvas';
 import { useDrawScheduler, useViewSize } from '../protein/canvasHooks';
 import { cssToRgb, panelColours, type PanelColours } from '../protein/panelTheme';
+import { useModifierWheelZoom } from '../protein/useWheelZoom';
 import {
   domainAt,
   domainTooltip,
+  clampLabelWidth,
+  labelColumnPx,
   lengthGutter,
   lengthLabel,
   LENGTH_LABEL_GAP_PX,
@@ -21,11 +24,13 @@ import {
   pxPerResidue as scalePxPerResidue,
   residueAt,
   residueX,
+  RESIDUE_WIDTH_MAX_PX,
   rowAt,
   rowHeight,
   rowOffsets,
   rowWindow,
-  trackBox,
+  trackLayout,
+  visibleResidues,
   type ArchitectureGroup,
   type DomainHit,
   type PanelRow,
@@ -39,8 +44,6 @@ const GEOMETRY: RowGeometry = { padPx: 5, lanePx: 16, notePx: 22 };
 const DOMAIN_PX = 12;
 const BACKBONE_PX = 3;
 const AXIS_PX = 20;
-const LABEL_MIN_PX = 72;
-const LABEL_MAX_PX = 200;
 const INDENT_PX = 14;
 const CHEVRON_PX = 16;
 const RIGHT_PAD_PX = 8;
@@ -62,6 +65,11 @@ export interface EntitySpan {
 export interface DomainArchitecturePanelProps {
   rows: PanelRow[];
   scale: 'shared' | 'per_protein';
+  /** Pixels per residue of the longest protein; 0 fits the tracks to the tile.
+   *  Wider than the tile, the tracks scroll sideways under a fixed label column. */
+  residueWidth?: number;
+  /** Receives a whole-pixel width from Ctrl / Cmd + wheel. Omit to disable the zoom. */
+  onResidueWidthChange?: (px: number) => void;
   partialCoverage: number;
   colourOf: (hit: DomainHit) => string;
   /** Column of the E-value, to name it in the tooltip. */
@@ -147,6 +155,8 @@ function drawChevron(
 const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
   rows,
   scale,
+  residueWidth = 0,
+  onResidueWidthChange,
   partialCoverage,
   colourOf,
   evalueColumn,
@@ -180,10 +190,10 @@ const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
     () => rows.reduce((m, r) => Math.max(m, drawnProtein(r)?.length ?? 0), 1),
     [rows],
   );
-  const labelWidth = useMemo(() => {
-    if (typeof document === 'undefined') return LABEL_MAX_PX;
+  const widestLabel = useMemo(() => {
+    if (typeof document === 'undefined') return Infinity;
     const ctx = document.createElement('canvas').getContext('2d');
-    if (!ctx) return LABEL_MAX_PX;
+    if (!ctx) return Infinity;
     let widest = 0;
     // Measuring every label of a proteome is cheap, but not free: the first
     // few thousand rows decide the column as well as all of them would.
@@ -204,8 +214,15 @@ const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
         );
       }
     }
-    return Math.round(Math.min(LABEL_MAX_PX, Math.max(LABEL_MIN_PX, widest + 12)));
+    return widest;
   }, [rows, colours.font]);
+  // Capped to a share of the tile, so one long identifier leaves the tracks room.
+  const autoLabelWidth = useMemo(() => labelColumnPx(widestLabel, view.w), [widestLabel, view.w]);
+  // A width dragged by hand replaces the automatic one for the session; the
+  // divider's double click gives the automatic one back.
+  const [labelOverride, setLabelOverride] = useState<number | null>(null);
+  const labelWidth =
+    labelOverride == null ? autoLabelWidth : clampLabelWidth(labelOverride, view.w);
   // The longest backbone ends at the track's end (every one does on the
   // per-protein scale), so its length label needs a gutter of its own: the
   // widest label's text, measured as it is drawn.
@@ -222,11 +239,26 @@ const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
     return lengthGutter(width);
   }, [sharedLength, colours.font]);
   const track = useMemo(
-    () => trackBox(view.w, labelWidth, { rightPadPx: RIGHT_PAD_PX, gutterPx }),
-    [view.w, labelWidth, gutterPx],
+    () =>
+      trackLayout(view.w, labelWidth, {
+        rightPadPx: RIGHT_PAD_PX,
+        gutterPx,
+        residueWidth,
+        sharedLength,
+      }),
+    [view.w, labelWidth, gutterPx, residueWidth, sharedLength],
   );
   const trackX = track.x;
   const trackW = track.w;
+  // The width the longest protein is drawn at, whether fitted or chosen.
+  const renderedPpr = scalePxPerResidue(trackW, 'shared', sharedLength, sharedLength);
+  useModifierWheelZoom(scrollRef, {
+    value: renderedPpr,
+    setValue: onResidueWidthChange,
+    min: 1,
+    max: RESIDUE_WIDTH_MAX_PX,
+    gutter: trackX,
+  });
   const gridH = Math.max(0, view.h - AXIS_PX);
   const pxPerResidue = useCallback(
     (p: ProteinArch) => scalePxPerResidue(trackW, scale, p.length, sharedLength),
@@ -272,6 +304,8 @@ const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
     const ctx = prepareCanvas(canvas, view.w, view.h);
     if (!ctx) return;
     const sy = el.scrollTop;
+    // Residue 0 of every track, scrolled; the label column stays put.
+    const originX = trackX - el.scrollLeft;
     const [r0, r1] = rowWindow(offsets, sy, gridH, 2);
     const hover = hoverRef.current;
 
@@ -331,9 +365,14 @@ const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
         ctx.fillText(fitText(ctx, protein.entity, labelWidth - x - 4), x, cy + 0.5);
       }
 
-      // Track: shading, backbone, domains.
+      // Track: shading, backbone, domains. Clipped to the right of the label
+      // column, which a scrolled track passes under.
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(labelWidth, top, Math.max(0, view.w - labelWidth), h);
+      ctx.clip();
       const ppr = pxPerResidue(protein);
-      const X = (pos: number) => residueX(trackX, ppr, pos);
+      const X = (pos: number) => residueX(originX, ppr, pos);
       const shade = (span: EntitySpan | null, fill: string) => {
         if (!span || span.entity !== protein.entity) return;
         const a = Math.max(0, Math.min(span.start, span.end) - 1);
@@ -417,6 +456,7 @@ const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
         ctx.fillStyle = colours.dimmed;
         ctx.fillText(lengthText, endX, cy + 0.5);
       }
+      ctx.restore();
 
       if (isPicked || isLit) {
         ctx.strokeStyle = isLit ? colours.highlight : colours.accent;
@@ -439,14 +479,22 @@ const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
       ctx.strokeStyle = colours.dimmed;
       ctx.lineWidth = 1;
       ctx.textAlign = 'center';
-      for (let t = step; t <= sharedLength; t += step) {
-        const x = Math.round(residueX(trackX, ppr, t - 0.5)) + 0.5;
+      // Only the ticks in view: a wide track holds far more than the tile shows.
+      const [seen0, seen1] = visibleResidues(originX, ppr, labelWidth, view.w, sharedLength);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(labelWidth, 0, Math.max(0, view.w - labelWidth), AXIS_PX);
+      ctx.clip();
+      for (let t = Math.max(1, Math.floor(seen0 / step)) * step; t <= seen1 + step; t += step) {
+        if (t > sharedLength) break;
+        const x = Math.round(residueX(originX, ppr, t - 0.5)) + 0.5;
         ctx.beginPath();
         ctx.moveTo(x, AXIS_PX - 4);
         ctx.lineTo(x, AXIS_PX);
         ctx.stroke();
         ctx.fillText(t.toLocaleString(), x, AXIS_PX - 6);
       }
+      ctx.restore();
     } else {
       ctx.fillText('Each protein drawn to its own length', trackX, AXIS_PX - 6);
     }
@@ -528,7 +576,7 @@ const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
         };
       }
       const ppr = pxPerResidue(protein);
-      const pos = residueAt(trackX, ppr, x);
+      const pos = residueAt(trackX - (scrollRef.current?.scrollLeft ?? 0), ppr, x);
       const yIn = y - AXIS_PX + sy - offsets[r] - GEOMETRY.padPx;
       const lane = Math.floor(yIn / GEOMETRY.lanePx);
       const domain =
@@ -619,6 +667,16 @@ const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
     requestDraw();
   };
 
+  // A new width moves every domain under a still pointer: forget the hover
+  // (and its tooltip) until the next move.
+  const lastWidth = useRef(residueWidth);
+  useEffect(() => {
+    if (lastWidth.current === residueWidth) return;
+    lastWidth.current = residueWidth;
+    clearHover();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [residueWidth]);
+
   const onClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const hit = hitAt(e);
     const row = rows[hit.row];
@@ -636,6 +694,22 @@ const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
     requestDraw();
   };
 
+  const dragLabel = useRef<{ x0: number; w0: number } | null>(null);
+  const onDividerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragLabel.current = { x0: e.clientX, w0: labelWidth };
+    clearHover();
+  };
+  const onDividerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = dragLabel.current;
+    if (d) setLabelOverride(clampLabelWidth(d.w0 + e.clientX - d.x0, view.w));
+  };
+  const onDividerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    dragLabel.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+
   return (
     <Box
       className="depictio-domain-architecture-panel"
@@ -645,20 +719,48 @@ const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
       <div
         ref={scrollRef}
         onScroll={() => (hoverRef.current ? clearHover() : requestDraw())}
-        style={{ position: 'absolute', inset: 0, overflowX: 'hidden', overflowY: 'auto' }}
+        style={{ position: 'absolute', inset: 0, overflowX: 'auto', overflowY: 'auto' }}
       >
-        <div style={{ position: 'relative', width: '100%', height: contentH, minHeight: '100%' }}>
+        <div
+          style={{
+            position: 'relative',
+            width: track.scrolls ? track.contentW : '100%',
+            height: contentH,
+            minHeight: '100%',
+          }}
+        >
           <canvas
             ref={canvasRef}
             role="img"
             aria-label={`Domain architectures, ${rows.length} rows`}
-            style={{ position: 'sticky', left: 0, top: 0, display: 'block', touchAction: 'pan-y' }}
+            style={{ position: 'sticky', left: 0, top: 0, display: 'block', touchAction: 'pan-x pan-y' }}
             onPointerMove={onPointerMove}
             onPointerLeave={clearHover}
             onClick={onClick}
           />
         </div>
       </div>
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize the label column (double click to reset)"
+        title="Drag to resize the labels, double click to reset"
+        onPointerDown={onDividerDown}
+        onPointerMove={onDividerMove}
+        onPointerUp={onDividerUp}
+        onPointerCancel={onDividerUp}
+        onDoubleClick={() => setLabelOverride(null)}
+        style={{
+          position: 'absolute',
+          top: AXIS_PX,
+          bottom: 0,
+          left: labelWidth - 3,
+          width: 6,
+          cursor: 'col-resize',
+          touchAction: 'none',
+          zIndex: 1,
+        }}
+      />
       {tooltip ? (
         <Paper
           withBorder

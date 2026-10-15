@@ -669,6 +669,110 @@ export function trackBox(
   return { x, w: Math.max(minPx, room - gutter) };
 }
 
+export interface LabelColumnOptions {
+  minPx?: number;
+  maxPx?: number;
+  /** Largest share of the tile the label column may take. */
+  maxShare?: number;
+  padPx?: number;
+}
+
+/**
+ * Width of the label column: the widest label plus a pad, clamped to
+ * `minPx`..`maxPx`, and never above `maxShare` of the tile (floored at `minPx`),
+ * so one long identifier cannot squeeze the tracks. The panel truncates the
+ * labels that do not fit with an ellipsis.
+ */
+export function labelColumnPx(
+  widestPx: number,
+  viewW: number,
+  { minPx = 72, maxPx = 200, maxShare = 0.22, padPx = 12 }: LabelColumnOptions = {},
+): number {
+  const cap = Math.min(maxPx, Math.max(minPx, maxShare * viewW));
+  return Math.round(Math.min(cap, Math.max(minPx, widestPx + padPx)));
+}
+
+/** A label column width chosen by hand, kept between `minPx` and the tile
+ *  less room for the tracks. */
+export function clampLabelWidth(
+  px: number,
+  viewW: number,
+  { minPx = 48, minTrackPx = 120 }: { minPx?: number; minTrackPx?: number } = {},
+): number {
+  const max = Math.max(minPx, viewW - minTrackPx);
+  return Math.round(Math.min(max, Math.max(minPx, px)));
+}
+
+/** Widest residue width the control offers, CSS px per residue. */
+export const RESIDUE_WIDTH_MAX_PX = 24;
+
+/** A residue width as the control holds it: a whole number of px in
+ *  `0..RESIDUE_WIDTH_MAX_PX`, 0 (fit the tile) for anything else. */
+export function normaliseResidueWidth(value: unknown): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(RESIDUE_WIDTH_MAX_PX, Math.round(n));
+}
+
+export interface TrackLayoutOptions extends TrackBoxOptions {
+  /** Pixels per residue of the longest protein; 0 fits the track to the tile. */
+  residueWidth?: number;
+  /** Length of the longest protein drawn. */
+  sharedLength: number;
+}
+
+export interface TrackLayout extends TrackBox {
+  /** Width of the scrolling content: the tile when fitted or when the track
+   *  fits it, else the label column, the track, the length gutter and the pad. */
+  contentW: number;
+  /** Whether the track is wider than the tile (the panel scrolls sideways). */
+  scrolls: boolean;
+}
+
+/**
+ * The track within a tile, for a fitted (`residueWidth` 0, `trackBox`) or an
+ * explicit residue width. An explicit width makes the track
+ * `residueWidth * sharedLength` px wide: on the shared scale that is N px per
+ * residue for every protein; on the per-protein scale it is the width of every
+ * backbone, so N px per residue of the longest protein and the others stretched
+ * to the same width. The length gutter is then kept whole (it scrolls with the
+ * track instead of being capped).
+ */
+export function trackLayout(
+  viewW: number,
+  labelColumnPx: number,
+  { residueWidth = 0, sharedLength, ...box }: TrackLayoutOptions,
+): TrackLayout {
+  if (!(residueWidth > 0)) {
+    const fitted = trackBox(viewW, labelColumnPx, box);
+    return { ...fitted, contentW: viewW, scrolls: false };
+  }
+  const { gapPx = 6, rightPadPx = 8, gutterPx = 0, minPx = 10 } = box;
+  const x = labelColumnPx + gapPx;
+  const w = Math.max(minPx, residueWidth * Math.max(1, sharedLength));
+  const contentW = Math.max(viewW, x + w + gutterPx + rightPadPx);
+  return { x, w, contentW, scrolls: contentW > viewW };
+}
+
+/**
+ * The residue coordinates `[from, to]` visible between `x0` and `x1` on a
+ * track whose residue 0 sits at `originX` (the track's left edge less the
+ * scroll), clamped to `0..length`.
+ */
+export function visibleResidues(
+  originX: number,
+  ppr: number,
+  x0: number,
+  x1: number,
+  length: number,
+): [number, number] {
+  if (!(ppr > 0)) return [0, 0];
+  return [
+    Math.max(0, Math.min(length, residueAt(originX, ppr, x0))),
+    Math.max(0, Math.min(length, residueAt(originX, ppr, x1))),
+  ];
+}
+
 /**
  * Pixels per residue of a protein `length` long: the shared scale fits the
  * longest protein (`sharedLength`) to the track, the per-protein scale fits

@@ -119,6 +119,19 @@ export interface StripResidue {
   category?: string | null;
 }
 
+/** The slice of a scroll container a `ScrollSync` reads and writes. */
+export interface ScrollSyncTarget {
+  scrollLeft: number;
+}
+
+/** Keeps the horizontal scroll of the strips of a stack together. */
+export interface ScrollSync {
+  /** Join the stack; returns the leave function. */
+  register: (el: ScrollSyncTarget) => () => void;
+  /** Call from `el`'s scroll handler: its peers follow its `scrollLeft`. */
+  follow: (el: ScrollSyncTarget) => void;
+}
+
 /** A span drawn on the domains lane. */
 export interface StripDomain {
   start: number;
@@ -170,6 +183,10 @@ export interface SequenceStripProps {
   height?: number | string;
   /** Pixels per residue; defaults to fitting the width. */
   cellWidth?: number;
+  /** Receives a whole-pixel residue width from Ctrl / Cmd + wheel. Omit to disable the zoom. */
+  onCellWidthChange?: (px: number) => void;
+  /** Strips that share one horizontal scroll (the chains of a complex). */
+  scrollSync?: ScrollSync;
   showLetters?: boolean;
   /** Scroll an incoming `selectedRange` / `highlight` into view. Default true. */
   followSelection?: boolean;

@@ -23,13 +23,34 @@ Overview highlights, the linked structure tiles) is not part of this report.
 | Every `use:` handle of the dashboard resolves to its catalog entry | pass |
 | PAE and structure ids on the megatest | the 9 matrices carry the id of their structure; the 3 structures without a matrix are ESMFold's |
 
+## Deliberate deviations from RULES.md
+
+- Findings figures sit in two rows of **w5 + w3** instead of two w4 tiles per row. The Overview
+  stays at compact width (1080 px), where the 3D structure over its written sequence and the PAE
+  matrix read too tight in a half row. They take the five-column side (the structure beside the
+  engine box plot, the PAE matrix beside the best-model bars); the two plots that read at a
+  third of the row take the three-column side. Each row still fills the 8 columns and the
+  Overview stays at 24 rows (structure row h5, PAE row h4). A full-width w8 row for the
+  structure was weighed and dropped: with the other three tiles re-flowed into two more rows it
+  needs 28 rows.
+
+## Link resolution
+
+- A link resolves to the first declared link of a pair of collections, so residues to
+  structure scores is its own link on `target`, while residues to the alignment and the PAE
+  matrix stay on `entity` (a target pick reaches them by translation).
+- The Structure tab picks its structure on a table of `proteinfold_structure_scores` (row
+  selection on `entity`, the id hidden from the grid), where a scatter stood earlier: same
+  selection, same follower tiles. The table spans the width (a lint rule), so the 3D tile now
+  spans it too (the tab is 22 open rows, over the 20 of RULES.md). Not yet checked on a running stack.
+
 ## Row budgets (stored heights, compact width)
 
 | Tab | Open rows | Open sections |
 | --- | --- | --- |
-| Overview | 23 | Hero, About, Pipeline, Key figures, Findings, How to read |
+| Overview | 24 | Hero, About, Pipeline, Key figures, Findings, How to read |
 | Model scores | 13 | 3 |
-| Structure | 19 | 3 (the alignment and the residue table are collapsed) |
+| Structure | 22 | 3 (the alignment and the residue table are collapsed) |
 | Predicted error | 14 | 3 |
 | Engines comparison | 17 | 3 (the model table and record are collapsed) |
 

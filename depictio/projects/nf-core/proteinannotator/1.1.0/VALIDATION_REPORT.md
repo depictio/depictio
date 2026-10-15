@@ -63,11 +63,21 @@ here resolves by sequence and has no structure collection.
   - `SKIP_INTERPROSCAN`: the "Match" step loses its line; every tab stays.
   - no `METADATA_FILE`: the design filters, the Samples card and the design table go.
 
+## Deliberate deviations
+
+- **Overview Findings rows are w3 + w5, not w4 + w4** (RULES section 3, "Findings rows fill the
+  width"). The Overview stays at compact width (1080 px), so the tiles that lay a protein out
+  along its chain need columns instead: the domain architecture (second row of tiles, w5) and
+  the sequence track (fourth, w5). Their rows still sum to 8 with no gap, share one stored
+  `h` of 5, and keep the funnel order of the findings text above them. The height budget is
+  unchanged (23 of 24). The scatter and the state-share bar take w3, which they read at with
+  their legend hidden. The deviation is limited to the two highlight rows of this template.
+
 ## Not verified
 
 - Ingestion, rendering, the structure resolver (ESMFold) and the new protein tiles
   (`domain_architecture`, `secondary_structure`, `sequence_track`, `molecule_3d`) on a live stack,
-  and highlights of those tiles at w4 on the Overview.
+  and highlights of those tiles at w5 on the Overview (and the w3 tiles beside them).
 - A run without `METADATA_FILE` shows three key figures (the Samples card binds the design table,
   as in the ampliseq template).
-- Whether the Findings highlight of the Structure tab (the sequence track) reads well at w4.
+- Whether the Findings highlight of the Structure tab (the sequence track) reads well at w5, and the scatter and state bar at w3.
