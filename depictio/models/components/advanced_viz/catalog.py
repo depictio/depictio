@@ -193,6 +193,29 @@ def role_config_key(kind: str | None, role: str) -> str:
     return f"{role}_col"
 
 
+# Kinds that read a structure from an `indexed_file` collection (`file`, the
+# model default) or fetch one for a UniProt accession, a gene or a sequence.
+_STRUCTURE_KINDS = frozenset({"molecule_3d", "ramachandran"})
+
+
+def with_inferred_structure_source(kind: str | None, config: dict) -> dict:
+    """Mark a structure tile that binds an accession, gene or sequence as `resolve`.
+
+    A catalog render carries roles only, and the model defaults to `file`: a tile
+    bound to `sequence` and to no structure collection then went looking for a
+    collection nobody bound and failed to render. Anything already said (a
+    `structure_source`, a structure collection) is left alone.
+    """
+    if (
+        kind in _STRUCTURE_KINDS
+        and "structure_source" not in config
+        and not (config.get("structure_dc_id") or config.get("structure_dc_tag"))
+        and any(config.get(key) for key in ("uniprot_col", "gene_col", "sequence_col"))
+    ):
+        return {**config, "structure_source": "resolve"}
+    return config
+
+
 def _allowed_roles(kind: AdvancedVizKind) -> set[str]:
     """Every role name a kind accepts: required + optional (the vocabulary the
     builder's binding panel offers), plus its list-typed and setting roles."""

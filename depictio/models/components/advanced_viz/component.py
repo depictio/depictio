@@ -179,13 +179,18 @@ class AdvancedVizLiteComponent(BaseLiteComponent):
         # preview and the builder), with any user-supplied config taking
         # precedence. Spelling a list-typed role as `<role>_col` here handed the
         # renderer a key its config model does not have.
-        from depictio.models.components.advanced_viz.catalog import role_config_key
+        from depictio.models.components.advanced_viz.catalog import (
+            role_config_key,
+            with_inferred_structure_source,
+        )
 
         inherited = {
             role_config_key(render.kind, role): col for role, col in (render.roles or {}).items()
         }
         user_cfg = data.get("config") or {}
-        merged = {**inherited, **user_cfg, "viz_kind": render.kind}
+        merged = with_inferred_structure_source(
+            render.kind, {**inherited, **user_cfg, "viz_kind": render.kind}
+        )
         return {**data, "viz_kind": render.kind, "config": merged}
 
     @model_validator(mode="before")

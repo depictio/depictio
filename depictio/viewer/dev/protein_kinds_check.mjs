@@ -303,5 +303,34 @@ check(
 );
 check('coverage_track: a default view mode', buildAdvancedVizConfigBlob('coverage_track', { position: 'pos' }).view_mode, 'overlay');
 
+// A structure tile bound to a sequence and to no structure collection resolves its structure.
+check(
+  'structure: a sequence binding resolves',
+  buildAdvancedVizConfigBlob('molecule_3d', { sequence: 'sequence' }).structure_source,
+  'resolve',
+);
+check(
+  'structure: a bound collection keeps file mode',
+  buildAdvancedVizConfigBlob('molecule_3d', { sequence: 'sequence' }, { structure_dc_tag: 'models' })
+    .structure_source,
+  undefined,
+);
+check(
+  'structure: nothing to resolve from stays on the default',
+  buildAdvancedVizConfigBlob('molecule_3d', {}).structure_source,
+  undefined,
+);
+check(
+  'structure: a stated file source is kept',
+  buildAdvancedVizConfigBlob('molecule_3d', { gene: 'gene' }, { structure_source: 'file' })
+    .structure_source,
+  'file',
+);
+check(
+  'structure: another kind is untouched',
+  buildAdvancedVizConfigBlob('lollipop', { sequence: 'sequence' }).structure_source,
+  undefined,
+);
+
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

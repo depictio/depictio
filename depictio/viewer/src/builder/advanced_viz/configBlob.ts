@@ -174,6 +174,18 @@ export function buildAdvancedVizConfigBlob(
   if (vizKind === 'secondary_structure' && merged.reference_source != null && !merged.source_col) {
     delete merged.reference_source;
   }
+  // A structure tile bound to an accession, a gene or a sequence and to no
+  // structure collection fetches its structure. The model's default, `file`,
+  // would look for a collection nobody bound (mirrors `with_inferred_structure_source`).
+  if (
+    (vizKind === 'molecule_3d' || vizKind === 'ramachandran') &&
+    merged.structure_source == null &&
+    !merged.structure_dc_id &&
+    !merged.structure_dc_tag &&
+    (merged.uniprot_col || merged.gene_col || merged.sequence_col)
+  ) {
+    merged.structure_source = 'resolve';
+  }
   return merged;
 }
 

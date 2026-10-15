@@ -134,3 +134,34 @@ def test_no_use_still_requires_explicit_binding_path():
     c = _component(viz_kind="volcano", config={"viz_kind": "volcano", "feature_id_col": "id"})
     assert c.viz_kind == "volcano"
     assert c.config.feature_id_col == "id"
+
+
+# ---------------------------------------------------------------------------
+# (c) a structure tile bound to a sequence resolves its structure
+# ---------------------------------------------------------------------------
+
+
+def test_use_of_a_sequence_bound_structure_resolves_it():
+    """famsa/conservation_structure binds `sequence` and no structure collection:
+    left on the model default (`file`) it looks for a collection nobody bound."""
+    comp = AdvancedVizLiteComponent.model_validate(
+        {"use": "famsa/conservation_structure", "index": "00000000-0000-0000-0000-000000000001"}
+    )
+
+    assert comp.config.structure_source == "resolve"
+    assert comp.config.sequence_col == "sequence"
+
+
+def test_a_stated_structure_source_or_collection_is_kept():
+    from depictio.models.components.advanced_viz.catalog import with_inferred_structure_source
+
+    bound = {"sequence_col": "sequence"}
+    assert with_inferred_structure_source("molecule_3d", {**bound, "structure_source": "file"}) == {
+        **bound,
+        "structure_source": "file",
+    }
+    assert "structure_source" not in with_inferred_structure_source(
+        "molecule_3d", {**bound, "structure_dc_tag": "models"}
+    )
+    assert "structure_source" not in with_inferred_structure_source("molecule_3d", {})
+    assert "structure_source" not in with_inferred_structure_source("volcano", bound)
