@@ -241,7 +241,7 @@ class TestAlwaysSelected:
 
     def test_banner_facts_round_trip_with_and_without_a_format(self):
         facts = [
-            {"column": "size", "label": "Members", "format": "integer"},
+            {"column": "size", "label": "Members", "format": "integer", "icon": "tabler:users"},
             {"column": "note", "label": "Note"},
         ]
         dash = DashboardDataLite(

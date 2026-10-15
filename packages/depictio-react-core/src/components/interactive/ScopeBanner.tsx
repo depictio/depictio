@@ -7,7 +7,8 @@
  * - the filter's title as an eyebrow over the unit's name, which is the
  *   picker itself (a searchable list in the panel's order), so the card reads
  *   as a heading rather than a form field;
- * - the filter's `banner_facts`, read from the unit's row, as figures;
+ * - the filter's `banner_facts`, read from the unit's row, as figures, each
+ *   under an icon tile in the filter's accent (light, as a card's icon);
  * - previous and next keys with the unit's rank ("3 / 12"), walking the same
  *   list as the automatic pick (`useScopeOptions`).
  *
@@ -22,6 +23,7 @@ import {
   getRadius,
   Group,
   Text,
+  ThemeIcon,
   Tooltip,
   UnstyledButton,
   useCombobox,
@@ -33,7 +35,12 @@ import type { InteractiveFilter, StoredMetadata } from '../../api';
 import { useChromeStyle } from '../../chrome';
 import { ownFilterValues } from './alwaysSelected';
 import { filterEvent } from './categoricalOptions';
-import { interactiveAccent, interactiveIcon, interactiveTitle } from './frame';
+import {
+  interactiveAccent,
+  interactiveAccentRaw,
+  interactiveIcon,
+  interactiveTitle,
+} from './frame';
 import { bannerFactColumns, bannerFactItems, unitSteps } from './scope';
 import { useRowValues } from './useInteractiveData';
 import { useScopeOptions, type ScopeOption } from './useScopeOptions';
@@ -81,7 +88,7 @@ const UnitPicker: React.FC<{
     <Combobox
       store={combobox}
       position="bottom-start"
-      width="target"
+      width="max-content"
       withinPortal
       onOptionSubmit={(v) => {
         combobox.closeDropdown();
@@ -102,8 +109,9 @@ const UnitPicker: React.FC<{
           <Icon icon="tabler:selector" width={18} height={18} aria-hidden />
         </UnstyledButton>
       </Combobox.Target>
-      {/* As wide as the name it opens from, never narrower than a readable list. */}
-      <Combobox.Dropdown miw={320} maw="min(640px, calc(100vw - 32px))">
+      {/* As wide as the longest name in the list (not the one it opens from),
+          so a name reads on one line; capped by the window. */}
+      <Combobox.Dropdown miw={420} maw="min(760px, calc(100vw - 32px))">
         <Combobox.Search
           value={search}
           onChange={(e) => setSearch(e.currentTarget.value)}
@@ -143,6 +151,9 @@ const ScopeCard: React.FC<{
 }> = ({ metadata, value, onFilterChange }) => {
   const style = useChromeStyle();
   const title = interactiveTitle(metadata);
+  // The fact tiles take the filter's accent as authored (a theme colour name
+  // or a hex), so Mantine derives the light tint; unset, the theme primary.
+  const accentRaw = interactiveAccentRaw(metadata);
   const columns = React.useMemo(() => bannerFactColumns(metadata.banner_facts), [metadata.banner_facts]);
   const { data: row } = useRowValues(
     metadata.dc_id,
@@ -202,22 +213,29 @@ const ScopeCard: React.FC<{
         <UnitPicker title={title} value={value} options={options} onPick={pick} />
       </div>
       {facts.length > 0 && (
-        <dl className="depictio-scope-banner__facts">
+        <div className="depictio-scope-banner__facts" role="list">
           {facts.map((f) => (
-            <div key={f.label} className="depictio-scope-banner__fact">
-              <dd>
+            <div key={f.label} className="depictio-scope-banner__fact" role="listitem">
+              <ThemeIcon
+                variant="light"
+                color={accentRaw}
+                radius={style.radius}
+                size={style.controlSize === 'xs' ? 'lg' : 'xl'}
+                aria-hidden
+              >
+                <Icon icon={f.icon} width={20} height={20} />
+              </ThemeIcon>
+              <div className="depictio-scope-banner__fact-text">
                 <Text component="span" fw={700} className="depictio-scope-banner__figure">
                   {f.text}
                 </Text>
-              </dd>
-              <dt>
-                <Text component="span" size="xs" c="dimmed">
+                <Text component="span" size="xs" c="dimmed" className="depictio-scope-banner__label">
                   {f.label}
                 </Text>
-              </dt>
+              </div>
             </div>
           ))}
-        </dl>
+        </div>
       )}
       {pick && steps.total > 1 && (
         <Group gap={6} wrap="nowrap" className="depictio-scope-banner__steps">

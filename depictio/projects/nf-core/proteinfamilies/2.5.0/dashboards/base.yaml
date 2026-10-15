@@ -1406,8 +1406,10 @@ tabs:
   # run's family). The list stays alphabetical. The tiles
   # follow it on hmm_name, entity and label through the families links. No size
   # filter beside it: a range that left the picked family out would empty the
-  # tab. banner_facts print the picked family's size and model length in the
-  # scope banner, read from its row of the families collection.
+  # tab. banner_facts print three figures of the picked family in the scope
+  # banner, read from its row of the families collection: its members, the
+  # length of its representative (the sequence the structure and the track
+  # draw) and how alike its members are to it.
   - component_type: interactive
     workflow_tag: proteinfamilies
     data_collection_tag: families
@@ -1415,8 +1417,9 @@ tabs:
     always_selected: true
     default_by: size
     banner_facts:
-    - {column: size, label: Members, format: integer}
-    - {column: model_length, label: Model length, format: integer}
+    - {column: size, label: Members, format: integer, icon: 'tabler:users-group'}
+    - {column: representative_length, label: Length (aa), format: integer, icon: 'tabler:ruler-measure'}
+    - {column: mean_identity, label: Mean identity, format: percent, icon: 'tabler:arrows-join'}
     column_name: family
     column_type: object
     display:

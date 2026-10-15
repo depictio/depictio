@@ -691,7 +691,7 @@ class BannerFact(BaseModel):
     """One fact a scope banner shows for the value an ``always_selected`` filter holds.
 
     Example YAML (under an interactive component's ``banner_facts``):
-        - {column: member_count, label: Members, format: integer}
+        - {column: member_count, label: Members, format: integer, icon: tabler:users-group}
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -704,6 +704,11 @@ class BannerFact(BaseModel):
         default=None,
         description="`percent`, `integer`, `si` or `decimals:N` (N from 0 to 6). Unset: "
         "numbers as a card prints them, text as is.",
+    )
+    icon: str | None = Field(
+        default=None,
+        description="Iconify icon name drawn beside the figure (e.g. `tabler:ruler-measure`). "
+        "Unset: one for the kind of value (a number, a share, text).",
     )
 
     @field_validator("format")

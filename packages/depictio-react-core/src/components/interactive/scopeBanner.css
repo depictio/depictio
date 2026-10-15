@@ -37,11 +37,13 @@
   color: var(--mantine-color-white);
 }
 
+/* Room for a long identifier on one line before the figures take the rest:
+ * the facts wrap to the next line rather than squeeze the name. */
 .depictio-scope-banner__identity {
   display: flex;
   flex-direction: column;
   flex: 0 1 auto;
-  min-width: 0;
+  min-width: min(100%, 22rem);
   max-width: 100%;
 }
 
@@ -94,24 +96,34 @@
   outline-offset: 1px;
 }
 
+/* Each fact is a stat: an icon tile in the filter's accent, the figure over
+ * its label. */
 .depictio-scope-banner__facts {
   display: flex;
   flex-wrap: wrap;
   gap: var(--mantine-spacing-xs) var(--mantine-spacing-xl);
-  margin: 0;
   margin-inline-start: var(--mantine-spacing-lg);
 }
 .depictio-scope-banner__fact {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
-.depictio-scope-banner__fact :is(dt, dd) {
-  margin: 0;
+.depictio-scope-banner__fact-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 .depictio-scope-banner__figure {
   font-size: var(--mantine-font-size-lg);
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.depictio-scope-banner__label {
+  line-height: 1.3;
+  white-space: nowrap;
 }
 
 .depictio-scope-banner__steps {

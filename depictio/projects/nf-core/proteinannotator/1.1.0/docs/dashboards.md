@@ -131,7 +131,7 @@ every other tab.
 4. **Structure.** *Where do the domains sit on one protein's 3D structure?* The tab shows one
    protein: its `Protein` filter is `always_selected` and opens on the shortest protein
    (`default_by: length`, ascending), so the first fold is within the ESMFold limit, and the scope
-   card prints its length, domain hits, annotated share and best domain (`banner_facts`). The
+   card prints its length, domain hits and annotated share, each under an icon (`banner_facts`). The
    `Structure and domains` section (`display: linked`, held within one screen height) puts the
    structure (coloured by best domain, over its written sequence) beside the sequence track
    (state, probability and domain spans), linked residue by residue: clicking a residue in 3D, a

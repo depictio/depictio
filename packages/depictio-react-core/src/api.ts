@@ -454,6 +454,8 @@ export interface BannerFact {
   column: string;
   label: string;
   format?: string | null;
+  /** Iconify name; unset picks one for the kind of value (`bannerFactIcon`). */
+  icon?: string | null;
 }
 
 export interface StoredMetadata {

@@ -4,6 +4,7 @@ import type { StoredMetadata } from '../../api';
 import {
   alwaysSelectedComponents,
   bannerFactColumns,
+  bannerFactIcon,
   bannerFactItems,
   scopeUnits,
   unitSteps,
@@ -46,9 +47,20 @@ describe('bannerFactItems', () => {
 
   it('formats numbers, keeps text, drops absent or empty values', () => {
     expect(bannerFactItems(facts, { size: 1234.4, kind: ' alpha ', score: null })).toEqual([
-      { label: 'Members', text: '1,234' },
-      { label: 'Kind', text: 'alpha' },
+      { label: 'Members', text: '1,234', icon: 'tabler:hash' },
+      { label: 'Kind', text: 'alpha', icon: 'tabler:tag' },
     ]);
+  });
+
+  it('draws a fact with its own icon, else one for the kind of value', () => {
+    expect(bannerFactIcon({ column: 'n', label: 'N', icon: 'tabler:users-group' }, 3)).toBe(
+      'tabler:users-group',
+    );
+    expect(bannerFactIcon({ column: 'n', label: 'N', format: 'percent' }, 0.4)).toBe(
+      'tabler:percentage',
+    );
+    expect(bannerFactIcon({ column: 'n', label: 'N' }, 3)).toBe('tabler:hash');
+    expect(bannerFactIcon({ column: 'n', label: 'N' }, 'x')).toBe('tabler:tag');
   });
 
   it('drops non-finite numbers and blank text', () => {

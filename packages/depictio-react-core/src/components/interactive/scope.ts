@@ -40,6 +40,17 @@ export function scopeUnits(
 export interface BannerFactItem {
   label: string;
   text: string;
+  icon: string;
+}
+
+/**
+ * The icon a fact is drawn with: its own, else one for the kind of value it
+ * shows (a share, another number, text).
+ */
+export function bannerFactIcon(fact: BannerFact, value: unknown): string {
+  if (fact.icon) return fact.icon;
+  if (fact.format === 'percent') return 'tabler:percentage';
+  return typeof value === 'number' ? 'tabler:hash' : 'tabler:tag';
 }
 
 /**
@@ -59,7 +70,7 @@ export function bannerFactItems(
     if (typeof v === 'number') text = Number.isFinite(v) ? formatNumber(v, fact.format) : null;
     else if (typeof v === 'string') text = v.trim() || null;
     else if (typeof v === 'boolean') text = v ? 'yes' : 'no';
-    if (text !== null) items.push({ label: fact.label, text });
+    if (text !== null) items.push({ label: fact.label, text, icon: bannerFactIcon(fact, v) });
   }
   return items;
 }

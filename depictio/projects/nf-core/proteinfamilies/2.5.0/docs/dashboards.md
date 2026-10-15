@@ -128,8 +128,8 @@ conservation of its representative's residues (their spread), those residues spl
 conservation class, the members' identity to the representative and their length (both with
 their spread). The model's own descriptors (match states, seed and effective sequences) are one
 value per family: the pinned family table, narrowed to the family's row, holds them, and the scope
-banner of the tab prints the family's member count and model length (`banner_facts` on the `Family`
-filter). Then a `Profile, fold and alignment` section (`display: linked`, held within one screen height) with the
+banner of the tab prints the family's member count, its representative's length and the members'
+mean identity to it, each under an icon (`banner_facts` on the `Family` filter). Then a `Profile, fold and alignment` section (`display: linked`, held within one screen height) with the
 predicted structure of the representative, coloured by conservation class, on the left and the
 profile logo of the family HMM (one stack of letters per match state with the insert, occupancy
 and consensus lanes and, under it, the members the hmmalign alignment placed on the model), the

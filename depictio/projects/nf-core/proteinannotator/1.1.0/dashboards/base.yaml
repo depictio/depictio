@@ -1096,7 +1096,7 @@ tabs:
     default_by: position
     default_order: asc
     banner_facts:
-    - {column: sample, label: Sample}
+    - {column: sample, label: Sample, icon: 'tabler:flask'}
     column_name: entity
     column_type: object
     display:
@@ -1349,7 +1349,8 @@ tabs:
   # short enough. A descending rank would open on the longest, and any other
   # score (domain hits, annotated share) is not bounded by the limit. The list
   # stays alphabetical, and a longer protein is one pick away. banner_facts read
-  # the picked protein's row of the protein summary.
+  # three figures from the picked protein's row of the protein summary: its
+  # length, its domain hits and the share of its residues inside a domain.
   - component_type: interactive
     workflow_tag: proteinannotator
     data_collection_tag: proteinannotator_proteins
@@ -1358,10 +1359,9 @@ tabs:
     default_by: length
     default_order: asc
     banner_facts:
-    - {column: length, label: Residues, format: integer}
-    - {column: domain_hits, label: Domains, format: integer}
-    - {column: annotated_pct, label: In a domain (%), format: 'decimals:0'}
-    - {column: top_domain, label: Best domain}
+    - {column: length, label: Length (aa), format: integer, icon: 'tabler:ruler-measure'}
+    - {column: domain_hits, label: Domains, format: integer, icon: 'tabler:puzzle'}
+    - {column: annotated_pct, label: In a domain (%), format: 'decimals:0', icon: 'tabler:chart-pie'}
     column_name: entity
     column_type: object
     display:
