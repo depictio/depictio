@@ -12,9 +12,10 @@ version: 1
 # Structure tiles (the 3D view, the sequence track, the alignment, the PAE
 # matrix, the Ramachandran plot) each show one structure at a time: the one a
 # click on the structure plot or a filter on `entity` names, else the first.
-# No tab holds a target picker that pre-selects one (the target filter is
-# optional), so a tab opens on every target in scope and these tiles on the
-# first structure until a point is picked.
+# The persistent target filter is optional, so the Overview and Model scores
+# read every target in scope; the Structure, Predicted error and Engines
+# comparison tabs each hold a single-unit picker (`always_selected`) and open on
+# the first option, these tiles on the first structure until a point is picked.
 #
 # The MultiQC report is not a tab: proteinfold's custom content is one plot
 # per target, named after the target, and a template never names a value of
@@ -30,7 +31,11 @@ main_dashboard:
   icon_color: green
   workflow_system: nf-core
   filter_panel_default: collapsed
-  content_width_default: compact
+  # Wide, not the family's compact: the 3D structure over its sequence and the PAE
+  # matrix (w4 tiles of the Overview, wider on their own tabs) need the room; at
+  # 1080 px the sequence wraps tight and the matrix labels crowd. See
+  # VALIDATION_REPORT.md.
+  content_width_default: wide
   show_tab_header: false
   # Declared once here, read by every tab of the family. The engines get a
   # palette each (one per engine and AlphaFold2 mode), the pLDDT bands the
@@ -668,7 +673,10 @@ tabs:
   # No engine picker: the plot is the engine picker (an engine filter would
   # narrow it to one point). The target is always_selected: every tile reads one
   # sequence (the plot one point per engine, the profile one curve per engine),
-  # the first target of the list until another is picked, on any run.
+  # the first target of the list until another is picked, on any run. The picker
+  # sits on the residues; its links (template.yaml) carry it to the structure
+  # plot, the engine curves and, as that target's structures, the alignment, so
+  # a point of the plot is always a structure of the picked target.
   - component_type: interactive
     workflow_tag: proteinfold
     data_collection_tag: proteinfold_residues

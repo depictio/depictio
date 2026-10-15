@@ -61,7 +61,7 @@ run. Sheet columns beyond `id` and `fasta` are kept, so any of them can become `
 
 ## Overview
 
-The landing page, at compact width with the filter panel collapsed:
+The landing page, opening at wide width (1600 px, see "Page width" below) with the filter panel collapsed:
 
 - **Hero**: what the run is, and a link to the run parameters.
 - **About this dashboard** and **The run**: two cards side by side. The first says what the
@@ -118,6 +118,13 @@ on the left would narrow the plot to one point, so the tab has none. The tab's `
 is `always_selected`: the plot draws one point per engine on that target, and the tiles that
 show one structure at a time (3D, track, Ramachandran, alignment) open on its first structure
 until a point is clicked.
+
+The picker is a filter on the residues, so `template.yaml` links it onward: to the engine curves
+and to the structure plot and the best-structure card (`target`, a direct link), and to the
+alignment and the PAE matrix (`entity`, reached as that target's structures). A point of the plot
+is therefore always a structure of the picked target, and a click never leaves the other tiles on
+another target. ESMFold writes no alignment: its structure opens the alignment tile on its
+empty-state message, not on rows.
 
 The 3D tile (`molecule_3d`, `layout: structure_text`) draws the top-ranked PDB coloured by pLDDT
 from its B-factor column over its sequence written out, one clickable letter per residue;
@@ -180,6 +187,13 @@ a pick replaces it, the filter cannot be cleared, and a held value that leaves t
 replaced by the first again. The tiles that show one structure at a time therefore always agree
 on it, and the curves and points of a tab are one target's. The pinned `Sample filters` and the
 Overview's filter bars stay optional, so the Overview and Model scores read every target.
+
+## Page width
+
+The dashboard opens at `wide` (1600 px) instead of the family's `compact` (1080 px): the 3D
+structure over its written sequence and the PAE matrix, both w4 tiles on the Overview, need the
+room. The viewer can still pick another width. The Overview keeps its row budget; the Findings
+tiles stay w4 so each row fills the 8 columns.
 
 ## Method notes
 

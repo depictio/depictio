@@ -1,7 +1,7 @@
 # Megatest manifest for nf-core/proteinfamilies 2.5.0 (read by scripts/nfcore_megatest.py).
 #
 # Which AWS megatest run this template was validated against and the subset of
-# it that the template recipes and MultiQC need. Fetch it with:
+# it that the template recipes need. Fetch it with:
 #
 #   python scripts/nfcore_megatest.py fetch --pipeline proteinfamilies --version 2.5.0 --max-file-mb 5 [--dest DIR]
 #   bash download_test_data.sh [DIR]      # same thing, plus the vendored samplesheet
@@ -53,8 +53,6 @@ keys:
   # map the HMM states onto the residues of the family representative and give
   # the members' coverage of the model. Families an update run extended have none.
   - full_msa/raw/hmmer_hmmalign/*/*.sto.gz
-  # CMAPLE trees of the new families.
-  - phylogeny/cmaple/*/*.treefile
   #
   # Deliberately NOT fetched:
   #   qc/<sample>/<sample>.fasta (11 MB each): the preprocessed input sequences.

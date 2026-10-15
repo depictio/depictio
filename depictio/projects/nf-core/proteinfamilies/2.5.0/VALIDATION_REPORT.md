@@ -16,13 +16,12 @@ this report: it is done on a running stack.
 | `depictio dashboard validate --offline dashboards/base.yaml` | pass |
 | `test_template_conventions.py`, `test_shipped_dashboard_yamls.py`, `test_template_dc_order.py` with `-k proteinfamilies` | pass |
 | `depictio/tests/recipes/test_proteinfamilies_project_recipes.py` (the `samples` hub) | 4 passed |
-| Every transformed collection's recipe over the megatest, through raw scans built with the collections' `polars_kwargs` | pass, 10 collections |
-| `depictio ingest --template nf-core/proteinfamilies/2.5.0 --dry-run` on the megatest | 8/8 steps, 19 collections, 0 empty, 0 missing |
+| Every transformed collection's recipe over the megatest, through raw scans built with the collections' `polars_kwargs` | pass, 9 collections |
+| `depictio ingest --template nf-core/proteinfamilies/2.5.0 --dry-run` on the megatest | 8/8 steps, 16 collections, 0 empty, 0 missing |
 
 The text tiles, KPI strips and open-row budgets are held by the lint above (stored text heights,
-at most three sentences per paragraph, no forbidden terms, no `GROUP_COL` in a `filter_expr`,
-persistent filters reaching MultiQC). The row budgets below are counted by hand from the stored
-heights.
+at most three sentences per paragraph, no forbidden terms, no `GROUP_COL` in a `filter_expr`).
+The row budgets below are counted by hand from the stored heights.
 
 ## Collection sizes on the megatest
 
@@ -37,18 +36,16 @@ heights.
 | family_residues | 1593 |
 | hmm_profile | 31720 (13 families, 1586 match states) |
 | hmmalign_hits | 212 (members of 10 alignments; two alignments belong to families the redundancy filter removed) |
-| family_trees | 1395 (8 trees) |
 
 ## Open rows per tab (stored heights)
 
 | Tab | Open rows | Open sections |
 | --- | --- | --- |
 | Overview | 23 of 24 | hero 1, about 3, pipeline 3, key figures 3, findings 11, how to read 2 |
-| MultiQC | 5 | 1 |
 | Input & Clustering | 13 | 3 |
 | Families | 14 | 3 |
 | Members | 14 | 3 |
-| Family alignment | 20 | 3 (tree and residue table collapsed) |
+| Family alignment | 20 | 3 (residue table collapsed) |
 | Profile HMM | 18 | 3 (family alignment and hits table collapsed) |
 
 ## Findings
@@ -72,12 +69,10 @@ heights.
 
 ## Open issues
 
-- The MultiQC report holds custom content only, and its SeqFu and cluster-size sections are named
-  after each sample (`<sample>_before`, `<sample>_cluster_distribution`): a template cannot name
-  them, so the MultiQC tab shows the family metadata table alone and the tiles read the source files.
-- One tree per family cannot be served by a phylogeny collection (one Newick file per
-  collection), so the trees are drawn from a segment table by a code figure; the `phylogenetic`
-  kind is not bound.
+- The run's MultiQC report holds custom content only, and its SeqFu and cluster-size sections
+  are named after each sample (`<sample>_before`, `<sample>_cluster_distribution`): a template
+  cannot name them. Its one addressable section, the family metadata table, repeats the Protein
+  families table, so the template ships no MultiQC tab and reads the source files instead.
 - The 3D tiles depend on the structure resolver (`settings.structure_resolver.enabled`) and on
   ESMFold being reachable; with the resolver off they show their empty state.
 - The hits table has no search statistics and `entity` is the member id, so its collapsed table is
@@ -92,6 +87,3 @@ heights.
   family is picked.
 - Overview highlights cannot show the logo (a w4 tile holds about 30 states): the four figures are
   the cluster curves, the family landscape, the member scatter and the conservation histogram.
-- `SKIP_PHYLOGENETIC_INFERENCE` must be set by hand; it is not introspected from
-  `pipeline_info/params_*.json` (`skip_phylogenetic_inference`). Both tree collections are also
-  `optional`.

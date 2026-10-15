@@ -23,7 +23,16 @@ Overview highlights, the linked structure tiles) is not part of this report.
 | Every `use:` handle of the dashboard resolves to its catalog entry | pass |
 | PAE and structure ids on the megatest | the 9 matrices carry the id of their structure; the 3 structures without a matrix are ESMFold's |
 
-## Row budgets (stored heights, compact width)
+## Deliberate deviations from RULES.md
+
+- `content_width_default: wide` (1600 px) instead of the family's `compact`: the Overview's
+  3D structure and PAE matrix tiles and the Structure tab's 3D-over-sequence tile read too
+  tight at 1080 px. The Findings highlights stay w4 (two per 8-column row, 24-row budget kept).
+- A link resolves to the first declared link of a pair of collections, so residues to
+  structure scores is its own link on `target`, while residues to the alignment and the PAE
+  matrix stay on `entity` (a target pick reaches them by translation).
+
+## Row budgets (stored heights, stored at the 8-column grid)
 
 | Tab | Open rows | Open sections |
 | --- | --- | --- |

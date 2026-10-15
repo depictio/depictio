@@ -18,8 +18,8 @@
 #
 # KEYS. Per-family files are laid out <step>/<sample>/<family>.<ext>, so every
 # family collection carries the sample (the directory) and the family (the
-# file name); the families hub fans the family out to the alignment, residue,
-# member and tree collections. Families an update run extended live under
+# file name); the families hub fans the family out to the alignment, residue
+# and member collections. Families an update run extended live under
 # update_families/ and carry origin "updated".
 #
 # PROFILES. The family HMMs (hmm/) are also drawn as sequence logos. Each state is
@@ -36,11 +36,11 @@
 # the same scan picks up.
 template:
   template_id: "nf-core/proteinfamilies/2.5.0"
-  description: "nf-core/proteinfamilies protein family template: how the input sequences clustered, the families built or extended with their seed, model and alignment statistics, each family's alignment, residue conservation, predicted structure and tree, and the members with their identity to the representative."
+  description: "nf-core/proteinfamilies protein family template: how the input sequences clustered, the families built or extended with their seed, model and alignment statistics, each family's alignment, residue conservation and predicted structure, and the members with their identity to the representative."
   version: "1.0.0"
   variables:
     - name: "DATA_ROOT"
-      description: "proteinfamilies output directory (qc/, mmseqs/, family_reps/, full_msa/, hmm/, phylogeny/, update_families/, multiqc/, pipeline_info/)."
+      description: "proteinfamilies output directory (qc/, mmseqs/, family_reps/, full_msa/, hmm/, update_families/, pipeline_info/)."
       required: true
     - name: "METADATA_FILE"
       description: "The samplesheet the run was started with (--input: sample, fasta, optional existing_hmms_to_update and existing_msas_to_update, plus any design columns). Defaults to input/samplesheet.csv under DATA_ROOT."
@@ -58,9 +58,6 @@ template:
       description: "Reader-facing label of GROUP_COL, used in filter and card titles."
       required: false
       default: "Mode"
-    - name: "SKIP_PHYLOGENETIC_INFERENCE"
-      description: "Set (--var SKIP_PHYLOGENETIC_INFERENCE=true) for a run with --skip_phylogenetic_inference: phylogeny/ is absent, so the tree collections are removed."
-      required: false
   # Variables used when materialising the bundled reference dataset.
   reference:
     vars:
@@ -107,10 +104,6 @@ template:
       - "cluster_seq_identity_for_redundancy"
   dashboards:
     - "dashboards/base.yaml"
-  conditional:
-    - if_var_present: "SKIP_PHYLOGENETIC_INFERENCE"
-      remove_dc_tags: ["cmaple_tree_raw", "family_trees"]
-      dashboards: ["dashboards/base.yaml"]
 
 # ============================================================================
 # PROJECT CONFIGURATION
@@ -155,26 +148,6 @@ workflows:
               "fasta": "Input protein FASTA file name"
               "existing_hmms_to_update": "Archive of existing family HMMs the sample extends (update mode)"
               "existing_msas_to_update": "Archive of the matching family alignments (update mode)"
-
-      # ----------------------------------------------------------------
-      # MultiQC: custom content. The SeqFu and cluster-size sections are
-      # named after each sample, so only the family metadata table has a
-      # stable id a template can address.
-      # ----------------------------------------------------------------
-      - data_collection_tag: "multiqc_data"
-        description: "MultiQC report of the run: the family metadata table (the per-sample SeqFu and cluster-size sections are read from their source files instead)"
-        config:
-          type: "MultiQC"
-          scan:
-            mode: "recursive"
-            scan_parameters:
-              regex_config:
-                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
-          dc_specific_properties:
-            modules:
-              - "family_metadata"
-            plots:
-              family_metadata: ["family_metadata-section"]
 
       # ----------------------------------------------------------------
       # Input sequences and initial clustering
@@ -393,30 +366,6 @@ workflows:
               "raw": "One line of a Stockholm alignment"
               "source_path": "File the line came from; the sample and the family are derived from its path"
 
-      - data_collection_tag: "cmaple_tree_raw"
-        optional: true  # absent with --skip_phylogenetic_inference
-        description: "Raw CMAPLE family trees (Newick), one file line per row (input of family_trees)"
-        config:
-          type: "Table"
-          metatype: "Aggregate"
-          scan:
-            mode: "recursive"
-            scan_parameters:
-              regex_config:
-                pattern: ".*\\.treefile$"
-          dc_specific_properties:
-            format: "TSV"
-            polars_kwargs:
-              separator: "\x1f"
-              quote_char: null
-              has_header: false
-              new_columns: ["raw"]
-              include_file_paths: "source_path"
-              infer_schema_length: 0
-            columns_description:
-              "raw": "One line of a Newick tree"
-              "source_path": "File the line came from; the sample and the family are derived from its path"
-
       # ----------------------------------------------------------------
       # Families: the family hub and what hangs off it
       # ----------------------------------------------------------------
@@ -568,37 +517,8 @@ workflows:
               "i_evalue": "Always empty: an alignment carries no search statistics"
               "dom_score": "Always empty: an alignment carries no search statistics"
 
-      - data_collection_tag: "family_trees"
-        optional: true  # absent with --skip_phylogenetic_inference
-        description: "CMAPLE family trees laid out as rectangular tree segments, families stacked"
-        config:
-          type: "Table"
-          metatype: "Aggregate"
-          source: "transformed"
-          transform:
-            recipe: "cmaple/tree_layout.py"
-          dc_specific_properties:
-            format: "TSV"
-            columns_description:
-              "family": "Family id"
-              "sample": "Sample the family was built from"
-              "draw_order": "Row order of the drawing"
-              "x": "Distance from the root, substitutions per site (empty on separator rows)"
-              "y": "Vertical slot of the node (empty on separator rows)"
-              "node": "Member id at a tip"
-              "is_tip": "The row ends a branch at a tip"
-              "n_tips": "Tips of the family tree"
-
 links:
   # Samplesheet hub to every sample-level collection.
-  - source_dc_tag: "samples"
-    source_column: "sample"
-    target_dc_tag: "multiqc_data"
-    target_type: "multiqc"
-    link_config:
-      resolver: "sample_mapping"
-    description: "Filter the MultiQC family table by samplesheet samples"
-    enabled: true
   - source_dc_tag: "samples"
     source_column: "sample"
     target_dc_tag: "sequence_stats"
@@ -655,13 +575,6 @@ links:
     link_config: {resolver: "direct", target_field: "sample"}
     description: "Filter the members' coverage of the models by samplesheet samples"
     enabled: true
-  - source_dc_tag: "samples"
-    source_column: "sample"
-    target_dc_tag: "family_trees"
-    target_type: "table"
-    link_config: {resolver: "direct", target_field: "sample"}
-    description: "Filter the family trees by samplesheet samples"
-    enabled: true
   # Families hub to every family-level collection.
   - source_dc_tag: "families"
     source_column: "family"
@@ -697,13 +610,6 @@ links:
     target_type: "table"
     link_config: {resolver: "direct", target_field: "label"}
     description: "Filter the members' coverage of the models by family"
-    enabled: true
-  - source_dc_tag: "families"
-    source_column: "family"
-    target_dc_tag: "family_trees"
-    target_type: "table"
-    link_config: {resolver: "direct", target_field: "family"}
-    description: "Filter the family trees by family"
     enabled: true
   # Reverse: a member selection narrows the family table.
   - source_dc_tag: "family_members"

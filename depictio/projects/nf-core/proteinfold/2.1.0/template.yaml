@@ -508,7 +508,22 @@ links:
     link_config: {resolver: "direct"}
     description: "Follow the picked structure's target on the per-engine curves"
     enabled: true
-  # ...and narrows the alignment and the PAE matrix to that structure.
+  # The Structure tab's target picker sits on the residues: this link carries
+  # its pick to the structure plot and to the best-structure card, so the plot
+  # lists the picked target's structures only and a click on a point always
+  # names a structure the other tiles hold residues for. A link resolves to the
+  # first declared link of a pair of collections, so the pair below (residues to
+  # the alignment and the PAE matrix) stays on `entity`, which a target pick
+  # reaches by translation: the entities of that target.
+  - source_dc_tag: "proteinfold_residues"
+    source_column: "target"
+    target_dc_tag: "proteinfold_structure_scores"
+    target_type: "table"
+    link_config: {resolver: "direct"}
+    description: "Follow the picked target on the structure plot"
+    enabled: true
+  # ...and narrows the alignment and the PAE matrix to that structure (a target
+  # pick on the residues reaches them as that target's structures).
   - source_dc_tag: "proteinfold_residues"
     source_column: "entity"
     target_dc_tag: "proteinfold_msa"
