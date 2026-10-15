@@ -51,13 +51,21 @@ import {
   AdvancedVizDataPopover,
   AdvancedVizDockToggle,
   AdvancedVizExtrasProvider,
-  AdvancedVizKindTagContext,
   AdvancedVizSettingsPopover,
 } from './AdvancedVizExtras';
-import { vizKindTag } from './vizKindTag';
+import { vizKindLabel } from './vizKindTag';
+import { AdvancedVizKindContext } from './VizKindBadge';
 import { useDensity } from '../density';
-import { ControlsDockContext, isControlsPlacement } from './controlsDock';
-import type { ControlsDockState } from './controlsDock';
+import {
+  ControlsDockContext,
+  isControlsPlacement,
+  parseChoice,
+  placementForView,
+  resolveControls,
+  serializeChoice,
+} from './controlsDock';
+import type { ControlsChoice, ControlsDockState, ControlsView } from './controlsDock';
+import { useAdvancedVizComponentDraft } from './AdvancedVizComponentDraft';
 import type { AdvancedVizExtrasPayload } from './AdvancedVizExtras';
 import { useAdvancedVizInspector } from './AdvancedVizInspectorBridge';
 import {
@@ -98,29 +106,29 @@ import {
   tabLinkName,
 } from './advancedVizShowcase';
 
-/** The hover line behind each way an advanced viz ends up "not grouped". */
-/** The viewer's fold of a tile's docked controls, kept per component in this
- *  browser: `1` folded, `0` opened on purpose, nothing when they never chose
- *  (null: the layout's default applies, see `folded` below). Storage can be
- *  missing or refuse (a private window): then the fold lasts as long as the
- *  page. */
+/** The viewer's choice of how a tile's controls show, kept per component in
+ *  this browser: `1` folded, `0` opened on purpose, or the view picked from
+ *  the header menu (`overlay`, `top`, `right`); nothing when they never chose
+ *  (null: the component's own placement and the layout's default apply, see
+ *  `resolveControls`). Storage can be missing or refuse (a private window):
+ *  then the choice lasts as long as the page. */
 const DOCK_FOLD_KEY = (index: string) => `depictio.vizControls.folded.${index}`;
-function readFolded(index: string): boolean | null {
+function readChoice(index: string): ControlsChoice | null {
   try {
-    const stored = window.localStorage.getItem(DOCK_FOLD_KEY(index));
-    return stored === '1' ? true : stored === '0' ? false : null;
+    return parseChoice(window.localStorage.getItem(DOCK_FOLD_KEY(index)));
   } catch {
     return null;
   }
 }
-function writeFolded(index: string, folded: boolean): void {
+function writeChoice(index: string, choice: ControlsChoice): void {
   try {
-    window.localStorage.setItem(DOCK_FOLD_KEY(index), folded ? '1' : '0');
+    window.localStorage.setItem(DOCK_FOLD_KEY(index), serializeChoice(choice));
   } catch {
-    // Not remembered; the fold still applies to this page.
+    // Not remembered; the choice still applies to this page.
   }
 }
 
+/** The hover line behind each way an advanced viz ends up "not grouped". */
 const NOT_GROUPED_REASONS: Record<AdvancedVizGroupBadge, () => string[]> = {
   kind: groupKindNotSplitReasons,
   unreachable: groupUnreachableReasons,
@@ -297,23 +305,61 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   groupRender,
 }) => {
   const [published, setPublished] = React.useState<AdvancedVizExtrasPayload | null>(null);
-  // Where a `popover` tile docks its controls (`controls_placement` on the
+  // Where a `popover` tile draws its controls (`controls_placement` on the
   // component, see controlsDock.ts); null when the author left it unsaid.
   const dockPlacement = isControlsPlacement(metadata.controls_placement)
     ? metadata.controls_placement
     : null;
+  const componentIndex = String(metadata.index ?? '');
   // A workbench cell has little room: unless the author placed the controls
-  // or the reader chose, they start folded, one click away behind the button
-  // in the tile's header. Everywhere else they start open, as before.
+  // or the reader chose, they start folded, one click away behind the menu in
+  // the tile's header. Everywhere else they start open, as before.
+  //
+  // The choice of view (hidden, over, above or beside the plot) is the
+  // reader's, kept in this browser, except where a component sink is mounted
+  // (the editor): there it is the author's, saved as the component's
+  // `controls_placement` and never read from or written to this browser, so a
+  // placement picked in the builder is not shadowed by an old local pick. Until
+  // the save lands in `metadata` the pick is held here.
   const compact = useDensity() === 'compact';
-  const [chosenFold, setChosenFold] = React.useState<boolean | null>(() =>
-    readFolded(String(metadata.index ?? '')),
+  const writeComponent = useAdvancedVizComponentDraft();
+  const authoring = writeComponent != null;
+  const [chosen, setChosen] = React.useState<ControlsChoice | null>(() =>
+    authoring ? null : readChoice(componentIndex),
   );
-  const folded = chosenFold ?? (compact && dockPlacement === null);
-  const toggleFolded = React.useCallback(() => {
-    writeFolded(String(metadata.index ?? ''), !folded);
-    setChosenFold(!folded);
-  }, [metadata.index, folded]);
+  React.useEffect(() => {
+    if (authoring) setChosen(null);
+  }, [authoring, dockPlacement]);
+  // What the fold button brings back: the last view shown, `open` before any.
+  const lastShown = React.useRef<ControlsChoice>(
+    chosen && chosen !== 'hidden' ? chosen : 'open',
+  );
+  const { placement: controlsPlacement, collapsed: folded } = resolveControls(
+    chosen,
+    dockPlacement,
+    compact,
+  );
+  const choose = React.useCallback(
+    (next: ControlsChoice) => {
+      if (next !== 'hidden') lastShown.current = next;
+      setChosen(next);
+      if (!authoring) writeChoice(componentIndex, next);
+    },
+    [authoring, componentIndex],
+  );
+  const toggleFolded = React.useCallback(
+    () => choose(folded ? lastShown.current : 'hidden'),
+    [choose, folded],
+  );
+  // The menu's pick, which is more than a fold: saved on the component where
+  // that is possible, as the placement it stands for (`hidden` is `popover`).
+  const pickView = React.useCallback(
+    (view: ControlsView) => {
+      choose(view);
+      writeComponent?.(componentIndex, { controls_placement: placementForView(view) });
+    },
+    [choose, writeComponent, componentIndex],
+  );
 
   // Forward to the inspector, when the app mounted one. Keyed by component so
   // the panel can show whichever component is selected.
@@ -411,7 +457,7 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   }, [published, placement, placementState, folded, toggleFolded]);
 
   const vizKind = (metadata.viz_kind as string) || '';
-  const kindTag = vizKindTag(vizKind);
+  const kindLabel = vizKindLabel(vizKind);
   const Renderer = RENDERERS[vizKind];
   // "Split" is one component per group, each built from that group's rows;
   // see SplitPanels for why it is not a cut through the finished figure.
@@ -434,11 +480,12 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   // stay behind the icon instead.
   const dockState = React.useMemo<ControlsDockState>(
     () => ({
-      placement: split ? 'popover' : dockPlacement,
+      placement: split ? 'popover' : controlsPlacement,
       collapsed: folded,
       toggle: toggleFolded,
+      setView: split ? undefined : pickView,
     }),
-    [split, dockPlacement, folded, toggleFolded],
+    [split, controlsPlacement, folded, toggleFolded, pickView],
   );
   // A kind that takes the groups neither as panels nor as colour (see
   // `groupingModeForKind`). Only a Split display asks the question: in the
@@ -619,13 +666,13 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
               <AdvancedVizCaptionContext.Provider value={caption}>
                 <ControlsPlacementContext.Provider value={placementState}>
                   <ControlsDockContext.Provider value={dockState}>
-                    <AdvancedVizKindTagContext.Provider value={kindTag}>
+                    <AdvancedVizKindContext.Provider value={kindLabel}>
                       <AdvancedVizRegionEchoContext.Provider value={regionEcho}>
                         <HideLegendContext.Provider value={Boolean(metadata.hide_legend)}>
                           {inner}
                         </HideLegendContext.Provider>
                       </AdvancedVizRegionEchoContext.Provider>
-                    </AdvancedVizKindTagContext.Provider>
+                    </AdvancedVizKindContext.Provider>
                   </ControlsDockContext.Provider>
                 </ControlsPlacementContext.Provider>
               </AdvancedVizCaptionContext.Provider>

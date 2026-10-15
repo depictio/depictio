@@ -125,6 +125,7 @@ import {
   mergeFilterScopes,
   planScopedRequests,
   sectionFilterScopes,
+  AdvancedVizComponentDraftProvider,
   AdvancedVizConfigDraftProvider,
   AdvancedVizPlacementDefaultProvider,
   DataVersionProvider,
@@ -153,6 +154,7 @@ import type {
   RealtimeJournalEntry,
   GroupRenderState,
   ControlsPlacement,
+  VizComponentPatch,
 } from 'depictio-react-core';
 
 import GridItemEditOverlay from './components/GridItemEditOverlay';
@@ -960,6 +962,27 @@ const EditorApp: React.FC = () => {
             ? { ...m, config: { ...((m.config as Record<string, unknown>) || {}), ...patch } }
             : m,
         ),
+      };
+      scheduleSave(next);
+    },
+    [scheduleSave],
+  );
+
+  /** The same write-back for a field of the component itself rather than of
+   *  its config: where its viz controls sit (`controls_placement`), picked from
+   *  a workbench tile's controls menu. A null value clears the field. */
+  const handleVizComponentDraft = useCallback(
+    (componentId: string, patch: VizComponentPatch) => {
+      const cur = dashboardRef.current;
+      if (!cur || !componentId) return;
+      const next = {
+        ...cur,
+        stored_metadata: (cur.stored_metadata || []).map((m) => {
+          if (m.index !== componentId) return m;
+          const merged: Record<string, unknown> = { ...m, ...patch };
+          for (const [k, v] of Object.entries(patch)) if (v == null) delete merged[k];
+          return merged as typeof m;
+        }),
       };
       scheduleSave(next);
     },
@@ -3021,6 +3044,7 @@ const EditorApp: React.FC = () => {
         component's config; the dashboard-wide default decides where every
         advanced-viz tile draws them unless the tile states its own. */}
     <AdvancedVizConfigDraftProvider value={handleVizConfigDraft}>
+    <AdvancedVizComponentDraftProvider value={handleVizComponentDraft}>
     <AdvancedVizPlacementDefaultProvider value={dashboard?.advanced_viz_controls}>
     <SaveGroupContext.Provider value={saveGroupApi}>
     {/* Same scoping as the viewer, so an editor sees the override they are
@@ -3122,6 +3146,7 @@ const EditorApp: React.FC = () => {
     </BrandScope>
     </SaveGroupContext.Provider>
     </AdvancedVizPlacementDefaultProvider>
+    </AdvancedVizComponentDraftProvider>
     </AdvancedVizConfigDraftProvider>
     </InspectorProviders>
     </DataVersionProvider>

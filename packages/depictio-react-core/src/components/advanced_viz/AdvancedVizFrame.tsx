@@ -7,19 +7,15 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { ActionIcon, Alert, Badge, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
-import { Icon } from '@iconify/react';
+import { Alert, Badge, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
 
 import ErrorBoundary from '../ErrorBoundary';
 import ComponentSkeleton from '../ComponentSkeleton';
 import { GroupStatusBadgeContext } from '../GroupStatusBadge';
 import { ComponentIndexContext, useReportLoadStatus } from '../DashboardLoadingProvider';
 import { GRID_ROW_GAP_PX, GRID_ROW_PX, publishContentDemand, useAutofitScope } from '../autofit';
-import { useChromeStyle } from '../../chrome';
-import { TILE_ACTION_STYLE } from '../chrome/actionStyles';
 import {
   AdvancedVizExtrasContext,
-  AdvancedVizKindTagContext,
   type AdvancedVizExtrasPayload,
   type TierAnnotation,
 } from './AdvancedVizExtras';
@@ -27,8 +23,16 @@ import { useAdvancedVizCaption, useAdvancedVizShowcase } from './advancedVizShow
 import { CARD_FRAME } from '../cardFrame';
 import FigureHeader from '../FigureHeader';
 import { useDensity } from '../density';
-import { ControlsDockContext, ControlsLeadContext, resolveDock } from './controlsDock';
+import {
+  ControlsDockContext,
+  ControlsLeadContext,
+  currentView,
+  resolveDock,
+} from './controlsDock';
 import DockedControls from './DockedControls';
+import ControlsOverlay from './ControlsOverlay';
+import ControlsViewMenu from './ControlsViewMenu';
+import VizKindBadge from './VizKindBadge';
 import './controlsDock.css';
 import {
   InlineControlsRail,
@@ -74,10 +78,11 @@ interface AdvancedVizFrameProps {
    * Tier-2 controls (sliders / dropdowns / toggles). Where they are drawn is
    * the tile's controls placement (`controls_placement` in the config, see
    * controlsPlacement.ts): in the tile's own strip or rail when pinned there,
-   * otherwise docked beside or above the plot where the tile allows (see
-   * controlsDock.ts), else behind the Settings ActionIcon in ComponentChrome's
-   * hover-revealed action row. Every surface reads the payload published via
-   * AdvancedVizExtrasContext, which also feeds the inspector.
+   * otherwise docked beside or above the plot where the tile allows, or
+   * floating over it (see controlsDock.ts), else behind the Settings
+   * ActionIcon in ComponentChrome's hover-revealed action row. Every surface
+   * reads the payload published via AdvancedVizExtrasContext, which also feeds
+   * the inspector.
    */
   controls?: React.ReactNode;
   /**
@@ -192,27 +197,6 @@ const EstimatedBadge: React.FC = () => (
   </Tooltip>
 );
 
-/** The visualization's type in one word ("3D", "PAE"), after the title of a
- *  tile in a workbench section. Quiet and neutral: it names the view, it is not
- *  a status. The shape is the chrome's (a pill in Paper, the Classic corner
- *  otherwise); the case follows the other small badges, which each chrome
- *  styles itself. */
-const VizKindBadge: React.FC<{ tag: string }> = ({ tag }) => {
-  const style = useChromeStyle();
-  return (
-    <Badge
-      variant="light"
-      color="gray"
-      size="xs"
-      radius={style.radius}
-      style={{ flex: 'none' }}
-      data-testid="viz-kind-badge"
-    >
-      {tag}
-    </Badge>
-  );
-};
-
 /** The height of the element behind `ref`, 0 while there is none. Measured
  *  again when it resizes and when `remeasureOn` changes (the element may have
  *  come or gone). Rounded, and held within 2 px, so reflow churn does not
@@ -270,7 +254,6 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   // A workbench or a docked column asks for a one-line header (`density.ts`).
   const compact = useDensity() === 'compact';
   const dock = useContext(ControlsDockContext);
-  const kindTag = useContext(AdvancedVizKindTagContext);
   // A view switch a router put ahead of this renderer's controls (see
   // VolcanoViews). It decides what is plotted, so it heads the encoding tier
   // wherever that tier is drawn; docked it sits above the fold.
@@ -379,33 +362,30 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
       ) : null,
     [primaryControls, controls],
   );
-  const dockSide =
-    placement === 'popover' && (docking || lead)
-      ? resolveDock(dock?.placement, { ...measure, showcase: Boolean(showcase) })
-      : null;
+  const hasDockable = placement === 'popover' && Boolean(docking || lead);
+  const dockSide = hasDockable
+    ? resolveDock(dock?.placement, { ...measure, showcase: Boolean(showcase) })
+    : null;
+  // `overlay` is not a side: the panel floats over the plot, which keeps its
+  // full size, so it needs no room and works at any width.
+  const overlaid = hasDockable && dock?.placement === 'overlay';
   const docked = dockSide != null;
   const dockOpen = docked && !dock?.collapsed;
+  const overlayOpen = overlaid && !dock?.collapsed;
   // The chrome's settings icon only shows on hover, which a reader of a
-  // workbench cell does not find: its header carries a button that is always
-  // there, since the controls start folded in that density.
-  const toggleDock = dock?.toggle;
-  const revealControls =
-    compact && docked && toggleDock ? (
-      <Tooltip label={dockOpen ? 'Hide controls' : 'Show controls'} withArrow openDelay={300}>
-        <ActionIcon
-          variant={dockOpen ? 'light' : 'subtle'}
-          color="gray"
-          size="sm"
-          aria-label={dockOpen ? 'Hide controls' : 'Show controls'}
-          aria-expanded={dockOpen}
-          onClick={toggleDock}
-          style={{ flex: 'none', marginLeft: 'auto' }}
-          data-testid="viz-controls-reveal"
-        >
-          <Icon icon={TILE_ACTION_STYLE.settings.icon} width={14} height={14} />
-        </ActionIcon>
-      </Tooltip>
+  // workbench cell does not find: its header carries a menu that is always
+  // there, to hide the controls or to put them over, above or beside the plot.
+  // Not offered where the tile cannot take a choice (split into panels).
+  const pickView = dock?.setView;
+  const controlsMenu =
+    compact && hasDockable && pickView ? (
+      <ControlsViewMenu
+        view={currentView(overlaid, dockSide, Boolean(dock?.collapsed))}
+        onPick={pickView}
+      />
     ) : null;
+  // Closing is the fold, not a choice of view: it is not saved on the component.
+  const foldControls = dock?.toggle;
 
   // Publish what this renderer has, not how to draw it. AdvancedVizDispatch
   // turns the payload back into the popovers; the inspector turns the same
@@ -415,7 +395,8 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     const payload: AdvancedVizExtrasPayload = {};
     if (cosmeticControls) payload.controls = cosmeticControls;
     if (stripControls) payload.primaryControls = stripControls;
-    if (docked) payload.docked = true;
+    // Controls drawn on the tile, docked or floating: the icon folds them.
+    if (docked || overlaid) payload.docked = true;
     if (dataRows) {
       payload.data = { rows: dataRows, columns: dataColumns, tierAnnotation };
     }
@@ -433,6 +414,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     cosmeticControls,
     stripControls,
     docked,
+    overlaid,
     dataRows,
     dataColumns,
     tierAnnotation,
@@ -633,7 +615,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
             </Text>
           </Tooltip>
         ) : null}
-        {kindTag ? <VizKindBadge tag={kindTag} /> : null}
+        <VizKindBadge />
         {echoText ? (
           <Text
             size="xs"
@@ -646,7 +628,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
           </Text>
         ) : null}
         {statusBadges}
-        {revealControls}
+        {controlsMenu}
       </Group>
       {countBadges}
       {strip}
@@ -774,9 +756,24 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
           ) : null}
           <div
             ref={plotSlotRef}
-            style={{ flex: '1 1 auto', minHeight: 0, minWidth: 0, position: 'relative' }}
+            style={{
+              flex: '1 1 auto',
+              minHeight: 0,
+              minWidth: 0,
+              position: 'relative',
+              // While the overlay is open its stacking is settled inside the
+              // slot, above Plotly's modebar and below Mantine's dropdowns.
+              ...(overlayOpen ? { isolation: 'isolate' } : null),
+            }}
           >
             {body}
+            {overlayOpen ? (
+              <ControlsOverlay
+                controls={docking}
+                lead={lead}
+                onClose={() => foldControls?.()}
+              />
+            ) : null}
           </div>
           {dockOpen && dockSide === 'right' ? (
             <DockedControls controls={docking} lead={lead} side="right" />

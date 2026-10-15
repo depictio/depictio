@@ -73,10 +73,6 @@ type Publisher = (payload: AdvancedVizExtrasPayload | null) => void;
 
 export const AdvancedVizExtrasContext = createContext<Publisher | null>(null);
 
-/** The short type tag of the tile's `viz_kind` ("3D", "PAE"; see `vizKindTag`),
- *  resolved once by the dispatch. The frame draws it only in compact density. */
-export const AdvancedVizKindTagContext = createContext<string | null>(null);
-
 interface ProviderProps {
   children: React.ReactNode;
   /** Receives the latest payload the framed renderer wants to publish. */

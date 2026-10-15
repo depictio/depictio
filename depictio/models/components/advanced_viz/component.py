@@ -108,12 +108,14 @@ class AdvancedVizLiteComponent(BaseLiteComponent):
         description="The tab this tile summarises, as `tab:<name>`, linked from the end "
         "of the card header (`minimal` style).",
     )
-    controls_placement: Literal["auto", "right", "top", "popover"] | None = Field(
+    controls_placement: Literal["auto", "right", "top", "popover", "overlay"] | None = Field(
         default=None,
         description="Where the viz controls sit. Unset or `auto`: docked beside the plot "
         "on a tile that spans its row, above it on a narrower one, behind the settings "
         "icon on a `minimal` card. `right` / `top` dock them there whatever the width; "
-        "`popover` keeps them behind the icon. The icon folds a docked panel away.",
+        "`overlay` floats them over the plot, top right, without resizing it; "
+        "`popover` keeps them behind the icon. The icon folds a docked or floating "
+        "panel away.",
     )
 
     # Layout placement, the same two fields a map carries. Only `molecule_3d`

@@ -1,0 +1,51 @@
+/* Viz controls floating over the plot (see ControlsOverlay.tsx). The panel is
+   a Mantine Paper (surface, border, shadow); this only places it, caps it at
+   the slot's height and lets the Paper chrome's own tokens through. */
+.dpx-viz-overlay {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  /* Over Plotly's modebar (z-index 1001), which sits at the same corner. The
+     slot is made an isolated stacking context while the overlay is open (see
+     AdvancedVizFrame), so this stays below Mantine's own dropdowns: a Select
+     inside the panel opens over it. */
+  z-index: 1002;
+  display: flex;
+  flex-direction: column;
+  width: min(290px, calc(100% - 16px));
+  max-height: calc(100% - 16px);
+  overflow: hidden;
+  border-radius: var(--gl-float-radius, var(--mantine-radius-md));
+}
+
+/* Paper chrome: the same opaque panel its menus and drawers are. */
+:root[data-chrome='glass'] .dpx-viz-overlay {
+  border-color: var(--gl-rim);
+  background: var(--gl-glass-strong);
+  box-shadow: var(--gl-float-shadow);
+}
+
+.dpx-viz-overlay__head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px 4px 12px;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+
+/* The body scrolls; the wheel must not chain to the page or the plot when the
+   panel reaches its end. */
+.dpx-viz-overlay__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding: 8px 12px 10px;
+}
+
+.dpx-viz-overlay__lead {
+  margin-bottom: var(--mantine-spacing-xs);
+}

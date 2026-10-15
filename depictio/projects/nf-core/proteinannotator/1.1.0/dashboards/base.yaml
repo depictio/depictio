@@ -721,14 +721,16 @@ tabs:
     icon: mdi:counter
     color: violet
     description: Domains, families, spans and databases per protein
-  - name: Domain architecture
+  # The per-protein views share one screen: the architecture and the domain
+  # record on top, the two database views under them. A click on a domain
+  # selects its span and family on the record. The significance scatter stays in
+  # its own section below, since it picks domains across proteins rather than
+  # reading one protein.
+  - name: Architecture and agreement
     icon: mdi:chart-timeline-variant
     color: violet
-    description: Each protein's domains along its chain; click one to select its span and family
-  - name: Database agreement
-    icon: mdi:set-merge
-    color: violet
-    description: Which databases annotate which proteins, and how much of each
+    description: Each protein's domains along its chain with the record of the picked domain, beside which databases annotate which proteins and how much of each
+    display: workbench
   - name: Domain calls
     icon: mdi:chart-scatter-plot
     color: violet
@@ -931,7 +933,7 @@ tabs:
       selection_column: domain_id
       selection_enabled: true
       follow_selection: true
-    section: Domain architecture
+    section: Architecture and agreement
     tag: pa-dom-av-architecture
     index: pa-dom-av-architecture
     title: Domain architecture of each protein
@@ -952,7 +954,7 @@ tabs:
         Evidence: [evalue, score, hmm_coverage, hmm_from, hmm_to, hmm_length]
       link_templates:
         accession: "https://www.ebi.ac.uk/interpro/search/text/{value}"
-    section: Domain architecture
+    section: Architecture and agreement
     tag: pa-dom-av-domain-record
     index: pa-dom-av-domain-record
     title: Domain record
@@ -968,12 +970,12 @@ tabs:
       cluster_method: ward
       normalize: none
       colorscale: Blues
-    section: Database agreement
+    section: Architecture and agreement
     tag: pa-dom-av-coverage
     index: pa-dom-av-coverage
     title: Share of each protein each database annotates
     description: One row per protein, one column per database, the colour the fraction of residues its domains cover.
-    layout: {x: 0, y: 0, w: 4, h: 5}
+    layout: {x: 0, y: 6, w: 4, h: 5}
   - component_type: advanced_viz
     workflow_tag: proteinannotator
     data_collection_tag: proteinannotator_database_sets
@@ -982,12 +984,12 @@ tabs:
       sort_by: cardinality
       show_set_sizes: true
       show_values: true
-    section: Database agreement
+    section: Architecture and agreement
     tag: pa-dom-av-upset
     index: pa-dom-av-upset
     title: Databases that agree on a protein
     description: Proteins per combination of databases annotating them.
-    layout: {x: 4, y: 0, w: 4, h: 5}
+    layout: {x: 4, y: 6, w: 4, h: 5}
   - component_type: advanced_viz
     workflow_tag: proteinannotator
     data_collection_tag: proteinannotator_domains
@@ -1060,14 +1062,14 @@ tabs:
     icon: mdi:counter
     color: cyan
     description: How many residues S4PRED called, and how sure it is
+  # The ribbon and the sequence track read one protein along the same chain, so
+  # they share one screen: a brush on either selects the same residues on the
+  # other. The composition chart and the residue table keep their own sections.
   - name: Predicted structure
     icon: mdi:waves
     color: cyan
-    description: The ribbon of one protein over the probability behind each call
-  - name: Along the chain
-    icon: mdi:dna
-    color: cyan
-    description: The sequence with its predicted state and the domains that cover it
+    description: The ribbon of the picked protein over the probability behind each call, with its sequence, predicted state and covering domains below
+    display: workbench
   - name: Composition
     icon: mdi:chart-bar
     color: cyan
@@ -1078,10 +1080,23 @@ tabs:
     description: Every residue with its state and the three state probabilities
     collapsed: true
   components:
+  # always_selected: the ribbon and the track show one protein, so the picker
+  # always names one (the scope card at the top of the tab). default_by ranks by
+  # position, ascending: a protein's highest position is its length, so the tab
+  # opens on the shortest protein, the same one the Structure tab opens on. The
+  # list stays alphabetical. banner_facts read the picked protein's first row of
+  # this collection, which holds one row per residue, so only the sample is a
+  # per-protein value here; the protein's length and state shares live in the
+  # protein summary, which this picker cannot read.
   - component_type: interactive
     workflow_tag: proteinannotator
     data_collection_tag: s4pred_secondary_structure
     interactive_component_type: Select
+    always_selected: true
+    default_by: position
+    default_order: asc
+    banner_facts:
+    - {column: sample, label: Sample}
     column_name: entity
     column_type: object
     display:
@@ -1116,9 +1131,10 @@ tabs:
     workflow_tag: proteinannotator
     body: >
       [S4PRED](https://github.com/psipred/s4pred) calls every residue helix, strand or coil and
-      keeps the probability of each state. The ribbon fades where the call is unsure; brush a stretch
-      to select it on the sequence track below, or click a segment to pick its range. The track also
-      draws the domains, so a helix or strand reads against the family that covers it.
+      keeps the probability of each state. The tab shows one protein, the shortest until another is
+      picked on the left or in the scope card. The ribbon fades where the call is unsure; brush a
+      stretch to select it on the sequence track, which also draws the domains, or click a segment
+      to pick its range.
     tag: pa-ss-intro
     index: pa-ss-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1207,9 +1223,9 @@ tabs:
     title: Strand probability
     description: How sure S4PRED is about the residues it calls strand, the state it finds hardest.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  # The tile shows one protein: the one the Protein filter names, else the one
-  # picked in its own control, else the first. It reads the same columns as the
-  # sequence track below, so a brush or a segment pick moves the track.
+  # The tile shows the protein the Protein filter names, which is never empty.
+  # It reads the same columns as the sequence track under it, so a brush or a
+  # segment pick moves the track.
   - component_type: advanced_viz
     workflow_tag: proteinannotator
     data_collection_tag: s4pred_secondary_structure
@@ -1234,7 +1250,7 @@ tabs:
     index: pa-ss-av-ribbon
     title: Secondary structure of the protein
     description: Helices, strands and coil along the chain, shaded by confidence, over the probability of each state. Brush a stretch to select it.
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: proteinannotator
     data_collection_tag: s4pred_secondary_structure
@@ -1252,12 +1268,12 @@ tabs:
       domain_label_col: label
       selection_enabled: true
       follow_selection: true
-    section: Along the chain
+    section: Predicted structure
     tag: pa-ss-av-track
     index: pa-ss-av-track
     title: Sequence, predicted state and domains
     description: The same protein along its chain, with the predicted state, its probability and every domain span.
-    layout: {x: 0, y: 0, w: 8, h: 5}
+    layout: {x: 0, y: 5, w: 8, h: 4}
   - component_type: figure
     workflow_tag: proteinannotator
     data_collection_tag: s4pred_secondary_structure
@@ -1303,22 +1319,49 @@ tabs:
   - name: Structure at a glance
     icon: mdi:counter
     color: indigo
-    description: The proteins in view, their residues and how deeply domains overlap
-  - name: Structure workbench
+    description: The picked protein's domains, residues in a domain, domain depth and length
+  # The fold and the sequence lanes share one screen, the 3D at full height on
+  # the left and the track at full height beside it, linked residue by residue.
+  # The protein table sits in its own section below: the scope card drives the
+  # tab, so the table no longer picks the protein.
+  - name: Structure and domains
     icon: mdi:view-dashboard-outline
     color: indigo
-    description: Pick a protein in the table, then read its structure and its sequence lanes side by side, linked residue by residue
+    description: The picked protein folded in 3D beside its sequence, predicted state and domain spans, linked residue by residue
     display: workbench
+  - name: Protein summary
+    icon: mdi:table
+    color: gray
+    description: The picked protein with its length, annotated share, best domain and hits per database
+    collapsed: true
   - name: Residue table
     icon: mdi:table
     color: gray
     description: Every residue with its state, confidence and covering domain
     collapsed: true
   components:
+  # always_selected: the structure, the track and the cards show one protein, so
+  # the picker always names one (the scope card at the top of the tab). The
+  # structure tile treats a value the picker holds as an explicit pick and never
+  # overrides it, and ESMFold refuses a sequence above 400 residues. So the
+  # default must itself be foldable: default_by ranks by length, ascending, and
+  # the tab opens on the shortest protein, which folds whenever any protein is
+  # short enough. A descending rank would open on the longest, and any other
+  # score (domain hits, annotated share) is not bounded by the limit. The list
+  # stays alphabetical, and a longer protein is one pick away. banner_facts read
+  # the picked protein's row of the protein summary.
   - component_type: interactive
     workflow_tag: proteinannotator
     data_collection_tag: proteinannotator_proteins
     interactive_component_type: Select
+    always_selected: true
+    default_by: length
+    default_order: asc
+    banner_facts:
+    - {column: length, label: Residues, format: integer}
+    - {column: domain_hits, label: Domains, format: integer}
+    - {column: annotated_pct, label: In a domain (%), format: 'decimals:0'}
+    - {column: top_domain, label: Best domain}
     column_name: entity
     column_type: object
     display:
@@ -1338,8 +1381,9 @@ tabs:
     column_name: length
     column_type: int64
     # No default window: ESMFold folds up to 400 residues, but a longer protein
-    # stays listed (the structure tile says why it cannot fold it) rather than
-    # dropping out of the table without a word.
+    # stays listed in the picker (the structure tile says why it cannot fold it)
+    # rather than dropping out of it without a word. The picker opens on the
+    # shortest protein instead, so the first fold is one ESMFold accepts.
     display:
       icon_name: mdi:ruler
       custom_color: cyan
@@ -1371,33 +1415,36 @@ tabs:
     body: >
       ESMFold folds the picked protein from its sequence, by sending the sequence to the public ESM
       Atlas service (api.esmatlas.com), for proteins of up to 400 residues; a
-      longer one stays in the table and its structure tile says it cannot be folded. Folding needs
+      longer one stays in the picker and its structure tile says it cannot be folded. Folding needs
       the server's structure resolver, which an administrator turns on with
       `DEPICTIO_STRUCTURE_RESOLVER_ENABLED`; when it is off the tile says so and the sequence track
-      keeps working. Click a protein in the table, then a residue in 3D or on the sequence to select
-      it in all three.
+      keeps working. The tab opens on the shortest protein, the likeliest to fold; pick another on
+      the left or in the scope card, then click a residue in 3D or on the sequence to select it in
+      both.
     tag: pa-st-intro
     index: pa-st-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
+  # One protein in scope: a count of proteins would always read 1, so the strip
+  # reads the picked protein's domains, residues and length instead.
   - component_type: card
     workflow_tag: proteinannotator
-    data_collection_tag: proteinannotator_proteins
-    use: proteinannotator/proteins
+    data_collection_tag: proteinannotator_domains
+    use: proteinannotator/domains
     aggregation: count
-    column_name: entity
+    column_name: domain_id
     column_type: object
-    secondary_layout: top_n
-    breakdown_col: top_domain_database
+    secondary_layout: composition
+    breakdown_col: database
     top_n_count: 5
     display:
-      icon_name: mdi:shape-outline
-      icon_color: indigo
-      caption: proteins, by database of the best domain
+      icon_name: mdi:puzzle-outline
+      icon_color: violet
+      caption: domains on the protein, by database
     section: Structure at a glance
-    tag: pa-st-card-proteins
-    index: pa-st-card-proteins
-    title: Proteins in view
-    description: Proteins inside the length window. The bars rank the databases their best domain comes from.
+    tag: pa-st-card-domains
+    index: pa-st-card-domains
+    title: Domains
+    description: Domain spans every database reports on the picked protein. The bar splits them by database.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: proteinannotator
@@ -1451,27 +1498,27 @@ tabs:
     display:
       icon_name: mdi:ruler
       icon_color: orange
-      caption: longest protein; ESMFold folds up to 400 residues
+      caption: residues; ESMFold folds up to 400
     section: Structure at a glance
-    tag: pa-st-card-longest
-    index: pa-st-card-longest
-    title: Longest protein
-    description: Length of the longest protein in view, against the longest sequence ESMFold folds.
+    tag: pa-st-card-length
+    index: pa-st-card-length
+    title: Protein length
+    description: Length of the picked protein, against the longest sequence ESMFold folds.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: table
     workflow_tag: proteinannotator
     data_collection_tag: proteinannotator_proteins
     use: proteinannotator/proteins
-    # The id column drives the selection but stays out of the grid: it is the
-    # FASTA header, where the sample column holds a readable name.
+    # The id column stays out of the grid: it is the FASTA header, where the
+    # sample column holds a readable name. No row selection: the scope card picks
+    # the protein, and a row click on the same column would meet it with another
+    # protein and empty the tab.
     columns: [sample, length, annotated_pct, top_domain_database, top_domain, domain_hits, databases_hit, annotation_status]
-    row_selection_enabled: true
-    row_selection_column: entity
-    section: Structure workbench
+    section: Protein summary
     tag: pa-st-table-proteins
     index: pa-st-table-proteins
-    title: Proteins to fold
-    description: One row per protein within the length window, with its length, annotated share and best domain. Click a row to fold it and show its structure and sequence.
+    title: Protein
+    description: The picked protein with its length, annotated share, best domain and domain hits per database.
     layout: {x: 0, y: 0, w: 8, h: 3}
   - component_type: advanced_viz
     workflow_tag: proteinannotator
@@ -1490,12 +1537,12 @@ tabs:
       layout: structure_text
       selection_enabled: true
       follow_selection: true
-    section: Structure workbench
+    section: Structure and domains
     tag: pa-st-av-structure
     index: pa-st-av-structure
     title: Predicted structure
     description: An ESMFold prediction made from the picked protein's sequence alone, not an experimental structure, coloured by domain (grey outside any domain) with the picked residue in red. Folding sends the sequence to the public ESM Atlas service.
-    layout: {x: 0, y: 3, w: 3, h: 5}
+    layout: {x: 0, y: 0, w: 3, h: 9}
   - component_type: advanced_viz
     workflow_tag: proteinannotator
     data_collection_tag: proteinannotator_residues
@@ -1513,12 +1560,12 @@ tabs:
       domain_label_col: label
       selection_enabled: true
       follow_selection: true
-    section: Structure workbench
+    section: Structure and domains
     tag: pa-st-av-sequence
     index: pa-st-av-sequence
     title: Sequence, secondary structure and domains
     description: The same protein along its chain, with the predicted state, its probability and every domain span.
-    layout: {x: 3, y: 3, w: 5, h: 5}
+    layout: {x: 3, y: 0, w: 5, h: 9}
   - component_type: table
     workflow_tag: proteinannotator
     data_collection_tag: proteinannotator_residues
