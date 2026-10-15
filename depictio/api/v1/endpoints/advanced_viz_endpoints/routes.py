@@ -122,6 +122,17 @@ def _apply_link_filters_to_payload(
     if not wf_id or not dc_id or not filters:
         return
 
+    # The heatmap and the UpSet summarise the whole collection: a residue pick
+    # made on a protein tile must not narrow them (see ``region_scope``).
+    from depictio.api.v1.region_scope import scope_residue_filters
+
+    scoped = scope_residue_filters(filters, component_type)
+    if len(scoped) != len(filters):
+        filters = scoped
+        payload["filter_metadata"] = filters
+        if not filters:
+            return
+
     resolved = _resolve_link_filters_for_dc(
         filters=filters,
         wf_id=str(wf_id),
