@@ -333,7 +333,16 @@ export async function createStructureViewer(
     viewer.getCanvas?.() ??
     Array.from(container.querySelectorAll('canvas')).find((c) => !before.has(c)) ??
     null;
-  viewer.setHoverDuration(40);
+  // 3Dmol looks for the hovered atom this long after the pointer last moved,
+  // and every move restarts the wait: at 40 ms a sweep over the structure
+  // reported nothing until the pointer rested, while the unhover of the atom
+  // it had left fired at once, so the highlight blinked off and the other
+  // tiles' crosshair lagged behind the pointer. 0 runs the lookup on the next
+  // task. It is the same ray cast `handleHoverContinue` already makes on every
+  // move, and a browser delivers about one move per frame, so this costs at
+  // most one more per frame. The tile (`hoverGate.ts`) absorbs the extra
+  // callbacks: a residue already shown is not drawn again.
+  viewer.setHoverDuration(0);
 
   let current = colours;
   let model: GlModel | null = null;

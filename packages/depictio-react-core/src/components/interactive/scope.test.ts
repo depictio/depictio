@@ -5,7 +5,6 @@ import {
   alwaysSelectedComponents,
   bannerFactColumns,
   bannerFactItems,
-  scopeChipColor,
   scopeUnits,
   unitSteps,
 } from './scope';
@@ -34,15 +33,6 @@ describe('scopeUnits', () => {
     const scopes = new Map([['b', 'Details']]);
     expect(scopeUnits([select('a'), select('b')], scopes).map((m) => m.index)).toEqual(['a']);
     expect(scopeUnits([select('a'), select('b')], null).map((m) => m.index)).toEqual(['a', 'b']);
-  });
-});
-
-describe('scopeChipColor', () => {
-  it('takes the accent of a single filter, neutral for several', () => {
-    expect(scopeChipColor([select('a', { icon_color: 'teal' })])).toBe('teal');
-    expect(scopeChipColor([select('a')])).toBeUndefined();
-    expect(scopeChipColor([select('a', { icon_color: 'teal' }), select('b')])).toBe('gray');
-    expect(scopeChipColor([])).toBe('gray');
   });
 });
 

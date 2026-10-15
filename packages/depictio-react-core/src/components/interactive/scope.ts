@@ -3,14 +3,13 @@
  * Select filters (see `alwaysSelected.ts`), the unit each one holds, and the
  * facts the scope banner reads about it.
  *
- * Pure, so the banner, the tiles' unit chip and the automatic pick agree on
- * which filters set the scope.
+ * Pure, so the banner and the automatic pick agree on which filters set the
+ * scope.
  */
 import type { BannerFact, StoredMetadata } from '../../api';
 import type { FilterScopes } from '../../filterScope';
 import { formatNumber } from '../card/metrics/format';
 import { isAlwaysSelected, type PickableOption } from './alwaysSelected';
-import { interactiveAccentRaw } from './frame';
 
 /** Every `always_selected` interactive component, once per index. */
 export function alwaysSelectedComponents(
@@ -36,16 +35,6 @@ export function scopeUnits(
   filterScopes?: FilterScopes | null,
 ): StoredMetadata[] {
   return alwaysSelectedComponents(components).filter((m) => !filterScopes?.has(m.index));
-}
-
-/**
- * The colour of the unit chip on the tiles: the filter's own accent when one
- * filter sets the scope (undefined, the primary, when it has none), neutral
- * when several do, since the chip cannot say which of them a tile follows.
- */
-export function scopeChipColor(units: readonly StoredMetadata[]): string | undefined {
-  if (units.length !== 1) return 'gray';
-  return interactiveAccentRaw(units[0]);
 }
 
 export interface BannerFactItem {

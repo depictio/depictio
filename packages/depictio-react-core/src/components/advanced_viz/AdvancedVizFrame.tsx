@@ -7,15 +7,19 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Alert, Badge, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
+import { ActionIcon, Alert, Badge, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
+import { Icon } from '@iconify/react';
 
 import ErrorBoundary from '../ErrorBoundary';
 import ComponentSkeleton from '../ComponentSkeleton';
 import { GroupStatusBadgeContext } from '../GroupStatusBadge';
 import { ComponentIndexContext, useReportLoadStatus } from '../DashboardLoadingProvider';
 import { GRID_ROW_GAP_PX, GRID_ROW_PX, publishContentDemand, useAutofitScope } from '../autofit';
+import { useChromeStyle } from '../../chrome';
+import { TILE_ACTION_STYLE } from '../chrome/actionStyles';
 import {
   AdvancedVizExtrasContext,
+  AdvancedVizKindTagContext,
   type AdvancedVizExtrasPayload,
   type TierAnnotation,
 } from './AdvancedVizExtras';
@@ -23,9 +27,6 @@ import { useAdvancedVizCaption, useAdvancedVizShowcase } from './advancedVizShow
 import { CARD_FRAME } from '../cardFrame';
 import FigureHeader from '../FigureHeader';
 import { useDensity } from '../density';
-import { ScopeValueBadge } from '../interactive/ScopeValueBadge';
-import { useScopeChip } from '../interactive/scopeContext';
-import { echoWithoutScope } from './scopeChip';
 import { ControlsDockContext, ControlsLeadContext, resolveDock } from './controlsDock';
 import DockedControls from './DockedControls';
 import './controlsDock.css';
@@ -150,13 +151,6 @@ interface AdvancedVizFrameProps {
   estimated?: boolean;
   /** Extra header badges, e.g. the annotation layer's "N/M points found". */
   badges?: React.ReactNode[];
-  /**
-   * The one unit this tile shows (a structure, a family), when it follows the
-   * tab's `always_selected` filter. Drawn as the scope chip after the title,
-   * and only where the host provides one (`ScopeChipProvider`); the echo then
-   * stops repeating it.
-   */
-  scopeLabel?: string;
 }
 
 /** Subtle Mantine theme colour for each canonical tier name (no hardcoded
@@ -197,6 +191,27 @@ const EstimatedBadge: React.FC = () => (
     </Badge>
   </Tooltip>
 );
+
+/** The visualization's type in one word ("3D", "PAE"), after the title of a
+ *  tile in a workbench section. Quiet and neutral: it names the view, it is not
+ *  a status. The shape is the chrome's (a pill in Paper, the Classic corner
+ *  otherwise); the case follows the other small badges, which each chrome
+ *  styles itself. */
+const VizKindBadge: React.FC<{ tag: string }> = ({ tag }) => {
+  const style = useChromeStyle();
+  return (
+    <Badge
+      variant="light"
+      color="gray"
+      size="xs"
+      radius={style.radius}
+      style={{ flex: 'none' }}
+      data-testid="viz-kind-badge"
+    >
+      {tag}
+    </Badge>
+  );
+};
 
 /** The height of the element behind `ref`, 0 while there is none. Measured
  *  again when it resizes and when `remeasureOn` changes (the element may have
@@ -250,15 +265,12 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   reduction,
   estimated,
   badges,
-  scopeLabel,
 }) => {
   const publish = useContext(AdvancedVizExtrasContext);
-  // The unit chip, under a host that scopes the tab; a workbench or a docked
-  // column asks for a one-line header (`density.ts`).
-  const scopeChip = useScopeChip();
-  const chipValue = scopeChip && scopeLabel ? scopeLabel : null;
+  // A workbench or a docked column asks for a one-line header (`density.ts`).
   const compact = useDensity() === 'compact';
   const dock = useContext(ControlsDockContext);
+  const kindTag = useContext(AdvancedVizKindTagContext);
   // A view switch a router put ahead of this renderer's controls (see
   // VolcanoViews). It decides what is plotted, so it heads the encoding tier
   // wherever that tier is drawn; docked it sits above the fold.
@@ -373,6 +385,27 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
       : null;
   const docked = dockSide != null;
   const dockOpen = docked && !dock?.collapsed;
+  // The chrome's settings icon only shows on hover, which a reader of a
+  // workbench cell does not find: its header carries a button that is always
+  // there, since the controls start folded in that density.
+  const toggleDock = dock?.toggle;
+  const revealControls =
+    compact && docked && toggleDock ? (
+      <Tooltip label={dockOpen ? 'Hide controls' : 'Show controls'} withArrow openDelay={300}>
+        <ActionIcon
+          variant={dockOpen ? 'light' : 'subtle'}
+          color="gray"
+          size="sm"
+          aria-label={dockOpen ? 'Hide controls' : 'Show controls'}
+          aria-expanded={dockOpen}
+          onClick={toggleDock}
+          style={{ flex: 'none', marginLeft: 'auto' }}
+          data-testid="viz-controls-reveal"
+        >
+          <Icon icon={TILE_ACTION_STYLE.settings.icon} width={14} height={14} />
+        </ActionIcon>
+      </Tooltip>
+    ) : null;
 
   // Publish what this renderer has, not how to draw it. AdvancedVizDispatch
   // turns the payload back into the popovers; the inspector turns the same
@@ -481,7 +514,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   const isShowcase = Boolean(showcase);
   const echoText = useMemo(() => {
     const sampled = !redFull && redDisplayed < redTotal;
-    const text = selectionEcho({
+    return selectionEcho({
       echo,
       reduction:
         redPresent && (sampled || !isShowcase)
@@ -490,21 +523,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
       rows: isShowcase ? null : dataRowCount,
       region: regionEcho,
     });
-    return chipValue ? echoWithoutScope(text, chipValue) : text;
-  }, [
-    echo,
-    redPresent,
-    redDisplayed,
-    redTotal,
-    redFull,
-    dataRowCount,
-    regionEcho,
-    isShowcase,
-    chipValue,
-  ]);
-  const chip = chipValue ? (
-    <ScopeValueBadge value={chipValue} color={scopeChip?.color} title={title} />
-  ) : null;
+  }, [echo, redPresent, redDisplayed, redTotal, redFull, dataRowCount, regionEcho, isShowcase]);
 
   // Tier counts (volcano UP/DN/NS, …). When ``tierAnnotation.selectedOrder``
   // is provided, that's the source of truth for which tier is "highlighted" —
@@ -590,7 +609,6 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
           iconColor={showcase.iconColor || undefined}
           source={showcase.source}
           badges={statusBadges ?? undefined}
-          titleBadge={chip ?? undefined}
         />
         {echoLine || countBadges || strip ? (
           <Stack gap={2} mb={6}>
@@ -602,9 +620,10 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
       </>
     ) : null
   ) : compact ? (
-    // One line: title, chip, what is on screen, the status chips. The
-    // subtitle moves to the title's tooltip, the tier counts and the inline
-    // controls keep their own lines under it.
+    // One line: title, the visualization's type, what is on screen, the
+    // status chips, the controls button. The subtitle moves to the title's
+    // tooltip, the tier counts and the inline controls keep their own lines
+    // under it.
     <Stack gap={2} mb={4}>
       <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }} pr={28}>
         {title ? (
@@ -614,7 +633,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
             </Text>
           </Tooltip>
         ) : null}
-        {chip}
+        {kindTag ? <VizKindBadge tag={kindTag} /> : null}
         {echoText ? (
           <Text
             size="xs"
@@ -627,12 +646,12 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
           </Text>
         ) : null}
         {statusBadges}
+        {revealControls}
       </Group>
       {countBadges}
       {strip}
     </Stack>
   ) : title ||
-    chip ||
     subtitle ||
     echoLine ||
     strip ||
@@ -642,16 +661,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     groupBadge ||
     extraBadges ? (
     <Stack gap={2} mb="xs">
-      {chip ? (
-        <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
-          {title ? (
-            <Text fw={600} size="sm" truncate style={{ flex: '0 1 auto', minWidth: 0 }}>
-              {title}
-            </Text>
-          ) : null}
-          {chip}
-        </Group>
-      ) : title ? (
+      {title ? (
         <Text fw={600} size="sm" lineClamp={1}>
           {title}
         </Text>

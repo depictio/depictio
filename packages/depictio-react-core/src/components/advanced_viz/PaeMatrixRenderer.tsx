@@ -555,7 +555,6 @@ const PaeMatrixRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
       controls={controls}
       contentDemand={contentDemand}
       echo={echo}
-      scopeLabel={entity || undefined}
       loading={loading}
       error={error}
       emptyMessage={emptyMessage}

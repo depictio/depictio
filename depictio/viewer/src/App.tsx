@@ -21,8 +21,6 @@ import {
   hasLiveValues,
   AlwaysSelectedPickers,
   ScopeBanner,
-  ScopeChipProvider,
-  scopeChipColor,
   scopeUnits,
   AvailableFilterValuesProvider,
   DataVersionProvider,
@@ -1457,15 +1455,11 @@ const App: React.FC = () => {
   );
 
   // The tab's scope: its `always_selected` filters, shown in a banner under
-  // the header and as a chip on the tiles that follow them.
+  // the header.
   const scope = useMemo(() => scopeUnits(summaryMetadata, filterScopes), [summaryMetadata, filterScopes]);
   // `?layout=classic|dock`: view a workbench section as a plain section or as
   // a docked column, to compare the arrangements on the same tab.
   const layoutOverride = useLayoutOverride();
-  const scopeChip = useMemo(
-    () => (scope.length > 0 ? { color: scopeChipColor(scope) } : null),
-    [scope],
-  );
 
   // The page's regions, handed to the active chrome style's Shell (see
   // chrome/shell/types.ts), which decides where each one goes.
@@ -1942,7 +1936,6 @@ const App: React.FC = () => {
           controls. No config sink in the viewer: a reader can still pin a
           tile's controls open, and it stays local to their session. */}
       <AdvancedVizPlacementDefaultProvider value={dashboard?.advanced_viz_controls}>
-      <ScopeChipProvider value={scopeChip}>
       <SaveGroupContext.Provider value={saveGroupApi}>
       {/* A dashboard that overrides the instance branding retints its own page
           and nothing else — /dashboards and /admin stay on the instance look. */}
@@ -2049,7 +2042,6 @@ const App: React.FC = () => {
       </CategoryColorsContext.Provider>
       </BrandScope>
       </SaveGroupContext.Provider>
-      </ScopeChipProvider>
       </AdvancedVizPlacementDefaultProvider>
       </InspectorProviders>
       </HighlightProvider>

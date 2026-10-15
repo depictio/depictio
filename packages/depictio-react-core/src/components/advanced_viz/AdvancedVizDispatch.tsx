@@ -51,8 +51,11 @@ import {
   AdvancedVizDataPopover,
   AdvancedVizDockToggle,
   AdvancedVizExtrasProvider,
+  AdvancedVizKindTagContext,
   AdvancedVizSettingsPopover,
 } from './AdvancedVizExtras';
+import { vizKindTag } from './vizKindTag';
+import { useDensity } from '../density';
 import { ControlsDockContext, isControlsPlacement } from './controlsDock';
 import type { ControlsDockState } from './controlsDock';
 import type { AdvancedVizExtrasPayload } from './AdvancedVizExtras';
@@ -97,20 +100,22 @@ import {
 
 /** The hover line behind each way an advanced viz ends up "not grouped". */
 /** The viewer's fold of a tile's docked controls, kept per component in this
- *  browser. Storage can be missing or refuse (a private window): then the
- *  fold lasts as long as the page. */
+ *  browser: `1` folded, `0` opened on purpose, nothing when they never chose
+ *  (null: the layout's default applies, see `folded` below). Storage can be
+ *  missing or refuse (a private window): then the fold lasts as long as the
+ *  page. */
 const DOCK_FOLD_KEY = (index: string) => `depictio.vizControls.folded.${index}`;
-function readFolded(index: string): boolean {
+function readFolded(index: string): boolean | null {
   try {
-    return window.localStorage.getItem(DOCK_FOLD_KEY(index)) === '1';
+    const stored = window.localStorage.getItem(DOCK_FOLD_KEY(index));
+    return stored === '1' ? true : stored === '0' ? false : null;
   } catch {
-    return false;
+    return null;
   }
 }
 function writeFolded(index: string, folded: boolean): void {
   try {
-    if (folded) window.localStorage.setItem(DOCK_FOLD_KEY(index), '1');
-    else window.localStorage.removeItem(DOCK_FOLD_KEY(index));
+    window.localStorage.setItem(DOCK_FOLD_KEY(index), folded ? '1' : '0');
   } catch {
     // Not remembered; the fold still applies to this page.
   }
@@ -292,13 +297,23 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   groupRender,
 }) => {
   const [published, setPublished] = React.useState<AdvancedVizExtrasPayload | null>(null);
-  const [folded, setFolded] = React.useState(() => readFolded(String(metadata.index ?? '')));
+  // Where a `popover` tile docks its controls (`controls_placement` on the
+  // component, see controlsDock.ts); null when the author left it unsaid.
+  const dockPlacement = isControlsPlacement(metadata.controls_placement)
+    ? metadata.controls_placement
+    : null;
+  // A workbench cell has little room: unless the author placed the controls
+  // or the reader chose, they start folded, one click away behind the button
+  // in the tile's header. Everywhere else they start open, as before.
+  const compact = useDensity() === 'compact';
+  const [chosenFold, setChosenFold] = React.useState<boolean | null>(() =>
+    readFolded(String(metadata.index ?? '')),
+  );
+  const folded = chosenFold ?? (compact && dockPlacement === null);
   const toggleFolded = React.useCallback(() => {
-    setFolded((f) => {
-      writeFolded(String(metadata.index ?? ''), !f);
-      return !f;
-    });
-  }, [metadata.index]);
+    writeFolded(String(metadata.index ?? ''), !folded);
+    setChosenFold(!folded);
+  }, [metadata.index, folded]);
 
   // Forward to the inspector, when the app mounted one. Keyed by component so
   // the panel can show whichever component is selected.
@@ -396,6 +411,7 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   }, [published, placement, placementState, folded, toggleFolded]);
 
   const vizKind = (metadata.viz_kind as string) || '';
+  const kindTag = vizKindTag(vizKind);
   const Renderer = RENDERERS[vizKind];
   // "Split" is one component per group, each built from that group's rows;
   // see SplitPanels for why it is not a cut through the finished figure.
@@ -414,15 +430,15 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   React.useEffect(() => setSplitIneffective(false), [metadata.dc_id, panelKey]);
   const split = Boolean(Renderer) && !splitIneffective && shouldSplitIntoPanels(panels, vizKind);
   const handleIneffective = React.useCallback(() => setSplitIneffective(true), []);
-  // Where a `popover` tile docks its controls (`controls_placement` on the
-  // component, see controlsDock.ts). Split into panels, each would dock its
-  // own copy of the controls: they stay behind the icon instead.
-  const dockPlacement = isControlsPlacement(metadata.controls_placement)
-    ? metadata.controls_placement
-    : null;
+  // Split into panels, each would dock its own copy of the controls: they
+  // stay behind the icon instead.
   const dockState = React.useMemo<ControlsDockState>(
-    () => ({ placement: split ? 'popover' : dockPlacement, collapsed: folded }),
-    [split, dockPlacement, folded],
+    () => ({
+      placement: split ? 'popover' : dockPlacement,
+      collapsed: folded,
+      toggle: toggleFolded,
+    }),
+    [split, dockPlacement, folded, toggleFolded],
   );
   // A kind that takes the groups neither as panels nor as colour (see
   // `groupingModeForKind`). Only a Split display asks the question: in the
@@ -603,11 +619,13 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
               <AdvancedVizCaptionContext.Provider value={caption}>
                 <ControlsPlacementContext.Provider value={placementState}>
                   <ControlsDockContext.Provider value={dockState}>
-                    <AdvancedVizRegionEchoContext.Provider value={regionEcho}>
-                      <HideLegendContext.Provider value={Boolean(metadata.hide_legend)}>
-                        {inner}
-                      </HideLegendContext.Provider>
-                    </AdvancedVizRegionEchoContext.Provider>
+                    <AdvancedVizKindTagContext.Provider value={kindTag}>
+                      <AdvancedVizRegionEchoContext.Provider value={regionEcho}>
+                        <HideLegendContext.Provider value={Boolean(metadata.hide_legend)}>
+                          {inner}
+                        </HideLegendContext.Provider>
+                      </AdvancedVizRegionEchoContext.Provider>
+                    </AdvancedVizKindTagContext.Provider>
                   </ControlsDockContext.Provider>
                 </ControlsPlacementContext.Provider>
               </AdvancedVizCaptionContext.Provider>

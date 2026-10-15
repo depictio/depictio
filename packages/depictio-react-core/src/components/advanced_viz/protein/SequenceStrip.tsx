@@ -29,28 +29,17 @@ import {
 } from './sequence';
 import { SEQUENCE_RESIDUE_WIDTH_MAX_PX } from './chainStrips';
 import { drawCoil, drawSecondaryStructureRuns } from './ssGlyphs';
+import { layoutLanes, type LaneKey, type LanePresence, type PlacedLane } from './stripLanes';
 import type { SequenceStripProps, StripDomain, StripHover, StripResidue } from './types';
 import { useModifierWheelZoom } from './useWheelZoom';
 
 const LABEL_PX = 72;
-const RULER_PX = 18;
-const LETTERS_PX = 14;
-const CATEGORY_PX = 12;
-const VALUE_PX = 22;
-const DOMAINS_PX = 18;
-const VARIANTS_PX = 30;
-const VALUE_MAX_PX = 64;
-const VARIANTS_MAX_PX = 120;
-const LANE_GAP = 3;
 const DRAG_PX = 3;
 const HEAD_R = 3.5;
 
-type LaneKey = 'ruler' | 'letters' | 'category' | 'value' | 'domains' | 'variants';
-interface Lane {
-  key: LaneKey;
+/** A placed lane (`stripLanes.ts`) with the title drawn in the label column. */
+interface Lane extends PlacedLane {
   title: string;
-  y: number;
-  h: number;
 }
 
 /** Baseline of the variants lane. */
@@ -148,29 +137,32 @@ const SequenceStrip: React.FC<SequenceStripProps> = ({
   }, [isSS, categories, variants, domains, colours.categorical, categoryColours]);
 
   // ---- lanes -----------------------------------------------------------------
+  // The lanes share the height the cell gives them, each up to its cap, and
+  // what they cannot take centres the stack (see `stripLanes.ts`). The offset
+  // is part of every lane's `y`, so drawing and hit-testing agree.
+  const present = useMemo<LanePresence>(
+    () => ({
+      letters: hasLetters,
+      category: hasCategory,
+      value: extent !== null,
+      domains: domains.length > 0,
+      variants: stacks.length > 0,
+    }),
+    [hasLetters, hasCategory, extent, domains.length, stacks.length],
+  );
+  const layout = useMemo(() => layoutLanes(present, view.h), [present, view.h]);
   const lanes = useMemo<Lane[]>(() => {
-    const spec: Array<[LaneKey, string, number]> = [['ruler', 'Residue', RULER_PX]];
-    if (hasLetters) spec.push(['letters', 'Sequence', LETTERS_PX]);
-    if (hasCategory) spec.push(['category', isSS ? 'Structure' : 'Category', CATEGORY_PX]);
-    if (extent) spec.push(['value', valueLabel || 'Value', VALUE_PX]);
-    if (domains.length) spec.push(['domains', 'Domains', DOMAINS_PX]);
-    if (stacks.length) spec.push(['variants', 'Variants', VARIANTS_PX]);
-    const natural = spec.reduce((s, [, , h]) => s + h + LANE_GAP, 0);
-    const spare = Math.max(0, view.h - natural);
-    const grow: Partial<Record<LaneKey, number>> = {};
-    const growable: Array<[LaneKey, number, number]> = [];
-    if (stacks.length) growable.push(['variants', VARIANTS_MAX_PX - VARIANTS_PX, 0.6]);
-    if (extent) growable.push(['value', VALUE_MAX_PX - VALUE_PX, 0.4]);
-    const weight = growable.reduce((s, [, , w]) => s + w, 0);
-    for (const [key, cap, w] of growable) grow[key] = Math.min(cap, (spare * w) / (weight || 1));
-    let y = 0;
-    return spec.map(([key, title, h]) => {
-      const lane = { key, title, y, h: h + (grow[key] ?? 0) };
-      y += lane.h + LANE_GAP;
-      return lane;
-    });
-  }, [hasLetters, hasCategory, isSS, extent, valueLabel, domains.length, stacks.length, view.h]);
-  const naturalH = lanes.reduce((s, l) => s + l.h + LANE_GAP, 0);
+    const titles: Record<LaneKey, string> = {
+      ruler: 'Residue',
+      letters: 'Sequence',
+      category: isSS ? 'Structure' : 'Category',
+      value: valueLabel || 'Value',
+      domains: 'Domains',
+      variants: 'Variants',
+    };
+    return layout.lanes.map((l) => ({ ...l, title: titles[l.key] }));
+  }, [layout, isSS, valueLabel]);
+  const naturalH = layout.naturalH;
 
   const minPos = span?.min ?? 1;
   const count = span ? span.max - span.min + 1 : 0;
@@ -237,7 +229,10 @@ const SequenceStrip: React.FC<SequenceStripProps> = ({
     const p1 = minPos + i1;
     const xOf = (pos: number) => LABEL_PX + (pos - minPos) * cw - sx;
     const lane = (key: LaneKey) => lanes.find((l) => l.key === key);
-    const fullH = Math.min(view.h, naturalH);
+    // The bands span the drawn stack, not the cell: a centred stack leaves
+    // room above and below it.
+    const bandTop = layout.top;
+    const bandH = Math.max(0, Math.min(layout.stackH, view.h - bandTop));
     const brush = brushRef.current;
     const hover = hoverRef.current;
 
@@ -249,7 +244,7 @@ const SequenceStrip: React.FC<SequenceStripProps> = ({
     // Background bands: selection, incoming highlight, live brush, hover.
     const band = (a: number, b: number, fill: string) => {
       ctx.fillStyle = fill;
-      ctx.fillRect(xOf(Math.min(a, b)), 0, (Math.abs(b - a) + 1) * cw, fullH);
+      ctx.fillRect(xOf(Math.min(a, b)), bandTop, (Math.abs(b - a) + 1) * cw, bandH);
     };
     if (selectedRange) band(selectedRange.start, selectedRange.end ?? selectedRange.start, colours.accentFill);
     if (highlight) band(highlight.start, highlight.end ?? highlight.start, colours.highlightFill);
@@ -411,7 +406,7 @@ const SequenceStrip: React.FC<SequenceStripProps> = ({
     const edges = (a: number, b: number, stroke: string) => {
       ctx.strokeStyle = stroke;
       ctx.lineWidth = 1.5;
-      ctx.strokeRect(xOf(Math.min(a, b)), 0.75, (Math.abs(b - a) + 1) * cw, fullH - 1.5);
+      ctx.strokeRect(xOf(Math.min(a, b)), bandTop + 0.75, (Math.abs(b - a) + 1) * cw, bandH - 1.5);
     };
     if (selectedRange) edges(selectedRange.start, selectedRange.end ?? selectedRange.start, colours.accent);
     if (highlight) edges(highlight.start, highlight.end ?? highlight.start, colours.highlight);
@@ -429,8 +424,8 @@ const SequenceStrip: React.FC<SequenceStripProps> = ({
     ctx.strokeStyle = colours.grid;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(LABEL_PX - 0.5, 0);
-    ctx.lineTo(LABEL_PX - 0.5, fullH);
+    ctx.moveTo(LABEL_PX - 0.5, bandTop);
+    ctx.lineTo(LABEL_PX - 0.5, bandTop + bandH);
     ctx.stroke();
 
     if (!drawnRef.current && (residues.length > 0 || variants.length > 0 || domains.length > 0)) {
@@ -445,7 +440,7 @@ const SequenceStrip: React.FC<SequenceStripProps> = ({
     count,
     minPos,
     lanes,
-    naturalH,
+    layout,
     colours,
     selectedRange,
     highlight,

@@ -53,6 +53,9 @@ export function isControlsPlacement(v: unknown): v is ControlsPlacement {
 export interface ControlsDockState {
   placement: ControlsPlacement | null;
   collapsed: boolean;
+  /** Folds the docked panel away or brings it back: the button a compact
+   *  header draws (the chrome's settings icon is hover-only). */
+  toggle?: () => void;
 }
 
 export const ControlsDockContext = createContext<ControlsDockState | null>(null);

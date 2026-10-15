@@ -175,21 +175,13 @@ export {
   singlePick,
 } from './components/interactive/alwaysSelected';
 export type { PickableOption } from './components/interactive/alwaysSelected';
-// The tab's scope (its `always_selected` filters): the banner under the
-// header and the unit chip on the tiles that follow it.
+// The tab's scope (its `always_selected` filters): the banner under the header.
 export { ScopeBanner } from './components/interactive/ScopeBanner';
-export { ScopeValueBadge } from './components/interactive/ScopeValueBadge';
-export {
-  ScopeChipContext,
-  ScopeChipProvider,
-  useScopeChip,
-} from './components/interactive/scopeContext';
-export type { ScopeChip } from './components/interactive/scopeContext';
 export {
   alwaysSelectedComponents,
   bannerFactItems,
-  scopeChipColor,
   scopeUnits,
+  unitSteps,
 } from './components/interactive/scope';
 export { default as SegmentedControlRenderer } from './components/interactive/SegmentedControlRenderer';
 export { default as TimelineRenderer } from './components/interactive/TimelineRenderer';

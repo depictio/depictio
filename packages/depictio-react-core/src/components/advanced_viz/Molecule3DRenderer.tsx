@@ -36,6 +36,7 @@ import {
   useStructureText,
   useThreeDmolStatus,
 } from './molecule/hooks';
+import { createHoverGate } from './molecule/hoverGate';
 import { modelCredit, modelExplanation } from './molecule/resolve';
 import {
   buildColouring,
@@ -675,13 +676,15 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     onHover: (_residue: ResidueRef | null) => {},
     onClick: (_residue: ResidueRef, _extend: boolean) => {},
   });
-  callbacks.current = {
-    onHover: (residue) => {
-      if (!residue) {
-        setHover(null);
-        publishHighlight(null);
-        return;
-      }
+  // What a hover does on screen (the tooltip, the letters' outline, the
+  // crosshair on the other protein tiles), read through a ref so the gate,
+  // made once, always sees the current entity and marks.
+  const hoverEffects = useRef({
+    enter: (_residue: ResidueRef) => {},
+    clear: () => {},
+  });
+  hoverEffects.current = {
+    enter: (residue) => {
       setHover({ residue, x: pointer.current.x, y: pointer.current.y });
       publishHighlight({
         entity: entity ?? undefined,
@@ -690,6 +693,25 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
         positionColumn: positionCol,
         rowKeys: marksByPosition.get(residue.position),
       });
+    },
+    clear: () => {
+      setHover(null);
+      publishHighlight(null);
+    },
+  };
+  // Hover is live: a residue already shown is not drawn again, and the clear
+  // between two residues of a sweep is held back one frame (see hoverGate.ts).
+  const [hoverGate] = useState(() =>
+    createHoverGate<ResidueRef>({
+      onEnter: (residue) => hoverEffects.current.enter(residue),
+      onClear: () => hoverEffects.current.clear(),
+    }),
+  );
+  useEffect(() => () => hoverGate.dispose(), [hoverGate]);
+  callbacks.current = {
+    onHover: (residue) => {
+      if (!residue) hoverGate.leave();
+      else hoverGate.enter(`${entity ?? ''}|${residue.chain}|${residue.position}`, residue);
     },
     onClick: (residue, extend) => pickResidue(residue.position, extend, residue.chain || null),
   };
@@ -1258,10 +1280,7 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
         const rect = e.currentTarget.getBoundingClientRect();
         pointer.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
       }}
-      onMouseLeave={() => {
-        setHover(null);
-        publishHighlight(null);
-      }}
+      onMouseLeave={() => hoverGate.clear()}
     >
       <div
         ref={hostRef}
@@ -1316,7 +1335,6 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       error={error}
       emptyMessage={emptyMessage}
       echo={echo || undefined}
-      scopeLabel={missingEntity ? undefined : entity || undefined}
       badges={badges.length ? badges : undefined}
       dataRows={frame ?? undefined}
       dataColumns={fetchCols}
