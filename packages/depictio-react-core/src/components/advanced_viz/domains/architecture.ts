@@ -669,6 +669,29 @@ export function trackBox(
   return { x, w: Math.max(minPx, room - gutter) };
 }
 
+export interface LabelColumnOptions {
+  minPx?: number;
+  maxPx?: number;
+  /** Largest share of the tile the label column may take. */
+  maxShare?: number;
+  padPx?: number;
+}
+
+/**
+ * Width of the label column: the widest label plus a pad, clamped to
+ * `minPx`..`maxPx`, and never above `maxShare` of the tile (floored at `minPx`),
+ * so one long identifier cannot squeeze the tracks. The panel truncates the
+ * labels that do not fit with an ellipsis.
+ */
+export function labelColumnPx(
+  widestPx: number,
+  viewW: number,
+  { minPx = 72, maxPx = 200, maxShare = 0.22, padPx = 12 }: LabelColumnOptions = {},
+): number {
+  const cap = Math.min(maxPx, Math.max(minPx, maxShare * viewW));
+  return Math.round(Math.min(cap, Math.max(minPx, widestPx + padPx)));
+}
+
 /**
  * Pixels per residue of a protein `length` long: the shared scale fits the
  * longest protein (`sharedLength`) to the track, the per-protein scale fits

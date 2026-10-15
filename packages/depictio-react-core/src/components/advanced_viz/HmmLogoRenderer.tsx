@@ -667,6 +667,7 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
         <VizControlGroup title="Display">
           <VizSlider
             label="State width"
+            title="Ctrl/Cmd + wheel to zoom"
             value={zoom}
             onChange={setZoom}
             min={0}
@@ -840,6 +841,7 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
             onClickHit={pickEnabled ? onClickHit : undefined}
             onClear={pickEnabled ? onClear : undefined}
             cellWidth={zoom > 0 ? zoom : undefined}
+            onCellWidthChange={setZoom}
             followSelection={follow}
             onDrawn={onDrawn}
           />

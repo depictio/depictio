@@ -25,6 +25,7 @@ import {
   partialEdges,
   proteinLengths,
   proteinRows,
+  labelColumnPx,
   pxPerResidue,
   representative,
   residueAt,
@@ -628,5 +629,27 @@ describe('track geometry with a length-label gutter', () => {
     const room = 200 - (LABEL_COL + 6) - RIGHT_PAD;
     expect(narrow.w).toBeGreaterThanOrEqual(room * 0.65 - 1e-9);
     expect(trackBox(50, LABEL_COL, { rightPadPx: RIGHT_PAD, gutterPx: 80 }).w).toBe(10);
+  });
+});
+
+describe('labelColumnPx', () => {
+  it('fits the widest label plus a pad when the tile has room', () => {
+    expect(labelColumnPx(100, 1000)).toBe(112);
+  });
+
+  it('keeps the floor for a short label', () => {
+    expect(labelColumnPx(10, 1000)).toBe(72);
+  });
+
+  it('caps a long identifier to a share of a narrow tile', () => {
+    // 0.22 * 625 = 137.5, under both the widest label and the 200 px ceiling.
+    expect(labelColumnPx(400, 625)).toBe(138);
+    expect(labelColumnPx(400, 2000)).toBe(200);
+  });
+
+  it('never goes under the floor on a tiny or unmeasured tile', () => {
+    expect(labelColumnPx(400, 100)).toBe(72);
+    expect(labelColumnPx(400, 0)).toBe(72);
+    expect(labelColumnPx(Infinity, 625)).toBe(138);
   });
 });

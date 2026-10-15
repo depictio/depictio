@@ -14,6 +14,7 @@ import { rgbCss } from '../protein/residueColours';
 import { SS_GLYPH_FILLS } from '../protein/ssGlyphs';
 import type { ResidueRange } from '../protein/types';
 import { segmentLabel, type SsSegment } from './ssModel';
+import type { SsStateColours } from './stateColours';
 
 /** Most segments the list renders; a proteome-scale table would otherwise mount thousands. */
 const MAX_LISTED = 400;
@@ -26,6 +27,8 @@ interface Props {
   selectedRange?: ResidueRange | null;
   /** Click on a segment: its residue range. Omit for a list that only reads. */
   onPick?: (range: ResidueRange) => void;
+  /** Colours the dashboard pins for a class; the others keep the glyph fills. */
+  stateColours?: SsStateColours;
 }
 
 /**
@@ -33,11 +36,11 @@ interface Props {
  * segment ("Helix 12–30 (19 aa, mean P 0.86)"). A click picks the segment's
  * residues, as a brush over them would.
  */
-const SegmentList: React.FC<Props> = ({ segments, selectedRange, onPick }) => {
+const SegmentList: React.FC<Props> = ({ segments, selectedRange, onPick, stateColours }) => {
   const theme = useMantineTheme();
   const { colorScheme } = useMantineColorScheme();
   // The glyph fill of a class; coil has none and takes the panel's neutral grey.
-  const coil = rgbCss(panelColours(theme, colorScheme === 'dark').neutral);
+  const coil = stateColours?.coil ?? rgbCss(panelColours(theme, colorScheme === 'dark').neutral);
   if (segments.length === 0) {
     return (
       <Text size="xs" c="dimmed" px={4} data-testid="secondary-structure-segments-empty">
@@ -67,7 +70,7 @@ const SegmentList: React.FC<Props> = ({ segments, selectedRange, onPick }) => {
               variant={selected ? 'light' : 'subtle'}
               color="gray"
               fw={selected ? 600 : 400}
-              leftSection={<ColorSwatch color={seg.state === 'coil' ? coil : SS_GLYPH_FILLS[seg.state]} size={8} withShadow={false} />}
+              leftSection={<ColorSwatch color={seg.state === 'coil' ? coil : (stateColours?.[seg.state] ?? SS_GLYPH_FILLS[seg.state])} size={8} withShadow={false} />}
               onClick={onPick ? () => onPick({ start: seg.start, end: seg.end }) : undefined}
               style={onPick ? undefined : { cursor: 'default', pointerEvents: 'none' }}
               aria-label={segmentLabel(seg)}

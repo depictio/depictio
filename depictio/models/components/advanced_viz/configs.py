@@ -3633,6 +3633,35 @@ class SecondaryStructureConfig(_BaseVizConfig):
     show_composition: bool = Field(
         default=True, description="Show the percentage of helix, strand and coil residues"
     )
+    show_letters: bool = Field(
+        default=True,
+        description="Write the one-letter sequence under the ruler once the cells are wide enough",
+    )
+    shade_confidence: bool = Field(
+        default=True, description="Shade each residue of the ribbon by its confidence"
+    )
+    show_coil_segments: bool = Field(
+        default=False,
+        description="List the coil stretches in the segment list, not only helices and strands",
+    )
+    residue_width: int = Field(
+        default=0,
+        ge=0,
+        le=24,
+        description="Pixels per residue; 0 fits the whole protein to the tile width",
+    )
+    ribbon_height: int = Field(
+        default=30,
+        ge=16,
+        le=64,
+        description="Height in pixels of the main ribbon lane, which may grow to fill spare room",
+    )
+    min_segment_length: int = Field(
+        default=1,
+        ge=1,
+        le=50,
+        description="Leave out of the segment list the segments shorter than this many residues",
+    )
     selection_enabled: bool = Field(
         default=True, description="Brushing the ribbon emits a residue_selection"
     )
@@ -3770,7 +3799,16 @@ class DomainArchitectureConfig(_BaseVizConfig):
         ),
     )
     label_selection: bool = Field(
-        default=True, description="A domain pick also emits a point selection on `label_col`"
+        default=True,
+        description="A domain pick also emits a point selection, on `selection_column` or `label_col`",
+    )
+    selection_column: str | None = Field(
+        default=None,
+        description=(
+            "Column the point selection of a domain pick is made on, and the one a "
+            "linked record card keys on. Null uses `label_col`, which several hits "
+            "of a protein can share; name a per-hit key to pick exactly one domain"
+        ),
     )
     selection_enabled: bool = Field(
         default=True, description="Clicking a domain emits a residue_selection over its span"

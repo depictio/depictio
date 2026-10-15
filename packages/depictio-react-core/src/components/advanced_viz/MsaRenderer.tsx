@@ -404,6 +404,7 @@ const MsaRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilter
         <VizControlGroup title="Display">
           <VizSlider
             label="Column width"
+            title="Ctrl/Cmd + wheel to zoom"
             value={zoom}
             onChange={setZoom}
             min={0}
@@ -470,6 +471,13 @@ const MsaRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilter
 
   const onDrawn = useCallback(() => setDrawn(true), []);
 
+  // ESMFold predicts a structure and writes no alignment, so say that rather
+  // than leave the tile looking broken.
+  const emptyMessage =
+    msaId && /esmfold/i.test(msaId)
+      ? 'No alignment for this engine (ESMFold does not write one)'
+      : 'No aligned sequences';
+
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Sequence alignment'}
@@ -480,7 +488,7 @@ const MsaRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilter
       echo={echo}
       loading={loading}
       error={error}
-      emptyMessage={!loading && rows.length === 0 ? 'No aligned sequences' : undefined}
+      emptyMessage={!loading && rows.length === 0 ? emptyMessage : undefined}
       dataRows={frame ?? undefined}
       dataColumns={columns}
       badges={badges}
@@ -503,6 +511,7 @@ const MsaRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilter
             onBrushColumns={brushEnabled ? onBrushColumns : undefined}
             onClickRow={selectionColumn ? onClickRow : undefined}
             cellWidth={zoom > 0 ? zoom : undefined}
+            onCellWidthChange={setZoom}
             showConsensus={showConsensus}
             showConservation={showConservation}
             followSelection={follow}

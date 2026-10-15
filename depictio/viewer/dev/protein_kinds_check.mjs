@@ -64,6 +64,14 @@ check(
   selectionEmitters([tile('domain_architecture', { label_col: 'family' })], null)[0]?.column,
   'family',
 );
+check(
+  'domain_architecture selection_column wins over its label column',
+  selectionEmitters(
+    [tile('domain_architecture', { label_col: 'family', selection_column: 'domain_id' })],
+    null,
+  )[0]?.column,
+  'domain_id',
+);
 
 console.log('\n2. Companion collections');
 const dc = (type, format) => ({

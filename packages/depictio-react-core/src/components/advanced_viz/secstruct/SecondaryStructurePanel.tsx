@@ -16,6 +16,7 @@ import { rgbCss, type SecondaryStructure } from '../protein/residueColours';
 import type { Run } from '../protein/sequence';
 import { drawSecondaryStructureRuns, SS_GLYPH_FILLS } from '../protein/ssGlyphs';
 import type { ProteinHighlight, ResidueRange } from '../protein/types';
+import type { SsStateColours } from './stateColours';
 import {
   agreementRuns,
   alphaRuns,
@@ -33,7 +34,8 @@ import {
 const LABEL_PX = 88;
 const RULER_PX = 18;
 const LETTERS_PX = 14;
-const MAIN_RIBBON_PX = 30;
+/** The main ribbon's height unless `ribbonHeight` says otherwise. */
+export const DEFAULT_RIBBON_PX = 30;
 const MAIN_RIBBON_MAX_PX = 52;
 const EXTRA_RIBBON_PX = 16;
 const AGREEMENT_PX = 12;
@@ -48,12 +50,14 @@ const COIL_AREA_ALPHA = 0.55;
 
 /** Height the panel needs for its lanes, with no spare room to spread. */
 export function naturalPanelHeight(opts: {
+  /** Height of the main ribbon; defaults to `DEFAULT_RIBBON_PX`. */
+  ribbonHeight?: number;
   letters: boolean;
   extraSources: number;
   agreement: boolean;
   probabilities: boolean;
 }): number {
-  let h = RULER_PX + LANE_GAP + MAIN_RIBBON_PX + LANE_GAP;
+  let h = RULER_PX + LANE_GAP + (opts.ribbonHeight ?? DEFAULT_RIBBON_PX) + LANE_GAP;
   if (opts.letters) h += LETTERS_PX + LANE_GAP;
   h += Math.max(0, opts.extraSources) * (EXTRA_RIBBON_PX + LANE_GAP);
   if (opts.agreement) h += AGREEMENT_PX + LANE_GAP;
@@ -88,6 +92,11 @@ export interface SecondaryStructurePanelProps {
   showLetters?: boolean;
   /** Shade each residue's glyph by its confidence. */
   shadeConfidence?: boolean;
+  /** Height of the main ribbon lane; it still grows into spare room up to
+   *  `MAIN_RIBBON_MAX_PX`, unless this is already taller. */
+  ribbonHeight?: number;
+  /** Colours of the classes the dashboard pins; the others keep the defaults. */
+  stateColours?: SsStateColours;
   selectedRange?: ResidueRange | null;
   highlight?: ProteinHighlight | null;
   /** Pointer over a residue; null when it leaves. */
@@ -120,6 +129,8 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
   showAgreement = true,
   showLetters = true,
   shadeConfidence = true,
+  ribbonHeight = DEFAULT_RIBBON_PX,
+  stateColours,
   selectedRange,
   highlight,
   onHover,
@@ -133,6 +144,17 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
   const { colorScheme } = useMantineColorScheme();
   const isDark = colorScheme === 'dark';
   const colours: PanelColours = useMemo(() => panelColours(theme, isDark), [theme, isDark]);
+  // Pinned colours over the defaults: the three filled glyphs and the coil
+  // line (the panel's own grey unless the dashboard pins one).
+  const fills = useMemo(
+    () => ({
+      helix: stateColours?.helix ?? SS_GLYPH_FILLS.helix,
+      strand: stateColours?.strand ?? SS_GLYPH_FILLS.strand,
+      turn: stateColours?.turn ?? SS_GLYPH_FILLS.turn,
+    }),
+    [stateColours],
+  );
+  const pinnedCoil = stateColours?.coil ?? null;
   const agreeColour = theme.colors.teal[isDark ? 4 : 6];
   const disagreeColour = theme.colors.red[isDark ? 4 : 6];
 
@@ -195,7 +217,7 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
       spec.push({
         key: 'ribbon',
         title: s.name,
-        h: k === 0 ? MAIN_RIBBON_PX : EXTRA_RIBBON_PX,
+        h: k === 0 ? ribbonHeight : EXTRA_RIBBON_PX,
         source: k,
       }),
     );
@@ -216,7 +238,7 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
     const growMain = probSource >= 0 ? 0.35 : 1;
     const grow = (key: LaneKey, source: number): number => {
       if (key === 'ribbon' && source === 0) {
-        return Math.min(MAIN_RIBBON_MAX_PX - MAIN_RIBBON_PX, spare * growMain);
+        return Math.max(0, Math.min(MAIN_RIBBON_MAX_PX - ribbonHeight, spare * growMain));
       }
       if (key === 'probabilities') return Math.min(PROB_MAX_PX - PROB_PX, spare * 0.65);
       return 0;
@@ -227,7 +249,7 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
       y += lane.h + LANE_GAP;
       return lane;
     });
-  }, [lettersOn, model.sources, agreementOn, agreement, probSource, view.h]);
+  }, [lettersOn, model.sources, agreementOn, agreement, probSource, view.h, ribbonHeight]);
   const naturalH = lanes.reduce((s, l) => s + l.h + LANE_GAP, 0);
 
   // ---- interaction state -------------------------------------------------------
@@ -330,7 +352,7 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
         height: l.h,
         visible: [p0, p1] as const,
       };
-      const glyphColours = { fills: SS_GLYPH_FILLS, coil: colours.dimmed };
+      const glyphColours = { fills, coil: pinnedCoil ?? colours.dimmed };
       for (const { run, pieces } of ribbons[l.source] ?? []) {
         if (run.end < p0 || run.start > p1) continue;
         if (pieces.length === 1) {
@@ -382,10 +404,10 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
       // seams between opaque bars, no doubled alpha on the coil share.
       const dpr = typeof window !== 'undefined' ? Math.max(1, window.devicePixelRatio || 1) : 1;
       const snap = (v: number) => Math.round(v * dpr) / dpr;
-      const fills = [
-        SS_GLYPH_FILLS.helix,
-        SS_GLYPH_FILLS.strand,
-        rgbCss(colours.neutral, COIL_AREA_ALPHA),
+      const shares = [
+        fills.helix,
+        fills.strand,
+        pinnedCoil ?? rgbCss(colours.neutral, COIL_AREA_ALPHA),
       ];
       // Bins start on multiples of `perBin` from the axis origin, so they do not shift with the scroll.
       for (let pos = p0 - ((p0 - minPos) % perBin); pos <= p1; pos += perBin) {
@@ -411,8 +433,11 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
           const yBottom = snap(baseY - acc * room);
           acc = next;
           if (yBottom <= yTop) return;
-          ctx.fillStyle = fills[k];
+          ctx.fillStyle = shares[k];
+          // A pinned coil colour is opaque: it takes the share's opacity here.
+          if (k === 2 && pinnedCoil) ctx.globalAlpha = COIL_AREA_ALPHA;
           ctx.fillRect(x0, yTop, w, yBottom - yTop);
+          ctx.globalAlpha = 1;
         });
       }
       ctx.strokeStyle = colours.grid;
@@ -465,6 +490,8 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
     colours,
     agreeColour,
     disagreeColour,
+    fills,
+    pinnedCoil,
     selectedRange,
     highlight,
     model,

@@ -14,6 +14,7 @@ import { cssToRgb, panelColours, type PanelColours } from '../protein/panelTheme
 import {
   domainAt,
   domainTooltip,
+  labelColumnPx,
   lengthGutter,
   lengthLabel,
   LENGTH_LABEL_GAP_PX,
@@ -39,8 +40,6 @@ const GEOMETRY: RowGeometry = { padPx: 5, lanePx: 16, notePx: 22 };
 const DOMAIN_PX = 12;
 const BACKBONE_PX = 3;
 const AXIS_PX = 20;
-const LABEL_MIN_PX = 72;
-const LABEL_MAX_PX = 200;
 const INDENT_PX = 14;
 const CHEVRON_PX = 16;
 const RIGHT_PAD_PX = 8;
@@ -180,10 +179,10 @@ const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
     () => rows.reduce((m, r) => Math.max(m, drawnProtein(r)?.length ?? 0), 1),
     [rows],
   );
-  const labelWidth = useMemo(() => {
-    if (typeof document === 'undefined') return LABEL_MAX_PX;
+  const widestLabel = useMemo(() => {
+    if (typeof document === 'undefined') return Infinity;
     const ctx = document.createElement('canvas').getContext('2d');
-    if (!ctx) return LABEL_MAX_PX;
+    if (!ctx) return Infinity;
     let widest = 0;
     // Measuring every label of a proteome is cheap, but not free: the first
     // few thousand rows decide the column as well as all of them would.
@@ -204,8 +203,10 @@ const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
         );
       }
     }
-    return Math.round(Math.min(LABEL_MAX_PX, Math.max(LABEL_MIN_PX, widest + 12)));
+    return widest;
   }, [rows, colours.font]);
+  // Capped to a share of the tile, so one long identifier leaves the tracks room.
+  const labelWidth = useMemo(() => labelColumnPx(widestLabel, view.w), [widestLabel, view.w]);
   // The longest backbone ends at the track's end (every one does on the
   // per-protein scale), so its length label needs a gutter of its own: the
   // widest label's text, measured as it is drawn.

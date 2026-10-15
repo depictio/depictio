@@ -207,8 +207,9 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
     case 'domain_architecture':
       // A click on a domain picks its span as a residue range (the pair
       // above) and, beside it, the domain by name: the label column is what
-      // identifies it, as a chord's is for a link.
-      return configColumn('label_col') ?? 'label';
+      // identifies it, as a chord's is for a link. `selection_column` names a
+      // per-hit key when several hits share a label.
+      return named ?? configColumn('label_col') ?? 'label';
     case 'msa':
       // A row click picks one sequence of the alignment.
       return configColumn('seq_id_col') ?? 'seq_id';

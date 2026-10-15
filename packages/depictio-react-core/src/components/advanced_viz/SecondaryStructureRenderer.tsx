@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, ColorSwatch, Group, Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
+import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import { usePublishHighlight, useHighlight } from '../../highlight/bus';
 import {
   filtersExcludingOwnResidue,
@@ -25,8 +26,12 @@ import { rgbCss } from './protein/residueColours';
 import { SS_GLYPH_FILLS } from './protein/ssGlyphs';
 import type { ResidueRange } from './protein/types';
 import { useEntityPicker } from './protein/useEntityPicker';
+import { usePersistedVizControl } from './usePersistedVizControl';
 import { compositionBadges } from './secstruct/compositionBadges';
-import SecondaryStructurePanel, { naturalPanelHeight } from './secstruct/SecondaryStructurePanel';
+import SecondaryStructurePanel, {
+  DEFAULT_RIBBON_PX,
+  naturalPanelHeight,
+} from './secstruct/SecondaryStructurePanel';
 import SegmentList, { SEGMENT_LIST_MAX_PX } from './secstruct/SegmentList';
 import {
   agreementOf,
@@ -34,6 +39,7 @@ import {
   segmentsOf,
   type SsColumns,
 } from './secstruct/ssModel';
+import { pinnedStateColours } from './secstruct/stateColours';
 
 /**
  * Mirrors `SecondaryStructureConfig` in depictio/models/components/advanced_viz/configs.py
@@ -54,6 +60,12 @@ interface SecondaryStructureConfig {
   show_agreement?: boolean;
   show_segments?: boolean;
   show_composition?: boolean;
+  show_letters?: boolean;
+  shade_confidence?: boolean;
+  show_coil_segments?: boolean;
+  residue_width?: number;
+  ribbon_height?: number;
+  min_segment_length?: number;
   selection_enabled?: boolean;
   follow_selection?: boolean;
 }
@@ -121,11 +133,17 @@ const SecondaryStructureRenderer: React.FC<Props> = ({
   const follow = config.follow_selection !== false;
   const brushEnabled = Boolean(onFilterChange) && config.selection_enabled !== false;
 
-  const [showLetters, setShowLetters] = useState(true);
-  const [shadeConfidence, setShadeConfidence] = useState(true);
-  const [coilSegments, setCoilSegments] = useState(false);
+  const [showLetters, setShowLetters] = usePersistedVizControl(metadata, 'show_letters', true);
+  const [shadeConfidence, setShadeConfidence] = usePersistedVizControl(metadata, 'shade_confidence', true);
+  const [coilSegments, setCoilSegments] = usePersistedVizControl(metadata, 'show_coil_segments', false);
   // Pixels per residue; 0 fits the whole protein to the tile width.
-  const [zoom, setZoom] = useState<number>(0);
+  const [zoom, setZoom] = usePersistedVizControl<number>(metadata, 'residue_width', 0);
+  const [ribbonHeight, setRibbonHeight] = usePersistedVizControl<number>(
+    metadata,
+    'ribbon_height',
+    DEFAULT_RIBBON_PX,
+  );
+  const [minSegment, setMinSegment] = usePersistedVizControl<number>(metadata, 'min_segment_length', 1);
   const [pickedReference, setPickedReference] = useState<string | null>(null);
   const [drawn, setDrawn] = useState(false);
 
@@ -245,8 +263,11 @@ const SecondaryStructureRenderer: React.FC<Props> = ({
   );
   const agreement = useMemo(() => agreementOf(model), [model]);
   const segments = useMemo(
-    () => segmentsOf(model, 0).filter((s) => coilSegments || s.state !== 'coil'),
-    [model, coilSegments],
+    () =>
+      segmentsOf(model, 0).filter(
+        (s) => (coilSegments || s.state !== 'coil') && s.length >= minSegment,
+      ),
+    [model, coilSegments, minSegment],
   );
   const sources = model.sources.length;
   const hasLetters = model.letters.some((l) => l != null);
@@ -315,23 +336,32 @@ const SecondaryStructureRenderer: React.FC<Props> = ({
 
   // ---- legend ----------------------------------------------------------------
   const colours = useMemo(() => panelColours(theme, isDark), [theme, isDark]);
+  // Colours the dashboard pins for the states: under the state column's own
+  // name, and under `category`, the column of the S4PRED residue table that
+  // spells the state out. Values are read as states, so Helix and H both count.
+  const pinnedByState = usePinnedCategoryColors(stateCol);
+  const pinnedByCategory = usePinnedCategoryColors('category');
+  const stateColours = useMemo(
+    () => pinnedStateColours(pinnedByCategory, pinnedByState),
+    [pinnedByCategory, pinnedByState],
+  );
   const hasTurn = useMemo(
     () => model.sources.some((s) => s.states.includes('turn')),
     [model.sources],
   );
   const legend = useMemo(() => {
     const items: { label: string; colour: string }[] = [
-      { label: 'Helix', colour: SS_GLYPH_FILLS.helix },
-      { label: 'Strand', colour: SS_GLYPH_FILLS.strand },
+      { label: 'Helix', colour: stateColours.helix ?? SS_GLYPH_FILLS.helix },
+      { label: 'Strand', colour: stateColours.strand ?? SS_GLYPH_FILLS.strand },
     ];
-    if (hasTurn) items.push({ label: 'Turn', colour: SS_GLYPH_FILLS.turn });
-    items.push({ label: 'Coil', colour: rgbCss(colours.neutral) });
+    if (hasTurn) items.push({ label: 'Turn', colour: stateColours.turn ?? SS_GLYPH_FILLS.turn });
+    items.push({ label: 'Coil', colour: stateColours.coil ?? rgbCss(colours.neutral) });
     if (showAgreement && agreement) {
       items.push({ label: 'Agree', colour: theme.colors.teal[isDark ? 4 : 6] });
       items.push({ label: 'Differ', colour: theme.colors.red[isDark ? 4 : 6] });
     }
     return items;
-  }, [hasTurn, colours.neutral, showAgreement, agreement, theme, isDark]);
+  }, [hasTurn, stateColours, colours.neutral, showAgreement, agreement, theme, isDark]);
 
   // ---- chrome ----------------------------------------------------------------
   const entityChoices = picker.entities && picker.entities.length > 1 ? picker.entities : null;
@@ -377,6 +407,15 @@ const SecondaryStructureRenderer: React.FC<Props> = ({
           step={1}
           thumbLabel={(v) => (v === 0 ? 'Fit' : `${v} px`)}
         />
+        <VizSlider
+          label="Ribbon height"
+          value={ribbonHeight}
+          onChange={setRibbonHeight}
+          min={16}
+          max={64}
+          step={2}
+          thumbLabel={(v) => `${v} px`}
+        />
         <VizSwitch
           label="Letters"
           checked={showLetters}
@@ -390,15 +429,37 @@ const SecondaryStructureRenderer: React.FC<Props> = ({
           disabled={!hasConfidence}
         />
         {showSegments ? (
-          <VizSwitch
-            label="Coil segments"
-            checked={coilSegments}
-            onChange={(e) => setCoilSegments(e.currentTarget.checked)}
-          />
+          <>
+            <VizSwitch
+              label="Coil segments"
+              checked={coilSegments}
+              onChange={(e) => setCoilSegments(e.currentTarget.checked)}
+            />
+            <VizSlider
+              label="Min segment"
+              value={minSegment}
+              onChange={setMinSegment}
+              min={1}
+              max={50}
+              step={1}
+              thumbLabel={(v) => `${v} aa`}
+            />
+          </>
         ) : null}
       </VizControlGroup>
     ),
-    [zoom, showLetters, residueCol, hasLetters, shadeConfidence, hasConfidence, showSegments, coilSegments],
+    [
+      zoom,
+      ribbonHeight,
+      showLetters,
+      residueCol,
+      hasLetters,
+      shadeConfidence,
+      hasConfidence,
+      showSegments,
+      coilSegments,
+      minSegment,
+    ],
   );
 
   const echo = useMemo(() => {
@@ -424,6 +485,7 @@ const SecondaryStructureRenderer: React.FC<Props> = ({
   const naturalPx = useMemo(
     () =>
       naturalPanelHeight({
+        ribbonHeight,
         // Letters only get a lane once the cells are wide enough to read.
         letters: showLetters && hasLetters && zoom >= MIN_LETTER_PX,
         extraSources: Math.max(0, sources - 1),
@@ -432,7 +494,7 @@ const SecondaryStructureRenderer: React.FC<Props> = ({
       }) +
       LEGEND_PX +
       (showSegments ? SEGMENT_LIST_MAX_PX : 0),
-    [showLetters, hasLetters, zoom, sources, agreementShown, probabilitiesShown, showSegments],
+    [ribbonHeight, showLetters, hasLetters, zoom, sources, agreementShown, probabilitiesShown, showSegments],
   );
   const contentDemand = useMemo(() => demandForPx(naturalPx + CHROME_PX), [naturalPx]);
   const onDrawn = useCallback(() => setDrawn(true), []);
@@ -481,6 +543,8 @@ const SecondaryStructureRenderer: React.FC<Props> = ({
                 showAgreement={showAgreement}
                 showLetters={showLetters}
                 shadeConfidence={shadeConfidence}
+                ribbonHeight={ribbonHeight}
+                stateColours={stateColours}
                 selectedRange={selectedRange}
                 highlight={highlight}
                 onHover={onHover}
@@ -513,6 +577,7 @@ const SecondaryStructureRenderer: React.FC<Props> = ({
                 segments={segments}
                 selectedRange={selectedRange}
                 onPick={brushEnabled ? onPickSegment : undefined}
+                stateColours={stateColours}
               />
             </Box>
           ) : null}

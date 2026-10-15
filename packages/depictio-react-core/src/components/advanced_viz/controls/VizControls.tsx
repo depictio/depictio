@@ -19,6 +19,7 @@ import {
   type SliderProps,
   type SwitchProps,
 } from '@mantine/core';
+import { useFullscreenPortalTarget } from '../../chrome/useFullscreenPortalTarget';
 
 /**
  * One layout for every advanced-viz control, wherever it is drawn: the strip
@@ -255,26 +256,44 @@ export type VizSelectProps = Omit<SelectProps, 'size' | 'w'>;
 const DROPDOWN_STYLES = { label: { marginBottom: 4 } } as const;
 
 /** A Select: the one kind of control that keeps its title above the input. */
-export const VizSelect: React.FC<VizSelectProps> = ({ comboboxProps, ...rest }) => (
-  <Select
-    styles={DROPDOWN_STYLES}
-    {...rest}
-    size="xs"
-    comboboxProps={{ withinPortal: true, ...comboboxProps }}
-  />
-);
+export const VizSelect: React.FC<VizSelectProps> = ({ comboboxProps, ...rest }) => {
+  // Portaled into the fullscreen element when there is one, or the options
+  // would land on document.body and never paint over a fullscreen figure.
+  const fsPortalTarget = useFullscreenPortalTarget();
+  return (
+    <Select
+      styles={DROPDOWN_STYLES}
+      {...rest}
+      size="xs"
+      comboboxProps={{
+        withinPortal: true,
+        ...comboboxProps,
+        portalProps: { target: fsPortalTarget, ...comboboxProps?.portalProps },
+      }}
+    />
+  );
+};
 
 export type VizMultiSelectProps = Omit<MultiSelectProps, 'size' | 'w'>;
 
 /** A MultiSelect, titled above like `VizSelect`. */
-export const VizMultiSelect: React.FC<VizMultiSelectProps> = ({ comboboxProps, ...rest }) => (
-  <MultiSelect
-    styles={DROPDOWN_STYLES}
-    {...rest}
-    size="xs"
-    comboboxProps={{ withinPortal: true, ...comboboxProps }}
-  />
-);
+export const VizMultiSelect: React.FC<VizMultiSelectProps> = ({ comboboxProps, ...rest }) => {
+  // Portaled into the fullscreen element when there is one, or the options
+  // would land on document.body and never paint over a fullscreen figure.
+  const fsPortalTarget = useFullscreenPortalTarget();
+  return (
+    <MultiSelect
+      styles={DROPDOWN_STYLES}
+      {...rest}
+      size="xs"
+      comboboxProps={{
+        withinPortal: true,
+        ...comboboxProps,
+        portalProps: { target: fsPortalTarget, ...comboboxProps?.portalProps },
+      }}
+    />
+  );
+};
 
 /** Space between two control rows: wider than a title-to-input gap. */
 const ROW_GAP = 'var(--mantine-spacing-sm)';

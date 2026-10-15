@@ -295,8 +295,8 @@ without the column it lacks. Every config also inherits `controls_placement` fro
 | kind | renderer | config fields (defaults) |
 | --- | --- | --- |
 | `hmm_logo` | canvas `LogoPanel` | `profile_source` (`hmm` \| `msa`), `entity_col` (`entity`), `position_col` (`position`), `model_col` (`hmm_name`), `state_col` (`hmm_position`), `letter_col` (`hmm_letter`), `emission_col` (`emission`), `insert_prob_col` (`insert_prob`), `insert_length_col` (`insert_length`), `occupancy_col` (`occupancy`), `consensus_col` (`consensus`), `rf_col` (`rf`), `cs_col` (`cs`), `msa_id_col` (`msa_id`), `seq_id_col` (`seq_id`), `sequence_col` (`aligned_sequence`), `rank_col` (`rank`), `height_mode` (`relent_abovebg` \| `relent_all` \| `probability`), `color_scheme` (`clustal`, the `msa` kind's schemes), `show_indel_rows` (true), `show_consensus` (true), `hits_dc_id` / `hits_wf_id` / `hits_dc_tag`, `hits_model_col` (`label`), `hits_entity_col` (`entity`), `hits_from_col` (`hmm_from`), `hits_to_col` (`hmm_to`), `hits_length_col` (`hmm_length`), `hits_evalue_col` (`i_evalue`), `hits_score_col` (`dom_score`), `hits_ali_from_col` (`ali_from`), `hits_ali_to_col` (`ali_to`), `hits_evalue_max` (0.01), `max_hits` (200, 1 to 2000), `selection_enabled` (true), `follow_selection` (true) |
-| `domain_architecture` | canvas `DomainArchitecturePanel` | `entity_col` (`entity`), `start_col` (`start`), `end_col` (`end`), `label_col` (`label`), `protein_length_col` (`protein_length`), `hmm_from_col` (`hmm_from`), `hmm_to_col` (`hmm_to`), `hmm_length_col` (`hmm_length`), `hmm_coverage_col` (`hmm_coverage`), `evalue_col` (`i_evalue`), `source_col` (`source`), `description_col` (`description`), `accession_col` (`accession`), `view` (`proteins` \| `architectures`), `max_architectures` (15, 1 to 100), `max_proteins` (2000, 1 to 20000), `evalue_threshold`, `sources`, `scale` (`shared` \| `per_protein`), `color_by` (`label` \| `source`), `partial_coverage` (0.9), `position_col_for_selection` (`position`), `label_selection` (true), `selection_enabled` (true), `follow_selection` (true) |
-| `secondary_structure` | canvas `SecondaryStructurePanel` and a Mantine segment list | `entity_col` (`entity`), `position_col` (`position`), `residue_col` (`residue`), `state_col` (`ss_code`), `source_col`, `reference_source`, `p_helix_col` (`p_helix`), `p_strand_col` (`p_strand`), `p_coil_col` (`p_coil`), `confidence_col`, `show_probabilities` (true), `show_agreement` (true), `show_segments` (true), `show_composition` (true), `selection_enabled` (true), `follow_selection` (true) |
+| `domain_architecture` | canvas `DomainArchitecturePanel` | `entity_col` (`entity`), `start_col` (`start`), `end_col` (`end`), `label_col` (`label`), `protein_length_col` (`protein_length`), `hmm_from_col` (`hmm_from`), `hmm_to_col` (`hmm_to`), `hmm_length_col` (`hmm_length`), `hmm_coverage_col` (`hmm_coverage`), `evalue_col` (`i_evalue`), `source_col` (`source`), `description_col` (`description`), `accession_col` (`accession`), `view` (`proteins` \| `architectures`), `max_architectures` (15, 1 to 100), `max_proteins` (2000, 1 to 20000), `evalue_threshold`, `sources`, `scale` (`shared` \| `per_protein`), `color_by` (`label` \| `source`), `partial_coverage` (0.9), `position_col_for_selection` (`position`), `label_selection` (true), `selection_column` (null uses `label_col`), `selection_enabled` (true), `follow_selection` (true) |
+| `secondary_structure` | canvas `SecondaryStructurePanel` and a Mantine segment list | `entity_col` (`entity`), `position_col` (`position`), `residue_col` (`residue`), `state_col` (`ss_code`), `source_col`, `reference_source`, `p_helix_col` (`p_helix`), `p_strand_col` (`p_strand`), `p_coil_col` (`p_coil`), `confidence_col`, `show_probabilities` (true), `show_agreement` (true), `show_segments` (true), `show_composition` (true), `show_letters` (true), `shade_confidence` (true), `show_coil_segments` (false), `residue_width` (0 fits the tile, 0 to 24), `ribbon_height` (30, 16 to 64), `min_segment_length` (1, 1 to 50), `selection_enabled` (true), `follow_selection` (true) |
 | `pae_matrix` | canvas `PaePanel` | `entity_col` (`entity`), `position_col` (`position`), `value_col`, `chain_col`, `pae_dc_id` / `pae_wf_id` / `pae_dc_tag`, `max_pae`, `colour_scale`, `brush` (`diagonal` \| `rectangle`), `show_plddt` (true), `selection_enabled` (true), `follow_selection` (true) |
 | `ramachandran` | Plotly SVG `scatter` | `structure_source` (`file` \| `resolve`), `structure_dc_id` / `structure_wf_id` / `structure_dc_tag`, `uniprot_col`, `gene_col`, `sequence_col`, `taxon` (9606), `entity_col` (`entity`), `position_col` (`position`), `chain_col`, `value_col`, `category_col`, `color_mode` (`plddt` \| `residue_class` \| `secondary_structure` \| `value` \| `category` \| `chain`), `show_regions` (true), `residue_classes` (null: all four), `marker_size` (6, 2 to 20), `selection_enabled` (true), `follow_selection` (true) |
 
@@ -497,7 +497,9 @@ hit has a source.
 
 - A domain click emits a `residue_selection` (entity on `entity_col`, `start` to `end` on
   `position_col_for_selection`) and, with `label_selection`, a point selection
-  (`scatter_selection`) on `label_col` holding the raw label value. Both come from one click
+  (`scatter_selection`) on `selection_column` (default `label_col`) holding the raw value. Several
+  hits can share a label, so name a per-hit key (`domain_id`) there and as the linked record
+  card's `id_col` to pick exactly one domain. Both come from one click
   handler. A table without the position column skips that half of the pair, so residue tables, the
   structure and the sequence track narrow or move, and the profile logo follows the label. A
   second click on the picked domain clears both, and so does a residue pick in another tile (the
@@ -573,8 +575,12 @@ Around the canvas: composition badges in the frame header (percent helix, strand
 summary badge per source when several; a turn only when a source has one), a legend row and the
 segment list, a Mantine `ScrollArea` of the main source's helix, strand and turn segments
 ("Helix 12–30 (19 aa, mean P 0.86)"; the mean is of P(state), or of the confidence for a turn),
-with a switch for the coil segments. Colours come from the shared glyph fills (`SS_GLYPH_FILLS`,
-the RasMol structure colours the sequence track uses) and the panel theme; agree and differ take
+with a switch for the coil segments and a minimum length under which a segment is left out of the
+list (the ribbon still draws it). Colours come from the shared glyph fills (`SS_GLYPH_FILLS`, the
+RasMol structure colours the sequence track uses) and the panel theme, unless the dashboard pins
+the states: `category_colors` entries for `Helix`, `Strand`, `Turn` or `Coil` (or their codes) on
+the state column or on `category` colour the glyphs, the probability lanes, the legend and the
+segment list, class by class, so a state left unpinned keeps its default. Agree and differ take
 the theme's teal and red.
 
 **Interactions.** A brush or a click on the canvas picks a residue range (a click on the picked
@@ -585,7 +591,10 @@ and the hover and the range of other tiles come back as a marked residue and a s
 scrolled into view with `follow_selection`. The tile keeps all its rows: it drops its own pick
 (`filtersExcludingOwnResidue`) and every position selection (`withoutPositionSelections`) before
 fetching, and shades the range instead. Controls: entity, reference source, residue width,
-letters, confidence shading, coil segments.
+ribbon height, letters, confidence shading, coil segments, minimum segment length. The last
+six are persisted (`show_letters`, `shade_confidence`, `show_coil_segments`, `residue_width`,
+`ribbon_height`, `min_segment_length`): a dashboard author's change is saved with the component,
+and each key's default is what the tile did before it existed.
 
 **Design choices.** The model is pure: per-source state arrays aligned on one ascending position
 list, so that agreement, composition and segments are loops over arrays and the canvas reads
@@ -799,7 +808,7 @@ change.
   states, in the reference's residues; a click on a hit bar picks the hit's aligned residues on
   the hit's own protein, with `hits_entity_col` as the entity column), `domain_architecture` (a
   click on a domain picks its span and, with `label_selection`, adds a point selection on
-  `label_col`; a click on a protein name picks the whole protein; a click on an architecture
+  `selection_column`, else `label_col`; a click on a protein name picks the whole protein; a click on an architecture
   group is a point selection on `entity_col`, not a residue pick), `secondary_structure` (a brush,
   a click, or a click on a segment), `pae_matrix` (a diagonal or rectangle brush emits the scored
   range, a click on a cell or a strip one residue) and `ramachandran` (a click, shift-click

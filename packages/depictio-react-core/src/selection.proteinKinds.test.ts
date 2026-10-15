@@ -33,6 +33,11 @@ describe('advancedVizSelectionColumn for the protein kinds', () => {
     expect(advancedVizSelectionColumn(meta('domain_architecture', { label_col: 'family' }))).toBe(
       'family',
     );
+    expect(
+      advancedVizSelectionColumn(
+        meta('domain_architecture', { label_col: 'family', selection_column: 'domain_id' }),
+      ),
+    ).toBe('domain_id');
   });
 
   it('honours an explicit opt-out, and keeps other kinds opt-in', () => {

@@ -3,6 +3,7 @@ import { alpha, Box, Paper, Text, useMantineColorScheme, useMantineTheme } from 
 
 import { fitCellWidth, prepareCanvas, rulerStep, scrollToReveal, visibleWindow } from '../protein/canvas';
 import { useDrawScheduler, useViewSize } from '../protein/canvasHooks';
+import { useModifierWheelZoom } from '../protein/useWheelZoom';
 import { rgbCss } from '../protein/residueColours';
 import type { MsaColourScheme, ProteinHighlight, ResidueRange } from '../protein/types';
 import { atlasCellPx, atlasKey, GlyphAtlas, glyphAtlasFor } from './glyphAtlas';
@@ -87,6 +88,8 @@ export interface LogoPanelProps {
   onClickHit?: (hit: LogoHit) => void;
   /** Px per state; 0 or undefined fits the model to the width. */
   cellWidth?: number;
+  /** Ctrl / Cmd + wheel asks for this many px per state (whole pixels). */
+  onCellWidthChange?: (px: number) => void;
   followSelection?: boolean;
   onDrawn?: () => void;
 }
@@ -142,6 +145,7 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
   onClear,
   onClickHit,
   cellWidth,
+  onCellWidthChange,
   followSelection = true,
   onDrawn,
 }) => {
@@ -208,6 +212,13 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
   const gridW = Math.max(0, view.w - GUTTER_PX);
   const cw = cellWidth && cellWidth > 0 ? cellWidth : fitCellWidth(gridW, m, 1, MAX_FIT_PX);
   const contentW = GUTTER_PX + m * cw;
+  useModifierWheelZoom(scrollRef, {
+    value: cw,
+    setValue: onCellWidthChange,
+    min: 1,
+    max: 40,
+    gutter: GUTTER_PX,
+  });
 
   const selectedSpan = useMemo(() => stateSpanOfRange(profile.positions, selectedRange), [profile.positions, selectedRange]);
   const highlightSpan = useMemo(() => stateSpanOfRange(profile.positions, highlight), [profile.positions, highlight]);

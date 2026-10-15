@@ -44,11 +44,11 @@ SELECTION_EMITTING_KINDS: dict[str, tuple[str, ...]] = {
     # matrix and the Ramachandran plot all pick residues, so they emit the
     # position column like the 3D tile. A domain bar picks a domain: its
     # `residue_selection` is the span (entity + start..end), and the point
-    # selection `label_selection` adds is on the label column, which is what a
-    # record card links on.
+    # selection `label_selection` adds is on `selection_column`, else the label
+    # column, which is what a record card links on.
     "hmm_logo": ("position_col", "=position"),
     "secondary_structure": ("position_col", "=position"),
-    "domain_architecture": ("label_col", "=label"),
+    "domain_architecture": ("selection_column", "label_col", "=label"),
     "pae_matrix": ("position_col", "=position"),
     "ramachandran": ("position_col", "=position"),
 }
@@ -86,6 +86,13 @@ SELECTION_ON_BY_DEFAULT: frozenset[str] = frozenset(
         "ramachandran",
     }
 )
+
+# Residue-emitting kinds whose pick also carries a point selection (a domain's
+# `selection_column`, else its label) that the card matches on its `id_col`: the
+# range half is dropped server-side when the card's collection has no position
+# column, so only that point selection is left to name the record. Skipped when
+# the kind turns it off with `label_selection: false`.
+POINT_SELECTION_WITH_PICK_KINDS: frozenset[str] = frozenset({"domain_architecture"})
 
 
 class LinkedComponentError(ValueError):
@@ -224,7 +231,11 @@ def linked_component_problems(
             )
             continue
         source_kind = str((config or {}).get("viz_kind") or viz_kind_of(source) or "")
-        if source_kind in RESIDUE_EMITTING_KINDS:
+        point_too = (
+            source_kind in POINT_SELECTION_WITH_PICK_KINDS
+            and (config or _config(source)).get("label_selection", True) is not False
+        )
+        if source_kind in RESIDUE_EMITTING_KINDS and not point_too:
             continue
         id_col = str(_config(card).get("id_col") or "id")
         same_dc = card.get("data_collection_tag") == source.get("data_collection_tag")
