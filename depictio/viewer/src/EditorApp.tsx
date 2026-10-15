@@ -187,10 +187,6 @@ import { DashboardSpotlight } from './spotlight';
 import { useLayoutOverride } from './layoutOverride';
 import type { GuideAuthorSettings, SettingsSectionKey } from './chrome/SettingsDrawer';
 import { focusComponent } from './lib/focusComponent';
-import {
-  findComponentElement,
-  focusComponent as focusAndRingComponent,
-} from './spotlight/focus';
 
 const API_BASE = '/depictio/api/v1';
 const SAVE_DEBOUNCE_MS = 500;
@@ -2468,15 +2464,6 @@ const EditorApp: React.FC = () => {
     () => (scope.length > 0 ? { color: scopeChipColor(scope) } : null),
     [scope],
   );
-  const changeScope = useCallback(
-    (index: string) => {
-      uncoverForSearch(index);
-      void focusAndRingComponent(index).then((found) => {
-        if (found) findComponentElement(index)?.querySelector<HTMLInputElement>('input')?.focus();
-      });
-    },
-    [uncoverForSearch],
-  );
   /** Before the search leaves for another tab, which is a full page load: save
    *  what the debounce still holds, and wait for it, or a layout change made a
    *  moment ago leaves with the page. A failed save keeps the author here. */
@@ -2683,7 +2670,7 @@ const EditorApp: React.FC = () => {
           onClear={clearDataVersions}
         />
       )}
-      {ready && <ScopeBanner units={scope} filters={filters} onChange={changeScope} />}
+      {ready && <ScopeBanner units={scope} filters={filters} onFilterChange={handleFilterChange} />}
       {loading && (
         <Group p="lg">
           <Loader size="sm" />

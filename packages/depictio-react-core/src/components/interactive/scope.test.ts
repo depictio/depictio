@@ -7,6 +7,7 @@ import {
   bannerFactItems,
   scopeChipColor,
   scopeUnits,
+  unitSteps,
 } from './scope';
 
 const select = (index: string, extra: Partial<StoredMetadata> = {}): StoredMetadata => ({
@@ -76,5 +77,29 @@ describe('bannerFactItems', () => {
       'score',
       'missing',
     ]);
+  });
+});
+
+describe('unitSteps', () => {
+  const opts = [
+    { value: 'a' },
+    { value: 'b', disabled: true },
+    { value: 'c' },
+    { value: 'd' },
+  ];
+
+  it('ranks the held value among the offered ones and skips ruled-out neighbours', () => {
+    expect(unitSteps(opts, 'c')).toEqual({ position: 2, total: 3, prev: 'a', next: 'd' });
+  });
+
+  it('stops at both ends', () => {
+    expect(unitSteps(opts, 'a')).toMatchObject({ position: 1, prev: null, next: 'c' });
+    expect(unitSteps(opts, 'd')).toMatchObject({ position: 3, prev: 'c', next: null });
+  });
+
+  it('steps forward to the first offered value when the held one is not offered', () => {
+    expect(unitSteps(opts, 'b')).toEqual({ position: 0, total: 3, prev: null, next: 'a' });
+    expect(unitSteps(opts, undefined)).toEqual({ position: 0, total: 3, prev: null, next: 'a' });
+    expect(unitSteps([], 'x')).toEqual({ position: 0, total: 0, prev: null, next: null });
   });
 });

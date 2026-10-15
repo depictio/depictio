@@ -152,7 +152,6 @@ import { DashboardGuide, useGuideRoute } from './guide';
 import { LandingHint, useLandingHint } from './landing';
 import { DashboardSpotlight } from './spotlight';
 import { useLayoutOverride } from './layoutOverride';
-import { findComponentElement, focusComponent } from './spotlight/focus';
 import type { SettingsSectionKey } from './chrome/SettingsDrawer';
 import VersionPreviewBanner from './versions/VersionPreviewBanner';
 import { dashboardHref } from './dashboards/lib/dashboardLinks';
@@ -1467,17 +1466,6 @@ const App: React.FC = () => {
     () => (scope.length > 0 ? { color: scopeChipColor(scope) } : null),
     [scope],
   );
-  // "Change" in the banner: the same landing as the dashboard search, then the
-  // control itself, so the reader can type the next unit straight away.
-  const changeScope = useCallback(
-    (index: string) => {
-      uncoverForSearch(index);
-      void focusComponent(index).then((found) => {
-        if (found) findComponentElement(index)?.querySelector<HTMLInputElement>('input')?.focus();
-      });
-    },
-    [uncoverForSearch],
-  );
 
   // The page's regions, handed to the active chrome style's Shell (see
   // chrome/shell/types.ts), which decides where each one goes.
@@ -1590,7 +1578,7 @@ const App: React.FC = () => {
           currentDataOnly={currentDataOnlyCount}
         />
       )}
-      {ready && <ScopeBanner units={scope} filters={filters} onChange={changeScope} />}
+      {ready && <ScopeBanner units={scope} filters={filters} onFilterChange={handleFilterChange} />}
       {ingestionHealth &&
         ingestionProjectId &&
         !ingestionBannerDismissed &&

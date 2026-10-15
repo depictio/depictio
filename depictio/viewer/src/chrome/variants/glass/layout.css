@@ -727,8 +727,7 @@
 
 /* The section filter bar on the canvas: the same card, one row per filter
  * (badge, name, control), its tools held to the first row. */
-:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-filter-strip__badge,
-:root[data-chrome='glass'] .depictio-scope-banner__badge {
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-filter-strip__badge {
   border-radius: 8px !important;
 }
 :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-filter-strip__name {
@@ -882,7 +881,7 @@
   background: transparent !important;
 }
 .hy-stage > .depictio-scope-banner {
-  padding: 8px 10px 8px 12px;
+  padding: 12px 14px;
 }
 .hy-inspector {
   grid-row: 2;

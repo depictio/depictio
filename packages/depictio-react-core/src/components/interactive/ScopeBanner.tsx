@@ -1,37 +1,143 @@
 /**
- * The scope banner: on a tab that shows one unit at a time, which unit that
- * is, under the header, whatever the reader has scrolled to.
+ * The scope banner: on a tab that shows one unit at a time, the identity card
+ * of that unit, under the header, whatever the reader has scrolled to.
  *
- * One row per filter that sets the scope (`scopeUnits`): the filter's icon
- * tile and title as the Filters panel draws them, the held value as the same
- * chip the tiles carry (`ScopeValueBadge`), the filter's `banner_facts` read
- * from the value's row, and a key that takes the reader to the filter. The
- * facts are left out while a data version is pinned: the row lookup reads the
- * newest commit only.
+ * One card per filter that sets the scope (`scopeUnits`):
+ * - the filter's icon tile in its accent, as the Filters panel draws it;
+ * - the filter's title as an eyebrow over the unit's name, which is the
+ *   picker itself (a searchable list in the panel's order), so the card reads
+ *   as a heading rather than a form field;
+ * - the filter's `banner_facts`, read from the unit's row, as figures;
+ * - previous and next keys with the unit's rank ("3 / 12"), walking the same
+ *   list as the automatic pick (`useScopeOptions`).
  *
- * Surfaces and shapes come from the chrome (`scopeBanner.css`, and the Paper
- * rules beside `.hy-strip`); nothing here picks a colour but the filter's own
- * accent.
+ * The facts are left out while a data version is pinned: the row lookup reads
+ * the newest commit only. Surfaces and shapes come from the chrome
+ * (`scopeBanner.css`, and the Paper rules beside `.hy-strip`); nothing here
+ * picks a colour but the filter's own accent.
  */
-import { Group, Text } from '@mantine/core';
+import {
+  ActionIcon,
+  Combobox,
+  getRadius,
+  Group,
+  Text,
+  Tooltip,
+  UnstyledButton,
+  useCombobox,
+} from '@mantine/core';
 import { Icon } from '@iconify/react';
 import React from 'react';
 
 import type { InteractiveFilter, StoredMetadata } from '../../api';
-import { ChromeButton } from '../../chrome';
+import { useChromeStyle } from '../../chrome';
 import { ownFilterValues } from './alwaysSelected';
+import { filterEvent } from './categoricalOptions';
 import { interactiveAccent, interactiveIcon, interactiveTitle } from './frame';
-import { bannerFactColumns, bannerFactItems, scopeChipColor } from './scope';
-import { ScopeValueBadge } from './ScopeValueBadge';
+import { bannerFactColumns, bannerFactItems, unitSteps } from './scope';
 import { useRowValues } from './useInteractiveData';
+import { useScopeOptions, type ScopeOption } from './useScopeOptions';
 
 import './scopeBanner.css';
 
-const ScopeRow: React.FC<{
+/** Options drawn in the list at once; the search narrows the rest. */
+const MAX_LISTED = 200;
+
+/** The unit's name as a heading that opens a searchable list of the others. */
+const UnitPicker: React.FC<{
+  title: string;
+  value: string | undefined;
+  options: readonly ScopeOption[];
+  onPick?: (value: string) => void;
+}> = ({ title, value, options, onPick }) => {
+  const style = useChromeStyle();
+  const [search, setSearch] = React.useState('');
+  const combobox = useCombobox({
+    onDropdownOpen: () => combobox.focusSearchInput(),
+    onDropdownClose: () => {
+      combobox.resetSelectedOption();
+      setSearch('');
+    },
+  });
+  const listed = React.useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const hits = q ? options.filter((o) => o.value.toLowerCase().includes(q)) : options;
+    return hits.slice(0, MAX_LISTED);
+  }, [options, search]);
+
+  const name = (
+    <Text
+      component="span"
+      className="depictio-scope-banner__name"
+      fw={700}
+      truncate="end"
+      data-testid="scope-banner-value"
+    >
+      {value ?? '…'}
+    </Text>
+  );
+  if (!onPick) return name;
+
+  return (
+    <Combobox
+      store={combobox}
+      position="bottom-start"
+      width={320}
+      withinPortal
+      onOptionSubmit={(v) => {
+        combobox.closeDropdown();
+        if (v !== value) onPick(v);
+      }}
+    >
+      <Combobox.Target>
+        <UnstyledButton
+          className="depictio-scope-banner__picker"
+          style={{ '--scope-radius': getRadius(style.radius) } as React.CSSProperties}
+          onClick={() => combobox.toggleDropdown()}
+          aria-label={`Change ${title}`}
+          aria-haspopup="listbox"
+          aria-expanded={combobox.dropdownOpened}
+          data-testid="scope-banner-picker"
+        >
+          {name}
+          <Icon icon="tabler:selector" width={18} height={18} aria-hidden />
+        </UnstyledButton>
+      </Combobox.Target>
+      <Combobox.Dropdown>
+        <Combobox.Search
+          value={search}
+          onChange={(e) => setSearch(e.currentTarget.value)}
+          placeholder={`Search ${title.toLowerCase()}`}
+        />
+        <Combobox.Options mah={320} style={{ overflowY: 'auto' }}>
+          {listed.length === 0 ? (
+            <Combobox.Empty>Nothing found</Combobox.Empty>
+          ) : (
+            listed.map((o) => (
+              <Combobox.Option
+                key={o.value}
+                value={o.value}
+                disabled={o.disabled}
+                active={o.value === value}
+              >
+                <Text size="sm" fw={o.value === value ? 600 : undefined} truncate="end">
+                  {o.value}
+                </Text>
+              </Combobox.Option>
+            ))
+          )}
+        </Combobox.Options>
+      </Combobox.Dropdown>
+    </Combobox>
+  );
+};
+
+const ScopeCard: React.FC<{
   metadata: StoredMetadata;
   value: string | undefined;
-  onChange?: (index: string) => void;
-}> = ({ metadata, value, onChange }) => {
+  onFilterChange?: (filter: InteractiveFilter) => void;
+}> = ({ metadata, value, onFilterChange }) => {
+  const style = useChromeStyle();
   const title = interactiveTitle(metadata);
   const columns = React.useMemo(() => bannerFactColumns(metadata.banner_facts), [metadata.banner_facts]);
   const { data: row } = useRowValues(
@@ -42,57 +148,81 @@ const ScopeRow: React.FC<{
     metadata.filter_expr,
   );
   const facts = bannerFactItems(metadata.banner_facts, row);
-  return (
-    <div className="depictio-scope-banner__row" data-component-id={metadata.index}>
-      <Group gap="xs" wrap="nowrap" style={{ minWidth: 0, flex: '0 1 auto' }}>
-        <span
-          className="depictio-scope-banner__badge"
-          style={
-            {
-              '--scope-accent': interactiveAccent(metadata) ?? 'var(--mantine-primary-color-filled)',
-            } as React.CSSProperties
-          }
-          aria-hidden
+  const { options } = useScopeOptions(metadata);
+  const steps = unitSteps(options, value);
+  const pick = onFilterChange
+    ? (v: string) => onFilterChange(filterEvent(metadata, [v]))
+    : undefined;
+
+  const stepKey = (dir: 'prev' | 'next') => {
+    const target = steps[dir];
+    const label = dir === 'prev' ? `Previous ${title.toLowerCase()}` : `Next ${title.toLowerCase()}`;
+    return (
+      <Tooltip label={target ? `${label}: ${target}` : label} withinPortal openDelay={300}>
+        <ActionIcon
+          variant="default"
+          radius={style.radius}
+          size={style.controlSize === 'xs' ? 'md' : 'lg'}
+          disabled={!target}
+          onClick={() => target && pick?.(target)}
+          aria-label={label}
+          data-testid={`scope-banner-${dir}`}
         >
-          <Icon icon={interactiveIcon(metadata)} width={16} height={16} />
-        </span>
-        <Text size="sm" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
+          <Icon
+            icon={dir === 'prev' ? 'tabler:chevron-left' : 'tabler:chevron-right'}
+            width={18}
+            height={18}
+          />
+        </ActionIcon>
+      </Tooltip>
+    );
+  };
+
+  return (
+    <div className="depictio-scope-banner__card" data-component-id={metadata.index}>
+      <span
+        className="depictio-scope-banner__badge"
+        style={
+          {
+            '--scope-accent': interactiveAccent(metadata) ?? 'var(--mantine-primary-color-filled)',
+          } as React.CSSProperties
+        }
+        aria-hidden
+      >
+        <Icon icon={interactiveIcon(metadata)} width={22} height={22} />
+      </span>
+      <div className="depictio-scope-banner__identity">
+        <Text className="depictio-scope-banner__eyebrow" c="dimmed" fw={600}>
           {title}
         </Text>
-        {value !== undefined ? (
-          <ScopeValueBadge value={value} color={scopeChipColor([metadata])} size="md" title={title} />
-        ) : (
-          <Text size="sm" c="dimmed">
-            …
-          </Text>
-        )}
-      </Group>
+        <UnitPicker title={title} value={value} options={options} onPick={pick} />
+      </div>
       {facts.length > 0 && (
-        <Group gap="md" wrap="wrap" className="depictio-scope-banner__facts">
+        <dl className="depictio-scope-banner__facts">
           {facts.map((f) => (
-            <Text key={f.label} size="sm" style={{ whiteSpace: 'nowrap' }}>
-              <Text span c="dimmed" inherit>
-                {f.label}
-              </Text>{' '}
-              <Text span fw={600} inherit>
-                {f.text}
-              </Text>
-            </Text>
+            <div key={f.label} className="depictio-scope-banner__fact">
+              <dd>
+                <Text component="span" fw={700} className="depictio-scope-banner__figure">
+                  {f.text}
+                </Text>
+              </dd>
+              <dt>
+                <Text component="span" size="xs" c="dimmed">
+                  {f.label}
+                </Text>
+              </dt>
+            </div>
           ))}
-        </Group>
+        </dl>
       )}
-      {onChange && (
-        <ChromeButton
-          role="secondary"
-          icon="filters"
-          label={`Change ${title}`}
-          collapse
-          onClick={() => onChange(metadata.index)}
-          className="depictio-scope-banner__change"
-          data-testid="scope-banner-change"
-        >
-          Change
-        </ChromeButton>
+      {pick && steps.total > 1 && (
+        <Group gap={6} wrap="nowrap" className="depictio-scope-banner__steps">
+          {stepKey('prev')}
+          <Text size="sm" c="dimmed" className="depictio-scope-banner__rank" aria-live="polite">
+            {steps.position > 0 ? `${steps.position} / ${steps.total}` : `${steps.total}`}
+          </Text>
+          {stepKey('next')}
+        </Group>
       )}
     </div>
   );
@@ -102,18 +232,18 @@ export const ScopeBanner: React.FC<{
   /** The filters that set the scope (`scopeUnits`); nothing renders without. */
   units: readonly StoredMetadata[];
   filters: readonly InteractiveFilter[];
-  /** Take the reader to the filter (open the panel, focus the control). */
-  onChange?: (index: string) => void;
-}> = ({ units, filters, onChange }) => {
+  /** Set the unit; without it the card is read-only. */
+  onFilterChange?: (filter: InteractiveFilter) => void;
+}> = ({ units, filters, onFilterChange }) => {
   if (units.length === 0) return null;
   return (
     <section className="depictio-scope-banner" data-testid="scope-banner" aria-label="Scope">
       {units.map((m) => (
-        <ScopeRow
+        <ScopeCard
           key={m.index}
           metadata={m}
           value={ownFilterValues(filters, m.index)[0]}
-          onChange={onChange}
+          onFilterChange={onFilterChange}
         />
       ))}
     </section>
