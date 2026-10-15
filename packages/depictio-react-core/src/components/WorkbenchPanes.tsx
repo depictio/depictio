@@ -1,24 +1,47 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
+import { ActionIcon, Group, Tooltip } from '@mantine/core';
+import { Icon } from '@iconify/react';
 
+import { WORKBENCH_MIN_PANE_PX } from './sectionGroups';
 import {
+  WORKBENCH_GUTTER_PX,
+  autofitTree,
   axisOf,
+  floorDeficit,
+  floorTree,
   gutterRange,
   moveGutterTree,
+  moveGutterWithin,
   nodeAt,
   parseStoredSplit,
   pathKey,
   resetGutter,
   sameFractions,
+  sameSizes,
   serializeStoredSplit,
+  snapTree,
   splitSignature,
   treeFractions,
+  treeRects,
   withFractions,
 } from './workbenchSplit';
-import type { SplitFractions, SplitNode, SplitTree, SplitUnit } from './workbenchSplit';
+import type {
+  FloorOf,
+  SplitFractions,
+  SplitNode,
+  SplitTree,
+  SplitUnit,
+} from './workbenchSplit';
 import './workbenchPanes.css';
 
-/** Thickness of a gutter, in px. Also the gap between two neighbouring tiles. */
-export const WORKBENCH_GUTTER_PX = 8;
+export { WORKBENCH_GUTTER_PX };
 
 /**
  * How the gutters behave.
@@ -31,39 +54,135 @@ export const WORKBENCH_GUTTER_PX = 8;
  */
 export type WorkbenchPanesMode = 'edit' | 'view' | 'static';
 
-export interface WorkbenchPanesProps {
+/** What the panes and the header's controls both read: the workbench's split,
+ *  where it stands and where its sizes are kept. */
+export interface WorkbenchSplitInput {
   /** The workbench's split tree, from its stored layout (`buildSplitTree`). */
   tree: SplitTree;
-  /** The grid cell of every tile, by the layout key the tree holds. */
-  cells: ReadonlyMap<string, React.ReactElement>;
   /** Height of the whole workbench, px: its rows at the fitted row height. */
   height: number;
-  /** One grid column and one stored row in the unit the tree is counted in:
-   *  the least a tile keeps, and a keyboard step. */
-  unit: SplitUnit;
+  /** The least each tile keeps by default, px, by layout key. A tile not listed
+   *  keeps `WORKBENCH_MIN_PANE_PX`; 0 leaves a tile (a card, a text) as short
+   *  as its stored size makes it. */
+  floors?: Readonly<Record<string, number>>;
   mode: WorkbenchPanesMode;
-  /** `edit`: the tree after a gutter move, to be written to the dashboard. */
-  onCommit?: (tree: SplitTree) => void;
   /** `view`: where the reader's gutter positions are kept. */
   storageKey?: string;
 }
 
-function readStored(key: string | undefined, signature: string): SplitFractions | null {
+export interface WorkbenchPanesProps extends WorkbenchSplitInput {
+  /** The grid cell of every tile, by the layout key the tree holds. */
+  cells: ReadonlyMap<string, React.ReactElement>;
+  /** One grid column and one stored row in the unit the tree is counted in:
+   *  the least a tile keeps, and a keyboard step. */
+  unit: SplitUnit;
+  /** `edit`: the tree after a gutter move, to be written to the dashboard. */
+  onCommit?: (tree: SplitTree) => void;
+}
+
+// ---- The reader's gutter positions, kept in this browser ---------------------
+//
+// One store for the panes and for the header's Reset: both read it, and either
+// may write it. A value that storage refuses (blocked, full) is held in memory
+// for as long as the page lives.
+
+const memory = new Map<string, string>();
+const listeners = new Set<() => void>();
+
+function readRaw(key: string | undefined): string | null {
   if (!key) return null;
   try {
-    return parseStoredSplit(window.localStorage.getItem(key), signature);
+    return window.localStorage.getItem(key) ?? memory.get(key) ?? null;
   } catch {
-    return null;
+    return memory.get(key) ?? null;
   }
 }
 
-function writeStored(key: string | undefined, signature: string, fractions: SplitFractions | null) {
+/** Keep `fractions` as the reader's positions for `key`, or forget them (null).
+ *  Every panes and controls component reading the key follows. */
+export function storeSplit(
+  key: string | undefined,
+  signature: string,
+  fractions: SplitFractions | null,
+): void {
   if (!key) return;
+  const raw = fractions ? serializeStoredSplit(signature, fractions) : null;
   try {
-    if (fractions) window.localStorage.setItem(key, serializeStoredSplit(signature, fractions));
+    if (raw) window.localStorage.setItem(key, raw);
     else window.localStorage.removeItem(key);
+    memory.delete(key);
   } catch {
     // Storage blocked or full: the positions last for as long as the page does.
+    if (raw) memory.set(key, raw);
+    else memory.delete(key);
+  }
+  listeners.forEach((listener) => listener());
+}
+
+function subscribeSplits(listener: () => void): () => void {
+  listeners.add(listener);
+  // Another tab of the same dashboard moved a gutter.
+  window.addEventListener('storage', listener);
+  return () => {
+    listeners.delete(listener);
+    window.removeEventListener('storage', listener);
+  };
+}
+
+/** The positions kept for `key`, for the structure `signature` names. */
+function useStoredSplit(key: string | undefined, signature: string): SplitFractions | null {
+  const raw = useSyncExternalStore(
+    subscribeSplits,
+    () => readRaw(key),
+    () => null,
+  );
+  return useMemo(() => parseStoredSplit(raw, signature), [raw, signature]);
+}
+
+/**
+ * The split as it is drawn. `base` is the dashboard's own, its stacks bent to
+ * the tiles' floors at this height; `current` adds a reader's own positions
+ * (`view`). `stable` is `tree` held still across renders that rebuild it.
+ */
+export function useWorkbenchSplit({ tree, height, floors, mode, storageKey }: WorkbenchSplitInput) {
+  // The parent rebuilds the tree on every render; panes and storage care about
+  // its content.
+  const treeKey = JSON.stringify(tree);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stable = useMemo(() => tree, [treeKey]);
+  const signature = useMemo(() => splitSignature(stable), [stable]);
+  const floorsKey = JSON.stringify(floors ?? null);
+  const floorOf = useMemo<FloorOf>(
+    () => (key) => floors?.[key] ?? WORKBENCH_MIN_PANE_PX,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [floorsKey],
+  );
+  const base = useMemo(() => floorTree(stable, height, floorOf), [stable, height, floorOf]);
+  const stored = useStoredSplit(mode === 'view' ? storageKey : undefined, signature);
+  const current = useMemo(
+    () => (mode === 'view' ? withFractions(base, stored) : base),
+    [base, stored, mode],
+  );
+  return { stable, signature, base, current, stored, floorOf };
+}
+
+interface CommitTarget {
+  mode: WorkbenchPanesMode;
+  base: SplitTree;
+  signature: string;
+  storageKey?: string;
+  onCommit?: (tree: SplitTree) => void;
+}
+
+/** Make `next` the workbench's layout: written to the dashboard in whole units
+ *  in the editor, kept in this browser for a reader. */
+function commitSplit(next: SplitTree, to: CommitTarget): void {
+  if (to.mode === 'edit') {
+    to.onCommit?.(snapTree(next));
+  } else if (to.mode === 'view') {
+    const fractions = treeFractions(next);
+    const value = sameFractions(fractions, treeFractions(to.base)) ? null : fractions;
+    storeSplit(to.storageKey, to.signature, value);
   }
 }
 
@@ -99,36 +218,20 @@ const WorkbenchPanes: React.FC<WorkbenchPanesProps> = ({
   tree,
   cells,
   height,
+  floors,
   unit,
   mode,
   onCommit,
   storageKey,
 }) => {
-  // The parent rebuilds the tree on every render; panes and storage care about
-  // its content.
-  const treeKey = JSON.stringify(tree);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const base = useMemo(() => tree, [treeKey]);
-  const signature = useMemo(() => splitSignature(base), [base]);
+  const { base, current, signature, floorOf } = useWorkbenchSplit({
+    tree,
+    height,
+    floors,
+    mode,
+    storageKey,
+  });
 
-  // The reader's own gutter positions. Read once on mount, so the first paint
-  // is already theirs, and again when the structure or key changes under us.
-  const [stored, setStored] = useState<SplitFractions | null>(() =>
-    mode === 'view' ? readStored(storageKey, signature) : null,
-  );
-  const loadedFor = useRef({ storageKey, signature });
-  useEffect(() => {
-    if (loadedFor.current.storageKey === storageKey && loadedFor.current.signature === signature) {
-      return;
-    }
-    loadedFor.current = { storageKey, signature };
-    setStored(mode === 'view' ? readStored(storageKey, signature) : null);
-  }, [storageKey, signature, mode]);
-
-  const current = useMemo(
-    () => (mode === 'view' ? withFractions(base, stored) : base),
-    [base, stored, mode],
-  );
   // The tree being dragged, while a drag is on.
   const [live, setLive] = useState<SplitTree | null>(null);
   const shown = live ?? current;
@@ -170,22 +273,27 @@ const WorkbenchPanes: React.FC<WorkbenchPanesProps> = ({
   );
 
   // What the handlers need from the latest render, without re-binding them.
-  const latest = useRef({ shown, base, mode, unit, onCommit, storageKey, signature });
-  latest.current = { shown, base, mode, unit, onCommit, storageKey, signature };
+  const latest = useRef({ shown, base, mode, unit, onCommit, storageKey, signature, height, floorOf });
+  latest.current = { shown, base, mode, unit, onCommit, storageKey, signature, height, floorOf };
 
-  /** Make `next` the workbench's layout: written to the dashboard in the
-   *  editor, kept in this browser for a reader. */
-  const commit = useCallback((next: SplitTree) => {
+  const commit = useCallback((next: SplitTree) => commitSplit(next, latest.current), []);
+
+  /** `delta` units of a gutter of `from`. The editor writes whole units and
+   *  keeps every tile on its floor, so there a move stops where a tile would go
+   *  under; a reader's is free down to one unit. */
+  const moveBy = (from: SplitTree, path: number[], gutter: number, delta: number) => {
     const now = latest.current;
-    if (now.mode === 'edit') {
-      now.onCommit?.(next);
-    } else if (now.mode === 'view') {
-      const fractions = treeFractions(next);
-      const value = sameFractions(fractions, treeFractions(now.base)) ? null : fractions;
-      setStored(value);
-      writeStored(now.storageKey, now.signature, value);
-    }
-  }, []);
+    if (now.mode !== 'edit') return moveGutterTree(from, path, gutter, delta, now.unit);
+    const was = floorDeficit(from, now.height, now.floorOf);
+    return moveGutterWithin(
+      from,
+      path,
+      gutter,
+      Math.round(delta),
+      now.unit,
+      (next) => floorDeficit(next, now.height, now.floorOf) <= was + 1e-6,
+    );
+  };
 
   const begin = (event: React.PointerEvent<HTMLDivElement>, path: number[], gutter: number) => {
     if (!interactive || event.button !== 0) return;
@@ -223,16 +331,9 @@ const WorkbenchPanes: React.FC<WorkbenchPanesProps> = ({
     const node = nodeAt(d.from.root, d.path);
     if (!node || node.kind !== 'split') return;
     const at = axisOf(node.dir) === 'x' ? event.clientX : event.clientY;
-    const wanted = (at - d.start) / d.pxPerUnit;
     // The editor stores whole units, so the handle snaps to them as it goes: what
     // is seen is what will be saved.
-    const moved = moveGutterTree(
-      d.from,
-      d.path,
-      d.gutter,
-      latest.current.mode === 'edit' ? Math.round(wanted) : wanted,
-      latest.current.unit,
-    );
+    const moved = moveBy(d.from, d.path, d.gutter, (at - d.start) / d.pxPerUnit);
     if (moved.delta === d.applied) return;
     d.applied = moved.delta;
     d.latest = moved.tree;
@@ -274,7 +375,7 @@ const WorkbenchPanes: React.FC<WorkbenchPanesProps> = ({
     if (k < 0) return;
     event.preventDefault();
     const step = unit[axisOf(node.dir)] * (event.shiftKey ? 2 : 1);
-    const moved = moveGutterTree(shown, path, gutter, k === 0 ? -step : step, unit);
+    const moved = moveBy(shown, path, gutter, k === 0 ? -step : step);
     if (moved.delta !== 0) commit(moved.tree);
   };
 
@@ -361,6 +462,116 @@ const WorkbenchPanes: React.FC<WorkbenchPanesProps> = ({
     >
       {renderNode(shown.root, [], 1)}
     </div>
+  );
+};
+
+export interface WorkbenchControlsProps extends WorkbenchSplitInput {
+  /** `edit`: the layout the section had when the dashboard was opened, which
+   *  Reset writes back. */
+  baseline?: SplitTree | null;
+  /** The height each tile's content asks for, px, by layout key: what the
+   *  renderers publish (`autofit.ts`). */
+  demands?: Readonly<Record<string, number>>;
+  /** `edit`: the tree after a reset or an autofit, to be written to the dashboard. */
+  onCommit?: (tree: SplitTree) => void;
+}
+
+/**
+ * The two actions of a workbench's header, beside the section's other controls:
+ * Reset puts the split back to the dashboard's default, Autofit sizes each stack
+ * from what its tiles ask for.
+ *
+ * Both act the way a drag does. A reader's result is theirs, kept in this
+ * browser (Reset forgets it); the editor's goes through the layout save path
+ * (Reset writes back `baseline`, the layout the section was opened with). Each
+ * is greyed out, not hidden, while it would change nothing, so the header does
+ * not shift as tiles load.
+ */
+export const WorkbenchControls: React.FC<WorkbenchControlsProps> = ({
+  baseline,
+  demands,
+  onCommit,
+  ...input
+}) => {
+  const { mode, storageKey } = input;
+  const { stable, signature, base, current, stored, floorOf } = useWorkbenchSplit(input);
+  const edit = mode === 'edit';
+
+  const asked = useMemo(
+    () => [...treeRects(current).keys()].some((key) => (demands?.[key] ?? 0) > 0),
+    [current, demands],
+  );
+  const fitted = useMemo(
+    () => autofitTree(current, input.height, (key) => demands?.[key], floorOf),
+    [current, input.height, demands, floorOf],
+  );
+  const target = useMemo(() => (edit ? snapTree(fitted) : fitted), [edit, fitted]);
+
+  const canFit =
+    mode !== 'static' &&
+    asked &&
+    (edit
+      ? !sameSizes(target, snapTree(current))
+      : !sameFractions(treeFractions(target), treeFractions(current), 0.002));
+  const canReset =
+    mode === 'view' ? stored !== null : edit && !!baseline && !sameSizes(stable, baseline);
+  if (mode === 'static') return null;
+
+  const to: CommitTarget = { mode, base, signature, storageKey, onCommit };
+  const reset = () => {
+    if (!canReset) return;
+    if (mode === 'view') storeSplit(storageKey, signature, null);
+    else if (baseline) onCommit?.(baseline);
+  };
+  const fit = () => {
+    if (canFit) commitSplit(fitted, to);
+  };
+
+  const resetTip = canReset
+    ? edit
+      ? 'Restore the sizes this section had when the dashboard was opened'
+      : "Reset the tile sizes to the dashboard's default"
+    : 'The tiles are at their default sizes';
+  const fitTip = canFit
+    ? 'Fit each stack of tiles to what its content needs'
+    : asked
+      ? 'The tiles already fit their content'
+      : 'No tile has reported the height its content needs yet';
+
+  const button = (
+    label: string,
+    tip: string,
+    icon: string,
+    enabled: boolean,
+    onClick: () => void,
+    testId: string,
+  ) => (
+    <Tooltip label={tip} withArrow multiline w={240} openDelay={300}>
+      {/* `data-disabled` and not `disabled`: a disabled button takes no hover,
+          and the tooltip is what says why it is greyed out. */}
+      <ActionIcon
+        size="sm"
+        variant="subtle"
+        color="gray"
+        aria-label={label}
+        aria-disabled={!enabled}
+        data-disabled={!enabled || undefined}
+        data-testid={testId}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (enabled) onClick();
+        }}
+      >
+        <Icon icon={icon} width={16} />
+      </ActionIcon>
+    </Tooltip>
+  );
+
+  return (
+    <Group gap={2} wrap="nowrap" data-testid="workbench-controls">
+      {button('Fit tiles to their content', fitTip, 'mdi:arrow-expand-vertical', canFit, fit, 'workbench-autofit')}
+      {button('Reset tile sizes', resetTip, 'mdi:restore', canReset, reset, 'workbench-reset')}
+    </Group>
   );
 };
 

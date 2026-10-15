@@ -74,8 +74,9 @@ export const SectionAccordionItem: React.FC<{
   children: React.ReactNode;
   /** `appearance: plain`: no frame, no chevron, a heading over its tiles. */
   plain?: boolean;
-  /** Extra class on the item: `is-workbench` tightens its paddings
-   *  (sectionAccordion.css, glass.css). Appended to `is-plain` when both apply. */
+  /** Extra class on the item: `is-workbench` tightens its paddings and draws
+   *  its tiles flatter and closer (sectionAccordion.css, glass.css). Appended to
+   *  `is-plain` when both apply. */
   className?: string;
 }> = ({ value, color, actions, children, plain = false, className }) => {
   const [control, panel] = React.Children.toArray(children);

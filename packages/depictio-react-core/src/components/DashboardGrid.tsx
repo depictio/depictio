@@ -61,11 +61,25 @@ import {
   SPLIT_ROW_PX,
 } from './autofit';
 import { DensityContext } from './density';
-import { effectiveDisplay, fitRowPx, layoutRows } from './sectionGroups';
+import {
+  WORKBENCH_MIN_PANE_PX,
+  effectiveDisplay,
+  fitRowPx,
+  layoutRows,
+  minRowPxForTiles,
+  rowFloorPx,
+} from './sectionGroups';
 import type { LayoutOverride } from './sectionGroups';
-import WorkbenchPanes from './WorkbenchPanes';
+import WorkbenchPanes, { WorkbenchControls } from './WorkbenchPanes';
 import type { WorkbenchPanesMode } from './WorkbenchPanes';
-import { buildSplitTree, treeLayouts, workbenchSplitStorageKey } from './workbenchSplit';
+import {
+  WORKBENCH_GUTTER_PX,
+  buildSplitTree,
+  splitSignature,
+  treeLayouts,
+  treeMinHeightPx,
+  workbenchSplitStorageKey,
+} from './workbenchSplit';
 import type { SplitTree } from './workbenchSplit';
 import {
   applyRecordPanels,
@@ -89,6 +103,27 @@ const UNSECTIONED_REST_KEY = '\u0000unsectioned-rest';
 const FALLBACK_CHROME_PX = 64;
 /** A scrolling container shorter than this is not a screen worth fitting to. */
 const MIN_FIT_VIEWPORT_PX = 240;
+
+/** How a workbench section is laid out this render: its layout, the panes it
+ *  is cut into (null where react-grid-layout draws it), the least each tile
+ *  keeps, and how a change to the split is written. */
+interface WorkbenchPlan {
+  layout: Layout[];
+  width: number;
+  /** Row height, px, of the section's grid: fitted to the screen, and never
+   *  under what the tiles' floors need. */
+  rowPx: number;
+  tree: SplitTree | null;
+  mode: WorkbenchPanesMode | null;
+  /** The least each tile keeps by default, px, by layout key. */
+  floors: Record<string, number>;
+  /** Height of the panes, px; 0 without a tree. */
+  height: number;
+  /** `edit`: the layout the section was opened with, for Reset. */
+  baseline: SplitTree | null;
+  /** Write `next` into the dashboard like a resize of the grid would. */
+  commit: (next: SplitTree) => void;
+}
 
 interface DashboardGridProps {
   dashboardId: string;
@@ -319,6 +354,9 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // rightmost component in every section loses its edge. Measured rather than
   // restated from the CSS, so the treatment can change without this drifting.
   const [sectionInset, setSectionInset] = useState(0);
+  // The same for a workbench, whose frame pads its tiles less (sectionAccordion.css,
+  // glass.css): measured on a workbench of its own, null until there is one.
+  const [workbenchInset, setWorkbenchInset] = useState<number | null>(null);
   const measureRef = useRef<() => void>(() => {});
   useEffect(() => {
     if (!wrapperRef.current || typeof ResizeObserver === 'undefined') return;
@@ -328,11 +366,15 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       const next = wrapper.getBoundingClientRect().width;
       if (!next || next <= 0) return;
       setContainerWidth(Math.floor(next));
-      // Every section draws the same chrome (a workbench only tightens its
-      // block paddings), so one of them answers for all.
-      const probe = wrapper.querySelector('[data-section-grid]');
+      // Every ordinary section draws the same chrome, so one of them answers
+      // for all; a workbench draws a tighter one, and answers for itself.
+      const probe = wrapper.querySelector('[data-section-grid]:not([data-workbench-grid])');
       if (probe) {
         setSectionInset(Math.max(0, Math.round(next - probe.getBoundingClientRect().width)));
+      }
+      const bench = wrapper.querySelector('[data-workbench-grid]');
+      if (bench) {
+        setWorkbenchInset(Math.max(0, Math.round(next - bench.getBoundingClientRect().width)));
       }
     };
     measureRef.current = measure;
@@ -550,6 +592,13 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // a react-grid-layout does, so the order remembered above goes stale for them:
   // another section's drag must merge their stored layout, not that.
   const splitSectionsRef = useRef<Set<string>>(new Set());
+  // The editor's Reset restores a workbench to the layout it was opened with.
+  // Held per section for as long as this grid lives: the first layout it sees,
+  // replaced when the section is re-cut or changes from outside (a restored
+  // version), never by the section's own gutters (`ours` marks those writes).
+  const workbenchBaselines = useRef(
+    new Map<string, { structure: string; baseline: SplitTree; seen: string; ours: boolean }>(),
+  );
 
   // Text tiles size themselves to their prose, and cards to their content. A
   // stored height is a guess made when the component was written, and it is
@@ -861,17 +910,21 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
 
   // A workbench fills the visible height: its rows (the layout's, counted in the
   // unit the grid lays out in) and the gaps between them share what the frame
-  // leaves.
+  // leaves. Never less than its tiles need to keep their own minimum
+  // (`floorRowPx`): a stack of three is taller than a laptop's screen, and the
+  // reader scrolls a little instead of reading three slivers.
   const normalRowPx = readOnly ? SPLIT_ROW_PX : GRID_ROW_PX;
-  const workbenchRowPx = (layout: Layout[]) =>
+  const workbenchRowPx = (layout: Layout[], floorRowPx: number) =>
     viewportHeight
       ? fitRowPx(
           layoutRows(layout),
           viewportHeight - (workbenchChrome || FALLBACK_CHROME_PX),
           GRID_ROW_GAP_PX,
           normalRowPx,
+          1,
+          floorRowPx,
         )
-      : normalRowPx;
+      : Math.max(normalRowPx, floorRowPx);
 
   const showOverlays = editMode && typeof renderItemOverlay === 'function';
   const rootClass =
@@ -1009,7 +1062,11 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // A filter bar's other members sit under the bar, outside any section box.
   const gridWidth = (section: ComponentSection) =>
     section.sectionName && !isStripSection(section.spec)
-      ? Math.max(100, containerWidth - sectionInset)
+      ? Math.max(
+          100,
+          containerWidth -
+            (kindOf(section) === 'workbench' ? (workbenchInset ?? sectionInset) : sectionInset),
+        )
       : containerWidth;
 
   /**
@@ -1186,9 +1243,91 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
             : renderAccordion(run.sections),
         );
 
+  /** How a workbench section is laid out: shared by its body and its header's
+   *  controls, so both see one answer per render. */
+  const workbenchPlans = new Map<string, WorkbenchPlan>();
+  const planFor = (section: ComponentSection): WorkbenchPlan => {
+    const cached = workbenchPlans.get(section.key);
+    if (cached) return cached;
+    const layout = layoutsForSection(section.members, section.spec, false);
+    const width = gridWidth(section);
+    const found = buildSplitTree(layout);
+    const mode: WorkbenchPanesMode | null =
+      !found || found.root.kind !== 'split'
+        ? null
+        : readOnly
+          ? 'view'
+          : isResizable && breakpointForWidth(width) === GRID_WIDEST_BREAKPOINT
+            ? 'edit'
+            : null;
+    const tree = mode ? found : null;
+    // What each tile keeps by default: a view its minimum, a card or a line of
+    // text only the height it was given.
+    const types = new Map(section.members.map((m) => [m.index, m.component_type]));
+    const floors: Record<string, number> = {};
+    for (const l of layout) {
+      const type = types.get(l.i);
+      floors[l.i] = type === 'card' || type === 'text' ? 0 : WORKBENCH_MIN_PANE_PX;
+    }
+    const floorOf = (key: string) => floors[key] ?? WORKBENCH_MIN_PANE_PX;
+    // The row height the tiles' floors ask for: summed down each stack of panes,
+    // or the tightest tile where react-grid-layout draws it.
+    const floorRowPx = tree
+      ? rowFloorPx(treeMinHeightPx(tree, floorOf, WORKBENCH_GUTTER_PX), tree.h, GRID_ROW_GAP_PX)
+      : minRowPxForTiles(layout, floorOf, GRID_ROW_GAP_PX);
+    const rowPx = workbenchRowPx(layout, floorRowPx);
+
+    let baseline: SplitTree | null = null;
+    const id = `${dashboardId}:${section.key}`;
+    if (tree && mode === 'edit') {
+      const structure = splitSignature(tree);
+      const seen = JSON.stringify(tree.root);
+      let held = workbenchBaselines.current.get(id);
+      if (!held || held.structure !== structure) {
+        held = { structure, baseline: tree, seen, ours: false };
+        workbenchBaselines.current.set(id, held);
+      } else if (held.seen !== seen) {
+        // Moved by one of this section's gutters (or its Reset), or from outside.
+        if (!held.ours) held.baseline = tree;
+        held.seen = seen;
+        held.ours = false;
+      }
+      baseline = held.baseline;
+    }
+
+    // Written like a resize of the grid: a tile whose height changed leaves
+    // autofit (`handleResizeStop`), then the section's layout is reported.
+    const commit = (next: SplitTree) => {
+      const held = workbenchBaselines.current.get(id);
+      if (held) held.ours = true;
+      const moved = treeLayouts(next, layout);
+      const was = new Map(layout.map((l) => [l.i, l]));
+      for (const item of moved) {
+        const old = was.get(item.i);
+        if (old) handleResizeStop(old, item, width);
+      }
+      handleSectionLayoutChange(section.key, moved, width);
+    };
+    const plan: WorkbenchPlan = {
+      layout,
+      width,
+      rowPx,
+      tree,
+      mode,
+      floors,
+      // What the grid would be: the rows and the gaps between them.
+      height: tree ? tree.h * rowPx + (tree.h - 1) * GRID_ROW_GAP_PX : 0,
+      baseline,
+      commit,
+    };
+    workbenchPlans.set(section.key, plan);
+    return plan;
+  };
+
   /** A workbench: the section's stored layout at a row height that fits the
-   *  visible screen. Not autofitted (growing a tile would push the section off
-   *  the screen it was fitted to).
+   *  visible screen, and tall enough that each tile keeps its minimum. Not
+   *  autofitted (growing a tile would push the section off the screen it was
+   *  fitted to).
    *
    *  A layout that cuts into its tiles by straight edge-to-edge lines (every
    *  shipped workbench does) is drawn as split panes with a draggable gutter
@@ -1202,28 +1341,17 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
    *  and columns are the stored ones, so a drag still writes the right
    *  position. */
   const renderWorkbench = (section: ComponentSection) => {
-    const layout = layoutsForSection(section.members, section.spec, false);
-    const rowPx = workbenchRowPx(layout);
-    const width = gridWidth(section);
-    const tree = buildSplitTree(layout);
-    const mode: WorkbenchPanesMode | null =
-      !tree || tree.root.kind !== 'split'
-        ? null
-        : readOnly
-          ? 'view'
-          : isResizable && breakpointForWidth(width) === GRID_WIDEST_BREAKPOINT
-            ? 'edit'
-            : null;
-    if (!tree || !mode) {
+    const plan = planFor(section);
+    if (!plan.tree || !plan.mode) {
       splitSectionsRef.current.delete(section.key);
       return (
         <DensityContext.Provider value="compact">
           {renderTiles({
-            layouts: responsiveLayouts(layout),
-            rowHeight: rowPx,
-            width,
+            layouts: responsiveLayouts(plan.layout),
+            rowHeight: plan.rowPx,
+            width: plan.width,
             persistKey: section.key,
-            children: cellsFor(section, layout),
+            children: cellsFor(section, plan.layout),
           })}
         </DensityContext.Provider>
       );
@@ -1233,32 +1361,57 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     for (const cell of cellsBySection.get(section.key) ?? []) {
       cells.set(cell.id, cell.node as React.ReactElement);
     }
-    // Written like a resize of the grid: a tile whose height changed leaves
-    // autofit (`handleResizeStop`), then the section's layout is reported.
-    const commit = (next: SplitTree) => {
-      const moved = treeLayouts(next, layout);
-      const was = new Map(layout.map((l) => [l.i, l]));
-      for (const item of moved) {
-        const old = was.get(item.i);
-        if (old) handleResizeStop(old, item, width);
-      }
-      handleSectionLayoutChange(section.key, moved, width);
-    };
     return (
       <DensityContext.Provider value="compact">
         <WorkbenchPanes
-          tree={tree}
+          tree={plan.tree}
           cells={cells}
-          // What the grid would be: the rows and the gaps between them.
-          height={tree.h * rowPx + (tree.h - 1) * GRID_ROW_GAP_PX}
+          height={plan.height}
+          floors={plan.floors}
           // A read-only grid counts in half rows; the least a tile keeps and a
           // keyboard step are one stored row either way.
           unit={{ x: 1, y: readOnly ? ROW_SPLIT : 1 }}
-          mode={mode}
-          onCommit={commit}
+          mode={plan.mode}
+          onCommit={plan.commit}
           storageKey={workbenchSplitStorageKey(dashboardId, section.key)}
         />
       </DensityContext.Provider>
+    );
+  };
+
+  /** Reset and Autofit, in the header of a workbench drawn as panes. */
+  const renderWorkbenchControls = (section: ComponentSection) => {
+    const plan = planFor(section);
+    if (!plan.tree || !plan.mode) return null;
+    return (
+      <WorkbenchControls
+        tree={plan.tree}
+        baseline={plan.baseline}
+        height={plan.height}
+        floors={plan.floors}
+        demands={autoHeights}
+        mode={plan.mode}
+        onCommit={plan.commit}
+        storageKey={workbenchSplitStorageKey(dashboardId, section.key)}
+      />
+    );
+  };
+
+  /** What sits beside a section's fold control: the host's (the editor's "…")
+   *  and, for an open workbench, its own Reset and Autofit before it. */
+  const sectionActions = (section: ComponentSection, kind: 'grid' | 'workbench') => {
+    const host = renderSectionActions?.(section.sectionName ?? null);
+    const own =
+      kind === 'workbench' && sectionCollapse.isOpen(section.key)
+        ? renderWorkbenchControls(section)
+        : null;
+    return own ? (
+      <Group gap={4} wrap="nowrap" align="center">
+        {own}
+        {host}
+      </Group>
+    ) : (
+      host
     );
   };
 
@@ -1299,7 +1452,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
               key={section.key}
               value={section.key}
               color={resolveSectionColor(section.spec?.color, section.sectionName)}
-              actions={renderSectionActions?.(section.sectionName ?? null)}
+              actions={sectionActions(section, kind)}
               plain={isPlain(section)}
               className={kind === 'workbench' ? 'is-workbench' : undefined}
             >

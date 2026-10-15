@@ -601,8 +601,9 @@
   padding: 8px 14px 14px;
 }
 /* Workbench sections: the same paper frame and accent edge, with the header on
- * one line and a thin margin around the tiles. Block paddings only: the inline
- * ones stay those above, so the grid's measured inset is shared. */
+ * one line and the tiles close together: one surface of parts, not a stack of
+ * cards. The inline padding is the workbench's own (DashboardGrid measures what
+ * the frame costs in width on a workbench of its own, `workbenchInset`). */
 :root[data-chrome='glass'] .depictio-section-accordion:not(.is-compact) .depictio-section-item.is-workbench:not(.is-plain) .depictio-section-control {
   padding-block: 8px;
 }
@@ -610,7 +611,20 @@
   padding-block: 8px 4px;
 }
 :root[data-chrome='glass'] .depictio-section-accordion:not(.is-compact) .depictio-section-item.is-workbench:not(.is-plain) .depictio-section-content {
-  padding-block: 4px 10px;
+  padding: 2px 8px 8px;
+}
+/* Its tiles lie flatter than elsewhere: half the radius, the hairline without
+ * the floating shadow, and a tighter inner edge with less air under the title.
+ * The hover rim of the canvas still applies. */
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .is-workbench:not(.is-plain) :is(.dc-tile.mantine-Paper-root, .depictio-component-chrome:is([data-component-type='map'], [data-component-type='advanced_viz']) > .mantine-Paper-root) {
+  border-radius: calc(var(--gl-tile-radius) / 2) !important;
+  box-shadow: none !important;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .is-workbench:not(.is-plain) :is(.dc-tile.mantine-Paper-root:not([data-showcase]), .depictio-component-chrome:is([data-component-type='map'], [data-component-type='advanced_viz']) > .mantine-Paper-root) {
+  padding: 8px 10px !important;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .is-workbench:not(.is-plain) :is(.dc-tile.mantine-Paper-root:not([data-showcase]), .depictio-component-chrome:is([data-component-type='map'], [data-component-type='advanced_viz']) > .mantine-Paper-root) > :is(.mantine-Group-root, .mantine-Stack-root):first-child:has(> .mantine-Text-root:first-child) {
+  margin-bottom: 6px !important;
 }
 /* Hover on the canvas, one system:
    - a section answers on its header row only, with the panels' row tint;

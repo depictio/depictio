@@ -3,7 +3,9 @@
 /* A workbench drawn as nested flex panes (WorkbenchPanes.tsx). Tiles are the
    grid's own cells, placed by flex instead of by react-grid-layout, with a
    gutter between neighbours. Colours come from Mantine's variables, so Paper
-   and Classic draw the same line. */
+   and Classic draw the same line. The gutter is 4px (WORKBENCH_GUTTER_PX): the
+   tiles read as parts of one surface, and the grab zone is wider than the gap
+   (see `::after`). */
 
 .depictio-workbench-split {
   display: flex;
@@ -25,6 +27,14 @@
   box-sizing: border-box;
 }
 
+/* A tile fills its pane exactly and answers for its own content: whatever it
+   holds that is taller or wider than the pane is cut at the pane's edge, never
+   painted over the tile beside or below it. The cell is a flex column whose one
+   child takes the whole of it (DashboardGrid builds it so). */
+.depictio-workbench-pane {
+  overflow: hidden;
+}
+
 /* Tiles are placed by the split, not dragged: the grid's handle would do
    nothing here. To move a tile to another position, `?layout=classic` draws the
    section as the plain grid. `!important`: the handle's own display is an
@@ -41,6 +51,9 @@
 
 .depictio-workbench-gutter {
   position: relative;
+  /* Above the tiles, so the part of the grab zone that lies over their edges
+     is the gutter's and not theirs. */
+  z-index: 2;
   box-sizing: border-box;
   outline: none;
   /* Pointer events only: the browser's own pan gesture would otherwise fight a
@@ -60,29 +73,37 @@
   cursor: default;
 }
 
-/* The line is drawn inside the gap, centred, and only once there is something
-   to say: on hover, while held, and for keyboard focus. */
+/* The grab zone: 3px more on each side of the gap, over the tiles' own edges,
+   so a 4px gutter is still easy to hold. */
+.depictio-workbench-gutter:not([data-static])::after {
+  content: '';
+  position: absolute;
+}
+
+.depictio-workbench-gutter[data-dir='row']:not([data-static])::after {
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  right: -3px;
+}
+
+.depictio-workbench-gutter[data-dir='column']:not([data-static])::after {
+  left: 0;
+  right: 0;
+  top: -3px;
+  bottom: -3px;
+}
+
+/* The line fills the gap, and only once there is something to say: on hover,
+   while held, and for keyboard focus. */
 .depictio-workbench-gutter::before {
   content: '';
   position: absolute;
+  inset: 0;
   border-radius: 2px;
   background: transparent;
   transition: background-color 120ms ease;
   pointer-events: none;
-}
-
-.depictio-workbench-gutter[data-dir='row']::before {
-  top: 0;
-  bottom: 0;
-  left: calc(50% - 1px);
-  width: 2px;
-}
-
-.depictio-workbench-gutter[data-dir='column']::before {
-  left: 0;
-  right: 0;
-  top: calc(50% - 1px);
-  height: 2px;
 }
 
 .depictio-workbench-gutter:not([data-static]):hover::before {

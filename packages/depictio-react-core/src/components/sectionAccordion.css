@@ -158,14 +158,27 @@
 
 /* Linked tiles that share one screen (`display: workbench`) spend their height
    on the tiles, not on the frame: the header is one line and the body keeps
-   only a thin margin above and below its tiles. Block paddings only. The inline
-   ones stay those of any section, so a grid's width inside a workbench is the
-   one DashboardGrid measured on an ordinary section (`sectionInset`). */
+   only a thin margin around its tiles, which sit 4px apart. The inline padding
+   is the workbench's own: DashboardGrid measures what the frame costs in width
+   on a workbench of its own (`workbenchInset`), apart from ordinary sections. */
 .depictio-section-accordion:not(.is-compact) .depictio-section-item.is-workbench:not(.is-plain) .depictio-section-control,
 .depictio-section-accordion:not(.is-compact) .depictio-section-item.is-workbench:not(.is-plain)[data-active] .depictio-section-control {
   padding-block: calc(var(--mantine-spacing-xs) / 2);
 }
 
 .depictio-section-accordion:not(.is-compact) .depictio-section-item.is-workbench:not(.is-plain) .depictio-section-content {
-  padding-block: var(--mantine-spacing-xs);
+  padding: calc(var(--mantine-spacing-xs) / 2);
+}
+
+/* The tiles of a workbench lie flatter and closer than elsewhere: a smaller
+   radius, a hairline border and a tighter padding, so the section reads as one
+   surface of parts and not as a stack of cards. `!important`: the renderers set
+   these on their frame inline. A showcase tile keeps its own frame. */
+.depictio-section-item.is-workbench:not(.is-plain) :is(
+    .dc-tile.mantine-Paper-root:not([data-showcase]),
+    .depictio-component-chrome > .mantine-Paper-root:not([data-showcase])
+  ) {
+  border-radius: var(--mantine-radius-sm) !important;
+  border-width: 1px !important;
+  padding: var(--mantine-spacing-xs) !important;
 }
