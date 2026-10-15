@@ -3237,7 +3237,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   refreshTick,
   onOpenComponentHistory,
 }) => {
-  // `?layout=classic|dock`, as in the viewer.
+  // `?layout=classic`, as in the viewer.
   const layoutOverride = useLayoutOverride();
   const allComponents = useMemo(
     () => [...cardComponents, ...otherComponents, ...barComponents],

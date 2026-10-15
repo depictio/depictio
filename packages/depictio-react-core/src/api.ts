@@ -635,9 +635,8 @@ export interface FilterSectionSpec {
    *  interactive components naming it leave the filter panel and render as one
    *  compact row. Unset (or `grid`) is one tile each on the grid.
    *  `workbench` holds the section's tiles in one screen height, so linked
-   *  views stay side by side; `dock` keeps them in a sticky column beside the
-   *  scrolling sections. Both fall back to a normal section below `md`. */
-  display?: 'grid' | 'strip' | 'workbench' | 'dock' | null;
+   *  views stay side by side; it falls back to a normal section below `md`. */
+  display?: 'grid' | 'strip' | 'workbench' | null;
   /** Grid sections of tiles: a filter bar of the section's own, under its
    *  heading. The interactive components naming the section render there, and
    *  their values narrow only this section's tiles (see `filterScope.ts`).

@@ -1,11 +1,10 @@
 /**
- * `?layout=` of this page: how workbench and dock sections are drawn.
+ * `?layout=` of this page: how workbench sections are drawn.
  *
  * A dashboard declares its linked tiles as `display: workbench` (one screen
- * height) or `display: dock` (a sticky column). The reader can compare the
- * layouts on the same tab: `?layout=classic` draws both as ordinary sections,
- * `?layout=dock` turns workbenches into docks, and `?layout=yaml` (or
- * `default`) goes back to what the dashboard declares.
+ * height). The reader can compare it with the plain grid on the same tab:
+ * `?layout=classic` draws workbenches as ordinary sections, and `?layout=yaml`
+ * (or `default`) goes back to what the dashboard declares.
  *
  * Read like `?chrome=` (chrome/variants/index.ts) and kept for the browser
  * session, so the pick survives a tab switch that drops the query string.
@@ -16,7 +15,7 @@ import type { LayoutOverride } from 'depictio-react-core';
 const SESSION_KEY = 'depictio-layout-session';
 
 function asOverride(value: string | null | undefined): LayoutOverride {
-  return value === 'classic' || value === 'dock' ? value : null;
+  return value === 'classic' ? value : null;
 }
 
 /** `?layout=` of this page, else the last one this browser session saw. */

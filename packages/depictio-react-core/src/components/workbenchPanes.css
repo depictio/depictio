@@ -1,0 +1,95 @@
+/* ------------------------------------------------- workbench split (gutters) */
+
+/* A workbench drawn as nested flex panes (WorkbenchPanes.tsx). Tiles are the
+   grid's own cells, placed by flex instead of by react-grid-layout, with a
+   gutter between neighbours. Colours come from Mantine's variables, so Paper
+   and Classic draw the same line. */
+
+.depictio-workbench-split {
+  display: flex;
+  min-width: 0;
+}
+
+/* It is a `.react-grid-layout` (screenshots and tiles look for one), and the
+   grid's stylesheet eases that class's height. Here a tile re-measures on the
+   window `resize` that follows a change, so the height must already be the new
+   one by then. */
+.depictio-workbench-split.react-grid-layout {
+  transition: none;
+}
+
+.depictio-workbench-node,
+.depictio-workbench-pane {
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+/* Tiles are placed by the split, not dragged: the grid's handle would do
+   nothing here. To move a tile to another position, `?layout=classic` draws the
+   section as the plain grid. `!important`: the handle's own display is an
+   inline style. */
+.depictio-workbench-split .react-grid-dragHandle {
+  display: none !important;
+}
+
+/* While a gutter is held, the tiles under the pointer neither highlight nor
+   show tooltips: the drag, not the cursor's position, is what is going on. */
+.depictio-workbench-split--dragging .depictio-workbench-pane {
+  pointer-events: none;
+}
+
+.depictio-workbench-gutter {
+  position: relative;
+  box-sizing: border-box;
+  outline: none;
+  /* Pointer events only: the browser's own pan gesture would otherwise fight a
+     drag on touch devices. */
+  touch-action: none;
+}
+
+.depictio-workbench-gutter[data-dir='row'] {
+  cursor: col-resize;
+}
+
+.depictio-workbench-gutter[data-dir='column'] {
+  cursor: row-resize;
+}
+
+.depictio-workbench-gutter[data-static] {
+  cursor: default;
+}
+
+/* The line is drawn inside the gap, centred, and only once there is something
+   to say: on hover, while held, and for keyboard focus. */
+.depictio-workbench-gutter::before {
+  content: '';
+  position: absolute;
+  border-radius: 2px;
+  background: transparent;
+  transition: background-color 120ms ease;
+  pointer-events: none;
+}
+
+.depictio-workbench-gutter[data-dir='row']::before {
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 1px);
+  width: 2px;
+}
+
+.depictio-workbench-gutter[data-dir='column']::before {
+  left: 0;
+  right: 0;
+  top: calc(50% - 1px);
+  height: 2px;
+}
+
+.depictio-workbench-gutter:not([data-static]):hover::before {
+  background: color-mix(in srgb, var(--mantine-primary-color-filled) 40%, transparent);
+}
+
+.depictio-workbench-gutter[data-active]::before,
+.depictio-workbench-gutter:focus-visible::before {
+  background: var(--mantine-primary-color-filled);
+}

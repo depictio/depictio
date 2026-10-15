@@ -600,20 +600,17 @@
 :root[data-chrome='glass'] .depictio-section-accordion:not(.is-compact) .depictio-section-item:not(.is-plain) .depictio-section-content {
   padding: 8px 14px 14px;
 }
-/* Workbench and dock sections: the same paper frame and accent edge, with the
- * header on one line and a thin margin around the tiles. Block paddings only:
- * the inline ones stay those above, so the grid's measured inset is shared. */
-:root[data-chrome='glass'] .depictio-section-accordion:not(.is-compact) .depictio-section-item:is(.is-workbench, .is-dock):not(.is-plain) .depictio-section-control {
+/* Workbench sections: the same paper frame and accent edge, with the header on
+ * one line and a thin margin around the tiles. Block paddings only: the inline
+ * ones stay those above, so the grid's measured inset is shared. */
+:root[data-chrome='glass'] .depictio-section-accordion:not(.is-compact) .depictio-section-item.is-workbench:not(.is-plain) .depictio-section-control {
   padding-block: 8px;
 }
-:root[data-chrome='glass'] .depictio-section-accordion:not(.is-compact) .depictio-section-item:is(.is-workbench, .is-dock):not(.is-plain)[data-active] .depictio-section-control {
+:root[data-chrome='glass'] .depictio-section-accordion:not(.is-compact) .depictio-section-item.is-workbench:not(.is-plain)[data-active] .depictio-section-control {
   padding-block: 8px 4px;
 }
-:root[data-chrome='glass'] .depictio-section-accordion:not(.is-compact) .depictio-section-item:is(.is-workbench, .is-dock):not(.is-plain) .depictio-section-content {
+:root[data-chrome='glass'] .depictio-section-accordion:not(.is-compact) .depictio-section-item.is-workbench:not(.is-plain) .depictio-section-content {
   padding-block: 4px 10px;
-}
-:root[data-chrome='glass'] .depictio-dock-column .depictio-section-accordion:not(.is-compact) .depictio-section-item + .depictio-section-item {
-  margin-top: 10px;
 }
 /* Hover on the canvas, one system:
    - a section answers on its header row only, with the panels' row tint;

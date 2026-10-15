@@ -321,7 +321,7 @@ class FilterSectionSpec(BaseModel):
         "matches them without being told. Unset leaves each card to its own `variant`. "
         "Grid sections only.",
     )
-    display: Literal["grid", "strip", "workbench", "dock"] | None = Field(
+    display: Literal["grid", "strip", "workbench"] | None = Field(
         default=None,
         description="How a grid section lays out its members. Unset or `grid`: one tile "
         "each on the dashboard grid. `strip`: a filter bar -- the interactive "
@@ -330,10 +330,8 @@ class FilterSectionSpec(BaseModel):
         "ignoring their grid coordinates. Their values filter the whole tab, as the "
         "panel's do. Any non-interactive members still render as tiles below the bar. "
         "`workbench`: holds the section's tiles within one screen height so linked "
-        "views stay side by side (grid sections of tiles only). `dock`: keeps the "
-        "section's tiles in a sticky column beside the scrolling sections. Both "
-        "`workbench` and `dock` fall back to a normal stacked section on narrow "
-        "screens. Grid sections only.",
+        "views stay side by side (grid sections of tiles only). `workbench` falls "
+        "back to a normal stacked section on narrow screens. Grid sections only.",
     )
     filter_bar: bool | None = Field(
         default=None,

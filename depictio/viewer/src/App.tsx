@@ -1469,8 +1469,8 @@ const App: React.FC = () => {
   // The tab's scope: its `always_selected` filters, shown in a banner under
   // the header.
   const scope = useMemo(() => scopeUnits(summaryMetadata, filterScopes), [summaryMetadata, filterScopes]);
-  // `?layout=classic|dock`: view a workbench section as a plain section or as
-  // a docked column, to compare the arrangements on the same tab.
+  // `?layout=classic`: view a workbench section as a plain section, to compare
+  // the arrangements on the same tab.
   const layoutOverride = useLayoutOverride();
 
   // The page's regions, handed to the active chrome style's Shell (see

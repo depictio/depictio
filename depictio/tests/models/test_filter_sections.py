@@ -339,7 +339,7 @@ class TestGridSections:
 
 
 class TestSectionDisplay:
-    @pytest.mark.parametrize("display", ["grid", "strip", "workbench", "dock"])
+    @pytest.mark.parametrize("display", ["grid", "strip", "workbench"])
     def test_every_layout_is_accepted_and_survives_a_round_trip(self, display):
         dash = _dashboard(
             [_figure("f", section="QC")],
@@ -352,9 +352,11 @@ class TestSectionDisplay:
     def test_display_defaults_to_unset(self):
         assert FilterSectionSpec(name="QC").display is None
 
-    def test_an_unknown_layout_is_rejected(self):
+    @pytest.mark.parametrize("display", ["carousel", "dock"])
+    def test_an_unknown_layout_is_rejected(self, display):
+        # `dock` was a section display once; it is gone, not just unused.
         with pytest.raises(ValidationError):
-            FilterSectionSpec(name="QC", display="carousel")
+            FilterSectionSpec(name="QC", display=display)
 
 
 # ---------------------------------------------------------------------------
