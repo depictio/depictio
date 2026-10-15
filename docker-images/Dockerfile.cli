@@ -86,11 +86,15 @@ WORKDIR /app
 #     every container-only deployment.
 #
 # Cheap, and it runs on release builds too, unlike the PR-only CI job.
+#
+# Telemetry is off for that last command only: a build is not a user, and no CI
+# variable reaches a RUN step, so each build (one per arch and release) would
+# otherwise register as a fresh `cli_install` and a `config nextflow` event.
 RUN python -c "import multiqc; print('multiqc', multiqc.__version__)" \
     && python -c "\
 from depictio.cli.cli.utils.templates import locate_template; \
 print('templates', locate_template('nf-core/ampliseq/latest'))" \
-    && python -m depictio.cli config nextflow
+    && DEPICTIO_TELEMETRY_ENABLED=false python -m depictio.cli config nextflow
 
 USER depictio
 
