@@ -14,8 +14,9 @@ import React, { useEffect, useMemo, useRef } from 'react';
 
 import type { InteractiveFilter, StoredMetadata } from '../../api';
 import { useAvailableSet } from '../../availableValues';
-import { autoPickValue, isAlwaysSelected, ownFilterValues, rankPickOptions } from './alwaysSelected';
+import { autoPickValue, ownFilterValues, rankPickOptions } from './alwaysSelected';
 import { filterEvent, orderCategoricalOptions } from './categoricalOptions';
+import { alwaysSelectedComponents } from './scope';
 import { useRankedValues, useUniqueValues } from './useInteractiveData';
 
 const AlwaysSelectedPicker: React.FC<{
@@ -75,16 +76,7 @@ export const AlwaysSelectedPickers: React.FC<{
   filters: InteractiveFilter[];
   onFilterChange: (filter: InteractiveFilter) => void;
 }> = ({ components, filters, onFilterChange }) => {
-  const pickers = useMemo(() => {
-    const seen = new Set<string>();
-    return components.filter((m) => {
-      if (m.component_type !== 'interactive' || !isAlwaysSelected(m) || seen.has(m.index)) {
-        return false;
-      }
-      seen.add(m.index);
-      return true;
-    });
-  }, [components]);
+  const pickers = useMemo(() => alwaysSelectedComponents(components), [components]);
   if (pickers.length === 0) return null;
   return (
     <>

@@ -1316,6 +1316,7 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       error={error}
       emptyMessage={emptyMessage}
       echo={echo || undefined}
+      scopeLabel={missingEntity ? undefined : entity || undefined}
       badges={badges.length ? badges : undefined}
       dataRows={frame ?? undefined}
       dataColumns={fetchCols}

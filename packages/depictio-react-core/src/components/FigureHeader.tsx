@@ -26,6 +26,8 @@ export interface FigureHeaderProps {
   iconColor?: string;
   badges?: React.ReactNode;
   source?: TabLinkTarget | null;
+  /** Right after the title, before the subtitle: the tab's unit chip. */
+  titleBadge?: React.ReactNode;
 }
 
 const FigureHeader: React.FC<FigureHeaderProps> = ({
@@ -35,6 +37,7 @@ const FigureHeader: React.FC<FigureHeaderProps> = ({
   iconColor,
   badges,
   source,
+  titleBadge,
 }) => {
   const color = iconColor ? glyphColorVar(iconColor) : 'var(--mantine-primary-color-filled)';
   return (
@@ -56,6 +59,7 @@ const FigureHeader: React.FC<FigureHeaderProps> = ({
             {title}
           </Text>
         )}
+        {titleBadge}
         {subtitle && (
           <Text size="sm" c="dimmed" truncate style={{ lineHeight: 1.3, minWidth: 0 }}>
             {subtitle}

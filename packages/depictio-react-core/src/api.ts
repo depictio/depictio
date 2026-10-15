@@ -449,6 +449,13 @@ export interface TextValueSpec {
   wf_id?: string | null;
 }
 
+/** One fact of a scope banner (see `StoredMetadata.banner_facts`). */
+export interface BannerFact {
+  column: string;
+  label: string;
+  format?: string | null;
+}
+
 export interface StoredMetadata {
   index: string;
   component_type: string;
@@ -522,6 +529,10 @@ export interface StoredMetadata {
    *  (`default_order` "asc": the smallest) rather than the first of the list. */
   default_by?: string;
   default_order?: 'asc' | 'desc';
+  /** `always_selected` only: facts the tab's scope banner shows about the
+   *  picked value, each read from the first row of the filter's own collection
+   *  that holds it. `format` is the cards' number vocabulary. */
+  banner_facts?: BannerFact[];
   /** Visual grouping — interactive components sharing the same `group` are
    *  rendered together inside one collapsible Mantine Paper. See
    *  MAX_INTERACTIVE_GROUP_SIZE in depictio/models/components/constants.py. */
@@ -620,8 +631,11 @@ export interface FilterSectionSpec {
   card_variant?: 'default' | 'headline' | 'compact' | 'minimal' | 'accent' | 'split' | null;
   /** Grid sections: `strip` draws the section as a filter bar — the
    *  interactive components naming it leave the filter panel and render as one
-   *  compact row. Unset (or `grid`) is one tile each on the grid. */
-  display?: 'grid' | 'strip' | null;
+   *  compact row. Unset (or `grid`) is one tile each on the grid.
+   *  `workbench` holds the section's tiles in one screen height, so linked
+   *  views stay side by side; `dock` keeps them in a sticky column beside the
+   *  scrolling sections. Both fall back to a normal section below `md`. */
+  display?: 'grid' | 'strip' | 'workbench' | 'dock' | null;
   /** Grid sections of tiles: a filter bar of the section's own, under its
    *  heading. The interactive components naming the section render there, and
    *  their values narrow only this section's tiles (see `filterScope.ts`).
@@ -920,6 +934,25 @@ export async function fetchRankedValues(
   if (!res.ok) throw new Error(`Failed to rank values: ${res.status}`);
   const body = (await res.json()) as { values?: string[] };
   return body.values || [];
+}
+
+/** A few columns of the first row whose ``column`` equals ``value`` (the facts
+ *  of an ``always_selected`` Select's scope banner). ``null`` when no row
+ *  holds the value. */
+export async function fetchRowValues(
+  dcId: string,
+  column: string,
+  value: string,
+  columns: readonly string[],
+  filterExpr?: string | null,
+): Promise<Record<string, unknown> | null> {
+  const params = new URLSearchParams({ column, value });
+  for (const c of columns) params.append('columns', c);
+  if (filterExpr) params.set('filter_expr', filterExpr);
+  const res = await authFetch(`${API_BASE}/deltatables/row_values/${dcId}?${params.toString()}`);
+  if (!res.ok) throw new Error(`Failed to fetch row values: ${res.status}`);
+  const body = (await res.json()) as { row?: Record<string, unknown> | null };
+  return body.row ?? null;
 }
 
 /** The ``__breakdown__`` payload for a card's categorical strip, computed

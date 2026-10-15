@@ -13,6 +13,8 @@ import './plotlyStrictMode';
 
 // Grid + top-level renderer
 export { default as DashboardGrid, SectionSummary } from './components/DashboardGrid';
+export { DensityContext, useDensity } from './components/density';
+export type { Density } from './components/density';
 export type { ComponentSection } from './utils/groupInteractive';
 // Content-aware sizing: the demand channel renderers publish on, and the two
 // predicates a host needs to offer "size this tile to its content" as an action.
@@ -169,6 +171,22 @@ export {
   singlePick,
 } from './components/interactive/alwaysSelected';
 export type { PickableOption } from './components/interactive/alwaysSelected';
+// The tab's scope (its `always_selected` filters): the banner under the
+// header and the unit chip on the tiles that follow it.
+export { ScopeBanner } from './components/interactive/ScopeBanner';
+export { ScopeValueBadge } from './components/interactive/ScopeValueBadge';
+export {
+  ScopeChipContext,
+  ScopeChipProvider,
+  useScopeChip,
+} from './components/interactive/scopeContext';
+export type { ScopeChip } from './components/interactive/scopeContext';
+export {
+  alwaysSelectedComponents,
+  bannerFactItems,
+  scopeChipColor,
+  scopeUnits,
+} from './components/interactive/scope';
 export { default as SegmentedControlRenderer } from './components/interactive/SegmentedControlRenderer';
 export { default as TimelineRenderer } from './components/interactive/TimelineRenderer';
 // The one frame every interactive control renders inside — exported so the

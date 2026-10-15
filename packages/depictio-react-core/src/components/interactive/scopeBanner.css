@@ -1,0 +1,49 @@
+/* The scope banner (ScopeBanner.tsx), as the Classic chrome draws it: a bar
+ * under the header on the page's own background, ruled off from the canvas.
+ * Paper restyles the surface as a strip card (glass/layout.css, beside
+ * `.hy-strip`); the rows are the same in both. */
+
+.depictio-scope-banner {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-md);
+  background: var(--mantine-color-body);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+
+.depictio-scope-banner__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--mantine-spacing-lg);
+  row-gap: 4px;
+  min-width: 0;
+}
+
+.depictio-scope-banner__change {
+  margin-inline-start: auto;
+}
+
+/* The filter's icon tile, as the filter bar draws it (filterStrip.css). */
+.depictio-scope-banner__badge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  background: var(--scope-accent);
+  color: var(--mantine-color-white);
+}
+
+@media (max-width: 48em) {
+  .depictio-scope-banner {
+    padding-inline: var(--mantine-spacing-sm);
+  }
+  .depictio-scope-banner__row {
+    column-gap: var(--mantine-spacing-md);
+  }
+}

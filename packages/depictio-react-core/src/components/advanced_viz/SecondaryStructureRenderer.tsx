@@ -597,6 +597,7 @@ const SecondaryStructureRenderer: React.FC<Props> = ({
       controls={controls}
       contentDemand={contentDemand}
       echo={echo}
+      scopeLabel={entity || undefined}
       loading={loading}
       error={error}
       emptyMessage={emptyMessage}

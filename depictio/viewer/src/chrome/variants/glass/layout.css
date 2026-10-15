@@ -727,7 +727,8 @@
 
 /* The section filter bar on the canvas: the same card, one row per filter
  * (badge, name, control), its tools held to the first row. */
-:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-filter-strip__badge {
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-filter-strip__badge,
+:root[data-chrome='glass'] .depictio-scope-banner__badge {
   border-radius: 8px !important;
 }
 :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-filter-strip__name {
@@ -861,11 +862,13 @@
   flex-shrink: 0 !important;
 }
 /* A `placement: top` strip (the Timeline) heads the canvas, full width of the
- * reading column; the canvas scrolls under it, the dock stays at the foot. */
-.hy-stage:has(> .hy-strip) > [data-testid='dashboard-content'] {
+ * reading column; the canvas scrolls under it, the dock stays at the foot. The
+ * scope banner (the unit a one-unit tab shows) is the same card. */
+.hy-stage:has(> :is(.hy-strip, .depictio-scope-banner)) > [data-testid='dashboard-content'] {
   padding-top: 12px !important;
 }
-.hy-strip {
+.hy-strip,
+.hy-stage > .depictio-scope-banner {
   flex: none;
   margin: var(--gl-canvas-top) 0 0;
   margin-inline: max(var(--gl-gutter), calc((100% - var(--gl-content-max, 100%)) / 2));
@@ -877,6 +880,9 @@
 .hy-strip > * {
   border-top: 0 !important;
   background: transparent !important;
+}
+.hy-stage > .depictio-scope-banner {
+  padding: 8px 10px 8px 12px;
 }
 .hy-inspector {
   grid-row: 2;
@@ -1389,7 +1395,7 @@
   padding: 12px 10px 16px !important;
   scroll-padding-top: 12px;
 }
-.hy-shell--phone .hy-strip {
+.hy-shell--phone :is(.hy-strip, .hy-stage > .depictio-scope-banner) {
   margin: 10px 10px 0;
 }
 

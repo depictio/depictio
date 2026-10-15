@@ -628,6 +628,7 @@ const RamachandranRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
       controls={controls}
       contentDemand={contentDemand}
       echo={echo}
+      scopeLabel={entity || undefined}
       loading={source.loading}
       error={source.error}
       emptyMessage={emptyMessage}

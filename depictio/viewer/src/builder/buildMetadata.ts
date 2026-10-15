@@ -273,6 +273,7 @@ export function buildInteractive(
     always_selected?: boolean;
     default_by?: string;
     default_order?: 'asc' | 'desc';
+    banner_facts?: StoredMetadata['banner_facts'];
   }>(state.config);
   // Mirror Dash design_interactive: the form surfaces only the basics, no
   // default value/range, marks, or scale. Those are derived at render time.
@@ -335,6 +336,11 @@ export function buildInteractive(
     default_order:
       c.interactive_component_type === 'Select' && c.always_selected === true
         ? c.default_order
+        : undefined,
+    // The scope banner's facts: YAML only too, and only valid with the flag.
+    banner_facts:
+      c.interactive_component_type === 'Select' && c.always_selected === true
+        ? c.banner_facts
         : undefined,
   };
 }

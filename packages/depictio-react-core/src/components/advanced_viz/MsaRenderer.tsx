@@ -488,6 +488,7 @@ const MsaRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilter
       controls={controls}
       contentDemand={contentDemand}
       echo={echo}
+      scopeLabel={msaId || undefined}
       loading={loading}
       error={error}
       emptyMessage={!loading && rows.length === 0 ? emptyMessage : undefined}

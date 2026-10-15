@@ -1065,6 +1065,7 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
       controls={controls}
       contentDemand={contentDemand}
       echo={echo}
+      scopeLabel={profile?.model || undefined}
       loading={loading}
       error={error}
       emptyMessage={emptyMessage}

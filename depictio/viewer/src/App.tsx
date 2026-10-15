@@ -20,6 +20,10 @@ import {
   bulkComputeCards,
   hasLiveValues,
   AlwaysSelectedPickers,
+  ScopeBanner,
+  ScopeChipProvider,
+  scopeChipColor,
+  scopeUnits,
   AvailableFilterValuesProvider,
   DataVersionProvider,
   dataVersionBody,
@@ -147,6 +151,7 @@ import { usePageTitle } from './branding';
 import { DashboardGuide, useGuideRoute } from './guide';
 import { LandingHint, useLandingHint } from './landing';
 import { DashboardSpotlight } from './spotlight';
+import { findComponentElement, focusComponent } from './spotlight/focus';
 import type { SettingsSectionKey } from './chrome/SettingsDrawer';
 import VersionPreviewBanner from './versions/VersionPreviewBanner';
 import { dashboardHref } from './dashboards/lib/dashboardLinks';
@@ -1451,6 +1456,25 @@ const App: React.FC = () => {
     [guide, isNarrow, mobileOpened, toggleMobile, leftComponents, openFilterDrawer],
   );
 
+  // The tab's scope: its `always_selected` filters, shown in a banner under
+  // the header and as a chip on the tiles that follow them.
+  const scope = useMemo(() => scopeUnits(summaryMetadata, filterScopes), [summaryMetadata, filterScopes]);
+  const scopeChip = useMemo(
+    () => (scope.length > 0 ? { color: scopeChipColor(scope) } : null),
+    [scope],
+  );
+  // "Change" in the banner: the same landing as the dashboard search, then the
+  // control itself, so the reader can type the next unit straight away.
+  const changeScope = useCallback(
+    (index: string) => {
+      uncoverForSearch(index);
+      void focusComponent(index).then((found) => {
+        if (found) findComponentElement(index)?.querySelector<HTMLInputElement>('input')?.focus();
+      });
+    },
+    [uncoverForSearch],
+  );
+
   // The page's regions, handed to the active chrome style's Shell (see
   // chrome/shell/types.ts), which decides where each one goes.
   const ready = Boolean(dashboard) && !loading && !error;
@@ -1562,6 +1586,7 @@ const App: React.FC = () => {
           currentDataOnly={currentDataOnlyCount}
         />
       )}
+      {ready && <ScopeBanner units={scope} filters={filters} onChange={changeScope} />}
       {ingestionHealth &&
         ingestionProjectId &&
         !ingestionBannerDismissed &&
@@ -1924,6 +1949,7 @@ const App: React.FC = () => {
           controls. No config sink in the viewer: a reader can still pin a
           tile's controls open, and it stays local to their session. */}
       <AdvancedVizPlacementDefaultProvider value={dashboard?.advanced_viz_controls}>
+      <ScopeChipProvider value={scopeChip}>
       <SaveGroupContext.Provider value={saveGroupApi}>
       {/* A dashboard that overrides the instance branding retints its own page
           and nothing else — /dashboards and /admin stay on the instance look. */}
@@ -2030,6 +2056,7 @@ const App: React.FC = () => {
       </CategoryColorsContext.Provider>
       </BrandScope>
       </SaveGroupContext.Provider>
+      </ScopeChipProvider>
       </AdvancedVizPlacementDefaultProvider>
       </InspectorProviders>
       </HighlightProvider>

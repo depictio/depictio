@@ -67,6 +67,10 @@ import {
   bulkComputeCards,
   hasLiveValues,
   AlwaysSelectedPickers,
+  ScopeBanner,
+  ScopeChipProvider,
+  scopeChipColor,
+  scopeUnits,
   canCopyToTab,
   canHighlight,
   copyComponentToTab,
@@ -182,6 +186,10 @@ import { DashboardGuide, useGuideRoute } from './guide';
 import { DashboardSpotlight } from './spotlight';
 import type { GuideAuthorSettings, SettingsSectionKey } from './chrome/SettingsDrawer';
 import { focusComponent } from './lib/focusComponent';
+import {
+  findComponentElement,
+  focusComponent as focusAndRingComponent,
+} from './spotlight/focus';
 
 const API_BASE = '/depictio/api/v1';
 const SAVE_DEBOUNCE_MS = 500;
@@ -2452,6 +2460,22 @@ const EditorApp: React.FC = () => {
     },
     [guide, isNarrow, mobileOpened, toggleMobile, leftComponents, openFilterDrawer],
   );
+  // The tab's scope, as in the viewer: the banner under the header and the
+  // unit chip on the tiles that follow it.
+  const scope = useMemo(() => scopeUnits(summaryMetadata, filterScopes), [summaryMetadata, filterScopes]);
+  const scopeChip = useMemo(
+    () => (scope.length > 0 ? { color: scopeChipColor(scope) } : null),
+    [scope],
+  );
+  const changeScope = useCallback(
+    (index: string) => {
+      uncoverForSearch(index);
+      void focusAndRingComponent(index).then((found) => {
+        if (found) findComponentElement(index)?.querySelector<HTMLInputElement>('input')?.focus();
+      });
+    },
+    [uncoverForSearch],
+  );
   /** Before the search leaves for another tab, which is a full page load: save
    *  what the debounce still holds, and wait for it, or a layout change made a
    *  moment ago leaves with the page. A failed save keeps the author here. */
@@ -2658,6 +2682,7 @@ const EditorApp: React.FC = () => {
           onClear={clearDataVersions}
         />
       )}
+      {ready && <ScopeBanner units={scope} filters={filters} onChange={changeScope} />}
       {loading && (
         <Group p="lg">
           <Loader size="sm" />
@@ -2966,6 +2991,7 @@ const EditorApp: React.FC = () => {
         advanced-viz tile draws them unless the tile states its own. */}
     <AdvancedVizConfigDraftProvider value={handleVizConfigDraft}>
     <AdvancedVizPlacementDefaultProvider value={dashboard?.advanced_viz_controls}>
+    <ScopeChipProvider value={scopeChip}>
     <SaveGroupContext.Provider value={saveGroupApi}>
     {/* Same scoping as the viewer, so an editor sees the override they are
         editing without it escaping into the rest of the app. */}
@@ -3065,6 +3091,7 @@ const EditorApp: React.FC = () => {
     </CategoryColorsContext.Provider>
     </BrandScope>
     </SaveGroupContext.Provider>
+    </ScopeChipProvider>
     </AdvancedVizPlacementDefaultProvider>
     </AdvancedVizConfigDraftProvider>
     </InspectorProviders>

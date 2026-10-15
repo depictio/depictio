@@ -23,6 +23,7 @@ import {
   fetchColumnRange,
   fetchColumnRangeAt,
   fetchRankedValues,
+  fetchRowValues,
   fetchUniqueValues,
   fetchUniqueValuesAt,
   type DataPinFields,
@@ -170,6 +171,71 @@ export function useRankedValues(
       .catch((err) => {
         console.warn('[useRankedValues] fetchRankedValues failed:', err);
         rankedPending.delete(key);
+        if (!cancelled) setState({ data: null, loading: false, error: errorMessage(err) });
+      });
+    return () => {
+      cancelled = true;
+    };
+    // `key` covers every input.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  return state;
+}
+
+// ------------------------------------------------------------------- row values
+
+const rowPending = new Map<string, Promise<Record<string, unknown> | null>>();
+const rowResolved = new Map<string, Record<string, unknown> | null>();
+
+/**
+ * A few columns of the row a filter value names (`fetchRowValues`): the facts
+ * of a scope banner. `data` is null while loading, when no row holds the value,
+ * when nothing is asked, and while a data version is active (the lookup only
+ * reads the newest commit, so it cannot speak for pinned data). A failed
+ * lookup resolves to null too: the facts are a garnish.
+ */
+export function useRowValues(
+  dcId: string | undefined,
+  column: string | undefined,
+  value: string | undefined,
+  columns: readonly string[],
+  filterExpr?: string | null,
+): Loadable<Record<string, unknown> | null> {
+  const pinned = useFilterDataPins() !== null;
+  const key =
+    dcId && column && value !== undefined && columns.length > 0 && !pinned
+      ? JSON.stringify([dcId, column, value, columns, filterExpr ?? null])
+      : null;
+  const [state, setState] = useState<Loadable<Record<string, unknown> | null>>(() => {
+    const hit = key !== null && rowResolved.has(key) ? rowResolved.get(key)! : null;
+    return { data: hit, loading: key !== null && !rowResolved.has(key), error: null };
+  });
+
+  useEffect(() => {
+    if (!key || !dcId || !column || value === undefined) {
+      setState({ data: null, loading: false, error: null });
+      return;
+    }
+    if (rowResolved.has(key)) {
+      setState({ data: rowResolved.get(key)!, loading: false, error: null });
+      return;
+    }
+    let cancelled = false;
+    setState((s) => ({ ...s, loading: true }));
+    let pending = rowPending.get(key);
+    if (!pending) {
+      pending = fetchRowValues(dcId, column, value, columns, filterExpr);
+      rowPending.set(key, pending);
+    }
+    pending
+      .then((row) => {
+        rowResolved.set(key, row);
+        if (!cancelled) setState({ data: row, loading: false, error: null });
+      })
+      .catch((err) => {
+        console.warn('[useRowValues] fetchRowValues failed:', err);
+        rowPending.delete(key);
         if (!cancelled) setState({ data: null, loading: false, error: errorMessage(err) });
       });
     return () => {

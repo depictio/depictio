@@ -22,6 +22,10 @@ import {
 import { useAdvancedVizCaption, useAdvancedVizShowcase } from './advancedVizShowcase';
 import { CARD_FRAME } from '../cardFrame';
 import FigureHeader from '../FigureHeader';
+import { useDensity } from '../density';
+import { ScopeValueBadge } from '../interactive/ScopeValueBadge';
+import { useScopeChip } from '../interactive/scopeContext';
+import { echoWithoutScope } from './scopeChip';
 import { ControlsDockContext, ControlsLeadContext, resolveDock } from './controlsDock';
 import DockedControls from './DockedControls';
 import './controlsDock.css';
@@ -146,6 +150,13 @@ interface AdvancedVizFrameProps {
   estimated?: boolean;
   /** Extra header badges, e.g. the annotation layer's "N/M points found". */
   badges?: React.ReactNode[];
+  /**
+   * The one unit this tile shows (a structure, a family), when it follows the
+   * tab's `always_selected` filter. Drawn as the scope chip after the title,
+   * and only where the host provides one (`ScopeChipProvider`); the echo then
+   * stops repeating it.
+   */
+  scopeLabel?: string;
 }
 
 /** Subtle Mantine theme colour for each canonical tier name (no hardcoded
@@ -239,8 +250,14 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   reduction,
   estimated,
   badges,
+  scopeLabel,
 }) => {
   const publish = useContext(AdvancedVizExtrasContext);
+  // The unit chip, under a host that scopes the tab; a workbench or a docked
+  // column asks for a one-line header (`density.ts`).
+  const scopeChip = useScopeChip();
+  const chipValue = scopeChip && scopeLabel ? scopeLabel : null;
+  const compact = useDensity() === 'compact';
   const dock = useContext(ControlsDockContext);
   // A view switch a router put ahead of this renderer's controls (see
   // VolcanoViews). It decides what is plotted, so it heads the encoding tier
@@ -464,7 +481,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   const isShowcase = Boolean(showcase);
   const echoText = useMemo(() => {
     const sampled = !redFull && redDisplayed < redTotal;
-    return selectionEcho({
+    const text = selectionEcho({
       echo,
       reduction:
         redPresent && (sampled || !isShowcase)
@@ -473,7 +490,21 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
       rows: isShowcase ? null : dataRowCount,
       region: regionEcho,
     });
-  }, [echo, redPresent, redDisplayed, redTotal, redFull, dataRowCount, regionEcho, isShowcase]);
+    return chipValue ? echoWithoutScope(text, chipValue) : text;
+  }, [
+    echo,
+    redPresent,
+    redDisplayed,
+    redTotal,
+    redFull,
+    dataRowCount,
+    regionEcho,
+    isShowcase,
+    chipValue,
+  ]);
+  const chip = chipValue ? (
+    <ScopeValueBadge value={chipValue} color={scopeChip?.color} title={title} />
+  ) : null;
 
   // Tier counts (volcano UP/DN/NS, …). When ``tierAnnotation.selectedOrder``
   // is provided, that's the source of truth for which tier is "highlighted" —
@@ -559,6 +590,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
           iconColor={showcase.iconColor || undefined}
           source={showcase.source}
           badges={statusBadges ?? undefined}
+          titleBadge={chip ?? undefined}
         />
         {echoLine || countBadges || strip ? (
           <Stack gap={2} mb={6}>
@@ -569,7 +601,38 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
         ) : null}
       </>
     ) : null
+  ) : compact ? (
+    // One line: title, chip, what is on screen, the status chips. The
+    // subtitle moves to the title's tooltip, the tier counts and the inline
+    // controls keep their own lines under it.
+    <Stack gap={2} mb={4}>
+      <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }} pr={28}>
+        {title ? (
+          <Tooltip label={subtitle} disabled={!subtitle} multiline maw={320} openDelay={300}>
+            <Text fw={600} size="sm" truncate style={{ flex: '0 1 auto', minWidth: 0 }}>
+              {title}
+            </Text>
+          </Tooltip>
+        ) : null}
+        {chip}
+        {echoText ? (
+          <Text
+            size="xs"
+            c="dimmed"
+            truncate
+            style={{ flex: '1 1 0', minWidth: 0 }}
+            data-testid="advanced-viz-echo"
+          >
+            {echoText}
+          </Text>
+        ) : null}
+        {statusBadges}
+      </Group>
+      {countBadges}
+      {strip}
+    </Stack>
   ) : title ||
+    chip ||
     subtitle ||
     echoLine ||
     strip ||
@@ -579,7 +642,16 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     groupBadge ||
     extraBadges ? (
     <Stack gap={2} mb="xs">
-      {title ? (
+      {chip ? (
+        <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
+          {title ? (
+            <Text fw={600} size="sm" truncate style={{ flex: '0 1 auto', minWidth: 0 }}>
+              {title}
+            </Text>
+          ) : null}
+          {chip}
+        </Group>
+      ) : title ? (
         <Text fw={600} size="sm" lineClamp={1}>
           {title}
         </Text>
@@ -665,7 +737,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     <ErrorBoundary>
       <Paper
         ref={frameRef}
-        p={showcase ? 'md' : 'sm'}
+        p={compact ? 'xs' : showcase ? 'md' : 'sm'}
         withBorder={!showcase}
         radius="md"
         style={{

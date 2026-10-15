@@ -650,6 +650,7 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
       controls={controls}
       contentDemand={contentDemand}
       echo={echo}
+      scopeLabel={entity || undefined}
       loading={loading}
       error={error}
       emptyMessage={!loading && empty ? 'No residues for this entity' : undefined}

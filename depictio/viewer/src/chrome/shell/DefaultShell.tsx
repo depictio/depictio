@@ -73,6 +73,11 @@ const DefaultShell: React.FC<DashboardShellProps> = ({
           // would leave no dashboard at all: there it overlays, as a drawer.
           paddingRight: analysis.open && !isNarrow ? analysis.widthPx : 0,
           transition: 'padding-right 250ms ease',
+          // A column, so a banner in `boot` (a version preview, the scope
+          // banner) takes its own height and the canvas the rest, instead of
+          // the canvas keeping the full height and running off the bottom.
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
         {boot}
@@ -81,7 +86,8 @@ const DefaultShell: React.FC<DashboardShellProps> = ({
             style={{
               display: 'flex',
               flexDirection: 'column',
-              height: '100%',
+              flex: '1 1 0',
+              minHeight: 0,
               width: '100%',
               overflow: 'hidden',
             }}
