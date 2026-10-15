@@ -3,6 +3,130 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.19.0
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.19.0</summary>
+
+### Changes 📜
+
+#### Documentation Updates 📚
+
+* docs: protein structure module design and indexed structure files [895a2fcc4]
+
+#### Other Changes 📝
+
+* Bump version: 1.18.1 → 1.19.0 [6a16b08ee]
+* fix(templates): proteinfamilies manifest drops the MultiQC parquet; regenerate the tool-studio catalog [08c93e8a2]
+* feat(interactive): an always_selected Select can start on the option that ranks first [340367ae3]
+* feat(domain-architecture): resizable label column [6d9d68d3e]
+* fix(hmm-logo): open on the model the dashboard narrowed to [13292d865]
+* feat(structure): technical details of the 3D structure call in the info popover [86f801cca]
+* fix(templates): proteinannotator states that folding calls an external service [ef5f967c9]
+* feat(advanced-viz): the HMM logo collapses or hides whole tracks; resolved structures say where they came from [ad7c175e0]
+* fix(templates): proteinannotator says what its structure tile shows [70ce72358]
+* feat(advanced-viz): residue width and wheel zoom on the domain, sequence and secondary structure tiles [aaf92f8a3]
+* feat(advanced-viz): the HMM logo hides or folds parts of the profile [9f81a3361]
+* fix(templates): protein showcases keep the Overview compact and widen the tiles that need room [3000e0d72]
+* feat(advanced-viz): the sequence track shows every chain of a complex [34f127d6b]
+* fix(templates): protein showcases follow the review of the first live run [9067bde4a]
+* fix(api): heatmap and upset ignore the residue pick of other tiles [a632c1267]
+* feat(advanced-viz): fullscreen controls, modifier-wheel zoom, secondary structure options, exact domain pick [811038560]
+* fix(auth): a larger custom logo on the sign-in card [ca12f0f96]
+* fix(auth): centre the brand on a branded sign-in card [8c9877066]
+* test(recipes): the proteinfold scores scan skips an empty file on polars 1.33 [3cfd6002f]
+* fix(catalog): a structure tile bound to a sequence resolves its structure [9931f2785]
+* fix(recipes): crisprseq recipes failed on polars 1.33, the version CI pins for MultiQC [88d17a71d]
+* feat(projects): preview a group's members before sharing, and list everyone with access [0993e48d5]
+* feat(admin): Add user in Admin > Users, and a password change prompt at first sign-in [3b0b2c573]
+* feat(auth): let an admin create an account with a password the person must change [ea54d52e5]
+* feat(groups): source filter as a dropdown, and a Create group dialog like the other create dialogs [51302f22b]
+* fix(groups): count only existing users in a group's member count [4f80870e2]
+* fix(auth): drop the transparent border on the glass provider buttons [5ebeae8ab]
+* fix(auth): count SAML as an SSO door for password_login_disabled, and close /register with it ([#1246](https://github.com/depictio/depictio/pull/1246)) [097032ef1]
+* fix(auth): count SAML as an SSO door for password_login_disabled, and close /register with it [b1a31fce2]
+* fix(saml): pass the POST and query data to python3-saml as dicts [35f2db3f6]
+* fix(docker): add zlib1g-dev so lxml links when built from source ([#1244](https://github.com/depictio/depictio/pull/1244)) [d93081766]
+* Update CHANGELOG.md for v1.18.1 [8691747e8]
+* docs(nf-core): PR screenshots of the lot 3 templates [629f54e24]
+* fix(nf-core): restore the single-unit pickers and stacked bar options of the lot 3 templates [bad26c2df]
+* test(compose): the conformance run's TEAL and CHORD outputs add an Other results tab [9d7877270]
+* chore(catalog): regenerate the conformance project and the Tool Studio catalog for lot 3 [807d1392b]
+* feat(nf-core): single-unit pickers on the protein templates [0316bfb46]
+* feat(advanced-viz): table column order and leaner stacked composition bars [349a6fcd0]
+* feat(interactive): always_selected Select option for single-unit pickers [2a91f8808]
+* fix(export): write an advanced viz's extra data collections as tags [9cb71aa5d]
+* feat(nf-core/sarek): a Protein tab with the gene scatter, the predicted structure and the lollipop [82b49dead]
+* feat(catalog): snpeff coding variants on a predicted structure, with the reference residue to check its numbering [c525eba70]
+* feat(nf-core/crisprseq): rebuild the 2.3.0 template on the family rules [e97a1085d]
+* feat(catalog): port the crisprseq tools and recipes from the lot 3 branch [1f956f394]
+* feat(nf-core/pairgenomealign): rebuild the 3.0.4 template on the family rules, with an Overview and five tabs [76830c9db]
+* feat(catalog): port the pairgenomealign tools and recipes from the lot 3 branch [ec1c2e48b]
+* feat(nf-core/oncoanalyser): add the 3.0.0 template on the family rules [98a8c4215]
+* feat(catalog): port the oncoanalyser tools and recipes from the lot 3 branch [74efb67ed]
+* feat(nf-core/isoseq): rebuild the 3.0.1 template on the family rules [5bf540b0a]
+* feat(catalog): port the isoseq pipeline's tools and recipes from the lot 3 branch [c75bb7887]
+* feat(nf-core/proteinannotator): rebuild the template on the family rules, with the protein tiles [0582b242d]
+* feat(nf-core/proteinfold): rework the 2.1.0 template on the family rules, with the PAE matrix and Ramachandran tiles [cca8cd7b6]
+* feat(nf-core/proteinfamilies): rework the 2.5.0 template on the family rules, with a Profile HMM tab [6c94074d1]
+* chore(catalog): regenerate the conformance project and the Tool Studio catalog [86d38fa19]
+* feat(catalog): profile HMM and member coverage recipes for protein families, kind renders [7a501691a]
+* feat(catalog): port the protein pipelines' tools and recipes from the lot 3 branch [d1fc8061f]
+* docs(protein): PR screenshots for the protein module [32d2b929a]
+* fix(protein): whole-axis fetches ignore position filters, exports carry table companions, a smaller PAE cache [3bd0548d8]
+* fix(viewer): settings-panel columns survive the save and cleared numbers fall back to their default [da1ca42cc]
+* fix(react-core): a residue gesture replaces the whole gesture of the tile it supersedes [59209d699]
+* fix(models): describe reference_source, show_indel_rows and the Ramachandran secondary-structure colours as they behave [421266969]
+* docs(protein): the structure confidence tab as laid out now [34c6c14c2]
+* docs(protein): HMM logo, domain architecture, PAE, secondary structure and Ramachandran tiles [6a7db3108]
+* fix(react-core): room for the length labels of the longest proteins and a compact hits lane under the logo [47f87202e]
+* feat(showcase): sequence track full width and a pLDDT profile beside the Ramachandran plot [0d30428bd]
+* feat(showcase): protein families and structure confidence tabs with HMM, hits, secondary structure and PAE fixtures [770b63181]
+* feat(react-core): ramachandran renderer computed from the structure backbone [ece790f63]
+* fix(react-core): sample every advanced-viz colour scale instead of falling back to Blues [0b2cb2c68]
+* feat(react-core): pae_matrix renderer linked to residue picks and hover [04a169e50]
+* feat(react-core): hmm_logo renderer with indel rows and an HMM hit coverage lane [b542e0c2a]
+* feat(react-core): domain_architecture renderer with Pfam-style partial HMM matches [40e3110c4]
+* feat(react-core): secondary_structure renderer with probability lanes and source agreement [6e5fe38dd]
+* fix(showcase): keep the compact 3D tile's controls behind the icon [7969b8f7f]
+* refactor(protein): share the secondary-structure glyphs, the object text cache and a backbone parser [46353350f]
+* chore(catalog): regenerate the Tool Studio kind snapshots for the five new protein kinds [dd6d6050a]
+* feat(models): hmm_logo, secondary_structure, domain_architecture, pae_matrix and ramachandran kinds [3c68a3944]
+* feat(react-core): register the five new protein kinds with stub renderers and builder bindings [b7c2388e7]
+* feat(recipes): HMMER profile, S4PRED ss2 and PAE parsers for the protein tiles [d496519e8]
+* refactor(protein): one span key and one swatch list in the 3D tile [893be0ae6]
+* fix(advanced-viz): a pick of another entity drops the residue selection made on the old one [107a58be5]
+* feat(showcase): protein tab with the lollipop beside the 3D tile and its written sequence [946b36b3b]
+* docs(protein): document the written sequence layout, 3D controls and compact placement [388474e78]
+* feat(protein): written sequence, combined representations and structure colours on the 3D tile [910afc61d]
+* feat(advanced-viz): selector plots keep their points and protein tiles open on one entity [ebafaa4f9]
+* chore(catalog): regenerate the catalog schemas and Tool Studio kind snapshots [60f756249]
+* test(e2e): recognise molecule_3d, msa and sequence_track renders in the catalog walk [abc7e7bf5]
+* feat(showcase): protein structure tab in the advanced viz showcase [9d4de758a]
+* feat(viewer): bind protein tiles from the component builder [7982d84ba]
+* feat(react-core): molecule_3d, msa and sequence_track renderers [841608ce2]
+* feat(react-core): residue_selection cross-filter and hover highlight bus [e1cae8f75]
+* test(cli): the scan skips empty files [558c2b08a]
+* feat(local): depictio local up passes the structure resolver settings through [2ad35403e]
+* feat(api): resolve protein structures from AlphaFold DB or ESMFold [a0af95f15]
+* feat(models): molecule_3d, msa and sequence_track advanced viz kinds [255e8621d]
+* fix(genome-view): send the bearer token when fetching an indexed-file manifest [71d238d27]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.18.1
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
