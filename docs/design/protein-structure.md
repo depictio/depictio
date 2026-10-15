@@ -955,9 +955,10 @@ outbound network from the server.
 **`structure_source: resolve`** asks `POST /depictio/api/v1/advanced_viz/structure/resolve` with
 the shown entity's value in `uniprot_col`, `gene_col` (plus `taxon`) or `sequence_col`. The
 answer is a presigned URL of a PDB in the deployment's bucket plus `source` (`afdb`, `esmfold` or
-`cache`), `origin` (where the model came from, also on a cache hit), `upstream` (`{host, url}`,
-scheme and host only, of the external service behind `origin`, read from the settings; null when
-the origin is unknown), `accession` and the model's sequence. The browser keeps a per-session memo keyed by the normalised request.
+`cache`), `origin` (where the model came from, also on a cache hit), `upstream` (`{host, url, endpoint}`
+of the external service behind `origin`, read from the settings: `url` is scheme and host only, `endpoint`
+the address the resolver calls, without credentials, query string or fragment, with an
+`{accession}` placeholder for AlphaFold DB; null when the origin is unknown), `accession` and the model's sequence. The browser keeps a per-session memo keyed by the normalised request.
 
 `ramachandran` finds its structure through the same two sources, with the same hooks and caches,
 so it and a `molecule_3d` tile on one protein share one download. A
@@ -1019,7 +1020,10 @@ sequences that can be a disclosure, which is why the resolver is off by default 
 until an operator turns it on. The route refuses anonymous visitors outside single-user mode, so
 on a public instance only signed-in users trigger those calls (and fill the bucket cache); the
 tile tells an anonymous visitor to sign in. The tile's info popover states the external call and
-names the service from `upstream`, with links to it.
+names the service from `upstream`, with links to it. A collapsed "Technical details" section
+(Show details / Hide details) lists the service, the endpoint (monospace, copyable, not linked),
+the method and body, what comes back, what is stored and the server switch, so the call is
+unmistakable.
 
 **Licence.** AlphaFold DB models are CC-BY 4.0. The tile shows a credit line with the model
 (`Model: AlphaFold DB, CC-BY 4.0`, or `Model: ESMFold`), from `origin`, so a cached model keeps

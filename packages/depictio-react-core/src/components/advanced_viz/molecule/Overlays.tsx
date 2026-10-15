@@ -5,11 +5,25 @@
  */
 
 import React from 'react';
-import { ActionIcon, Anchor, Box, Group, Paper, Popover, Stack, Text, Tooltip } from '@mantine/core';
+import {
+  ActionIcon,
+  Anchor,
+  Box,
+  Code,
+  Collapse,
+  CopyButton,
+  Group,
+  Paper,
+  Popover,
+  Stack,
+  Text,
+  Tooltip,
+  UnstyledButton,
+} from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { LegendSpec } from './residueData';
-import type { ModelExplanationNote } from './resolve';
+import type { ExplanationDetail, ModelExplanationNote } from './resolve';
 
 const SWATCH: React.CSSProperties = {
   width: 10,
@@ -143,6 +157,71 @@ export const MoleculeTooltip: React.FC<{
 };
 
 /**
+ * The "Technical details" of an external call: collapsed by default, so the
+ * popover stays short, but one click away from the exact endpoint. The endpoint
+ * is shown as text (and copyable), never linked: it is not a page to open.
+ */
+const TechnicalDetails: React.FC<{ details: ExplanationDetail[] }> = ({ details }) => {
+  const [open, setOpen] = React.useState(false);
+  const panelId = React.useId();
+  if (!details.length) return null;
+  return (
+    <Box>
+      <UnstyledButton
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={panelId}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+      >
+        <Icon icon={open ? 'tabler:chevron-down' : 'tabler:chevron-right'} width={12} height={12} />
+        <Text size="xs" c="dimmed" fw={500}>
+          {open ? 'Hide details' : 'Show details'}
+        </Text>
+      </UnstyledButton>
+      <Collapse in={open} id={panelId}>
+        <Box component="dl" m={0} mt={6}>
+          <Stack gap={6}>
+            {details.map((row) => (
+              <Box key={row.label}>
+                <Text component="dt" size="xs" c="dimmed" fw={600}>
+                  {row.label}
+                </Text>
+                <Box component="dd" m={0}>
+                  {row.code ? (
+                    <Group gap={4} wrap="nowrap" align="flex-start">
+                      <Code block style={{ flex: 1, minWidth: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                        {row.value}
+                      </Code>
+                      <CopyButton value={row.value} timeout={1500}>
+                        {({ copied, copy }) => (
+                          <Tooltip label={copied ? 'Copied' : 'Copy'} withinPortal>
+                            <ActionIcon
+                              size="xs"
+                              variant="subtle"
+                              color="gray"
+                              aria-label={`Copy ${row.label.toLowerCase()}`}
+                              onClick={copy}
+                            >
+                              <Icon icon={copied ? 'tabler:check' : 'tabler:copy'} width={12} height={12} />
+                            </ActionIcon>
+                          </Tooltip>
+                        )}
+                      </CopyButton>
+                    </Group>
+                  ) : (
+                    <Text size="xs">{row.value}</Text>
+                  )}
+                </Box>
+              </Box>
+            ))}
+          </Stack>
+        </Box>
+      </Collapse>
+    </Box>
+  );
+};
+
+/**
  * Model credit (bottom right). With `info`, a small info button next to it
  * opens a note on where the structure comes from and how to read it.
  */
@@ -195,6 +274,7 @@ export const MoleculeCredit: React.FC<{
                   ))}
                 </Group>
               ) : null}
+              <TechnicalDetails details={info.details} />
             </Stack>
           </Popover.Dropdown>
         </Popover>

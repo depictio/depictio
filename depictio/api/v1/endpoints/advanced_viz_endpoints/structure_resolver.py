@@ -566,20 +566,30 @@ def _single_flight(digest: str) -> Iterator[None]:
 # ---------------------------------------------------------------------------
 
 
-def _upstream(cfg: StructureResolverSettings, origin: str | None) -> dict[str, str] | None:
-    """Host and origin URL of the service that produced a model, for the viewer's
-    "this was an external call" note. Scheme and host only: never a path, a
-    query string or credentials. None when the origin is not one we know."""
+def _upstream(cfg: StructureResolverSettings, origin: str | None) -> dict[str, str | None] | None:
+    """Host, origin URL and endpoint of the service that produced a model, for the
+    viewer's "this was an external call" note. ``url`` is scheme and host only.
+    ``endpoint`` is the address the resolver calls (scheme, host, port and path as
+    configured; AlphaFold DB's with an ``{accession}`` placeholder), never
+    credentials, a query string or a fragment. None when the origin is not one we
+    know."""
     if origin == "esmfold":
-        url = cfg.esmfold_url
+        url, suffix = cfg.esmfold_url, ""
     elif origin == "afdb":
-        url = cfg.afdb_base_url
+        url, suffix = cfg.afdb_base_url, "/api/prediction/{accession}"
     else:
         return None
     parts = urlsplit(url)
     if not parts.scheme or not parts.hostname:
         return None
-    return {"host": parts.hostname, "url": f"{parts.scheme}://{parts.hostname}"}
+    # netloc minus any userinfo; keeps the port and the brackets of an IPv6 host.
+    netloc = parts.netloc.rpartition("@")[2]
+    path = parts.path.rstrip("/") if suffix else parts.path
+    return {
+        "host": parts.hostname,
+        "url": f"{parts.scheme}://{parts.hostname}",
+        "endpoint": f"{parts.scheme}://{netloc}{path}{suffix}",
+    }
 
 
 def _response(cfg: StructureResolverSettings, digest: str, sidecar: dict, source: str) -> dict:

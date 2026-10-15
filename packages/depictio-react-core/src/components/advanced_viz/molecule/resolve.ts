@@ -23,10 +23,13 @@ export interface ResolveRequest {
 
 export type ResolveOrigin = 'afdb' | 'esmfold';
 
-/** The public service that produced a model: scheme and host only. */
+/** The public service that produced a model: `url` is scheme and host only,
+ *  `endpoint` the address the server calls (no credentials or query string;
+ *  AlphaFold DB's has an `{accession}` placeholder). */
 export interface ResolveUpstream {
   host: string;
   url: string;
+  endpoint?: string | null;
 }
 
 export interface ResolvedStructure {
@@ -104,10 +107,44 @@ export interface ExplanationLink {
   href: string;
 }
 
-/** The info note of a 3D tile: a paragraph and the links that back it up. */
+/** One row of the note's "Technical details" list. `code` shows the value in
+ *  monospace and makes it copyable. */
+export interface ExplanationDetail {
+  label: string;
+  value: string;
+  code?: boolean;
+}
+
+/**
+ * The info note of a 3D tile: a paragraph, the links that back it up and, for
+ * a resolved model, the rows of its collapsible "Technical details" (empty
+ * when no external call is made).
+ */
 export interface ModelExplanationNote {
   text: string;
   links: ExplanationLink[];
+  details: ExplanationDetail[];
+}
+
+/** Rows shared by every external call; the caller adds service, endpoint and method. */
+function callDetails(
+  upstream: ResolveUpstream | null | undefined,
+  method: string,
+): ExplanationDetail[] {
+  const rows: ExplanationDetail[] = [];
+  if (upstream?.host) rows.push({ label: 'Service', value: upstream.host });
+  if (upstream?.endpoint) rows.push({ label: 'Endpoint', value: upstream.endpoint, code: true });
+  rows.push(
+    { label: 'Method and body', value: method },
+    { label: 'What comes back', value: 'A PDB file' },
+    {
+      label: 'What is stored',
+      value:
+        "The model is cached in this deployment's bucket under a hash of the request, so a repeat is not sent again",
+    },
+    { label: 'Server switch', value: 'DEPICTIO_STRUCTURE_RESOLVER_ENABLED, off by default' },
+  );
+  return rows;
 }
 
 /**
@@ -141,6 +178,7 @@ export function modelExplanation(
         { label: 'ESM Atlas', href: 'https://esmatlas.com' },
         { label: 'ESMFold paper', href: 'https://doi.org/10.1126/science.ade2574' },
       ],
+      details: callDetails(opts.upstream, 'POST, the protein sequence as plain text'),
     };
   }
   if (origin === 'afdb') {
@@ -159,6 +197,7 @@ export function modelExplanation(
             }
           : { label: 'AlphaFold DB', href: 'https://alphafold.ebi.ac.uk' },
       ],
+      details: callDetails(opts.upstream, 'GET, the UniProt accession'),
     };
   }
   if (origin === 'file') {
@@ -167,6 +206,7 @@ export function modelExplanation(
         `Structure file written by the run; coloured by ${colours}. ` +
         "Read from the run's output files; nothing is sent anywhere.",
       links: [],
+      details: [],
     };
   }
   return null;
@@ -177,9 +217,13 @@ function asOrigin(value: unknown): ResolveOrigin | null {
 }
 
 function asUpstream(value: unknown): ResolveUpstream | null {
-  const v = value as { host?: unknown; url?: unknown } | null | undefined;
+  const v = value as { host?: unknown; url?: unknown; endpoint?: unknown } | null | undefined;
   return v && typeof v.host === 'string' && typeof v.url === 'string'
-    ? { host: v.host, url: v.url }
+    ? {
+        host: v.host,
+        url: v.url,
+        ...(typeof v.endpoint === 'string' && v.endpoint ? { endpoint: v.endpoint } : {}),
+      }
     : null;
 }
 

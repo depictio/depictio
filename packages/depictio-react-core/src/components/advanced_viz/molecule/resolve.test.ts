@@ -138,6 +138,61 @@ describe('resolveStructure', () => {
       expect(bare?.links).toEqual([{ label: 'AlphaFold DB', href: 'https://alphafold.ebi.ac.uk' }]);
     });
 
+    it('lists the technical details of an ESMFold call, with the endpoint', () => {
+      const note = modelExplanation('esmfold', {
+        upstream: { ...ESM_UPSTREAM, endpoint: 'https://api.esmatlas.com/foldSequence/v1/pdb/' },
+      });
+      expect(note?.details).toEqual([
+        { label: 'Service', value: 'api.esmatlas.com' },
+        { label: 'Endpoint', value: 'https://api.esmatlas.com/foldSequence/v1/pdb/', code: true },
+        { label: 'Method and body', value: 'POST, the protein sequence as plain text' },
+        { label: 'What comes back', value: 'A PDB file' },
+        {
+          label: 'What is stored',
+          value:
+            "The model is cached in this deployment's bucket under a hash of the request, so a repeat is not sent again",
+        },
+        { label: 'Server switch', value: 'DEPICTIO_STRUCTURE_RESOLVER_ENABLED, off by default' },
+      ]);
+    });
+
+    it('lists the technical details of an AlphaFold DB call', () => {
+      const note = modelExplanation('afdb', {
+        accession: 'P04637',
+        upstream: {
+          host: 'alphafold.ebi.ac.uk',
+          url: 'https://alphafold.ebi.ac.uk',
+          endpoint: 'https://alphafold.ebi.ac.uk/api/prediction/{accession}',
+        },
+      });
+      const byLabel = Object.fromEntries((note?.details ?? []).map((d) => [d.label, d]));
+      expect(byLabel['Service'].value).toBe('alphafold.ebi.ac.uk');
+      expect(byLabel['Endpoint']).toEqual({
+        label: 'Endpoint',
+        value: 'https://alphafold.ebi.ac.uk/api/prediction/{accession}',
+        code: true,
+      });
+      expect(byLabel['Method and body'].value).toBe('GET, the UniProt accession');
+    });
+
+    it('omits the Endpoint row when the server sent none, and Service with no upstream', () => {
+      const noEndpoint = modelExplanation('esmfold', { upstream: ESM_UPSTREAM });
+      expect(noEndpoint?.details.map((d) => d.label)).toEqual([
+        'Service',
+        'Method and body',
+        'What comes back',
+        'What is stored',
+        'Server switch',
+      ]);
+      expect(modelExplanation('esmfold')?.details.map((d) => d.label)).not.toContain('Endpoint');
+      expect(modelExplanation('afdb')?.details.map((d) => d.label)).not.toContain('Service');
+    });
+
+    it('returns no details for a file, and no note for an unknown origin', () => {
+      expect(modelExplanation('file')?.details).toEqual([]);
+      expect(modelExplanation(null)).toBeNull();
+    });
+
     it('keeps the file mode text short, generic and free of any external call', () => {
       const note = modelExplanation('file', { colorMode: 'chain' });
       expect(note?.text).toBe(
@@ -154,8 +209,12 @@ describe('resolveStructure', () => {
     });
   });
 
-  it('keeps the upstream host the server names, and null when it names none', async () => {
-    const upstream = { host: 'api.esmatlas.com', url: 'https://api.esmatlas.com' };
+  it('keeps the upstream host and endpoint the server names, and null when it names none', async () => {
+    const upstream = {
+      host: 'api.esmatlas.com',
+      url: 'https://api.esmatlas.com',
+      endpoint: 'https://api.esmatlas.com/foldSequence/v1/pdb/',
+    };
     const withUpstream = vi.fn(async () => json(200, { ...OK_BODY, origin: 'esmfold', upstream }));
     expect((await resolveStructure({ uniprot: 'P04637' }, { fetcher: withUpstream })).upstream).toEqual(
       upstream,

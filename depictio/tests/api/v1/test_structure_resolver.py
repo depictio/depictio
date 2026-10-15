@@ -193,14 +193,36 @@ class TestGate:
             esmfold_url="https://user:pw@fold.example.org:8443/pdb/?token=s3cret",
             afdb_base_url="http://afdb.example.org/base/",
         )
-        assert sr._upstream(conf, "esmfold") == {
-            "host": "fold.example.org",
-            "url": "https://fold.example.org",
-        }
-        assert sr._upstream(conf, "afdb") == {
-            "host": "afdb.example.org",
-            "url": "http://afdb.example.org",
-        }
+        esm = sr._upstream(conf, "esmfold")
+        assert esm is not None and (esm["host"], esm["url"]) == (
+            "fold.example.org",
+            "https://fold.example.org",
+        )
+        afdb = sr._upstream(conf, "afdb")
+        assert afdb is not None and (afdb["host"], afdb["url"]) == (
+            "afdb.example.org",
+            "http://afdb.example.org",
+        )
+
+    def test_upstream_endpoint_strips_credentials_query_and_fragment(self):
+        conf = StructureResolverSettings(
+            esmfold_url="https://user:pw@fold.example.org:8443/pdb/?token=s3cret#frag",
+        )
+        out = sr._upstream(conf, "esmfold")
+        assert out is not None
+        assert out["endpoint"] == "https://fold.example.org:8443/pdb/"
+        assert "pw" not in str(out) and "s3cret" not in str(out) and "frag" not in str(out)
+
+    def test_upstream_endpoint_of_afdb_is_the_prediction_template(self):
+        conf = StructureResolverSettings(
+            afdb_base_url="http://afdb.example.org/base/?key=k#x",
+        )
+        out = sr._upstream(conf, "afdb")
+        assert out is not None
+        assert out["endpoint"] == "http://afdb.example.org/base/api/prediction/{accession}"
+        default = sr._upstream(StructureResolverSettings(), "afdb")
+        assert default is not None
+        assert default["endpoint"].endswith("/api/prediction/{accession}")
 
     def test_upstream_is_null_for_an_unknown_origin(self):
         conf = StructureResolverSettings()
@@ -224,7 +246,11 @@ class TestResolution:
         out = _resolve(uniprot=f" {ACC.lower()} ")
         assert out["source"] == "afdb"
         assert out["origin"] == "afdb"
-        assert out["upstream"] == {"host": "alphafold.ebi.ac.uk", "url": AFDB}
+        assert out["upstream"] == {
+            "host": "alphafold.ebi.ac.uk",
+            "url": AFDB,
+            "endpoint": f"{AFDB}/api/prediction/{{accession}}",
+        }
         assert out["accession"] == ACC
         assert out["sequence"] == "MKW"
         assert out["format"] == "pdb"
@@ -254,7 +280,11 @@ class TestResolution:
         assert out["source"] == "esmfold"
         assert out["accession"] is None
         assert out["sequence"] == "GSC"
-        assert out["upstream"] == {"host": "api.esmatlas.com", "url": "https://api.esmatlas.com"}
+        assert out["upstream"] == {
+            "host": "api.esmatlas.com",
+            "url": "https://api.esmatlas.com",
+            "endpoint": "https://api.esmatlas.com/foldSequence/v1/pdb/",
+        }
         esm_call = upstreams.calls[-1]
         assert esm_call.content == b"GSC"
         assert esm_call.headers["content-type"] == "text/plain"
