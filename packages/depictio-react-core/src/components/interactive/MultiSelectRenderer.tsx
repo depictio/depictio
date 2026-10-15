@@ -4,7 +4,7 @@ import ComponentSkeleton from '../ComponentSkeleton';
 
 import { InteractiveFilter, StoredMetadata } from '../../api';
 import { useAvailableSet, useFunnelState } from '../../availableValues';
-import { isAlwaysSelected, singlePick } from './alwaysSelected';
+import { isAlwaysSelected, rankPickOptions, singlePick } from './alwaysSelected';
 import { orderCategoricalOptions } from './categoricalOptions';
 import { FunnelAvailabilityBadge, FunnelOptionMarker } from './funnelDecorations';
 import {
@@ -13,7 +13,7 @@ import {
   InteractiveTitle,
   interactiveAccent,
 } from './frame';
-import { useUniqueValues } from './useInteractiveData';
+import { useRankedValues, useUniqueValues } from './useInteractiveData';
 
 const MultiSelectRenderer: React.FC<{
   metadata: StoredMetadata;
@@ -54,6 +54,14 @@ const MultiSelectRenderer: React.FC<{
           : { value: v, label: v },
       ),
     [options, availableSet],
+  );
+
+  // Clearing the only value falls back on the best-ranked option (`default_by`).
+  const { data: ranking } = useRankedValues(
+    metadata.dc_id,
+    metadata.column_name,
+    alwaysSelected ? metadata.default_by : undefined,
+    metadata.default_order,
   );
 
   // Skeleton on first load so this widget matches the rest of the dashboard's
@@ -100,7 +108,7 @@ const MultiSelectRenderer: React.FC<{
           onChange={(next) =>
             onChange?.({
               index: metadata.index,
-              value: alwaysSelected ? singlePick(next, optionItems) : next,
+              value: alwaysSelected ? singlePick(next, rankPickOptions(optionItems, ranking)) : next,
               column_name: metadata.column_name,
               interactive_component_type: metadata.interactive_component_type,
               filter_expr: metadata.filter_expr,

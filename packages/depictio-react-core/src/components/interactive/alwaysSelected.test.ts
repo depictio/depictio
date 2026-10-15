@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import type { InteractiveFilter, StoredMetadata } from '../../api';
-import { autoPickValue, isAlwaysSelected, ownFilterValues, singlePick } from './alwaysSelected';
+import {
+  autoPickValue,
+  isAlwaysSelected,
+  ownFilterValues,
+  rankPickOptions,
+  singlePick,
+} from './alwaysSelected';
 
 const opts = (...values: string[]) => values.map((value) => ({ value }));
 
@@ -90,5 +96,25 @@ describe('ownFilterValues', () => {
     expect(ownFilterValues(filters, 'p')).toEqual(['b']);
     expect(ownFilterValues(filters, 'q')).toEqual(['c']);
     expect(ownFilterValues(filters, 'none')).toEqual([]);
+  });
+});
+
+describe('rankPickOptions', () => {
+  it('walks the ranked values first and keeps the rest as listed', () => {
+    const ranked = rankPickOptions(opts('a', 'b', 'c', 'd'), ['c', 'a', 'zz']);
+    expect(ranked.map((o) => o.value)).toEqual(['c', 'a', 'b', 'd']);
+  });
+
+  it('leaves the list alone without a ranking', () => {
+    expect(rankPickOptions(opts('a', 'b'), null).map((o) => o.value)).toEqual(['a', 'b']);
+    expect(rankPickOptions(opts('a', 'b'), []).map((o) => o.value)).toEqual(['a', 'b']);
+  });
+
+  it('starts on the best-ranked option that is still enabled', () => {
+    const options = [{ value: 'a' }, { value: 'b', disabled: true }, { value: 'c' }];
+    const ranked = rankPickOptions(options, ['b', 'c', 'a']);
+    expect(autoPickValue({ enabled: true, loading: false, selected: [], options: ranked })).toEqual([
+      'c',
+    ]);
   });
 });

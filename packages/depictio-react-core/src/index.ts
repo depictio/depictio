@@ -165,6 +165,7 @@ export {
   autoPickValue,
   isAlwaysSelected,
   ownFilterValues,
+  rankPickOptions,
   singlePick,
 } from './components/interactive/alwaysSelected';
 export type { PickableOption } from './components/interactive/alwaysSelected';

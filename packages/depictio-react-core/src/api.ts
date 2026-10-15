@@ -517,6 +517,11 @@ export interface StoredMetadata {
    *  list when empty, and cannot be cleared (see
    *  `components/interactive/alwaysSelected.ts`). */
   always_selected?: boolean;
+  /** `always_selected` only: a numeric column of the same collection that ranks
+   *  the options, so the filter starts on the one with the largest value of it
+   *  (`default_order` "asc": the smallest) rather than the first of the list. */
+  default_by?: string;
+  default_order?: 'asc' | 'desc';
   /** Visual grouping — interactive components sharing the same `group` are
    *  rendered together inside one collapsible Mantine Paper. See
    *  MAX_INTERACTIVE_GROUP_SIZE in depictio/models/components/constants.py. */
@@ -898,6 +903,21 @@ export async function fetchUniqueValues(
   if (filterExpr) params.set('filter_expr', filterExpr);
   const res = await authFetch(`${API_BASE}/deltatables/unique_values/${dcId}?${params.toString()}`);
   if (!res.ok) throw new Error(`Failed to fetch unique values: ${res.status}`);
+  const body = (await res.json()) as { values?: string[] };
+  return body.values || [];
+}
+
+/** The distinct values of a column, ranked by the largest value of another
+ *  column each one carries (``default_by`` of an ``always_selected`` Select). */
+export async function fetchRankedValues(
+  dcId: string,
+  columnName: string,
+  by: string,
+  order: 'asc' | 'desc' = 'desc',
+): Promise<string[]> {
+  const params = new URLSearchParams({ column: columnName, by, order });
+  const res = await authFetch(`${API_BASE}/deltatables/ranked_values/${dcId}?${params.toString()}`);
+  if (!res.ok) throw new Error(`Failed to rank values: ${res.status}`);
   const body = (await res.json()) as { values?: string[] };
   return body.values || [];
 }

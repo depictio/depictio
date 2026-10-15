@@ -216,6 +216,29 @@ class TestAlwaysSelected:
                 always_selected=True,
             )
 
+    def test_default_by_round_trips_and_stays_out_when_unset(self):
+        plain = DashboardDataLite(title="t", components=[self._select(always_selected=True)])
+        stored = plain.to_full()["stored_metadata"][0]
+        assert "default_by" not in stored and "default_order" not in stored
+        ranked = DashboardDataLite(
+            title="t",
+            components=[self._select(always_selected=True, default_by="size")],
+        )
+        stored = ranked.to_full()["stored_metadata"][0]
+        assert stored["default_by"] == "size" and "default_order" not in stored
+        back = DashboardDataLite.from_full(ranked.to_full()).components[0]
+        back = back if isinstance(back, dict) else back.model_dump()
+        assert back["default_by"] == "size"
+        asc = DashboardDataLite(
+            title="t",
+            components=[self._select(always_selected=True, default_by="size", default_order="asc")],
+        )
+        assert asc.to_full()["stored_metadata"][0]["default_order"] == "asc"
+
+    def test_default_by_needs_always_selected(self):
+        with pytest.raises(ValueError, match="always_selected"):
+            InteractiveLiteComponent(**self._select(default_by="size"))
+
     def test_a_default_value_names_the_one_value_it_starts_on(self):
         one = InteractiveLiteComponent(**self._select(always_selected=True, default_value=["a"]))
         assert one.default_value == ["a"]

@@ -22,6 +22,7 @@ import {
   ColumnRange,
   fetchColumnRange,
   fetchColumnRangeAt,
+  fetchRankedValues,
   fetchUniqueValues,
   fetchUniqueValuesAt,
   type DataPinFields,
@@ -114,6 +115,67 @@ export function useUniqueValues(
       cancelled = true;
     };
     // `key` covers every input, the pins included.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  return state;
+}
+
+// ---------------------------------------------------------------- ranked values
+
+const rankedPending = new Map<string, Promise<string[]>>();
+const rankedResolved = new Map<string, string[]>();
+
+/**
+ * The values of a column ranked by another (`fetchRankedValues`): where an
+ * `always_selected` Select with `default_by` starts. `data` is null when there
+ * is nothing to rank by (no `by`, or a data version is active, whose pinned
+ * data the live ranking cannot speak for), and the Select then starts on its
+ * first option. A failed ranking resolves to null too: it is a preference.
+ */
+export function useRankedValues(
+  dcId: string | undefined,
+  columnName: string | undefined,
+  by: string | undefined,
+  order: 'asc' | 'desc' = 'desc',
+): Loadable<string[] | null> {
+  const pinned = useFilterDataPins() !== null;
+  const key = dcId && columnName && by && !pinned ? `${dcId}|${columnName}|${by}|${order}` : null;
+  const [state, setState] = useState<Loadable<string[] | null>>(() => {
+    const hit = key ? rankedResolved.get(key) : undefined;
+    return { data: hit ?? null, loading: Boolean(key) && !hit, error: null };
+  });
+
+  useEffect(() => {
+    if (!key || !dcId || !columnName || !by) {
+      setState({ data: null, loading: false, error: null });
+      return;
+    }
+    const hit = rankedResolved.get(key);
+    if (hit) {
+      setState({ data: hit, loading: false, error: null });
+      return;
+    }
+    let cancelled = false;
+    let pending = rankedPending.get(key);
+    if (!pending) {
+      pending = fetchRankedValues(dcId, columnName, by, order);
+      rankedPending.set(key, pending);
+    }
+    pending
+      .then((values) => {
+        rankedResolved.set(key, values);
+        if (!cancelled) setState({ data: values, loading: false, error: null });
+      })
+      .catch((err) => {
+        console.warn('[useRankedValues] fetchRankedValues failed:', err);
+        rankedPending.delete(key);
+        if (!cancelled) setState({ data: null, loading: false, error: errorMessage(err) });
+      });
+    return () => {
+      cancelled = true;
+    };
+    // `key` covers every input.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 

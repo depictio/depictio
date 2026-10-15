@@ -8,6 +8,7 @@ upsert, fetch, batch existence checks, and shape queries.
 import asyncio
 import math
 from datetime import datetime, timezone
+from typing import Literal
 
 import boto3
 import polars as pl
@@ -1082,6 +1083,110 @@ async def get_unique_values(
     except Exception as e:
         logger.error(f"Error fetching unique values for column {column}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to read unique values: {e}")
+
+
+def rank_values(
+    lazy: pl.LazyFrame, column: str, by: str, descending: bool = True, limit: int = 1000
+) -> list[str]:
+    """The distinct values of ``column``, ranked by the largest ``by`` each carries.
+
+    Backs the default of an ``always_selected`` Select that names a ``default_by``
+    column: the first value is the one with the largest (or, ascending, smallest)
+    ``by``. A value whose ``by`` is null ranks last; ties fall back on the value
+    itself, so the order is stable.
+    """
+    ranked = (
+        lazy.filter(pl.col(column).is_not_null())
+        .group_by(column)
+        .agg(pl.col(by).max().alias("__rank__"))
+        .sort(["__rank__", column], descending=[descending, False], nulls_last=True)
+        .limit(limit)
+        .collect()
+    )
+    return [str(v) for v in ranked[column].to_list()]
+
+
+@deltatables_endpoint_router.get("/ranked_values/{data_collection_id}")
+async def get_ranked_values(
+    data_collection_id: PyObjectId,
+    column: str,
+    by: str,
+    order: Literal["asc", "desc"] = "desc",
+    limit: int = 1000,
+    current_user: str = Depends(get_user_or_anonymous),
+):
+    """Return the distinct values of ``column`` ranked by the ``by`` column.
+
+    Backs the default of an ``always_selected`` Select with ``default_by``: the
+    Select keeps its alphabetical list and starts on the first value of this one
+    (see ``rank_values``).
+
+    Returns:
+        ``{"column": str, "by": str, "values": list[str]}``, best first.
+
+    Raises:
+        HTTPException: 404 if the data collection or a column is missing, 403 without
+        viewer access.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
+
+    project = projects_collection.find_one(
+        {"workflows.data_collections._id": ObjectId(data_collection_id)},
+        {"_id": 1},
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Data collection not found.")
+    if not check_project_permission(project["_id"], current_user, "viewer"):  # type: ignore[arg-type]
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this data collection.",
+        )
+    deltatables_list = list(deltatables_collection.find({"data_collection_id": data_collection_id}))
+    location = deltatables_list[-1].get("delta_table_location") if deltatables_list else None
+    if not location:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No DeltaTable found for Data Collection ID {data_collection_id}.",
+        )
+
+    from depictio.api.v1.deltatables_utils import _get_aggregation_version
+
+    dc_id_str = str(data_collection_id)
+    cache_key = (
+        f"ranked_values_{dc_id_str}_{column}_{by}_{order}_{limit}_"
+        f"{_get_aggregation_version(dc_id_str)}"
+    )
+    try:
+        from depictio.api.cache import get_cache
+
+        cached = get_cache().get(cache_key)
+        if cached is not None:
+            return {"column": column, "by": by, "values": cached}
+    except Exception as exc:  # the cache is an optimisation, never a dependency
+        logger.debug(f"ranked_values: cache read failed for {cache_key}: {exc}")
+
+    try:
+        lazy = pl.scan_delta(location, storage_options=polars_s3_config)
+        names = lazy.collect_schema().names()
+        for name in (column, by):
+            if name not in names:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Column '{name}' not found in data collection {data_collection_id}.",
+                )
+        values = rank_values(lazy, column, by, descending=order == "desc", limit=limit)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error ranking values of {column} by {by}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to rank values: {e}")
+    try:
+        from depictio.api.cache import get_cache
+
+        get_cache().set(cache_key, values)
+    except Exception as exc:
+        logger.debug(f"ranked_values: cache write failed for {cache_key}: {exc}")
+    return {"column": column, "by": by, "values": values}
 
 
 def _resolve_delta_location(data_collection_id: PyObjectId, current_user: User) -> str:

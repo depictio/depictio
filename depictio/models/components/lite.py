@@ -804,6 +804,20 @@ class InteractiveLiteComponent(BaseLiteComponent):
         "fits any run, where a ``default_value`` would name one run's unit.",
     )
 
+    default_by: str | None = Field(
+        default=None,
+        description="always_selected Select only: a numeric column of the same data "
+        "collection that ranks the options. The filter then starts on the option whose "
+        "largest value of this column is highest (``default_order`` flips it), instead of "
+        "the first in the list, e.g. the family with the most members. The list itself "
+        "stays alphabetical. Unset: the first enabled option.",
+    )
+    default_order: Literal["desc", "asc"] = Field(
+        default="desc",
+        description="With ``default_by``: ``desc`` starts on the largest value, ``asc`` on "
+        "the smallest.",
+    )
+
     # Styling (optional)
     title_size: str | None = Field(default=None, description="Title size")
     custom_color: str | None = Field(default=None, description="Custom accent color")
@@ -867,6 +881,11 @@ class InteractiveLiteComponent(BaseLiteComponent):
         if isinstance(self.default_value, list) and kind != "MultiSelect" and kind != "Select":
             raise ValueError(
                 f"A list default_value is only valid for Select / MultiSelect, not {kind}."
+            )
+        if self.default_by is not None and not self.always_selected:
+            raise ValueError(
+                "default_by ranks the options an always_selected Select starts on: set "
+                "always_selected too, or drop default_by."
             )
         if self.always_selected:
             if kind != "Select":
