@@ -222,18 +222,23 @@ def substitutions_per_library(subs: pl.DataFrame, cut: pl.DataFrame) -> pl.DataF
         .unique(subset=["sample"], keep="first")
     )
     is_gap = pl.col("nt") == "-"
+    # The dominant base is taken on the gap-free rows. Sorting a filtered column by
+    # another filtered column inside the aggregation fails on polars 1.33 (the
+    # version MultiQC pins in CI) with "matching group lengths".
+    dominant = (
+        df.filter(~is_gap)
+        .sort("pct", maintain_order=True)
+        .group_by("sample", "position", maintain_order=True)
+        .agg(pl.col("nt").last().alias("reference_nt"))
+    )
     per_pos = (
         df.group_by("sample", "position")
         .agg(
             pl.col("pct").filter(~is_gap).sum().alias("_bases"),
             pl.col("pct").filter(~is_gap).max().alias("_ref"),
-            pl.col("nt")
-            .filter(~is_gap)
-            .sort_by(pl.col("pct").filter(~is_gap))
-            .last()
-            .alias("reference_nt"),
             pl.col("pct").filter(is_gap).sum().alias("gap_pct"),
         )
+        .join(dominant, on=["sample", "position"], how="left")
         .join(cut_sites, on="sample", how="inner")
         .with_columns((pl.col("position") - pl.col("cut")).alias("offset"))
         .filter(pl.col("offset").abs() <= PROFILE_WINDOW)

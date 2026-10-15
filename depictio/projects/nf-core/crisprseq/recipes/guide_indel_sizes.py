@@ -75,7 +75,8 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     seen = sizes.join(libs.select("sample", "guide"), on="sample", how="inner")
     keys = (
         seen.group_by("guide")
-        .agg(pl.int_ranges(pl.col("size").min(), pl.col("size").max() + 1).first().alias("size"))
+        .agg(pl.col("size").min().alias("_lo"), pl.col("size").max().alias("_hi"))
+        .select("guide", pl.int_ranges("_lo", pl.col("_hi") + 1).alias("size"))
         .explode("size")
         .with_columns(pl.col("size").cast(pl.Int64))
     )
