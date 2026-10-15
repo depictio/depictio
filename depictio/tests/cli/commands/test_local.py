@@ -103,6 +103,18 @@ def test_server_env_keeps_the_export_api_settings(paths, monkeypatch):
     assert "DEPICTIO_FASTAPI_WORKERS" not in env, "only the embed settings, not the whole prefix"
 
 
+def test_server_env_keeps_the_structure_resolver_settings(paths, monkeypatch):
+    monkeypatch.setenv("DEPICTIO_STRUCTURE_RESOLVER_ENABLED", "true")
+    monkeypatch.setenv("DEPICTIO_STRUCTURE_RESOLVER_TIMEOUT_S", "5")
+    monkeypatch.setenv("DEPICTIO_STRUCTURE_RESOLVER_ESMFOLD_MAX_LENGTH", "200")
+    ports = {"api": 1, "mongo": 2, "redis": 3, "s3": 4}
+    env = server_env(paths, ports, SECRETS, "none", False)
+
+    assert env["DEPICTIO_STRUCTURE_RESOLVER_ENABLED"] == "true"
+    assert env["DEPICTIO_STRUCTURE_RESOLVER_TIMEOUT_S"] == "5"
+    assert env["DEPICTIO_STRUCTURE_RESOLVER_ESMFOLD_MAX_LENGTH"] == "200"
+
+
 def test_the_server_reaches_127_0_0_1_without_the_proxy(paths, monkeypatch):
     monkeypatch.setenv("http_proxy", "http://proxy:3128")
     monkeypatch.setenv("no_proxy", "localhost,.example.org")

@@ -539,8 +539,9 @@ calls when the annotated VCFs are absent. mosdepth reads one pass per sample.
 | SK4 | **annotation skipped** | `--skip_tools snpeff,vep` | No SnpEff/VEP output | `gatk`, `vcftools` and `vep` MultiQC panels empty; the Annotation portion of the MultiQC tab loses its data. |
 | SK5 | **somatic pairs (tumor/normal)** | a tumor/normal design | ASCAT / ControlFREEC / MSIsensor outputs would appear for the first time in this repo | Not published by this megatest, so untestable against it; no somatic-specific catalog output exists yet either: the germline-only `bcftools_stats_*` binding (SN-record based) would still apply to whatever callers run. |
 | SK6 | **Manta's near-zero SNP counts** | present in the validated run | Manta is the one structural-variant caller among the five | SK-D4: `ts=0 tv=0 n_snps=0` for both samples is correct behaviour, not a data gap, easy to misdiagnose as broken without the dashboard's own caller-labelled description. |
+| SK7 | **structure resolver off or on** | `DEPICTIO_STRUCTURE_RESOLVER_ENABLED` unset (default) or `true` | The Protein tab's structure is fetched by gene symbol from AlphaFold DB | Off: the structure tile says the lookup is disabled, and the scatter, lollipop and table work. On: 28 of the 40 lollipop genes get a model and 12 do not (a protein past about 2,700 residues, or a clone-based gene name with no reviewed UniProt entry); on 11 of the 28, some variants fall outside the model or on a residue it does not share (SnpEff counts along an Ensembl transcript, AlphaFold DB along the UniProt sequence), which the tile lists instead of drawing (SK-D21 to SK-D23 in VALIDATION_REPORT.md). |
 
-**Ranking by template stress:** SK1 > SK2 > SK5 > SK4 > SK3 > SK6
+**Ranking by template stress:** SK1 > SK2 > SK5 > SK7 > SK4 > SK3 > SK6
 
 ---
 

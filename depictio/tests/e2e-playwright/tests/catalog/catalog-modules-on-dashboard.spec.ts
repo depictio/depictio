@@ -239,6 +239,25 @@ const KIND_CONTENT_SELECTOR: Record<string, string> = {
   genome_chord: 'svg[role="img"]',
   record_card: '.mantine-Card-root, [data-testid="advanced-viz-empty"]',
   group_compare: '.js-plotly-plot, [data-testid="group-compare-empty"]',
+  // A 3D tile placed alone has no structure collection bound and CI runs with
+  // the structure resolver off, so its explained empty state is a pass.
+  molecule_3d: '.depictio-molecule-3d canvas, [data-testid="advanced-viz-empty"]',
+  msa: ".depictio-msa canvas",
+  sequence_track: ".depictio-sequence-track canvas",
+  // Drawn from the catalog's own tables, so each paints its root with a canvas
+  // or an SVG (whichever the renderer picked).
+  hmm_logo: ".depictio-hmm-logo canvas, .depictio-hmm-logo svg",
+  secondary_structure:
+    ".depictio-secondary-structure canvas, .depictio-secondary-structure svg",
+  domain_architecture:
+    ".depictio-domain-architecture canvas, .depictio-domain-architecture svg",
+  // These two fetch a file at render time (a PAE matrix from object storage, a
+  // backbone from the structure resolver) that the catalog preview cannot
+  // serve, so the explained empty state is a pass, as for molecule_3d.
+  pae_matrix:
+    '.depictio-pae-matrix canvas, .depictio-pae-matrix svg, [data-testid="advanced-viz-empty"]',
+  ramachandran:
+    '.depictio-ramachandran svg, .depictio-ramachandran canvas, [data-testid="advanced-viz-empty"]',
 };
 
 /** What shows that a render drew its content: its kind's own selector, the

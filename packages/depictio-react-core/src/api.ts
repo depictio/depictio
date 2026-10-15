@@ -513,6 +513,10 @@ export interface StoredMetadata {
   default_state?: { default_value?: unknown; default_range?: unknown; options?: unknown[] };
   /** Slider only: comparison with the value (gte when absent). */
   slider_mode?: string;
+  /** Select only: the filter always holds one value, the first option of its
+   *  list when empty, and cannot be cleared (see
+   *  `components/interactive/alwaysSelected.ts`). */
+  always_selected?: boolean;
   /** Visual grouping — interactive components sharing the same `group` are
    *  rendered together inside one collapsible Mantine Paper. See
    *  MAX_INTERACTIVE_GROUP_SIZE in depictio/models/components/constants.py. */
@@ -1269,6 +1273,11 @@ export type InteractiveFilterSource =
    *  position range) because the pipeline filters by column and a genomic
    *  region is two columns. See `genomeRegionFilters` in `selection.ts`. */
   | 'genome_selection'
+  /** A residue range picked on a protein tile (molecule_3d, msa,
+   *  sequence_track, lollipop). Same pair shape as `genome_selection`: an
+   *  entity multi-select and a position range. See `residueRangeFilters` in
+   *  `selection.ts`. */
+  | 'residue_selection'
   /** A range brushed on one axis of a `parallel_coordinates` tile. Emits an
    *  ordinary RangeSlider entry on that axis's column. */
   | 'axis_selection'
@@ -1289,6 +1298,11 @@ export interface InteractiveFilter {
   column_name?: string;
   interactive_component_type?: string;
   source?: InteractiveFilterSource;
+  /** Set on a selection a tile emitted in the same gesture as its residue
+   *  pick (a domain's label beside its span): it is dropped with that pick
+   *  when another gesture replaces it (`pairedWithResiduePick` in
+   *  `selection.ts`). The server ignores it. */
+  paired_with?: 'residue_selection';
   /** Optional Polars filter expression carried with the user-supplied value.
    *  When set, the server ANDs it onto the value-based filter so the source's
    *  row scoping (e.g. `col('depth') >= 30`) propagates to downstream cards/
@@ -1536,7 +1550,15 @@ export type AdvancedVizKind =
   | 'cnv_profile'
   | 'genome_chord'
   | 'record_card'
-  | 'parallel_coordinates';
+  | 'parallel_coordinates'
+  | 'molecule_3d'
+  | 'msa'
+  | 'sequence_track'
+  | 'hmm_logo'
+  | 'secondary_structure'
+  | 'domain_architecture'
+  | 'pae_matrix'
+  | 'ramachandran';
 
 /** Accepted dtypes for one role, plus whether the role is required. Sourced
  *  from the backend canonical schema so the builder never duplicates the
@@ -5204,6 +5226,57 @@ export async function listMyGroups(): Promise<MyGroup[]> {
 export async function fetchGroup(groupId: string): Promise<GroupDetail> {
   const res = await authFetch(`${API_BASE}/groups/${groupId}`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch group');
+  return res.json();
+}
+
+/** One grant behind a person's access: a direct entry or a group's. */
+export interface AccessSource {
+  kind: 'direct' | 'group';
+  role: 'owner' | 'editor' | 'viewer';
+  group_id?: string;
+  group_name?: string;
+}
+
+export interface EffectiveAccessUser {
+  id: string;
+  email: string;
+  display_name?: string | null;
+  /** Highest of the person's grants. */
+  role: 'owner' | 'editor' | 'viewer';
+  /** Every grant, highest first, so the role reads off the first one. */
+  sources: AccessSource[];
+}
+
+export interface EffectiveAccess {
+  users: EffectiveAccessUser[];
+  /** The `*` viewer wildcard: every signed-in user. Not a row. */
+  everyone_can_view: boolean;
+}
+
+/** Everyone a project's grants reach, direct or through a group. Project
+ *  owners and sysadmins only: the rows carry group members' emails. */
+export async function fetchProjectEffectiveAccess(projectId: string): Promise<EffectiveAccess> {
+  const res = await authFetch(`${API_BASE}/projects/effective_access/${projectId}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load who can access this project');
+  return res.json();
+}
+
+export interface GroupMemberPreview {
+  id: string;
+  email: string;
+  display_name?: string | null;
+}
+
+/** Members of a group before it is shared with a project. Same gate as the
+ *  permissions edit, so a project owner need not belong to the group. */
+export async function previewGroupMembers(
+  projectId: string,
+  groupId: string,
+): Promise<{ id: string; name: string; members: GroupMemberPreview[] }> {
+  const res = await authFetch(
+    `${API_BASE}/projects/group_members_preview/${projectId}/${groupId}`,
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load the group members');
   return res.json();
 }
 

@@ -56,6 +56,19 @@ describe('pickFilterDemo', () => {
     expect(pickFilterDemo([city])).toBeNull();
     expect(pickFilterDemo([card])).toBeNull();
   });
+
+  it('never demos an always_selected Select, which cannot be cleared', () => {
+    const picker = meta({
+      index: 'p',
+      component_type: 'interactive',
+      interactive_component_type: 'Select',
+      always_selected: true,
+      dc_id: 'meta',
+      column_name: 'structure',
+    });
+    expect(pickFilterDemo([card, picker, city])).toEqual({ card, control: city });
+    expect(pickFilterDemo([card, picker])).toBeNull();
+  });
 });
 
 describe('foldableSectionsOf', () => {

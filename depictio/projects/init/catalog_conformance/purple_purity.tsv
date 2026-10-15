@@ -1,0 +1,2 @@
+sample	purity	ploidy	fit_status	sex	whole_genome_duplication	ms_indels_per_mb	ms_status	tmb_per_mb	tmb_status	tml	tml_status	sv_tmb	diploid_fraction	polyclonal_fraction	min_purity	max_purity	min_ploidy	max_ploidy	fit_score	run_mode	qc_status	fit_method	cn_segments	unsupported_cn_segments	deleted_genes	contamination	germline_aberrations	amber_mean_depth	loh_fraction	tinc_level
+TUMOR1	1.0	2.82	NORMAL	MALE	true	0.0965	MSS	14.8398	HIGH	349	HIGH	1295	0.0177	0.3129	0.98	1.0	1.38	2.94	1.193	TUMOR_GERMLINE	PASS	NORMAL	2755	1	148	0.0	NONE	89	0.5243	0.0

@@ -989,6 +989,243 @@ workflows:
               percent_rrna: "Percentage of reads assigned to rRNA. The clearest single separator of the degraded group."
               genes_detected: "Number of genes with at least one assigned read."
 
+      # Protein structure (the 8ddx block). One predicted structure and the
+      # four tables the protein tiles read, all keyed on the same `entity` and
+      # `position` column names: that shared naming is what lets a residue
+      # picked in one tile move every other one (the `residue_selection`
+      # filter). Every other column name is specific to its table, because a
+      # filter reaches every collection with a column of its name: a shared
+      # `category` would let a consequence filter empty the residue table.
+      # The structure is a ColabFold prediction from the
+      # nf-core/proteinfold 2.1.0 test profile, not a PDB entry; see
+      # scripts/generate_fixtures.py for how the tables derive from it.
+      - id: "646b0f3c1e4a2d7f8e5b8dd1"
+        data_collection_tag: "protein_structure_demo"
+        description: "One predicted protein structure (PDB, pLDDT in the B-factor column), 172 residues, one chain"
+        config:
+          type: "indexed_file"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/demo_protein.pdb"
+          dc_specific_properties:
+            # The entity id is the file name without its extension, so the
+            # file is named after the entity the four tables carry.
+            format: "pdb"
+            max_file_size_mb: 16
+
+      - id: "646b0f3c1e4a2d7f8e5b8dd2"
+        data_collection_tag: "protein_residues_demo"
+        description: "One row per residue of the demo structure: amino acid, pLDDT and an approximate secondary structure"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/protein_residues_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              entity: "Protein the residue belongs to. Named like the structure file, which is how the 3D tile finds its structure."
+              chain: "Chain of the residue. One chain here."
+              position: "Residue number in the structure's own numbering, from 1. The column every protein tile selects on."
+              residue: "One-letter amino acid, read from the structure."
+              plddt: "Per-residue pLDDT (0 to 100), read from the B-factor column of the model. Draws the sequence track's confidence lane."
+              secondary_structure: "Secondary structure from CA geometry alone: H helix, E strand, C coil. An approximation of DSSP, drawn as glyphs on the sequence track."
+
+      - id: "646b0f3c1e4a2d7f8e5b8dd3"
+        data_collection_tag: "protein_msa_demo"
+        description: "The alignment the demo structure was folded from: 34 sequences over 172 columns, the query first"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/protein_msa_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              msa_id: "Alignment the row belongs to, named after the entity folded from it."
+              seq_id: "Sequence name: query for the folded sequence, hit_N for the others, in file order. The pipeline writes the rows unnamed."
+              rank: "Row order, 0 for the query. The alignment tiles sort on it."
+              aligned_sequence: "Aligned residues, gaps as dashes, insertions relative to the query removed so every row is 172 columns."
+              identity: "Share of the row's aligned residues identical to the query (0 to 1)."
+              coverage: "Share of the query's columns the row covers (0 to 1)."
+              entity: "Entity the alignment belongs to, the same value as msa_id."
+
+      - id: "646b0f3c1e4a2d7f8e5b8dd4"
+        data_collection_tag: "protein_variants_demo"
+        description: "12 synthetic protein variants on the demo structure in 4 consequence classes, one of them numbered one residue off on purpose"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/protein_variants_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              entity: "Protein the variant falls on."
+              position: "Amino-acid position in the structure's numbering."
+              ref_aa: "Reference amino acid as the caller reports it. It matches the structure on every row but one, which the 3D tile lists as a numbering mismatch rather than drawing it on the wrong residue."
+              alt_aa: "Alternate amino acid: a letter for a missense or synonymous change, * for a stop, fs for a frameshift."
+              consequence: "Consequence class: missense, synonymous, nonsense or frameshift. Colours the variants in every tile."
+              allele_fraction: "Variant allele fraction (0 to 0.55). Sizes the variant spheres and the lollipop heads."
+              protein_change: "Protein change in HGVS short form (p.K11Q). The table's selection column and the record card's key."
+
+      - id: "646b0f3c1e4a2d7f8e5b8dd5"
+        data_collection_tag: "protein_domains_demo"
+        description: "3 domain spans on the demo structure, taken as its confident pLDDT stretches"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/protein_domains_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              entity: "Protein the span belongs to."
+              start: "First residue of the span."
+              end: "Last residue of the span, inclusive."
+              domain: "Span name, drawn on the sequence track's domain lane."
+              source: "Where the span comes from: pLDDT segment, a stretch of 20 or more residues at pLDDT 70 and above."
+
+      # Protein families and structure confidence (the 8dex block). The HMM
+      # logo, the domain architectures, the predicted aligned error and the
+      # secondary-structure comparison of the two tabs beside the protein
+      # structure tab. Same naming rule as the 8ddx block: only `entity` and
+      # `position` are shared between the collections of a tab, every other
+      # column name is specific to its table. Nothing here is pipeline output:
+      # scripts/generate_fixtures.py builds the files from the demo alignment and
+      # structure, shaped like hmmbuild, hmmsearch, S4PRED and AlphaFold write them.
+      - id: "646b0f3c1e4a2d7f8e5b8de1"
+        data_collection_tag: "protein_family_hmm_demo"
+        description: "The profile of two demo HMMs (DemoFamA over residues 30 to 101, DemoFamB over 102 to 172) as one row per match state and letter, mapped onto the demo protein. Estimated from the demo alignment by the fixture script, not hmmbuild"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/protein_family_hmm_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              entity: "Reference protein the match states are mapped onto: the demo protein, which is what links the logo to the structure tiles."
+              position: "Residue of the reference protein the match state sits on, in the structure's numbering. A pick on a stack selects it everywhere."
+              hmm_name: "Profile HMM the row belongs to: DemoFamA or DemoFamB. One logo per model."
+              hmm_acc: "Accession of the model (DEMO0001.1, DEMO0002.1)."
+              hmm_position: "Match state number along the HMM, from 1. The x axis of the logo."
+              hmm_letter: "Amino acid the emission probability belongs to."
+              emission: "Match emission probability of the letter at the state (0 to 1). The logo recomputes its heights from it."
+              height_bits: "Letter height in bits in hmmlogo's above-background mode, for other uses. The logo does not read it."
+              info_bits: "Relative entropy of the state in bits: the height of its stack."
+              insert_prob: "Probability of an insert after the state (match to insert transition), 0 after the last state. Three loop insertions were simulated, so three states stand out."
+              insert_length: "Expected length of an insert after the state, 0 after the last state."
+              occupancy: "Probability that the state is used rather than deleted. Falls near the ends of the models, where fragments are missing."
+              delete_prob: "One minus the occupancy."
+              consensus: "Most likely letter of the state, upper case from a probability of 0.5."
+              rf: "Reference annotation of the state: x on every match state."
+              cs: "Consensus structure of the state: the helix (H), strand (E) or coil (C) the demo protein has there, from CA geometry."
+              map_column: "Column of the seed alignment the state was built from, which skips the insert columns."
+
+      - id: "646b0f3c1e4a2d7f8e5b8de2"
+        data_collection_tag: "protein_family_hits_demo"
+        description: "Domain hits of the 34 members of the demo alignment against the two demo HMMs, plus 3 synthetic extra families (OtherFamC, D and E) on 10 of them, in the hmmsearch domain table columns. 6 members are truncated fragments, so their hits match only part of the HMM. Scores, E-values and accuracies are synthetic, monotone in identity times coverage; ~6 distinct architectures"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/protein_family_hits_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              entity: "Protein the domain was found on: the demo protein, or a member of its alignment (hit_N, which has no structure)."
+              sample: "Run the hits come from."
+              source: "Annotation source: demo_hmm_library for the two demo HMMs, synthetic for the extra families."
+              label: "Family the domain matched, which is the HMM name. A domain click links to the logo of that model."
+              accession: "Accession of the family."
+              description: "Free-text description of the family, shown in the tooltip."
+              start: "First residue of the domain envelope on its protein."
+              end: "Last residue of the domain envelope, inclusive."
+              protein_length: "Length of the protein. Members carry loop insertions, fragments and extra domains, so it differs from 172."
+              hmm_length: "Number of match states of the family's HMM."
+              domain_index: "Number of this domain among the domains of the same family on the protein."
+              domain_count: "Number of domains of the same family on the protein."
+              seq_evalue: "E-value of the whole sequence against the model. Synthetic."
+              seq_score: "Bit score of the whole sequence. Synthetic."
+              c_evalue: "Conditional E-value of the domain. Synthetic."
+              i_evalue: "Independent E-value of the domain, the one the tiles threshold on. Synthetic."
+              dom_score: "Bit score of the domain. Synthetic, monotone in identity times coverage."
+              dom_bias: "Composition bias correction of the domain in bits. Synthetic."
+              hmm_from: "First HMM state the domain aligns to. Above 1, the domain is a partial match on its left edge."
+              hmm_to: "Last HMM state the domain aligns to. Below hmm_length, the domain is a partial match on its right edge."
+              ali_from: "First residue of the alignment on the protein."
+              ali_to: "Last residue of the alignment on the protein."
+              acc: "Mean posterior probability of the aligned residues. Synthetic."
+              hmm_coverage: "Share of the HMM the domain covers: (hmm_to - hmm_from + 1) / hmm_length."
+              neg_log10_evalue: "Minus log10 of the independent E-value, for plotting."
+
+      - id: "646b0f3c1e4a2d7f8e5b8de3"
+        data_collection_tag: "protein_pae_demo"
+        description: "Predicted aligned error of the demo structure, 172 x 172 residues, as a tab-separated matrix. Synthetic: low inside each confident segment, high between segments and around the low-confidence ends"
+        config:
+          type: "indexed_file"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/demo_protein.pae.tsv"
+          dc_specific_properties:
+            # The entity id is the file name without its .pae.tsv extension, so
+            # the file is named after the entity the residue table carries.
+            format: "pae"
+            max_file_size_mb: 16
+
+      - id: "646b0f3c1e4a2d7f8e5b8de4"
+        data_collection_tag: "protein_ss_demo"
+        description: "Secondary structure of the demo protein from two sources: a synthetic S4PRED-style prediction with probabilities (two deliberate disagreements) and the call from the structure's CA geometry"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/protein_ss_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              entity: "Protein the residue belongs to."
+              position: "Residue number in the structure's numbering, from 1."
+              ss_source: "Where the call comes from: S4PRED (a synthetic prediction written like S4PRED's .ss2) or structure (CA geometry)."
+              ss_code: "Secondary-structure state: H helix, E strand, C coil."
+              ss_probability: "Probability of the called state, for the S4PRED source. Empty for the structure, which has no probabilities."
+              p_helix: "Probability of helix, for the S4PRED source."
+              p_strand: "Probability of strand, for the S4PRED source."
+              p_coil: "Probability of coil, for the S4PRED source."
+
 # Region links. A genomic region travels as a chromosome filter plus a
 # position range on the emitting collection's own columns; a region link
 # renames that pair onto the target's columns (depictio/models/models/links.py),

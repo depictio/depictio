@@ -1,0 +1,925 @@
+# nf-core/oncoanalyser Template v3.0.0 - Cancer genome and transcriptome (WiGiTS)
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/oncoanalyser/3.0.0 --data-root /path/to/outdir \
+#     --var METADATA_FILE=/path/to/samplesheet.csv
+#
+# Tested against nf-core/oncoanalyser AWS megatest results:
+#   s3://nf-core-awsmegatests/oncoanalyser/results-7c74c87a43749952b38c9a18915947570f0595a0
+#   (test_full profile, WGTS tumor/normal DNA plus tumor RNA; see megatest.yaml)
+# ============================================================================
+#
+# DATA_ROOT is the pipeline outdir: oncoanalyser publishes every output under
+# <group_id>/<tool>/, one group per tumor, so a cohort run is a set of group
+# directories side by side. Every recipe globs its files with **/, and every
+# tumor-level file is named after the tumor's sample_id, which is the key the
+# sample hub links on.
+#
+# DESIGN METADATA. oncoanalyser does not publish the samplesheet it ran on, so
+# the hub reads the file named by METADATA_FILE (default: input/samplesheet.csv
+# under DATA_ROOT, where download_test_data.sh puts the vendored megatest
+# sheet). The pipeline's input schema guarantees group_id, subject_id,
+# sample_id, sample_type and sequence_type; GROUP_COL names the column the
+# dashboard groups by (sample_class, tumor or normal and DNA or RNA, unless
+# told otherwise).
+#
+# OPTIONAL TOOLS. CUPPA, SIGS, CHORD, LILAC, TEAL, Neo and QSEE can be excluded
+# with --processes_exclude, and a targeted (panel) run skips several of them, so
+# their collections are optional: a run without them drops those tiles.
+template:
+  template_id: "nf-core/oncoanalyser/3.0.0"
+  description: "nf-core/oncoanalyser cancer genomics template (WiGiTS): tumor purity, ploidy and QC, allele-specific copy number, the driver catalog, somatic small variants and their protein changes, structural variants and fusions, tissue of origin, mutational signatures, homologous recombination deficiency, HLA typing and neoepitopes."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "oncoanalyser output directory (one <group_id>/ sub-directory per tumor, plus pipeline_info/)."
+      required: true
+    - name: "METADATA_FILE"
+      description: "The samplesheet the run was started with (--input: group_id, subject_id, sample_id, sample_type, sequence_type, filetype, filepath). Defaults to input/samplesheet.csv under DATA_ROOT."
+      required: false
+      default: "{DATA_ROOT}/input/samplesheet.csv"
+    - name: "METADATA_ID_COL"
+      description: "Samplesheet id column. oncoanalyser fixes it to sample_id, the name every per-sample output file carries."
+      required: false
+      default: "sample_id"
+    - name: "GROUP_COL"
+      description: "Samplesheet column the dashboard groups and filters samples by. Defaults to sample_class (sample_type and sequence_type joined, e.g. tumor_dna), which the sample hub derives."
+      required: false
+      default: "sample_class"
+    - name: "GROUP_COL_DISPLAY"
+      description: "Reader-facing label of GROUP_COL, used in filter and card titles."
+      required: false
+      default: "Sample class"
+    - name: "GENOME"
+      description: "Genome build of the run (UCSC name): hg38 for GRCh38_hmf, hg19 for GRCh37_hmf. Sets the chromosome ring, the locus views and their gene lane."
+      required: false
+      default: "hg38"
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/samplesheet.csv"
+      METADATA_ID_COL: "sample_id"
+      GROUP_COL: "sample_class"
+      GROUP_COL_DISPLAY: "Sample class"
+      GENOME: "hg38"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "hook_url"
+          - "email*"
+          - "genomes"            # the full reference bundle URL table
+          - "hmf_data_paths"     # internal paths inside the reference bundle
+          - "panel_data_paths"
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Mode and reference"
+        key_patterns: ["mode", "genome", "force_genome", "force_panel", "ref_data_*", "ref_data_genomes_base", "driver_gene_panel", "target_regions_bed", "igenomes_*"]
+      - group: "Processes"
+        key_patterns: ["processes_*", "prepare_reference_only", "create_stub_placeholders"]
+      - group: "Purity and copy number"
+        key_patterns: ["purity_estimate_mode", "enable_cn_norm_with_wgs_pct"]
+      - group: "Reads and UMIs"
+        key_patterns: ["umi_type", "max_fastq_records"]
+      - group: "RNA (Isofox)"
+        key_patterns: ["isofox_*"]
+      - group: "Structural variants"
+        key_patterns: ["gridss_config"]
+      - group: "Run context"
+        key_patterns: ["input", "outdir", "version", "publish_dir_mode", "monochrome_logs", "validate_params", "help*", "show_hidden", "pipelines_testdata_base_path", "trace_report_suffix", "config_profile_*", "custom_config_*", "multiqc_*", "max_multiqc_email_size", "plaintext_email", "hmftools_log_level"]
+    highlight:
+      - "mode"
+      - "genome"
+      - "purity_estimate_mode"
+      - "processes_exclude"
+      - "driver_gene_panel"
+      - "umi_type"
+  dashboards:
+    - "dashboards/base.yaml"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "oncoanalyser Cancer Genomics"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "oncoanalyser"
+    version: "3.0.0"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/oncoanalyser"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Hub: the samplesheet, one row per sample
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "The run's samplesheet collapsed to one row per sample, with the group, subject, tumor or normal role and sequence type every other collection is filtered by"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/oncoanalyser/samples.py"
+            source_overrides:
+              samplesheet:
+                path: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample id, the name every per-sample output file carries"
+              "group_id": "Analysis group: one tumor with its optional normal and RNA sample"
+              "subject_id": "Patient the samples come from"
+              "sample_type": "tumor or normal"
+              "sequence_type": "dna or rna"
+              "sample_class": "sample_type and sequence_type joined, the role the sample plays in the run"
+              "input_files": "Number of samplesheet rows (lanes or files) behind the sample"
+              "filetypes": "Input file types of the sample (fastq, bam, cram)"
+
+      # ----------------------------------------------------------------
+      # PURPLE: purity, ploidy, copy number, drivers, somatic variants
+      # ----------------------------------------------------------------
+      - data_collection_tag: "purple_purity"
+        description: "PURPLE's purity and ploidy fit, genome-wide mutational load and QC checks, one row per tumor"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "purple/purity.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Tumor sample id"
+              "purity": "Fitted tumor purity, the share of tumor cells, 0 to 1"
+              "ploidy": "Fitted average copy number of the tumor genome"
+              "fit_status": "PURPLE fit status (NORMAL, HIGHLY_DIPLOID, SOMATIC, NO_TUMOR)"
+              "sex": "Sex from the AMBER and COBALT evidence"
+              "whole_genome_duplication": "True when the tumor genome was duplicated"
+              "ms_indels_per_mb": "Microsatellite indels per megabase"
+              "ms_status": "Microsatellite status: MSS or MSI"
+              "tmb_per_mb": "Tumor mutational burden, somatic variants per megabase"
+              "tmb_status": "Tumor mutational burden class: LOW or HIGH"
+              "tml": "Tumor mutational load, missense variants in the genome"
+              "tml_status": "Tumor mutational load class: LOW or HIGH"
+              "sv_tmb": "Structural-variant burden, somatic SVs in the genome"
+              "diploid_fraction": "Share of the genome at diploid copy number"
+              "polyclonal_fraction": "Share of the genome not explained by a clonal copy number"
+              "min_purity": "Lowest purity within the fit's score margin"
+              "max_purity": "Highest purity within the fit's score margin"
+              "min_ploidy": "Lowest ploidy within the fit's score margin"
+              "max_ploidy": "Highest ploidy within the fit's score margin"
+              "fit_score": "Score of the chosen purity and ploidy fit, lower is better"
+              "run_mode": "Evidence PURPLE ran on: TUMOR_GERMLINE or TUMOR"
+              "qc_status": "PURPLE QC verdict: PASS or the failing checks"
+              "fit_method": "Fit method: NORMAL, HIGHLY_DIPLOID, SOMATIC or NO_TUMOR"
+              "cn_segments": "Number of copy-number segments"
+              "unsupported_cn_segments": "Copy-number segments with no SV or centromere support"
+              "deleted_genes": "Genes with a homozygous deletion"
+              "contamination": "Contamination estimated by AMBER, 0 to 1"
+              "germline_aberrations": "Germline chromosomal aberrations detected, NONE when there are none"
+              "amber_mean_depth": "Mean depth at the AMBER heterozygous sites"
+              "loh_fraction": "Share of the genome with loss of heterozygosity, 0 to 1"
+              "tinc_level": "Tumor in normal contamination level, 0 to 1"
+
+      - data_collection_tag: "purple_cnv_segments"
+        description: "PURPLE's fitted allele-specific copy-number segments as a copy-number profile, one row per segment"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "purple/cnv_segments.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Tumor sample id"
+              "chrom": "Chromosome"
+              "start": "Segment start, bp"
+              "end": "Segment end, bp"
+              "log2": "log2 of the copy number over 2, the ratio against a diploid baseline"
+              "baf": "Fitted B-allele frequency of the segment"
+              "copy_number": "Absolute copy number, rounded"
+              "segment": "Row type, always segment"
+              "label": "Copy number as total = major + minor allele"
+              "depth": "Read-depth windows behind the segment"
+              "minor_copy_number": "Minor-allele copy number"
+              "major_copy_number": "Major-allele copy number"
+
+      - data_collection_tag: "purple_gene_copy_number"
+        description: "PURPLE's copy number per gene with an amplification, deletion or LOH call, one row per gene"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "purple/gene_copy_number.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Tumor sample id"
+              "gene": "Gene symbol"
+              "chrom": "Chromosome"
+              "start": "Gene start, bp"
+              "end": "Gene end, bp"
+              "chromosome_band": "Cytoband"
+              "transcript": "Canonical transcript"
+              "min_copy_number": "Lowest copy number across the gene"
+              "max_copy_number": "Highest copy number across the gene"
+              "min_minor_allele_copy_number": "Lowest minor-allele copy number across the gene"
+              "relative_min_copy_number": "Lowest copy number over the sample ploidy"
+              "somatic_regions": "Copy-number segments the gene spans"
+              "cn_event": "AMP, PARTIAL_AMP, DEL, PARTIAL_DEL, LOH or NEUTRAL, from PURPLE's driver cut-offs"
+              "reported_status": "Whether the gene is reported as a copy-number driver"
+              "driver_type": "Driver type PURPLE assigned the gene"
+
+      - data_collection_tag: "purple_drivers"
+        description: "The somatic and germline driver catalog of PURPLE and LINX, one row per tumor, gene and driver type"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "purple/drivers.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "driver_id": "Tumor, gene and driver type joined, the record key"
+              "sample": "Tumor sample id"
+              "gene": "Gene symbol"
+              "driver": "Driver type (MUTATION, AMP, DEL, LOH, DISRUPTION, GERMLINE_MUTATION)"
+              "origin": "somatic or germline"
+              "source_tool": "Tool that wrote the row: PURPLE or LINX"
+              "category": "ONCO for an oncogene, TSG for a tumor suppressor"
+              "reported": "True when the driver is reported"
+              "report_status": "REPORTED or NOT_REPORTED, PURPLE's reporting status as text"
+              "driver_likelihood": "Driver likelihood, 0 to 1"
+              "likelihood_method": "How the likelihood was set (DNDS, HOTSPOT, AMP, DEL, BIALLELIC)"
+              "biallelic": "True when both alleles are hit"
+              "missense": "Missense variants in the gene"
+              "nonsense": "Nonsense variants in the gene"
+              "splice": "Splice variants in the gene"
+              "inframe": "In-frame indels in the gene"
+              "frameshift": "Frameshift variants in the gene"
+              "min_copy_number": "Lowest copy number across the gene"
+              "max_copy_number": "Highest copy number across the gene"
+              "chrom": "Chromosome"
+              "chromosome_band": "Cytoband"
+              "transcript": "Transcript the driver was assessed on"
+
+      - data_collection_tag: "purple_somatic_variants"
+        description: "PASS somatic SNVs, MNVs and indels with PAVE's impact and PURPLE's purity-adjusted allele frequency, one row per call"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "purple/somatic_variants.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "variant_key": "Chromosome, position, reference and alternate allele joined"
+              "sample": "Tumor sample id"
+              "chrom": "Chromosome"
+              "pos": "Position, 1-based"
+              "ref": "Reference allele"
+              "alt": "Alternate allele"
+              "variant_type": "SNV, MNV or INDEL"
+              "tier": "SAGE tier: HOTSPOT, PANEL, HIGH_CONFIDENCE or LOW_CONFIDENCE"
+              "gene": "Gene of the canonical impact, empty when intergenic"
+              "transcript": "Canonical transcript"
+              "canonical_effect": "Sequence Ontology effect on the canonical transcript"
+              "coding_effect": "Coding effect class: MISSENSE, NONSENSE_OR_FRAMESHIFT, SPLICE, SYNONYMOUS or NONE"
+              "hgvs_c": "HGVS coding change"
+              "hgvs_p": "HGVS protein change"
+              "worst_coding_effect": "Most severe coding effect across transcripts"
+              "splice_region": "True when the call falls in a splice region"
+              "tumor_af": "Raw allele fraction in the tumor"
+              "tumor_depth": "Read depth in the tumor"
+              "tumor_alt_reads": "Reads supporting the alternate allele in the tumor"
+              "purple_af": "Purity-adjusted allele frequency"
+              "copy_number": "Copy number at the locus"
+              "variant_copy_number": "Copy number of the variant allele"
+              "minor_allele_copy_number": "Minor-allele copy number at the locus"
+              "subclonal_likelihood": "Likelihood the call is subclonal, 0 to 1"
+              "biallelic": "True when the variant is biallelic"
+              "hotspot": "True at a known hotspot"
+              "reported": "True when the variant is in the driver catalog"
+              "kataegis": "True when the call is part of a kataegis cluster"
+              "trinucleotide_context": "Reference base with its two flanks"
+              "germline_status": "Germline copy-number status around the locus"
+              "gnomad_frequency": "gnomAD population frequency"
+              "mappability": "Mappability of the locus, 0 to 1"
+
+      - data_collection_tag: "purple_protein_changes"
+        description: "Protein-changing somatic variants in the residue contract of the protein views (gene, residue, reference and alternate amino acid)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "purple/protein_changes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "entity": "Gene symbol, the protein the residue belongs to"
+              "position": "Residue number on the canonical transcript's protein"
+              "ref_aa": "Reference amino acid, one letter"
+              "alt_aa": "Alternate amino acid, one letter; * for a stop, empty for a frameshift or indel"
+              "category": "Coding effect class"
+              "value": "Purity-adjusted allele frequency"
+              "label": "Short protein change"
+              "sample": "Tumor sample id"
+              "hgvs_p": "HGVS protein change"
+              "hgvs_c": "HGVS coding change"
+              "transcript": "Canonical transcript"
+              "canonical_effect": "Sequence Ontology effect"
+              "variant_key": "Chromosome, position, reference and alternate allele joined"
+              "chrom": "Chromosome"
+              "pos": "Genomic position"
+              "variant_copy_number": "Copy number of the variant allele"
+              "biallelic": "True when the variant is biallelic"
+              "hotspot": "True at a known hotspot"
+              "reported": "True when the variant is in the driver catalog"
+
+      # One row per tumor and gene with a protein change: the Protein changes
+      # tab's scatter, whose click emits `entity` and so moves the lollipop and
+      # the 3D structure to that gene.
+      - data_collection_tag: "purple_protein_genes"
+        description: "One row per tumor and gene with a protein change: how many changes, their highest allele frequency and worst effect, and PURPLE's driver likelihood for the gene"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/oncoanalyser/protein_genes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "entity": "Gene symbol, the same values as the protein changes' entity column"
+              "sample": "Tumor sample id"
+              "changes": "Protein changes on the gene in that tumor"
+              "hotspots": "Of those, changes at a known hotspot"
+              "max_af": "Highest purity-adjusted allele frequency among the changes"
+              "worst_effect": "Most severe coding effect among the changes"
+              "driver_likelihood": "PURPLE's likelihood that the gene's point mutations are a driver, 0 when the driver catalog has no MUTATION row for it"
+              "gene_role": "ONCO or TSG from the driver catalog, unlisted when the gene is not in it"
+              "driver_types": "Somatic driver types the catalog lists for the gene in that tumor"
+              "reported": "True when PURPLE reports one of those drivers"
+
+      # ----------------------------------------------------------------
+      # LINX: structural variants and fusions
+      # ----------------------------------------------------------------
+      - data_collection_tag: "linx_svs"
+        description: "LINX's somatic structural variants with their cluster's resolved event, as locus pairs, one row per SV"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "linx/svs.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sv_key": "Tumor and SV id joined"
+              "sample": "Tumor sample id"
+              "sv_id": "LINX SV id"
+              "label": "SV type and id"
+              "type": "SV type: DEL, DUP, INV, BND, INS, SGL or INF"
+              "cluster_id": "LINX cluster the SV belongs to"
+              "resolved_type": "Event the cluster resolves to (DEL, DUP, RECIP_TRANS, LINE, COMPLEX)"
+              "cluster_category": "Cluster category: SIMPLE, INSERTION, COMPLEX, INCOMPLETE"
+              "cluster_sv_count": "SVs in the cluster"
+              "chrom_a": "Chromosome of the start breakend"
+              "pos_a": "Position of the start breakend"
+              "orient_a": "Orientation of the start breakend"
+              "chrom_b": "Chromosome of the end breakend, empty for a single breakend"
+              "pos_b": "Position of the end breakend"
+              "orient_b": "Orientation of the end breakend"
+              "length": "Distance between the breakends on one chromosome"
+              "junction_copy_number": "Middle of LINX's junction copy-number range"
+              "junction_copy_number_min": "Lower bound of the junction copy number"
+              "junction_copy_number_max": "Upper bound of the junction copy number"
+              "genes_a": "Genes at the start breakend"
+              "genes_b": "Genes at the end breakend"
+              "is_foldback": "True for a fold-back inversion"
+              "fragile_site": "True when a breakend falls in a fragile site"
+              "line_element": "True when a breakend is at a LINE element"
+
+      - data_collection_tag: "linx_fusions"
+        description: "LINX's candidate gene fusions with both partners resolved, one row per fusion"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "linx/fusions.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "fusion_id": "Tumor and the two breakend ids joined, the record key"
+              "sample": "Tumor sample id"
+              "fusion": "Partner pair, 5' gene then 3' gene"
+              "gene_up": "5' partner gene"
+              "gene_down": "3' partner gene"
+              "reported": "True when the fusion is reported"
+              "reported_type": "Known-fusion class the report rests on"
+              "reportable_reasons": "Why the fusion is or is not reportable"
+              "phased": "INFRAME, SKIPPED_EXONS or OUT_OF_FRAME"
+              "likelihood": "Driver likelihood class of a reported fusion"
+              "transcript_up": "5' partner transcript"
+              "transcript_down": "3' partner transcript"
+              "region_up": "Region of the 5' breakend (intronic, exonic, upstream)"
+              "region_down": "Region of the 3' breakend"
+              "coords_up": "5' breakend as chromosome, position and orientation"
+              "coords_down": "3' breakend as chromosome, position and orientation"
+              "fused_exon_up": "Last 5' exon kept"
+              "fused_exon_down": "First 3' exon kept"
+              "exons_up_total": "Exons in the 5' transcript"
+              "exons_down_total": "Exons in the 3' transcript"
+              "skipped_exons_up": "5' exons skipped"
+              "skipped_exons_down": "3' exons skipped"
+              "chain_length": "Length of the SV chain joining the partners"
+              "chain_links": "SVs in that chain"
+              "chain_terminated": "True when the chain is broken before the 3' partner"
+              "domains_kept": "Protein domains kept in the fusion"
+              "domains_lost": "Protein domains lost in the fusion"
+
+      - data_collection_tag: "linx_fusion_structure"
+        description: "Each LINX fusion as two partner lanes along the fused transcript in exon units, kept and lost spans"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "linx/fusion_structure.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "fusion_id": "Tumor and the two breakend ids joined"
+              "fusion": "Partner pair, the facet title"
+              "sample": "Tumor sample id"
+              "partner": "5' or 3' partner gene"
+              "feature": "Exon span and whether it is kept"
+              "start": "Span start along the fused transcript, in exons"
+              "end": "Span end along the fused transcript, in exons"
+              "retained": "1 for a kept span, 0 for a lost one"
+              "breakpoint": "Breakpoint position along the fused transcript, in exons"
+              "phased": "INFRAME, SKIPPED_EXONS or OUT_OF_FRAME"
+              "reported": "True when the fusion is reported"
+
+      # ----------------------------------------------------------------
+      # Tumor characteristics (optional tools)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "cuppa_predictions"
+        optional: true
+        description: "CUPPA's tissue-of-origin probability per classifier and cancer type"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cuppa/predictions.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Tumor sample id"
+              "classifier_group": "Classifier family: combined, dna or rna"
+              "classifier": "Classifier (combined, dna_combined, snv96, gen_pos, event, rna_combined, gene_exp, alt_sj)"
+              "cancer_type": "Cancer type"
+              "probability": "Probability the classifier gives the cancer type"
+              "rank": "Rank of the cancer type within the classifier"
+              "is_top": "True for the classifier's first ranked type"
+
+      - data_collection_tag: "cuppa_classifier_matrix"
+        optional: true
+        description: "CUPPA's probabilities as a cancer type by classifier matrix"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cuppa/classifier_matrix.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "row_label": "Cancer type, prefixed with the tumor when the run has several"
+              "sample": "Tumor sample id"
+              "cancer_type": "Cancer type"
+              "combined": "Final combined classifier probability"
+              "dna_combined": "Combined DNA classifier probability"
+              "snv96": "Mutational profile classifier probability"
+              "gen_pos": "Genomic position classifier probability"
+              "event": "Driver and SV event classifier probability"
+              "rna_combined": "Combined RNA classifier probability"
+              "gene_exp": "Gene expression classifier probability"
+              "alt_sj": "Alternative splice junction classifier probability"
+
+      - data_collection_tag: "sigs_allocation"
+        optional: true
+        description: "SIGS' COSMIC mutational signature allocation, one row per tumor and signature"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "sigs/allocation.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Tumor sample id"
+              "signature": "COSMIC signature, MISALLOC for the unexplained share"
+              "allocation": "SNVs allocated to the signature"
+              "fraction": "Share of the tumor's SNVs, 0 to 1"
+              "percent": "Share of the tumor's SNVs, percent"
+
+      - data_collection_tag: "chord_prediction"
+        optional: true
+        description: "CHORD's homologous recombination deficiency prediction, one row per tumor"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.chord\\.prediction\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "sample": "Tumor sample id"
+              "p_BRCA1": "Probability of a BRCA1-type deficiency"
+              "p_BRCA2": "Probability of a BRCA2-type deficiency"
+              "p_hrd": "Probability of homologous recombination deficiency, BRCA1 plus BRCA2 type"
+              "hr_status": "HR_deficient, HR_proficient or cannot_be_determined"
+              "hrd_type": "BRCA1_type, BRCA2_type or none"
+              "remarks_hr_status": "Why the HR status could not be determined"
+              "remarks_hrd_type": "Why the HRD type could not be determined"
+
+      - data_collection_tag: "teal_telomere_length"
+        optional: true
+        description: "TEAL's telomere length estimate, one row per DNA sample"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.teal\\.tellength\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "sampleId": "Sample id"
+              "type": "tumor or ref (the normal)"
+              "rawTelomereLength": "Telomere length before purity adjustment, bp"
+              "finalTelomereLength": "Purity and ploidy adjusted telomere length, bp"
+              "fullFragments": "Fragments fully telomeric"
+              "cRichPartialFragments": "Partially telomeric C-rich fragments"
+              "gRichPartialFragments": "Partially telomeric G-rich fragments"
+              "totalTelomericReads": "Telomeric reads"
+              "purity": "Purity used for the adjustment"
+              "ploidy": "Ploidy used for the adjustment"
+              "duplicateProportion": "Duplicate read share"
+              "meanReadDepth": "Mean read depth"
+              "gc50ReadDepth": "Read depth at 50 percent GC"
+
+      - data_collection_tag: "lilac_alleles"
+        optional: true
+        description: "LILAC's HLA alleles and their state in the tumor, one row per tumor and allele"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "lilac/alleles.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "allele_id": "Tumor, allele and copy joined, the record key"
+              "sample": "Tumor sample id"
+              "gene": "HLA gene"
+              "allele": "Called allele"
+              "ref_fragments": "Supporting fragments in the reference"
+              "ref_unique_fragments": "Fragments unique to the allele in the reference"
+              "tumor_fragments": "Supporting fragments in the tumor"
+              "rna_fragments": "Supporting fragments in the RNA"
+              "tumor_copy_number": "Copy number of the allele in the tumor"
+              "lost_in_tumor": "True when the tumor copy number is below 0.5"
+              "somatic_missense": "Somatic missense variants in the allele"
+              "somatic_nonsense_or_frameshift": "Somatic nonsense or frameshift variants"
+              "somatic_splice": "Somatic splice variants"
+              "somatic_inframe_indel": "Somatic in-frame indels"
+              "somatic_synonymous": "Somatic synonymous variants"
+              "somatic_mutations": "Non-synonymous somatic variants in the allele"
+
+      - data_collection_tag: "neo_neoepitopes"
+        optional: true
+        description: "Neo's scored neoepitope candidates, one row per tumor and neoepitope"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "neo/neoepitopes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "neoepitope_id": "Tumor and Neo id joined"
+              "sample": "Tumor sample id"
+              "variant_type": "Event creating the neoepitope (MISSENSE, FRAMESHIFT, INFRAME_FUSION)"
+              "variant": "Variant or fusion breakends"
+              "gene": "Gene"
+              "up_amino_acids": "Wild-type amino acids before the novel ones"
+              "novel_amino_acids": "Novel amino acids"
+              "down_amino_acids": "Amino acids after the novel ones"
+              "peptides": "Peptides the neoepitope yields"
+              "rna_fragments": "RNA fragments supporting the novel sequence"
+              "rna_depth": "RNA depth at the variant"
+              "expected_tpm": "Expected expression, TPM"
+              "effective_tpm": "Effective expression, TPM"
+              "variant_copy_number": "Copy number of the variant"
+              "copy_number": "Copy number at the locus"
+              "subclonal_likelihood": "Likelihood the variant is subclonal"
+
+      # ----------------------------------------------------------------
+      # Sequencing QC
+      # ----------------------------------------------------------------
+      - data_collection_tag: "hmf_bamtools_summary"
+        description: "hmftools BamTools alignment and coverage summary, one row per DNA sample"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "hmf_bamtools/summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "DNA sample id"
+              "region_bases": "Bases in the assessed genome or target regions"
+              "total_reads": "Reads in the BAM"
+              "duplicate_reads": "Duplicate reads"
+              "dual_strand_reads": "Dual-strand consensus reads (UMI runs)"
+              "mean_coverage": "Mean coverage"
+              "sd_coverage": "Standard deviation of the coverage"
+              "median_coverage": "Median coverage"
+              "mad_coverage": "Median absolute deviation of the coverage"
+              "low_map_qual_frac": "Share of bases lost to low mapping quality"
+              "duplicate_frac": "Share of bases lost to duplicates"
+              "unmapped_frac": "Share of bases in unmapped reads"
+              "low_base_qual_frac": "Share of bases lost to low base quality"
+              "overlapping_read_frac": "Share of bases in overlapping read pairs"
+              "capped_coverage_frac": "Share of bases above the coverage cap"
+              "frac_ge_1x": "Share of bases covered at least 1x"
+              "frac_ge_5x": "Share of bases covered at least 5x"
+              "frac_ge_10x": "Share of bases covered at least 10x"
+              "frac_ge_15x": "Share of bases covered at least 15x"
+              "frac_ge_20x": "Share of bases covered at least 20x"
+              "frac_ge_25x": "Share of bases covered at least 25x"
+              "frac_ge_30x": "Share of bases covered at least 30x"
+              "frac_ge_40x": "Share of bases covered at least 40x"
+              "frac_ge_50x": "Share of bases covered at least 50x"
+              "frac_ge_60x": "Share of bases covered at least 60x"
+              "frac_ge_70x": "Share of bases covered at least 70x"
+              "frac_ge_80x": "Share of bases covered at least 80x"
+              "frac_ge_90x": "Share of bases covered at least 90x"
+              "frac_ge_100x": "Share of bases covered at least 100x"
+
+      - data_collection_tag: "hmf_bamtools_coverage_profile"
+        description: "Share of bases covered at least each depth, one curve per DNA sample"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "hmf_bamtools/coverage_profile.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "DNA sample id"
+              "coverage": "Read depth"
+              "bases": "Bases at exactly this depth"
+              "fraction": "Share of bases at exactly this depth"
+              "fraction_at_least": "Share of bases at this depth or more"
+
+      - data_collection_tag: "hmf_bamtools_fragment_length"
+        description: "Read-pair insert size distribution, one curve per DNA sample"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "hmf_bamtools/fragment_length.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "DNA sample id"
+              "fragment_length": "Centre of the insert size window, bp"
+              "pairs": "Read pairs in the window"
+              "fraction": "Share of the sample's read pairs in the window"
+
+      - data_collection_tag: "qsee_status"
+        optional: true
+        description: "QSEE's QC verdicts, one row per sample and checked feature"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "qsee/status.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "check_id": "Sample, tool and feature joined, the record key"
+              "sample": "Sample id"
+              "sample_type": "tumor or normal"
+              "source_tool": "Tool the metric comes from"
+              "feature_type": "Kind of QC feature"
+              "feature": "Checked metric"
+              "value": "Metric value"
+              "qc_status": "PASS, WARN or FAIL"
+              "fail_condition": "Condition that fails the check"
+
+links:
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "purple_purity"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the purity fit by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "purple_cnv_segments"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the copy-number segments by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "purple_gene_copy_number"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the gene copy number by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "purple_drivers"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the driver catalog by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "purple_somatic_variants"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the somatic variants by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "purple_protein_changes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the protein changes by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "purple_protein_genes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the genes with a protein change by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "linx_svs"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the structural variants by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "linx_fusions"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the fusions by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "linx_fusion_structure"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the fusion structures by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "cuppa_predictions"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the tissue-of-origin predictions by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "cuppa_classifier_matrix"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the classifier matrix by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "sigs_allocation"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the signature allocation by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "chord_prediction"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the HRD prediction by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "teal_telomere_length"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sampleId"}
+    description: "Filter the telomere lengths by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "lilac_alleles"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the HLA alleles by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "neo_neoepitopes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the neoepitopes by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "hmf_bamtools_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the alignment summary by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "hmf_bamtools_coverage_profile"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the coverage curves by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "hmf_bamtools_fragment_length"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the fragment length curves by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "qsee_status"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the QC verdicts by samplesheet samples"
+    enabled: true
+  # Reverse and lateral links: a gene picked in the driver catalog or the gene
+  # copy-number table narrows the protein changes to that gene.
+  - source_dc_tag: "purple_drivers"
+    source_column: "gene"
+    target_dc_tag: "purple_protein_changes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "entity"}
+    description: "Filter the protein changes by the genes of the selected drivers"
+    enabled: true
+  - source_dc_tag: "purple_gene_copy_number"
+    source_column: "gene"
+    target_dc_tag: "purple_drivers"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene"}
+    description: "Filter the driver catalog by the selected genes"
+    enabled: true

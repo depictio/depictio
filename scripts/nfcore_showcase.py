@@ -169,8 +169,19 @@ SCENARIOS: list[Scenario] = [
     ),
     Scenario("atacseq", "2.1.2", "test", note="CI profile, yeast"),
     Scenario("atacseq", "2.1.2", "test_controls", note="control route: libraries with an input"),
-    Scenario("chipseq", "2.1.0", "test", note="EMBL HPC run (no 2.x megatest); yeast, one antibody"),
+    Scenario(
+        "chipseq", "2.1.0", "test", note="EMBL HPC run (no 2.x megatest); yeast, one antibody"
+    ),
     Scenario("chipseq", "2.1.0", "test_star", note="STAR route: adds the STAR MultiQC module"),
+    # The samplesheet is vendored and copied into input/ by download_test_data.sh;
+    # an explicit GROUP_COL keeps the metadata auto-detection off fastq_1.
+    Scenario(
+        "crisprseq",
+        "2.3.0",
+        "megatest",
+        note="test_full targeted, 6195 libraries, vendored samplesheet; no MultiQC",
+        vars=(("GROUP_COL", "protospacer"),),
+    ),
     # No 3.2.x megatest: EMBL HPC runs, with the MultiQC 1.19 report reprocessed
     # beside them, which MULTIQC_REPROCESSED binds.
     Scenario(
@@ -213,6 +224,15 @@ SCENARIOS: list[Scenario] = [
     Scenario(
         "hic", "2.0.0", "megatest", note="MultiQC reprocessed; 2.1.0 megatest is a truncated sync"
     ),
+    # The design table is vendored (the pipeline publishes none) and copied into input/ by
+    # download_test_data.sh; the reference GTF is the one uLTRA indexed.
+    Scenario(
+        "isoseq",
+        "3.0.1",
+        "megatest",
+        note="vendored design, uLTRA GTF as reference; one sample, CCS in 100 chunks",
+        vars=(_DESIGN_IN_DATA_ROOT, ("GROUP_COL", "tissue")),
+    ),
     Scenario(
         "mag",
         "5.5.0",
@@ -229,12 +249,57 @@ SCENARIOS: list[Scenario] = [
     # The samplesheet is vendored and copied into input/ by download_test_data.sh;
     # the template reads it there by default (GROUP_COL defaults to Condition).
     Scenario("mhcquant", "3.2.0", "megatest", note="test_full profile, vendored samplesheet"),
+    # The hmmalign alignments (full_msa/raw) are in the manifest: they map the profile
+    # HMM states onto the representative's residues for the Profile HMM tab.
+    Scenario(
+        "proteinfamilies",
+        "2.5.0",
+        "megatest",
+        note="test_full profile, vendored samplesheet, hmmalign alignments for the profile logo",
+    ),
     Scenario(
         "nanoseq",
         "3.0.0",
         "megatest",
         note="MultiQC reprocessed, vendored design; 3.1.0 megatest is empty",
         vars=(_DESIGN_IN_DATA_ROOT,),
+    ),
+    # The samplesheet is vendored and copied into input/ by download_test_data.sh. The
+    # Protein changes tab resolves the structure of a gene only when the server has
+    # DEPICTIO_STRUCTURE_RESOLVER_ENABLED=true.
+    Scenario(
+        "oncoanalyser",
+        "3.0.0",
+        "megatest",
+        note="test_full WGTS; 33 MB of tables from a 272 GB run, vendored samplesheet",
+    ),
+    # The samplesheet and the design table are vendored and copied into input/ by
+    # download_test_data.sh. The run has no PSL export, so the Synteny tab is pruned.
+    Scenario(
+        "pairgenomealign",
+        "3.0.4",
+        "megatest",
+        note="test_full profile, vendored samplesheet and design table; no PSL export, no Synteny tab",
+        vars=(("METADATA_FILE", "{data_root}/input/genome_metadata.tsv"),),
+    ),
+    # The samplesheet and the design table are vendored and copied into input/ by
+    # download_test_data.sh. The run is a dev run (3 proteins, no MultiQC panel
+    # read); the Structure tab folds a protein only when the server has
+    # DEPICTIO_STRUCTURE_RESOLVER_ENABLED=true.
+    Scenario(
+        "proteinannotator",
+        "1.1.0",
+        "megatest",
+        note="dev run pin, vendored samplesheet and design; structure resolver off by default",
+        vars=(_DESIGN_IN_DATA_ROOT,),
+    ),
+    # The samplesheet is vendored and copied into input/ by download_test_data.sh;
+    # only the top-ranked PAE matrix of each engine and target is fetched.
+    Scenario(
+        "proteinfold",
+        "2.1.0",
+        "megatest",
+        note="2.1.0dev run a414fd13 (2.0.0 run empty), vendored samplesheet, top-ranked PAE only",
     ),
     Scenario(
         "riboseq",

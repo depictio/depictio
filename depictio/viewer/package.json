@@ -15,9 +15,11 @@
     "check:dataversions": "node dev/run_check.mjs dev/data_version_body_check.mjs",
     "check:componenthistory": "node dev/run_check.mjs dev/component_history_check.mjs",
     "check:renderkey": "node dev/run_check.mjs dev/render_key_check.mjs",
-    "check:dataversionstatus": "node dev/run_check.mjs dev/data_version_status_check.mjs"
+    "check:dataversionstatus": "node dev/run_check.mjs dev/data_version_status_check.mjs",
+    "check:proteinkinds": "node dev/run_check.mjs dev/protein_kinds_check.mjs"
   },
   "dependencies": {
+    "3dmol": "^2.5.5",
     "@fontsource-variable/inter": "^5.3.0",
     "@genome-spy/core": "0.88.1",
     "@iconify/react": "^5.0.2",

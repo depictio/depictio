@@ -368,6 +368,10 @@ backend:
     DEPICTIO_FEEDBACK_URL: ""
     DEPICTIO_FEEDBACK_LABEL: "Feedback"
 
+    # Protein structure resolver for molecule_3d (AlphaFold DB, UniProt, ESMFold).
+    # Off by default: accessions, gene names or sequences leave the server.
+    DEPICTIO_STRUCTURE_RESOLVER_ENABLED: "false"
+
     # Which view /dashboards opens in for someone who never picked one
     # ("thumbnails" or "table"), and the geometry of the thumbnails it shows:
     # the CSS viewport the dashboard is laid out at, times a pixel density that

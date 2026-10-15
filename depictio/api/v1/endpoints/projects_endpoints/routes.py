@@ -33,6 +33,11 @@ from depictio.api.v1.endpoints.dashboards_endpoints.version_store import (
     delete_project_versions,
 )
 from depictio.api.v1.endpoints.migrate_endpoints.routes import _collect_s3_locations_for_project
+from depictio.api.v1.endpoints.projects_endpoints.effective_access import (
+    compute_effective_access,
+    referenced_group_ids,
+    referenced_user_ids,
+)
 from depictio.api.v1.endpoints.projects_endpoints.export_template import (
     ExportTemplateRequest,
     build_template_bundle,
@@ -1434,6 +1439,63 @@ def _can_manage_project_sharing(project: dict, current_user) -> bool:
         return False
     administered = get_administered_group_ids(current_user.id)
     return any(str(group_id) in group_owner_ids for group_id in administered)
+
+
+@projects_endpoint_router.get("/effective_access/{project_id}")
+async def get_effective_access(project_id: str, current_user=Depends(get_current_user)):
+    """Everyone a grant gives access to, direct or through a group, one row each.
+
+    Gated like the edit itself: the rows carry the emails of group members, which
+    the group list withholds from people outside the group.
+    """
+    project = _async_get_project_from_id(PyObjectId(project_id), current_user, projects_collection)
+    if not _can_manage_project_sharing(project, current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="User does not have permission to see who can access this project.",
+        )
+    permissions = project.get("permissions") or {}
+    group_docs = list(groups_collection.find({"_id": {"$in": referenced_group_ids(permissions)}}))
+    user_ids = referenced_user_ids(permissions, group_docs)
+    user_docs = {
+        doc["_id"]: doc
+        for doc in users_collection.find(
+            {"_id": {"$in": user_ids}}, {"email": 1, "display_name": 1}
+        )
+    }
+    return compute_effective_access(permissions, group_docs, user_docs)
+
+
+@projects_endpoint_router.get("/group_members_preview/{project_id}/{group_id}")
+async def preview_group_members(
+    project_id: str, group_id: str, current_user=Depends(get_current_user)
+):
+    """Members of a group about to be shared with, before the grant is made."""
+    project = _async_get_project_from_id(PyObjectId(project_id), current_user, projects_collection)
+    if not _can_manage_project_sharing(project, current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="User does not have permission to update permissions for this project.",
+        )
+    try:
+        group = groups_collection.find_one({"_id": ObjectId(group_id)})
+    except Exception:
+        group = None
+    if group is None:
+        raise HTTPException(status_code=404, detail="Group not found.")
+    member_ids = [ObjectId(str(uid)) for uid in group.get("users_ids") or []]
+    members = [
+        {
+            "id": str(doc["_id"]),
+            "email": doc.get("email", ""),
+            "display_name": doc.get("display_name"),
+        }
+        for doc in users_collection.find(
+            {"_id": {"$in": member_ids}}, {"email": 1, "display_name": 1}
+        )
+    ]
+    members.sort(key=lambda m: m["email"].lower())
+    return {"id": str(group["_id"]), "name": group.get("name", ""), "members": members}
 
 
 @projects_endpoint_router.post("/update_project_permissions")

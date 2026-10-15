@@ -257,6 +257,20 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   // splitting would redraw the same axes beside each other; the kind colours by
   // its own `group_col` rather than taking the dashboard's groups.
   parallel_coordinates: 'none',
+  // One entity's structure, alignment or residue ruler: a residue axis shared
+  // with the linked protein tiles, which per-group copies would break.
+  molecule_3d: 'none',
+  msa: 'none',
+  sequence_track: 'none',
+  // The same residue axis, one entity at a time: a profile HMM's logo, the
+  // secondary-structure ribbon, a protein's domain layout, its PAE matrix and
+  // its backbone angles. Each is bound to the entity the linked protein tiles
+  // show, so per-group copies would draw the same protein side by side.
+  hmm_logo: 'none',
+  secondary_structure: 'none',
+  domain_architecture: 'none',
+  pae_matrix: 'none',
+  ramachandran: 'none',
 };
 
 /** The policy for `vizKind`.

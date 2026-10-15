@@ -34,6 +34,70 @@ const IRREGULAR_BINDINGS: readonly { kind?: string; role: string; key: string }[
 
 const scoped = (b: { kind?: string }, vizKind: string | undefined) => !b.kind || b.kind === vizKind;
 
+/** Column keys a kind's settings panel writes (`ProteinBindingSettings.tsx` and
+ *  `protein/*.tsx`), as opposed to the role table.
+ *
+ *  Every key has one source of truth. For these it is the config layer (the
+ *  saved or catalog blob, then the author's overrides), never `column_mapping`:
+ *   - a companion table's columns (an HMM logo's hits, a sequence track's
+ *     domains and variants) are not roles of the kind, so they are never
+ *     turned into one;
+ *   - the secondary-structure panel's column pickers re-point or unbind roles
+ *     the role table also lists. The builder's role table reads and writes
+ *     those rows through the same overrides (AdvancedVizBuilder.tsx), so both
+ *     show the one value that is saved.
+ *  They travel with the viz-control extras, so a panel's pick beats a binding
+ *  derived from the mapping. Treating them as bindings was the bug: an edited
+ *  component's saved `hits_model_col` came back as a `hits_model` role, and
+ *  that role's copy silently replaced the column picked in the panel.
+ *
+ *  Roles of the kind's descriptor that a panel merely displays or writes
+ *  through `column_mapping` (a PAE tile's pLDDT and chain) are not listed: the
+ *  mapping owns them. */
+const PANEL_COLUMNS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  [
+    'hmm_logo',
+    new Set([
+      'hits_model_col',
+      'hits_entity_col',
+      'hits_from_col',
+      'hits_to_col',
+      'hits_ali_from_col',
+      'hits_ali_to_col',
+      'hits_evalue_col',
+      'hits_score_col',
+      'hits_length_col',
+    ]),
+  ],
+  [
+    'sequence_track',
+    new Set([
+      'domain_start_col',
+      'domain_end_col',
+      'domain_label_col',
+      'variant_position_col',
+      'variant_label_col',
+      'variant_category_col',
+    ]),
+  ],
+  [
+    'secondary_structure',
+    new Set(['source_col', 'p_helix_col', 'p_strand_col', 'p_coil_col', 'confidence_col']),
+  ],
+]);
+
+/** Whether `key` is a column `vizKind`'s settings panel owns (PANEL_COLUMNS). */
+export function isPanelColumn(vizKind: string | null | undefined, key: string): boolean {
+  return Boolean(vizKind && PANEL_COLUMNS.get(vizKind)?.has(key));
+}
+
+/** The panel-owned config key behind a role of the binding table, or null when
+ *  the role is bound through `column_mapping` like any other. */
+export function panelColumnOfRole(vizKind: string | null | undefined, role: string): string | null {
+  const key = `${role}_col`;
+  return isPanelColumn(vizKind, key) ? key : null;
+}
+
 /** List fields and the pattern field each one excludes in configs.py. */
 const COLUMN_PATTERN_KEYS: readonly [string, string][] = [
   ['value_columns', 'value_columns_pattern'],
@@ -66,11 +130,12 @@ export function buildAdvancedVizConfigBlob(
   //  - the bindings just derived from `column_mapping`, which reflect any edits
   //    made in the builder and therefore win,
   //  - the viz-control extras (manhattan score_threshold, top_n_labels, marker
-  //    sizes...) the preview rendered with.
+  //    sizes...) the preview rendered with, and the columns a settings panel
+  //    owns (PANEL_COLUMNS), so the panel's pick is what is saved.
   const merged: Record<string, unknown> = {
-    ...extractRoleDerivedFallbacks(presetConfig, blob),
+    ...extractRoleDerivedFallbacks(presetConfig, blob, vizKind),
     ...blob,
-    ...extractVizControlExtras(presetConfig),
+    ...extractVizControlExtras(presetConfig, vizKind),
   };
   // A template names its columns by pattern, and the pattern rides along as an
   // extra. Once the author picks a list the model rejects both, so the pick,
@@ -103,6 +168,24 @@ export function buildAdvancedVizConfigBlob(
   ) {
     delete merged.collapse_rank;
   }
+  // The reference source names a value of the source column. With that column
+  // since unbound (in the role table or the panel) the tile draws one source,
+  // and SecondaryStructureConfig refuses the pair, so save what is drawn.
+  if (vizKind === 'secondary_structure' && merged.reference_source != null && !merged.source_col) {
+    delete merged.reference_source;
+  }
+  // A structure tile bound to an accession, a gene or a sequence and to no
+  // structure collection fetches its structure. The model's default, `file`,
+  // would look for a collection nobody bound (mirrors `with_inferred_structure_source`).
+  if (
+    (vizKind === 'molecule_3d' || vizKind === 'ramachandran') &&
+    merged.structure_source == null &&
+    !merged.structure_dc_id &&
+    !merged.structure_dc_tag &&
+    (merged.uniprot_col || merged.gene_col || merged.sequence_col)
+  ) {
+    merged.structure_source = 'resolve';
+  }
   return merged;
 }
 
@@ -115,8 +198,12 @@ const IRREGULAR_BINDING_KEYS: readonly string[] = IRREGULAR_BINDINGS.map((b) => 
  *  The irregular keys must be consulted, not just `endsWith('_col')`: they all
  *  fail that test, so treating it as the whole rule filed them as viz-control
  *  extras, and extras are overlaid *last*. A preset's copy of a binding then
- *  won over the one the user had just edited, inverting the layer order above. */
-function isRoleDerivedKey(key: string): boolean {
+ *  won over the one the user had just edited, inverting the layer order above.
+ *
+ *  A column a settings panel owns is a `_col` key that is not a binding: it is
+ *  an extra, overlaid last, so the panel's pick wins (PANEL_COLUMNS). */
+function isRoleDerivedKey(key: string, vizKind?: string): boolean {
+  if (isPanelColumn(vizKind, key)) return false;
   return (
     key.endsWith('_col') ||
     key === 'viz_kind' ||
@@ -134,7 +221,11 @@ function isRoleDerivedKey(key: string): boolean {
  *  hierarchy is inferred server-side and arrives *only* as `rank_cols`. Without
  *  this inverse the builder's binding form never learns the hierarchy exists,
  *  so an offer that previews correctly reports "needs at least 2 rank columns"
- *  the moment you open it for editing. */
+ *  the moment you open it for editing.
+ *
+ *  A column a settings panel owns (PANEL_COLUMNS) is left out: it lives in the
+ *  config layer, and a copy in the mapping would be a second, stale source of
+ *  truth for it. */
 export function rolesFromConfigBlob(
   vizKind: string | undefined,
   blob: Record<string, unknown> | null | undefined,
@@ -150,7 +241,7 @@ export function rolesFromConfigBlob(
     const irregular = IRREGULAR_BINDINGS.find((b) => b.key === key && scoped(b, vizKind));
     if (irregular) {
       roles[irregular.role] = value as string | string[];
-    } else if (key.endsWith('_col')) {
+    } else if (key.endsWith('_col') && !isPanelColumn(vizKind, key)) {
       roles[key.slice(0, -'_col'.length)] = value as string | string[];
     }
     // Anything else is a viz-control extra, not a binding.
@@ -159,14 +250,16 @@ export function rolesFromConfigBlob(
 }
 
 /** Pick the non-role viz-control keys out of a catalog/live preset config so
- *  they can be overlaid on a freshly-built blob without clobbering bindings. */
+ *  they can be overlaid on a freshly-built blob without clobbering bindings.
+ *  With `vizKind`, the columns its settings panel owns come along. */
 export function extractVizControlExtras(
   presetConfig?: Record<string, unknown> | null,
+  vizKind?: string,
 ): Record<string, unknown> {
   if (!presetConfig) return {};
   const extras: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(presetConfig)) {
-    if (!isRoleDerivedKey(k)) extras[k] = v;
+    if (!isRoleDerivedKey(k, vizKind)) extras[k] = v;
   }
   return extras;
 }
@@ -186,11 +279,12 @@ export function extractVizControlExtras(
 function extractRoleDerivedFallbacks(
   presetConfig: Record<string, unknown> | null | undefined,
   blob: Record<string, unknown>,
+  vizKind: string | undefined,
 ): Record<string, unknown> {
   if (!presetConfig) return {};
   const fallbacks: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(presetConfig)) {
-    if (!isRoleDerivedKey(k)) continue; // already carried by the extras layer
+    if (!isRoleDerivedKey(k, vizKind)) continue; // already carried by the extras layer
     if (k in blob) continue; // the mapping produced it — that one wins
     fallbacks[k] = v;
   }
@@ -217,6 +311,27 @@ export function bindingSchemaDcId(
   if (vizKind !== 'phylogenetic') return dcId;
   const metadataDcId = preset?.metadata_dc_id;
   return typeof metadataDcId === 'string' && metadataDcId ? metadataDcId : null;
+}
+
+/** The author's overrides after a settings write (`patch`).
+ *
+ *  `undefined` means "unset": the key is dropped when the inherited config
+ *  (saved or catalog) never had it, and nulled when it did, so clearing a field
+ *  neither leaves the old value in place nor writes a key the saved component
+ *  did not carry. A null is only valid on a nullable field, so a panel clearing
+ *  a field that takes no null writes the field's default instead. */
+export function patchOverrides(
+  inherited: Record<string, unknown> | null | undefined,
+  overrides: Record<string, unknown> | null | undefined,
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...(overrides ?? {}) };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value !== undefined) next[key] = value;
+    else if (inherited?.[key] != null) next[key] = null;
+    else delete next[key];
+  }
+  return next;
 }
 
 /** The config a component actually renders with: the catalog or previously

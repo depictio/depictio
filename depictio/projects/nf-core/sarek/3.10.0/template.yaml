@@ -13,7 +13,7 @@
 # WHAT A RUN MAY LACK.
 # The annotation collections (snpeff_*) and the VCFtools ones (vcftools_*) are
 # optional: a run without snpEff in --tools, or with vcftools skipped, drops
-# the Consequences and Genes tabs (and the VCFtools panels) instead of failing
+# the Consequences, Genes and Protein tabs (and the VCFtools panels) instead of failing
 # to ingest. The somatic collections (ASCAT, CNVkit, MSIsensor-pro,
 # NGSCheckMate) are optional too, and no tile binds them yet.
 #
@@ -755,8 +755,35 @@ workflows:
               "impact": "Impact class, the colour of the lollipop head"
               "consequence": "Consequence term"
               "hgvs_p": "Protein change in HGVS notation, the label of the stem"
+              "ref_aa": "Reference residue of the protein change (three-letter code), which the structure tile checks against its model; null for a stop codon"
               "variant_key": "Contig, position and alleles joined"
               "vaf": "Variant allele fraction, the size of the lollipop head"
+
+      # One row per gene of the lollipop: the Protein tab's scatter, whose click
+      # emits `gene` and so moves the lollipop and the 3D structure to it.
+      - data_collection_tag: "protein_genes"
+        description: "One row per gene of the coding-variant lollipop: its variants, how many callers agree on them and its worst impact class"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/protein_genes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "gene": "Gene symbol, the same values as the lollipop's gene column"
+              "variants": "Distinct variants with a protein position on the gene"
+              "positions": "Distinct amino-acid positions those variants hit"
+              "calls": "Distinct sample and variant pairs, whatever the caller"
+              "shared_pct": "Calls two or more callers made, per hundred"
+              "samples": "Samples with a variant on the gene"
+              "callers": "Callers with a variant on the gene"
+              "high_variants": "Distinct HIGH impact variants"
+              "moderate_variants": "Distinct MODERATE impact variants"
+              "worst_impact": "Most severe impact class on the gene"
+              "median_vaf": "Median variant allele fraction of the calls"
 
       # ----------------------------------------------------------------
       # snpEff's own summaries: the CSV of composition sections and the

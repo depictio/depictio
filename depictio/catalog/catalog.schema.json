@@ -295,7 +295,15 @@
                 "cnv_profile",
                 "genome_chord",
                 "record_card",
-                "parallel_coordinates"
+                "parallel_coordinates",
+                "molecule_3d",
+                "msa",
+                "sequence_track",
+                "hmm_logo",
+                "secondary_structure",
+                "domain_architecture",
+                "pae_matrix",
+                "ramachandran"
               ],
               "type": "string"
             },

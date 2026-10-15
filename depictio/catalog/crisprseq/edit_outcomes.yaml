@@ -1,0 +1,18 @@
+id: crisprseq_edit_outcomes
+name: Edit outcome composition
+mode: gene-editing/outcomes
+description: >-
+  Reads per outcome class and library (wild type, template-based repair,
+  deletion-insertion, in-frame and frameshift insertions and deletions) with
+  each class's share of the library's classified reads, in long form for a
+  stacked composition bar.
+find: { path_glob: "**/*_edits.csv" }
+recipe: crisprseq/edit_outcomes.py
+fixture: edit_outcomes.tsv
+renders_as:
+  - id: outcome_bars
+    component: advanced_viz
+    kind: stacked_taxonomy
+    roles: { sample_id: sample, taxon: outcome, rank: level, abundance: pct }
+  - { component: interactive, interactive_type: MultiSelect, column_name: outcome }
+  - { component: table }

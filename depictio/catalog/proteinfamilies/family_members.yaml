@@ -1,0 +1,28 @@
+id: proteinfamilies_family_members
+name: Family members
+mode: families/members
+description: >-
+  One row per member of every family roster: the family, the sample, whether
+  the family is new or an extended existing one, whether the member is the
+  representative, and from the full alignment its identity to the
+  representative, the share of the representative it covers and its length.
+find:
+  path_glob: "**/family_reps/*/*.tsv"
+  path_glob_alt:
+    - "**/update_families/family_reps/*/*.tsv"
+recipe: proteinfamilies/family_members.py
+fixture: family_members.tsv
+renders_as:
+  # Fragments sit left (low coverage), divergent members low (low identity).
+  - { id: member_scatter, component: advanced_viz, kind: scatter_xy,
+      roles: {x: coverage, y: identity, label: member_id, color: origin, size: length} }
+  - { id: members_count, component: card, column: member_id, aggregation: count,
+      secondary_layout: top_n, breakdown_col: family, top_n_count: 3 }
+  - { id: member_identity, component: card, column: identity, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: member_coverage, component: card, column: coverage, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: member_length, component: card, column: length, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: figure, visu_type: box, dict_kwargs: {x: family, y: identity, color: origin} }
+  - { component: table }

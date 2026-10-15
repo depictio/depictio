@@ -95,6 +95,21 @@ AdvancedVizKind = Literal[
     # is how a QC table with a dozen columns is read as a whole.
     "record_card",
     "parallel_coordinates",
+    # Protein kinds (lot 3): a 3D structure, a multiple sequence alignment and
+    # a linear per-residue track, linked by the `residue_selection` filter
+    # (an entity column + a residue position range).
+    "molecule_3d",
+    "msa",
+    "sequence_track",
+    # Protein kinds (wave 2): the profile HMM as a logo, the predicted
+    # secondary structure and the domain architecture of a protein, and the
+    # two views of a structure that are not 3D (predicted aligned error,
+    # backbone torsions). Same `residue_selection` link as the three above.
+    "hmm_logo",
+    "secondary_structure",
+    "domain_architecture",
+    "pae_matrix",
+    "ramachandran",
 ]
 
 # Map visualization types

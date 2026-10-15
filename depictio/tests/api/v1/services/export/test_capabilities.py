@@ -174,7 +174,17 @@ class TestComponentFormats:
         assert ExportFormat.JSON in component_formats(_av_component("enrichment"))
         assert ExportFormat.JSON in component_formats(_av_component("roc_pr_curve"))
 
-    @pytest.mark.parametrize("kind", ["genome_view", "contact_map", "group_compare"])
+    @pytest.mark.parametrize(
+        "kind",
+        [
+            "genome_view",
+            "contact_map",
+            "group_compare",
+            "molecule_3d",
+            "pae_matrix",
+            "ramachandran",
+        ],
+    )
     def test_kinds_the_offline_bundle_cannot_serve_have_no_html(self, kind: str) -> None:
         from depictio.api.v1.services.export.capabilities import (
             component_formats,
@@ -184,6 +194,56 @@ class TestComponentFormats:
         component = _av_component(kind)
         assert ExportFormat.HTML not in component_formats(component)
         assert component_html_unavailable_reason(component)
+
+    @pytest.mark.parametrize(
+        "kind",
+        [
+            "molecule_3d",
+            "msa",
+            "sequence_track",
+            "hmm_logo",
+            "secondary_structure",
+            "domain_architecture",
+            "pae_matrix",
+            "ramachandran",
+        ],
+    )
+    def test_protein_kinds_are_drawn_in_the_browser_only(self, kind: str) -> None:
+        from depictio.api.v1.services.export.capabilities import HTML_UNAVAILABLE_KINDS
+
+        assert AV_JSON_SOURCE[kind] == "client_only"
+        assert advanced_viz_json_source(kind) == "client_only"
+        assert ExportFormat.JSON not in formats_for("advanced_viz", kind)
+        reason = unsupported_reason("advanced_viz", kind)
+        assert reason
+        # The reason JSON is refused is the HTML one only when the bundle cannot serve the kind.
+        if kind in HTML_UNAVAILABLE_KINDS:
+            assert reason == HTML_UNAVAILABLE_KINDS[kind]
+            assert ExportFormat.HTML not in formats_for("advanced_viz", kind)
+        else:
+            assert "format=html" in reason
+            assert ExportFormat.HTML in formats_for("advanced_viz", kind)
+
+    def test_only_the_protein_kinds_that_fetch_a_file_lack_html(self) -> None:
+        from depictio.api.v1.services.export.capabilities import HTML_UNAVAILABLE_KINDS
+
+        protein = {
+            "molecule_3d",
+            "msa",
+            "sequence_track",
+            "hmm_logo",
+            "secondary_structure",
+            "domain_architecture",
+            "pae_matrix",
+            "ramachandran",
+        }
+        assert protein & set(HTML_UNAVAILABLE_KINDS) == {
+            "molecule_3d",
+            "pae_matrix",
+            "ramachandran",
+        }
+        for kind in ("pae_matrix", "ramachandran"):
+            assert "Open the dashboard instead" in HTML_UNAVAILABLE_KINDS[kind]
 
     def test_a_genomespy_view_has_no_html_but_the_plotly_view_does(self) -> None:
         from depictio.api.v1.services.export.capabilities import (

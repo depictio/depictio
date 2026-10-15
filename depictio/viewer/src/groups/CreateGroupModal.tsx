@@ -1,13 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Autocomplete, Button, Group, Modal, Stack, TextInput } from '@mantine/core';
+import { Autocomplete, Button, Center, Group, Modal, Stack, TextInput, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
-import { Plus } from 'lucide-react';
 
 import { createGroup, listAllUsers } from 'depictio-react-core';
 import type { GroupDetail } from 'depictio-react-core';
 
-import { STROKE, useGlassPages } from '../chrome/variants/glass/pages';
+import { useListingAccents } from '../lib/useListingAccents';
 
 interface CreateGroupModalProps {
   opened: boolean;
@@ -17,7 +16,8 @@ interface CreateGroupModalProps {
 }
 
 const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ opened, onClose, onCreated }) => {
-  const glass = useGlassPages();
+  // Same chrome as the Create project / Create dashboard dialogs.
+  const accent = useListingAccents('projects');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   /** Free text on purpose: a P.I. who has no account yet is designated by
@@ -85,55 +85,88 @@ const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ opened, onClose, on
     }
   };
 
+  const handleClose = () => {
+    if (!submitting) onClose();
+  };
+
   return (
-    <Modal opened={opened} onClose={onClose} title="Create group" size="md" centered>
-      <Stack gap="sm">
+    <Modal
+      opened={opened}
+      onClose={handleClose}
+      centered
+      size="md"
+      withCloseButton
+      closeOnClickOutside={false}
+      closeOnEscape={!submitting}
+      overlayProps={{ blur: 3, backgroundOpacity: 0.55 }}
+      title={null}
+      padding="lg"
+    >
+      <Stack gap="md" data-testid="create-group-modal">
+        <Center>
+          <Group gap="xs">
+            <Icon
+              icon="mdi:account-multiple-plus-outline"
+              width={28}
+              color={`var(--mantine-color-${accent.secondary}-6)`}
+            />
+            <Title
+              order={2}
+              c={accent.secondary}
+              style={{ fontFamily: 'Virgil', fontWeight: 400 }}
+            >
+              New group
+            </Title>
+          </Group>
+        </Center>
         <TextInput
-          label="Name"
-          placeholder="e.g. korbel-lab"
+          label="Group name"
+          description="A short, unique name"
+          placeholder="Enter group name"
           value={name}
           onChange={(e) => setName(e.currentTarget.value)}
           required
+          disabled={submitting}
+          leftSection={<Icon icon="mdi:account-multiple-outline" width={16} />}
           data-autofocus
           data-testid="create-group-name"
         />
         <TextInput
-          label="Description"
-          placeholder="Optional description"
+          label="Description (Optional)"
+          description="What the group is for"
+          placeholder="Enter description (optional)"
           value={description}
           onChange={(e) => setDescription(e.currentTarget.value)}
+          disabled={submitting}
+          leftSection={<Icon icon="mdi:text-box-outline" width={16} />}
           data-testid="create-group-description"
         />
         <Autocomplete
-          label="Principal Investigator"
-          description="Optional — becomes a member and group admin. An address with no account yet is applied at their first sign-in."
+          label="Principal Investigator (Optional)"
+          description="Becomes a member and group admin. An address with no account yet is applied at their first sign-in."
           placeholder="pi@example.com"
           value={piEmail}
           onChange={setPiEmail}
           data={users.map((u) => u.email)}
           limit={20}
+          disabled={submitting}
           comboboxProps={{ withinPortal: true }}
+          leftSection={<Icon icon="mdi:account-star-outline" width={16} />}
           data-testid="create-group-pi"
         />
-        <Group justify="flex-end" gap="xs" mt="sm">
-          <Button variant="subtle" onClick={onClose} disabled={submitting}>
+        <Group justify="flex-end" gap="sm">
+          <Button variant="default" onClick={handleClose} disabled={submitting}>
             Cancel
           </Button>
           <Button
-            color={glass ? undefined : 'teal'}
-            leftSection={
-              glass ? (
-                <Plus size={15} strokeWidth={STROKE} aria-hidden />
-              ) : (
-                <Icon icon="mdi:plus" width={14} />
-              )
-            }
+            color={accent.secondary}
+            leftSection={<Icon icon="mdi:plus" width={16} />}
             onClick={handleCreate}
             loading={submitting}
             disabled={!name.trim()}
             data-testid="create-group-submit"
           >
-            Create
+            Create group
           </Button>
         </Group>
       </Stack>

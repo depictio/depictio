@@ -452,9 +452,77 @@ x alone and a `genome_view` track stacked above shares the axis; `max_separation
 apex. The pure helper `contactMapTriangle.ts` does the rotation and fills the odd-parity lattice
 gaps from horizontal neighbours.
 
+The third lot added a protein module of three kinds, linked by residue rather than by locus, and
+a second set of five followed on the same two columns. Details, data contract and resolver
+settings are in `docs/design/protein-structure.md`.
+
+**`molecule_3d`.** A protein structure in 3D (3Dmol.js, loaded in its own chunk only when a tile
+mounts), coloured by pLDDT, chain, N-to-C spectrum, secondary structure, residue type, hydrophobicity
+or a column of the bound residue or variant table, in one or several combined representations,
+with variants as spheres on the alpha carbon and the picked site in red ball and stick. The structure comes from an `indexed_file`
+collection of `pdb` / `mmcif` objects, one per entity (`structure_source: file`), or from the
+opt-in structure resolver (`resolve`: AlphaFold DB by accession or gene, ESMFold by sequence).
+Only `position` is required. A variant whose `ref_aa` disagrees with the model is listed as a
+numbering mismatch instead of drawn. `layout: structure_sequence | structure_msa | structure_text`
+puts a sequence strip, the alignment or the written sequence (one clickable letter per residue)
+in the same tile.
+
+**`msa`.** A multiple sequence alignment on a virtualised canvas: one row per sequence (`msa_id`,
+`seq_id`, `aligned_sequence` required, `rank` and `identity` optional), Clustal, Zappo,
+hydrophobicity or identity colours, consensus and conservation rows, capped at `max_rows` in rank
+order. A column brush emits a `residue_selection` in the reference row's numbering.
+
+**`sequence_track`.** One protein's sequence as a residue ruler with lanes: a value lane (the
+AlphaFold confidence bands when the value is pLDDT), a category lane (helix and strand glyphs when
+it holds secondary-structure classes), domain spans and variant ticks from two companion
+collections. A brush emits a `residue_selection`.
+
+The second set, with its parsers in `depictio/recipes/lib/` (`hmm.py`, `secondary_structure.py`,
+`pae.py`):
+
+**`hmm_logo`.** The sequence logo of one profile HMM, with the semantics of HMMER's `hmmlogo` and
+Skylign: a stack of letters per match state whose height is the state's relative entropy above the
+Swiss-Prot background (`height_mode`: `relent_abovebg`, `relent_all` or `probability`, always
+recomputed in the browser from the emission probabilities), consensus, RF and CS rows, insert
+probability, expected insert length and occupancy lanes, and, with a hits companion
+(`hits_dc_id`), a lane showing where the hits of an `hmmsearch` land on the model, with Pfam-style
+jagged ends on partial hits. Required roles `state`, `letter`, `emission`; with
+`profile_source: msa` the profile is counted from an alignment table instead (`msa_id`, `seq_id`,
+`sequence`). The profile table is the long table of `profile_frame` (nf-core/proteinfamilies'
+`hmmbuild` profile and `hmmalign` Stockholm), whose `position` maps each state onto a residue of a
+reference protein through the alignment's `RF` line. A brush on states emits a `residue_selection`
+in the reference's numbering; a click on a hit bar picks the hit's residues on its own protein.
+
+**`domain_architecture`.** Domain hits as architectures: one backbone per protein with its domains
+coloured by family and, where the HMM match is partial, a zigzag edge on the missing side as Pfam
+graphics draws it, or the proteins grouped by their ordered list of families with a count.
+Required roles `entity`, `start`, `end`, `label`; the lot 3 `hmmsearch_domtbl` table binds as it
+is. A domain click emits a `residue_selection` over its span and, with `label_selection`, a point
+selection on the label, which is how it selects the logo of its family.
+
+**`secondary_structure`.** The secondary structure of one protein: a topology ribbon (helix,
+strand arrow, turn, coil) shaded by confidence, stacked helix, strand and coil probability lanes
+(S4PRED `.ss2`), several sources compared on a Q3 agreement lane, the composition in percent and
+a list of segments. Required roles `position`, `state`. It is not a preset of `sequence_track`
+(section 8).
+
+**`pae_matrix`.** The predicted aligned error as an N x N heatmap on residue axes, read from a
+per-entity file of a `pae` `indexed_file` collection (proteinfold's `paes/*_pae.tsv`, AlphaFold DB
+or ColabFold JSON), with pLDDT strips along the axes from the bound residue table. Required role
+`position`. A diagonal brush selects the smallest square on the diagonal holding the drag (a
+domain), a rectangle brush the scored range.
+
+**`ramachandran`.** Phi and psi of every residue, computed in the browser from the backbone of the
+structure (the sources of `molecule_3d`: a `pdb` / `mmcif` collection or the resolver), as an SVG
+scatter with glycine and proline symbols and schematic favoured regions labelled as approximate,
+not MolProbity contours. Required role `position`. A click or a box picks residues.
+
+The eight kinds use the `none` sampling policy and, unlike the kinds outside the module, default
+`selection_enabled` to true.
+
 ## 8. When a new kind is justified
 
-Thirty-nine kinds is enough to have learned what a kind costs. Each one is seven registry
+Forty-seven kinds is enough to have learned what a kind costs. Each one is seven registry
 entries, a renderer, a showcase tab, a pair of alignment tests and a line in every snapshot
 that enumerates kinds, and none of that is paid back by a kind that draws the same marks as
 its neighbour with different column names. This section is the rule the next one is measured
@@ -705,6 +773,33 @@ source's selection next appears or clears. The fold is a derived layout
 and the editor always shows the stored layout unfolded. This pairing is also the one
 exception to the full-width table rule of the shipped-template lint: a table may be narrower
 than the grid when its linked record card fills the rest of the row.
+
+### Proteins: structure, alignment and sequence
+
+`molecule_3d`, `msa` and `sequence_track` (section 7), and the second set of `hmm_logo`,
+`domain_architecture`, `secondary_structure`, `pae_matrix` and `ramachandran`, are the protein
+counterpart of the genomic axis substrate. The shared coordinate is a residue: collections that
+carry the same `entity` and `position` column names are linked with no project link. A pick is a
+filter pair with source `residue_selection` (an entity `MultiSelect` and a position `RangeSlider`
+under the index suffix `::res`), read back by column name from any source, and a new pick
+replaces every other tile's pick on the same column, so the last gesture wins. A hover is not a
+filter: it travels on an in-memory highlight bus (`HighlightProvider`, `useHighlight`,
+`usePublishHighlight`), coalesced to one event per animation frame, and a publisher ignores its
+own events. `lollipop` joins both channels (`selection_enabled`, opt-in), and `profile` with
+`residue_axis` shades the picked range and draws the hovered residue.
+
+The second set emits and reads the same pair and publishes on the same bus: a brush on logo
+states, a domain, a block of the error matrix, a segment of the secondary structure or a point of
+the Ramachandran plot picks a residue range in every other protein tile. Each tile of the set
+keeps all its rows and shades the range instead of narrowing to it. `pae_matrix` reads a file, a
+`pae` `indexed_file` collection with one object per entity, fetched whole by the browser like a
+structure; `ramachandran` computes its points in the browser from the structure file.
+
+Cards ignore a residue range unless `follow_region_filter` is set, as for a genome region.
+File-backed structures and matrices are fetched by the browser from presigned URLs, so the
+storage origin must be in the CSP `connect-src` (see `docs/indexed-files.md`). The full design,
+including the opt-in structure resolver and its privacy trade-off, is in
+`docs/design/protein-structure.md`.
 
 ---
 

@@ -1,0 +1,23 @@
+id: purple_somatic_variants
+name: Somatic small variants
+mode: purple
+description: >-
+  Every PASS somatic SNV, MNV and indel of the purity-adjusted PURPLE VCF, one
+  row per call: locus and alleles, SAGE tier, PAVE's canonical gene, effect,
+  coding effect and HGVS changes, the raw and purity-adjusted allele frequency,
+  the copy number at the locus and of the variant, the subclonal likelihood and
+  the biallelic, hotspot, reported and kataegis flags.
+find:
+  path_glob: "**/purple/*.purple.somatic.vcf.gz"
+recipe: purple/somatic_variants.py
+fixture: somatic_variants.tsv
+renders_as:
+  - { id: variant_count, component: card, column: variant_key, aggregation: count, secondary_layout: top_n, breakdown_col: variant_type, top_n_count: 3 }
+  - { id: coding_variant_count, component: card, column: variant_key, aggregation: count, secondary_layout: top_n, breakdown_col: coding_effect, top_n_count: 3, filter_expr: "pl.col('coding_effect').is_in(['MISSENSE', 'NONSENSE_OR_FRAMESHIFT', 'SPLICE', 'SYNONYMOUS'])" }
+  - { id: purity_adjusted_af_spread, component: card, column: purple_af, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: variant_cn_spread, component: card, column: variant_copy_number, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: purity_adjusted_af_histogram, component: figure, visu_type: histogram, dict_kwargs: {x: purple_af, color: variant_type} }
+  - { id: variant_cn_histogram, component: figure, visu_type: histogram, dict_kwargs: {x: variant_copy_number, color: variant_type} }
+  - { id: somatic_variant_genome, component: advanced_viz, kind: genome_view, roles: {chr: chrom, pos: pos, score: purple_af, feature: variant_key, sample: sample, category: variant_type} }
+  - { id: coding_effect_filter, component: interactive, interactive_type: MultiSelect, column_name: coding_effect }
+  - { id: somatic_variant_table, component: table, row_selection_enabled: true, row_selection_column: variant_key }

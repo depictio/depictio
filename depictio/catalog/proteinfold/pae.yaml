@@ -1,0 +1,20 @@
+id: proteinfold_pae
+name: Predicted aligned error of the top-ranked models
+mode: protein/pae
+description: >-
+  The predicted aligned error matrix of every top-ranked model, averaged into
+  at most 64 residue bins per axis: row k and column bNN with the same number
+  cover the same residues. Low values off the diagonal mean two regions (two
+  domains, or two chains of a complex) are confidently placed relative to each
+  other. mean_pae is each row's mean error, so its average is the matrix mean.
+find:
+  path_glob: "**/paes/*_pae.tsv"
+recipe: proteinfold/pae.py
+fixture: pae.tsv
+renders_as:
+  - { id: pae_heatmap, component: advanced_viz, kind: complex_heatmap,
+      roles: {index: residue_range} }
+  - { id: mean_pae, component: card, column: mean_pae, aggregation: average,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: interactive, interactive_type: Select, column_name: engine }
+  - { component: table }

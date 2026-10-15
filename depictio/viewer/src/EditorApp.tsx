@@ -66,6 +66,7 @@ import {
   fetchAllDashboards,
   bulkComputeCards,
   hasLiveValues,
+  AlwaysSelectedPickers,
   canCopyToTab,
   canHighlight,
   copyComponentToTab,
@@ -129,6 +130,7 @@ import {
   isCurrentDataOnlyType,
   isHttpStatus,
   DATA_VERSION_GONE_EVENT,
+  HighlightProvider,
 } from 'depictio-react-core';
 import type {
   DataVersionGoneDetail,
@@ -2946,8 +2948,18 @@ const EditorApp: React.FC = () => {
 
   return (
     <>
+    {/* One hover bus for the whole view: pinned sections rendered outside
+        DashboardGrid share it (the grid's own provider reuses this one). */}
+    <HighlightProvider>
     {/* Renderers read their pin from here, as in the viewer's preview. */}
     <DataVersionProvider asOfVersionId={asOfVersionId} pins={dataPins} dashboardId={dashboardId}>
+    {/* `always_selected` Selects take their first option, as in the viewer.
+        Filter state only: nothing here writes to the dashboard. */}
+    <AlwaysSelectedPickers
+      components={summaryMetadata}
+      filters={filters}
+      onFilterChange={handleFilterChange}
+    />
     <InspectorProviders control={inspectorControl}>
     {/* Tier-2 viz controls an author touches here are written back onto the
         component's config; the dashboard-wide default decides where every
@@ -3057,6 +3069,7 @@ const EditorApp: React.FC = () => {
     </AdvancedVizConfigDraftProvider>
     </InspectorProviders>
     </DataVersionProvider>
+    </HighlightProvider>
     </>
   );
 };

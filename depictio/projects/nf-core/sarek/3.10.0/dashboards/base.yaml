@@ -12,7 +12,7 @@ version: 1
 #
 # Structural-variant callers (Manta, TIDDIT) call few SNPs, so every Ts/Tv
 # tile filters `ts_tv > 0`. The SnpEff collections are optional (a run without
-# `--tools snpeff` prunes them, with the Consequences and Genes tabs and the
+# `--tools snpeff` prunes them, with the Consequences, Genes and Protein tabs and the
 # Overview tiles and rows that read them).
 main_dashboard:
   title: nf-core/sarek
@@ -46,6 +46,11 @@ main_dashboard:
       MODERATE: '#f08c00'
       LOW: '#1c7ed6'
       MODIFIER: '#adb5bd'
+    # The worst impact class of a gene on the Protein tab's scatter.
+    worst_impact:
+      HIGH: '#e03131'
+      MODERATE: '#f08c00'
+      LOW: '#1c7ed6'
     mutation_class:
       transition: '#1c7ed6'
       transversion: '#e8590c'
@@ -396,6 +401,7 @@ main_dashboard:
       ### Annotation
       - [Consequences](tab:Consequences)
       - [Genes](tab:Genes)
+      - [Protein](tab:Protein)
       - [Locus](tab:Locus)
     section: How to read this dashboard
     tag: sk-ov-how-to-read
@@ -1983,7 +1989,7 @@ tabs:
 # The gene-level view, from SnpEff's per-gene table and from the protein
 # coordinates in the annotated VCF.
 - title: Genes
-  subtitle: Which genes carry the calls, and where on the protein?
+  subtitle: Which genes carry the calls, and which do the callers share?
   tab_group: Annotation
   tab_order: 7
   tab_icon: mdi:dna
@@ -1995,7 +2001,7 @@ tabs:
   - name: Gene filters
     icon: mdi:filter-variant
     color: pink
-    description: Biotype and caller of the burden table, impact class of the protein view
+    description: Biotype and caller of the burden table
   grid_sections:
   - name: Genes at a glance
     icon: mdi:counter
@@ -2009,14 +2015,10 @@ tabs:
     icon: mdi:set-merge
     color: pink
     description: Genes with a HIGH or MODERATE call, set by caller
-  - name: Along the protein
-    icon: mdi:chart-timeline-variant
-    color: pink
-    description: Coding variants at their amino-acid position, one lane per gene
-  - name: Gene tables
+  - name: Gene table
     icon: mdi:table
     color: gray
-    description: The per-gene burden and the coding variants with a protein position
+    description: The per-gene burden behind the panels on this tab
     collapsed: true
   components:
   - component_type: text
@@ -2024,8 +2026,8 @@ tabs:
     body: >
       [SnpEff](https://pcingola.github.io/SnpEff/) counts, for each gene and callset, the
       variants of each impact class. A high burden is often a long, repetitive or poorly
-      mappable gene before it is a biological signal. The lollipop places the coding variants
-      on the protein, one lane per gene.
+      mappable gene before it is a biological signal. The [Protein](tab:Protein) tab places
+      the coding variants on the protein and its predicted structure.
     tag: sk-gn-intro
     index: gn-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -2057,20 +2059,6 @@ tabs:
     index: gn-caller-filter
     title: Caller
     layout: {x: 0, y: 3, w: 1, h: 3}
-  - component_type: interactive
-    workflow_tag: sarek
-    data_collection_tag: snpeff_protein_lollipop
-    interactive_component_type: MultiSelect
-    column_name: impact
-    column_type: object
-    display:
-      icon_name: mdi:alert-outline
-      custom_color: red
-    section: Gene filters
-    tag: sk-gn-filter-impact
-    index: gn-impact-filter
-    title: Impact class
-    layout: {x: 0, y: 6, w: 1, h: 3}
   - component_type: card
     workflow_tag: sarek
     data_collection_tag: snpeff_genes
@@ -2182,6 +2170,222 @@ tabs:
     title: Genes hit by a coding call, shared between callers
     description: Agreement on a gene survives callers writing one variant differently.
     layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    workflow_tag: sarek
+    data_collection_tag: snpeff_genes
+    use: snpeff/genes
+    row_selection_enabled: true
+    row_selection_column: gene_name
+    section: Gene table
+    tag: sk-gn-table-genes
+    index: gn-table-genes
+    title: Per-gene variant burden
+    description: Gene, biotype and the HIGH, MODERATE, LOW and MODIFIER counts per gene and callset.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+# The coding variants on the protein: a scatter of the lollipop's genes picks
+# one, its predicted structure loads beside it and the lollipop narrows to it.
+# The structure comes from the server's structure resolver, off by default
+# (DEPICTIO_STRUCTURE_RESOLVER_ENABLED): the tile then says so and the rest of
+# the tab works. A click on a stem or a residue selects `gene` and `aa_pos`,
+# which the lollipop, the structure and the table follow.
+- title: Protein
+  subtitle: Where on the protein do the coding variants sit?
+  tab_group: Annotation
+  tab_order: 8
+  tab_icon: mdi:molecule
+  tab_icon_color: violet
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Protein filters
+    icon: mdi:filter-variant
+    color: violet
+    description: The callers and impact classes of the coding variants
+  grid_sections:
+  - name: Protein at a glance
+    icon: mdi:counter
+    color: violet
+    description: Genes on the protein view, their calls and how far the callers agree
+  - name: Genes and structure
+    icon: mdi:chart-scatter-plot
+    color: violet
+    description: Pick a gene on the scatter; its predicted structure loads beside it
+  - name: Along the protein
+    icon: mdi:chart-timeline-variant
+    color: violet
+    description: Coding variants at their amino-acid position, one lane per gene
+  - name: Coding variant table
+    icon: mdi:table
+    color: gray
+    description: Gene, amino-acid position, impact and protein change, one row per call
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      Only variants whose protein change [SnpEff](https://pcingola.github.io/SnpEff/) could compute
+      appear here. Click a gene on the scatter to load its [AlphaFold DB](https://alphafold.ebi.ac.uk/)
+      structure, then a stem or a residue to mark it in the structure, the lollipop and the table below.
+      The structure is fetched only when an administrator sets `DEPICTIO_STRUCTURE_RESOLVER_ENABLED`,
+      and a protein past about 2,700 residues has no model of its own.
+    tag: sk-pr-intro
+    index: pr-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: sarek
+    data_collection_tag: snpeff_protein_lollipop
+    interactive_component_type: MultiSelect
+    column_name: caller
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: indigo
+    section: Protein filters
+    tag: sk-pr-filter-caller
+    index: pr-caller-filter
+    title: Caller
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: sarek
+    data_collection_tag: snpeff_protein_lollipop
+    interactive_component_type: MultiSelect
+    column_name: impact
+    column_type: object
+    display:
+      icon_name: mdi:alert-outline
+      custom_color: red
+    section: Protein filters
+    tag: sk-pr-filter-impact
+    index: pr-impact-filter
+    title: Impact class
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  # The first and third cards read the per-gene summary of the whole run, which
+  # has no sample or caller column: the pickers do not narrow them, a gene
+  # picked on the scatter does.
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: protein_genes
+    aggregation: count
+    column_name: gene
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: worst_impact
+    display:
+      icon_name: mdi:dna
+      icon_color: pink
+      caption: genes, by their worst impact class
+      decimals: 0
+    section: Protein at a glance
+    tag: sk-pr-card-genes
+    index: pr-card-genes
+    title: Genes on the protein view
+    description: The genes carrying the most coding variants on the run, split by the worst impact class on each. Counted over the whole run.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: snpeff_protein_lollipop
+    use: snpeff/protein_lollipop
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: caller
+    display:
+      icon_name: mdi:map-marker-radius-outline
+      icon_color: cyan
+      caption: coding calls, by caller
+      decimals: 0
+    section: Protein at a glance
+    tag: sk-pr-card-calls
+    index: pr-card-calls
+    title: Coding calls
+    description: Calls with a protein position on those genes, split by the caller that made them.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: protein_genes
+    aggregation: median
+    column_name: shared_pct
+    column_type: float64
+    filter_expr: "col('calls') > 0"
+    secondary_layout: coverage
+    coverage_max: 100
+    display:
+      icon_name: mdi:set-merge
+      icon_color: indigo
+      caption: median share of a gene's calls two callers made
+      decimals: 0
+    section: Protein at a glance
+    tag: sk-pr-card-shared
+    index: pr-card-shared
+    title: Caller agreement (%)
+    description: Median share of a gene's calls that two or more callers made. A gene only one caller sees is often a mapping artefact. Counted over the whole run.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: sarek
+    data_collection_tag: snpeff_protein_lollipop
+    use: snpeff/protein_lollipop
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: vaf
+    column_type: float64
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: orange
+      caption: median, with its spread
+      decimals: 2
+    section: Protein at a glance
+    tag: sk-pr-card-vaf
+    index: pr-card-vaf
+    title: Allele fraction
+    description: Allele fraction of the coding calls. Heterozygous calls sit near 0.5 and homozygous ones near 1.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: sarek
+    data_collection_tag: protein_genes
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: variants
+      y_col: shared_pct
+      label_col: gene
+      color_col: worst_impact
+      log_x: true
+      x_title: Distinct coding variants
+      y_title: Calls made by two or more callers (%)
+      top_n_labels: 0
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: gene
+    section: Genes and structure
+    tag: sk-pr-av-genes
+    index: pr-genes
+    title: Genes with coding variants
+    description: One point per gene of the lollipop, coloured by its worst impact class, over the whole run. A gene low on the axis carries variants one caller sees, often a mapping artefact.
+    layout: {x: 0, y: 0, w: 4, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: sarek
+    data_collection_tag: snpeff_protein_lollipop
+    use: snpeff/coding_variant_structure
+    config:
+      structure_source: resolve
+      gene_col: gene
+      entity_col: gene
+      color_mode: plddt
+      representations: [cartoon]
+      show_variants: true
+      highlight_site: true
+      layout: structure_text
+      selection_enabled: true
+      follow_selection: true
+    section: Genes and structure
+    tag: sk-pr-av-structure
+    index: pr-structure
+    title: Coding variants on the predicted structure
+    description: The picked gene's structure over its written sequence, fetched by gene symbol from AlphaFold DB when the server's structure resolver is on. A sphere marks each variant by impact class and the picked residue turns red. A protein past about 2,700 residues has no model of its own, so the tile says none was found or draws a shorter isoform and lists the variants it cannot place.
+    layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: sarek
     data_collection_tag: snpeff_protein_lollipop
@@ -2190,23 +2394,12 @@ tabs:
       max_subplot_genes: 4
       point_size: 8
       scale_points_by_effect: true
+      selection_enabled: true
     section: Along the protein
-    tag: sk-gn-av-lolli
-    index: gn-protein-lollipop
+    tag: sk-pr-av-lolli
+    index: pr-lollipop
     title: Coding variants along the protein
-    description: Head colour is the impact class, head size the allele fraction; past four genes, a picker.
-    layout: {x: 0, y: 0, w: 8, h: 6}
-  - component_type: table
-    workflow_tag: sarek
-    data_collection_tag: snpeff_genes
-    use: snpeff/genes
-    row_selection_enabled: true
-    row_selection_column: gene_name
-    section: Gene tables
-    tag: sk-gn-table-genes
-    index: gn-table-genes
-    title: Per-gene variant burden
-    description: Gene, biotype and the HIGH, MODERATE, LOW and MODIFIER counts per gene and callset.
+    description: One lane per gene, one stem per variant, head colour by impact class and head size by allele fraction. Past four genes the tile switches to a picker.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: sarek
@@ -2214,12 +2407,12 @@ tabs:
     use: snpeff/protein_lollipop
     row_selection_enabled: true
     row_selection_column: variant_key
-    section: Gene tables
-    tag: sk-gn-table-lolli
-    index: gn-table-protein
+    section: Coding variant table
+    tag: sk-pr-table-lolli
+    index: pr-table-protein
     title: Coding variants with a protein position
     description: Gene, amino-acid position, impact, consequence and protein change, one row per call.
-    layout: {x: 0, y: 6, w: 8, h: 6}
+    layout: {x: 0, y: 0, w: 8, h: 6}
 # One genome_view navigator on mosdepth_windows drives the tracks through the
 # region links in template.yaml (per-interval depth, the calls over the
 # {GENOME} gene lane) and through follow_region_filter (the annotated VCFs
@@ -2229,7 +2422,7 @@ tabs:
 - title: Locus
   subtitle: What do depth and calls show at one region?
   tab_group: Annotation
-  tab_order: 8
+  tab_order: 9
   tab_icon: mdi:map-marker-outline
   tab_icon_color: indigo
   icon: /assets/images/workflows/nf-core.png

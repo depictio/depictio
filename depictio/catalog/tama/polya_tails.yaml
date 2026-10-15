@@ -1,0 +1,16 @@
+id: tama_polya_tails
+name: Poly(A) tail length distribution
+mode: pacbio/polya
+description: >-
+  Share of each sample's FLNC reads per poly(A) tail length removed by TAMA's
+  poly(A) clean-up, pooled over chunks and SMRT cells.
+find:
+  path_glob: "**/*_polya_flnc_report.txt.gz"
+  path_glob_alt:
+    - "**/*_polya_flnc_report.txt"
+recipe: tama/polya_tails.py
+fixture: polya_tails.tsv
+renders_as:
+  - { id: polya_tail_profile, component: advanced_viz, kind: profile,
+      roles: {series: sample, x: tail_length, y: pct} }
+  - { component: table }

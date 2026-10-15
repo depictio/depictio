@@ -132,6 +132,10 @@ interface InteractiveConfig {
   strip_icon?: boolean;
   /** RangeSlider only: draw the column's histogram above the slider. */
   show_histogram?: boolean;
+  /** Select only: the filter always holds one value, the first option of its
+   *  list until another is picked (see `alwaysSelected.ts` in
+   *  depictio-react-core). */
+  always_selected?: boolean;
 }
 
 /** Variants whose renderers read `show_marks`. */
@@ -323,6 +327,7 @@ const InteractiveBuilder: React.FC = () => {
   const supportsTop = TOP_PLACEMENT_VARIANTS.includes(selected ?? '');
   const supportsMarks = MARKS_VARIANTS.includes(selected ?? '');
   const supportsHistogram = HISTOGRAM_VARIANTS.includes(selected ?? '');
+  const supportsAlwaysSelected = selected === 'Select';
   const supportsMarkLabels = MARK_LABEL_VARIANTS.includes(selected ?? '');
   // What the renderer does with `show_marks` unset: ticks for a control on its
   // own, none inside a group's compact card.
@@ -384,6 +389,15 @@ const InteractiveBuilder: React.FC = () => {
             disabled={!config.column_type || variants.length === 0}
             allowDeselect={false}
           />
+
+          {supportsAlwaysSelected && (
+            <SwitchField
+              label="Always hold a value"
+              description="Opens on the first value of the list and cannot be cleared; a pick replaces it. For tabs that show one unit at a time."
+              checked={config.always_selected === true}
+              onChange={(checked) => patchConfig({ always_selected: checked })}
+            />
+          )}
         </Stack>
       </BuilderSection>
 

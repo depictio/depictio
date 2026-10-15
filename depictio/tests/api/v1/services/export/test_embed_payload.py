@@ -23,6 +23,7 @@ from depictio.api.v1.services.export.bundle import (
 from depictio.api.v1.services.export.embed import (
     EMBED_SENTINEL,
     _advanced_viz_columns,
+    _companion_dc_ids,
     _empty_data,
     _script_hashes,
     _synthetic_dc_id,
@@ -205,6 +206,204 @@ class TestKeyingContract:
         component = _component("text", extra_oid=ObjectId())
         payload = await _build(component)
         assert not isinstance(payload["component"]["extra_oid"], ObjectId)
+
+
+HITS_WF = "507f1f77bcf86cd799439081"
+HITS_DC = "507f1f77bcf86cd799439082"
+DOMAINS_DC = "507f1f77bcf86cd799439083"
+VARIANTS_DC = "507f1f77bcf86cd799439084"
+STRUCTURE_DC = "507f1f77bcf86cd799439085"
+PAE_DC = "507f1f77bcf86cd799439086"
+MAIN_DC = "507f1f77bcf86cd799439055"
+
+LOGO_CONFIG = {
+    "profile_source": "hmm",
+    "entity_col": "entity",
+    "position_col": "position",
+    "model_col": "hmm_name",
+    "state_col": "hmm_position",
+    "letter_col": "hmm_letter",
+    "emission_col": "emission",
+    "hits_wf_id": HITS_WF,
+    "hits_dc_id": HITS_DC,
+    "hits_model_col": "label",
+    "hits_entity_col": "entity",
+    "hits_from_col": "hmm_from",
+    "hits_to_col": "hmm_to",
+    "hits_evalue_col": "i_evalue",
+}
+
+PROFILE_ROWS = {
+    "rows": {
+        "entity": ["P1", "P1"],
+        "hmm_name": ["PF1", "PF1"],
+        "hmm_position": [1, 2],
+        "hmm_letter": ["A", "C"],
+        "emission": [0.7, 0.3],
+    }
+}
+HITS_ROWS = {
+    "rows": {
+        "entity": ["Q1", "Q2"],
+        "label": ["PF1", "PF1"],
+        "hmm_from": [1, 2],
+        "hmm_to": [30, 28],
+        "i_evalue": [1e-9, 1e-4],
+    }
+}
+
+
+def _dc_types(**by_dc_id: str | None):
+    """A stand-in for the lookup of a collection's type; unknown ids are not found."""
+    return patch(
+        "depictio.api.v1.deltatables_utils._get_dc_type_from_db",
+        side_effect=lambda oid: by_dc_id.get(str(oid)),
+    )
+
+
+def _tidy(**rows_by_dc_id):
+    """A stand-in for the data route that answers per collection (or raises)."""
+
+    def load(**kwargs):
+        rows = rows_by_dc_id.get(kwargs["dc_id"])
+        if isinstance(rows, Exception):
+            raise rows
+        return rows if rows is not None else {"rows": {}}
+
+    return patch("depictio.api.v1.services.advanced_viz.data.load_tidy_columns", side_effect=load)
+
+
+class TestTableCompanions:
+    """A tile reads some tables beside its own; the offline shim answers by dc_id alone."""
+
+    @pytest.mark.asyncio
+    async def test_a_logo_export_carries_its_hits_rows(self) -> None:
+        component = _component("advanced_viz", viz_kind="hmm_logo", config=dict(LOGO_CONFIG))
+        with (
+            _dc_types(**{HITS_DC: "table"}),
+            _tidy(**{MAIN_DC: PROFILE_ROWS, HITS_DC: HITS_ROWS}) as load,
+        ):
+            payload = await _build(component)
+
+        shipped = payload["data"]["advancedVizData"]
+        assert shipped[_synthetic_dc_id("cmp-1")] == PROFILE_ROWS
+        # The renderer asks for `hits_dc_id` as the config states it ...
+        assert payload["component"]["config"]["hits_dc_id"] == HITS_DC
+        # ... so that is the key, and the rows are the hits.
+        assert shipped[HITS_DC] == HITS_ROWS
+        hits_call = next(c for c in load.call_args_list if c.kwargs["dc_id"] == HITS_DC)
+        assert hits_call.kwargs["wf_id"] == HITS_WF
+        assert hits_call.kwargs["viz_kind"] == "hmm_logo"
+        assert {"label", "hmm_from", "hmm_to", "i_evalue"} <= set(hits_call.kwargs["columns"])
+
+    @pytest.mark.asyncio
+    async def test_indexed_file_companions_are_left_out(self) -> None:
+        """Structures and PAE matrices are objects fetched from storage: the data
+        route has no rows for them (404), and the kinds that read them cannot go
+        offline anyway (`HTML_UNAVAILABLE_KINDS`)."""
+        component = _component(
+            "advanced_viz",
+            viz_kind="hmm_logo",
+            config={**LOGO_CONFIG, "structure_dc_id": STRUCTURE_DC, "pae_dc_id": PAE_DC},
+        )
+        with (
+            _dc_types(**{HITS_DC: "table", STRUCTURE_DC: "indexed_file", PAE_DC: "indexed_file"}),
+            _tidy(**{HITS_DC: HITS_ROWS}) as load,
+        ):
+            payload = await _build(component)
+
+        asked = [c.kwargs["dc_id"] for c in load.call_args_list]
+        assert STRUCTURE_DC not in asked
+        assert PAE_DC not in asked
+        assert HITS_DC in payload["data"]["advancedVizData"]
+        assert STRUCTURE_DC not in payload["data"]["advancedVizData"]
+
+    @pytest.mark.asyncio
+    async def test_a_sequence_track_carries_its_domains_and_variants(self) -> None:
+        component = _component(
+            "advanced_viz",
+            viz_kind="sequence_track",
+            config={
+                "entity_col": "entity",
+                "position_col": "position",
+                "domains_dc_id": DOMAINS_DC,
+                "domain_start_col": "start",
+                "domain_end_col": "end",
+                "domain_label_col": "label",
+                "variants_wf_id": HITS_WF,
+                "variants_dc_id": VARIANTS_DC,
+                "variant_position_col": "position",
+            },
+        )
+        domains = {"rows": {"entity": ["P1"], "start": [3], "end": [40], "label": ["Kinase"]}}
+        variants = {"rows": {"entity": ["P1"], "position": [7], "ref_aa": ["A"], "alt_aa": ["V"]}}
+        with (
+            _dc_types(**{DOMAINS_DC: "table", VARIANTS_DC: "TABLE"}),
+            _tidy(**{DOMAINS_DC: domains, VARIANTS_DC: variants}) as load,
+        ):
+            payload = await _build(component)
+
+        shipped = payload["data"]["advancedVizData"]
+        assert shipped[DOMAINS_DC] == domains
+        assert shipped[VARIANTS_DC] == variants
+        by_dc = {c.kwargs["dc_id"]: c.kwargs for c in load.call_args_list}
+        # Read by a fixed name, so no `*_col` key would have asked for them.
+        assert "source" in by_dc[DOMAINS_DC]["columns"]
+        assert {"ref_aa", "alt_aa"} <= set(by_dc[VARIANTS_DC]["columns"])
+        assert "ref_aa" not in by_dc[DOMAINS_DC]["columns"]
+        # The companion's workflow is its own where the config names one.
+        assert by_dc[VARIANTS_DC]["wf_id"] == HITS_WF
+        assert by_dc[DOMAINS_DC]["wf_id"] == "507f1f77bcf86cd799439066"
+
+    @pytest.mark.asyncio
+    async def test_a_companion_that_cannot_be_read_costs_its_lane_not_the_export(self) -> None:
+        from fastapi import HTTPException
+
+        component = _component("advanced_viz", viz_kind="hmm_logo", config=dict(LOGO_CONFIG))
+        with (
+            _dc_types(**{HITS_DC: "table"}),
+            _tidy(
+                **{
+                    MAIN_DC: PROFILE_ROWS,
+                    HITS_DC: HTTPException(status_code=404, detail="no Delta table"),
+                }
+            ),
+        ):
+            payload = await _build(component)
+
+        shipped = payload["data"]["advancedVizData"]
+        assert shipped[_synthetic_dc_id("cmp-1")] == PROFILE_ROWS
+        assert HITS_DC not in shipped
+
+    @pytest.mark.asyncio
+    async def test_a_collection_that_is_not_a_table_is_left_out(self) -> None:
+        component = _component("advanced_viz", viz_kind="hmm_logo", config=dict(LOGO_CONFIG))
+        for other in (None, "multiqc"):
+            with _dc_types(**{HITS_DC: other}), _tidy(**{HITS_DC: HITS_ROWS}) as load:
+                payload = await _build(component)
+            assert HITS_DC not in payload["data"]["advancedVizData"]
+            assert HITS_DC not in [c.kwargs["dc_id"] for c in load.call_args_list]
+
+
+class TestCompanionDiscovery:
+    def test_every_dc_id_key_but_the_ones_with_their_own_path(self) -> None:
+        config = {
+            "hits_dc_id": "h",
+            "hits_wf_id": "hw",
+            "msa_dc_id": "m",
+            "tree_dc_id": "t",
+            "ma_dc_id": "ma",
+            "matrix_dc_id": "mx",
+            "pae_dc_tag": "a-tag-names-no-id",
+            "variants_dc_id": None,
+        }
+        assert _companion_dc_ids(config) == {"h": ("hw", []), "m": (None, [])}
+
+    def test_a_collection_named_twice_is_listed_once_with_both_fixed_column_sets(self) -> None:
+        found = _companion_dc_ids(
+            {"domains_dc_id": "x", "variants_dc_id": "x", "variants_wf_id": "w"}
+        )
+        assert found == {"x": ("w", ["source", "ref_aa", "alt_aa"])}
 
 
 class TestAdvancedVizColumnDiscovery:
