@@ -692,6 +692,17 @@ export function labelColumnPx(
   return Math.round(Math.min(cap, Math.max(minPx, widestPx + padPx)));
 }
 
+/** A label column width chosen by hand, kept between `minPx` and the tile
+ *  less room for the tracks. */
+export function clampLabelWidth(
+  px: number,
+  viewW: number,
+  { minPx = 48, minTrackPx = 120 }: { minPx?: number; minTrackPx?: number } = {},
+): number {
+  const max = Math.max(minPx, viewW - minTrackPx);
+  return Math.round(Math.min(max, Math.max(minPx, px)));
+}
+
 /** Widest residue width the control offers, CSS px per residue. */
 export const RESIDUE_WIDTH_MAX_PX = 24;
 

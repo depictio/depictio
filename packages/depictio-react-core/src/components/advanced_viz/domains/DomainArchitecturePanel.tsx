@@ -15,6 +15,7 @@ import { useModifierWheelZoom } from '../protein/useWheelZoom';
 import {
   domainAt,
   domainTooltip,
+  clampLabelWidth,
   labelColumnPx,
   lengthGutter,
   lengthLabel,
@@ -216,7 +217,12 @@ const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
     return widest;
   }, [rows, colours.font]);
   // Capped to a share of the tile, so one long identifier leaves the tracks room.
-  const labelWidth = useMemo(() => labelColumnPx(widestLabel, view.w), [widestLabel, view.w]);
+  const autoLabelWidth = useMemo(() => labelColumnPx(widestLabel, view.w), [widestLabel, view.w]);
+  // A width dragged by hand replaces the automatic one for the session; the
+  // divider's double click gives the automatic one back.
+  const [labelOverride, setLabelOverride] = useState<number | null>(null);
+  const labelWidth =
+    labelOverride == null ? autoLabelWidth : clampLabelWidth(labelOverride, view.w);
   // The longest backbone ends at the track's end (every one does on the
   // per-protein scale), so its length label needs a gutter of its own: the
   // widest label's text, measured as it is drawn.
@@ -688,6 +694,22 @@ const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
     requestDraw();
   };
 
+  const dragLabel = useRef<{ x0: number; w0: number } | null>(null);
+  const onDividerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragLabel.current = { x0: e.clientX, w0: labelWidth };
+    clearHover();
+  };
+  const onDividerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = dragLabel.current;
+    if (d) setLabelOverride(clampLabelWidth(d.w0 + e.clientX - d.x0, view.w));
+  };
+  const onDividerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    dragLabel.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+
   return (
     <Box
       className="depictio-domain-architecture-panel"
@@ -718,6 +740,27 @@ const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
           />
         </div>
       </div>
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize the label column (double click to reset)"
+        title="Drag to resize the labels, double click to reset"
+        onPointerDown={onDividerDown}
+        onPointerMove={onDividerMove}
+        onPointerUp={onDividerUp}
+        onPointerCancel={onDividerUp}
+        onDoubleClick={() => setLabelOverride(null)}
+        style={{
+          position: 'absolute',
+          top: AXIS_PX,
+          bottom: 0,
+          left: labelWidth - 3,
+          width: 6,
+          cursor: 'col-resize',
+          touchAction: 'none',
+          zIndex: 1,
+        }}
+      />
       {tooltip ? (
         <Paper
           withBorder

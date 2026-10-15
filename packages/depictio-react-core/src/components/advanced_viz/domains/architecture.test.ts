@@ -26,6 +26,7 @@ import {
   partialEdges,
   proteinLengths,
   proteinRows,
+  clampLabelWidth,
   labelColumnPx,
   pxPerResidue,
   representative,
@@ -655,6 +656,18 @@ describe('labelColumnPx', () => {
     expect(labelColumnPx(400, 100)).toBe(72);
     expect(labelColumnPx(400, 0)).toBe(72);
     expect(labelColumnPx(Infinity, 625)).toBe(138);
+  });
+});
+
+describe('clampLabelWidth', () => {
+  it('keeps a dragged width as it is when it fits', () => {
+    expect(clampLabelWidth(150, 800)).toBe(150);
+  });
+
+  it('keeps a floor and leaves the tracks their room', () => {
+    expect(clampLabelWidth(10, 800)).toBe(48);
+    expect(clampLabelWidth(790, 800)).toBe(680);
+    expect(clampLabelWidth(300, 100)).toBe(48);
   });
 });
 
