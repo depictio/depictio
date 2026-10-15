@@ -214,8 +214,10 @@ jobs:
           cache-from: type=gha,scope=depictio-cli-amd64
           cache-to: type=gha,scope=depictio-cli-amd64,mode=max
 
+      # CI=true does not cross into the container, so without the opt-out each
+      # run files a `cli_install` under a fresh anonymous ID.
       - name: The entrypoint runs as the unprivileged user
-        run: docker run --rm depictio-cli:ci version
+        run: docker run --rm -e DEPICTIO_TELEMETRY_ENABLED=false depictio-cli:ci version
 
       - name: multiqc and the bundled templates are readable by that user
         run: |
