@@ -21,16 +21,9 @@ version: "2.5.0"
 # release run (software_versions.yml: v2.5.0-gf8c0b18).
 results_sha: "f8c0b183e59df3d87c38d0f7c4acc6918593f4f5"
 run_root: ""
-multiqc:
-  version: "1.35"
-  parquet: multiqc/multiqc_data/multiqc.parquet
-  reprocess: false
 keys:
   - pipeline_info/params_*.json
   - pipeline_info/*software*versions*.yml
-  # MultiQC parquet: custom content only (per-sample SeqFu and cluster-size
-  # sections named after the sample, plus the family metadata table).
-  - multiqc/multiqc_data/multiqc.parquet
   # SeqFu statistics of the input sequences before and after preprocessing.
   - qc/*/*_before.tsv
   - qc/*/*_after.tsv
