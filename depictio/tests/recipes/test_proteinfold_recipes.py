@@ -135,7 +135,9 @@ def _scores_scan(run_dir: Path) -> pl.DataFrame:
         .with_columns(pl.lit(str(p.relative_to(run_dir))).alias("source_path"))
         .collect()
         for p in sorted(run_dir.rglob("*.tsv"))
-        if pattern.match(p.name)
+        # An empty file (a monomer's ipTM) yields no row; polars 1.33, which CI pins for
+        # MultiQC, raises on `new_columns` against zero columns instead of returning none.
+        if pattern.match(p.name) and p.stat().st_size
     ]
     return pl.concat([f for f in frames if f.height], how="diagonal_relaxed")
 
