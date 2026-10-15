@@ -1305,7 +1305,7 @@ tabs:
     color: indigo
     description: The proteins in view, their residues and how deeply domains overlap
   - name: Structure workbench
-    icon: mdi:view-split-vertical
+    icon: mdi:view-dashboard-outline
     color: indigo
     description: Pick a protein in the table, then read its structure and its sequence lanes side by side, linked residue by residue
     display: workbench
@@ -1472,7 +1472,7 @@ tabs:
     index: pa-st-table-proteins
     title: Proteins to fold
     description: One row per protein within the length window, with its length, annotated share and best domain. Click a row to fold it and show its structure and sequence.
-    layout: {x: 3, y: 0, w: 5, h: 3}
+    layout: {x: 0, y: 0, w: 8, h: 3}
   - component_type: advanced_viz
     workflow_tag: proteinannotator
     data_collection_tag: proteinannotator_residues
@@ -1495,7 +1495,7 @@ tabs:
     index: pa-st-av-structure
     title: Predicted structure
     description: An ESMFold prediction made from the picked protein's sequence alone, not an experimental structure, coloured by domain (grey outside any domain) with the picked residue in red. Folding sends the sequence to the public ESM Atlas service.
-    layout: {x: 0, y: 0, w: 3, h: 8}
+    layout: {x: 0, y: 3, w: 3, h: 5}
   - component_type: advanced_viz
     workflow_tag: proteinannotator
     data_collection_tag: proteinannotator_residues

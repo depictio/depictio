@@ -1106,7 +1106,7 @@ tabs:
     color: grape
     description: How the representative's residues spread over the conservation scale
   - name: Family workbench
-    icon: mdi:view-split-vertical
+    icon: mdi:view-dashboard-outline
     color: grape
     description: Pick a family, then read its fold, sequence track and alignment side by side, linked by residue
     display: workbench
@@ -1355,7 +1355,7 @@ tabs:
     color: indigo
     description: The picked family's conservation, residue by residue, and its members
   - name: Family workbench
-    icon: mdi:view-split-vertical
+    icon: mdi:view-dashboard-outline
     color: indigo
     description: The profile logo, the folded representative, its sequence track and the family alignment side by side, linked by residue
     display: workbench
