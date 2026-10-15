@@ -33,7 +33,7 @@ const AuthBrand: React.FC = () => {
   if (mode === 'custom') {
     return (
       <div className="gp-auth-brand gp-auth-brand--custom">
-        <BrandLogo height={96} />
+        <BrandLogo height={128} />
         <PoweredBy />
       </div>
     );
