@@ -390,8 +390,10 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
   const followed = followedName ?? (source === 'hmm' ? modelOfEntity : null);
   // An alignment is an entity like the msa tile's, so it agrees on the opening
   // one with the other protein tiles; a model is not (sharing model names under
-  // the entity key would hold that key against the protein tiles), and opens
-  // on the first.
+  // the entity key would hold that key against the protein tiles). Both open on
+  // the one still in scope: a sidebar family reaches this table through a link
+  // the server applies, so the model list (unscoped) cannot tell which model
+  // the dashboard narrowed to, and opening on its first would draw nothing.
   const picker = useEntityPicker(
     metadata.dc_id,
     scopeCol,
@@ -399,7 +401,7 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
     refreshTick,
     source === 'msa'
       ? { wfId: metadata.wf_id, vizKind: 'hmm_logo', filters: fetchFilters, shareKey: entityCol, owner: index }
-      : undefined,
+      : { wfId: metadata.wf_id, vizKind: 'hmm_logo', filters: fetchFilters },
   );
 
   // ---- profile rows -------------------------------------------------------------
