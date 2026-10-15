@@ -3496,6 +3496,36 @@ class HmmLogoConfig(_BaseVizConfig):
         description="Show the insert probability, expected insert length and occupancy lanes",
     )
     show_consensus: bool = Field(default=True, description="Show the consensus residue row")
+    window_start: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "First match state drawn (1-based); states before it are left out. "
+            "null starts at the first state. Also a tile control"
+        ),
+    )
+    window_end: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Last match state drawn (1-based); states after it are left out. "
+            "null runs to the last state. Also a tile control"
+        ),
+    )
+    collapse_below_ic: float | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Fold runs of states whose information content is under this many "
+            "bits (relative entropy) into a narrow stub that a click opens; "
+            "null folds nothing. Also a tile control"
+        ),
+    )
+    collapse_min_run: int = Field(
+        default=4,
+        ge=1,
+        description="Shortest run of low-information states that `collapse_below_ic` folds",
+    )
     hits_wf_id: str | None = Field(
         default=None, description="Workflow id of the domain hits table (optional)"
     )
@@ -3556,6 +3586,16 @@ class HmmLogoConfig(_BaseVizConfig):
     follow_selection: bool = Field(
         default=True, description="Mark the states of an incoming residue_selection or hover"
     )
+
+    @model_validator(mode="after")
+    def _window_is_ordered(self) -> HmmLogoConfig:
+        if (
+            self.window_start is not None
+            and self.window_end is not None
+            and self.window_start > self.window_end
+        ):
+            raise ValueError("window_start must not come after window_end")
+        return self
 
 
 class SecondaryStructureConfig(_BaseVizConfig):

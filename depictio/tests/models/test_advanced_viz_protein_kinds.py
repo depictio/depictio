@@ -337,7 +337,34 @@ def test_hmm_logo_defaults():
     assert (c.hits_evalue_col, c.hits_score_col) == ("i_evalue", "dom_score")
     assert (c.hits_ali_from_col, c.hits_ali_to_col) == ("ali_from", "ali_to")
     assert (c.hits_evalue_max, c.max_hits) == (0.01, 200)
+    # Nothing hidden and nothing folded unless a dashboard asks.
+    assert (c.window_start, c.window_end) == (None, None)
+    assert (c.collapse_below_ic, c.collapse_min_run) == (None, 4)
     assert c.controls_placement == "popover"
+
+
+def test_hmm_logo_window_and_fold_validate():
+    from pydantic import ValidationError
+
+    ok = _cfg("hmm_logo", window_start=10, window_end=10, collapse_below_ic=0.5, collapse_min_run=1)
+    assert (ok.window_start, ok.window_end, ok.collapse_below_ic, ok.collapse_min_run) == (
+        10,
+        10,
+        0.5,
+        1,
+    )
+    # One open side is a half-open window.
+    assert _cfg("hmm_logo", window_start=5).window_end is None
+    assert _cfg("hmm_logo", window_end=5).window_start is None
+    for bad in (
+        {"window_start": 20, "window_end": 10},
+        {"window_start": 0},
+        {"window_end": 0},
+        {"collapse_min_run": 0},
+        {"collapse_below_ic": -0.1},
+    ):
+        with pytest.raises(ValidationError):
+            _cfg("hmm_logo", **bad)
 
 
 def test_hmm_logo_reuses_the_msa_colour_schemes():

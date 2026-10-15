@@ -295,7 +295,7 @@ without the column it lacks. Every config also inherits `controls_placement` fro
 
 | kind | renderer | config fields (defaults) |
 | --- | --- | --- |
-| `hmm_logo` | canvas `LogoPanel` | `profile_source` (`hmm` \| `msa`), `entity_col` (`entity`), `position_col` (`position`), `model_col` (`hmm_name`), `state_col` (`hmm_position`), `letter_col` (`hmm_letter`), `emission_col` (`emission`), `insert_prob_col` (`insert_prob`), `insert_length_col` (`insert_length`), `occupancy_col` (`occupancy`), `consensus_col` (`consensus`), `rf_col` (`rf`), `cs_col` (`cs`), `msa_id_col` (`msa_id`), `seq_id_col` (`seq_id`), `sequence_col` (`aligned_sequence`), `rank_col` (`rank`), `height_mode` (`relent_abovebg` \| `relent_all` \| `probability`), `color_scheme` (`clustal`, the `msa` kind's schemes), `show_indel_rows` (true), `show_consensus` (true), `hits_dc_id` / `hits_wf_id` / `hits_dc_tag`, `hits_model_col` (`label`), `hits_entity_col` (`entity`), `hits_from_col` (`hmm_from`), `hits_to_col` (`hmm_to`), `hits_length_col` (`hmm_length`), `hits_evalue_col` (`i_evalue`), `hits_score_col` (`dom_score`), `hits_ali_from_col` (`ali_from`), `hits_ali_to_col` (`ali_to`), `hits_evalue_max` (0.01), `max_hits` (200, 1 to 2000), `selection_enabled` (true), `follow_selection` (true) |
+| `hmm_logo` | canvas `LogoPanel` | `profile_source` (`hmm` \| `msa`), `entity_col` (`entity`), `position_col` (`position`), `model_col` (`hmm_name`), `state_col` (`hmm_position`), `letter_col` (`hmm_letter`), `emission_col` (`emission`), `insert_prob_col` (`insert_prob`), `insert_length_col` (`insert_length`), `occupancy_col` (`occupancy`), `consensus_col` (`consensus`), `rf_col` (`rf`), `cs_col` (`cs`), `msa_id_col` (`msa_id`), `seq_id_col` (`seq_id`), `sequence_col` (`aligned_sequence`), `rank_col` (`rank`), `height_mode` (`relent_abovebg` \| `relent_all` \| `probability`), `color_scheme` (`clustal`, the `msa` kind's schemes), `show_indel_rows` (true), `show_consensus` (true), `window_start` / `window_end` (null, 1-based states), `collapse_below_ic` (null, bits), `collapse_min_run` (4), `hits_dc_id` / `hits_wf_id` / `hits_dc_tag`, `hits_model_col` (`label`), `hits_entity_col` (`entity`), `hits_from_col` (`hmm_from`), `hits_to_col` (`hmm_to`), `hits_length_col` (`hmm_length`), `hits_evalue_col` (`i_evalue`), `hits_score_col` (`dom_score`), `hits_ali_from_col` (`ali_from`), `hits_ali_to_col` (`ali_to`), `hits_evalue_max` (0.01), `max_hits` (200, 1 to 2000), `selection_enabled` (true), `follow_selection` (true) |
 | `domain_architecture` | canvas `DomainArchitecturePanel` | `entity_col` (`entity`), `start_col` (`start`), `end_col` (`end`), `label_col` (`label`), `protein_length_col` (`protein_length`), `hmm_from_col` (`hmm_from`), `hmm_to_col` (`hmm_to`), `hmm_length_col` (`hmm_length`), `hmm_coverage_col` (`hmm_coverage`), `evalue_col` (`i_evalue`), `source_col` (`source`), `description_col` (`description`), `accession_col` (`accession`), `view` (`proteins` \| `architectures`), `max_architectures` (15, 1 to 100), `max_proteins` (2000, 1 to 20000), `evalue_threshold`, `sources`, `scale` (`shared` \| `per_protein`), `color_by` (`label` \| `source`), `partial_coverage` (0.9), `position_col_for_selection` (`position`), `label_selection` (true), `selection_column` (null uses `label_col`), `selection_enabled` (true), `follow_selection` (true) |
 | `secondary_structure` | canvas `SecondaryStructurePanel` and a Mantine segment list | `entity_col` (`entity`), `position_col` (`position`), `residue_col` (`residue`), `state_col` (`ss_code`), `source_col`, `reference_source`, `p_helix_col` (`p_helix`), `p_strand_col` (`p_strand`), `p_coil_col` (`p_coil`), `confidence_col`, `show_probabilities` (true), `show_agreement` (true), `show_segments` (true), `show_composition` (true), `show_letters` (true), `shade_confidence` (true), `show_coil_segments` (false), `residue_width` (0 fits the tile, 0 to 24), `ribbon_height` (30, 16 to 64), `min_segment_length` (1, 1 to 50), `selection_enabled` (true), `follow_selection` (true) |
 | `pae_matrix` | canvas `PaePanel` | `entity_col` (`entity`), `position_col` (`position`), `value_col`, `chain_col`, `pae_dc_id` / `pae_wf_id` / `pae_dc_tag`, `max_pae`, `colour_scale`, `brush` (`diagonal` \| `rectangle`), `show_plddt` (true), `selection_enabled` (true), `follow_selection` (true) |
@@ -389,6 +389,23 @@ outlined.
 rows, and a null `*_col` drops its lane. The tile also offers the model (or alignment) picker, the
 height mode, the colour scheme, the state width (fit, or a pixel width), occupancy or deletion
 bars, the E-value threshold and the maximum hit count.
+
+**Hiding parts of a long profile.** Three ways, none on by default, all tile controls seeded from
+the config. A position window (`window_start`, `window_end`, 1-based state numbers, either side
+open) leaves the states outside it undrawn. `collapse_below_ic` folds every run of at least
+`collapse_min_run` states whose information (the relative entropy the tooltip reports, whatever
+the height mode) is under that many bits into a 14 px hatched stub labelled with its state count
+when the logo lane is tall enough; a click on a stub opens that run for the session, and "Fold
+opened runs again" closes them. "Hide selection" folds the states of the shaded residue range the
+same way (a click opens it), and "Show all" clears the window, the threshold and every fold. The
+layout is the pure `logo/collapse.ts`: it plans the segments from the window, the runs and the
+hidden ranges, places them at the state width (the "Fit" width leaves the stubs their own width,
+and a wheel zoom does not scale them) and maps a column to its pixel and back. Everything that
+leaves the tile stays in the original coordinates: a brush that crosses a stub covers the hidden
+states too, so the residue range it emits, the hover and the highlight keep following the
+structure and the sequence tracks, and a hit bar runs over a stub. The insert, occupancy,
+coverage and consensus lanes fold with the stacks. The hand-hidden ranges and the opened runs are
+not saved; the window and the threshold are.
 
 **Lanes**, top to bottom: the logo (y axis in bits, or probability, scaled to the tallest stack of
 the model so that scrolling never rescales it), the consensus (coloured, lower case dimmed), RF

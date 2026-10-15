@@ -52,6 +52,7 @@ import {
   withoutPositionSelections,
 } from './protein/rendererData';
 import { useEntityPicker } from './protein/useEntityPicker';
+import ZoomHintLabel from './protein/ZoomHint';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
 /**
@@ -403,7 +404,8 @@ const MsaRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilter
       <>
         <VizControlGroup title="Display">
           <VizSlider
-            label="Column width"
+            label={<ZoomHintLabel>Column width</ZoomHintLabel>}
+            aria-label="Column width"
             title="Ctrl/Cmd + wheel to zoom"
             value={zoom}
             onChange={setZoom}

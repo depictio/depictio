@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { scrollLeftAfterZoom, zoomStep } from './useWheelZoom';
+import { isApplePlatform, scrollLeftAfterZoom, zoomModifierLabel, zoomStep } from './useWheelZoom';
 
 describe('zoomStep', () => {
   it('zooms in on a negative delta and out on a positive one', () => {
@@ -46,5 +46,23 @@ describe('scrollLeftAfterZoom', () => {
 
   it('keeps the scroll on a degenerate width', () => {
     expect(scrollLeftAfterZoom(120, 10, 0, 0, 5)).toBe(120);
+  });
+});
+
+describe('zoomModifierLabel', () => {
+  it('names the Command key on a Mac and Ctrl elsewhere', () => {
+    expect(zoomModifierLabel({ platform: 'MacIntel', userAgent: '' })).toBe('\u2318');
+    expect(zoomModifierLabel({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)' })).toBe(
+      '\u2318',
+    );
+    expect(zoomModifierLabel({ platform: 'Win32', userAgent: 'Mozilla/5.0 (Windows NT 10.0)' })).toBe(
+      'Ctrl',
+    );
+    expect(zoomModifierLabel({ platform: 'Linux x86_64' })).toBe('Ctrl');
+  });
+
+  it('falls back to Ctrl when there is no navigator', () => {
+    expect(isApplePlatform({})).toBe(false);
+    expect(zoomModifierLabel({})).toBe('Ctrl');
   });
 });

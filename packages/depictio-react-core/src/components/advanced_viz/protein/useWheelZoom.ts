@@ -49,6 +49,28 @@ export function scrollLeftAfterZoom(
   return Math.max(0, col * newCw + gutter - anchorX);
 }
 
+/** The slice of `navigator` the platform check reads. */
+interface PlatformInfo {
+  platform?: string;
+  userAgent?: string;
+}
+
+/** Whether the platform is a Mac (iPadOS reports a Mac platform too). */
+export function isApplePlatform(nav?: PlatformInfo): boolean {
+  const n = nav ?? (typeof navigator === 'undefined' ? undefined : navigator);
+  if (!n) return false;
+  return /mac|iphone|ipad|ipod/i.test(`${n.platform ?? ''} ${n.userAgent ?? ''}`);
+}
+
+/**
+ * The name of the key that turns the wheel into a zoom on this platform:
+ * the Command symbol on a Mac, `Ctrl` elsewhere. (Both work everywhere; the
+ * hint shows the one the user's keyboard has.)
+ */
+export function zoomModifierLabel(nav?: PlatformInfo): string {
+  return isApplePlatform(nav) ? '\u2318' : 'Ctrl';
+}
+
 export interface ModifierWheelZoomOptions {
   /** The column width now rendered, in px (the fitted width when the slider is at 0). */
   value: number;
