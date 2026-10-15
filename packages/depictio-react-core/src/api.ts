@@ -543,14 +543,16 @@ export interface StoredMetadata {
   section?: string;
   /** Layout placement. The allowed values depend on the component type:
    *  interactive components use 'left' (default — Filters sidebar) or 'top'
-   *  (top panel above the grid, currently 'Timeline' only); maps use 'grid'
-   *  (default — a normal tile) or 'floating' (the floating panel, reachable
-   *  from every tab). Anything lifted out of the grid gets no layout entry. */
+   *  (top panel above the grid, currently 'Timeline' only); maps and
+   *  `molecule_3d` advanced viz tiles use 'grid' (default: a normal tile) or
+   *  'floating' (a floating panel, reachable from every tab: the map panel and
+   *  the 3D structure panel). Anything lifted out of the grid gets no layout
+   *  entry. */
   placement?: 'left' | 'top' | 'grid' | 'floating';
   /** How the panel presents itself on a viewer's first visit — a card in one of
    *  its two sizes, docked below the filter panel, or hidden behind the header
-   *  control. Their own saved preference wins thereafter. Maps with
-   *  `placement: 'floating'` only. */
+   *  control. Their own saved preference wins thereafter. Floating maps and
+   *  floating `molecule_3d` tiles only. */
   floating_initial_state?: 'compact' | 'expanded' | 'docked' | 'hidden';
   /** Default timescale for the Timeline interactive component. */
   timescale?: 'year' | 'month' | 'day' | 'hour' | 'minute';

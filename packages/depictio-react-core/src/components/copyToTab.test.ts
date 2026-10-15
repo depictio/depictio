@@ -48,6 +48,17 @@ describe('canCopyToTab', () => {
     expect(canCopyToTab({ component_type: 'map', placement: 'floating' })).toBe(false);
     expect(canCopyToTab({ component_type: 'something-new' })).toBe(false);
   });
+
+  it('holds back a floating 3D structure, and copies the same tile on the grid', () => {
+    const structure = { component_type: 'advanced_viz', viz_kind: 'molecule_3d' };
+    expect(canCopyToTab({ ...structure, placement: 'floating' })).toBe(false);
+    expect(canCopyToTab({ ...structure, placement: 'grid' })).toBe(true);
+    expect(canCopyToTab(structure)).toBe(true);
+    // Any other advanced viz stays a grid tile whatever its placement says.
+    expect(
+      canCopyToTab({ component_type: 'advanced_viz', viz_kind: 'volcano', placement: 'floating' }),
+    ).toBe(true);
+  });
 });
 
 describe('copyComponentToTab', () => {

@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'react';
 
+import { PANEL_KINDS } from './panelKinds';
+
 /**
  * How the panel presents itself.
  *
@@ -39,7 +41,10 @@ export interface MapPanelState {
   legendHidden: boolean;
 }
 
-const STORAGE_PREFIX = 'depictio:map-panel:';
+/** The map panel's key, which is what every saved layout used before there was
+ *  a second kind of panel. Another kind passes its own prefix to
+ *  `useMapPanelState`, so two panels on one dashboard never share an entry. */
+const STORAGE_PREFIX = PANEL_KINDS.map.storagePrefix;
 
 const DEFAULT_AXES: Pick<MapPanelState, 'mode' | 'cardSize'> = {
   mode: 'floating',
@@ -86,10 +91,10 @@ const DEFAULT_VIEW: Omit<MapPanelState, 'mode' | 'cardSize'> = {
   legendHidden: false,
 };
 
-function readState(familyId: string | null): MapPanelState | null {
+function readState(familyId: string | null, prefix: string): MapPanelState | null {
   if (!familyId) return null;
   try {
-    const raw = window.localStorage.getItem(`${STORAGE_PREFIX}${familyId}`);
+    const raw = window.localStorage.getItem(`${prefix}${familyId}`);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const axes = axesFromStored(parsed.mode, parsed.cardSize);
@@ -111,10 +116,10 @@ function readState(familyId: string | null): MapPanelState | null {
   }
 }
 
-function writeState(familyId: string | null, state: MapPanelState): void {
+function writeState(familyId: string | null, prefix: string, state: MapPanelState): void {
   if (!familyId) return;
   try {
-    window.localStorage.setItem(`${STORAGE_PREFIX}${familyId}`, JSON.stringify(state));
+    window.localStorage.setItem(`${prefix}${familyId}`, JSON.stringify(state));
   } catch {
     // Storage unavailable (private browsing, quota): the panel still works for
     // this page load, it just will not remember across tab switches.
@@ -137,6 +142,7 @@ function writeState(familyId: string | null, state: MapPanelState): void {
 export function useMapPanelState(
   familyId: string | null,
   authorDefault: string | undefined,
+  storagePrefix: string = STORAGE_PREFIX,
 ) {
   const [state, setState] = useState<MapPanelState>(() => ({
     ...axesFromAuthorDefault(authorDefault),
@@ -155,7 +161,7 @@ export function useMapPanelState(
   if (familyId && familyId !== resolvedFor) {
     setResolvedFor(familyId);
     setState(
-      readState(familyId) ?? {
+      readState(familyId, storagePrefix) ?? {
         ...axesFromAuthorDefault(authorDefault),
         ...DEFAULT_VIEW,
       },
@@ -169,9 +175,9 @@ export function useMapPanelState(
     (patch: Partial<MapPanelState>) => {
       const next = { ...state, ...patch };
       setState(next);
-      writeState(familyId, next);
+      writeState(familyId, storagePrefix, next);
     },
-    [familyId, state],
+    [familyId, storagePrefix, state],
   );
 
   const setMode = useCallback((mode: MapPanelMode) => update({ mode }), [update]);

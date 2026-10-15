@@ -9,6 +9,7 @@
 import type { FilterSectionSpec, PersistentSection, StoredMetadata } from '../api';
 import { isAlwaysSelected } from '../components/interactive/alwaysSelected';
 import { isStripSection } from '../components/interactive/strip/stripLayout';
+import { isFloatingComponent } from '../components/mapPanel/panelKinds';
 import { tabLinkKey } from '../components/tabLinks';
 import { advancedVizSelectionColumn, supportsSelectionGrouping } from '../selection';
 import { groupDisplaysForKind, type GroupDisplays } from '../splitPanels';
@@ -296,6 +297,9 @@ export function actionsTileRank(
         if (isFloatingMap(m)) return 2;
         return supportsSelectionGrouping(m, true) ? 0 : 1;
       case 'advanced_viz': {
+        // A floating structure draws in its own panel, and a second viewer
+        // costs a WebGL context: last resort, as a floating map is.
+        if (isFloatingComponent(m)) return 3;
         if (supportsSelectionGrouping(m, true)) return 0;
         // Heavy to draw a second time, and a tree keys its plot by a page-wide
         // id that a copy beside the original would share.

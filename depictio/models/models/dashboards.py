@@ -80,13 +80,14 @@ class LayoutItem(BaseModel):
 _VALUE_ERROR_PREFIX = re.compile(r"^Value error,\s*")
 
 # `placement` means something different per component type and so defaults
-# differently: an interactive control lives in the left filter panel, a map is a
-# normal grid tile. Kept in step with the `placement` fields on
-# `InteractiveLiteComponent` / `MapLiteComponent`. Types absent here carry no
-# placement at all, so nothing is ever skipped for them.
+# differently: an interactive control lives in the left filter panel, a map or an
+# advanced viz is a normal grid tile. Kept in step with the `placement` fields on
+# `InteractiveLiteComponent` / `MapLiteComponent` / `AdvancedVizLiteComponent`.
+# Types absent here carry no placement at all, so nothing is ever skipped for them.
 _DEFAULT_PLACEMENT: dict[str, str] = {
     "interactive": "left",
     "map": "grid",
+    "advanced_viz": "grid",
 }
 
 
@@ -646,6 +647,45 @@ class DashboardDataLite(BaseModel):
         if errors:
             raise ValueError("\n".join(errors))
 
+        return self
+
+    @model_validator(mode="after")
+    def validate_floating_advanced_viz(self) -> "DashboardDataLite":
+        """Refuse a floating advanced viz of a kind that may not float.
+
+        `AdvancedVizLiteComponent` checks this itself, but a component that
+        fails any check falls through the union to a plain dict (see
+        `validate_components_domain`, which has no advanced_viz entry), so the
+        placement rule is restated here, on whatever form the component took.
+        """
+        from depictio.models.components.advanced_viz.component import floating_kind_error
+
+        errors: list[str] = []
+        for i, comp in enumerate(self.components):
+            if isinstance(comp, dict):
+                if comp.get("component_type") != "advanced_viz":
+                    continue
+                placement = comp.get("placement")
+                config = comp.get("config")
+                viz_kind = comp.get("viz_kind") or (
+                    config.get("viz_kind") if isinstance(config, dict) else None
+                )
+                tag = comp.get("tag")
+            else:
+                if getattr(comp, "component_type", None) != "advanced_viz":
+                    continue
+                placement = getattr(comp, "placement", None)
+                viz_kind = getattr(comp, "viz_kind", None)
+                tag = getattr(comp, "tag", None)
+            # A dict whose kind never resolved failed some other check; that is
+            # what to report, not a kind of None.
+            if placement != "floating" or viz_kind is None:
+                continue
+            error = floating_kind_error(viz_kind)
+            if error:
+                errors.append(f"[{tag or f'component[{i}]'}] placement: {error}")
+        if errors:
+            raise ValueError("\n".join(errors))
         return self
 
     @model_validator(mode="after")
@@ -1682,6 +1722,13 @@ class DashboardDataLite(BaseModel):
                 for field in ADVANCED_VIZ_DISPLAY_FIELDS:
                     if comp.get(field):
                         lite_comp[field] = comp[field]
+                # `placement: floating` was written by the prologue above; its
+                # opening state travels with it, skipped at the default as a
+                # map's is.
+                if comp.get("placement") == "floating" and comp.get(
+                    "floating_initial_state", "compact"
+                ) not in ("compact", None):
+                    lite_comp["floating_initial_state"] = comp["floating_initial_state"]
 
             elif comp_type == "multiqc":
                 # MultiQC parameters - export only if present in DB
@@ -2118,6 +2165,16 @@ class DashboardDataLite(BaseModel):
                 for field in ADVANCED_VIZ_DISPLAY_FIELDS:
                     if comp_dict.get(field) is not None:
                         full_comp[field] = comp_dict[field]
+                # A tile lifted into the floating panel. Written only when it
+                # floats, unlike a map's always-present pair: every stored advanced
+                # viz that never set it keeps its shape, and with it its snapshot
+                # hash. The layout loop below reads `placement` to give a floating
+                # tile no grid slot.
+                if comp_dict.get("placement") == "floating":
+                    full_comp["placement"] = "floating"
+                    full_comp["floating_initial_state"] = (
+                        comp_dict.get("floating_initial_state") or "compact"
+                    )
 
             elif comp_type == "highlight":
                 # Rendered by HighlightBlock.tsx, which looks the figure up on

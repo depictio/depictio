@@ -14,8 +14,28 @@ from typing import Any, Literal
 from pydantic import Field, model_validator
 
 from depictio.models.components.advanced_viz.configs import VizConfig
+from depictio.models.components.constants import (
+    FLOATING_ADVANCED_VIZ_KINDS,
+    FLOATING_PANEL_STATES,
+    MAP_PLACEMENTS,
+)
 from depictio.models.components.lite import BaseLiteComponent
 from depictio.models.components.types import AdvancedVizKind, FigureStyle
+
+
+def floating_kind_error(viz_kind: str | None) -> str | None:
+    """Why an advanced viz of this kind may not float, or None when it may.
+
+    One message for the component model and for the dashboard-level check, so a
+    YAML author sees the same words whichever of the two catches it.
+    """
+    if viz_kind in FLOATING_ADVANCED_VIZ_KINDS:
+        return None
+    allowed = ", ".join(FLOATING_ADVANCED_VIZ_KINDS)
+    return (
+        f"only viz_kind {allowed} may float (got {viz_kind!r}); a floating panel is a "
+        "light module for a protein structure, so any other advanced viz belongs on the grid"
+    )
 
 
 class AdvancedVizLiteComponent(BaseLiteComponent):
@@ -35,6 +55,9 @@ class AdvancedVizLiteComponent(BaseLiteComponent):
             significance_threshold: 0.05
             effect_threshold: 1.0
           controls_placement: auto   # right on a full-width tile, top otherwise
+
+    A `molecule_3d` tile may instead float over the dashboard, reachable from
+    every tab (`placement: floating`, see `floating_initial_state`).
     """
 
     component_type: Literal["advanced_viz"] = "advanced_viz"
@@ -91,6 +114,22 @@ class AdvancedVizLiteComponent(BaseLiteComponent):
         "on a tile that spans its row, above it on a narrower one, behind the settings "
         "icon on a `minimal` card. `right` / `top` dock them there whatever the width; "
         "`popover` keeps them behind the icon. The icon folds a docked panel away.",
+    )
+
+    # Layout placement, the same two fields a map carries. Only `molecule_3d`
+    # may float (`FLOATING_ADVANCED_VIZ_KINDS`); everything else stays a grid tile.
+    placement: str = Field(
+        default="grid",
+        description="Where to render this tile: 'grid' (default, a normal dashboard "
+        "tile) or 'floating' (a draggable, dockable panel reachable from every tab of "
+        "the dashboard). Floating is limited to molecule_3d.",
+    )
+    floating_initial_state: str = Field(
+        default="compact",
+        description="How that panel presents itself on a viewer's first visit: "
+        "'compact' or 'expanded' (a draggable card), 'docked' (pinned below the "
+        "filter panel) or 'hidden' (reachable from the header). Their own saved "
+        "preference takes over from then on. Ignored when placement='grid'.",
     )
 
     @model_validator(mode="before")
@@ -226,6 +265,26 @@ class AdvancedVizLiteComponent(BaseLiteComponent):
             # the post-validator below doesn't fire spuriously.
             data["viz_kind"] = "da_barplot"
         return data
+
+    @model_validator(mode="after")
+    def _check_placement(self) -> "AdvancedVizLiteComponent":
+        """Validate placement, and that only an allow-listed kind floats."""
+        if self.placement not in MAP_PLACEMENTS:
+            valid = ", ".join(MAP_PLACEMENTS)
+            raise ValueError(f"Invalid placement '{self.placement}'. Valid values: {valid}")
+        if self.floating_initial_state not in FLOATING_PANEL_STATES:
+            valid = ", ".join(FLOATING_PANEL_STATES)
+            raise ValueError(
+                f"Invalid floating_initial_state '{self.floating_initial_state}'. "
+                f"Valid values: {valid}"
+            )
+        if self.placement == "floating":
+            # Judged on the kind the config holds, which `_kind_matches_config`
+            # keeps in step with the mirrored `viz_kind`.
+            error = floating_kind_error(self.config.viz_kind)
+            if error:
+                raise ValueError(f"Invalid placement 'floating': {error}")
+        return self
 
     @model_validator(mode="after")
     def _kind_matches_config(self) -> "AdvancedVizLiteComponent":

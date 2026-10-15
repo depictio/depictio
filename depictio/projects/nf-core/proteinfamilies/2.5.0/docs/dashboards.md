@@ -99,7 +99,10 @@ cluster size band.
 members recruited beyond the seed (the samples recruiting most) and the mean residue conservation
 (its distribution). Then the family landscape, size against mean conservation with the record of the
 picked family beside it, and the family size per sample. The full family table is the pinned
-reference table. Filters: origin, members per family and mean conservation.
+reference table. Filters: origin, members per family and mean conservation. The tab also declares
+the predicted structure of the picked family as a floating 3D panel (`placement: floating`, opening
+compact, draggable, resizable and dockable under the filters), which stays on screen on every tab
+and follows the filters of the tab being read.
 
 **Members.** Strip: the members (split by family origin), their identity to the representative (its
 spread), the share of the representative they cover (its distribution) and their length (its

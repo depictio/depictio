@@ -3,6 +3,7 @@ import { Box, Tooltip } from '@mantine/core';
 
 import type { InteractiveFilter } from '../../api';
 import MapPanelBody from './MapPanelBody';
+import { PANEL_KINDS } from './panelKinds';
 import { MAX_DOCK_SHARE, useDockResize } from './useDockResize';
 import type { MapPanel } from './useMapPanel';
 
@@ -20,12 +21,18 @@ export interface MapPanelDockProps {
   filters: InteractiveFilter[];
   onFilterChange?: (filter: InteractiveFilter) => void;
   refreshTick?: number;
-  /** Editor chrome for the map on screen — see `MapPanelBodyProps`. */
+  /** Editor chrome for the component on screen, see `MapPanelBodyProps`. */
   renderEditActions?: (componentId: string, ownerDashboardId: string) => React.ReactNode;
+  /** Another dock sits under this one. The last dock reaches the filter panel's
+   *  bottom edge by a negative margin; one with a dock below it must not, or the
+   *  two overlap by the panel's padding. */
+  followedByDock?: boolean;
 }
 
 /**
- * The map panel pinned to the bottom of the filter panel.
+ * A floating panel (the map's, or the 3D structure's) pinned to the bottom of
+ * the filter panel. Both can be docked at once: they stack in the order the
+ * shell mounts them.
  *
  * Unlike the floating shell this renders *in flow*, as the last child of the
  * filter panel's `Paper` — so it reserves no dashboard width and needs no
@@ -41,11 +48,13 @@ const MapPanelDock: React.FC<MapPanelDockProps> = ({
   onFilterChange,
   refreshTick,
   renderEditActions,
+  followedByDock = false,
 }) => {
   const { nodeRef, liveHeight, resizing, handleProps } = useDockResize(panel.setDockHeight);
 
   if (!panel.docked) return null;
 
+  const spec = PANEL_KINDS[panel.kind];
   const collapsed = panel.state.dockCollapsed;
   const height = liveHeight ?? panel.state.dockHeight ?? DEFAULT_DOCK_HEIGHT;
 
@@ -64,11 +73,11 @@ const MapPanelDock: React.FC<MapPanelDockProps> = ({
         // Span the host Paper's padding so the dock reads as its own section
         // rather than a card floating inside the filter list.
         marginInline: 'calc(var(--mantine-spacing-md) * -1)',
-        marginBottom: 'calc(var(--mantine-spacing-md) * -1)',
+        marginBottom: followedByDock ? undefined : 'calc(var(--mantine-spacing-md) * -1)',
         marginTop: 'var(--mantine-spacing-xs)',
         overflow: 'hidden',
       }}
-      data-testid="map-panel-dock"
+      data-testid={`${spec.testId}-dock`}
       data-mode={panel.state.mode}
       data-collapsed={collapsed || undefined}
     >
@@ -77,12 +86,12 @@ const MapPanelDock: React.FC<MapPanelDockProps> = ({
           preset only approximated, and the filter panel is the one place where
           how much room the map may take is a per-viewer judgement call. */}
       {!collapsed && (
-        <Tooltip label="Drag to resize the map" withinPortal openDelay={400}>
+        <Tooltip label={`Drag to resize ${spec.thing}`} withinPortal openDelay={400}>
           <Box
             {...handleProps}
             role="separator"
             aria-orientation="horizontal"
-            aria-label="Resize the map panel"
+            aria-label={`Resize the ${spec.noun} panel`}
             style={{
               flexShrink: 0,
               // Comfortably grabbable: a hairline splitter is a pixel-hunt, and

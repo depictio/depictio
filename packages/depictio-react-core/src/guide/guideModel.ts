@@ -243,7 +243,7 @@ export interface GuideModelInput<T extends DashboardSummary = DashboardSummary> 
   panelComponents: readonly StoredMetadata[];
   /** The panel's section specs, fanned-out ones included. */
   panelSections?: readonly FilterSectionSpec[] | null;
-  /** The family's floating components (the map panel). */
+  /** The family's floating components (the map and 3D structure panels). */
   floating?: readonly FloatingComponent[];
   /** Whether the header offers Analysis here — pass the header's own condition. */
   analysisAvailable: boolean;
@@ -519,6 +519,9 @@ export function buildGuideModel<T extends DashboardSummary>(
   }
   for (const f of floating) {
     const m = f.metadata;
+    // Only the map panel selects values that filter. A floating structure's
+    // residue pick is a place to look, not a subset.
+    if (m.component_type !== 'map') continue;
     if (seen.has(m.index) || !isMapSelectionEnabled(m, true)) continue;
     seen.add(m.index);
     selection.push({ index: m.index, title: componentTitle(m), kind: 'map', floating: true });

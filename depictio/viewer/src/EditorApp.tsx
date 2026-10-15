@@ -100,6 +100,8 @@ import {
   MapPanelControl,
   MapPanelDock,
   MapPanelSurface,
+  partitionFloating,
+  isFloatingComponent,
   FILTER_PANEL_RAIL_WIDTH,
   countActiveFilters,
   readEditorFilters,
@@ -812,8 +814,17 @@ const EditorApp: React.FC = () => {
   // ever entering its editable grid. Rendered through the grid's
   // `beforeSections` slot so it sits after this tab's own unsectioned
   // components (title / intro text), exactly as the viewer draws it.
+  // One panel per kind of thing that can float: maps, and 3D structures.
+  const floatingByKind = useMemo(() => partitionFloating(crossTab.floating), [crossTab.floating]);
   const mapPanel = useMapPanel({
-    components: crossTab.floating,
+    components: floatingByKind.map,
+    familyId: crossTab.familyId,
+    filters,
+    onFilterChange: handleFilterChange,
+  });
+  const structurePanel = useMapPanel({
+    kind: 'structure',
+    components: floatingByKind.structure,
     familyId: crossTab.familyId,
     filters,
     onFilterChange: handleFilterChange,
@@ -1331,20 +1342,21 @@ const EditorApp: React.FC = () => {
   );
 
   /**
-   * The same Edit / Delete menu a grid tile carries, for the map in the panel.
+   * The same Edit / Delete menu a grid tile carries, for the component in a
+   * floating panel (a map, or a 3D structure).
    *
-   * A map with `placement: floating` claims no grid cell, so it never gets a
-   * `renderItemOverlay` — without this there is no way to edit or delete one
-   * again short of hand-typing its component id into the edit URL.
+   * A component with `placement: floating` claims no grid cell, so it never
+   * gets a `renderItemOverlay`, so without this there is no way to edit or delete
+   * one again short of hand-typing its component id into the edit URL.
    *
-   * Only for maps this tab owns. `handleDeleteComponent` strips the component
-   * from *this* dashboard's `stored_metadata`, so on a map authored on a
+   * Only for components this tab owns. `handleDeleteComponent` strips the
+   * component from *this* dashboard's `stored_metadata`, so on one authored on a
    * sibling tab it would save a document unchanged and look like the delete
    * silently failed. Those are editable from the tab that owns them, which is
    * the tab the panel's own tab strip names.
    */
-  const renderMapPanelEditActions = useCallback(
-    (componentId: string, ownerDashboardId: string) => {
+  const panelEditActions = useCallback(
+    (componentType: string, componentId: string, ownerDashboardId: string) => {
       if (!dashboardId || ownerDashboardId !== dashboardId) return null;
       return (
         <GridItemEditOverlay
@@ -1352,11 +1364,21 @@ const EditorApp: React.FC = () => {
           componentId={componentId}
           editMode
           onDelete={handleDeleteComponent}
-          componentType="map"
+          componentType={componentType}
         />
       );
     },
     [dashboardId, handleDeleteComponent],
+  );
+  const renderMapPanelEditActions = useCallback(
+    (componentId: string, ownerDashboardId: string) =>
+      panelEditActions('map', componentId, ownerDashboardId),
+    [panelEditActions],
+  );
+  const renderStructurePanelEditActions = useCallback(
+    (componentId: string, ownerDashboardId: string) =>
+      panelEditActions('advanced_viz', componentId, ownerDashboardId),
+    [panelEditActions],
   );
 
   const interactiveComponents = useMemo(
@@ -1588,8 +1610,9 @@ const EditorApp: React.FC = () => {
         (m) =>
           m.component_type !== 'card' &&
           m.component_type !== 'interactive' &&
-          // Floating maps live in FloatingPanelHost, not the grid (see App.tsx).
-          !(m.component_type === 'map' && m.placement === 'floating'),
+          // Floating maps and 3D structures live in the floating panels, not
+          // the grid (see App.tsx).
+          !isFloatingComponent(m),
       ),
     [dashboard],
   );
@@ -2610,7 +2633,12 @@ const EditorApp: React.FC = () => {
         renderSectionActions={renderPanelSectionAction}
         dashboardId={dashboardId}
         stateScopeId={panelScopeId}
-        headerActions={<MapPanelControl panel={mapPanel} />}
+        headerActions={
+          <>
+            <MapPanelControl panel={mapPanel} />
+            <MapPanelControl panel={structurePanel} />
+          </>
+        }
         // No refreshTick: the editor threads no realtime refresh
         // counter into any of its grids, so the left panel matches
         // RightComponentGrid rather than inventing state here.
@@ -2621,14 +2649,23 @@ const EditorApp: React.FC = () => {
         onToggleCollapsed={toggleFilterPanel}
         groupSummaryRows={groupSummaryRows}
         footer={
-          <MapPanelDock
-            panel={mapPanel}
-            // Docked maps render data: include group filters (the
-            // tab's; a section bar's stay with its section).
-            filters={tabFilters}
-            onFilterChange={handleFilterChange}
-            renderEditActions={renderMapPanelEditActions}
-          />
+          <>
+            <MapPanelDock
+              panel={mapPanel}
+              // Docked maps render data: include group filters (the
+              // tab's; a section bar's stay with its section).
+              filters={tabFilters}
+              onFilterChange={handleFilterChange}
+              renderEditActions={renderMapPanelEditActions}
+              followedByDock={structurePanel.docked}
+            />
+            <MapPanelDock
+              panel={structurePanel}
+              filters={tabFilters}
+              onFilterChange={handleFilterChange}
+              renderEditActions={renderStructurePanelEditActions}
+            />
+          </>
         }
       />
     ) : (
@@ -2643,7 +2680,12 @@ const EditorApp: React.FC = () => {
         dashboardId={dashboardId}
         groupSummaryRows={groupSummaryRows}
         stateScopeId={panelScopeId}
-        headerActions={<MapPanelControl panel={mapPanel} />}
+        headerActions={
+          <>
+            <MapPanelControl panel={mapPanel} />
+            <MapPanelControl panel={structurePanel} />
+          </>
+        }
       />
     );
   const boot = (
@@ -2809,6 +2851,14 @@ const EditorApp: React.FC = () => {
             filters={tabFilters}
             onFilterChange={handleFilterChange}
             renderEditActions={renderMapPanelEditActions}
+          />
+        )}
+        {dashboard && dashboardId && (
+          <MapPanelSurface
+            panel={structurePanel}
+            filters={tabFilters}
+            onFilterChange={handleFilterChange}
+            renderEditActions={renderStructurePanelEditActions}
           />
         )}
       </div>

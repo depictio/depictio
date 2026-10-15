@@ -831,6 +831,31 @@ tabs:
     title: Picked family
     description: The family picked on the plot, with its seed, model and alignment statistics.
     layout: {x: 5, y: 0, w: 3, h: 7}
+  # The structure of the picked family as a floating 3D panel: lifted out of the
+  # grid (no layout) into a card every tab shares, so the fold stays on screen
+  # while the other tabs are browsed. Same binding as the structure on the Profile
+  # HMM tab. It reads the filters of the tab on screen: a family picked on the
+  # landscape here, or by the Family picker of the Profile HMM tab, is the one
+  # drawn. Opens as a compact card; the reader drags, resizes, docks or hides it.
+  - component_type: advanced_viz
+    workflow_tag: proteinfamilies
+    data_collection_tag: family_residues
+    use: famsa/conservation_structure
+    config:
+      structure_source: resolve
+      color_mode: category
+      representations: [cartoon]
+      highlight_site: true
+      show_variants: false
+      layout: structure
+      selection_enabled: true
+      follow_selection: true
+    placement: floating
+    floating_initial_state: compact
+    tag: pf-fam-av-structure-panel
+    index: fam-structure-panel
+    title: Predicted structure of the representative
+    description: Folded on demand from the picked family's representative and coloured by conservation class. Stays on screen across the tabs.
   - component_type: figure
     workflow_tag: proteinfamilies
     data_collection_tag: families

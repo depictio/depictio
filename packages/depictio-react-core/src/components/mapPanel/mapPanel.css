@@ -1,0 +1,25 @@
+/**
+ * A tile drawn inside a floating panel (the 3D structure panel).
+ *
+ * The wrapper fills the panel's body and is positioned against it, which gives
+ * the tile's own `height: 100%` chain, and the molecule's absolutely placed
+ * split layouts, a definite box to resolve against.
+ */
+.depictio-panel-embed {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* The card around the tile is the frame. The tile's own Paper keeps its padding
+ * and its header, but draws no second border, corner or surface inside the
+ * first. `!important` only because the frame sets its border width inline. */
+.depictio-panel-embed .depictio-component-chrome > .mantine-Paper-root {
+  border-width: 0 !important;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}

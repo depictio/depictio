@@ -2,6 +2,7 @@ import React from 'react';
 import { ActionIcon, Indicator, Menu, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+import { PANEL_KINDS } from './panelKinds';
 import type { MapPanel } from './useMapPanel';
 import type { MapPanelMode } from './useMapPanelState';
 
@@ -16,25 +17,33 @@ export interface MapPanelControlProps {
 }
 
 /**
- * Header entry point for the dashboard's map panel.
+ * Header entry point for one of the dashboard's floating panels (the map's, or
+ * the 3D structure's: one control each).
  *
  * The panel is dashboard-wide, so its control belongs with the other
  * dashboard-wide controls rather than as a floating button over the canvas —
  * same reasoning, and same shape, as `RealtimeIndicator` next to it. The badge
  * is what tells a viewer that a map selection made on another tab is still
- * filtering what they are looking at.
+ * filtering what they are looking at. A structure's residue pick is a place to
+ * look rather than a subset, and does not outlive a tab switch, so its badge is
+ * a bare dot: there is nothing to count.
  */
 const MapPanelControl: React.FC<MapPanelControlProps> = ({ panel }) => {
-  const { state, setMode, totalSelected, clearSelection, available } = panel;
+  const { kind, state, setMode, totalSelected, clearSelection, available } = panel;
   if (!available) return null;
 
+  const spec = PANEL_KINDS[kind];
+  const isMap = kind === 'map';
+  const panelName = `${spec.label} panel`;
   const hidden = state.mode === 'hidden';
   const filtering = totalSelected > 0;
   const label = filtering
-    ? `Map panel — ${totalSelected} value${totalSelected > 1 ? 's' : ''} filtering the dashboard`
+    ? isMap
+      ? `${panelName} — ${totalSelected} value${totalSelected > 1 ? 's' : ''} filtering the dashboard`
+      : `${panelName} — residue picked`
     : hidden
-      ? 'Map panel — hidden'
-      : 'Map panel';
+      ? `${panelName} — hidden`
+      : panelName;
 
   return (
     /* The count rides on the button's *corner*, so the Indicator wraps the whole
@@ -60,9 +69,9 @@ const MapPanelControl: React.FC<MapPanelControlProps> = ({ panel }) => {
       color="orange"
       withBorder
       position="bottom-end"
-      size={16}
+      size={isMap ? 16 : 10}
       offset={2}
-      label={totalSelected}
+      label={isMap ? totalSelected : undefined}
       disabled={!filtering}
     >
       <Menu position="bottom-end" withinPortal>
@@ -72,19 +81,15 @@ const MapPanelControl: React.FC<MapPanelControlProps> = ({ panel }) => {
               variant={filtering ? 'light' : 'subtle'}
               color={filtering ? 'orange' : 'gray'}
               aria-label={label}
-              data-testid="map-panel-control"
+              data-testid={`${spec.testId}-control`}
               data-filtering={filtering || undefined}
             >
-              <Icon
-                icon={hidden ? 'mdi:map-marker-off-outline' : 'mdi:map-marker-multiple'}
-                width={18}
-                height={18}
-              />
+              <Icon icon={hidden ? spec.hiddenIcon : spec.icon} width={18} height={18} />
             </ActionIcon>
           </Tooltip>
         </Menu.Target>
         <Menu.Dropdown miw={220}>
-          <Menu.Label>Map panel</Menu.Label>
+          <Menu.Label>{panelName}</Menu.Label>
           {MODE_ITEMS.map((item) => (
             <Menu.Item
               key={item.mode}
@@ -102,7 +107,9 @@ const MapPanelControl: React.FC<MapPanelControlProps> = ({ panel }) => {
               <Menu.Divider />
               <Menu.Label>
                 <Text size="xs" c="dimmed">
-                  {totalSelected} value{totalSelected > 1 ? 's' : ''} selected on the map
+                  {isMap
+                    ? `${totalSelected} value${totalSelected > 1 ? 's' : ''} selected on the map`
+                    : 'A residue is picked on the structure'}
                 </Text>
               </Menu.Label>
               <Menu.Item
@@ -110,7 +117,7 @@ const MapPanelControl: React.FC<MapPanelControlProps> = ({ panel }) => {
                 leftSection={<Icon icon="mdi:selection-remove" width={16} />}
                 onClick={clearSelection}
               >
-                Clear map selection
+                {isMap ? 'Clear map selection' : 'Clear residue pick'}
               </Menu.Item>
             </>
           )}

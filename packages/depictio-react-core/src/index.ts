@@ -758,7 +758,9 @@ export type { GenomeRegionSelection } from './selection';
 
 // Map panel: a map lifted out of the grid, available from every tab as a
 // floating card or as a dock under the filter panel. Mount both shells — each
-// renders nothing unless the panel is in its mode.
+// renders nothing unless the panel is in its mode. The same shell holds a
+// floating `molecule_3d` tile (the 3D structure panel): one `useMapPanel` call
+// per kind, over `partitionFloating` of the family's floating components.
 // Consumers that draw their own Plotly map (the builder / project previews)
 // need this too — plotly leaves every map's basemap credit expanded on first
 // paint. See the helper's own docstring.
@@ -771,6 +773,14 @@ export { default as MapPanelDock } from './components/mapPanel/MapPanelDock';
 export type { MapPanelDockProps } from './components/mapPanel/MapPanelDock';
 export { useMapPanel } from './components/mapPanel/useMapPanel';
 export type { MapPanel, UseMapPanelOptions } from './components/mapPanel/useMapPanel';
+export {
+  FLOATING_VIZ_KINDS,
+  PANEL_KINDS,
+  floatingPanelKindOf,
+  isFloatingComponent,
+  partitionFloating,
+} from './components/mapPanel/panelKinds';
+export type { FloatingPanelKind, PanelKindSpec } from './components/mapPanel/panelKinds';
 export { useCrossTabComponents } from './hooks/useCrossTabComponents';
 export type { CrossTabComponents } from './hooks/useCrossTabComponents';
 export type {
