@@ -8,8 +8,9 @@
  * helix glyph is not a better one) and a weight (its share of the spare
  * height). Spare height goes to the lanes by weight, up to their caps; what
  * the caps cannot take widens the gaps between lanes a little, and the rest
- * centres the stack in the cell, so a tall cell reads as a compact figure with
- * air around it rather than as a strip with a blank half below it.
+ * centres the stack in the cell. The caps of the two data lanes are high
+ * enough that the strip fills a linked-view pane rather than floating in it;
+ * only a very tall cell leaves air above and below.
  *
  * All sizes are whole CSS pixels, so the canvas rules between lanes stay crisp.
  */
@@ -44,11 +45,11 @@ interface LaneSpec {
  */
 export const LANE_SPECS: Readonly<Record<LaneKey, LaneSpec>> = {
   ruler: { base: 18, max: 18, weight: 0 },
-  letters: { base: 14, max: 18, weight: 1 },
-  category: { base: 12, max: 24, weight: 1 },
-  value: { base: 22, max: 96, weight: 3 },
-  domains: { base: 18, max: 26, weight: 1 },
-  variants: { base: 30, max: 120, weight: 3 },
+  letters: { base: 14, max: 22, weight: 1 },
+  category: { base: 12, max: 32, weight: 1 },
+  value: { base: 22, max: 360, weight: 3 },
+  domains: { base: 18, max: 40, weight: 1 },
+  variants: { base: 30, max: 480, weight: 3 },
 };
 
 const LANE_ORDER: readonly LaneKey[] = [

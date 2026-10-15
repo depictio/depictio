@@ -60,10 +60,12 @@
 }
 
 /* Never truncated: a unit's name is often an identifier with no spaces, so it
- * breaks anywhere rather than spilling out of a narrow screen. */
+ * breaks inside a word, but only when the line has no room for it.
+ * (`anywhere` would also shrink the name's min-content width to one letter,
+ * and the card would then wrap even a short name.) */
 .depictio-scope-banner__name,
 .depictio-scope-banner__option {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 /* The name is the picker: it reads as a heading, and shows it is one only on

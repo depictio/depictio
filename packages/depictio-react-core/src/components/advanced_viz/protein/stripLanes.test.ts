@@ -89,22 +89,31 @@ describe('layoutLanes', () => {
     expect(layout.gap).toBe(LANE_GAP);
   });
 
-  it('fills a ~330 px cell: lanes at or near their caps, gaps opened, no blank block below', () => {
+  it('fills a ~330 px cell: the small lanes at their caps, the data lanes share the rest', () => {
     const viewH = 330;
     const layout = layoutLanes(all, viewH);
-    expect(heightOf(layout, 'variants')).toBe(LANE_SPECS.variants.max);
-    expect(heightOf(layout, 'value')).toBe(LANE_SPECS.value.max);
     expect(heightOf(layout, 'letters')).toBe(LANE_SPECS.letters.max);
     expect(heightOf(layout, 'category')).toBe(LANE_SPECS.category.max);
     expect(heightOf(layout, 'domains')).toBe(LANE_SPECS.domains.max);
+    expect(heightOf(layout, 'value')).toBeLessThan(LANE_SPECS.value.max);
+    expect(heightOf(layout, 'variants')).toBeLessThan(LANE_SPECS.variants.max);
     expect(layout.top + layout.stackH).toBeLessThanOrEqual(viewH);
     // The stack takes (almost) the whole cell.
-    expect(viewH - (layout.top + layout.stackH)).toBeLessThanOrEqual(layout.top + 1);
-    expect(layout.stackH).toBeGreaterThan(viewH - 20);
+    expect(layout.top).toBe(0);
+    expect(layout.stackH).toBeGreaterThan(viewH - 10);
+  });
+
+  it('fills a linked-view pane (~540 px) with the value lane rather than with air', () => {
+    const present = { ...none, letters: true, category: true, value: true, domains: true };
+    const viewH = 540;
+    const layout = layoutLanes(present, viewH);
+    expect(heightOf(layout, 'value')).toBeGreaterThan(300);
+    expect(layout.top).toBeLessThan(20);
+    expect(layout.top + layout.stackH).toBeLessThanOrEqual(viewH);
   });
 
   it('caps every lane, widens the gaps to their limit, centres the stack in a tall cell', () => {
-    const viewH = 600;
+    const viewH = 1400;
     const layout = layoutLanes(all, viewH);
     for (const lane of layout.lanes) expect(lane.h).toBeLessThanOrEqual(LANE_SPECS[lane.key].max);
     expect(layout.gap).toBe(LANE_GAP_MAX);
@@ -116,14 +125,15 @@ describe('layoutLanes', () => {
   });
 
   it('lets a lane hand its unused share on once it is at its cap', () => {
-    // Value and variants only, equal weights: a spare of 160 would split 80 and
-    // 80, but the value lane takes at most 74 (cap 96 over its base 22), and
-    // the 6 it leaves go to the variants lane.
+    // Value and variants only, equal weights: a spare of 700 would split 350
+    // and 350, but the value lane takes at most its cap over its base, and
+    // what it leaves goes to the variants lane.
     const present = { ...none, value: true, variants: true };
     const natural = naturalStripHeight(present);
-    const layout = layoutLanes(present, natural + 160);
+    const valueRoom = LANE_SPECS.value.max - LANE_SPECS.value.base;
+    const layout = layoutLanes(present, natural + 700);
     expect(heightOf(layout, 'value')).toBe(LANE_SPECS.value.max);
-    expect(heightOf(layout, 'variants')).toBe(LANE_SPECS.variants.base + (160 - 74));
+    expect(heightOf(layout, 'variants')).toBe(LANE_SPECS.variants.base + (700 - valueRoom));
   });
 
   it('never grows the ruler', () => {
