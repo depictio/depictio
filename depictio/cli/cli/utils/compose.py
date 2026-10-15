@@ -1739,7 +1739,10 @@ def _render_tile(
 ) -> dict[str, Any] | str:
     """One catalog render as a component dict, or the reason it was left out."""
     from depictio.catalog.payload import advanced_viz_persist_config
-    from depictio.models.components.advanced_viz.catalog import role_config_key
+    from depictio.models.components.advanced_viz.catalog import (
+        role_config_key,
+        with_inferred_structure_source,
+    )
 
     missing = render.bound_columns() - set(collection.columns)
     if collection.columns and missing:
@@ -1798,7 +1801,7 @@ def _render_tile(
         config = advanced_viz_persist_config(output, render) or {
             role_config_key(render.kind, role): col for role, col in render.roles.items()
         }
-        config = {**config, "viz_kind": render.kind}
+        config = with_inferred_structure_source(render.kind, {**config, "viz_kind": render.kind})
         fields = {
             "title": f"{_output_label(output)}: {render.kind.replace('_', ' ')}",
             "viz_kind": render.kind,
