@@ -1368,7 +1368,8 @@ tabs:
   - component_type: text
     order: 1
     body: >
-      ESMFold folds the picked protein from its sequence, for proteins of up to 400 residues; a
+      ESMFold folds the picked protein from its sequence, by sending the sequence to the public ESM
+      Atlas service (api.esmatlas.com), for proteins of up to 400 residues; a
       longer one stays in the table and its structure tile says it cannot be folded. Folding needs
       the server's structure resolver, which an administrator turns on with
       `DEPICTIO_STRUCTURE_RESOLVER_ENABLED`; when it is off the tile says so and the sequence track
@@ -1492,7 +1493,7 @@ tabs:
     tag: pa-st-av-structure
     index: pa-st-av-structure
     title: Predicted structure
-    description: An ESMFold prediction made from the picked protein's sequence alone, not an experimental structure, coloured by domain (grey outside any domain) with the picked residue in red.
+    description: An ESMFold prediction made from the picked protein's sequence alone, not an experimental structure, coloured by domain (grey outside any domain) with the picked residue in red. Folding sends the sequence to the public ESM Atlas service.
     layout: {x: 0, y: 6, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: proteinannotator

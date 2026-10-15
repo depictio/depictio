@@ -61,7 +61,9 @@ structure file named after the protein, share one `entity`. The original id stay
   **off by default**: an administrator turns it on with `DEPICTIO_STRUCTURE_RESOLVER_ENABLED=true`.
   With it off the tile shows an explanation ("Structure lookup is disabled on this server") and
   the sequence track and the other tabs are unaffected. ESMFold takes sequences of up to 400
-  residues. The tab's length filter has no default window, so every protein is listed; the
+  residues. This is an external call: the sequence is sent to the public ESM Atlas service
+  (`api.esmatlas.com`, run by Meta), and the tile's info popover names the service and links to it.
+  The tab's length filter has no default window, so every protein is listed; the
   structure tile of a longer one explains why it is empty, and the Longest protein card flags
   a protein above the limit.
 
