@@ -171,8 +171,11 @@ export function createZoomSyncStore(
       const changed = indices.filter((i) => members.has(i) !== on);
       if (!changed.length) return;
       if (on) {
-        // The window in force holds only while a tile that sent it is still in.
-        const held = current !== null && members.has(current.sourceIndex);
+        // The window in force holds while any tile is in: every member shows
+        // it, even once the tile that sent it has left. A joiner that sent it
+        // itself leads instead (it may have moved since it left).
+        const held =
+          current !== null && members.size > 0 && !changed.includes(current.sourceIndex);
         for (const i of changed) {
           members.delete(i);
           members.add(i);

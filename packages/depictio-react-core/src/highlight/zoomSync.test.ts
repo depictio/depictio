@@ -100,6 +100,24 @@ describe('createZoomSyncStore', () => {
     expect(store.current()?.sourceIndex).toBe('a');
   });
 
+  it('keeps the window for the members left after its source leaves', () => {
+    const store = createZoomSyncStore(memory(['a', 'c']));
+    store.publish(win());
+    store.setMembers(['a'], false);
+    store.setMembers(['b'], true, 'b');
+    expect(store.leader()).toBeNull();
+    expect(store.current()?.sourceIndex).toBe('a');
+  });
+
+  it('lets the source of the window lead when it joins again', () => {
+    const store = createZoomSyncStore(memory(['a', 'c']));
+    store.publish(win());
+    store.setMembers(['a'], false);
+    store.setMembers(['a'], true, 'a');
+    expect(store.leader()).toBe('a');
+    expect(store.current()).toBeNull();
+  });
+
   it('leads a group join from its first tile that can lead', () => {
     const store = createZoomSyncStore(memory());
     store.register('3d', false);

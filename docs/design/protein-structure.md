@@ -961,8 +961,9 @@ theirs; the domain architecture, which shows every protein, follows any window.
   two of its open tiles can sync: it adds them all, or takes them all out once they all are
   (light while only some are). Members are remembered in the browser by tile index
   (`depictio.zoom.sync`).
-- A tile that joins fits the window in force. With none, the tile it was turned on from sends
-  its own first; a section's button leads from its first tile that can.
+- A tile that joins fits the window in force, which holds while any tile is in, even after
+  the tile that sent it has left. With none, the tile it was turned on from sends its own first;
+  a section's button leads from its first tile that can.
 - Tiles register while mounted, which is what shows their icon and lets a section count them.
   A folded section mounts none, so it offers no button.
 - Windows are in residue coordinates. An alignment maps them through its reference row (a gap
