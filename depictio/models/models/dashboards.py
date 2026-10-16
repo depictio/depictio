@@ -138,6 +138,20 @@ FIGURE_DISPLAY_FIELDS: tuple[str, ...] = (
     "caption",
 )
 
+# The fields of a card's secondary strip (see CardLiteComponent), each with the
+# default the export leaves out.
+_CARD_SECONDARY_DEFAULTS: dict[str, Any] = {
+    "secondary_layout": "vertical",
+    "breakdown_col": None,
+    "top_n_count": 3,
+    "coverage_max": None,
+    "trend_col": None,
+    "threshold_value": None,
+    "threshold_direction": "min",
+    "threshold_warn": None,
+    "attrition_cols": [],
+}
+
 # An advanced visualisation's own display keys, beside the figure ones.
 ADVANCED_VIZ_DISPLAY_FIELDS: tuple[str, ...] = (*FIGURE_DISPLAY_FIELDS, "controls_placement")
 
@@ -1541,6 +1555,13 @@ class DashboardDataLite(BaseModel):
                     lite_comp["filter_expr"] = comp["filter_expr"]
                 if comp.get("follow_region_filter") is True:
                     lite_comp["follow_region_filter"] = True
+                # The secondary strip (breakdown bars, coverage gauge, QC
+                # threshold...). Left out at its default, so a plain card
+                # exports no key; written otherwise, or a round trip turns
+                # every such card back into a vertical one.
+                for key, default in _CARD_SECONDARY_DEFAULTS.items():
+                    if comp.get(key) not in (None, [], default):
+                        lite_comp[key] = comp[key]
                 display = collect_display_fields(
                     comp,
                     [
@@ -1609,6 +1630,10 @@ class DashboardDataLite(BaseModel):
                     lite_comp["sortable"] = False
                 if comp.get("filterable") is False:
                     lite_comp["filterable"] = False
+                if comp.get("row_selection_enabled") is True:
+                    lite_comp["row_selection_enabled"] = True
+                    if comp.get("row_selection_column"):
+                        lite_comp["row_selection_column"] = comp["row_selection_column"]
 
             elif comp_type == "image":
                 lite_comp["image_column"] = comp.get("image_column", "")
