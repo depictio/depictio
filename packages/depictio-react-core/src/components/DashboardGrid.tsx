@@ -88,6 +88,7 @@ import {
   panelExpanded,
   reconcileOverrides,
   recordPanelLinks,
+  sectionSidePanels,
 } from './recordPanelLayout';
 import type { RecordSidePanel } from './recordPanelLayout';
 import { RecordPanelContext, RecordPanelSource, RecordPanelToggle } from './RecordPanel';
@@ -678,17 +679,30 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // panel never folds while the layout can be dragged or resized.
   const panelsEnabled = !editMode && !isDraggable && !isResizable;
   const recordLinks = useMemo(() => recordPanelLinks(metadataList), [metadataList]);
+  // A linked view (`display: 'linked'`, sectionGroups.ts) needs the 8-column
+  // layout. Below it (a phone, a narrow pane) its tiles stack as in any other
+  // section.
+  const groupsWide = breakpointForWidth(containerWidth) === GRID_WIDEST_BREAKPOINT;
   const sidePanels = useMemo(() => {
     const byCard = new Map<string, RecordSidePanel>();
     if (!panelsEnabled || recordLinks.size === 0) return byCard;
     for (const section of sections) {
       const base = baseLayoutForSection(section.members, section.spec);
-      for (const panel of findSidePanels(base, recordLinks)) {
+      const linkedView = groupDisplay(section, layoutOverride, groupsWide, onGrid) === 'linked';
+      for (const panel of sectionSidePanels(base, recordLinks, linkedView)) {
         byCard.set(panel.cardId, panel);
       }
     }
     return byCard;
-  }, [panelsEnabled, recordLinks, sections, baseLayoutForSection]);
+  }, [
+    panelsEnabled,
+    recordLinks,
+    sections,
+    baseLayoutForSection,
+    layoutOverride,
+    groupsWide,
+    onGrid,
+  ]);
 
   // Folded while the source holds no pick, unfolded while it does; a reader's
   // toggle wins until the source's pick appears or goes away.
@@ -843,11 +857,9 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   //
   // Linked tiles that stay close enough for a brush on one to show on the others
   // without scrolling. A linked view is a view of the stored layout, which it never
-  // rewrites: the section is laid out at a row height that fits the screen.
-  //
-  // It needs the 8-column layout. Below it (a phone, a narrow pane) its tiles
-  // stack as in any other section.
-  const groupsWide = breakpointForWidth(containerWidth) === GRID_WIDEST_BREAKPOINT;
+  // rewrites: the section is laid out at a row height that fits the screen. Its
+  // record side panels never fold (`sidePanels`), so a pick moves no pane.
+  // `groupsWide` is declared with the side panels, above.
 
   /** How a section is drawn: its `display`, the reader's `?layout=` and the
    *  room there is deciding. Anything this cannot place is an ordinary section. */

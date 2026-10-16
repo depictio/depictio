@@ -9,7 +9,8 @@
  * wider than a rail needs) stands in for the card. A pick unfolds it again.
  * The swap is a derived layout handed to react-grid-layout, never a change to
  * the stored one, so the editor and the persisted dashboard only ever see the
- * author's own geometry.
+ * author's own geometry. A linked view (`display: linked`) never folds a card:
+ * its panes are the stored layout (`sectionSidePanels`).
  *
  * Pure functions only: DashboardGrid owns the state and the rendering. The
  * pairing rule is the one the shipped-template lint applies
@@ -67,6 +68,22 @@ export function findSidePanels(
     else if (source.x === card.x + card.w) panels.push({ cardId, sourceId, side: 'left' });
   }
   return panels;
+}
+
+/**
+ * The side panels of one section's layout. A linked view has none: its panes
+ * are the stored layout, and a fold would re-cut its split tree on every pick
+ * (the architecture widening over the freed columns, the card popping back in),
+ * so the reader's gutters, kept per tree, would stop applying and every pane
+ * would move under their cursor. The card keeps its pane and shows its empty
+ * state until a pick arrives.
+ */
+export function sectionSidePanels(
+  layout: readonly Layout[],
+  links: ReadonlyMap<string, string>,
+  linkedView: boolean,
+): RecordSidePanel[] {
+  return linkedView ? [] : findSidePanels(layout, links);
 }
 
 /**

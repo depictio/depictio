@@ -9,7 +9,9 @@ import {
   panelExpanded,
   reconcileOverrides,
   recordPanelLinks,
+  sectionSidePanels,
 } from './recordPanelLayout';
+import { buildSplitTree, splitSignature } from './linkedViewSplit';
 
 const item = (i: string, x: number, w: number, y = 0, h = 6): Layout => ({ i, x, y, w, h });
 
@@ -78,6 +80,48 @@ describe('applyRecordPanels', () => {
     const snapshot = JSON.parse(JSON.stringify(layout));
     applyRecordPanels(layout, findSidePanels(layout, new Map([['card', 'table']])), () => true);
     expect(layout).toEqual(snapshot);
+  });
+});
+
+describe('sectionSidePanels', () => {
+  // proteinannotator, Domains tab, `Architecture and agreement`: the domain
+  // record sits beside the architecture it follows, over the two tiles below.
+  const domains = [
+    item('architecture', 0, 5, 0, 6),
+    item('record', 5, 3, 0, 6),
+    item('coverage', 0, 4, 6, 5),
+    item('upset', 4, 4, 6, 5),
+  ];
+  const links = new Map([['record', 'architecture']]);
+  /** The layout a section draws while `folded` is what `recordPanelState` says. */
+  const drawn = (linkedView: boolean, folded: boolean) =>
+    applyRecordPanels(domains, sectionSidePanels(domains, links, linkedView), () => folded);
+
+  it('is the plain pairing for an ordinary section', () => {
+    expect(sectionSidePanels(domains, links, false)).toEqual(findSidePanels(domains, links));
+    expect(sectionSidePanels(domains, links, false)).toHaveLength(1);
+  });
+
+  it('is empty for a linked view, whatever the pairing', () => {
+    expect(sectionSidePanels(domains, links, true)).toEqual([]);
+  });
+
+  it('keeps a linked view cut the same way before and after a pick', () => {
+    // Folded (nothing picked) and unfolded (a pick) are the one layout.
+    expect(drawn(true, true)).toEqual(domains);
+    expect(drawn(true, false)).toEqual(domains);
+    const before = buildSplitTree(drawn(true, true))!;
+    const after = buildSplitTree(drawn(true, false))!;
+    expect(splitSignature(before)).toBe(splitSignature(after));
+    expect(before.root).toEqual(after.root);
+  });
+
+  it('would re-cut the same section as a plain grid, which is what a linked view avoids', () => {
+    // The fold swaps a row of two (architecture | record) for one full-width
+    // tile: another tree, so a reader's gutters (kept per tree) stop applying.
+    const folded = buildSplitTree(drawn(false, true))!;
+    const unfolded = buildSplitTree(drawn(false, false))!;
+    expect(splitSignature(folded)).not.toBe(splitSignature(unfolded));
   });
 });
 
