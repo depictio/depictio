@@ -298,9 +298,9 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   // Where a `popover` tile docks its controls (`controls_placement` on the
   // component, see controlsDock.ts); null when the author left it unsaid.
   // A linked view cell has little room: unless the author placed them, its
-  // controls stay behind the settings button in the tile's header, whose
-  // popover heads them with the usual placement picker (popover, rail, under
-  // the title). Everywhere else an unsaid placement docks where it fits.
+  // controls stay behind the settings icon of the hover row, whose popover
+  // heads them with the usual placement picker (popover, rail, under the
+  // title). Everywhere else an unsaid placement docks where it fits.
   const compact = useDensity() === 'compact';
   const ownDock = isControlsPlacement(metadata.controls_placement)
     ? metadata.controls_placement
@@ -430,15 +430,10 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   const split = Boolean(Renderer) && !splitIneffective && shouldSplitIntoPanels(panels, vizKind);
   const handleIneffective = React.useCallback(() => setSplitIneffective(true), []);
   // Split into panels, each would dock its own copy of the controls: they
-  // stay behind the icon instead. In a linked view the tile's tools (and with
-  // them the placement picker) move from the hover row into the header.
+  // stay behind the icon instead.
   const dockState = React.useMemo<ControlsDockState>(
-    () => ({
-      placement: split ? 'popover' : dockPlacement,
-      collapsed: folded,
-      headerActions: compact ? popovers : undefined,
-    }),
-    [split, dockPlacement, folded, compact, popovers],
+    () => ({ placement: split ? 'popover' : dockPlacement, collapsed: folded }),
+    [split, dockPlacement, folded],
   );
   // A kind that takes the groups neither as panels nor as colour (see
   // `groupingModeForKind`). Only a Split display asks the question: in the
@@ -579,11 +574,9 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
         }
       : undefined;
 
-  // In a linked view the popovers are in the tile's header (see `dockState`).
-  const rowPopovers = compact ? null : popovers;
-  const combinedExtras = rowPopovers || extraActions ? (
+  const combinedExtras = popovers || extraActions ? (
     <>
-      {rowPopovers}
+      {popovers}
       {extraActions}
     </>
   ) : undefined;

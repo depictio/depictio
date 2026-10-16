@@ -53,11 +53,6 @@ export function isControlsPlacement(v: unknown): v is ControlsPlacement {
 export interface ControlsDockState {
   placement: ControlsPlacement | null;
   collapsed: boolean;
-  /** The tile's own tools (settings, data), handed to a one-line compact
-   *  header so they are always in view: the chrome's action row only shows on
-   *  hover, which a reader of a linked view cell does not find. Unset
-   *  elsewhere, where the chrome keeps them. */
-  headerActions?: ReactNode;
 }
 
 export const ControlsDockContext = createContext<ControlsDockState | null>(null);

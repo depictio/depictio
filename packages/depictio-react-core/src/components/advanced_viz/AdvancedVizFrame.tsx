@@ -578,10 +578,8 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     ) : null
   ) : compact ? (
     // One line: title, the visualization's type, what is on screen, the
-    // status chips, then the tile's own tools (settings, data), which the
-    // dispatch moves here from the hover-only chrome row. The subtitle moves
-    // to the title's tooltip, the tier counts and the inline controls keep
-    // their own lines under it.
+    // status chips. The subtitle moves to the title's tooltip, the tier counts
+    // and the inline controls keep their own lines under it.
     <Stack gap={2} mb={4}>
       <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }} pr={28}>
         {title ? (
@@ -604,11 +602,6 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
           </Text>
         ) : null}
         {statusBadges}
-        {dock?.headerActions ? (
-          <Group gap={4} wrap="nowrap" style={{ marginLeft: 'auto', flex: 'none' }}>
-            {dock.headerActions}
-          </Group>
-        ) : null}
       </Group>
       {countBadges}
       {strip}
