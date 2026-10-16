@@ -54,7 +54,6 @@ import {
 } from './protein/rendererData';
 import { useEntityPicker } from './protein/useEntityPicker';
 import ZoomHintLabel from './protein/ZoomHint';
-import ZoomSyncSwitch from './protein/ZoomSyncSwitch';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
 /**
@@ -418,7 +417,6 @@ const MsaRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilter
             step={1}
             thumbLabel={(v) => (v === 0 ? 'Fit' : `${v} px`)}
           />
-          <ZoomSyncSwitch index={index} />
           <VizSwitch
             label="Consensus row"
             checked={showConsensus}
@@ -441,7 +439,7 @@ const MsaRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilter
         </VizControlGroup>
       </>
     ),
-    [zoom, showConsensus, showConservation, maxRows, setShowConsensus, setShowConservation, setMaxRows, index],
+    [zoom, showConsensus, showConservation, maxRows, setShowConsensus, setShowConservation, setMaxRows],
   );
 
   const echo = useMemo(() => {
@@ -488,6 +486,7 @@ const MsaRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilter
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Sequence alignment'}
+      zoomSync={zoomSync !== null && !chains}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       primaryControls={primaryControls}
       controls={controls}

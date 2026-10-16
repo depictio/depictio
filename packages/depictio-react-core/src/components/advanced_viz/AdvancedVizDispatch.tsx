@@ -52,6 +52,7 @@ import {
   AdvancedVizDockToggle,
   AdvancedVizExtrasProvider,
   AdvancedVizSettingsPopover,
+  AdvancedVizZoomSyncToggle,
 } from './AdvancedVizExtras';
 import { vizKindLabel } from './vizKindTag';
 import { AdvancedVizKindContext } from './VizKindBadge';
@@ -361,6 +362,9 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   const popovers = React.useMemo<React.ReactNode>(() => {
     if (!published) return null;
     const nodes: React.ReactNode[] = [];
+    if (published.zoomSync) {
+      nodes.push(<AdvancedVizZoomSyncToggle key="zoom-sync" index={String(metadata.index)} />);
+    }
     // `rail` draws both tiers in the tile, so there is nothing left to open;
     // `header` draws the encoding tier and leaves the cosmetic one here.
     const popoverControls =
@@ -407,7 +411,7 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     // controls live is picked in the header of the controls block itself
     // (popover, strip or rail), not from a separate chrome icon.
     return nodes.length ? <>{nodes}</> : null;
-  }, [published, placement, placementState, folded, toggleFolded]);
+  }, [published, placement, placementState, folded, toggleFolded, metadata.index]);
 
   const vizKind = (metadata.viz_kind as string) || '';
   const kindLabel = vizKindLabel(vizKind);

@@ -948,16 +948,17 @@ of the five ignores an event whose `positionColumn` is not its own.
 ### Zoom sync
 
 The residue panels that scroll sideways (`sequence_track`, `secondary_structure`, `msa`,
-`hmm_logo`, `domain_architecture` on its shared scale) zoom on their own by default. Their
-`Sync zoom` switch, under the width slider, makes them show the same residues: the tile the
-reader zooms or scrolls publishes the residue window it shows, and every other residue tile of
+`hmm_logo`, `domain_architecture` on its shared scale) zoom on their own by default. The
+link icon in their hover row (`Sync zoom across tiles`) makes them show the same residues:
+the tile the reader zooms or scrolls publishes the residue window it shows, and every other residue tile of
 the view fits that window to its own width, so panes of different widths show the same residues
 rather than the same pixels. The store (`highlight/zoomSync.ts`) shares the hover bus's scope
 (`HighlightProvider`) and its axis rule: same position column, same entity when both tiles know
 theirs; the domain architecture, which shows every protein, follows any window.
 
 - One switch for the whole view, off by default and remembered in the browser
-  (`depictio.zoom.sync`). The tile it is flipped on from leads: its window goes out first.
+  (`depictio.zoom.sync`); the icon is filled on every residue tile while it is on. The tile it
+  is turned on from leads: its window goes out first.
 - Windows are in residue coordinates. An alignment maps them through its reference row (a gap
   column sits between its neighbours' residues); a logo through each state's reference residue,
   with folded runs keeping their fixed width. A source that fits its whole axis asks followers
@@ -968,8 +969,8 @@ theirs; the domain architecture, which shows every protein, follows any window.
   alignment's span changes as gap columns slide through the view, and every follower would
   re-fit its width on a plain scroll.
 - Not synced: the chains of a complex (each numbers its residues apart), an alignment with a
-  chain layout, a logo without reference residues, the per-protein scale. Outside a provider
-  (record panels, catalog previews) the switch is hidden.
+  chain layout, a logo without reference residues, the per-protein scale: those tiles show no
+  icon. Outside a provider (record panels, catalog previews) the icon is hidden too.
 
 ## 4. Where the structure comes from
 

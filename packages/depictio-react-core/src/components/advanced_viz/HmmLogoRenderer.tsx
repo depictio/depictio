@@ -47,7 +47,6 @@ import {
 } from './protein/rendererData';
 import { useEntityPicker } from './protein/useEntityPicker';
 import ZoomHintLabel from './protein/ZoomHint';
-import ZoomSyncSwitch from './protein/ZoomSyncSwitch';
 import { usePersistedVizControl, useVizConfigWriter } from './usePersistedVizControl';
 
 /**
@@ -829,7 +828,6 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
             step={1}
             thumbLabel={(v) => (v === 0 ? 'Fit' : `${v} px`)}
           />
-          <ZoomSyncSwitch index={index} />
           <VizSwitch
             label="Consensus rows"
             checked={showConsensus}
@@ -959,7 +957,6 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
     ),
     [
       zoom,
-      index,
       showConsensus,
       setShowConsensus,
       showIndelRows,
@@ -1066,6 +1063,7 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
   return (
     <AdvancedVizFrame
       title={metadata.title || 'HMM logo'}
+      zoomSync={zoomSync !== null && Boolean(profile?.positions.some((p) => p != null))}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       primaryControls={primaryControls}
       controls={controls}

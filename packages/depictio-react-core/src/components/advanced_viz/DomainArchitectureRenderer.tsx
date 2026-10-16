@@ -76,7 +76,6 @@ import {
   withoutPositionSelections,
 } from './protein/rendererData';
 import ZoomHintLabel from './protein/ZoomHint';
-import ZoomSyncSwitch from './protein/ZoomSyncSwitch';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
 /**
@@ -710,7 +709,6 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
             step={1}
             thumbLabel={(v) => (v === 0 ? 'Fit' : `${v} px`)}
           />
-          {scale === 'shared' ? <ZoomSyncSwitch index={index} /> : null}
           {view === 'architectures' ? (
             <VizSlider
               label="Architectures"
@@ -744,7 +742,6 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
       setScale,
       residueWidth,
       setResidueWidth,
-      index,
       view,
       maxArchitectures,
       setMaxArchitectures,
@@ -878,6 +875,7 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Domain architecture'}
+      zoomSync={zoomSync !== null && scale === 'shared'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       primaryControls={primaryControls}
       controls={controls}

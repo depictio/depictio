@@ -27,7 +27,6 @@ import {
 } from './protein';
 import { panelColours } from './protein/panelTheme';
 import ZoomHintLabel from './protein/ZoomHint';
-import ZoomSyncSwitch from './protein/ZoomSyncSwitch';
 import {
   chainsOfEntity,
   chainsShown,
@@ -602,7 +601,6 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
           step={1}
           thumbLabel={(v) => (v === 0 ? 'Fit' : `${v} px`)}
         />
-        <ZoomSyncSwitch index={index} />
         <VizSwitch
           label="Letters"
           checked={showLetters}
@@ -620,7 +618,7 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
         ) : null}
       </VizControlGroup>
     ),
-    [zoom, showLetters, residueCol, valueCol, plddt, valueScale, index],
+    [zoom, showLetters, residueCol, valueCol, plddt, valueScale],
   );
 
   const echo = useMemo(() => {
@@ -673,6 +671,7 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Sequence track'}
+      zoomSync={zoomSync !== null}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       primaryControls={primaryControls}
       controls={controls}

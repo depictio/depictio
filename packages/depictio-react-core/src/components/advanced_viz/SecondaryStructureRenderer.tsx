@@ -42,7 +42,6 @@ import { SS_GLYPH_FILLS } from './protein/ssGlyphs';
 import type { ResidueRange } from './protein/types';
 import { useEntityPicker } from './protein/useEntityPicker';
 import ZoomHintLabel from './protein/ZoomHint';
-import ZoomSyncSwitch from './protein/ZoomSyncSwitch';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { compositionBadges } from './secstruct/compositionBadges';
 import { naturalPanelHeight } from './secstruct/panelLanes';
@@ -465,7 +464,6 @@ const SecondaryStructureRenderer: React.FC<Props> = ({
             step={1}
             thumbLabel={(v) => (v === 0 ? 'Fit' : `${v} px`)}
           />
-          <ZoomSyncSwitch index={index} />
           <VizSlider
             label="Ribbon height"
             value={ribbonHeight ?? DEFAULT_RIBBON_PX}
@@ -531,7 +529,6 @@ const SecondaryStructureRenderer: React.FC<Props> = ({
     ),
     [
       zoom,
-      index,
       ribbonHeight,
       colourClasses,
       swatches,
@@ -599,6 +596,7 @@ const SecondaryStructureRenderer: React.FC<Props> = ({
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Secondary structure'}
+      zoomSync={zoomSync !== null}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       primaryControls={primaryControls}
       controls={controls}

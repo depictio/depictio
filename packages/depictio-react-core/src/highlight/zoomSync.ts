@@ -16,13 +16,13 @@
  * window marked `fit` means the source shows its whole axis; followers then
  * fit theirs, whatever its length.
  *
- * Off by default. One setting for the whole view, switched from any residue
- * tile's controls and remembered in localStorage. The tile whose switch turned
- * it on leads: its window goes out first.
+ * Off by default. One setting for the whole view, switched from the link icon
+ * in any residue tile's hover row and remembered in localStorage. The tile it
+ * was turned on from leads: its window goes out first.
  *
  * Scope: one store per dashboard view, provided by `HighlightProvider` next to
  * the hover bus. Outside a provider (record panels, catalog previews) there is
- * nothing to sync with and the switch is not shown.
+ * nothing to sync with and the icon is not shown.
  */
 import { createContext, useCallback, useContext, useMemo, useSyncExternalStore } from 'react';
 

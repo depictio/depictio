@@ -12,6 +12,7 @@ import type { TierAnnotation } from '../data/DataGridBody';
 import type { LoadAllState } from '../chrome/LoadAllButton';
 import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
 import { TILE_ACTION_STYLE } from '../chrome/actionStyles';
+import { useZoomSyncSwitch } from '../../highlight/zoomSync';
 import { VizControlsGrid } from './controls/VizControls';
 
 /**
@@ -63,6 +64,8 @@ export interface AdvancedVizExtrasPayload {
   /** The frame shows the controls docked beside or above the plot, so the
    *  chrome row offers a toggle for them rather than a popover. */
   docked?: boolean;
+  /** The tile follows and leads zoom sync: the row offers its switch. */
+  zoomSync?: boolean;
   /** Reduced-sampling state, when the renderer can expand to the full view.
    *  Shaped as `LoadAllState` so the dispatch can hand it straight to
    *  `LoadAllButton`. */
@@ -203,6 +206,31 @@ export const AdvancedVizDockToggle: React.FC<{ open: boolean; onToggle: () => vo
     <Icon icon={TILE_ACTION_STYLE.settings.icon} width={16} height={16} />
   </ActionIcon>
 );
+
+/**
+ * The zoom sync switch in the tile's row (see highlight/zoomSync.ts): one
+ * setting for the view, so every residue tile shows it filled while it is on,
+ * and the tile it is turned on from leads. Hidden where there is nothing to
+ * sync with (outside a dashboard view).
+ */
+export const AdvancedVizZoomSyncToggle: React.FC<{ index: string }> = ({ index }) => {
+  const { available, enabled, setEnabled } = useZoomSyncSwitch();
+  if (!available) return null;
+  const label = enabled ? 'Stop syncing zoom' : TILE_ACTION_STYLE.zoomSync.label;
+  return (
+    <ActionIcon
+      variant={enabled ? 'filled' : 'subtle'}
+      size="sm"
+      aria-label={label}
+      aria-pressed={enabled}
+      title={label}
+      data-tile-action="zoom-sync"
+      onClick={() => setEnabled(!enabled, index)}
+    >
+      <Icon icon={TILE_ACTION_STYLE.zoomSync.icon} width={16} height={16} />
+    </ActionIcon>
+  );
+};
 
 export type { TierAnnotation } from '../data/DataGridBody';
 

@@ -121,6 +121,8 @@ interface AdvancedVizFrameProps {
   dataRows?: Record<string, unknown[]>;
   /** Column ordering for the data popover. */
   dataColumns?: string[];
+  /** The tile takes part in zoom sync: its row offers the switch. */
+  zoomSync?: boolean;
   /**
    * Threshold-aware per-row annotation aligned with `dataRows` (volcano UP/DN/NS,
    * manhattan HIT/MISS, etc.). When set, the data popover prepends a `__tier`
@@ -238,6 +240,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   emptyMessage,
   dataRows,
   dataColumns,
+  zoomSync = false,
   tierAnnotation,
   counts,
   reduction,
@@ -373,6 +376,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     if (cosmeticControls) payload.controls = cosmeticControls;
     if (stripControls) payload.primaryControls = stripControls;
     if (docked) payload.docked = true;
+    if (zoomSync) payload.zoomSync = true;
     if (dataRows) {
       payload.data = { rows: dataRows, columns: dataColumns, tierAnnotation };
     }
@@ -390,6 +394,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     cosmeticControls,
     stripControls,
     docked,
+    zoomSync,
     dataRows,
     dataColumns,
     tierAnnotation,

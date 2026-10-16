@@ -101,6 +101,8 @@ const MEANING: Record<TileActionStyleKey, string> = {
   loadAll: 'Draws every point or row instead of the sample shown; may be slow.',
   settings: 'Display options for this view only: metric, scale, colours, sizes.',
   data: 'The rows behind the view, in a table you can sort and filter.',
+  zoomSync:
+    'Residue tiles of the view show the same residues: zooming or scrolling one moves the others. One switch for all of them.',
   source: 'Opens the tab the view comes from.',
   menu: "The editor's menu for the tile.",
 };
@@ -131,6 +133,7 @@ const EXTRAS: Partial<
   table: [{ key: 'loadAll', when: 'When the table shows a page of its rows' }],
   map: [{ key: 'settings', when: 'Once the map has drawn' }, { key: 'data' }],
   advanced_viz: [
+    { key: 'zoomSync', when: 'Views on a residue axis (sequence, alignment, logo, domains)' },
     { key: 'settings', when: 'Views with options' },
     { key: 'data' },
     { key: 'loadAll', when: 'When the data was reduced' },
