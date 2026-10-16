@@ -1,9 +1,9 @@
 """Contract for ``GET /dashboards/cross_tab_components/{dashboard_id}``.
 
 The endpoint is the viewer's single family request per page load: everything a
-tab renders on behalf of its siblings — floating maps plus every section marked
-``persistent: true`` — with each member paired to its *owning* tab's id so
-render calls target the owner while viewing a sibling.
+tab renders on behalf of its siblings (floating maps and 3D structures, plus
+every section marked ``persistent: true``), with each member paired to its
+*owning* tab's id so render calls target the owner while viewing a sibling.
 
 It shares its family-resolution prologue (``_resolve_tab_family``) with
 ``/floating_components``; the refusals are tested here since no other test
@@ -201,6 +201,77 @@ def test_floating_maps_stay_out_of_persistent_sections() -> None:
     grid = next(s for s in result["persistent_sections"] if s["kind"] == "grid")
     assert [c["metadata"]["index"] for c in grid["components"]] == ["metadata-table"]
     assert [c["metadata"]["index"] for c in result["floating"]] == ["floaty"]
+
+
+def _structure(**overrides) -> dict:
+    meta = {
+        "index": "fold",
+        "component_type": "advanced_viz",
+        "viz_kind": "molecule_3d",
+        "placement": "floating",
+        "floating_initial_state": "compact",
+        "section": None,
+    }
+    meta.update(overrides)
+    return meta
+
+
+def test_floating_structures_fan_out_beside_floating_maps() -> None:
+    """A floating molecule_3d is served like a floating map: same shape, paired
+    with the tab that owns it, in tab order."""
+    main = _main_tab()
+    main["stored_metadata"].append(_structure())
+    with _Ctx([main, _child_tab()]):
+        result = _call()
+    floating = result["floating"]
+    assert [(c["dashboard_id"], c["metadata"]["index"]) for c in floating] == [
+        (MAIN_ID, "fold"),
+        (CHILD_ID, "floaty"),
+    ]
+    assert floating[0]["tab_title"] == "Main"
+    assert floating[0]["metadata"]["viz_kind"] == "molecule_3d"
+    # The map path is unchanged.
+    assert floating[1]["metadata"]["component_type"] == "map"
+
+
+def test_advanced_viz_on_the_grid_or_of_another_kind_does_not_float() -> None:
+    """Stored metadata never met the lite model's check: a grid tile, and a tile
+    of a kind the panel cannot hold, both stay on the grid the viewer draws."""
+    main = _main_tab()
+    main["stored_metadata"] += [
+        _structure(index="on-grid", placement="grid"),
+        _structure(index="no-placement", placement=None),
+        _structure(index="volcano", viz_kind="volcano"),
+    ]
+    with _Ctx([main, _child_tab()]):
+        result = _call()
+    assert [c["metadata"]["index"] for c in result["floating"]] == ["floaty"]
+
+
+def test_floating_structures_stay_out_of_persistent_sections() -> None:
+    """Like a floating map, a floating structure fans out through `floating`; a
+    persistent section naming it would draw it a second time."""
+    child = _child_tab()
+    child["stored_metadata"].append(_structure(section="Sample metadata"))
+    with _Ctx([_main_tab(), child]):
+        result = _call()
+    grid = next(s for s in result["persistent_sections"] if s["kind"] == "grid")
+    assert [c["metadata"]["index"] for c in grid["components"]] == ["metadata-table"]
+    assert "fold" in [c["metadata"]["index"] for c in result["floating"]]
+
+
+def test_a_grid_structure_in_a_persistent_section_still_fans_out_there() -> None:
+    child = _child_tab()
+    child["stored_metadata"].append(
+        _structure(index="grid-fold", placement="grid", section="Sample metadata")
+    )
+    with _Ctx([_main_tab(), child]):
+        result = _call()
+    grid = next(s for s in result["persistent_sections"] if s["kind"] == "grid")
+    assert [c["metadata"]["index"] for c in grid["components"]] == [
+        "metadata-table",
+        "grid-fold",
+    ]
 
 
 def test_floating_slice_matches_the_floating_components_endpoint() -> None:

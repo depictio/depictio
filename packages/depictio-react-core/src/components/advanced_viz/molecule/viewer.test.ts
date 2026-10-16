@@ -205,16 +205,26 @@ describe('resize re-fit', () => {
     expect(host.listeners.get('wheel')?.size ?? 0).toBe(0);
   });
 
-  it('keeps a focused span in frame, and a wheel or a new load toggles the flag', async () => {
+  it('keeps a focused span in frame, and a zoom wheel or a new load toggles the flag', async () => {
     const { host, viewer } = await setup();
     viewer.focus({ chain: 'A', start: 20, end: 40 }, false);
     fits.length = 0;
     viewer.resize();
     expect(fits).toEqual([{ chain: 'A', resi: '20-40' }]);
 
-    host.fire('wheel');
+    // A plain wheel is kept from the canvas and scrolls the page: not a camera move.
+    const stopPropagation = vi.fn();
+    host.fire('wheel', { stopPropagation });
+    expect(stopPropagation).toHaveBeenCalledTimes(1);
     viewer.resize();
-    expect(fits).toHaveLength(1);
+    expect(fits).toHaveLength(2);
+
+    // Ctrl / Cmd + wheel reaches 3Dmol and moves it.
+    const zoomStop = vi.fn();
+    host.fire('wheel', { ctrlKey: true, stopPropagation: zoomStop });
+    expect(zoomStop).not.toHaveBeenCalled();
+    viewer.resize();
+    expect(fits).toHaveLength(2);
 
     viewer.load('ATOM', 'pdb');
     fits.length = 0;

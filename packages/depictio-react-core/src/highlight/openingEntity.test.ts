@@ -60,6 +60,76 @@ describe('createOpeningEntityStore', () => {
   });
 });
 
+describe('a priority claim', () => {
+  it('takes the key from an ordinary claimant and tells subscribers', () => {
+    const store = createOpeningEntityStore();
+    const listener = vi.fn();
+    store.claim('entity', 'track', 'long');
+    store.subscribe(listener);
+    expect(store.claim('entity', 'mol', 'short', true)).toBe('short');
+    expect(store.get('entity')).toBe('short');
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('is not taken back by the ordinary claimant it replaced', () => {
+    const store = createOpeningEntityStore();
+    store.claim('entity', 'track', 'long');
+    store.claim('entity', 'mol', 'short', true);
+    expect(store.claim('entity', 'track', 'long')).toBe('short');
+    expect(store.get('entity')).toBe('short');
+  });
+
+  it('holds the key first-come among priority claimants', () => {
+    const store = createOpeningEntityStore();
+    store.claim('entity', 'a', 'A', true);
+    expect(store.claim('entity', 'b', 'B', true)).toBe('A');
+    expect(store.get('entity')).toBe('A');
+  });
+
+  it('wins whichever tile claims first', () => {
+    const store = createOpeningEntityStore();
+    store.claim('entity', 'mol', 'short', true);
+    expect(store.claim('entity', 'track', 'long')).toBe('short');
+  });
+
+  it('becomes the owner when it takes over the same entity, without a notification', () => {
+    const store = createOpeningEntityStore();
+    const listener = vi.fn();
+    store.claim('entity', 'track', 'A');
+    store.subscribe(listener);
+    store.claim('entity', 'mol', 'A', true);
+    expect(listener).not.toHaveBeenCalled();
+    // The previous owner's unmount no longer frees the key.
+    store.release('entity', 'track');
+    expect(store.get('entity')).toBe('A');
+    store.release('entity', 'mol');
+    expect(store.get('entity')).toBeNull();
+  });
+
+  it('can drop its priority and keep the key', () => {
+    const store = createOpeningEntityStore();
+    store.claim('entity', 'mol', 'A', true);
+    store.claim('entity', 'mol', 'A', false);
+    expect(store.claim('entity', 'track', 'B', true)).toBe('B');
+  });
+
+  it('ends in the same state after a StrictMode mount, cleanup, mount', () => {
+    const store = createOpeningEntityStore();
+    const mount = () => {
+      store.claim('entity', 'track', 'long');
+      store.claim('entity', 'mol', 'short', true);
+    };
+    const unmount = () => {
+      store.release('entity', 'track');
+      store.release('entity', 'mol');
+    };
+    mount();
+    unmount();
+    mount();
+    expect(store.get('entity')).toBe('short');
+  });
+});
+
 describe('adoptOpeningEntity', () => {
   it('adopts the shared opening when the tile holds it', () => {
     expect(adoptOpeningEntity('A', 'B', ['A', 'B'])).toBe('A');

@@ -72,10 +72,9 @@ const PLOT_CONFIG = {
   responsive: true,
   displayModeBar: true,
   modeBarButtonsToRemove: ['select2d', 'lasso2d', 'autoScale2d'],
-  // Scroll-zoom OFF: capturing the wheel breaks page-level scrolling when
-  // the mouse happens to be over the rarefaction tile. Box-zoom via the
-  // modebar Zoom button stays available for explicit zoom interaction.
-  scrollZoom: false,
+  // No `scrollZoom`: the zoom gate (plotlyZoomGate) lets a plain wheel scroll
+  // the page and zooms on Ctrl / Cmd + wheel. Box-zoom via the modebar Zoom
+  // button stays available too.
 };
 
 /**

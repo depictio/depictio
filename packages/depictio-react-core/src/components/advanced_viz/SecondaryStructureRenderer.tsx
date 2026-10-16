@@ -12,6 +12,7 @@ import {
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import { usePublishHighlight, useHighlight } from '../../highlight/bus';
+import { useZoomSyncHandle } from '../../highlight/zoomSync';
 import {
   filtersExcludingOwnResidue,
   residueEntityFromFilters,
@@ -43,7 +44,8 @@ import { useEntityPicker } from './protein/useEntityPicker';
 import ZoomHintLabel from './protein/ZoomHint';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { compositionBadges } from './secstruct/compositionBadges';
-import SecondaryStructurePanel, { naturalPanelHeight } from './secstruct/SecondaryStructurePanel';
+import { naturalPanelHeight } from './secstruct/panelLanes';
+import SecondaryStructurePanel from './secstruct/SecondaryStructurePanel';
 import { DEFAULT_RIBBON_PX } from './secstruct/ribbonHeight';
 import SegmentList, { SEGMENT_LIST_MAX_PX } from './secstruct/SegmentList';
 import {
@@ -312,6 +314,8 @@ const SecondaryStructureRenderer: React.FC<Props> = ({
     if (!r || (r.entity && entity && r.entity !== entity)) return null;
     return { start: r.start, end: r.end };
   }, [filters, entityCol, positionCol, follow, ownResidue, entity]);
+
+  const zoomSync = useZoomSyncHandle(index, entity, positionCol);
 
   const incoming = useHighlight(index, follow);
   const highlight = useMemo(() => {
@@ -592,6 +596,7 @@ const SecondaryStructureRenderer: React.FC<Props> = ({
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Secondary structure'}
+      zoomSync={zoomSync !== null}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       primaryControls={primaryControls}
       controls={controls}
@@ -630,6 +635,7 @@ const SecondaryStructureRenderer: React.FC<Props> = ({
                 height="100%"
                 cellWidth={zoom > 0 ? zoom : undefined}
                 onCellWidthChange={setZoom}
+                zoomSync={zoomSync}
                 followSelection={follow}
                 onDrawn={onDrawn}
               />

@@ -7,10 +7,11 @@
   "scripts": {
     "test": "vitest run"
   },
-  "//sideEffects": "Only stylesheets and plotlyStrictMode (a react-plotly.js prototype patch with no exports) are imported for their side effects; every other module's JS exports are pure. This lets bundlers tree-shake unused barrel re-exports (e.g. the plotly/ag-grid renderers) out of consumers that only pull light helpers from the index, instead of dragging the whole visualisation stack onto their boot path.",
+  "//sideEffects": "Only stylesheets, plotlyStrictMode and plotlyZoomGate (react-plotly.js prototype patches with no exports) are imported for their side effects; every other module's JS exports are pure. This lets bundlers tree-shake unused barrel re-exports (e.g. the plotly/ag-grid renderers) out of consumers that only pull light helpers from the index, instead of dragging the whole visualisation stack onto their boot path.",
   "sideEffects": [
     "**/*.css",
-    "**/plotlyStrictMode.ts"
+    "**/plotlyStrictMode.ts",
+    "**/plotlyZoomGate.ts"
   ],
   "main": "src/index.ts",
   "module": "src/index.ts",

@@ -770,7 +770,9 @@ vertical title, unfold chevron) and the source widens into the freed columns; a 
 unfolds it, and the chevron in the rail or in the card header toggles it by hand until the
 source's selection next appears or clears. The fold is a derived layout
 (`packages/depictio-react-core/src/components/recordPanelLayout.ts`), never written back,
-and the editor always shows the stored layout unfolded. This pairing is also the one
+and the editor always shows the stored layout unfolded. A section with `display: linked`
+never folds: its panes are the stored layout, and the card keeps its pane (with its empty
+state) until a pick arrives, so a pick moves nothing. This pairing is also the one
 exception to the full-width table rule of the shipped-template lint: a table may be narrower
 than the grid when its linked record card fills the rest of the row.
 

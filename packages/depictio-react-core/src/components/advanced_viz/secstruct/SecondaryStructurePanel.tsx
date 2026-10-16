@@ -11,7 +11,9 @@ import {
   visibleWindow,
 } from '../protein/canvas';
 import { useDrawScheduler, useViewSize } from '../protein/canvasHooks';
+import type { ZoomSyncHandle } from '../../../highlight/zoomSync';
 import { useModifierWheelZoom } from '../protein/useWheelZoom';
+import { uniformAxis } from '../protein/zoomAxis';
 import { panelColours, type PanelColours } from '../protein/panelTheme';
 import { rgbCss, type SecondaryStructure } from '../protein/residueColours';
 import type { Run } from '../protein/sequence';
@@ -31,43 +33,19 @@ import {
   type SsAgreement,
   type SsModel,
 } from './ssModel';
-import { baseRibbonHeight, DEFAULT_RIBBON_PX, mainRibbonLaneHeight } from './ribbonHeight';
+import { layoutPanelLanes, LETTERS_PX, type PanelLaneKey } from './panelLanes';
+import { DEFAULT_RIBBON_PX } from './ribbonHeight';
 
 const LABEL_PX = 88;
-const RULER_PX = 18;
-const LETTERS_PX = 14;
 export { DEFAULT_RIBBON_PX };
-const EXTRA_RIBBON_PX = 16;
-const AGREEMENT_PX = 12;
-const PROB_PX = 44;
-const PROB_MAX_PX = 160;
-const LANE_GAP = 3;
 const DRAG_PX = 3;
 /** Narrower cells than this cannot show a residue's own opacity: a run gets its mean. */
 const PER_RESIDUE_ALPHA_MIN_CW = 1.5;
 /** Opacity of the coil share of the probability lanes (coil has no glyph colour). */
 const COIL_AREA_ALPHA = 0.55;
 
-/** Height the panel needs for its lanes, with no spare room to spread. */
-export function naturalPanelHeight(opts: {
-  /** Height of the main ribbon; defaults to `DEFAULT_RIBBON_PX`. */
-  ribbonHeight?: number | null;
-  letters: boolean;
-  extraSources: number;
-  agreement: boolean;
-  probabilities: boolean;
-}): number {
-  let h = RULER_PX + LANE_GAP + baseRibbonHeight(opts.ribbonHeight) + LANE_GAP;
-  if (opts.letters) h += LETTERS_PX + LANE_GAP;
-  h += Math.max(0, opts.extraSources) * (EXTRA_RIBBON_PX + LANE_GAP);
-  if (opts.agreement) h += AGREEMENT_PX + LANE_GAP;
-  if (opts.probabilities) h += PROB_PX + LANE_GAP;
-  return h;
-}
-
-type LaneKey = 'ruler' | 'letters' | 'ribbon' | 'agreement' | 'probabilities';
 interface Lane {
-  key: LaneKey;
+  key: PanelLaneKey;
   title: string;
   y: number;
   h: number;
@@ -93,7 +71,7 @@ export interface SecondaryStructurePanelProps {
   /** Shade each residue's glyph by its confidence. */
   shadeConfidence?: boolean;
   /** Height of the main ribbon lane, drawn exactly. Null or omitted: the
-   *  default height, growing into spare room up to `MAIN_RIBBON_MAX_PX`. */
+   *  default height, growing into spare room up to its cap (`ribbonHeight.ts`). */
   ribbonHeight?: number | null;
   /** Colours of the classes the tile, its config or the dashboard sets; the
    *  others keep the defaults. */
@@ -111,6 +89,8 @@ export interface SecondaryStructurePanelProps {
   cellWidth?: number;
   /** Ctrl / Cmd + wheel asks for this many px per residue (whole pixels; 0 fits). */
   onCellWidthChange?: (px: number) => void;
+  /** Zoom sync with the view's other residue tiles. */
+  zoomSync?: ZoomSyncHandle | null;
   /** Scroll an incoming `selectedRange` / `highlight` into view. Default true. */
   followSelection?: boolean;
   /** Called once the first frame with data has been drawn. */
@@ -141,6 +121,7 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
   height,
   cellWidth,
   onCellWidthChange,
+  zoomSync = null,
   followSelection = true,
   onDrawn,
 }) => {
@@ -171,7 +152,8 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
   const minPos = span?.min ?? 1;
   const count = span ? span.max - span.min + 1 : 0;
   const gridW = Math.max(0, view.w - LABEL_PX);
-  const cw = cellWidth && cellWidth > 0 ? cellWidth : fitCellWidth(gridW, count, 0.05, 24);
+  const fitCw = fitCellWidth(gridW, count, 0.05, 24);
+  const cw = cellWidth && cellWidth > 0 ? cellWidth : fitCw;
   const contentW = LABEL_PX + count * cw;
   // The floor is the smallest fitted width, so zooming out from "fit" rounds
   // to 0 (fit) instead of jumping to a wider column.
@@ -181,6 +163,13 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
     min: 0.05,
     max: 24,
     gutter: LABEL_PX,
+    sync: zoomSync && {
+      ...zoomSync,
+      axis: uniformAxis(minPos, cw),
+      fit: fitCw,
+      requested: cellWidth && cellWidth > 0 ? cellWidth : 0,
+      ready: count > 0 && gridW > 0,
+    },
   });
 
   // ---- data ------------------------------------------------------------------
@@ -223,48 +212,46 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
   }, [model, probSource, minPos, count]);
 
   // ---- lanes -----------------------------------------------------------------
+  // The lanes share the height the cell gives them, each up to its cap, and
+  // what they cannot take centres the stack (see `panelLanes.ts`). The offset
+  // is part of every lane's `y`, so drawing and hit-testing agree.
+  const layout = useMemo(
+    () =>
+      layoutPanelLanes(
+        {
+          ribbonHeight,
+          letters: lettersOn,
+          extraSources: Math.max(0, model.sources.length - 1),
+          agreement: agreementOn,
+          probabilities: probSource >= 0,
+        },
+        view.h,
+      ),
+    [ribbonHeight, lettersOn, model.sources.length, agreementOn, probSource, view.h],
+  );
   const lanes = useMemo<Lane[]>(() => {
-    const spec: Array<Omit<Lane, 'y'>> = [{ key: 'ruler', title: 'Residue', h: RULER_PX, source: 0 }];
-    if (lettersOn) spec.push({ key: 'letters', title: 'Sequence', h: LETTERS_PX, source: 0 });
-    model.sources.forEach((s, k) =>
-      spec.push({
-        key: 'ribbon',
-        title: s.name,
-        h: k === 0 ? baseRibbonHeight(ribbonHeight) : EXTRA_RIBBON_PX,
-        source: k,
-      }),
-    );
-    if (agreementOn) {
-      const pct = agreement?.fraction != null ? ` ${Math.round(agreement.fraction * 100)}%` : '';
-      spec.push({ key: 'agreement', title: `Agreement${pct}`, h: AGREEMENT_PX, source: 0 });
-    }
-    if (probSource >= 0) {
-      spec.push({
-        key: 'probabilities',
-        title: model.sources.length > 1 ? `P · ${model.sources[probSource].name}` : 'P(H/E/C)',
-        h: PROB_PX,
-        source: probSource,
-      });
-    }
-    const natural = spec.reduce((s, l) => s + l.h + LANE_GAP, 0);
-    const spare = Math.max(0, view.h - natural);
-    const growMain = probSource >= 0 ? 0.35 : 1;
-    const grow = (key: LaneKey, source: number): number => {
-      if (key === 'ribbon' && source === 0) {
-        // A chosen height is drawn exactly; only the default grows.
-        return mainRibbonLaneHeight(ribbonHeight, spare, growMain) - baseRibbonHeight(ribbonHeight);
+    const pct = agreement?.fraction != null ? ` ${Math.round(agreement.fraction * 100)}%` : '';
+    const titleOf = (key: PanelLaneKey, source: number): string => {
+      switch (key) {
+        case 'ruler':
+          return 'Residue';
+        case 'letters':
+          return 'Sequence';
+        case 'ribbon':
+          return model.sources[source]?.name ?? '';
+        case 'agreement':
+          return `Agreement${pct}`;
+        case 'probabilities':
+          return model.sources.length > 1 ? `P · ${model.sources[probSource].name}` : 'P(H/E/C)';
       }
-      if (key === 'probabilities') return Math.min(PROB_MAX_PX - PROB_PX, spare * 0.65);
-      return 0;
     };
-    let y = 0;
-    return spec.map((l) => {
-      const lane = { ...l, y, h: l.h + grow(l.key, l.source) };
-      y += lane.h + LANE_GAP;
-      return lane;
+    return layout.lanes.map((l) => {
+      // The probabilities come from the first source that has them, not the main one.
+      const source = l.key === 'probabilities' ? probSource : l.source;
+      return { ...l, source, title: titleOf(l.key, source) };
     });
-  }, [lettersOn, model.sources, agreementOn, agreement, probSource, view.h, ribbonHeight]);
-  const naturalH = lanes.reduce((s, l) => s + l.h + LANE_GAP, 0);
+  }, [layout, model.sources, agreement, probSource]);
+  const naturalH = layout.naturalH;
 
   // ---- interaction state -------------------------------------------------------
   const brushRef = useRef<{
@@ -294,8 +281,11 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
     const p0 = minPos + i0;
     const p1 = minPos + i1;
     const xOf = (pos: number) => LABEL_PX + (pos - minPos) * cw - sx;
-    const lane = (key: LaneKey) => lanes.find((l) => l.key === key);
-    const fullH = Math.min(view.h, naturalH);
+    const lane = (key: PanelLaneKey) => lanes.find((l) => l.key === key);
+    // The bands span the drawn stack, not the cell: a centred stack leaves
+    // room above and below it.
+    const bandTop = layout.top;
+    const bandH = Math.max(0, Math.min(layout.stackH, view.h - bandTop));
     const brush = brushRef.current;
     const hover = hoverRef.current;
 
@@ -307,7 +297,7 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
     // Background bands: selection, incoming highlight, live brush, hover.
     const band = (a: number, b: number, fill: string) => {
       ctx.fillStyle = fill;
-      ctx.fillRect(xOf(Math.min(a, b)), 0, (Math.abs(b - a) + 1) * cw, fullH);
+      ctx.fillRect(xOf(Math.min(a, b)), bandTop, (Math.abs(b - a) + 1) * cw, bandH);
     };
     if (selectedRange) band(selectedRange.start, selectedRange.end ?? selectedRange.start, colours.accentFill);
     if (highlight) band(highlight.start, highlight.end ?? highlight.start, colours.highlightFill);
@@ -466,7 +456,7 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
     const edges = (a: number, b: number, stroke: string) => {
       ctx.strokeStyle = stroke;
       ctx.lineWidth = 1.5;
-      ctx.strokeRect(xOf(Math.min(a, b)), 0.75, (Math.abs(b - a) + 1) * cw, fullH - 1.5);
+      ctx.strokeRect(xOf(Math.min(a, b)), bandTop + 0.75, (Math.abs(b - a) + 1) * cw, bandH - 1.5);
     };
     if (selectedRange) edges(selectedRange.start, selectedRange.end ?? selectedRange.start, colours.accent);
     if (highlight) edges(highlight.start, highlight.end ?? highlight.start, colours.highlight);
@@ -484,8 +474,8 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
     ctx.strokeStyle = colours.grid;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(LABEL_PX - 0.5, 0);
-    ctx.lineTo(LABEL_PX - 0.5, fullH);
+    ctx.moveTo(LABEL_PX - 0.5, bandTop);
+    ctx.lineTo(LABEL_PX - 0.5, bandTop + bandH);
     ctx.stroke();
 
     if (!drawnRef.current && model.positions.length > 0) {
@@ -500,7 +490,7 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
     count,
     minPos,
     lanes,
-    naturalH,
+    layout,
     colours,
     agreeColour,
     disagreeColour,

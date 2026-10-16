@@ -5,14 +5,14 @@ import { useViewportSize } from '@mantine/hooks';
 import type { InteractiveFilter } from '../../api';
 import { Z_LAYERS } from '../../zLayers';
 import MapPanelBody from './MapPanelBody';
+import { PANEL_KINDS, type PanelKindSpec } from './panelKinds';
 import { useCardResize } from './useCardResize';
 import { clampToViewport, useDraggable, type Position } from './useDraggable';
 import type { MapPanel } from './useMapPanel';
 
 /** Compact is deliberately small enough to leave the dashboard readable behind
- *  it; expanded takes most of the viewport but stays capped so it never fills a
- *  large screen edge to edge. */
-const COMPACT_SIZE = { width: 360, height: 280 };
+ *  it (its footprint is the kind's: `PANEL_KINDS`); expanded takes most of the
+ *  viewport but stays capped so it never fills a large screen edge to edge. */
 const EXPANDED_MAX_WIDTH = 920;
 const EXPANDED_VIEWPORT_FRACTION = { width: 0.78, height: 0.72 };
 
@@ -22,8 +22,9 @@ const EXPANDED_VIEWPORT_FRACTION = { width: 0.78, height: 0.72 };
 function cardSize(
   size: 'compact' | 'expanded',
   viewport: { width: number; height: number },
+  spec: PanelKindSpec,
 ): { width: number; height: number } {
-  if (size === 'compact') return COMPACT_SIZE;
+  if (size === 'compact') return spec.compact;
   return {
     width: Math.min(
       EXPANDED_MAX_WIDTH,
@@ -33,20 +34,18 @@ function cardSize(
   };
 }
 
-/** Default anchor for the floating card: bottom-right, clear of the Notes FAB. */
-const DEFAULT_ANCHOR = { right: 16, bottom: 72 };
-
 export interface MapPanelSurfaceProps {
   panel: MapPanel;
   filters: InteractiveFilter[];
   onFilterChange?: (filter: InteractiveFilter) => void;
   refreshTick?: number;
-  /** Editor chrome for the map on screen — see `MapPanelBodyProps`. */
+  /** Editor chrome for the component on screen, see `MapPanelBodyProps`. */
   renderEditActions?: (componentId: string, ownerDashboardId: string) => React.ReactNode;
 }
 
 /**
- * The map panel as a draggable card floating over the dashboard.
+ * A floating panel (the map's, or the 3D structure's) as a draggable card over
+ * the dashboard.
  *
  * This is the positioning half only — everything the viewer actually interacts
  * with lives in `MapPanelBody`, which the docked shell (`MapPanelDock`) renders
@@ -60,7 +59,8 @@ const MapPanelSurface: React.FC<MapPanelSurfaceProps> = ({
   refreshTick,
   renderEditActions,
 }) => {
-  const { components, state, setPosition, setCardDims } = panel;
+  const { kind, components, state, setPosition, setCardDims } = panel;
+  const spec = PANEL_KINDS[kind];
   const { nodeRef, livePosition, dragging, handleProps } = useDraggable((pos: Position) =>
     setPosition(pos.x, pos.y),
   );
@@ -73,10 +73,14 @@ const MapPanelSurface: React.FC<MapPanelSurfaceProps> = ({
   // `useViewportSize` reports 0×0 until its mount effect runs; fall back to the
   // window so the first paint is already the right size.
   const viewport = useViewportSize();
-  const preset = cardSize(state.cardSize, {
-    width: viewport.width || window.innerWidth,
-    height: viewport.height || window.innerHeight,
-  });
+  const preset = cardSize(
+    state.cardSize,
+    {
+      width: viewport.width || window.innerWidth,
+      height: viewport.height || window.innerHeight,
+    },
+    spec,
+  );
   // A freely dragged size beats the preset; the in-flight drag value beats
   // both. The presets stay reachable because choosing one clears the stored
   // size (see `setCardSize`).
@@ -112,13 +116,13 @@ const MapPanelSurface: React.FC<MapPanelSurfaceProps> = ({
         height: size.height,
         ...(anchored
           ? { left: anchored.x, top: anchored.y }
-          : { right: DEFAULT_ANCHOR.right, bottom: DEFAULT_ANCHOR.bottom }),
+          : spec.anchor),
         // Deliberately no width/height transition. An animated resize leaves
         // the map lagging a box it no longer fills, and the map inside has to
         // be told to re-fit anyway (see the resize effect in MapPanelBody) —
         // which is only correct once the box has settled.
       }}
-      data-testid="map-panel-surface"
+      data-testid={`${spec.testId}-surface`}
       data-mode={state.mode}
     >
       <MapPanelBody
@@ -138,7 +142,7 @@ const MapPanelSurface: React.FC<MapPanelSurfaceProps> = ({
       <div
         {...resizeHandleProps}
         data-no-drag
-        aria-label="Resize map panel"
+        aria-label={`Resize ${spec.noun} panel`}
         style={{
           position: 'absolute',
           right: 0,

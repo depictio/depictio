@@ -687,6 +687,37 @@ class CardLiteComponent(BaseLiteComponent):
 _RANGE_DEFAULT_TYPES: tuple[str, ...] = ("RangeSlider", "DateRangePicker", "DatePicker")
 
 
+class BannerFact(BaseModel):
+    """One fact a scope banner shows for the value an ``always_selected`` filter holds.
+
+    Example YAML (under an interactive component's ``banner_facts``):
+        - {column: member_count, label: Members, format: integer, icon: tabler:users-group}
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    column: str = Field(
+        ..., min_length=1, description="Column of the filter's own data collection to read"
+    )
+    label: str = Field(..., min_length=1, description="Caption printed with the value")
+    format: str | None = Field(
+        default=None,
+        description="`percent`, `integer`, `si` or `decimals:N` (N from 0 to 6). Unset: "
+        "numbers as a card prints them, text as is.",
+    )
+    icon: str | None = Field(
+        default=None,
+        description="Iconify icon name drawn beside the figure (e.g. `tabler:ruler-measure`). "
+        "Unset: one for the kind of value (a number, a share, text).",
+    )
+
+    @field_validator("format")
+    @classmethod
+    def validate_format(cls, v: str | None) -> str | None:
+        validate_value_format(v)
+        return v
+
+
 class InteractiveLiteComponent(BaseLiteComponent):
     """Lite interactive component for user definition.
 
@@ -817,6 +848,14 @@ class InteractiveLiteComponent(BaseLiteComponent):
         description="With ``default_by``: ``desc`` starts on the largest value, ``asc`` on "
         "the smallest.",
     )
+    banner_facts: list[BannerFact] | None = Field(
+        default=None,
+        description="always_selected Select only: facts shown in the scope banner of a tab "
+        "whose filter is this one. Each is read from the first row of the filter's own "
+        "data collection whose filter column equals the picked value; ``format`` uses the "
+        "shared number vocabulary (percent, integer, si, decimals:N). Only valid with "
+        "``always_selected: true``.",
+    )
 
     # Styling (optional)
     title_size: str | None = Field(default=None, description="Title size")
@@ -834,6 +873,12 @@ class InteractiveLiteComponent(BaseLiteComponent):
         description="Whether a filter bar draws the icon badge before the label. "
         "Unset means shown.",
     )
+
+    @field_validator("banner_facts")
+    @classmethod
+    def drop_empty_banner_facts(cls, v: list[BannerFact] | None) -> list[BannerFact] | None:
+        """An empty list shows nothing, so it is the same as unset."""
+        return v or None
 
     @field_validator("column_type")
     @classmethod
@@ -886,6 +931,11 @@ class InteractiveLiteComponent(BaseLiteComponent):
             raise ValueError(
                 "default_by ranks the options an always_selected Select starts on: set "
                 "always_selected too, or drop default_by."
+            )
+        if self.banner_facts is not None and not self.always_selected:
+            raise ValueError(
+                "banner_facts are read for the value an always_selected filter holds: set "
+                "always_selected too, or drop banner_facts."
             )
         if self.always_selected:
             if kind != "Select":

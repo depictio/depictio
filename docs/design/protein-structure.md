@@ -945,6 +945,45 @@ crosshair lines through the strips at an incoming one. `ramachandran` publishes 
 residue and rings an incoming one with an overlay trace appended after the finished figure. Each
 of the five ignores an event whose `positionColumn` is not its own.
 
+### Zoom sync
+
+The residue panels that scroll sideways (`sequence_track`, `secondary_structure`, `msa`,
+`hmm_logo`, `domain_architecture` on its shared scale) zoom on their own by default. Synced
+tiles show the same residues: the tile the reader zooms or scrolls publishes the residue window
+it shows, and every other synced residue tile fits that window to its own width, so panes of
+different widths show the same residues rather than the same pixels. A synced `molecule_3d`
+frames those residues. The store (`highlight/zoomSync.ts`) shares the hover bus's scope
+(`HighlightProvider`) and its axis rule: same position column, same entity when both tiles know
+theirs; the domain architecture, which shows every protein, follows any window.
+
+- Per tile, off by default. The link icon in a tile's hover row (`Sync zoom with other tiles`)
+  adds it or takes it out, filled while it is in. A section's header carries the same icon once
+  two of its open tiles can sync: it adds them all, or takes them all out once they all are
+  (light while only some are). Members are remembered in the browser by tile index
+  (`depictio.zoom.sync`).
+- A tile that joins fits the window in force, which holds while any tile is in, even after
+  the tile that sent it has left. With none, the tile it was turned on from sends its own first;
+  a section's button leads from its first tile that can.
+- Tiles register while mounted, which is what shows their icon and lets a section count them.
+  A folded section mounts none, so it offers no button.
+- Windows are in residue coordinates. An alignment maps them through its reference row (a gap
+  column sits between its neighbours' residues); a logo through each state's reference residue,
+  with folded runs keeping their fixed width. A source that fits its whole axis asks followers
+  to fit theirs.
+- Only the reader's moves go out (a width from the wheel or the slider, a horizontal scroll).
+  What a tile writes to follow another never does, so two tiles cannot chase each other's
+  rounding. A scroll keeps the span in force and followers only scroll: measured instead, an
+  alignment's span changes as gap columns slide through the view, and every follower would
+  re-fit its width on a plain scroll.
+- The 3D model only follows (`molecule/zoomFollow.ts`): a camera shows no residue range to fit
+  a sequence to. It frames every residue the window touches, clamped to the model (the primary
+  chain of a complex), and the whole model for a fitted source. A scroll sends a window per
+  frame, so the camera moves at most every 250 ms, each move lasting as long.
+- Not synced: the chains of a complex in a track (each numbers its residues apart), an
+  alignment with a chain layout, a logo without reference residues, the per-protein scale:
+  those tiles show no icon. Outside a provider (record panels, catalog previews) the icon is
+  hidden too.
+
 ## 4. Where the structure comes from
 
 **`structure_source: file`** reads the manifest of the companion `indexed_file` collection

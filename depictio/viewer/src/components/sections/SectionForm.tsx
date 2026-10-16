@@ -43,7 +43,13 @@ import {
 } from '../settings/SettingsSections';
 import { SECTION_ACCENT, SECTION_COLOR_OPTIONS, iconOptionsWith } from './sectionIcons';
 import type { SectionKind } from './sectionMutations';
-import { BarPreview, LayoutChoice, SectionBarPreview, TilesPreview } from './SectionLayoutChoice';
+import {
+  BarPreview,
+  LayoutChoice,
+  LinkedPreview,
+  SectionBarPreview,
+  TilesPreview,
+} from './SectionLayoutChoice';
 
 /** `inherit` is "each card keeps its own style": the field left unset. A
  *  named sentinel rather than an empty string, which a Select cannot tell
@@ -65,7 +71,7 @@ const FIGURE_STYLE_OPTIONS: { value: FigureStyle | typeof INHERIT; label: string
   { value: 'minimal', label: 'Minimal (showcase)' },
 ];
 
-type Layout = 'tiles' | 'bar';
+type Layout = 'tiles' | 'linked' | 'bar';
 
 export interface SectionFormProps {
   /** null = a new section. */
@@ -152,9 +158,13 @@ const SectionForm: React.FC<SectionFormProps> = ({
   const [cardVariant, setCardVariant] = useState<CardVariant | null>(
     normalizeCardVariant(initial?.card_variant),
   );
-  // Grid sections only: tiles on the grid, or the section as one filter bar.
-  const [layout, setLayout] = useState<Layout>(initial?.display === 'strip' ? 'bar' : 'tiles');
+  // Grid sections only: tiles on the grid, the tiles as one linked view, or
+  // the section as one filter bar.
+  const [layout, setLayout] = useState<Layout>(
+    initial?.display === 'strip' ? 'bar' : initial?.display === 'linked' ? 'linked' : 'tiles',
+  );
   const isStrip = kind === 'grid' && layout === 'bar';
+  const isLinked = kind === 'grid' && layout === 'linked';
   // Grid sections of tiles only: a bar of the section's own filters.
   const [filterBar, setFilterBar] = useState(Boolean(initial?.filter_bar));
   const hasOwnBar = kind === 'grid' && !isStrip && filterBar;
@@ -207,15 +217,16 @@ const SectionForm: React.FC<SectionFormProps> = ({
             // nothing.
             pin: persistent ? pin : undefined,
             // Grid sections only; `box` is the default and goes unwritten. A
-            // filter bar has no heading to make plain.
-            appearance: kind === 'grid' && plain && !isStrip ? 'plain' : undefined,
+            // filter bar has no heading to make plain, and a linked view needs
+            // its frame (a plain one would draw as ordinary tiles).
+            appearance: kind === 'grid' && plain && !isStrip && !isLinked ? 'plain' : undefined,
             // Same rule as `pin`: only a persistent section shows on other tabs.
             exclude_tabs: persistent && excludeTabs.length ? excludeTabs : undefined,
             // Grid sections only, and unwritten when each card keeps its own.
             card_variant: kind === 'grid' && cardVariant && !isStrip ? cardVariant : undefined,
             // Unwritten for the default grid, so a section saved from this
             // form stays readable by a server that predates filter bars.
-            display: isStrip ? 'strip' : undefined,
+            display: isStrip ? 'strip' : isLinked ? 'linked' : undefined,
             // Same: unwritten unless on.
             filter_bar: hasOwnBar ? true : undefined,
             // Only for a section with a bar, and only when the author set it.
@@ -241,6 +252,7 @@ const SectionForm: React.FC<SectionFormProps> = ({
     excludeTabs,
     cardVariant,
     isStrip,
+    isLinked,
     hasOwnBar,
     visibleFilters,
     figureStyle,
@@ -389,7 +401,7 @@ const SectionForm: React.FC<SectionFormProps> = ({
             value="layout"
             icon="mdi:view-dashboard-outline"
             title="Layout"
-            subtitle="A grid of tiles, or one compact row of filters"
+            subtitle="Tiles on a grid, linked panes on one screen, or one row of filters"
             testId="section-form-layout"
           >
             <Stack gap="md">
@@ -405,6 +417,14 @@ const SectionForm: React.FC<SectionFormProps> = ({
                     description:
                       'Cards, figures, tables and text as tiles under the section’s heading.',
                     preview: <TilesPreview />,
+                  },
+                  {
+                    value: 'linked',
+                    title: 'Linked view',
+                    icon: 'mdi:view-split-vertical',
+                    description:
+                      'The tiles share one screen, side by side, so a pick in one is seen in the others.',
+                    preview: <LinkedPreview />,
                   },
                   {
                     value: 'bar',
@@ -431,13 +451,23 @@ const SectionForm: React.FC<SectionFormProps> = ({
                 </>
               ) : (
                 <>
-                  <SwitchField
-                    label="Plain heading"
-                    description="A light heading over the tiles: no frame, no fold, always open. For a section whose tiles are already cards, like a landing page’s key figures."
-                    checked={plain}
-                    onChange={setPlain}
-                  />
-                  {!plain && (
+                  {isLinked ? (
+                    <ScopeNote icon="mdi:view-split-vertical">
+                      The section’s tiles are held within one screen height, as panes with
+                      draggable gutters between them. Their positions on the grid decide the
+                      panes: in edit mode, <b>Arrange tiles</b> in the section’s header shows
+                      them as a plain grid to move and resize. On a narrow screen, or with{' '}
+                      <b>Show on every tab</b> on, they stack as ordinary tiles.
+                    </ScopeNote>
+                  ) : (
+                    <SwitchField
+                      label="Plain heading"
+                      description="A light heading over the tiles: no frame, no fold, always open. For a section whose tiles are already cards, like a landing page’s key figures."
+                      checked={plain}
+                      onChange={setPlain}
+                    />
+                  )}
+                  {(isLinked || !plain) && (
                     <SwitchField
                       label="Start collapsed"
                       description="Applies to first-time visitors. Anyone who has already opened this dashboard keeps the state they left it in."

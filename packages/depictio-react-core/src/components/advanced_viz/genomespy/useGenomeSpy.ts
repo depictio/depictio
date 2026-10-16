@@ -24,6 +24,7 @@ import type { RefObject } from 'react';
 import type { EmbedResult } from '@genome-spy/core/types/embedApi.js';
 import type { IntervalSelection } from '@genome-spy/core/types/selectionTypes.js';
 import type { RootSpec } from '@genome-spy/core/spec/root.js';
+import { attachZoomGate } from '../../zoomGateDom';
 import { BRUSH_PARAM, DATASET_NAME, GENOME_SCALE_NAME } from './genomeSpySpec';
 import type { Contig } from './genomeSpySpec';
 
@@ -122,6 +123,10 @@ export function useGenomeSpy(
     let cancelled = false;
     let live: EmbedResult | undefined;
     const unsubscribes: Array<() => void> = [];
+    // GenomeSpy zooms the genome axis on a plain wheel. The gate on its host
+    // keeps that wheel from the canvas: the page scrolls, Ctrl / Cmd + wheel
+    // and a two-finger pinch zoom.
+    const detachZoomGate = attachZoomGate(el);
 
     (async () => {
       const [{ embed }] = await Promise.all([
@@ -173,6 +178,7 @@ export function useGenomeSpy(
 
     return () => {
       cancelled = true;
+      detachZoomGate();
       for (const off of unsubscribes) off();
       if (live) finalizeGenomeSpy(live);
       setApi(null);

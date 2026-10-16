@@ -10,6 +10,7 @@
 import type { Layout } from 'react-grid-layout';
 
 import type { DashboardData, StoredMetadata } from '../api';
+import { isFloatingComponent } from './mapPanel/panelKinds';
 import { extractLayoutItems, stripBoxPrefix } from '../utils/leftPanelLayout';
 
 /**
@@ -17,8 +18,8 @@ import { extractLayoutItems, stripBoxPrefix } from '../utils/leftPanelLayout';
  * left out: a filter acts on its own tab's components, the value it holds is
  * that tab's state, a grouped control would arrive without the rest of its
  * group card, and a persistent filter section is already how a filter is
- * shared across tabs. A floating map is left out too: it lives in the
- * family-wide map panel, not in a tab's grid. A highlight copies as the
+ * shared across tabs. A floating map or 3D structure is left out too: it
+ * lives in a family-wide panel, not in a tab's grid. A highlight copies as the
  * reference it is: the copy shows the same figure.
  */
 const COPYABLE_TYPES = new Set([
@@ -33,9 +34,11 @@ const COPYABLE_TYPES = new Set([
   'advanced_viz',
 ]);
 
-export function canCopyToTab(m: Pick<StoredMetadata, 'component_type' | 'placement'>): boolean {
+export function canCopyToTab(
+  m: Pick<StoredMetadata, 'component_type' | 'placement'> & { viz_kind?: unknown },
+): boolean {
   if (!COPYABLE_TYPES.has(m.component_type)) return false;
-  return !(m.component_type === 'map' && m.placement === 'floating');
+  return !isFloatingComponent(m);
 }
 
 /** Size of the copy when the source has no layout entry to borrow it from. */

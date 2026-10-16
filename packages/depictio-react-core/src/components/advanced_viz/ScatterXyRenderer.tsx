@@ -107,21 +107,19 @@ const SCATTER_XY_VIZ_KIND: AdvancedVizKind = 'scatter_xy';
 const PLOT_STYLE = { width: '100%', height: '100%' };
 
 // Two configs: a component that cannot emit a selection has no use for the
-// box/lasso buttons. Scroll-zoom stays off in both, because capturing the wheel
-// breaks page scrolling whenever the pointer crosses the tile.
+// box/lasso buttons. Neither sets `scrollZoom`: the zoom gate (plotlyZoomGate)
+// lets a plain wheel scroll the page and zooms on Ctrl / Cmd + wheel.
 const PLOT_CONFIG_PLAIN = {
   displaylogo: false,
   responsive: true,
   displayModeBar: true,
   modeBarButtonsToRemove: ['select2d', 'lasso2d', 'autoScale2d'],
-  scrollZoom: false,
 };
 const PLOT_CONFIG_SELECT = {
   displaylogo: false,
   responsive: true,
   displayModeBar: true,
   modeBarButtonsToRemove: ['autoScale2d'],
-  scrollZoom: false,
 };
 
 // Only the scales that are actually present in the bundled plotly.js build.

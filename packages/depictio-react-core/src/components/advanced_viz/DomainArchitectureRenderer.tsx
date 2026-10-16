@@ -17,6 +17,7 @@ import {
 } from '../../api';
 import { stableColorMap } from '../../colors';
 import { usePublishHighlight, useHighlight } from '../../highlight/bus';
+import { useZoomSyncHandle } from '../../highlight/zoomSync';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import {
   advancedVizSelectionColumn,
@@ -440,6 +441,10 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
     const values = f && Array.isArray(f.value) ? f.value.map(String) : [];
     return { column: f ? filterColumn(f) : undefined, values };
   }, [filters, metadata.index]);
+
+  // Every protein at once, so no entity: it follows a window on any of them.
+  // Per-protein scales draw no one residue axis.
+  const zoomSync = useZoomSyncHandle(index, null, positionCol, scale === 'shared');
 
   const incoming = useHighlight(index, follow);
   const highlight = useMemo<EntitySpan | null>(() => {
@@ -871,6 +876,7 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Domain architecture'}
+      zoomSync={zoomSync !== null}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       primaryControls={primaryControls}
       controls={controls}
@@ -903,6 +909,7 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
                 scale={scale}
                 residueWidth={residueWidth}
                 onResidueWidthChange={setResidueWidth}
+                zoomSync={zoomSync}
                 partialCoverage={partialCoverage}
                 colourOf={colourOf}
                 evalueColumn={evalueCol}

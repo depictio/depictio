@@ -1,0 +1,39 @@
+/*
+ * The "how to zoom" hint (zoomGateDom.ts): one pill, centred over the figure
+ * the pointer rests on. It floats like the chrome's other surfaces, so Paper
+ * (glass) tokens come first and Mantine's variables stand in for Classic; both
+ * flip with the colour scheme, so no colour is written out here.
+ *
+ * It stays in the page at opacity 0 rather than `display: none` or
+ * `visibility: hidden`, which would take it out of the accessibility tree and
+ * silence its aria-live announcement.
+ */
+.depictio-zoom-hint {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  max-width: min(90vw, 20rem);
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--gl-float-line, var(--mantine-color-default-border));
+  border-radius: var(--mantine-radius-xl);
+  background: var(--gl-float-bg, var(--mantine-color-body));
+  color: var(--gl-fg, var(--mantine-color-text));
+  box-shadow: var(--gl-float-shadow, var(--mantine-shadow-md));
+  font-family: var(--mantine-font-family);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.depictio-zoom-hint[data-visible] {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .depictio-zoom-hint {
+    transition: none;
+  }
+}

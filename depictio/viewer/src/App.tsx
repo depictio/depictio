@@ -20,6 +20,8 @@ import {
   bulkComputeCards,
   hasLiveValues,
   AlwaysSelectedPickers,
+  ScopeBanner,
+  scopeUnits,
   AvailableFilterValuesProvider,
   DataVersionProvider,
   dataVersionBody,
@@ -43,6 +45,8 @@ import {
   MapPanelControl,
   MapPanelDock,
   MapPanelSurface,
+  partitionFloating,
+  isFloatingComponent,
   useCrossTabComponents,
   PersistentSectionsHost,
   readCrossTabFilters,
@@ -147,6 +151,7 @@ import { usePageTitle } from './branding';
 import { DashboardGuide, useGuideRoute } from './guide';
 import { LandingHint, useLandingHint } from './landing';
 import { DashboardSpotlight } from './spotlight';
+import { useLayoutOverride } from './layoutOverride';
 import type { SettingsSectionKey } from './chrome/SettingsDrawer';
 import VersionPreviewBanner from './versions/VersionPreviewBanner';
 import { dashboardHref } from './dashboards/lib/dashboardLinks';
@@ -811,14 +816,23 @@ const App: React.FC = () => {
     groupsApi.deactivateAllGroupFilters();
   }, [groupsApi.deactivateAllGroupFilters, dashboard?.stored_metadata]);
 
-  // The dashboard-wide map panel: the tab family's floating maps, its own
-  // hidden/floating/docked state, shared by the header control and the panel
+  // The dashboard-wide floating panels, one per kind of thing that can float:
+  // the family's floating maps, and its floating 3D structures. Each has its own
+  // hidden/floating/docked state, shared by its header control and the panel
   // itself.
+  const floatingByKind = useMemo(() => partitionFloating(crossTab.floating), [crossTab.floating]);
   const mapPanel = useMapPanel({
-    components: crossTab.floating,
+    components: floatingByKind.map,
     familyId: crossTab.familyId,
     // Instant filters, not the debounced copy: the badge and the selection
     // summary should not lag behind the click that set them.
+    filters,
+    onFilterChange: handleFilterChange,
+  });
+  const structurePanel = useMapPanel({
+    kind: 'structure',
+    components: floatingByKind.structure,
+    familyId: crossTab.familyId,
     filters,
     onFilterChange: handleFilterChange,
   });
@@ -1276,10 +1290,11 @@ const App: React.FC = () => {
         (m) =>
           m.component_type !== 'card' &&
           m.component_type !== 'interactive' &&
-          // Floating maps are rendered by FloatingPanelHost, not the grid.
-          // They also carry no layout entry (see dashboards.py), so leaving
-          // them here would make the grid auto-place them on top of a tile.
-          !(m.component_type === 'map' && m.placement === 'floating'),
+          // Floating maps and 3D structures are drawn by the floating panels,
+          // not the grid. They also carry no layout entry (see dashboards.py),
+          // so leaving them here would make the grid auto-place them on top of
+          // a tile.
+          !isFloatingComponent(m),
       ),
     [dashboard],
   );
@@ -1451,6 +1466,13 @@ const App: React.FC = () => {
     [guide, isNarrow, mobileOpened, toggleMobile, leftComponents, openFilterDrawer],
   );
 
+  // The tab's scope: its `always_selected` filters, shown in a banner under
+  // the header.
+  const scope = useMemo(() => scopeUnits(summaryMetadata, filterScopes), [summaryMetadata, filterScopes]);
+  // `?layout=classic`: view a linked view section as a plain section, to compare
+  // the arrangements on the same tab.
+  const layoutOverride = useLayoutOverride();
+
   // The page's regions, handed to the active chrome style's Shell (see
   // chrome/shell/types.ts), which decides where each one goes.
   const ready = Boolean(dashboard) && !loading && !error;
@@ -1524,7 +1546,12 @@ const App: React.FC = () => {
         filterSections={panelFilterSections}
         dashboardId={dashboardId}
         stateScopeId={panelScopeId}
-        headerActions={<MapPanelControl panel={mapPanel} />}
+        headerActions={
+          <>
+            <MapPanelControl panel={mapPanel} />
+            <MapPanelControl panel={structurePanel} />
+          </>
+        }
         refreshTick={refreshTick}
         collapsed={opts?.docked ? !filterPanelOpened : undefined}
         onToggleCollapsed={opts?.docked ? toggleFilterPanel : undefined}
@@ -1536,16 +1563,27 @@ const App: React.FC = () => {
         groupSummaryRows={groupSummaryRows}
         footer={
           opts?.docked ? (
-            <MapPanelDock
-              panel={mapPanel}
-              // Docked maps render data, so they must see active group
-              // filters too (instant copy: group toggles are single clicks,
-              // no debounce needed). Tab-wide only: a section bar's filters
-              // stay with its section.
-              filters={tabFilters}
-              onFilterChange={handleFilterChange}
-              refreshTick={refreshTick}
-            />
+            <>
+              <MapPanelDock
+                panel={mapPanel}
+                // Docked maps render data, so they must see active group
+                // filters too (instant copy: group toggles are single clicks,
+                // no debounce needed). Tab-wide only: a section bar's filters
+                // stay with its section.
+                filters={tabFilters}
+                onFilterChange={handleFilterChange}
+                refreshTick={refreshTick}
+                followedByDock={structurePanel.docked}
+              />
+              <MapPanelDock
+                panel={structurePanel}
+                // A structure fetches its residue table like any tile, so it
+                // follows the settled filters the grid does, the tab's only.
+                filters={tabDeferredFilters}
+                onFilterChange={handleFilterChange}
+                refreshTick={refreshTick}
+              />
+            </>
           ) : undefined
         }
       />
@@ -1562,6 +1600,7 @@ const App: React.FC = () => {
           currentDataOnly={currentDataOnlyCount}
         />
       )}
+      {ready && <ScopeBanner units={scope} filters={filters} onFilterChange={handleFilterChange} />}
       {ingestionHealth &&
         ingestionProjectId &&
         !ingestionBannerDismissed &&
@@ -1731,6 +1770,7 @@ const App: React.FC = () => {
             <DashboardGrid
               dashboardId={dashboardId!}
               metadataList={rightComponents}
+              layoutOverride={layoutOverride}
               layoutData={dashboard.right_panel_layout_data}
               gridSections={dashboard.grid_sections}
               beforeSections={topSectionsHost}
@@ -1829,6 +1869,15 @@ const App: React.FC = () => {
             // Floating maps render data: give them group filters too (see the
             // docked MapPanelDock above), and the tab's only.
             filters={tabFilters}
+            onFilterChange={handleFilterChange}
+            refreshTick={refreshTick}
+          />
+        )}
+        {dashboard && dashboardId && (
+          <MapPanelSurface
+            panel={structurePanel}
+            // The same settled, tab-wide filters the docked structure reads.
+            filters={tabDeferredFilters}
             onFilterChange={handleFilterChange}
             refreshTick={refreshTick}
           />

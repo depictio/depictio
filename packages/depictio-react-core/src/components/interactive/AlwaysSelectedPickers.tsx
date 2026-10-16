@@ -13,10 +13,10 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 
 import type { InteractiveFilter, StoredMetadata } from '../../api';
-import { useAvailableSet } from '../../availableValues';
-import { autoPickValue, isAlwaysSelected, ownFilterValues, rankPickOptions } from './alwaysSelected';
-import { filterEvent, orderCategoricalOptions } from './categoricalOptions';
-import { useRankedValues, useUniqueValues } from './useInteractiveData';
+import { autoPickValue, ownFilterValues } from './alwaysSelected';
+import { filterEvent } from './categoricalOptions';
+import { alwaysSelectedComponents } from './scope';
+import { useScopeOptions } from './useScopeOptions';
 
 const AlwaysSelectedPicker: React.FC<{
   metadata: StoredMetadata;
@@ -25,33 +25,10 @@ const AlwaysSelectedPicker: React.FC<{
 }> = ({ metadata, filters, onFilterChange }) => {
   // The same option list, in the same order, as the panel's Select
   // (`MultiSelectRenderer`): "the first option" is the one a reader sees first.
-  const { data: options, loading } = useUniqueValues(
-    metadata.dc_id,
-    metadata.column_name,
-    metadata.filter_expr,
-  );
-  const availableSet = useAvailableSet(metadata.dc_id, metadata.column_name, metadata.index);
-  // `default_by`: the pick walks the options best-ranked first.
-  const { data: ranking, loading: rankLoading } = useRankedValues(
-    metadata.dc_id,
-    metadata.column_name,
-    metadata.default_by,
-    metadata.default_order,
-  );
-  const ordered = useMemo(
-    () =>
-      rankPickOptions(
-        orderCategoricalOptions(options, availableSet).map((value) => ({
-          value,
-          disabled: availableSet ? !availableSet.has(value) : false,
-        })),
-        ranking,
-      ),
-    [options, availableSet, ranking],
-  );
+  const { options: ordered, loading } = useScopeOptions(metadata);
   const pick = autoPickValue({
     enabled: true,
-    loading: loading || rankLoading,
+    loading,
     selected: ownFilterValues(filters, metadata.index),
     options: ordered,
   });
@@ -75,16 +52,7 @@ export const AlwaysSelectedPickers: React.FC<{
   filters: InteractiveFilter[];
   onFilterChange: (filter: InteractiveFilter) => void;
 }> = ({ components, filters, onFilterChange }) => {
-  const pickers = useMemo(() => {
-    const seen = new Set<string>();
-    return components.filter((m) => {
-      if (m.component_type !== 'interactive' || !isAlwaysSelected(m) || seen.has(m.index)) {
-        return false;
-      }
-      seen.add(m.index);
-      return true;
-    });
-  }, [components]);
+  const pickers = useMemo(() => alwaysSelectedComponents(components), [components]);
   if (pickers.length === 0) return null;
   return (
     <>

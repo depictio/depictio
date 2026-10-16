@@ -449,6 +449,15 @@ export interface TextValueSpec {
   wf_id?: string | null;
 }
 
+/** One fact of a scope banner (see `StoredMetadata.banner_facts`). */
+export interface BannerFact {
+  column: string;
+  label: string;
+  format?: string | null;
+  /** Iconify name; unset picks one for the kind of value (`bannerFactIcon`). */
+  icon?: string | null;
+}
+
 export interface StoredMetadata {
   index: string;
   component_type: string;
@@ -522,6 +531,10 @@ export interface StoredMetadata {
    *  (`default_order` "asc": the smallest) rather than the first of the list. */
   default_by?: string;
   default_order?: 'asc' | 'desc';
+  /** `always_selected` only: facts the tab's scope banner shows about the
+   *  picked value, each read from the first row of the filter's own collection
+   *  that holds it. `format` is the cards' number vocabulary. */
+  banner_facts?: BannerFact[];
   /** Visual grouping — interactive components sharing the same `group` are
    *  rendered together inside one collapsible Mantine Paper. See
    *  MAX_INTERACTIVE_GROUP_SIZE in depictio/models/components/constants.py. */
@@ -532,14 +545,16 @@ export interface StoredMetadata {
   section?: string;
   /** Layout placement. The allowed values depend on the component type:
    *  interactive components use 'left' (default — Filters sidebar) or 'top'
-   *  (top panel above the grid, currently 'Timeline' only); maps use 'grid'
-   *  (default — a normal tile) or 'floating' (the floating panel, reachable
-   *  from every tab). Anything lifted out of the grid gets no layout entry. */
+   *  (top panel above the grid, currently 'Timeline' only); maps and
+   *  `molecule_3d` advanced viz tiles use 'grid' (default: a normal tile) or
+   *  'floating' (a floating panel, reachable from every tab: the map panel and
+   *  the 3D structure panel). Anything lifted out of the grid gets no layout
+   *  entry. */
   placement?: 'left' | 'top' | 'grid' | 'floating';
   /** How the panel presents itself on a viewer's first visit — a card in one of
    *  its two sizes, docked below the filter panel, or hidden behind the header
-   *  control. Their own saved preference wins thereafter. Maps with
-   *  `placement: 'floating'` only. */
+   *  control. Their own saved preference wins thereafter. Floating maps and
+   *  floating `molecule_3d` tiles only. */
   floating_initial_state?: 'compact' | 'expanded' | 'docked' | 'hidden';
   /** Default timescale for the Timeline interactive component. */
   timescale?: 'year' | 'month' | 'day' | 'hour' | 'minute';
@@ -620,8 +635,10 @@ export interface FilterSectionSpec {
   card_variant?: 'default' | 'headline' | 'compact' | 'minimal' | 'accent' | 'split' | null;
   /** Grid sections: `strip` draws the section as a filter bar — the
    *  interactive components naming it leave the filter panel and render as one
-   *  compact row. Unset (or `grid`) is one tile each on the grid. */
-  display?: 'grid' | 'strip' | null;
+   *  compact row. Unset (or `grid`) is one tile each on the grid.
+   *  `linked` holds the section's tiles in one screen height, so linked
+   *  views stay side by side; it falls back to a normal section below `md`. */
+  display?: 'grid' | 'strip' | 'linked' | null;
   /** Grid sections of tiles: a filter bar of the section's own, under its
    *  heading. The interactive components naming the section render there, and
    *  their values narrow only this section's tiles (see `filterScope.ts`).
@@ -920,6 +937,25 @@ export async function fetchRankedValues(
   if (!res.ok) throw new Error(`Failed to rank values: ${res.status}`);
   const body = (await res.json()) as { values?: string[] };
   return body.values || [];
+}
+
+/** A few columns of the first row whose ``column`` equals ``value`` (the facts
+ *  of an ``always_selected`` Select's scope banner). ``null`` when no row
+ *  holds the value. */
+export async function fetchRowValues(
+  dcId: string,
+  column: string,
+  value: string,
+  columns: readonly string[],
+  filterExpr?: string | null,
+): Promise<Record<string, unknown> | null> {
+  const params = new URLSearchParams({ column, value });
+  for (const c of columns) params.append('columns', c);
+  if (filterExpr) params.set('filter_expr', filterExpr);
+  const res = await authFetch(`${API_BASE}/deltatables/row_values/${dcId}?${params.toString()}`);
+  if (!res.ok) throw new Error(`Failed to fetch row values: ${res.status}`);
+  const body = (await res.json()) as { row?: Record<string, unknown> | null };
+  return body.row ?? null;
 }
 
 /** The ``__breakdown__`` payload for a card's categorical strip, computed

@@ -6,15 +6,18 @@ upsert, fetch, batch existence checks, and shape queries.
 """
 
 import asyncio
+import hashlib
+import json
 import math
-from datetime import datetime, timezone
-from typing import Literal
+from datetime import date, datetime, time, timedelta, timezone
+from decimal import Decimal
+from typing import Any, Literal
 
 import boto3
 import polars as pl
 from botocore.exceptions import ClientError
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from depictio.api.v1.celery_dispatch import offload_or_run
 from depictio.api.v1.celery_tasks import preview_deltatable as preview_deltatable_task
@@ -1187,6 +1190,166 @@ async def get_ranked_values(
     except Exception as exc:
         logger.debug(f"ranked_values: cache write failed for {cache_key}: {exc}")
     return {"column": column, "by": by, "values": values}
+
+
+# Most columns one row_values call may read: a banner shows a handful of facts, and a
+# wider request is a sign the caller wants the table endpoint instead.
+MAX_ROW_VALUE_COLUMNS = 12
+
+
+def _json_safe(value: Any) -> Any:
+    """A cell as JSON can carry it: dates as ISO strings, non-finite floats as None."""
+    if isinstance(value, Decimal):
+        value = float(value)
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, datetime | date | time):
+        return value.isoformat()
+    if isinstance(value, timedelta):
+        return str(value)
+    if isinstance(value, list | tuple):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if value is None or isinstance(value, bool | int | str):
+        return value
+    return str(value)
+
+
+def row_values(
+    lazy: pl.LazyFrame, column: str, value: str, columns: list[str]
+) -> dict[str, Any] | None:
+    """The ``columns`` of the first row whose ``column`` equals ``value``, or None.
+
+    Backs the facts a scope banner shows for the value an ``always_selected``
+    filter holds. ``value`` arrives as text, so a string-like column is compared
+    as is and any other (a numeric id, say) through its string form. The result is
+    JSON-safe (see ``_json_safe``); ``columns`` are deduplicated, first occurrence
+    first.
+    """
+    wanted = list(dict.fromkeys(columns))
+    dtype = lazy.collect_schema()[column]
+    key = (
+        pl.col(column)
+        if dtype in (pl.String, pl.Categorical, pl.Enum)
+        else pl.col(column).cast(pl.Utf8)
+    )
+    row = lazy.filter(key == value).select(wanted).head(1).collect()
+    if row.height == 0:
+        return None
+    return {name: _json_safe(cell) for name, cell in row.row(0, named=True).items()}
+
+
+@deltatables_endpoint_router.get("/row_values/{data_collection_id}")
+async def get_row_values(
+    data_collection_id: PyObjectId,
+    column: str,
+    value: str,
+    columns: list[str] = Query(...),
+    filter_expr: str | None = None,
+    current_user: str = Depends(get_user_or_anonymous),
+):
+    """Return ``columns`` of the first row where ``column`` equals ``value``.
+
+    Backs the facts of a scope banner (``banner_facts`` on an ``always_selected``
+    filter): the banner names the picked value and reads a few of its attributes
+    from the filter's own data collection (see ``row_values``).
+
+    Args:
+        data_collection_id: Target data collection.
+        column: Column compared with ``value``.
+        value: The picked value, as text.
+        columns: Columns to return (at most ``MAX_ROW_VALUE_COLUMNS``).
+        filter_expr: Optional Polars filter expression (string) applied before the
+            lookup, validated through ``depictio.models.components.filter_expr``.
+        current_user: Authenticated or anonymous user (permission-checked).
+
+    Returns:
+        ``{"row": dict | None}``: None when no row matches.
+
+    Raises:
+        HTTPException: 400 on too many columns or an invalid ``filter_expr``, 404 if
+        the data collection or a column is missing, 403 without viewer access.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
+
+    wanted = list(dict.fromkeys(columns))
+    if len(wanted) > MAX_ROW_VALUE_COLUMNS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"At most {MAX_ROW_VALUE_COLUMNS} columns per request, got {len(wanted)}.",
+        )
+    project = projects_collection.find_one(
+        {"workflows.data_collections._id": ObjectId(data_collection_id)},
+        {"_id": 1},
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Data collection not found.")
+    if not check_project_permission(project["_id"], current_user, "viewer"):  # type: ignore[arg-type]
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this data collection.",
+        )
+    deltatables_list = list(deltatables_collection.find({"data_collection_id": data_collection_id}))
+    location = deltatables_list[-1].get("delta_table_location") if deltatables_list else None
+    if not location:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No DeltaTable found for Data Collection ID {data_collection_id}.",
+        )
+
+    from depictio.api.v1.deltatables_utils import _get_aggregation_version
+
+    dc_id_str = str(data_collection_id)
+    params = json.dumps([column, value, wanted, filter_expr], separators=(",", ":"))
+    cache_key = (
+        f"row_values_{dc_id_str}_{hashlib.sha256(params.encode()).hexdigest()}_"
+        f"{_get_aggregation_version(dc_id_str)}"
+    )
+    try:
+        from depictio.api.cache import get_cache
+
+        cached = get_cache().get(cache_key)
+        if cached is not None:
+            return {"row": cached}
+    except Exception as exc:  # the cache is an optimisation, never a dependency
+        logger.debug(f"row_values: cache read failed for {cache_key}: {exc}")
+
+    try:
+        lazy = pl.scan_delta(location, storage_options=polars_s3_config)
+        names = lazy.collect_schema().names()
+        for name in (column, *wanted):
+            if name not in names:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Column '{name}' not found in data collection {data_collection_id}.",
+                )
+        if filter_expr:
+            from depictio.models.components.filter_expr import (
+                build_filter_expr,
+                validate_filter_expr,
+            )
+
+            try:
+                validate_filter_expr(filter_expr)
+                expr = build_filter_expr(filter_expr)
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"Invalid filter_expr: {exc}")
+            lazy = lazy.filter(expr)
+        row = row_values(lazy, column, value, wanted)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error reading the row of {column}={value!r}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to read row values: {e}")
+    if row is not None:
+        try:
+            from depictio.api.cache import get_cache
+
+            get_cache().set(cache_key, row)
+        except Exception as exc:
+            logger.debug(f"row_values: cache write failed for {cache_key}: {exc}")
+    return {"row": row}
 
 
 def _resolve_delta_location(data_collection_id: PyObjectId, current_user: User) -> str:

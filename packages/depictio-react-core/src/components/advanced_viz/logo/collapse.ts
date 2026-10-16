@@ -247,6 +247,38 @@ export function indexAtX(layout: ColumnLayout, x: number): ColumnHit | null {
 }
 
 /**
+ * Left edge of the continuous column coordinate `u` (column `i` spans
+ * `[i, i + 1)`): inside a stub the columns it folds share its width evenly,
+ * and past either end of the window one column is `cw` wide. Unlike
+ * `xOfIndex` it never returns null and is affine in the layout's `cw`, which
+ * is what zoom sync solves a width from.
+ */
+export function xOfColumn(layout: ColumnLayout, u: number): number {
+  const segs = layout.segments;
+  if (!segs.length) return u * layout.cw;
+  if (u <= layout.first) return (u - layout.first) * layout.cw;
+  if (u >= layout.last + 1) return layout.width + (u - layout.last - 1) * layout.cw;
+  const s = segmentOfIndex(layout, Math.floor(u));
+  if (!s) return 0;
+  if (s.kind === 'states') return s.x + (u - s.start) * layout.cw;
+  return s.x + ((u - s.start) / (s.end - s.start + 1)) * s.w;
+}
+
+/** The inverse of `xOfColumn`: the continuous column coordinate at `x`. */
+export function columnAtX(layout: ColumnLayout, x: number): number {
+  const segs = layout.segments;
+  const cw = layout.cw > 0 ? layout.cw : 1;
+  if (!segs.length) return x / cw;
+  if (x <= 0) return layout.first + x / cw;
+  if (x >= layout.width) return layout.last + 1 + (x - layout.width) / cw;
+  const hit = indexAtX(layout, x);
+  if (!hit) return layout.first;
+  const s = hit.segment;
+  if (s.kind === 'states') return s.start + (x - s.x) / cw;
+  return s.start + ((x - s.x) / s.w) * (s.end - s.start + 1);
+}
+
+/**
  * Columns a brush from `xA` to `xB` (any order, pixels from the first drawn
  * column; outside the grid clamps to its ends) covers: both ends are widened to
  * whole stubs, so the hidden columns under a stub are brushed too.

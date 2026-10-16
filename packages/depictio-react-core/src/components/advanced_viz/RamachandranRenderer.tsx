@@ -93,7 +93,6 @@ const PLOT_CONFIG_SELECT = {
   responsive: true,
   displayModeBar: true,
   modeBarButtonsToRemove: ['autoScale2d'],
-  scrollZoom: false,
 };
 const PLOT_CONFIG_PLAIN = {
   ...PLOT_CONFIG_SELECT,

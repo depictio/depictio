@@ -3,10 +3,15 @@ import { ActionIcon, Badge, Box, Center, Group, Loader, Tabs, Text, Tooltip } fr
 import { Icon } from '@iconify/react';
 
 import type { InteractiveFilter } from '../../api';
-import { isMapSelectionEnabled, mapSelectionValues } from '../../selection';
+import { isMapSelectionEnabled } from '../../selection';
+import ComponentRenderer from '../ComponentRenderer';
+import { DensityContext } from '../density';
 import MapDataButton from '../map/MapDataButton';
+import { PANEL_KINDS } from './panelKinds';
+import { clearSelectionFilters, selectionCount } from './panelSelection';
 import type { DragHandleProps } from './useDraggable';
 import type { MapPanel } from './useMapPanel';
+import './mapPanel.css';
 
 // Both shells are imported eagerly by the viewer and the editor — they have to
 // be, since each decides for itself whether to render — so a static import here
@@ -66,14 +71,21 @@ export interface MapPanelBodyProps {
 }
 
 /**
- * Everything inside the map panel that is not positioning.
+ * Everything inside a floating panel that is not positioning.
  *
- * The panel has two shells — a draggable card over the dashboard
+ * The panel has two shells, a draggable card over the dashboard
  * (`MapPanelSurface`) and a column pinned under the filter panel
- * (`MapPanelDock`) — and they show exactly the same thing: a header, a tab
- * strip when the dashboard has more than one floating map, the map, and a
- * selection footer. Keeping that here is what stops the two shells drifting
- * apart.
+ * (`MapPanelDock`), and they show exactly the same thing: a header, a tab
+ * strip when the dashboard has more than one floating component of the kind,
+ * the component, and (for a map) a selection footer. Keeping that here is what
+ * stops the two shells drifting apart, and it is also where the two kinds of
+ * panel part ways:
+ *
+ * - `map`: `MapRenderer` in its bare presentation, with the data and legend
+ *   buttons in the header.
+ * - `structure`: the same tile the grid would draw (`ComponentRenderer`, so
+ *   the same chrome, controls and hover linking), in compact density so its
+ *   frame keeps to a one-line header. The card around it is the only border.
  */
 const MapPanelBody: React.FC<MapPanelBodyProps> = ({
   panel,
@@ -86,6 +98,7 @@ const MapPanelBody: React.FC<MapPanelBodyProps> = ({
   renderEditActions,
 }) => {
   const {
+    kind,
     components,
     state,
     setMode,
@@ -95,6 +108,8 @@ const MapPanelBody: React.FC<MapPanelBodyProps> = ({
     activeIndex,
     setActiveIndex,
   } = panel;
+  const spec = PANEL_KINDS[kind];
+  const isMap = kind === 'map';
   const docked = variant === 'docked';
   // Folded down to the title bar. Docked only: the floating card can be put
   // away with Hide, and a title bar floating over the dashboard on its own
@@ -107,22 +122,29 @@ const MapPanelBody: React.FC<MapPanelBodyProps> = ({
   // is worse than no button on a header this narrow.
   const [legendPresent, setLegendPresent] = useState(false);
 
+  // The free-drag sizes are dependencies too. A drag nudges the page while it
+  // runs, but a size restored from storage, or committed on release, has had no
+  // nudge of its own, and a 3Dmol canvas keeps the box it measured last until it
+  // hears one.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const timers = PANEL_SETTLE_STEPS_MS.map((delay) =>
       window.setTimeout(() => window.dispatchEvent(new Event('resize')), delay),
     );
     return () => timers.forEach((t) => window.clearTimeout(t));
-  }, [state.mode, state.cardSize, collapsed]);
+  }, [state.mode, state.cardSize, state.cardWidth, state.cardHeight, state.dockHeight, collapsed]);
 
   const active = components.find((c) => c.metadata.index === activeIndex) ?? components[0];
   if (!active) return null;
 
-  const selected = mapSelectionValues(filters, active.metadata.index);
-  const selectionEnabled = isMapSelectionEnabled(active.metadata, Boolean(onFilterChange));
+  const selectedCount = selectionCount(kind, filters, active.metadata.index);
+  const selectionEnabled = isMap && isMapSelectionEnabled(active.metadata, Boolean(onFilterChange));
 
-  const clearSelection = () =>
-    onFilterChange?.({ index: active.metadata.index, value: [], source: 'map_selection' });
+  const clearSelection = () => {
+    for (const cleared of clearSelectionFilters(kind, filters, active.metadata.index)) {
+      onFilterChange?.(cleared);
+    }
+  };
 
   return (
     <>
@@ -148,23 +170,28 @@ const MapPanelBody: React.FC<MapPanelBodyProps> = ({
             unmistakably a map sitting under the filters, and its header is the
             narrowest thing on the page — every pixel goes to the title. Folded
             down, though, the row has to carry that on its own. */}
-        {(!docked || collapsed) && <Icon icon="mdi:map-marker-multiple" width={GLYPH} />}
+        {(!docked || collapsed) && <Icon icon={spec.icon} width={GLYPH} />}
+        {/* A map has no title of its own once it is drawn bare, so the header
+            carries the component's. A structure keeps its tile's frame, which
+            already prints the component's title and what is on screen; saying
+            it twice would cost the viewer a line of height, so the header names
+            the panel instead. */}
         <Text size="sm" fw={600} truncate style={{ flex: 1, minWidth: 0 }}>
-          {(active.metadata.title as string) || 'Map'}
+          {isMap ? (active.metadata.title as string) || spec.label : spec.label}
         </Text>
-        {selected.length > 0 && (
+        {selectedCount > 0 && (
           <Group gap={4} wrap="nowrap" data-no-drag>
             <Badge size="sm" variant="light" color="orange">
-              {selected.length} selected
+              {isMap ? `${selectedCount} selected` : 'Residues picked'}
             </Badge>
             {/* Sits with the count rather than in a footer: the count is what
                 tells you a filter is live, so the way out belongs beside it. */}
-            <Tooltip label="Clear map selection" withinPortal>
+            <Tooltip label={isMap ? 'Clear map selection' : 'Clear residue pick'} withinPortal>
               <ActionIcon
                 variant="filled"
                 color="orange"
                 size="xs"
-                aria-label="Clear map selection"
+                aria-label={isMap ? 'Clear map selection' : 'Clear residue pick'}
                 onClick={clearSelection}
               >
                 <Icon icon="bx:reset" width={12} />
@@ -180,8 +207,10 @@ const MapPanelBody: React.FC<MapPanelBodyProps> = ({
               those actions. */}
           {!collapsed && renderEditActions?.(active.metadata.index, active.dashboard_id)}
           {/* Folded down, the row keeps only what still acts on something: the
-              map's own controls would be operating on a map nobody can see. */}
-          {!collapsed && (
+              map's own controls would be operating on a map nobody can see.
+              A structure has no such buttons here: its settings and its data
+              live in the tile's own chrome. */}
+          {isMap && !collapsed && (
             /* The owning tab's id, not the one on screen — a floating map is
                authored on one tab and shown on all of them. */
             <MapDataButton
@@ -191,7 +220,7 @@ const MapPanelBody: React.FC<MapPanelBodyProps> = ({
               onFilterChange={onFilterChange}
             />
           )}
-          {legendPresent && !collapsed && (
+          {isMap && legendPresent && !collapsed && (
             <Tooltip label={state.legendHidden ? 'Show legend' : 'Hide legend'} withinPortal>
               <ActionIcon
                 variant={state.legendHidden ? 'subtle' : 'light'}
@@ -215,7 +244,9 @@ const MapPanelBody: React.FC<MapPanelBodyProps> = ({
                 color="indigo"
                 size={ACTION_SIZE}
                 aria-label={
-                  state.cardSize === 'expanded' ? 'Compact map panel' : 'Expand map panel'
+                  state.cardSize === 'expanded'
+                    ? `Compact ${spec.noun} panel`
+                    : `Expand ${spec.noun} panel`
                 }
                 onClick={() =>
                   setCardSize(state.cardSize === 'expanded' ? 'compact' : 'expanded')
@@ -241,12 +272,15 @@ const MapPanelBody: React.FC<MapPanelBodyProps> = ({
               give its room back to the filter list. Chevron direction is
               literal — unfolding moves the dock's top edge up. */}
           {docked && (
-            <Tooltip label={collapsed ? 'Show the map' : 'Collapse to the title'} withinPortal>
+            <Tooltip
+              label={collapsed ? `Show ${spec.thing}` : 'Collapse to the title'}
+              withinPortal
+            >
               <ActionIcon
                 variant="light"
                 color="gray"
                 size={ACTION_SIZE}
-                aria-label={collapsed ? 'Show the map' : 'Collapse the map panel'}
+                aria-label={collapsed ? `Show ${spec.thing}` : `Collapse the ${spec.noun} panel`}
                 aria-expanded={!collapsed}
                 onClick={() => setDockCollapsed(!collapsed)}
               >
@@ -263,7 +297,9 @@ const MapPanelBody: React.FC<MapPanelBodyProps> = ({
               variant="light"
               color="gray"
               size={ACTION_SIZE}
-              aria-label={docked ? 'Float map panel' : 'Dock map panel in the filter panel'}
+              aria-label={
+                docked ? `Float ${spec.noun} panel` : `Dock ${spec.noun} panel in the filter panel`
+              }
               onClick={() => setMode(docked ? 'floating' : 'docked')}
             >
               {/* Tabler here too: `mdi:dock-bottom` is a solid block, and it
@@ -282,7 +318,7 @@ const MapPanelBody: React.FC<MapPanelBodyProps> = ({
               variant="light"
               color="gray"
               size={ACTION_SIZE}
-              aria-label="Hide map panel"
+              aria-label={`Hide ${spec.noun} panel`}
               onClick={() => setMode('hidden')}
             >
               <Icon icon="mdi:close" width={GLYPH} height={GLYPH} />
@@ -302,7 +338,7 @@ const MapPanelBody: React.FC<MapPanelBodyProps> = ({
             {components.map((c) => (
               <Tabs.Tab key={c.metadata.index} value={c.metadata.index}>
                 <Text size="xs" truncate maw={120}>
-                  {(c.metadata.title as string) || c.tab_title || 'Map'}
+                  {(c.metadata.title as string) || c.tab_title || spec.label}
                 </Text>
               </Tabs.Tab>
             ))}
@@ -314,7 +350,7 @@ const MapPanelBody: React.FC<MapPanelBodyProps> = ({
           zero-height box is not cheaper than a fresh one, and a dock that was
           left folded should cost the page nothing at all on load. The selection
           it made survives regardless — it lives in the dashboard's filters. */}
-      {!collapsed && (
+      {!collapsed && isMap && (
         <Box style={{ flex: 1, minHeight: 0, display: 'flex' }}>
           <Suspense
             fallback={
@@ -339,10 +375,33 @@ const MapPanelBody: React.FC<MapPanelBodyProps> = ({
         </Box>
       )}
 
+      {/* The structure is the grid's own tile, drawn by the same path. Compact
+          density gives its frame a one-line header; the box around it is a
+          definite, positioned parent, because the molecule's split layouts
+          position themselves absolutely against the nearest one. */}
+      {!collapsed && !isMap && (
+        <Box style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+          <div className="depictio-panel-embed">
+            <DensityContext.Provider value="compact">
+              {/* Keyed by index so switching structures remounts the viewer
+                  rather than feeding it another component's metadata. */}
+              <ComponentRenderer
+                key={active.metadata.index}
+                dashboardId={active.dashboard_id}
+                metadata={active.metadata}
+                filters={filters}
+                onFilterChange={onFilterChange}
+                refreshTick={refreshTick}
+              />
+            </DensityContext.Provider>
+          </div>
+        </Box>
+      )}
+
       {/* Discoverability only. Once something *is* selected the header carries
           both the count and the way to clear it, so restating that down here
           would just cost the map a strip of height. */}
-      {selectionEnabled && selected.length === 0 && !collapsed && (
+      {selectionEnabled && selectedCount === 0 && !collapsed && (
         <Box
           px="xs"
           py={4}

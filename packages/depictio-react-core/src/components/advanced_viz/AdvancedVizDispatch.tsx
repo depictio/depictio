@@ -52,7 +52,11 @@ import {
   AdvancedVizDockToggle,
   AdvancedVizExtrasProvider,
   AdvancedVizSettingsPopover,
+  AdvancedVizZoomSyncToggle,
 } from './AdvancedVizExtras';
+import { vizKindLabel } from './vizKindTag';
+import { AdvancedVizKindContext } from './VizKindBadge';
+import { useDensity } from '../density';
 import { ControlsDockContext, isControlsPlacement } from './controlsDock';
 import type { ControlsDockState } from './controlsDock';
 import type { AdvancedVizExtrasPayload } from './AdvancedVizExtras';
@@ -95,7 +99,6 @@ import {
   tabLinkName,
 } from './advancedVizShowcase';
 
-/** The hover line behind each way an advanced viz ends up "not grouped". */
 /** The viewer's fold of a tile's docked controls, kept per component in this
  *  browser. Storage can be missing or refuse (a private window): then the
  *  fold lasts as long as the page. */
@@ -116,6 +119,7 @@ function writeFolded(index: string, folded: boolean): void {
   }
 }
 
+/** The hover line behind each way an advanced viz ends up "not grouped". */
 const NOT_GROUPED_REASONS: Record<AdvancedVizGroupBadge, () => string[]> = {
   kind: groupKindNotSplitReasons,
   unreachable: groupUnreachableReasons,
@@ -292,6 +296,17 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   groupRender,
 }) => {
   const [published, setPublished] = React.useState<AdvancedVizExtrasPayload | null>(null);
+  // Where a `popover` tile docks its controls (`controls_placement` on the
+  // component, see controlsDock.ts); null when the author left it unsaid.
+  // A linked view cell has little room: unless the author placed them, its
+  // controls stay behind the settings icon of the hover row, whose popover
+  // heads them with the usual placement picker (popover, rail, under the
+  // title). Everywhere else an unsaid placement docks where it fits.
+  const compact = useDensity() === 'compact';
+  const ownDock = isControlsPlacement(metadata.controls_placement)
+    ? metadata.controls_placement
+    : null;
+  const dockPlacement = ownDock ?? (compact ? 'popover' : null);
   const [folded, setFolded] = React.useState(() => readFolded(String(metadata.index ?? '')));
   const toggleFolded = React.useCallback(() => {
     setFolded((f) => {
@@ -347,6 +362,9 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   const popovers = React.useMemo<React.ReactNode>(() => {
     if (!published) return null;
     const nodes: React.ReactNode[] = [];
+    if (published.zoomSync) {
+      nodes.push(<AdvancedVizZoomSyncToggle key="zoom-sync" index={String(metadata.index)} />);
+    }
     // `rail` draws both tiers in the tile, so there is nothing left to open;
     // `header` draws the encoding tier and leaves the cosmetic one here.
     const popoverControls =
@@ -393,9 +411,10 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     // controls live is picked in the header of the controls block itself
     // (popover, strip or rail), not from a separate chrome icon.
     return nodes.length ? <>{nodes}</> : null;
-  }, [published, placement, placementState, folded, toggleFolded]);
+  }, [published, placement, placementState, folded, toggleFolded, metadata.index]);
 
   const vizKind = (metadata.viz_kind as string) || '';
+  const kindLabel = vizKindLabel(vizKind);
   const Renderer = RENDERERS[vizKind];
   // "Split" is one component per group, each built from that group's rows;
   // see SplitPanels for why it is not a cut through the finished figure.
@@ -414,12 +433,8 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   React.useEffect(() => setSplitIneffective(false), [metadata.dc_id, panelKey]);
   const split = Boolean(Renderer) && !splitIneffective && shouldSplitIntoPanels(panels, vizKind);
   const handleIneffective = React.useCallback(() => setSplitIneffective(true), []);
-  // Where a `popover` tile docks its controls (`controls_placement` on the
-  // component, see controlsDock.ts). Split into panels, each would dock its
-  // own copy of the controls: they stay behind the icon instead.
-  const dockPlacement = isControlsPlacement(metadata.controls_placement)
-    ? metadata.controls_placement
-    : null;
+  // Split into panels, each would dock its own copy of the controls: they
+  // stay behind the icon instead.
   const dockState = React.useMemo<ControlsDockState>(
     () => ({ placement: split ? 'popover' : dockPlacement, collapsed: folded }),
     [split, dockPlacement, folded],
@@ -603,11 +618,13 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
               <AdvancedVizCaptionContext.Provider value={caption}>
                 <ControlsPlacementContext.Provider value={placementState}>
                   <ControlsDockContext.Provider value={dockState}>
-                    <AdvancedVizRegionEchoContext.Provider value={regionEcho}>
-                      <HideLegendContext.Provider value={Boolean(metadata.hide_legend)}>
-                        {inner}
-                      </HideLegendContext.Provider>
-                    </AdvancedVizRegionEchoContext.Provider>
+                    <AdvancedVizKindContext.Provider value={kindLabel}>
+                      <AdvancedVizRegionEchoContext.Provider value={regionEcho}>
+                        <HideLegendContext.Provider value={Boolean(metadata.hide_legend)}>
+                          {inner}
+                        </HideLegendContext.Provider>
+                      </AdvancedVizRegionEchoContext.Provider>
+                    </AdvancedVizKindContext.Provider>
                   </ControlsDockContext.Provider>
                 </ControlsPlacementContext.Provider>
               </AdvancedVizCaptionContext.Provider>

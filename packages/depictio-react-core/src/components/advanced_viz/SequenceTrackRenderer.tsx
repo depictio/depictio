@@ -4,6 +4,7 @@ import { Box, ColorSwatch, Group, Text, useMantineColorScheme, useMantineTheme }
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { stableColorMap } from '../../colors';
 import { usePublishHighlight, useHighlight } from '../../highlight/bus';
+import { useZoomSyncHandle } from '../../highlight/zoomSync';
 import {
   filtersExcludingOwnResidue,
   residueEntityFromFilters,
@@ -48,6 +49,7 @@ import {
 } from './protein/rendererData';
 import { SECONDARY_STRUCTURE_COLOURS } from './protein/residueColours';
 import { isPlddtLabel, looksLikeSecondaryStructure } from './protein/sequence';
+import { lanePresenceOf, naturalStripHeight } from './protein/stripLanes';
 import { useEntityPicker } from './protein/useEntityPicker';
 
 /**
@@ -96,7 +98,15 @@ const ALL_CHAINS = '__all__';
 const ALL_CHAINS_LABEL = 'All chains';
 /** Tile furniture around the strips: frame header, legend. */
 const CHROME_PX = 96;
-const STRIP_NATURAL_PX = 150;
+/** One strip with every lane drawn, at its base height: what the tile asks for
+ *  before the residues arrive and tell which lanes there are. */
+const FULL_STRIP_PX = naturalStripHeight({
+  letters: true,
+  category: true,
+  value: true,
+  domains: true,
+  variants: true,
+});
 /** Least height of one chain's block (label + strip) before the stack scrolls. */
 const CHAIN_BLOCK_MIN_PX = 150;
 const CHAIN_LABEL_PX = 16;
@@ -159,6 +169,7 @@ interface ChainBlockProps
     | 'cellWidth'
     | 'onCellWidthChange'
     | 'scrollSync'
+    | 'zoomSync'
     | 'showLetters'
     | 'followSelection'
     | 'onDrawn'
@@ -460,6 +471,9 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
     [filters, multiChain],
   );
 
+  // The chains of a complex number their residues apart: one window cannot say which.
+  const zoomSync = useZoomSyncHandle(index, entity, positionCol, strips.length <= 1);
+
   const incoming = useHighlight(index, follow);
   const highlight = useMemo(() => {
     if (!incoming || (incoming.entity && entity && incoming.entity !== entity)) return null;
@@ -635,16 +649,29 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
     [companionError],
   );
 
-  const contentDemand = useMemo(
-    () => demandForPx(STRIP_NATURAL_PX * Math.max(1, strips.length) + CHROME_PX),
-    [strips.length],
-  );
+  // What the strips need is their lanes at base height, as the strip itself
+  // counts them: it grows into a taller cell, it never needs one. A complex
+  // adds each chain's caption and keeps every block above its floor.
+  const contentDemand = useMemo(() => {
+    const stacked = strips.length > 1;
+    const px = strips.length
+      ? strips.reduce((sum, s) => {
+          const present = lanePresenceOf(s.residues, domains, variants, showLetters);
+          const strip = naturalStripHeight(present);
+          return stacked
+            ? sum + Math.max(strip + CHAIN_LABEL_PX, CHAIN_BLOCK_MIN_PX)
+            : sum + strip;
+        }, 0)
+      : FULL_STRIP_PX;
+    return demandForPx(px + CHROME_PX);
+  }, [strips, domains, variants, showLetters]);
   const onDrawn = useCallback(() => setDrawn(true), []);
   const empty = residues.length === 0 && variants.length === 0 && domains.length === 0;
 
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Sequence track'}
+      zoomSync={zoomSync !== null}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       primaryControls={primaryControls}
       controls={controls}
@@ -693,6 +720,7 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
                   cellWidth={zoom > 0 ? zoom : undefined}
                   onCellWidthChange={setZoom}
                   scrollSync={strips.length > 1 ? scrollSync : undefined}
+                  zoomSync={zoomSync}
                   showLetters={showLetters}
                   followSelection={follow}
                   onDrawn={onDrawn}

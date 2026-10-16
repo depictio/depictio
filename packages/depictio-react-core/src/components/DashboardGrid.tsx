@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Responsive as ResponsiveGridLayout } from 'react-grid-layout';
 import {
   GRID_BREAKPOINTS,
   GRID_COL_COUNTS,
   GRID_MAX_COLS,
   GRID_WIDEST_BREAKPOINT,
+  ROW_SPLIT,
   breakpointForWidth,
   phoneLayout,
   scaleLayout,
@@ -17,6 +18,8 @@ import { StoredMetadata, InteractiveFilter } from '../api';
 import type { FilterSectionSpec } from '../api';
 import { ActiveHighlight } from '../highlight';
 import { HighlightProvider } from '../highlight/bus';
+import { useZoomSyncRegistered } from '../highlight/zoomSync';
+import ZoomSyncSectionButton from './ZoomSyncSectionButton';
 import type { GroupRenderState } from '../selectionGroups';
 import {
   PANEL_RESIZE_END_EVENT,
@@ -24,7 +27,7 @@ import {
   PanelToggleDetail,
   isPanelResizing,
 } from '../utils/panelToggle';
-import { Accordion, Badge, Button, Group, Paper, Text, Tooltip } from '@mantine/core';
+import { Accordion, ActionIcon, Badge, Button, Group, Paper, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { collapsedSectionKeys, sectionComponents } from '../utils/groupInteractive';
 import type { ComponentSection } from '../utils/groupInteractive';
@@ -59,6 +62,27 @@ import {
   GRID_ROW_PX,
   SPLIT_ROW_PX,
 } from './autofit';
+import { DensityContext } from './density';
+import {
+  LINKED_VIEW_MIN_PANE_PX,
+  effectiveDisplay,
+  fitRowPx,
+  layoutRows,
+  minRowPxForTiles,
+  rowFloorPx,
+} from './sectionGroups';
+import type { LayoutOverride } from './sectionGroups';
+import LinkedViewPanes, { LinkedViewControls } from './LinkedViewPanes';
+import type { LinkedViewPanesMode } from './LinkedViewPanes';
+import {
+  LINKED_VIEW_GUTTER_PX,
+  buildSplitTree,
+  splitSignature,
+  treeLayouts,
+  treeMinHeightPx,
+  linkedViewSplitStorageKey,
+} from './linkedViewSplit';
+import type { SplitTree } from './linkedViewSplit';
 import {
   applyRecordPanels,
   findSidePanels,
@@ -66,6 +90,7 @@ import {
   panelExpanded,
   reconcileOverrides,
   recordPanelLinks,
+  sectionSidePanels,
 } from './recordPanelLayout';
 import type { RecordSidePanel } from './recordPanelLayout';
 import { RecordPanelContext, RecordPanelSource, RecordPanelToggle } from './RecordPanel';
@@ -75,6 +100,33 @@ import type { FoldedRecordPanel, RecordPanelState } from './RecordPanel';
  *  opening text has been split off — never a real section name, so it can't
  *  collide with `sectionKey(name)`. */
 const UNSECTIONED_REST_KEY = '\u0000unsectioned-rest';
+
+/** What a linked view section's frame (header, paddings) is taken to cost until
+ *  it has been measured, in px. */
+const FALLBACK_CHROME_PX = 64;
+/** A scrolling container shorter than this is not a screen worth fitting to. */
+const MIN_FIT_VIEWPORT_PX = 240;
+
+/** How a linked view section is laid out this render: its layout, the panes it
+ *  is cut into (null where react-grid-layout draws it), the least each tile
+ *  keeps, and how a change to the split is written. */
+interface LinkedViewPlan {
+  layout: Layout[];
+  width: number;
+  /** Row height, px, of the section's grid: fitted to the screen, and never
+   *  under what the tiles' floors need. */
+  rowPx: number;
+  tree: SplitTree | null;
+  mode: LinkedViewPanesMode | null;
+  /** The least each tile keeps by default, px, by layout key. */
+  floors: Record<string, number>;
+  /** Height of the panes, px; 0 without a tree. */
+  height: number;
+  /** `edit`: the layout the section was opened with, for Reset. */
+  baseline: SplitTree | null;
+  /** Write `next` into the dashboard like a resize of the grid would. */
+  commit: (next: SplitTree) => void;
+}
 
 interface DashboardGridProps {
   dashboardId: string;
@@ -182,6 +234,13 @@ interface DashboardGridProps {
    * fold or unfold them on the dashboard.
    */
   collapseStorageKey?: string | null;
+  /**
+   * The reader's `?layout=` pick for grid sections that declare
+   * `display: 'linked'` (`sectionGroups.ts`): `classic` draws them as
+   * ordinary sections, null keeps what the dashboard declares. Has no effect
+   * on a dashboard without them.
+   */
+  layoutOverride?: LayoutOverride;
 }
 
 /**
@@ -250,6 +309,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   filterScopes,
   onResetFilters,
   collapseStorageKey,
+  layoutOverride = null,
 }) => {
   // Filter-bar members ride along in `metadataList` so they bucket into their
   // section, but they are drawn by the bar and never laid out on the grid:
@@ -297,6 +357,9 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // rightmost component in every section loses its edge. Measured rather than
   // restated from the CSS, so the treatment can change without this drifting.
   const [sectionInset, setSectionInset] = useState(0);
+  // The same for a linked view, whose frame pads its tiles less (sectionAccordion.css,
+  // glass.css): measured on a linked view of its own, null until there is one.
+  const [linkedViewInset, setLinkedViewInset] = useState<number | null>(null);
   const measureRef = useRef<() => void>(() => {});
   useEffect(() => {
     if (!wrapperRef.current || typeof ResizeObserver === 'undefined') return;
@@ -306,10 +369,15 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       const next = wrapper.getBoundingClientRect().width;
       if (!next || next <= 0) return;
       setContainerWidth(Math.floor(next));
-      // Every section draws the same chrome, so one of them answers for all.
-      const probe = wrapper.querySelector('[data-section-grid]');
+      // Every ordinary section draws the same chrome, so one of them answers
+      // for all; a linked view draws a tighter one, and answers for itself.
+      const probe = wrapper.querySelector('[data-section-grid]:not([data-linked-view-grid])');
       if (probe) {
         setSectionInset(Math.max(0, Math.round(next - probe.getBoundingClientRect().width)));
+      }
+      const bench = wrapper.querySelector('[data-linked-view-grid]');
+      if (bench) {
+        setLinkedViewInset(Math.max(0, Math.round(next - bench.getBoundingClientRect().width)));
       }
     };
     measureRef.current = measure;
@@ -419,6 +487,10 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     collapseStorageKey === undefined ? `grid-section-collapsed:${dashboardId}` : collapseStorageKey,
     sectionsCollapsedByDefault,
   );
+  // Tiles that can zoom together now, for the sections' sync button. Read from
+  // the host's provider: the viewer and the editor wrap the grid in one, which
+  // the grid's own provider below reuses.
+  const zoomSyncable = useZoomSyncRegistered();
 
   // One bucket per `section`. A dashboard that sets none produces a single
   // unnamed bucket and renders exactly as it did before sections existed.
@@ -522,6 +594,18 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // Latest grid order per section, so a drag in one section can be merged with
   // the others' current positions into the single flat array we persist.
   const sectionLayoutsRef = useRef<Map<string, Layout[]>>(new Map());
+  // Linked view sections drawn as split panes (`renderLinkedView`). They report
+  // only when one of their gutters is moved, not on every change of layout like
+  // a react-grid-layout does, so the order remembered above goes stale for them:
+  // another section's drag must merge their stored layout, not that.
+  const splitSectionsRef = useRef<Set<string>>(new Set());
+  // The editor's Reset restores a linked view to the layout it was opened with.
+  // Held per section for as long as this grid lives: the first layout it sees,
+  // replaced when the section is re-cut or changes from outside (a restored
+  // version), never by the section's own gutters (`ours` marks those writes).
+  const linkedViewBaselines = useRef(
+    new Map<string, { structure: string; baseline: SplitTree; seen: string; ours: boolean }>(),
+  );
 
   // Text tiles size themselves to their prose, and cards to their content. A
   // stored height is a guess made when the component was written, and it is
@@ -533,6 +617,17 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // Nothing a read-only grid lays out is ever persisted, which is what lets it
   // fit tiles to their content and count in half rows.
   const readOnly = !(isDraggable || isResizable);
+  // Edit mode: the linked views an author is arranging, drawn as the plain
+  // grid so their tiles can be moved and resized, then turned back into a
+  // linked view built from the new positions. This editor session only.
+  const [arranging, setArranging] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleArranging = useCallback((key: string) => {
+    setArranging((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
+  }, []);
 
   // The height each tile is stored with, and which of them follow their
   // content. Both are needed on the way back out: what the editor renders is
@@ -601,17 +696,32 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // panel never folds while the layout can be dragged or resized.
   const panelsEnabled = !editMode && !isDraggable && !isResizable;
   const recordLinks = useMemo(() => recordPanelLinks(metadataList), [metadataList]);
+  // A linked view (`display: 'linked'`, sectionGroups.ts) needs the 8-column
+  // layout. Below it (a phone, a narrow pane) its tiles stack as in any other
+  // section.
+  const groupsWide = breakpointForWidth(containerWidth) === GRID_WIDEST_BREAKPOINT;
   const sidePanels = useMemo(() => {
     const byCard = new Map<string, RecordSidePanel>();
     if (!panelsEnabled || recordLinks.size === 0) return byCard;
     for (const section of sections) {
       const base = baseLayoutForSection(section.members, section.spec);
-      for (const panel of findSidePanels(base, recordLinks)) {
+      const override = arranging.has(section.key) ? 'classic' : layoutOverride;
+      const linkedView = groupDisplay(section, override, groupsWide, onGrid) === 'linked';
+      for (const panel of sectionSidePanels(base, recordLinks, linkedView)) {
         byCard.set(panel.cardId, panel);
       }
     }
     return byCard;
-  }, [panelsEnabled, recordLinks, sections, baseLayoutForSection]);
+  }, [
+    panelsEnabled,
+    recordLinks,
+    sections,
+    baseLayoutForSection,
+    layoutOverride,
+    arranging,
+    groupsWide,
+    onGrid,
+  ]);
 
   // Folded while the source holds no pick, unfolded while it does; a reader's
   // toggle wins until the source's pick appears or goes away.
@@ -726,9 +836,12 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
         // `fitted: false`, for the same reason the touched section's heights
         // are put back: a section the user never opened must be persisted at
         // the heights it is stored with, not at the ones its content asked for.
+        const remembered =
+          section.key !== sectionKey && splitSectionsRef.current.has(section.key)
+            ? undefined
+            : sectionLayoutsRef.current.get(section.key);
         const sectionLayout =
-          sectionLayoutsRef.current.get(section.key) ??
-          baseLayoutForSection(section.members, section.spec, false);
+          remembered ?? baseLayoutForSection(section.members, section.spec, false);
 
         let sectionBottom = 0;
         for (const item of sectionLayout) {
@@ -758,6 +871,96 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     },
     [onTileFixed],
   );
+
+  // ---- Linked view sections (`display`, see sectionGroups.ts) ----
+  //
+  // Linked tiles that stay close enough for a brush on one to show on the others
+  // without scrolling. A linked view is a view of the stored layout, which it never
+  // rewrites: the section is laid out at a row height that fits the screen. Its
+  // record side panels never fold (`sidePanels`), so a pick moves no pane.
+  // `groupsWide` is declared with the side panels, above.
+
+  /** How a section is drawn: its `display`, the reader's `?layout=` and the
+   *  room there is deciding. Anything this cannot place is an ordinary section. */
+  const kindOf = (section: ComponentSection): 'grid' | 'linked' =>
+    groupDisplay(
+      section,
+      arranging.has(section.key) ? 'classic' : layoutOverride,
+      groupsWide,
+      onGrid,
+    ) ?? 'grid';
+  const hasLinkedView = sections.some((s) => kindOf(s) === 'linked');
+
+  // The part of the scrolling container a reader sees, which is what a linked view
+  // is fitted to. The container is the nearest ancestor that scrolls (the app's
+  // dashboard body), the window when none does. What its padding and its
+  // `scroll-padding` set aside (a gutter, the glass shell's floating dock) is not
+  // visible room, so the height excludes both, whichever is larger on each edge.
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    if (!hasLinkedView) return;
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+    const scroller = scrollParentOf(wrapper);
+    const read = () => {
+      const style = scroller ? getComputedStyle(scroller) : null;
+      const keepTop = style
+        ? Math.max(pxOf(style.paddingTop), pxOf(style.scrollPaddingTop))
+        : 0;
+      const keepBottom = style
+        ? Math.max(pxOf(style.paddingBottom), pxOf(style.scrollPaddingBottom))
+        : 0;
+      const height = Math.floor(
+        (scroller ? scroller.clientHeight : window.innerHeight) - keepTop - keepBottom,
+      );
+      const next = height >= MIN_FIT_VIEWPORT_PX ? height : null;
+      setViewportHeight((prev) => (prev === next ? prev : next));
+    };
+    read();
+    const observer =
+      scroller && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(read) : null;
+    if (scroller) observer?.observe(scroller);
+    window.addEventListener('resize', read);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', read);
+    };
+  }, [hasLinkedView]);
+
+  // What a linked view's frame costs in height (header, paddings, borders, the
+  // section's own filter bar): the tiles get what is left of the visible height.
+  // Read from the DOM after every render, since it depends on the theme and on
+  // which sections are open, and kept only when it changed.
+  const [linkedViewChrome, setLinkedViewChrome] = useState(0);
+  useLayoutEffect(() => {
+    if (!hasLinkedView) return;
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+    let chrome = 0;
+    wrapper.querySelectorAll('[data-linked-view-grid]').forEach((grid) => {
+      const item = grid.closest('.depictio-section-item');
+      if (item) chrome = Math.max(chrome, frameHeight(item));
+    });
+    setLinkedViewChrome((prev) => (prev === chrome ? prev : chrome));
+  });
+
+  // A linked view fills the visible height: its rows (the layout's, counted in the
+  // unit the grid lays out in) and the gaps between them share what the frame
+  // leaves. Never less than its tiles need to keep their own minimum
+  // (`floorRowPx`): a stack of three is taller than a laptop's screen, and the
+  // reader scrolls a little instead of reading three slivers.
+  const normalRowPx = readOnly ? SPLIT_ROW_PX : GRID_ROW_PX;
+  const linkedViewRowPx = (layout: Layout[], floorRowPx: number) =>
+    viewportHeight
+      ? fitRowPx(
+          layoutRows(layout),
+          viewportHeight - (linkedViewChrome || FALLBACK_CHROME_PX),
+          GRID_ROW_GAP_PX,
+          normalRowPx,
+          1,
+          floorRowPx,
+        )
+      : Math.max(normalRowPx, floorRowPx);
 
   const showOverlays = editMode && typeof renderItemOverlay === 'function';
   const rootClass =
@@ -895,8 +1098,81 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // A filter bar's other members sit under the bar, outside any section box.
   const gridWidth = (section: ComponentSection) =>
     section.sectionName && !isStripSection(section.spec)
-      ? Math.max(100, containerWidth - sectionInset)
+      ? Math.max(
+          100,
+          containerWidth -
+            (kindOf(section) === 'linked' ? (linkedViewInset ?? sectionInset) : sectionInset),
+        )
       : containerWidth;
+
+  /**
+   * One react-grid-layout over `layouts`, which every grid of the dashboard is
+   * drawn with. `persistKey` is the section whose layout it reports to the
+   * editor's save path.
+   */
+  const renderTiles = (o: {
+    layouts: Record<string, Layout[]>;
+    rowHeight: number;
+    width: number;
+    persistKey: string;
+    children: React.ReactNode;
+  }) => (
+    <ResponsiveGridLayout
+      className="layout"
+      layouts={o.layouts}
+      // Shared geometry (see gridConfig.ts): `lg` keeps the authoring 8-column
+      // grid down to narrow content widths so opening the panels shrinks
+      // components instead of wrapping them; fewer columns are a phone-only
+      // fallback.
+      breakpoints={GRID_BREAKPOINTS}
+      cols={GRID_COL_COUNTS}
+      // Half rows when read-only: the unit `layoutsForSection` counts in.
+      rowHeight={o.rowHeight}
+      width={o.width}
+      // Asymmetric grid gap: horizontal stays at 12 px (visual breathing room
+      // between side-by-side cards / plots) but vertical drops to 4 px so
+      // stacked rows feel tightly packed — short text intros, Manhattan→
+      // filter-strip transitions, etc. no longer have a wasteful gap.
+      margin={[12, GRID_ROW_GAP_PX]}
+      containerPadding={[0, 0]}
+      isDraggable={isDraggable}
+      isResizable={isResizable}
+      compactType="vertical"
+      onLayoutChange={(current) => handleSectionLayoutChange(o.persistKey, current, o.width)}
+      // Live-resize: Plotly's useResizeHandler and AG Grid only listen to
+      // the WINDOW ``resize`` event, not container size changes. While the
+      // user is dragging a resize handle the cell DIM changes but the
+      // window doesn't, so Plotly/AG Grid never re-flow until release.
+      // Dispatch a synthetic resize event on every onResize tick so the
+      // figure / table tracks the cell size live.
+      onResize={() => {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('resize'));
+        }
+      }}
+      // Fires before the `onLayoutChange` of the same gesture (RGL calls the
+      // prop, then `onLayoutMaybeChanged`), which is what lets the merge tell
+      // this tile's new height apart from every other tile's fitted one on
+      // that pass.
+      onResizeStop={(_layout, oldItem, newItem) => handleResizeStop(oldItem, newItem, o.width)}
+      // Drag is gated to a dedicated handle (see ComponentChrome's
+      // `react-grid-dragHandle` action). Cells themselves are NOT draggable
+      // — the user can interact with content (Plotly modebar, AG Grid
+      // selectors, etc.) without accidentally starting a drag.
+      draggableHandle=".react-grid-dragHandle"
+      resizeHandles={['s', 'e', 'w', 'n', 'sw', 'se', 'nw', 'ne']}
+    >
+      {o.children}
+    </ResponsiveGridLayout>
+  );
+
+  /** The cells of `section` that `layout` places, in the order they were built. */
+  const cellsFor = (section: ComponentSection, layout: Layout[]) => {
+    const placed = new Set(layout.map((l) => l.i));
+    return (cellsBySection.get(section.key) ?? [])
+      .filter((cell) => placed.has(cell.id))
+      .map((cell) => cell.node);
+  };
 
   const renderGrid = (section: ComponentSection) =>
     !section.members.some(onGrid) ? (
@@ -913,61 +1189,17 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
         </Paper>
       ) : null
     ) : (
-    <ResponsiveGridLayout
-      className="layout"
-      layouts={responsiveLayouts(layoutsForSection(section.members, section.spec))}
-      // Shared geometry (see gridConfig.ts): `lg` keeps the authoring 8-column
-      // grid down to narrow content widths so opening the panels shrinks
-      // components instead of wrapping them; fewer columns are a phone-only
-      // fallback.
-      breakpoints={GRID_BREAKPOINTS}
-      cols={GRID_COL_COUNTS}
-      // Half rows when read-only: the unit `layoutsForSection` counts in.
-      rowHeight={readOnly ? SPLIT_ROW_PX : GRID_ROW_PX}
-      width={gridWidth(section)}
-      // Asymmetric grid gap: horizontal stays at 12 px (visual breathing room
-      // between side-by-side cards / plots) but vertical drops to 4 px so
-      // stacked rows feel tightly packed — short text intros, Manhattan→
-      // filter-strip transitions, etc. no longer have a wasteful gap.
-      margin={[12, GRID_ROW_GAP_PX]}
-      containerPadding={[0, 0]}
-      isDraggable={isDraggable}
-      isResizable={isResizable}
-      compactType="vertical"
-      onLayoutChange={(current) =>
-        handleSectionLayoutChange(section.key, current, gridWidth(section))
-      }
-      // Live-resize: Plotly's useResizeHandler and AG Grid only listen to
-      // the WINDOW ``resize`` event, not container size changes. While the
-      // user is dragging a resize handle the cell DIM changes but the
-      // window doesn't, so Plotly/AG Grid never re-flow until release.
-      // Dispatch a synthetic resize event on every onResize tick so the
-      // figure / table tracks the cell size live.
-      onResize={() => {
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new Event('resize'));
-        }
-      }}
-      // Fires before the `onLayoutChange` of the same gesture (RGL calls the
-      // prop, then `onLayoutMaybeChanged`), which is what lets the merge tell
-      // this tile's new height apart from every other tile's fitted one on
-      // that pass.
-      onResizeStop={(_layout, oldItem, newItem) =>
-        handleResizeStop(oldItem, newItem, gridWidth(section))
-      }
-      // Drag is gated to a dedicated handle (see ComponentChrome's
-      // `react-grid-dragHandle` action). Cells themselves are NOT draggable
-      // — the user can interact with content (Plotly modebar, AG Grid
-      // selectors, etc.) without accidentally starting a drag.
-      draggableHandle=".react-grid-dragHandle"
-      resizeHandles={['s', 'e', 'w', 'n', 'sw', 'se', 'nw', 'ne']}
-    >
-      {(cellsBySection.get(section.key) ?? [])
+    renderTiles({
+      layouts: responsiveLayouts(layoutsForSection(section.members, section.spec)),
+      rowHeight: normalRowPx,
+      width: gridWidth(section),
+      persistKey: section.key,
+      children: (cellsBySection.get(section.key) ?? [])
         // A folded record card has no layout item (`applyRecordPanels`), and
         // react-grid-layout would place a child without one on its own.
         .filter((cell) => !sidePanels.has(cell.id) || recordPanelState.expanded(cell.id))
-        .map((cell) => cell.node)}
-    </ResponsiveGridLayout>
+        .map((cell) => cell.node),
+    })
     );
 
   const leadBucket = sections.find((s) => !s.sectionName && s.key !== UNSECTIONED_REST_KEY);
@@ -1047,6 +1279,216 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
             : renderAccordion(run.sections),
         );
 
+  /** How a linked view section is laid out: shared by its body and its header's
+   *  controls, so both see one answer per render. */
+  const linkedViewPlans = new Map<string, LinkedViewPlan>();
+  const planFor = (section: ComponentSection): LinkedViewPlan => {
+    const cached = linkedViewPlans.get(section.key);
+    if (cached) return cached;
+    const layout = layoutsForSection(section.members, section.spec, false);
+    const width = gridWidth(section);
+    const found = buildSplitTree(layout);
+    const mode: LinkedViewPanesMode | null =
+      !found || found.root.kind !== 'split'
+        ? null
+        : readOnly
+          ? 'view'
+          : isResizable && breakpointForWidth(width) === GRID_WIDEST_BREAKPOINT
+            ? 'edit'
+            : null;
+    const tree = mode ? found : null;
+    // What each tile keeps by default: a view its minimum, a card or a line of
+    // text only the height it was given.
+    const types = new Map(section.members.map((m) => [m.index, m.component_type]));
+    const floors: Record<string, number> = {};
+    for (const l of layout) {
+      const type = types.get(l.i);
+      floors[l.i] = type === 'card' || type === 'text' ? 0 : LINKED_VIEW_MIN_PANE_PX;
+    }
+    const floorOf = (key: string) => floors[key] ?? LINKED_VIEW_MIN_PANE_PX;
+    // The row height the tiles' floors ask for: summed down each stack of panes,
+    // or the tightest tile where react-grid-layout draws it.
+    const floorRowPx = tree
+      ? rowFloorPx(treeMinHeightPx(tree, floorOf, LINKED_VIEW_GUTTER_PX), tree.h, GRID_ROW_GAP_PX)
+      : minRowPxForTiles(layout, floorOf, GRID_ROW_GAP_PX);
+    const rowPx = linkedViewRowPx(layout, floorRowPx);
+
+    let baseline: SplitTree | null = null;
+    const id = `${dashboardId}:${section.key}`;
+    if (tree && mode === 'edit') {
+      const structure = splitSignature(tree);
+      const seen = JSON.stringify(tree.root);
+      let held = linkedViewBaselines.current.get(id);
+      if (!held || held.structure !== structure) {
+        held = { structure, baseline: tree, seen, ours: false };
+        linkedViewBaselines.current.set(id, held);
+      } else if (held.seen !== seen) {
+        // Moved by one of this section's gutters (or its Reset), or from outside.
+        if (!held.ours) held.baseline = tree;
+        held.seen = seen;
+        held.ours = false;
+      }
+      baseline = held.baseline;
+    }
+
+    // Written like a resize of the grid: a tile whose height changed leaves
+    // autofit (`handleResizeStop`), then the section's layout is reported.
+    const commit = (next: SplitTree) => {
+      const held = linkedViewBaselines.current.get(id);
+      if (held) held.ours = true;
+      const moved = treeLayouts(next, layout);
+      const was = new Map(layout.map((l) => [l.i, l]));
+      for (const item of moved) {
+        const old = was.get(item.i);
+        if (old) handleResizeStop(old, item, width);
+      }
+      handleSectionLayoutChange(section.key, moved, width);
+    };
+    const plan: LinkedViewPlan = {
+      layout,
+      width,
+      rowPx,
+      tree,
+      mode,
+      floors,
+      // What the grid would be: the rows and the gaps between them.
+      height: tree ? tree.h * rowPx + (tree.h - 1) * GRID_ROW_GAP_PX : 0,
+      baseline,
+      commit,
+    };
+    linkedViewPlans.set(section.key, plan);
+    return plan;
+  };
+
+  /** A linked view: the section's stored layout at a row height that fits the
+   *  visible screen, and tall enough that each tile keeps its minimum. Not
+   *  autofitted (growing a tile would push the section off the screen it was
+   *  fitted to).
+   *
+   *  A layout that cuts into its tiles by straight edge-to-edge lines (every
+   *  shipped linked view does) is drawn as split panes with a draggable gutter
+   *  between neighbours (`LinkedViewPanes`): one drag moves a shared edge, so a
+   *  stack of tiles is resized in one go. A reader's gutters are their own
+   *  (this browser's storage, never the dashboard); the editor's snap to grid
+   *  units and are saved like a resize of the grid. Tiles are not moved to
+   *  other positions there: `?layout=classic` draws the section as the plain
+   *  grid, which does. A layout that cannot be cut (a pinwheel, a gap), or a
+   *  grid too narrow to save, stays on react-grid-layout as before: its units
+   *  and columns are the stored ones, so a drag still writes the right
+   *  position. */
+  const renderLinkedView = (section: ComponentSection) => {
+    const plan = planFor(section);
+    if (!plan.tree || !plan.mode) {
+      splitSectionsRef.current.delete(section.key);
+      return (
+        <DensityContext.Provider value="compact">
+          {renderTiles({
+            layouts: responsiveLayouts(plan.layout),
+            rowHeight: plan.rowPx,
+            width: plan.width,
+            persistKey: section.key,
+            children: cellsFor(section, plan.layout),
+          })}
+        </DensityContext.Provider>
+      );
+    }
+    splitSectionsRef.current.add(section.key);
+    const cells = new Map<string, React.ReactElement>();
+    for (const cell of cellsBySection.get(section.key) ?? []) {
+      cells.set(cell.id, cell.node as React.ReactElement);
+    }
+    return (
+      <DensityContext.Provider value="compact">
+        <LinkedViewPanes
+          tree={plan.tree}
+          cells={cells}
+          height={plan.height}
+          floors={plan.floors}
+          // A read-only grid counts in half rows; the least a tile keeps and a
+          // keyboard step are one stored row either way.
+          unit={{ x: 1, y: readOnly ? ROW_SPLIT : 1 }}
+          mode={plan.mode}
+          onCommit={plan.commit}
+          storageKey={linkedViewSplitStorageKey(dashboardId, section.key)}
+        />
+      </DensityContext.Provider>
+    );
+  };
+
+  /** Reset and Autofit, in the header of a linked view drawn as panes. */
+  const renderLinkedViewControls = (section: ComponentSection) => {
+    const plan = planFor(section);
+    if (!plan.tree || !plan.mode) return null;
+    return (
+      <LinkedViewControls
+        tree={plan.tree}
+        baseline={plan.baseline}
+        height={plan.height}
+        floors={plan.floors}
+        demands={autoHeights}
+        mode={plan.mode}
+        onCommit={plan.commit}
+        storageKey={linkedViewSplitStorageKey(dashboardId, section.key)}
+      />
+    );
+  };
+
+  /** Edit mode: move a linked view's tiles on the plain grid, and back. Offered
+   *  on a section that declares a linked view and is drawn as one here (not
+   *  under `?layout=classic`, not on a narrow screen). */
+  const renderArrangeToggle = (section: ComponentSection) => {
+    if (readOnly || layoutOverride === 'classic') return null;
+    if (groupDisplay(section, null, groupsWide, onGrid) !== 'linked') return null;
+    const on = arranging.has(section.key);
+    const label = on ? 'Back to the linked view' : 'Arrange tiles';
+    const tip = on
+      ? 'Show the section as a linked view again, built from the positions set here'
+      : 'Show the section as a plain grid to move and resize its tiles; the linked view follows their positions';
+    return (
+      <Tooltip label={tip} withArrow multiline w={240} openDelay={300}>
+        <ActionIcon
+          size="sm"
+          variant={on ? 'filled' : 'subtle'}
+          color={on ? undefined : 'gray'}
+          aria-label={label}
+          aria-pressed={on}
+          data-testid="linked-view-arrange"
+          onClick={(event) => {
+            event.stopPropagation();
+            toggleArranging(section.key);
+          }}
+        >
+          <Icon icon="mdi:cursor-move" width={16} />
+        </ActionIcon>
+      </Tooltip>
+    );
+  };
+
+  /** What sits beside a section's fold control: the host's (the editor's "…")
+   *  and, for an open linked view, its own Reset and Autofit before it. */
+  const sectionActions = (section: ComponentSection, kind: 'grid' | 'linked') => {
+    const host = renderSectionActions?.(section.sectionName ?? null);
+    const open = sectionCollapse.isOpen(section.key);
+    const linked = kind === 'linked' && open ? renderLinkedViewControls(section) : null;
+    // Offered once two of the section's tiles can zoom together; a folded
+    // section has none mounted, so none registered.
+    const syncTiles = section.members
+      .map((m) => String(m.index))
+      .filter((i) => zoomSyncable.has(i));
+    const sync = syncTiles.length >= 2 ? <ZoomSyncSectionButton tiles={syncTiles} /> : null;
+    const arrange = open ? renderArrangeToggle(section) : null;
+    return sync || linked || arrange ? (
+      <Group gap={4} wrap="nowrap" align="center">
+        {sync}
+        {arrange}
+        {linked}
+        {host}
+      </Group>
+    ) : (
+      host
+    );
+  };
+
   const renderAccordion = (list: ComponentSection[]) =>
     list.length === 0 ? null : (
       <SectionAccordion
@@ -1064,43 +1506,59 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
           )
         }
       >
-        {list.map((section) => (
-          <SectionAccordionItem
-            key={section.key}
-            value={section.key}
-            color={resolveSectionColor(section.spec?.color, section.sectionName)}
-            actions={renderSectionActions?.(section.sectionName ?? null)}
-            plain={isPlain(section)}
-          >
-            <Accordion.Control>
-              <SectionHeader
-                spec={section.spec}
-                name={section.sectionName}
-                badge={<SectionFilteredBadge section={section} filters={shownFilters} onGrid={onGrid} />}
-                // Only while folded: expanded, these numbers are already on
-                // screen as the cards themselves. Folding a section must not
-                // cost you the figures it was showing.
-                trailing={
-                  !isPlain(section) && !sectionCollapse.isOpen(section.key) ? (
-                    <SectionSummary
-                      section={{ ...section, members: section.members.filter(onGrid) }}
-                      cardValues={cardValues}
-                    />
-                  ) : undefined
-                }
+        {list.map((section) => {
+          const kind = kindOf(section);
+          const badge = (
+            <SectionFilteredBadge section={section} filters={shownFilters} onGrid={onGrid} />
+          );
+          // Only while folded: expanded, these numbers are already on
+          // screen as the cards themselves. Folding a section must not
+          // cost you the figures it was showing.
+          const trailing =
+            !isPlain(section) && !sectionCollapse.isOpen(section.key) ? (
+              <SectionSummary
+                section={{ ...section, members: section.members.filter(onGrid) }}
+                cardValues={cardValues}
               />
-            </Accordion.Control>
-            <Accordion.Panel>
-              {renderSectionBar(section)}
-              {/* Plain wrapper so the width available inside the section box
-                  can be read off the DOM — see `sectionInset`. Absent until
-                  the section has been opened once: see `renderedSections`. */}
-              {(isPlain(section) || renderedSections.has(section.key)) && (
-                <div data-section-grid>{renderGrid(section)}</div>
-              )}
-            </Accordion.Panel>
-          </SectionAccordionItem>
-        ))}
+            ) : undefined;
+          return (
+            <SectionAccordionItem
+              key={section.key}
+              value={section.key}
+              color={resolveSectionColor(section.spec?.color, section.sectionName)}
+              actions={sectionActions(section, kind)}
+              plain={isPlain(section)}
+              className={kind === 'linked' ? 'is-linked-view' : undefined}
+            >
+              <Accordion.Control>
+                {kind === 'grid' ? (
+                  <SectionHeader
+                    spec={section.spec}
+                    name={section.sectionName}
+                    badge={badge}
+                    trailing={trailing}
+                  />
+                ) : (
+                  <GroupSectionHeader section={section} badge={badge} trailing={trailing} />
+                )}
+              </Accordion.Control>
+              <Accordion.Panel>
+                {renderSectionBar(section)}
+                {/* Plain wrapper so the width available inside the section box
+                    can be read off the DOM — see `sectionInset`. Absent until
+                    the section has been opened once: see `renderedSections`. */}
+                {(isPlain(section) || renderedSections.has(section.key)) &&
+                  (kind === 'linked' ? (
+                    <div data-section-grid data-linked-view-grid>
+                      {renderLinkedView(section)}
+                    </div>
+                  ) : (
+                    <div data-section-grid>{renderGrid(section)}</div>
+                  ))}
+              </Accordion.Panel>
+            </SectionAccordionItem>
+          );
+        })}
       </SectionAccordion>
     );
 
@@ -1193,6 +1651,42 @@ const SectionFilteredBadge: React.FC<{
         Filtered
       </Badge>
     </Tooltip>
+  );
+};
+
+/**
+ * The heading of a linked view section: the same `SectionHeader`, on one line.
+ * The description moves into a tooltip on an info glyph (a linked view spends its
+ * height on its tiles).
+ */
+const GroupSectionHeader: React.FC<{
+  section: ComponentSection;
+  badge?: React.ReactNode;
+  trailing?: React.ReactNode;
+}> = ({ section, badge, trailing }) => {
+  const description = section.spec?.description;
+  return (
+    <SectionHeader
+      spec={section.spec ? { ...section.spec, description: undefined } : section.spec}
+      name={section.sectionName}
+      badge={
+        <>
+          {description ? (
+            <Tooltip label={description} withArrow multiline w={260} openDelay={400}>
+              <Icon
+                icon="mdi:information-outline"
+                width={14}
+                height={14}
+                color="var(--mantine-color-dimmed)"
+                style={{ flexShrink: 0 }}
+              />
+            </Tooltip>
+          ) : null}
+          {badge}
+        </>
+      }
+      trailing={trailing}
+    />
   );
 };
 
@@ -1378,6 +1872,61 @@ export function normalizeLayout(
   // non-static there, RGL compacts naturally after every drag/resize.
   if (interactive || !pack) return merged;
   return widenLoneRows(compactVerticallyForStatic(merged), hadRowMate);
+}
+
+/**
+ * Whether a section draws as a linked view, from its `display` and the reader's
+ * `?layout=`. Null for everything else: a section needs a name, tiles of its
+ * own, and a layout wide enough to hold a linked view; a plain heading and a
+ * persistent section (also drawn by other tabs' hosts, which know no
+ * linked views) stay as they are.
+ */
+function groupDisplay(
+  section: ComponentSection,
+  override: LayoutOverride,
+  wide: boolean,
+  onGrid: (m: StoredMetadata) => boolean,
+): 'linked' | null {
+  const spec = section.spec;
+  if (!wide || !section.sectionName || !section.members.some(onGrid)) return null;
+  if (spec?.appearance === 'plain' || spec?.persistent) return null;
+  return effectiveDisplay(spec, override) === 'linked' ? 'linked' : null;
+}
+
+/** A computed length in px; 0 for `auto`, empty or anything that is not one. */
+function pxOf(value: string | null | undefined): number {
+  const n = parseFloat(value ?? '');
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** The nearest ancestor that scrolls vertically, null when the page does. */
+function scrollParentOf(el: HTMLElement): HTMLElement | null {
+  for (let node = el.parentElement; node; node = node.parentElement) {
+    const overflowY = getComputedStyle(node).overflowY;
+    if (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') return node;
+  }
+  return null;
+}
+
+/**
+ * The height a section item spends on everything but its tiles: borders, the
+ * header and, while open, the body's paddings and whatever sits above the grid
+ * (a section's own filter bar). Summed from parts that do not move while the
+ * body folds, so it is stable through the accordion's own height transition.
+ */
+function frameHeight(item: Element): number {
+  const style = getComputedStyle(item);
+  let height = pxOf(style.borderTopWidth) + pxOf(style.borderBottomWidth);
+  height += item.querySelector<HTMLElement>('.depictio-section-control')?.offsetHeight ?? 0;
+  if (!item.hasAttribute('data-active')) return height;
+  const content = item.querySelector<HTMLElement>('.depictio-section-content');
+  if (!content) return height;
+  const padding = getComputedStyle(content);
+  height += pxOf(padding.paddingTop) + pxOf(padding.paddingBottom);
+  for (const child of Array.from(content.children) as HTMLElement[]) {
+    if (!child.hasAttribute('data-section-grid')) height += child.offsetHeight;
+  }
+  return height;
 }
 
 /**

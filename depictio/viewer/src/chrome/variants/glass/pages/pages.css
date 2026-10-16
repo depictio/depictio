@@ -404,13 +404,15 @@
   margin: 0 0 0 -6px;
 }
 /* The instance's state, as two quiet lines that share one leading column:
- * the live dot, then the mode (single user, public, demo) with its glyph. */
+ * the live dot, then the mode (single user, public, demo) with its glyph.
+ * The two lines are centred as one block, like the dashboard sidebar's foot
+ * (`.hy-side-foot`); a subgrid keeps their leading glyphs in one column. */
 .gp-side-foot {
   flex: none;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  display: grid;
+  grid-template-columns: 14px max-content;
   justify-content: center;
+  align-content: center;
   gap: 8px;
   width: 100%;
   margin-top: 10px;
@@ -420,14 +422,18 @@
 }
 .gp-side-foot > .gp-status,
 .gp-side-foot > .gp-mode {
+  grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: 14px auto;
-  justify-content: start;
-  justify-items: center;
-  column-gap: 8px;
+  grid-template-columns: subgrid;
+  justify-items: start;
+}
+.gp-side-foot > :is(.gp-status, .gp-mode) > :first-child {
+  justify-self: center;
 }
 .gp-shell[data-side='folded'] .gp-side-foot {
+  display: flex;
   align-items: center;
+  justify-content: center;
   width: 46px;
   height: 46px;
   padding: 0;

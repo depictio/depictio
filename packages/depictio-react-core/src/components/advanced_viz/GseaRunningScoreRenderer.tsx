@@ -78,9 +78,8 @@ const PLOT_CONFIG = {
   responsive: true,
   displayModeBar: true,
   modeBarButtonsToRemove: ['select2d', 'lasso2d'],
-  // Wheel-zoom would swallow page scrolling whenever the pointer crossed the
-  // tile; the modebar's Zoom button stays available for deliberate zooming.
-  scrollZoom: false,
+  // No `scrollZoom`: the zoom gate (plotlyZoomGate) lets a plain wheel scroll
+  // the page and zooms on Ctrl / Cmd + wheel; the modebar's Zoom button stays.
 };
 
 /** Vertical gap between stacked panels, in paper fraction. */

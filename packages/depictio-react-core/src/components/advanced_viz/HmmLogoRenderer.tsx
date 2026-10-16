@@ -3,6 +3,7 @@ import { Box, Button, Text } from '@mantine/core';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { usePublishHighlight, useHighlight } from '../../highlight/bus';
+import { useZoomSyncHandle } from '../../highlight/zoomSync';
 import {
   filtersExcludingOwnResidue,
   isResidueFilter,
@@ -609,6 +610,15 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
     return h?.key ?? null;
   }, [hitRange, pickedHitEntity, hitSelection.drawn]);
 
+  // Synced through each state's reference residue; a profile without any has
+  // no residue axis.
+  const zoomSync = useZoomSyncHandle(
+    index,
+    profileEntity,
+    positionCol,
+    Boolean(profile?.positions.some((p) => p != null)),
+  );
+
   const incoming = useHighlight(index, follow);
   const highlight = useMemo(() => {
     if (!incoming) return null;
@@ -1060,6 +1070,7 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
   return (
     <AdvancedVizFrame
       title={metadata.title || 'HMM logo'}
+      zoomSync={zoomSync !== null}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       primaryControls={primaryControls}
       controls={controls}
@@ -1100,6 +1111,7 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
             onClear={pickEnabled ? onClear : undefined}
             cellWidth={zoom > 0 ? zoom : undefined}
             onCellWidthChange={setZoom}
+            zoomSync={zoomSync}
             followSelection={follow}
             onDrawn={onDrawn}
             windowStart={windowStart}

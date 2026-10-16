@@ -13,6 +13,7 @@ import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../a
 import { mantineCategoricalPalette, resolveCategoricalPalette, stableColorMap } from '../../colors';
 import { useHighlight, usePublishHighlight } from '../../highlight/bus';
 import { useSharedOpeningEntity } from '../../highlight/openingEntity';
+import { useZoomSyncHandle } from '../../highlight/zoomSync';
 import {
   residueEntityFromFilters,
   residueRangeFilterIndex,
@@ -36,6 +37,8 @@ import {
   useStructureText,
   useThreeDmolStatus,
 } from './molecule/hooks';
+import { chooseDefaultEntity, renderableEntities, unfoldableEntities } from './molecule/foldable';
+import { createHoverGate } from './molecule/hoverGate';
 import { modelCredit, modelExplanation } from './molecule/resolve';
 import {
   buildColouring,
@@ -75,6 +78,7 @@ import {
 } from './molecule/Overlays';
 import { SplitView, splitOrientation } from './molecule/SplitView';
 import SequenceText from './molecule/SequenceText';
+import { type FollowBounds, useStructureZoomFollow } from './molecule/zoomFollow';
 import { textKey, type TextResidue } from './molecule/sequenceLines';
 import { plddtIsFractional } from './protein/residueColours';
 import { chainRangeToConcat, concatRangeToChain } from './protein/alignment';
@@ -155,6 +159,9 @@ const COMPACT_WIDTH = 560;
 const COMPACT_HEIGHT = 440;
 
 const MAX_TOOLTIP_VARIANTS = 4;
+
+/** No entity the source refuses: every protein of a structure file collection is drawable. */
+const NO_ENTITIES: ReadonlySet<string> = new Set();
 
 interface HoverState {
   residue: ResidueRef;
@@ -361,23 +368,35 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     () => residueEntityFromFilters(filters, entityCol),
     [filters, entityCol],
   );
+  // Proteins the resolver has nothing to draw (resolve mode: no accession, no
+  // gene, and a sequence longer than ESMFold folds). Only the automatic
+  // choices below steer clear of them; a filter or a pick is honoured as is.
+  const unrenderable = useMemo(
+    () => (fileMode ? NO_ENTITIES : unfoldableEntities(rows)),
+    [fileMode, rows],
+  );
   // What this tile opens on by itself, once both its rows and its structure
   // list are in (null before: nothing is shared while half loaded), agreed
   // with the dashboard's other protein tiles under the entity column name so
   // they all open on the same entity. A filter or the reader's pick wins.
+  // The first entity in the default order the source can draw, so the tile
+  // does not start on a protein it cannot fold; `steered` (that moved the
+  // choice) makes its claim win over another tile's, which would otherwise
+  // pull this tile back onto the one it cannot draw.
   const openingReady = !rowsLoading && (!fileMode || previewOnly || !manifest.loading);
-  const ownOpening = useMemo(
+  const { entity: ownOpening, steered } = useMemo(
     () =>
       openingReady
-        ? chooseEntity({ fromFilters: null, picked: null, rowEntities, available })
-        : null,
-    [openingReady, rowEntities, available],
+        ? chooseDefaultEntity({ rowEntities, available, unrenderable })
+        : { entity: null, steered: false },
+    [openingReady, rowEntities, available, unrenderable],
   );
   const opening = useSharedOpeningEntity(
     entityCol,
     index,
     ownOpening,
-    openingReady ? available : null,
+    openingReady ? renderableEntities(available, unrenderable) : null,
+    steered,
   );
   const entity = chooseEntity({
     fromFilters,
@@ -385,6 +404,7 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     rowEntities,
     available,
     opening,
+    unrenderable,
   });
   // A dashboard filter naming an entity with no structure must not silently
   // show another protein instead.
@@ -675,13 +695,15 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     onHover: (_residue: ResidueRef | null) => {},
     onClick: (_residue: ResidueRef, _extend: boolean) => {},
   });
-  callbacks.current = {
-    onHover: (residue) => {
-      if (!residue) {
-        setHover(null);
-        publishHighlight(null);
-        return;
-      }
+  // What a hover does on screen (the tooltip, the letters' outline, the
+  // crosshair on the other protein tiles), read through a ref so the gate,
+  // made once, always sees the current entity and marks.
+  const hoverEffects = useRef({
+    enter: (_residue: ResidueRef) => {},
+    clear: () => {},
+  });
+  hoverEffects.current = {
+    enter: (residue) => {
       setHover({ residue, x: pointer.current.x, y: pointer.current.y });
       publishHighlight({
         entity: entity ?? undefined,
@@ -690,6 +712,25 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
         positionColumn: positionCol,
         rowKeys: marksByPosition.get(residue.position),
       });
+    },
+    clear: () => {
+      setHover(null);
+      publishHighlight(null);
+    },
+  };
+  // Hover is live: a residue already shown is not drawn again, and the clear
+  // between two residues of a sweep is held back one frame (see hoverGate.ts).
+  const [hoverGate] = useState(() =>
+    createHoverGate<ResidueRef>({
+      onEnter: (residue) => hoverEffects.current.enter(residue),
+      onClear: () => hoverEffects.current.clear(),
+    }),
+  );
+  useEffect(() => () => hoverGate.dispose(), [hoverGate]);
+  callbacks.current = {
+    onHover: (residue) => {
+      if (!residue) hoverGate.leave();
+      else hoverGate.enter(`${entity ?? ''}|${residue.chain}|${residue.position}`, residue);
     },
     onClick: (residue, extend) => pickResidue(residue.position, extend, residue.chain || null),
   };
@@ -766,6 +807,22 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     // `selectionKey` carries `drawnSelection`'s content.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewerReady, structure.data, selectionKey, selectionIsOwn, followSelection, highlightSite]);
+
+  // Zoom sync: frame the residues the synced tiles show. A follower only (see
+  // molecule/zoomFollow.ts); on a complex, the primary chain is framed.
+  const zoomSync = useZoomSyncHandle(index, entity, positionCol, true, false);
+  const followBounds = useMemo<FollowBounds | null>(() => {
+    const chain = multiChain ? residueIndex.primaryChain : null;
+    let first = Infinity;
+    let last = -Infinity;
+    for (const r of residues) {
+      if (chain !== null && r.chain !== chain) continue;
+      first = Math.min(first, r.position);
+      last = Math.max(last, r.position);
+    }
+    return first <= last ? { first, last, chain } : null;
+  }, [residues, multiChain, residueIndex.primaryChain]);
+  useStructureZoomFollow(zoomSync, viewerRef, viewerReady && Boolean(structure.data), followBounds);
 
   const highlightKey = spanKey(highlightSpan);
   useEffect(() => {
@@ -1258,10 +1315,7 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
         const rect = e.currentTarget.getBoundingClientRect();
         pointer.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
       }}
-      onMouseLeave={() => {
-        setHover(null);
-        publishHighlight(null);
-      }}
+      onMouseLeave={() => hoverGate.clear()}
     >
       <div
         ref={hostRef}
@@ -1319,6 +1373,7 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       badges={badges.length ? badges : undefined}
       dataRows={frame ?? undefined}
       dataColumns={fetchCols}
+      zoomSync={zoomSync !== null}
     >
       <div
         ref={bodyRef}

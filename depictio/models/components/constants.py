@@ -120,6 +120,14 @@ MAP_PLACEMENTS: tuple[str, ...] = ("grid", "floating")
 # The viewer's own saved preference takes over from then on.
 FLOATING_PANEL_STATES: tuple[str, ...] = ("compact", "expanded", "docked", "hidden")
 
+# The advanced visualisation kinds that may leave the grid for a floating panel.
+# A protein structure is the one case so far: it earns its place beside a
+# dashboard you browse, where a table or a plot would not. Kept to a tuple so
+# widening it later is one line here plus the matching set in the React core
+# (`FLOATING_VIZ_KINDS`, components/mapPanel/panelKinds.ts); `placement`
+# validation, the cross-tab endpoint and the grid exclusion all read it.
+FLOATING_ADVANCED_VIZ_KINDS: tuple[str, ...] = ("molecule_3d",)
+
 # ---------------------------------------------------------------------------
 # Card aggregation × column_type compatibility
 # column_type → list of valid aggregation names

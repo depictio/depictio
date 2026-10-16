@@ -3,6 +3,7 @@ import { Badge, Box } from '@mantine/core';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { usePublishHighlight, useHighlight } from '../../highlight/bus';
+import { useZoomSyncHandle } from '../../highlight/zoomSync';
 import {
   advancedVizSelectionColumn,
   advancedVizSelectionFilter,
@@ -286,6 +287,9 @@ const MsaRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilter
     [ownRows, follow, filters, index, seqIdCol],
   );
 
+  // A complex numbers each chain apart: no one residue axis to sync.
+  const zoomSync = useZoomSyncHandle(index, msaId, positionCol, !chains);
+
   const incoming = useHighlight(index, follow);
   const highlight = useMemo(() => {
     if (!incoming || (incoming.entity && msaId && incoming.entity !== msaId)) return null;
@@ -483,6 +487,7 @@ const MsaRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilter
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Sequence alignment'}
+      zoomSync={zoomSync !== null}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       primaryControls={primaryControls}
       controls={controls}
@@ -514,6 +519,7 @@ const MsaRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilter
             onClickRow={selectionColumn ? onClickRow : undefined}
             cellWidth={zoom > 0 ? zoom : undefined}
             onCellWidthChange={setZoom}
+            zoomSync={zoomSync}
             showConsensus={showConsensus}
             showConservation={showConservation}
             followSelection={follow}

@@ -338,6 +338,27 @@ class TestGridSections:
         assert back.grid_sections[0].collapsed is True
 
 
+class TestSectionDisplay:
+    @pytest.mark.parametrize("display", ["grid", "strip", "linked"])
+    def test_every_layout_is_accepted_and_survives_a_round_trip(self, display):
+        dash = _dashboard(
+            [_figure("f", section="QC")],
+            grid_sections=[{"name": "QC", "display": display}],
+        )
+        assert dash.to_full()["grid_sections"][0]["display"] == display
+        back = DashboardDataLite.from_full(dash.to_full())
+        assert back.grid_sections[0].display == display
+
+    def test_display_defaults_to_unset(self):
+        assert FilterSectionSpec(name="QC").display is None
+
+    @pytest.mark.parametrize("display", ["carousel", "dock"])
+    def test_an_unknown_layout_is_rejected(self, display):
+        # `dock` was a section display once; it is gone, not just unused.
+        with pytest.raises(ValidationError):
+            FilterSectionSpec(name="QC", display=display)
+
+
 # ---------------------------------------------------------------------------
 # `persistent` — cross-tab fan-out flag
 # ---------------------------------------------------------------------------

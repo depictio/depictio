@@ -8,6 +8,8 @@
  * with the reference's own gap columns mapping to no residue.
  */
 
+import type { ZoomSyncHandle } from '../../../highlight/zoomSync';
+
 /** Residue colouring schemes an MSA offers (mirrors `MsaConfig.color_scheme`). */
 export type MsaColourScheme = 'clustal' | 'zappo' | 'hydrophobicity' | 'identity' | 'none';
 
@@ -100,6 +102,8 @@ export interface MsaPanelProps {
   height?: number | string;
   /** Pixels per alignment column; defaults to fitting the width (min 1 px). */
   cellWidth?: number;
+  /** Zoom sync with the view's other residue tiles, in the reference's numbering. */
+  zoomSync?: ZoomSyncHandle | null;
   showConsensus?: boolean;
   showConservation?: boolean;
   /** Scroll an incoming `selectedRange` / `highlight` into view. Default true. */
@@ -187,6 +191,8 @@ export interface SequenceStripProps {
   onCellWidthChange?: (px: number) => void;
   /** Strips that share one horizontal scroll (the chains of a complex). */
   scrollSync?: ScrollSync;
+  /** Zoom sync with the view's other residue tiles. */
+  zoomSync?: ZoomSyncHandle | null;
   showLetters?: boolean;
   /** Scroll an incoming `selectedRange` / `highlight` into view. Default true. */
   followSelection?: boolean;

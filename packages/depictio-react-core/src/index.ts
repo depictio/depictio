@@ -10,9 +10,17 @@
 import './styles/realtime-highlight.css';
 // Before any Plot mounts: re-attach Plotly listeners after StrictMode's remount.
 import './plotlyStrictMode';
+// Before any Plot mounts: plain wheel scrolls the page, Ctrl / Cmd + wheel zooms.
+import './plotlyZoomGate';
 
 // Grid + top-level renderer
 export { default as DashboardGrid, SectionSummary } from './components/DashboardGrid';
+export { DensityContext, useDensity } from './components/density';
+export type { Density } from './components/density';
+// Linked view sections (`display` on a grid section): the pure rules the
+// viewer's `?layout=` switch shares with the grid.
+export { effectiveDisplay } from './components/sectionGroups';
+export type { LayoutOverride } from './components/sectionGroups';
 export type { ComponentSection } from './utils/groupInteractive';
 // Content-aware sizing: the demand channel renderers publish on, and the two
 // predicates a host needs to offer "size this tile to its content" as an action.
@@ -169,6 +177,14 @@ export {
   singlePick,
 } from './components/interactive/alwaysSelected';
 export type { PickableOption } from './components/interactive/alwaysSelected';
+// The tab's scope (its `always_selected` filters): the banner under the header.
+export { ScopeBanner } from './components/interactive/ScopeBanner';
+export {
+  alwaysSelectedComponents,
+  bannerFactItems,
+  scopeUnits,
+  unitSteps,
+} from './components/interactive/scope';
 export { default as SegmentedControlRenderer } from './components/interactive/SegmentedControlRenderer';
 export { default as TimelineRenderer } from './components/interactive/TimelineRenderer';
 // The one frame every interactive control renders inside — exported so the
@@ -744,7 +760,9 @@ export type { GenomeRegionSelection } from './selection';
 
 // Map panel: a map lifted out of the grid, available from every tab as a
 // floating card or as a dock under the filter panel. Mount both shells — each
-// renders nothing unless the panel is in its mode.
+// renders nothing unless the panel is in its mode. The same shell holds a
+// floating `molecule_3d` tile (the 3D structure panel): one `useMapPanel` call
+// per kind, over `partitionFloating` of the family's floating components.
 // Consumers that draw their own Plotly map (the builder / project previews)
 // need this too — plotly leaves every map's basemap credit expanded on first
 // paint. See the helper's own docstring.
@@ -757,6 +775,14 @@ export { default as MapPanelDock } from './components/mapPanel/MapPanelDock';
 export type { MapPanelDockProps } from './components/mapPanel/MapPanelDock';
 export { useMapPanel } from './components/mapPanel/useMapPanel';
 export type { MapPanel, UseMapPanelOptions } from './components/mapPanel/useMapPanel';
+export {
+  FLOATING_VIZ_KINDS,
+  PANEL_KINDS,
+  floatingPanelKindOf,
+  isFloatingComponent,
+  partitionFloating,
+} from './components/mapPanel/panelKinds';
+export type { FloatingPanelKind, PanelKindSpec } from './components/mapPanel/panelKinds';
 export { useCrossTabComponents } from './hooks/useCrossTabComponents';
 export type { CrossTabComponents } from './hooks/useCrossTabComponents';
 export type {

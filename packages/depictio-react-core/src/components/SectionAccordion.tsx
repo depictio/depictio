@@ -74,13 +74,17 @@ export const SectionAccordionItem: React.FC<{
   children: React.ReactNode;
   /** `appearance: plain`: no frame, no chevron, a heading over its tiles. */
   plain?: boolean;
-}> = ({ value, color, actions, children, plain = false }) => {
+  /** Extra class on the item: `is-linked-view` tightens its paddings and draws
+   *  its tiles flatter and closer (sectionAccordion.css, glass.css). Appended to
+   *  `is-plain` when both apply. */
+  className?: string;
+}> = ({ value, color, actions, children, plain = false, className }) => {
   const [control, panel] = React.Children.toArray(children);
   return (
     <SectionColorContext.Provider value={color ?? null}>
     <Accordion.Item
       value={value}
-      className={plain ? 'is-plain' : undefined}
+      className={[plain ? 'is-plain' : null, className].filter(Boolean).join(' ') || undefined}
       style={
         color
           ? ({ '--section-accent': sectionColorVar(color) } as React.CSSProperties)

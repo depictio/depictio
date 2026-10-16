@@ -139,6 +139,12 @@ export function distinctEntities(rows: readonly ResidueRow[]): string[] {
  * is the universe of entities that can be drawn (the indexed_file samples in
  * file mode, the row entities in resolve mode); an entity outside it is never
  * returned.
+ *
+ * `unrenderable` names entities the structure source cannot draw (see
+ * `foldable.ts`). Only the two automatic steps at the end steer clear of
+ * them: a filter, a pick and the agreed opening are honoured as given, and
+ * when every candidate is unrenderable the choice is the one it would be
+ * without the set.
  */
 export function chooseEntity(args: {
   fromFilters: string | null;
@@ -146,12 +152,17 @@ export function chooseEntity(args: {
   rowEntities: readonly string[];
   available: readonly string[];
   opening?: string | null;
+  unrenderable?: ReadonlySet<string>;
 }): string | null {
-  const { fromFilters, picked, rowEntities, available, opening = null } = args;
+  const { fromFilters, picked, rowEntities, available, opening = null, unrenderable } = args;
   const has = (e: string | null): e is string => e !== null && available.includes(e);
   if (has(fromFilters)) return fromFilters;
   if (has(picked)) return picked;
   if (has(opening)) return opening;
+  if (unrenderable && unrenderable.size > 0) {
+    for (const e of rowEntities) if (has(e) && !unrenderable.has(e)) return e;
+    for (const e of available) if (!unrenderable.has(e)) return e;
+  }
   for (const e of rowEntities) if (has(e)) return e;
   return available[0] ?? null;
 }

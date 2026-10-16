@@ -12,6 +12,7 @@ import type { TierAnnotation } from '../data/DataGridBody';
 import type { LoadAllState } from '../chrome/LoadAllButton';
 import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
 import { TILE_ACTION_STYLE } from '../chrome/actionStyles';
+import { useZoomSyncMember } from '../../highlight/zoomSync';
 import { VizControlsGrid } from './controls/VizControls';
 
 /**
@@ -63,6 +64,8 @@ export interface AdvancedVizExtrasPayload {
   /** The frame shows the controls docked beside or above the plot, so the
    *  chrome row offers a toggle for them rather than a popover. */
   docked?: boolean;
+  /** The tile follows and leads zoom sync: the row offers its switch. */
+  zoomSync?: boolean;
   /** Reduced-sampling state, when the renderer can expand to the full view.
    *  Shaped as `LoadAllState` so the dispatch can hand it straight to
    *  `LoadAllButton`. */
@@ -203,6 +206,31 @@ export const AdvancedVizDockToggle: React.FC<{ open: boolean; onToggle: () => vo
     <Icon icon={TILE_ACTION_STYLE.settings.icon} width={16} height={16} />
   </ActionIcon>
 );
+
+/**
+ * This tile's zoom sync switch, in its row (see highlight/zoomSync.ts): filled
+ * while the tile zooms with the other synced tiles. Hidden until the tile has
+ * registered (nothing to sync with outside a dashboard view, or an axis the
+ * sync cannot follow).
+ */
+export const AdvancedVizZoomSyncToggle: React.FC<{ index: string }> = ({ index }) => {
+  const { available, member, setMember } = useZoomSyncMember(index);
+  if (!available) return null;
+  const label = member ? 'Stop syncing zoom' : TILE_ACTION_STYLE.zoomSync.label;
+  return (
+    <ActionIcon
+      variant={member ? 'filled' : 'subtle'}
+      size="sm"
+      aria-label={label}
+      aria-pressed={member}
+      title={label}
+      data-tile-action="zoom-sync"
+      onClick={() => setMember(!member)}
+    >
+      <Icon icon={TILE_ACTION_STYLE.zoomSync.icon} width={16} height={16} />
+    </ActionIcon>
+  );
+};
 
 export type { TierAnnotation } from '../data/DataGridBody';
 

@@ -1,0 +1,168 @@
+/* The scope banner (ScopeBanner.tsx), as the Classic chrome draws it: a bar
+ * under the header on the page's own background, ruled off from the canvas.
+ * Paper restyles the surface as a strip card (glass/layout.css, beside
+ * `.hy-strip`); the card inside is the same in both. */
+
+.depictio-scope-banner {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-xs);
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+  background: var(--mantine-color-body);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+
+/* Icon tile, identity, figures, then the previous and next keys at the end;
+ * wraps on a narrow screen. */
+.depictio-scope-banner__card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mantine-spacing-xs) 12px;
+  min-width: 0;
+}
+
+/* The filter's icon tile, as the filter bar draws it (filterStrip.css), at
+ * card size. */
+.depictio-scope-banner__badge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--scope-accent);
+  color: var(--mantine-color-white);
+}
+
+/* The name takes the room the line has: a basis wide enough for most
+ * identifiers, growing into whatever the figures leave, which wrap to the
+ * next line rather than squeeze it. A size container, so the name's type can
+ * follow its width (below). */
+.depictio-scope-banner__identity {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 22rem;
+  min-width: min(100%, 14rem);
+  max-width: 100%;
+  container-type: inline-size;
+}
+
+.depictio-scope-banner__eyebrow {
+  font-size: 11px;
+  line-height: 1.3;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* The name's type fits its length to the room: heading size while it fits,
+ * smaller as the name gets longer than the identity is wide, never under the
+ * body size. `--scope-name-chars` is the name's length (ScopeBanner.tsx), and
+ * 0.64em a bold character's width, rounded up so the estimate errs towards
+ * fitting; the selector icon's width comes off the room first. */
+.depictio-scope-banner__name {
+  --scope-name-max: var(--mantine-h3-font-size);
+  display: block;
+  min-width: 0;
+  font-size: clamp(
+    var(--mantine-font-size-sm),
+    calc((100cqi - 32px) / (var(--scope-name-chars, 12) * 0.64)),
+    var(--scope-name-max)
+  );
+  line-height: 1.25;
+}
+
+/* Never truncated: a name too long even at the smallest size breaks inside a
+ * word (it is often an identifier with no spaces), but only when the line has
+ * no room for it. (`anywhere` would also shrink the name's min-content width
+ * to one letter, and the card would then wrap even a short name.) */
+.depictio-scope-banner__name,
+.depictio-scope-banner__option {
+  overflow-wrap: break-word;
+}
+
+/* The name is the picker: it reads as a heading, and shows it is one only on
+ * hover and focus. */
+.depictio-scope-banner__picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+  margin-inline-start: -6px;
+  padding: 1px 6px;
+  border-radius: var(--scope-radius, var(--mantine-radius-default));
+  color: inherit;
+}
+.depictio-scope-banner__picker > svg {
+  flex: none;
+  color: var(--mantine-color-dimmed);
+}
+.depictio-scope-banner__picker:hover,
+.depictio-scope-banner__picker[aria-expanded='true'] {
+  background: var(--mantine-color-default-hover);
+}
+.depictio-scope-banner__picker:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 1px;
+}
+
+/* Each fact is a stat: an icon tile in the filter's accent, the figure over
+ * its label. */
+.depictio-scope-banner__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-xs) var(--mantine-spacing-xl);
+  margin-inline-start: var(--mantine-spacing-lg);
+}
+.depictio-scope-banner__fact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.depictio-scope-banner__fact-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.depictio-scope-banner__figure {
+  font-size: var(--mantine-font-size-lg);
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.depictio-scope-banner__label {
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.depictio-scope-banner__steps {
+  margin-inline-start: auto;
+}
+.depictio-scope-banner__rank {
+  min-width: 5ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (max-width: 48em) {
+  .depictio-scope-banner {
+    padding-inline: var(--mantine-spacing-sm);
+  }
+  .depictio-scope-banner__badge {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+  }
+  .depictio-scope-banner__name {
+    --scope-name-max: var(--mantine-h4-font-size);
+  }
+  .depictio-scope-banner__facts {
+    margin-inline-start: 0;
+    gap: var(--mantine-spacing-xs) var(--mantine-spacing-lg);
+  }
+}

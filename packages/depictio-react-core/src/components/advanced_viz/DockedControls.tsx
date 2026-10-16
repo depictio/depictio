@@ -47,13 +47,18 @@ function controlsOf(item: HTMLElement): HTMLElement[] {
  * change of value, so a control never jumps between the two while it is used.
  *
  * Titled, so the panel reads as the plot's settings rather than as part of the
- * figure. `lead` (a view switch) comes first and is never folded.
+ * figure. `lead` (a view switch) comes first and is never folded. The title
+ * line ends with `headerAction`, the placement picker every other controls
+ * block heads with, so a docked panel can be moved into a rail or under the
+ * title like the popover can: while docked, the chrome's settings icon only
+ * folds the panel and opens no popover to pick from.
  */
 const DockedControls: React.FC<{
   controls: React.ReactNode;
   side: DockSide;
   lead?: React.ReactNode;
-}> = ({ controls, side, lead }) => {
+  headerAction?: React.ReactNode;
+}> = ({ controls, side, lead, headerAction }) => {
   const ref = useRef<HTMLDivElement | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [extra, setExtra] = useState(0);
@@ -112,7 +117,12 @@ const DockedControls: React.FC<{
           <Icon icon="tabler:adjustments-horizontal" width={13} height={13} />
           Controls
         </span>
-        {side === 'top' ? more : null}
+        {side === 'top' || headerAction ? (
+          <span className="dpx-viz-dock__head-end">
+            {side === 'top' ? more : null}
+            {headerAction}
+          </span>
+        ) : null}
       </div>
       <div className="dpx-viz-dock__body">
         {lead ? <div className="dpx-viz-dock__lead">{lead}</div> : null}

@@ -83,6 +83,7 @@ from depictio.api.v1.services.figure.figure_builder import (
 )
 from depictio.api.v1.services.figure.style_presets import figure_style_payload
 from depictio.models.components.category_palette import assign_category_colors
+from depictio.models.components.constants import FLOATING_ADVANCED_VIZ_KINDS
 from depictio.models.components.lite import (
     TEXT_ONLY_AGGREGATIONS,
     TEXT_PARAM_PLACEHOLDER,
@@ -4758,12 +4759,28 @@ def _resolve_tab_family(
     return parent_id, tabs
 
 
+def _is_floating_component(meta: dict[str, Any]) -> bool:
+    """Whether a stored component is lifted out of the grid into the floating panel.
+
+    A map floats whenever it says so. An advanced viz does only when it is one
+    of the kinds a panel can hold (`FLOATING_ADVANCED_VIZ_KINDS`): stored
+    metadata never went through the lite model's own check, and the viewer takes
+    whatever floats off the grid, so a tile of any other kind has to stay on it.
+    """
+    if meta.get("placement") != "floating":
+        return False
+    component_type = meta.get("component_type")
+    if component_type == "map":
+        return True
+    return component_type == "advanced_viz" and meta.get("viz_kind") in FLOATING_ADVANCED_VIZ_KINDS
+
+
 def _floating_components_of(tabs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The family's floating maps, each paired with its owning tab."""
+    """The family's floating components (maps and 3D structures), each paired with its owning tab."""
     components: list[dict[str, Any]] = []
     for tab in tabs:
         for meta in tab.get("stored_metadata") or []:
-            if meta.get("component_type") == "map" and meta.get("placement") == "floating":
+            if _is_floating_component(meta):
                 components.append(
                     {
                         "dashboard_id": str(tab.get("dashboard_id")),
@@ -4910,15 +4927,16 @@ def get_cross_tab_components(
                     # Same membership rule as the viewer's `isFilterMember`:
                     # interactive components live in filter sections, everything
                     # else in grid sections -- except interactive components of
-                    # a filter bar, which are grid members. Floating maps are
-                    # excluded — they already fan out through `floating`.
+                    # a filter bar, which are grid members. Floating components
+                    # (maps, 3D structures) are excluded: they already fan out
+                    # through `floating`.
                     is_filter = (
                         meta.get("component_type") == "interactive"
                         and meta.get("section") not in bar_names
                     )
                     if is_filter != (kind == "filter"):
                         continue
-                    if meta.get("component_type") == "map" and meta.get("placement") == "floating":
+                    if _is_floating_component(meta):
                         continue
                     members.append(
                         {

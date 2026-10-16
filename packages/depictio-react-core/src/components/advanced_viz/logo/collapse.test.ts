@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   addHidden,
+  columnAtX,
   columnsInView,
   expandStub,
   extentAtX,
@@ -13,6 +14,7 @@ import {
   STUB_PX,
   visibleSegments,
   windowIndices,
+  xOfColumn,
   xOfIndex,
   type CollapseSpec,
   type StubSegment,
@@ -252,5 +254,40 @@ describe('addHidden and expandStub', () => {
     const next = expandStub({ hidden: spec.hidden!, expanded: [] }, placed[1]);
     expect(next.hidden).toEqual([[2, 4]]);
     expect(shape({ ...spec, hidden: next.hidden })).toEqual(['L0-1', 'S2-4', 'L5-19']);
+  });
+});
+
+describe('xOfColumn and columnAtX', () => {
+  // Columns 0..9; 3..6 fold into one stub; letters at 10 px.
+  const layout = placeColumns(
+    planColumns({ states: states(10), information: info(10, [[3, 6]]), belowIc: 0.5, minRun: 3 }),
+    10,
+  );
+
+  it('places letters at their width and spreads a stub evenly over its columns', () => {
+    expect(xOfColumn(layout, 0)).toBe(0);
+    expect(xOfColumn(layout, 2.5)).toBe(25);
+    expect(xOfColumn(layout, 3)).toBe(30);
+    expect(xOfColumn(layout, 5)).toBe(30 + STUB_PX / 2);
+    expect(xOfColumn(layout, 7)).toBe(30 + STUB_PX);
+    expect(xOfColumn(layout, 10)).toBe(layout.width);
+  });
+
+  it('goes past the window one column width at a time', () => {
+    expect(xOfColumn(layout, -1)).toBe(-10);
+    expect(xOfColumn(layout, 12)).toBe(layout.width + 20);
+  });
+
+  it('inverts xOfColumn', () => {
+    for (const u of [-1, 0, 1.25, 3, 4.5, 6.9, 7, 9.5, 11]) {
+      expect(columnAtX(layout, xOfColumn(layout, u))).toBeCloseTo(u, 10);
+    }
+  });
+
+  it('is affine in the width, stubs fixed', () => {
+    const plan = planColumns({ states: states(10), information: info(10, [[3, 6]]), belowIc: 0.5, minRun: 3 });
+    const x = (cw: number) => xOfColumn(placeColumns(plan, cw), 8);
+    expect(x(3) - x(2)).toBeCloseTo(x(2) - x(1), 10);
+    expect(x(0)).toBe(STUB_PX);
   });
 });

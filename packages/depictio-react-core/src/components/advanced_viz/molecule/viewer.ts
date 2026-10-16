@@ -20,6 +20,8 @@
  * few shapes it changes, not every mark.
  */
 
+import { isZoomWheel } from '../../zoomGate';
+import { attachZoomGate } from '../../zoomGateDom';
 import type { StructureFormat } from './structureText';
 
 export type Representation = 'cartoon' | 'trace' | 'stick' | 'sphere' | 'surface';
@@ -100,8 +102,9 @@ export interface StructureViewer {
   setSelection(span: ResidueSpan | null, asSite?: boolean): void;
   /** Marks, labels and hover highlight (shapes only, no restyle). */
   setOverlay(overlay: OverlayState): void;
-  /** Zoom onto a span, or back onto the whole model with `null`. */
-  focus(span: ResidueSpan | null, animate?: boolean): void;
+  /** Zoom onto a span, or back onto the whole model with `null`. `animate`:
+   *  the default move, none, or a duration in ms. */
+  focus(span: ResidueSpan | null, animate?: boolean | number): void;
   setColours(colours: ViewerColours): void;
   setSpin(on: boolean): void;
   resetView(): void;
@@ -333,7 +336,16 @@ export async function createStructureViewer(
     viewer.getCanvas?.() ??
     Array.from(container.querySelectorAll('canvas')).find((c) => !before.has(c)) ??
     null;
-  viewer.setHoverDuration(40);
+  // 3Dmol looks for the hovered atom this long after the pointer last moved,
+  // and every move restarts the wait: at 40 ms a sweep over the structure
+  // reported nothing until the pointer rested, while the unhover of the atom
+  // it had left fired at once, so the highlight blinked off and the other
+  // tiles' crosshair lagged behind the pointer. 0 runs the lookup on the next
+  // task. It is the same ray cast `handleHoverContinue` already makes on every
+  // move, and a browser delivers about one move per frame, so this costs at
+  // most one more per frame. The tile (`hoverGate.ts`) absorbs the extra
+  // callbacks: a residue already shown is not drawn again.
+  viewer.setHoverDuration(0);
 
   let current = colours;
   let model: GlModel | null = null;
@@ -374,15 +386,17 @@ export async function createStructureViewer(
   const onPointerUp = () => {
     pressAt = null;
   };
-  const onWheel = () => {
-    userMoved = true;
+  // Only a zoom wheel moves the camera: a plain one is kept from 3Dmol by the
+  // zoom gate below and scrolls the page instead.
+  const onWheel = (e: WheelEvent) => {
+    if (isZoomWheel(e)) userMoved = true;
   };
   const hostListeners: [string, EventListener][] = [
     ['pointerdown', onPointerDown as EventListener],
     ['pointermove', onPointerMove as EventListener],
     ['pointerup', onPointerUp],
     ['pointercancel', onPointerUp],
-    ['wheel', onWheel],
+    ['wheel', onWheel as EventListener],
   ];
   const canListen = typeof container.addEventListener === 'function';
   if (canListen) {
@@ -390,6 +404,10 @@ export async function createStructureViewer(
       container.addEventListener(type, fn, { passive: true, capture: true });
     }
   }
+  // 3Dmol zooms on a plain wheel (and traps the page scroll doing it). The
+  // gate on its host keeps that wheel from the canvas, so Ctrl / Cmd + wheel
+  // and a two-finger pinch zoom, and the first hover shows how.
+  const detachZoomGate = attachZoomGate(container);
   const fitCamera = () => {
     viewer.zoomTo(focusSpan ? frameSelection(focusSpan) : {}, 0);
   };
@@ -563,7 +581,8 @@ export async function createStructureViewer(
       // A programmatic fit: later resizes keep this span in frame.
       focusSpan = span;
       userMoved = false;
-      viewer.zoomTo(span ? frameSelection(span) : {}, animate ? 500 : 0);
+      const ms = typeof animate === 'number' ? animate : animate ? 500 : 0;
+      viewer.zoomTo(span ? frameSelection(span) : {}, ms);
     },
 
     setColours(next) {
@@ -606,6 +625,7 @@ export async function createStructureViewer(
     dispose() {
       if (disposed) return;
       disposed = true;
+      detachZoomGate();
       if (canListen) {
         for (const [type, fn] of hostListeners) {
           container.removeEventListener(type, fn, { capture: true });

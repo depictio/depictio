@@ -1,0 +1,116 @@
+/* ------------------------------------------------- linked view split (gutters) */
+
+/* A linked view drawn as nested flex panes (LinkedViewPanes.tsx). Tiles are the
+   grid's own cells, placed by flex instead of by react-grid-layout, with a
+   gutter between neighbours. Colours come from Mantine's variables, so Paper
+   and Classic draw the same line. The gutter is 4px (LINKED_VIEW_GUTTER_PX): the
+   tiles read as parts of one surface, and the grab zone is wider than the gap
+   (see `::after`). */
+
+.depictio-linked-view-split {
+  display: flex;
+  min-width: 0;
+}
+
+/* It is a `.react-grid-layout` (screenshots and tiles look for one), and the
+   grid's stylesheet eases that class's height. Here a tile re-measures on the
+   window `resize` that follows a change, so the height must already be the new
+   one by then. */
+.depictio-linked-view-split.react-grid-layout {
+  transition: none;
+}
+
+.depictio-linked-view-node,
+.depictio-linked-view-pane {
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+/* A tile fills its pane exactly and answers for its own content: whatever it
+   holds that is taller or wider than the pane is cut at the pane's edge, never
+   painted over the tile beside or below it. The cell is a flex column whose one
+   child takes the whole of it (DashboardGrid builds it so). */
+.depictio-linked-view-pane {
+  overflow: hidden;
+}
+
+/* Tiles are placed by the split, not dragged: the grid's handle would do
+   nothing here. To move a tile to another position, `?layout=classic` draws the
+   section as the plain grid. `!important`: the handle's own display is an
+   inline style. */
+.depictio-linked-view-split .react-grid-dragHandle {
+  display: none !important;
+}
+
+/* While a gutter is held, the tiles under the pointer neither highlight nor
+   show tooltips: the drag, not the cursor's position, is what is going on. */
+.depictio-linked-view-split--dragging .depictio-linked-view-pane {
+  pointer-events: none;
+}
+
+.depictio-linked-view-gutter {
+  position: relative;
+  /* Above the tiles, so the part of the grab zone that lies over their edges
+     is the gutter's and not theirs. */
+  z-index: 2;
+  box-sizing: border-box;
+  outline: none;
+  /* Pointer events only: the browser's own pan gesture would otherwise fight a
+     drag on touch devices. */
+  touch-action: none;
+}
+
+.depictio-linked-view-gutter[data-dir='row'] {
+  cursor: col-resize;
+}
+
+.depictio-linked-view-gutter[data-dir='column'] {
+  cursor: row-resize;
+}
+
+.depictio-linked-view-gutter[data-static] {
+  cursor: default;
+}
+
+/* The grab zone: 3px more on each side of the gap, over the tiles' own edges,
+   so a 4px gutter is still easy to hold. */
+.depictio-linked-view-gutter:not([data-static])::after {
+  content: '';
+  position: absolute;
+}
+
+.depictio-linked-view-gutter[data-dir='row']:not([data-static])::after {
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  right: -3px;
+}
+
+.depictio-linked-view-gutter[data-dir='column']:not([data-static])::after {
+  left: 0;
+  right: 0;
+  top: -3px;
+  bottom: -3px;
+}
+
+/* The line fills the gap, and only once there is something to say: on hover,
+   while held, and for keyboard focus. */
+.depictio-linked-view-gutter::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 2px;
+  background: transparent;
+  transition: background-color 120ms ease;
+  pointer-events: none;
+}
+
+.depictio-linked-view-gutter:not([data-static]):hover::before {
+  background: color-mix(in srgb, var(--mantine-primary-color-filled) 40%, transparent);
+}
+
+.depictio-linked-view-gutter[data-active]::before,
+.depictio-linked-view-gutter:focus-visible::before {
+  background: var(--mantine-primary-color-filled);
+}

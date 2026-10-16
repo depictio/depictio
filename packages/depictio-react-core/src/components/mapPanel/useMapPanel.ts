@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useState } from 'react';
 
 import { type FloatingComponent, type InteractiveFilter } from '../../api';
-import { mapSelectionValues } from '../../selection';
+import { PANEL_KINDS, type FloatingPanelKind } from './panelKinds';
+import { clearSelectionFilters, selectionCount } from './panelSelection';
 import {
   useMapPanelState,
   type MapPanelCardSize,
@@ -10,7 +11,10 @@ import {
 } from './useMapPanelState';
 
 export interface MapPanel {
-  /** Floating maps across the whole tab family, in tab order. */
+  /** What this panel holds: the dashboard's floating maps, or its floating 3D
+   *  structures. The shells read it for the glyph, the labels and the body. */
+  kind: FloatingPanelKind;
+  /** The family's floating components of this kind, in tab order. */
   components: FloatingComponent[];
   /** Parent dashboard id — the family key the panel state is stored under. */
   familyId: string | null;
@@ -28,23 +32,29 @@ export interface MapPanel {
   /** Which map the panel is showing, when the family has more than one. */
   activeIndex: string | null;
   setActiveIndex: (index: string) => void;
-  /** Values selected across every floating map. Drives the header badge, which
-   *  is often the only sign that a filter set on another tab is still live. */
+  /** Values selected across every component of this panel. Drives the header
+   *  badge, which for a map is often the only sign that a filter set on another
+   *  tab is still live. For a structure it is the count of residue picks (one
+   *  per pick: a range is a single selection), and a pick does not outlive a
+   *  tab switch, so the badge there only reports the tab on screen. */
   totalSelected: number;
-  /** Clear every floating map's selection at once. */
+  /** Clear every component's selection at once. */
   clearSelection: () => void;
   /** True when the panel is pinned under the filter panel. The dock renders in
    *  flow, so nothing on the page has to reserve space for it. */
   docked: boolean;
-  /** False when this dashboard has no floating map at all — the shells render
-   *  neither the header control nor the panel. */
+  /** False when this dashboard has no floating component of this kind at all:
+   *  the shells render neither the header control nor the panel. */
   available: boolean;
 }
 
 export interface UseMapPanelOptions {
-  /** Floating maps across the whole tab family, in tab order. Resolved by
-   *  `useCrossTabComponents` — the shell owns the single family request per
-   *  page load and hands the floating slice down here. */
+  /** Which panel this is. Defaults to the map panel, which is what every caller
+   *  was before the 3D structure panel existed. */
+  kind?: FloatingPanelKind;
+  /** The family's floating components of `kind`, in tab order. Resolved by
+   *  `useCrossTabComponents` (the shell owns the single family request per
+   *  page load) and split with `partitionFloating`. */
   components: FloatingComponent[];
   /** Parent dashboard id — the family key the panel state is stored under. */
   familyId: string | null;
@@ -57,15 +67,16 @@ export interface UseMapPanelOptions {
 /**
  * Everything the map panel needs, in one place.
  *
- * A floating map is authored on one tab but belongs to the whole dashboard, so
- * this receives the tab family's floating components rather than reading the
- * current tab's `stored_metadata`. Each component keeps its owning tab's id,
- * which is what `MapRenderer` fetches against.
+ * A floating component is authored on one tab but belongs to the whole
+ * dashboard, so this receives the tab family's floating components rather than
+ * reading the current tab's `stored_metadata`. Each component keeps its owning
+ * tab's id, which is what the renderer fetches against.
  *
- * The shell calls this once and hands the result to both the header control
- * and the panel surface, so the two always agree on mode and selection.
+ * The shell calls this once per kind and hands the result to both the header
+ * control and the panel surface, so the two always agree on mode and selection.
  */
 export function useMapPanel({
+  kind = 'map',
   components,
   familyId,
   filters,
@@ -83,28 +94,26 @@ export function useMapPanel({
     setDockHeight,
     setDockCollapsed,
     setLegendHidden,
-  } = useMapPanelState(familyId, authorDefault);
+  } = useMapPanelState(familyId, authorDefault, PANEL_KINDS[kind].storagePrefix);
 
   const totalSelected = useMemo(
-    () =>
-      components.reduce(
-        (sum, c) => sum + mapSelectionValues(filters, c.metadata.index).length,
-        0,
-      ),
-    [components, filters],
+    () => components.reduce((sum, c) => sum + selectionCount(kind, filters, c.metadata.index), 0),
+    [kind, components, filters],
   );
 
   const clearSelection = useCallback(() => {
     if (!onFilterChange) return;
     for (const c of components) {
-      if (mapSelectionValues(filters, c.metadata.index).length === 0) continue;
-      onFilterChange({ index: c.metadata.index, value: [], source: 'map_selection' });
+      for (const cleared of clearSelectionFilters(kind, filters, c.metadata.index)) {
+        onFilterChange(cleared);
+      }
     }
-  }, [components, filters, onFilterChange]);
+  }, [kind, components, filters, onFilterChange]);
 
   const available = components.length > 0;
 
   return {
+    kind,
     components,
     familyId,
     state,

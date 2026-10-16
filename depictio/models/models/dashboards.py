@@ -80,13 +80,14 @@ class LayoutItem(BaseModel):
 _VALUE_ERROR_PREFIX = re.compile(r"^Value error,\s*")
 
 # `placement` means something different per component type and so defaults
-# differently: an interactive control lives in the left filter panel, a map is a
-# normal grid tile. Kept in step with the `placement` fields on
-# `InteractiveLiteComponent` / `MapLiteComponent`. Types absent here carry no
-# placement at all, so nothing is ever skipped for them.
+# differently: an interactive control lives in the left filter panel, a map or an
+# advanced viz is a normal grid tile. Kept in step with the `placement` fields on
+# `InteractiveLiteComponent` / `MapLiteComponent` / `AdvancedVizLiteComponent`.
+# Types absent here carry no placement at all, so nothing is ever skipped for them.
 _DEFAULT_PLACEMENT: dict[str, str] = {
     "interactive": "left",
     "map": "grid",
+    "advanced_viz": "grid",
 }
 
 
@@ -211,6 +212,20 @@ def exportable_text_values(values: Any) -> dict[str, dict[str, Any]] | None:
     return out or None
 
 
+def _banner_facts_payload(facts: Any) -> list[dict[str, Any]]:
+    """An interactive component's `banner_facts` as stored: dicts, unset `format` left out.
+
+    Takes the parsed specs or the stored dicts alike, so the same call serves both
+    directions of the lite/full conversion.
+    """
+    out: list[dict[str, Any]] = []
+    for fact in facts or []:
+        raw = fact.model_dump() if isinstance(fact, BaseModel) else fact
+        if isinstance(raw, dict):
+            out.append({k: v for k, v in raw.items() if v is not None})
+    return out
+
+
 class FilterSectionSpec(BaseModel):
     """Presentation of one left-panel filter section, or one grid section.
 
@@ -306,7 +321,7 @@ class FilterSectionSpec(BaseModel):
         "matches them without being told. Unset leaves each card to its own `variant`. "
         "Grid sections only.",
     )
-    display: Literal["grid", "strip"] | None = Field(
+    display: Literal["grid", "strip", "linked"] | None = Field(
         default=None,
         description="How a grid section lays out its members. Unset or `grid`: one tile "
         "each on the dashboard grid. `strip`: a filter bar -- the interactive "
@@ -314,7 +329,9 @@ class FilterSectionSpec(BaseModel):
         "compact row of controls (label, chips or a thin slider, dividers between), "
         "ignoring their grid coordinates. Their values filter the whole tab, as the "
         "panel's do. Any non-interactive members still render as tiles below the bar. "
-        "Grid sections only.",
+        "`linked`: holds the section's tiles within one screen height so linked "
+        "views stay side by side (grid sections of tiles only). `linked` falls "
+        "back to a normal stacked section on narrow screens. Grid sections only.",
     )
     filter_bar: bool | None = Field(
         default=None,
@@ -628,6 +645,45 @@ class DashboardDataLite(BaseModel):
         if errors:
             raise ValueError("\n".join(errors))
 
+        return self
+
+    @model_validator(mode="after")
+    def validate_floating_advanced_viz(self) -> "DashboardDataLite":
+        """Refuse a floating advanced viz of a kind that may not float.
+
+        `AdvancedVizLiteComponent` checks this itself, but a component that
+        fails any check falls through the union to a plain dict (see
+        `validate_components_domain`, which has no advanced_viz entry), so the
+        placement rule is restated here, on whatever form the component took.
+        """
+        from depictio.models.components.advanced_viz.component import floating_kind_error
+
+        errors: list[str] = []
+        for i, comp in enumerate(self.components):
+            if isinstance(comp, dict):
+                if comp.get("component_type") != "advanced_viz":
+                    continue
+                placement = comp.get("placement")
+                config = comp.get("config")
+                viz_kind = comp.get("viz_kind") or (
+                    config.get("viz_kind") if isinstance(config, dict) else None
+                )
+                tag = comp.get("tag")
+            else:
+                if getattr(comp, "component_type", None) != "advanced_viz":
+                    continue
+                placement = getattr(comp, "placement", None)
+                viz_kind = getattr(comp, "viz_kind", None)
+                tag = getattr(comp, "tag", None)
+            # A dict whose kind never resolved failed some other check; that is
+            # what to report, not a kind of None.
+            if placement != "floating" or viz_kind is None:
+                continue
+            error = floating_kind_error(viz_kind)
+            if error:
+                errors.append(f"[{tag or f'component[{i}]'}] placement: {error}")
+        if errors:
+            raise ValueError("\n".join(errors))
         return self
 
     @model_validator(mode="after")
@@ -1530,6 +1586,8 @@ class DashboardDataLite(BaseModel):
                         lite_comp["default_by"] = comp["default_by"]
                         if comp.get("default_order") == "asc":
                             lite_comp["default_order"] = "asc"
+                    if comp.get("banner_facts"):
+                        lite_comp["banner_facts"] = _banner_facts_payload(comp["banner_facts"])
                 display = collect_display_fields(
                     comp, ["title_size", "custom_color", "icon_name", "strip_label"]
                 )
@@ -1662,6 +1720,13 @@ class DashboardDataLite(BaseModel):
                 for field in ADVANCED_VIZ_DISPLAY_FIELDS:
                     if comp.get(field):
                         lite_comp[field] = comp[field]
+                # `placement: floating` was written by the prologue above; its
+                # opening state travels with it, skipped at the default as a
+                # map's is.
+                if comp.get("placement") == "floating" and comp.get(
+                    "floating_initial_state", "compact"
+                ) not in ("compact", None):
+                    lite_comp["floating_initial_state"] = comp["floating_initial_state"]
 
             elif comp_type == "multiqc":
                 # MultiQC parameters - export only if present in DB
@@ -1987,6 +2052,8 @@ class DashboardDataLite(BaseModel):
                         full_comp["default_by"] = comp_dict["default_by"]
                         if comp_dict.get("default_order") == "asc":
                             full_comp["default_order"] = "asc"
+                    if comp_dict.get("banner_facts"):
+                        full_comp["banner_facts"] = _banner_facts_payload(comp_dict["banner_facts"])
                 for f in ["title_size", "custom_color", "icon_name", "strip_label"]:
                     if comp_dict.get(f):
                         full_comp[f] = comp_dict[f]
@@ -2096,6 +2163,16 @@ class DashboardDataLite(BaseModel):
                 for field in ADVANCED_VIZ_DISPLAY_FIELDS:
                     if comp_dict.get(field) is not None:
                         full_comp[field] = comp_dict[field]
+                # A tile lifted into the floating panel. Written only when it
+                # floats, unlike a map's always-present pair: every stored advanced
+                # viz that never set it keeps its shape, and with it its snapshot
+                # hash. The layout loop below reads `placement` to give a floating
+                # tile no grid slot.
+                if comp_dict.get("placement") == "floating":
+                    full_comp["placement"] = "floating"
+                    full_comp["floating_initial_state"] = (
+                        comp_dict.get("floating_initial_state") or "compact"
+                    )
 
             elif comp_type == "highlight":
                 # Rendered by HighlightBlock.tsx, which looks the figure up on

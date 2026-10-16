@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   clearResolveMemo,
+  ESMFOLD_MAX_RESIDUES,
   modelCredit,
   modelExplanation,
   resolveKey,
@@ -62,6 +63,43 @@ describe('resolveStructure', () => {
     expect(err.kind).toBe('not_found');
     expect(err.message).toContain('No structure found');
     expect(missing).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers a sequence over the ESMFold limit with an explanation, not an upstream failure', async () => {
+    // The tile shows every kind but `upstream` as a calm state, so the kind of
+    // a too-long sequence decides whether the reader sees an explanation or a
+    // red failure box. The server's detail names the length and the limit.
+    const detail =
+      'sequence has 612 residues; ESMFold is limited to 400 on this server. ' +
+      'Give a uniprot accession or gene.';
+    const tooLong = vi.fn(async () => json(400, { detail }));
+    const err = await resolveStructure({ sequence: 'A'.repeat(612) }, { fetcher: tooLong }).catch(
+      (e) => e,
+    );
+    expect(err).toBeInstanceOf(ResolveError);
+    expect(err.kind).toBe('invalid');
+    expect(err.message).toBe(detail);
+    expect(err.message).toContain(String(ESMFOLD_MAX_RESIDUES));
+    // The same sequence behind an accession AlphaFold DB lacks is a 404 with its own detail.
+    const missing = vi.fn(async () =>
+      json(404, {
+        detail:
+          'No structure found: sequence has 612 residues, above the ESMFold limit of 400',
+      }),
+    );
+    const notFound = await resolveStructure(
+      { uniprot: 'P04637', sequence: 'A'.repeat(612) },
+      { fetcher: missing },
+    ).catch((e) => e);
+    expect(notFound.kind).toBe('not_found');
+    expect(notFound.message).toContain('above the ESMFold limit of 400');
+  });
+
+  it('keeps a failing upstream an error', async () => {
+    const down = vi.fn(async () => json(502, { detail: 'Structure upstream failed: ESMFold: timed out' }));
+    const err = await resolveStructure({ sequence: 'MKT' }, { fetcher: down }).catch((e) => e);
+    expect(err.kind).toBe('upstream');
+    expect(err.message).toContain('timed out');
   });
 
   it('tells an anonymous visitor to sign in rather than that the lookup is off', async () => {

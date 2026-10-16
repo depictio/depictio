@@ -63,9 +63,11 @@ structure file named after the protein, share one `entity`. The original id stay
   the sequence track and the other tabs are unaffected. ESMFold takes sequences of up to 400
   residues. This is an external call: the sequence is sent to the public ESM Atlas service
   (`api.esmatlas.com`, run by Meta), and the tile's info popover names the service and links to it.
-  The tab's length filter has no default window, so every protein is listed; the
-  structure tile of a longer one explains why it is empty, and the Longest protein card flags
-  a protein above the limit.
+  The tab's length filter has no default window, so every protein stays in the picker; the
+  structure tile of a longer one explains why it is empty, and the Protein length card flags
+  a protein above the limit. The picker opens on the shortest protein, because the structure tile
+  never overrides a protein the picker holds and the shortest one folds whenever any protein is
+  short enough.
 
 ## Variables
 
@@ -111,20 +113,31 @@ every other tab.
    `domain_architecture` tile draws one backbone per protein with its domains from all five
    databases, coloured by database; a click selects the protein and the span on the residue
    tables and the family on the domain table, scatter and record card beside it. The View control
-   groups proteins by architecture. The protein x database heatmap and the UpSet plot show which
-   databases agree, and significance against span separates families from motifs and borderline
-   calls. The domain table and the raw hmmsearch hits are collapsed.
+   groups proteins by architecture. The architecture, the domain record beside it, the protein x
+   database heatmap and the UpSet plot (which databases agree) sit in one `Architecture and
+   agreement` section (`display: linked`, held within one screen height), so the per-protein
+   views stay side by side. Significance against span, which picks domains across proteins,
+   keeps its own section and separates families from motifs and borderline calls. The domain
+   table and the raw hmmsearch hits are collapsed.
 3. **Secondary structure.** *Which stretches of each protein fold as helix, strand or coil?*
-   The `secondary_structure` tile shows the S4PRED ribbon of one protein over the probability of
-   each state, with its segment list; a brush or a segment pick selects the residues on the
-   `sequence_track` below, which also draws the domain spans. A stacked bar compares the state
-   shares of the proteins. The residue table is collapsed.
-4. **Structure.** *Where do the domains sit on one protein's 3D structure?* A table of the
-   proteins (sample, length, annotated share, best domain) picks the protein; its structure
-   (coloured by best domain, over its written sequence) and the sequence track (state,
-   probability and domain spans) stand linked residue by residue. Clicking a residue in 3D, a letter of the
-   sequence or brushing the track selects the same residues in all three. The residue table is
-   collapsed.
+   The tab shows one protein: its `Protein` filter is `always_selected` and opens on the shortest
+   protein (`default_by: position`, ascending), and the scope card prints the protein's sample
+   (the S4PRED table has one row per residue, so it holds no other per-protein value). The
+   `Predicted structure` section (`display: linked`, held within one screen height) stacks the
+   S4PRED ribbon of the protein over the probability of each state, with its segment list, on the
+   `sequence_track`, which also draws the domain spans; a brush or a segment pick selects the same
+   residues on both. The stacked bar of the state shares and the residue table keep their own
+   sections, the table collapsed.
+4. **Structure.** *Where do the domains sit on one protein's 3D structure?* The tab shows one
+   protein: its `Protein` filter is `always_selected` and opens on the shortest protein
+   (`default_by: length`, ascending), so the first fold is within the ESMFold limit, and the scope
+   card prints its length, domain hits and annotated share, each under an icon (`banner_facts`). The
+   `Structure and domains` section (`display: linked`, held within one screen height) puts the
+   structure (coloured by best domain, over its written sequence) beside the sequence track
+   (state, probability and domain spans), linked residue by residue: clicking a residue in 3D, a
+   letter of the sequence or brushing the track selects the same residues in both. The strip
+   reads the protein's domains, residues in a domain, domain depth and length; the protein
+   summary and the residue table are collapsed.
 
 Every child tab filters through the persistent sample filters plus its own left-panel filters:
 protein length, annotated share and status (Input filtering); database, family, significance and
@@ -140,4 +153,4 @@ databases (`database`, `source` and `top_domain_database` share one palette), th
 ## Height budget
 
 Open rows per tab (the collapsed sections excluded): Overview 23, Input filtering 14, Domains 20,
-Secondary structure 19, Structure 14.
+Secondary structure 17, Structure 13.

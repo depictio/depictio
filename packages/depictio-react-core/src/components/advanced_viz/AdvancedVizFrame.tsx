@@ -22,10 +22,13 @@ import {
 import { useAdvancedVizCaption, useAdvancedVizShowcase } from './advancedVizShowcase';
 import { CARD_FRAME } from '../cardFrame';
 import FigureHeader from '../FigureHeader';
+import { useDensity } from '../density';
 import { ControlsDockContext, ControlsLeadContext, resolveDock } from './controlsDock';
 import DockedControls from './DockedControls';
+import VizKindBadge from './VizKindBadge';
 import './controlsDock.css';
 import {
+  ControlsPlacementPicker,
   InlineControlsRail,
   InlineControlsStrip,
   RAIL_WIDTH_PX,
@@ -69,10 +72,11 @@ interface AdvancedVizFrameProps {
    * Tier-2 controls (sliders / dropdowns / toggles). Where they are drawn is
    * the tile's controls placement (`controls_placement` in the config, see
    * controlsPlacement.ts): in the tile's own strip or rail when pinned there,
-   * otherwise docked beside or above the plot where the tile allows (see
-   * controlsDock.ts), else behind the Settings ActionIcon in ComponentChrome's
-   * hover-revealed action row. Every surface reads the payload published via
-   * AdvancedVizExtrasContext, which also feeds the inspector.
+   * otherwise docked beside or above the plot where the tile allows, or
+   * floating over it (see controlsDock.ts), else behind the Settings
+   * ActionIcon in ComponentChrome's hover-revealed action row. Every surface
+   * reads the payload published via AdvancedVizExtrasContext, which also feeds
+   * the inspector.
    */
   controls?: React.ReactNode;
   /**
@@ -117,6 +121,8 @@ interface AdvancedVizFrameProps {
   dataRows?: Record<string, unknown[]>;
   /** Column ordering for the data popover. */
   dataColumns?: string[];
+  /** The tile takes part in zoom sync: its row offers the switch. */
+  zoomSync?: boolean;
   /**
    * Threshold-aware per-row annotation aligned with `dataRows` (volcano UP/DN/NS,
    * manhattan HIT/MISS, etc.). When set, the data popover prepends a `__tier`
@@ -234,6 +240,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   emptyMessage,
   dataRows,
   dataColumns,
+  zoomSync = false,
   tierAnnotation,
   counts,
   reduction,
@@ -241,6 +248,8 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   badges,
 }) => {
   const publish = useContext(AdvancedVizExtrasContext);
+  // A linked view or a docked column asks for a one-line header (`density.ts`).
+  const compact = useDensity() === 'compact';
   const dock = useContext(ControlsDockContext);
   // A view switch a router put ahead of this renderer's controls (see
   // VolcanoViews). It decides what is plotted, so it heads the encoding tier
@@ -285,7 +294,8 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   // Where this tile's controls are drawn. Resolved once by the dispatch (which
   // holds the config and the dashboard default) and read here and there, so
   // the strip and the popover cannot disagree about which tier lives where.
-  const { placement } = useControlsPlacement();
+  const placementState = useControlsPlacement();
+  const { placement } = placementState;
   const regionEcho = useRegionEcho();
 
   const encoding = useMemo(
@@ -366,6 +376,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     if (cosmeticControls) payload.controls = cosmeticControls;
     if (stripControls) payload.primaryControls = stripControls;
     if (docked) payload.docked = true;
+    if (zoomSync) payload.zoomSync = true;
     if (dataRows) {
       payload.data = { rows: dataRows, columns: dataColumns, tierAnnotation };
     }
@@ -383,6 +394,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     cosmeticControls,
     stripControls,
     docked,
+    zoomSync,
     dataRows,
     dataColumns,
     tierAnnotation,
@@ -569,6 +581,36 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
         ) : null}
       </>
     ) : null
+  ) : compact ? (
+    // One line: title, the visualization's type, what is on screen, the
+    // status chips. The subtitle moves to the title's tooltip, the tier counts
+    // and the inline controls keep their own lines under it.
+    <Stack gap={2} mb={4}>
+      <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }} pr={28}>
+        {title ? (
+          <Tooltip label={subtitle} disabled={!subtitle} multiline maw={320} openDelay={300}>
+            <Text fw={600} size="sm" truncate style={{ flex: '0 1 auto', minWidth: 0 }}>
+              {title}
+            </Text>
+          </Tooltip>
+        ) : null}
+        <VizKindBadge />
+        {echoText ? (
+          <Text
+            size="xs"
+            c="dimmed"
+            truncate
+            style={{ flex: '1 1 0', minWidth: 0 }}
+            data-testid="advanced-viz-echo"
+          >
+            {echoText}
+          </Text>
+        ) : null}
+        {statusBadges}
+      </Group>
+      {countBadges}
+      {strip}
+    </Stack>
   ) : title ||
     subtitle ||
     echoLine ||
@@ -665,7 +707,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     <ErrorBoundary>
       <Paper
         ref={frameRef}
-        p={showcase ? 'md' : 'sm'}
+        p={compact ? 'xs' : showcase ? 'md' : 'sm'}
         withBorder={!showcase}
         radius="md"
         style={{
@@ -688,7 +730,12 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
           }}
         >
           {dockOpen && dockSide === 'top' ? (
-            <DockedControls controls={docking} lead={lead} side="top" />
+            <DockedControls
+              controls={docking}
+              lead={lead}
+              side="top"
+              headerAction={<ControlsPlacementPicker state={placementState} />}
+            />
           ) : null}
           <div
             ref={plotSlotRef}
@@ -697,7 +744,12 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
             {body}
           </div>
           {dockOpen && dockSide === 'right' ? (
-            <DockedControls controls={docking} lead={lead} side="right" />
+            <DockedControls
+              controls={docking}
+              lead={lead}
+              side="right"
+              headerAction={<ControlsPlacementPicker state={placementState} />}
+            />
           ) : null}
           {rail ? (
             <div

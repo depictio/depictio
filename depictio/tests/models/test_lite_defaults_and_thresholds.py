@@ -239,6 +239,55 @@ class TestAlwaysSelected:
         with pytest.raises(ValueError, match="always_selected"):
             InteractiveLiteComponent(**self._select(default_by="size"))
 
+    def test_banner_facts_round_trip_with_and_without_a_format(self):
+        facts = [
+            {"column": "size", "label": "Members", "format": "integer", "icon": "tabler:users"},
+            {"column": "note", "label": "Note"},
+        ]
+        dash = DashboardDataLite(
+            title="t", components=[self._select(always_selected=True, banner_facts=facts)]
+        )
+        full = dash.to_full()
+        # A fact without a format stores no `format` key at all.
+        assert full["stored_metadata"][0]["banner_facts"] == facts
+        back = DashboardDataLite.from_full(full)
+        comp = back.components[0]
+        comp = comp if isinstance(comp, dict) else comp.model_dump()
+        assert [
+            {k: v for k, v in f.items() if v is not None} for f in comp["banner_facts"]
+        ] == facts
+        assert back.to_full()["stored_metadata"][0]["banner_facts"] == facts
+
+    def test_banner_facts_stay_out_of_stored_metadata_when_unset_or_empty(self):
+        for extra in ({}, {"banner_facts": None}, {"banner_facts": []}):
+            dash = DashboardDataLite(
+                title="t", components=[self._select(always_selected=True, **extra)]
+            )
+            assert "banner_facts" not in dash.to_full()["stored_metadata"][0]
+        empty = InteractiveLiteComponent(**self._select(always_selected=True, banner_facts=[]))
+        assert empty.banner_facts is None
+
+    def test_banner_facts_need_always_selected(self):
+        facts = [{"column": "size", "label": "Members"}]
+        with pytest.raises(ValidationError, match="always_selected"):
+            InteractiveLiteComponent(**self._select(banner_facts=facts))
+
+    @pytest.mark.parametrize("bad", ["bogus", "decimals:9", "decimals", ""])
+    def test_a_banner_fact_format_outside_the_shared_vocabulary_is_rejected(self, bad):
+        fact = {"column": "size", "label": "Members", "format": bad}
+        with pytest.raises(ValidationError, match="is not one of"):
+            InteractiveLiteComponent(**self._select(always_selected=True, banner_facts=[fact]))
+
+    def test_a_banner_fact_needs_a_column_and_a_label_and_nothing_else(self):
+        for fact in (
+            {"label": "Members"},
+            {"column": "size"},
+            {"column": "", "label": "Members"},
+            {"column": "size", "label": "Members", "unit": "x"},
+        ):
+            with pytest.raises(ValidationError):
+                InteractiveLiteComponent(**self._select(always_selected=True, banner_facts=[fact]))
+
     def test_a_default_value_names_the_one_value_it_starts_on(self):
         one = InteractiveLiteComponent(**self._select(always_selected=True, default_value=["a"]))
         assert one.default_value == ["a"]
