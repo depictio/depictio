@@ -1423,7 +1423,7 @@ tabs:
       both.
     tag: pa-st-intro
     index: pa-st-intro
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    layout: {x: 0, y: 0, w: 8, h: 2}
   # One protein in scope: a count of proteins would always read 1, so the strip
   # reads the picked protein's domains, residues and length instead.
   - component_type: card
