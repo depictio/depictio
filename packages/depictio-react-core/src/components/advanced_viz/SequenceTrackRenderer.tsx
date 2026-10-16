@@ -4,6 +4,7 @@ import { Box, ColorSwatch, Group, Text, useMantineColorScheme, useMantineTheme }
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { stableColorMap } from '../../colors';
 import { usePublishHighlight, useHighlight } from '../../highlight/bus';
+import { useZoomSyncHandle } from '../../highlight/zoomSync';
 import {
   filtersExcludingOwnResidue,
   residueEntityFromFilters,
@@ -26,6 +27,7 @@ import {
 } from './protein';
 import { panelColours } from './protein/panelTheme';
 import ZoomHintLabel from './protein/ZoomHint';
+import ZoomSyncSwitch from './protein/ZoomSyncSwitch';
 import {
   chainsOfEntity,
   chainsShown,
@@ -168,6 +170,7 @@ interface ChainBlockProps
     | 'cellWidth'
     | 'onCellWidthChange'
     | 'scrollSync'
+    | 'zoomSync'
     | 'showLetters'
     | 'followSelection'
     | 'onDrawn'
@@ -469,6 +472,9 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
     [filters, multiChain],
   );
 
+  // The chains of a complex number their residues apart: one window cannot say which.
+  const zoomSync = useZoomSyncHandle(index, entity, positionCol, strips.length <= 1);
+
   const incoming = useHighlight(index, follow);
   const highlight = useMemo(() => {
     if (!incoming || (incoming.entity && entity && incoming.entity !== entity)) return null;
@@ -596,6 +602,7 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
           step={1}
           thumbLabel={(v) => (v === 0 ? 'Fit' : `${v} px`)}
         />
+        <ZoomSyncSwitch index={index} />
         <VizSwitch
           label="Letters"
           checked={showLetters}
@@ -613,7 +620,7 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
         ) : null}
       </VizControlGroup>
     ),
-    [zoom, showLetters, residueCol, valueCol, plddt, valueScale],
+    [zoom, showLetters, residueCol, valueCol, plddt, valueScale, index],
   );
 
   const echo = useMemo(() => {
@@ -714,6 +721,7 @@ const SequenceTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTick
                   cellWidth={zoom > 0 ? zoom : undefined}
                   onCellWidthChange={setZoom}
                   scrollSync={strips.length > 1 ? scrollSync : undefined}
+                  zoomSync={zoomSync}
                   showLetters={showLetters}
                   followSelection={follow}
                   onDrawn={onDrawn}

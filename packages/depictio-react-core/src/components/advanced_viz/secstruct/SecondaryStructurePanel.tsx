@@ -11,7 +11,9 @@ import {
   visibleWindow,
 } from '../protein/canvas';
 import { useDrawScheduler, useViewSize } from '../protein/canvasHooks';
+import type { ZoomSyncHandle } from '../../../highlight/zoomSync';
 import { useModifierWheelZoom } from '../protein/useWheelZoom';
+import { uniformAxis } from '../protein/zoomAxis';
 import { panelColours, type PanelColours } from '../protein/panelTheme';
 import { rgbCss, type SecondaryStructure } from '../protein/residueColours';
 import type { Run } from '../protein/sequence';
@@ -87,6 +89,8 @@ export interface SecondaryStructurePanelProps {
   cellWidth?: number;
   /** Ctrl / Cmd + wheel asks for this many px per residue (whole pixels; 0 fits). */
   onCellWidthChange?: (px: number) => void;
+  /** Zoom sync with the view's other residue tiles. */
+  zoomSync?: ZoomSyncHandle | null;
   /** Scroll an incoming `selectedRange` / `highlight` into view. Default true. */
   followSelection?: boolean;
   /** Called once the first frame with data has been drawn. */
@@ -117,6 +121,7 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
   height,
   cellWidth,
   onCellWidthChange,
+  zoomSync = null,
   followSelection = true,
   onDrawn,
 }) => {
@@ -147,7 +152,8 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
   const minPos = span?.min ?? 1;
   const count = span ? span.max - span.min + 1 : 0;
   const gridW = Math.max(0, view.w - LABEL_PX);
-  const cw = cellWidth && cellWidth > 0 ? cellWidth : fitCellWidth(gridW, count, 0.05, 24);
+  const fitCw = fitCellWidth(gridW, count, 0.05, 24);
+  const cw = cellWidth && cellWidth > 0 ? cellWidth : fitCw;
   const contentW = LABEL_PX + count * cw;
   // The floor is the smallest fitted width, so zooming out from "fit" rounds
   // to 0 (fit) instead of jumping to a wider column.
@@ -157,6 +163,13 @@ const SecondaryStructurePanel: React.FC<SecondaryStructurePanelProps> = ({
     min: 0.05,
     max: 24,
     gutter: LABEL_PX,
+    sync: zoomSync && {
+      ...zoomSync,
+      axis: uniformAxis(minPos, cw),
+      fit: fitCw,
+      requested: cellWidth && cellWidth > 0 ? cellWidth : 0,
+      ready: count > 0 && gridW > 0,
+    },
   });
 
   // ---- data ------------------------------------------------------------------

@@ -23,6 +23,7 @@ import {
 } from './canvas';
 import { useDrawScheduler, useViewSize } from './canvasHooks';
 import { useModifierWheelZoom } from './useWheelZoom';
+import { columnResidueMap, mappedAxis } from './zoomAxis';
 import { panelColours, type PanelColours } from './panelTheme';
 import { isGap, rgbCss, schemeColour, type ColumnProfile, type RGB } from './residueColours';
 import type { MsaHover, MsaPanelProps } from './types';
@@ -150,6 +151,7 @@ const MsaPanel: React.FC<MsaPanelProps & MsaPanelZoomProps> = ({
   height = '100%',
   cellWidth,
   onCellWidthChange,
+  zoomSync = null,
   showConsensus = true,
   showConservation = true,
   followSelection = true,
@@ -222,15 +224,37 @@ const MsaPanel: React.FC<MsaPanelProps & MsaPanelZoomProps> = ({
     RULER_PX + (showConsensus ? CONSENSUS_PX : 0) + (showConservation ? CONSERVATION_PX : 0);
   const gridW = Math.max(0, view.w - idWidth);
   const gridH = Math.max(0, view.h - headerH);
-  const cw = cellWidth && cellWidth > 0 ? cellWidth : fitCellWidth(gridW, width, 1, 16);
+  const fitCw = fitCellWidth(gridW, width, 1, 16);
+  const cw = cellWidth && cellWidth > 0 ? cellWidth : fitCw;
   const ch = ROW_PX;
   const contentW = idWidth + width * cw;
+  // Columns against the reference's residues, for zoom sync: a column on a
+  // reference gap sits between its neighbours' residues.
+  const residueMap = useMemo(
+    () =>
+      columnResidueMap(width, (c) => {
+        const r = refMap.colToRes[c];
+        return r != null && r >= 0 ? r : null;
+      }),
+    [width, refMap],
+  );
   useModifierWheelZoom(scrollRef, {
     value: cw,
     setValue: onCellWidthChange,
     min: 1,
     max: 16,
     gutter: idWidth,
+    // A complex numbers its residues per chain; one window cannot say which.
+    sync:
+      zoomSync && !chainCols
+        ? {
+            ...zoomSync,
+            axis: mappedAxis(residueMap, cw),
+            fit: fitCw,
+            requested: cellWidth && cellWidth > 0 ? cellWidth : 0,
+            ready: refMap.residueCount > 0 && gridW > 0,
+          }
+        : null,
   });
   const contentH = headerH + rows.length * ch;
 

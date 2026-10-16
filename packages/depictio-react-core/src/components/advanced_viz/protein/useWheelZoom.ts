@@ -6,10 +6,12 @@
  * hint on first hover (components/zoomGate.ts).
  */
 
-import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, type MutableRefObject, type RefObject } from 'react';
 
+import { followsWindow, type ZoomSyncHandle, type ZoomWindow } from '../../../highlight/zoomSync';
 import { isZoomWheel } from '../../zoomGate';
 import { useZoomGate } from '../../zoomGateDom';
+import { followerWidth, type ZoomAxis } from './zoomAxis';
 
 // The platform helpers live with the zoom gate now; kept importable from here.
 export { isApplePlatform, zoomModifierLabel } from '../../zoomGate';
@@ -65,6 +67,22 @@ export interface ModifierWheelZoomOptions {
   max: number;
   /** Width of the sticky left gutter inside the scroll viewport, in px. */
   gutter?: number;
+  /** Zoom sync with the view's other residue tiles; null or omitted: none. */
+  sync?: WheelZoomSync | null;
+}
+
+/** A panel's side of zoom sync (see highlight/zoomSync.ts). */
+export interface WheelZoomSync extends ZoomSyncHandle {
+  /** The panel's axis at the width now drawn. */
+  axis: ZoomAxis;
+  /** The width the panel fits at (what its slider's 0 draws). */
+  fit: number;
+  /** The width the caller asked for; 0 is fit. */
+  requested: number;
+  /** The panel has data and a width, so its axis means something. */
+  ready: boolean;
+  /** Px at the right of the viewport that hold no residue (a length label). */
+  trailing?: number;
 }
 
 /**
@@ -73,10 +91,10 @@ export interface ModifierWheelZoomOptions {
  */
 export function useModifierWheelZoom(
   scrollRef: RefObject<HTMLElement | null>,
-  { value, setValue, min, max, gutter = 0 }: ModifierWheelZoomOptions,
+  { value, setValue, min, max, gutter = 0, sync = null }: ModifierWheelZoomOptions,
 ): void {
-  const opts = useRef({ value, setValue, min, max, gutter });
-  opts.current = { value, setValue, min, max, gutter };
+  const opts = useRef<WheelZoomOptionsNow>({ value, setValue, min, max, gutter, sync });
+  opts.current = { value, setValue, min, max, gutter, sync };
   // The fractional width a run of wheel events is accumulating, so small
   // deltas are not lost to rounding; re-synced when the width changes elsewhere.
   const acc = useRef(value);
@@ -127,4 +145,167 @@ export function useModifierWheelZoom(
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   }, [scrollRef]);
+
+  // Declared after the wheel's layout effect, so a zoom's anchor scroll is in
+  // place before the window it shows goes out.
+  useResidueZoomSync(scrollRef, opts);
+}
+
+type WheelZoomOptionsNow = Required<Omit<ModifierWheelZoomOptions, 'setValue'>> &
+  Pick<ModifierWheelZoomOptions, 'setValue'>;
+
+/** Widths closer than this are the same width (followers round to 0.01 px). */
+const WIDTH_EPS = 0.005;
+
+/**
+ * Zoom sync for one panel. The reader's moves go out (a width change from the
+ * wheel or the slider, a horizontal scroll), and other tiles' windows come in
+ * and are fitted to this panel's width. What this hook writes itself (a width
+ * asked for to show a window, the scroll that follows it) never goes out, so
+ * two tiles cannot chase each other's rounding.
+ */
+function useResidueZoomSync(
+  scrollRef: RefObject<HTMLElement | null>,
+  opts: MutableRefObject<WheelZoomOptionsNow>,
+): void {
+  const sync = opts.current.sync;
+  const store = sync?.store ?? null;
+  const requested = sync?.requested ?? 0;
+  const ready = sync?.ready ?? false;
+  const entity = sync?.peer.entity ?? null;
+  const positionColumn = sync?.peer.positionColumn ?? null;
+  const value = opts.current.value;
+  // The scrollLeft last seen, written or published: a scroll event that
+  // leaves it there (this hook's own write, a vertical scroll) is not the
+  // reader's move.
+  const lastLeft = useRef<number | null>(null);
+  // A width asked for to show a window, and that window's left edge (null:
+  // the source fits its axis, so scroll home).
+  const applying = useRef<{ cw: number; start: number | null } | null>(null);
+  const lastRequested = useRef(requested);
+
+  const writeLeft = useCallback(
+    (x: number) => {
+      const el = scrollRef.current;
+      if (!el) return;
+      el.scrollLeft = Math.max(0, x);
+      lastLeft.current = el.scrollLeft;
+    },
+    [scrollRef],
+  );
+
+  const publish = useCallback(() => {
+    const s = opts.current.sync;
+    const el = scrollRef.current;
+    if (!s || !el || !s.ready || !s.store.isEnabled()) return;
+    const gridW = el.clientWidth - opts.current.gutter - (s.trailing ?? 0);
+    if (!(gridW > 0)) return;
+    const x0 = el.scrollLeft;
+    lastLeft.current = x0;
+    s.store.publish({
+      sourceIndex: s.peer.index,
+      entity: s.peer.entity ?? undefined,
+      positionColumn: s.peer.positionColumn ?? undefined,
+      start: s.axis.posAt(x0),
+      end: s.axis.posAt(x0 + gridW),
+      // A fitted panel that still scrolls (a long alignment at its narrowest
+      // column) shows a window, not its whole axis.
+      fit: !(s.requested > 0) && el.scrollWidth <= el.clientWidth + 1,
+    });
+  }, [scrollRef, opts]);
+
+  const apply = useCallback(
+    (w: ZoomWindow) => {
+      const o = opts.current;
+      const s = o.sync;
+      const el = scrollRef.current;
+      if (!s || !el || !s.ready || !o.setValue) return;
+      const gridW = el.clientWidth - o.gutter - (s.trailing ?? 0);
+      if (!(gridW > 0)) return;
+      const target = w.fit ? 0 : followerWidth(s.axis, w.start, w.end, gridW, s.fit, o.max);
+      if (target === null) return;
+      const start = w.fit ? null : w.start;
+      if (Math.abs(target - s.requested) < WIDTH_EPS) {
+        applying.current = null;
+        writeLeft(start === null ? 0 : s.axis.xOf(start, o.value));
+        return;
+      }
+      applying.current = { cw: target, start };
+      o.setValue(target);
+    },
+    [scrollRef, opts, writeLeft],
+  );
+
+  // A width landed: the one asked for to show a window (scroll to it), or the
+  // reader's own (send it out).
+  useLayoutEffect(() => {
+    const s = opts.current.sync;
+    if (!s) return;
+    const a = applying.current;
+    if (a && Math.abs(s.requested - a.cw) < WIDTH_EPS) {
+      applying.current = null;
+      lastRequested.current = s.requested;
+      writeLeft(a.start === null ? 0 : s.axis.xOf(a.start, opts.current.value));
+      return;
+    }
+    if (s.requested !== lastRequested.current) {
+      lastRequested.current = s.requested;
+      applying.current = null;
+      publish();
+    }
+  }, [requested, value, opts, publish, writeLeft]);
+
+  // The reader's horizontal scroll, once per frame.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !store) return undefined;
+    let frame = 0;
+    lastLeft.current = el.scrollLeft;
+    const onScroll = () => {
+      if (lastLeft.current !== null && Math.abs(el.scrollLeft - lastLeft.current) < 0.5) return;
+      lastLeft.current = el.scrollLeft;
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        publish();
+      });
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [scrollRef, store, ready, publish]);
+
+  // Other tiles' windows; the tile whose switch turned sync on sends its own.
+  useEffect(() => {
+    if (!store) return undefined;
+    let wasOn = store.isEnabled();
+    let seen = store.current();
+    return store.subscribe(() => {
+      const on = store.isEnabled();
+      const turnedOn = on && !wasOn;
+      wasOn = on;
+      if (!on) return;
+      const s = opts.current.sync;
+      if (!s) return;
+      if (turnedOn && store.leader() === s.peer.index) {
+        publish();
+        return;
+      }
+      const w = store.current();
+      if (w === seen) return;
+      seen = w;
+      if (followsWindow(w, s.peer)) apply(w);
+    });
+  }, [store, opts, publish, apply]);
+
+  // A tile that mounts, gets its data or changes entity while a window is in
+  // force joins it.
+  useEffect(() => {
+    if (!store || !ready || !store.isEnabled()) return;
+    const s = opts.current.sync;
+    const w = store.current();
+    if (s && followsWindow(w, s.peer)) apply(w);
+  }, [store, ready, entity, positionColumn, opts, apply]);
 }

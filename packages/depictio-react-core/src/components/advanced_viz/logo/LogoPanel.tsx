@@ -6,10 +6,13 @@ import { useFullscreenPortalTarget } from '../../chrome/useFullscreenPortalTarge
 
 import { fitCellWidth, prepareCanvas, rulerStep, scrollToReveal } from '../protein/canvas';
 import { useDrawScheduler, useViewSize } from '../protein/canvasHooks';
+import type { ZoomSyncHandle } from '../../../highlight/zoomSync';
 import { useModifierWheelZoom } from '../protein/useWheelZoom';
+import { columnOfResidue, columnResidueMap, residueAtColumn, type ZoomAxis } from '../protein/zoomAxis';
 import { rgbCss } from '../protein/residueColours';
 import type { MsaColourScheme, ProteinHighlight, ResidueRange } from '../protein/types';
 import {
+  columnAtX,
   columnsInView,
   extentAtX,
   indexAtX,
@@ -18,6 +21,7 @@ import {
   spanOfIndices,
   STUB_PX,
   visibleSegments,
+  xOfColumn,
   type HiddenRange,
   type StubSegment,
 } from './collapse';
@@ -109,6 +113,8 @@ export interface LogoPanelProps {
   cellWidth?: number;
   /** Ctrl / Cmd + wheel asks for this many px per state (whole pixels). */
   onCellWidthChange?: (px: number) => void;
+  /** Zoom sync with the view's other residue tiles, through the states' residues. */
+  zoomSync?: ZoomSyncHandle | null;
   followSelection?: boolean;
   onDrawn?: () => void;
   /** Draw only the states numbered `windowStart..windowEnd` (1-based); null is open. */
@@ -190,6 +196,7 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
   onClickHit,
   cellWidth,
   onCellWidthChange,
+  zoomSync = null,
   followSelection = true,
   onDrawn,
   windowStart = null,
@@ -283,18 +290,40 @@ const LogoPanel: React.FC<LogoPanelProps> = ({
       }),
     [profile.states, windowStart, windowEnd, information, collapseBelowIc, collapseMinRun, hidden, expanded],
   );
-  const cw =
-    cellWidth && cellWidth > 0
-      ? cellWidth
-      : fitCellWidth(Math.max(0, gridW - plan.stubs * STUB_PX), plan.shown, 1, MAX_FIT_PX);
+  const fitCw = fitCellWidth(Math.max(0, gridW - plan.stubs * STUB_PX), plan.shown, 1, MAX_FIT_PX);
+  const cw = cellWidth && cellWidth > 0 ? cellWidth : fitCw;
   const columns = useMemo(() => placeColumns(plan, cw), [plan, cw]);
   const contentW = GUTTER_PX + columns.width;
+  // States against the representative's residues, for zoom sync: a state on
+  // a gap of the representative sits between its neighbours' residues.
+  const residueMap = useMemo(
+    () => columnResidueMap(profile.positions.length, (i) => profile.positions[i]),
+    [profile.positions],
+  );
+  const syncAxis = useMemo<ZoomAxis>(
+    () => ({
+      posAt: (x) => residueAtColumn(residueMap, columnAtX(columns, x)),
+      xOf: (pos, w) =>
+        xOfColumn(w === columns.cw ? columns : placeColumns(plan, w), columnOfResidue(residueMap, pos)),
+    }),
+    [residueMap, columns, plan],
+  );
   useModifierWheelZoom(scrollRef, {
     value: cw,
     setValue: onCellWidthChange,
     min: 1,
     max: 40,
     gutter: GUTTER_PX,
+    sync:
+      zoomSync && hasPositions
+        ? {
+            ...zoomSync,
+            axis: syncAxis,
+            fit: fitCw,
+            requested: cellWidth && cellWidth > 0 ? cellWidth : 0,
+            ready: plan.shown > 0 && gridW > 0,
+          }
+        : null,
   });
 
   const selectedSpan = useMemo(() => stateSpanOfRange(profile.positions, selectedRange), [profile.positions, selectedRange]);

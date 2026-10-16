@@ -28,6 +28,7 @@ import {
 } from 'react';
 
 import { createOpeningEntityStore, OpeningEntityContext } from './openingEntity';
+import { createZoomSyncStore, ZoomSyncContext } from './zoomSync';
 
 export type HighlightEvent = {
   /** Index of the tile that published it; a tile ignores its own events. */
@@ -175,12 +176,20 @@ export function HighlightProvider({ children }: { children?: ReactNode }) {
   const [own] = useState(() => (parent ? null : createHighlightBus()));
   // The protein tiles' opening-entity agreement shares the bus's scope.
   const [ownOpening] = useState(() => (parentOpening ? null : createOpeningEntityStore()));
+  // And so does zoom sync between the residue tiles.
+  const parentZoom = useContext(ZoomSyncContext);
+  const [ownZoom] = useState(() => (parentZoom ? null : createZoomSyncStore()));
   useEffect(() => () => own?.dispose(), [own]);
   useEffect(() => () => ownOpening?.dispose(), [ownOpening]);
+  useEffect(() => () => ownZoom?.dispose(), [ownZoom]);
   return createElement(
     HighlightContext.Provider,
     { value: parent ?? own },
-    createElement(OpeningEntityContext.Provider, { value: parentOpening ?? ownOpening }, children),
+    createElement(
+      OpeningEntityContext.Provider,
+      { value: parentOpening ?? ownOpening },
+      createElement(ZoomSyncContext.Provider, { value: parentZoom ?? ownZoom }, children),
+    ),
   );
 }
 

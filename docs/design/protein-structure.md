@@ -945,6 +945,30 @@ crosshair lines through the strips at an incoming one. `ramachandran` publishes 
 residue and rings an incoming one with an overlay trace appended after the finished figure. Each
 of the five ignores an event whose `positionColumn` is not its own.
 
+### Zoom sync
+
+The residue panels that scroll sideways (`sequence_track`, `secondary_structure`, `msa`,
+`hmm_logo`, `domain_architecture` on its shared scale) zoom on their own by default. Their
+`Sync zoom` switch, under the width slider, makes them show the same residues: the tile the
+reader zooms or scrolls publishes the residue window it shows, and every other residue tile of
+the view fits that window to its own width, so panes of different widths show the same residues
+rather than the same pixels. The store (`highlight/zoomSync.ts`) shares the hover bus's scope
+(`HighlightProvider`) and its axis rule: same position column, same entity when both tiles know
+theirs; the domain architecture, which shows every protein, follows any window.
+
+- One switch for the whole view, off by default and remembered in the browser
+  (`depictio.zoom.sync`). The tile it is flipped on from leads: its window goes out first.
+- Windows are in residue coordinates. An alignment maps them through its reference row (a gap
+  column sits between its neighbours' residues); a logo through each state's reference residue,
+  with folded runs keeping their fixed width. A source that fits its whole axis asks followers
+  to fit theirs.
+- Only the reader's moves go out (a width from the wheel or the slider, a horizontal scroll).
+  What a tile writes to follow another never does, so two tiles cannot chase each other's
+  rounding.
+- Not synced: the chains of a complex (each numbers its residues apart), an alignment with a
+  chain layout, a logo without reference residues, the per-protein scale. Outside a provider
+  (record panels, catalog previews) the switch is hidden.
+
 ## 4. Where the structure comes from
 
 **`structure_source: file`** reads the manifest of the companion `indexed_file` collection

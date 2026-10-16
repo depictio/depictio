@@ -3,6 +3,7 @@ import { Box, Button, Text } from '@mantine/core';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { usePublishHighlight, useHighlight } from '../../highlight/bus';
+import { useZoomSyncHandle } from '../../highlight/zoomSync';
 import {
   filtersExcludingOwnResidue,
   isResidueFilter,
@@ -46,6 +47,7 @@ import {
 } from './protein/rendererData';
 import { useEntityPicker } from './protein/useEntityPicker';
 import ZoomHintLabel from './protein/ZoomHint';
+import ZoomSyncSwitch from './protein/ZoomSyncSwitch';
 import { usePersistedVizControl, useVizConfigWriter } from './usePersistedVizControl';
 
 /**
@@ -609,6 +611,8 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
     return h?.key ?? null;
   }, [hitRange, pickedHitEntity, hitSelection.drawn]);
 
+  const zoomSync = useZoomSyncHandle(index, profileEntity, positionCol);
+
   const incoming = useHighlight(index, follow);
   const highlight = useMemo(() => {
     if (!incoming) return null;
@@ -825,6 +829,7 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
             step={1}
             thumbLabel={(v) => (v === 0 ? 'Fit' : `${v} px`)}
           />
+          <ZoomSyncSwitch index={index} />
           <VizSwitch
             label="Consensus rows"
             checked={showConsensus}
@@ -954,6 +959,7 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
     ),
     [
       zoom,
+      index,
       showConsensus,
       setShowConsensus,
       showIndelRows,
@@ -1100,6 +1106,7 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
             onClear={pickEnabled ? onClear : undefined}
             cellWidth={zoom > 0 ? zoom : undefined}
             onCellWidthChange={setZoom}
+            zoomSync={zoomSync}
             followSelection={follow}
             onDrawn={onDrawn}
             windowStart={windowStart}

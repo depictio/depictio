@@ -11,7 +11,9 @@ import {
 } from '../protein/canvas';
 import { useDrawScheduler, useViewSize } from '../protein/canvasHooks';
 import { cssToRgb, panelColours, type PanelColours } from '../protein/panelTheme';
+import type { ZoomSyncHandle } from '../../../highlight/zoomSync';
 import { useModifierWheelZoom } from '../protein/useWheelZoom';
+import { uniformAxis } from '../protein/zoomAxis';
 import {
   domainAt,
   domainTooltip,
@@ -70,6 +72,8 @@ export interface DomainArchitecturePanelProps {
   residueWidth?: number;
   /** Receives a whole-pixel width from Ctrl / Cmd + wheel. Omit to disable the zoom. */
   onResidueWidthChange?: (px: number) => void;
+  /** Zoom sync with the view's other residue tiles (on the shared scale only). */
+  zoomSync?: ZoomSyncHandle | null;
   partialCoverage: number;
   colourOf: (hit: DomainHit) => string;
   /** Column of the E-value, to name it in the tooltip. */
@@ -157,6 +161,7 @@ const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
   scale,
   residueWidth = 0,
   onResidueWidthChange,
+  zoomSync = null,
   partialCoverage,
   colourOf,
   evalueColumn,
@@ -252,12 +257,37 @@ const DomainArchitecturePanel: React.FC<DomainArchitecturePanelProps> = ({
   const trackW = track.w;
   // The width the longest protein is drawn at, whether fitted or chosen.
   const renderedPpr = scalePxPerResidue(trackW, 'shared', sharedLength, sharedLength);
+  // The fitted track, for zoom sync: its width per residue, and the px at its
+  // right (length labels, pad) that show no residue.
+  const fitted = useMemo(
+    () =>
+      trackLayout(view.w, labelWidth, {
+        rightPadPx: RIGHT_PAD_PX,
+        gutterPx,
+        residueWidth: 0,
+        sharedLength,
+      }),
+    [view.w, labelWidth, gutterPx, sharedLength],
+  );
   useModifierWheelZoom(scrollRef, {
     value: renderedPpr,
     setValue: onResidueWidthChange,
     min: 1,
     max: RESIDUE_WIDTH_MAX_PX,
     gutter: trackX,
+    // On the per-protein scale a residue sits somewhere else on every row.
+    sync:
+      zoomSync && scale === 'shared'
+        ? {
+            ...zoomSync,
+            // Residue coordinate 0 here is the start of residue 1.
+            axis: uniformAxis(1, renderedPpr),
+            fit: scalePxPerResidue(fitted.w, 'shared', sharedLength, sharedLength),
+            requested: residueWidth > 0 ? residueWidth : 0,
+            ready: sharedLength > 0 && view.w > 0,
+            trailing: Math.max(0, view.w - fitted.x - fitted.w),
+          }
+        : null,
   });
   const gridH = Math.max(0, view.h - AXIS_PX);
   const pxPerResidue = useCallback(

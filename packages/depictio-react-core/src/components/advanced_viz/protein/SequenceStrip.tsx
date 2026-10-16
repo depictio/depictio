@@ -32,6 +32,7 @@ import { drawCoil, drawSecondaryStructureRuns } from './ssGlyphs';
 import { layoutLanes, type LaneKey, type LanePresence, type PlacedLane } from './stripLanes';
 import type { SequenceStripProps, StripDomain, StripHover, StripResidue } from './types';
 import { useModifierWheelZoom } from './useWheelZoom';
+import { uniformAxis } from './zoomAxis';
 
 const LABEL_PX = 72;
 const DRAG_PX = 3;
@@ -85,6 +86,7 @@ const SequenceStrip: React.FC<SequenceStripProps> = ({
   cellWidth,
   onCellWidthChange,
   scrollSync,
+  zoomSync = null,
   showLetters = true,
   followSelection = true,
   onDrawn,
@@ -167,7 +169,8 @@ const SequenceStrip: React.FC<SequenceStripProps> = ({
   const minPos = span?.min ?? 1;
   const count = span ? span.max - span.min + 1 : 0;
   const gridW = Math.max(0, view.w - LABEL_PX);
-  const cw = cellWidth && cellWidth > 0 ? cellWidth : fitCellWidth(gridW, count, 0.05, 24);
+  const fitCw = fitCellWidth(gridW, count, 0.05, 24);
+  const cw = cellWidth && cellWidth > 0 ? cellWidth : fitCw;
   const contentW = LABEL_PX + count * cw;
   useModifierWheelZoom(scrollRef, {
     value: cw,
@@ -175,6 +178,13 @@ const SequenceStrip: React.FC<SequenceStripProps> = ({
     min: 1,
     max: SEQUENCE_RESIDUE_WIDTH_MAX_PX,
     gutter: LABEL_PX,
+    sync: zoomSync && {
+      ...zoomSync,
+      axis: uniformAxis(minPos, cw),
+      fit: fitCw,
+      requested: cellWidth && cellWidth > 0 ? cellWidth : 0,
+      ready: count > 0 && gridW > 0,
+    },
   });
   // The chains of a complex scroll together.
   useEffect(() => {

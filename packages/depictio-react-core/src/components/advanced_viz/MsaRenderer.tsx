@@ -3,6 +3,7 @@ import { Badge, Box } from '@mantine/core';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { usePublishHighlight, useHighlight } from '../../highlight/bus';
+import { useZoomSyncHandle } from '../../highlight/zoomSync';
 import {
   advancedVizSelectionColumn,
   advancedVizSelectionFilter,
@@ -53,6 +54,7 @@ import {
 } from './protein/rendererData';
 import { useEntityPicker } from './protein/useEntityPicker';
 import ZoomHintLabel from './protein/ZoomHint';
+import ZoomSyncSwitch from './protein/ZoomSyncSwitch';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
 /**
@@ -286,6 +288,8 @@ const MsaRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilter
     [ownRows, follow, filters, index, seqIdCol],
   );
 
+  const zoomSync = useZoomSyncHandle(index, msaId, positionCol);
+
   const incoming = useHighlight(index, follow);
   const highlight = useMemo(() => {
     if (!incoming || (incoming.entity && msaId && incoming.entity !== msaId)) return null;
@@ -414,6 +418,7 @@ const MsaRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilter
             step={1}
             thumbLabel={(v) => (v === 0 ? 'Fit' : `${v} px`)}
           />
+          <ZoomSyncSwitch index={index} />
           <VizSwitch
             label="Consensus row"
             checked={showConsensus}
@@ -436,7 +441,7 @@ const MsaRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilter
         </VizControlGroup>
       </>
     ),
-    [zoom, showConsensus, showConservation, maxRows, setShowConsensus, setShowConservation, setMaxRows],
+    [zoom, showConsensus, showConservation, maxRows, setShowConsensus, setShowConservation, setMaxRows, index],
   );
 
   const echo = useMemo(() => {
@@ -514,6 +519,7 @@ const MsaRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilter
             onClickRow={selectionColumn ? onClickRow : undefined}
             cellWidth={zoom > 0 ? zoom : undefined}
             onCellWidthChange={setZoom}
+            zoomSync={zoomSync}
             showConsensus={showConsensus}
             showConservation={showConservation}
             followSelection={follow}

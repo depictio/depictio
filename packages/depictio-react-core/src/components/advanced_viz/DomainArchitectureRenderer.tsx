@@ -17,6 +17,7 @@ import {
 } from '../../api';
 import { stableColorMap } from '../../colors';
 import { usePublishHighlight, useHighlight } from '../../highlight/bus';
+import { useZoomSyncHandle } from '../../highlight/zoomSync';
 import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import {
   advancedVizSelectionColumn,
@@ -75,6 +76,7 @@ import {
   withoutPositionSelections,
 } from './protein/rendererData';
 import ZoomHintLabel from './protein/ZoomHint';
+import ZoomSyncSwitch from './protein/ZoomSyncSwitch';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
 /**
@@ -441,6 +443,9 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
     return { column: f ? filterColumn(f) : undefined, values };
   }, [filters, metadata.index]);
 
+  // Every protein at once, so no entity: it follows a window on any of them.
+  const zoomSync = useZoomSyncHandle(index, null, positionCol);
+
   const incoming = useHighlight(index, follow);
   const highlight = useMemo<EntitySpan | null>(() => {
     if (!incoming || !incoming.entity) return null;
@@ -705,6 +710,7 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
             step={1}
             thumbLabel={(v) => (v === 0 ? 'Fit' : `${v} px`)}
           />
+          {scale === 'shared' ? <ZoomSyncSwitch index={index} /> : null}
           {view === 'architectures' ? (
             <VizSlider
               label="Architectures"
@@ -738,6 +744,7 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
       setScale,
       residueWidth,
       setResidueWidth,
+      index,
       view,
       maxArchitectures,
       setMaxArchitectures,
@@ -903,6 +910,7 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
                 scale={scale}
                 residueWidth={residueWidth}
                 onResidueWidthChange={setResidueWidth}
+                zoomSync={zoomSync}
                 partialCoverage={partialCoverage}
                 colourOf={colourOf}
                 evalueColumn={evalueCol}
