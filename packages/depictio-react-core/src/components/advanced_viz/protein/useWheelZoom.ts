@@ -174,6 +174,7 @@ function useResidueZoomSync(
   const ready = sync?.ready ?? false;
   const entity = sync?.peer.entity ?? null;
   const positionColumn = sync?.peer.positionColumn ?? null;
+  const index = sync?.peer.index ?? null;
   const value = opts.current.value;
   // The scrollLeft last seen, written or published: a scroll event that
   // leaves it there (this hook's own write, a vertical scroll) is not the
@@ -198,7 +199,7 @@ function useResidueZoomSync(
     (scrollOnly = false) => {
       const s = opts.current.sync;
       const el = scrollRef.current;
-      if (!s || !el || !s.ready || !s.store.isEnabled()) return;
+      if (!s || !el || !s.ready || !s.store.isMember(s.peer.index)) return;
       const gridW = el.clientWidth - opts.current.gutter - (s.trailing ?? 0);
       if (!(gridW > 0)) return;
       const x0 = el.scrollLeft;
@@ -298,35 +299,37 @@ function useResidueZoomSync(
     };
   }, [scrollRef, store, ready, publish]);
 
-  // Other tiles' windows; the tile whose switch turned sync on sends its own.
+  // Other tiles' windows. On joining, the tile fits the window in force, or
+  // sends its own when it leads the join.
   useEffect(() => {
-    if (!store) return undefined;
-    let wasOn = store.isEnabled();
+    if (!store || !index) return undefined;
+    let wasMember = store.isMember(index);
     let seen = store.current();
     return store.subscribe(() => {
-      const on = store.isEnabled();
-      const turnedOn = on && !wasOn;
-      wasOn = on;
-      if (!on) return;
+      const member = store.isMember(index);
+      const joined = member && !wasMember;
+      wasMember = member;
+      if (!member) return;
       const s = opts.current.sync;
       if (!s) return;
-      if (turnedOn && store.leader() === s.peer.index) {
+      if (joined && store.leader() === index) {
         publish();
+        seen = store.current();
         return;
       }
       const w = store.current();
-      if (w === seen) return;
+      if (w === seen && !joined) return;
       seen = w;
-      if (followsWindow(w, s.peer)) apply(w);
+      if (followsWindow(w, s.peer)) apply(w, joined);
     });
-  }, [store, opts, publish, apply]);
+  }, [store, index, opts, publish, apply]);
 
   // A tile that mounts, gets its data or changes entity while a window is in
   // force joins it.
   useEffect(() => {
-    if (!store || !ready || !store.isEnabled()) return;
+    if (!store || !index || !ready || !store.isMember(index)) return;
     const s = opts.current.sync;
     const w = store.current();
     if (s && followsWindow(w, s.peer)) apply(w, true);
-  }, [store, ready, entity, positionColumn, opts, apply]);
+  }, [store, index, ready, entity, positionColumn, opts, apply]);
 }

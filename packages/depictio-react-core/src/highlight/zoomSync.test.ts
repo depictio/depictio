@@ -6,14 +6,15 @@ import {
   sameWindow,
   type ZoomSyncPersistence,
   type ZoomWindow,
+  ZOOM_SYNC_MAX_REMEMBERED,
 } from './zoomSync';
 
-const memory = (initial = false): ZoomSyncPersistence & { stored: boolean } => {
+const memory = (initial: string[] = []): ZoomSyncPersistence & { stored: string[] } => {
   const p = {
     stored: initial,
-    read: () => p.stored,
-    write: (on: boolean) => {
-      p.stored = on;
+    read: () => [...p.stored],
+    write: (members: readonly string[]) => {
+      p.stored = [...members];
     },
   };
   return p;
@@ -66,13 +67,13 @@ describe('sameWindow', () => {
 });
 
 describe('createZoomSyncStore', () => {
-  it('starts from the remembered switch, off by default', () => {
-    expect(createZoomSyncStore(memory()).isEnabled()).toBe(false);
-    expect(createZoomSyncStore(memory(true)).isEnabled()).toBe(true);
+  it('starts from the remembered members, none by default', () => {
+    expect(createZoomSyncStore(memory()).isMember('a')).toBe(false);
+    expect(createZoomSyncStore(memory(['a'])).isMember('a')).toBe(true);
   });
 
-  it('ignores windows while off', () => {
-    const store = createZoomSyncStore(memory());
+  it('ignores windows from a tile that is not a member', () => {
+    const store = createZoomSyncStore(memory(['b']));
     let heard = 0;
     store.subscribe(() => heard++);
     store.publish(win());
@@ -80,19 +81,35 @@ describe('createZoomSyncStore', () => {
     expect(heard).toBe(0);
   });
 
-  it('remembers the switch and names the tile that turned it on', () => {
+  it('remembers members and lets the tile turned on lead when no window holds', () => {
     const p = memory();
     const store = createZoomSyncStore(p);
-    store.setEnabled(true, 'a');
-    expect(p.stored).toBe(true);
+    store.setMembers(['a'], true, 'a');
+    expect(p.stored).toEqual(['a']);
     expect(store.leader()).toBe('a');
-    store.setEnabled(false, 'b');
-    expect(p.stored).toBe(false);
+    store.setMembers(['a'], false);
+    expect(p.stored).toEqual([]);
     expect(store.leader()).toBeNull();
   });
 
+  it('has a joiner follow the window a member holds', () => {
+    const store = createZoomSyncStore(memory(['a']));
+    store.publish(win());
+    store.setMembers(['b'], true, 'b');
+    expect(store.leader()).toBeNull();
+    expect(store.current()?.sourceIndex).toBe('a');
+  });
+
+  it('leads a group join from its first tile that can lead', () => {
+    const store = createZoomSyncStore(memory());
+    store.register('3d', false);
+    store.register('track');
+    store.setMembers(['3d', 'track'], true);
+    expect(store.leader()).toBe('track');
+  });
+
   it('notifies once per new window and not for the same one again', () => {
-    const store = createZoomSyncStore(memory(true));
+    const store = createZoomSyncStore(memory(['a']));
     let heard = 0;
     store.subscribe(() => heard++);
     store.publish(win());
@@ -102,28 +119,47 @@ describe('createZoomSyncStore', () => {
     expect(store.current()?.start).toBe(20);
   });
 
-  it('drops the window in force when the switch goes off', () => {
-    const store = createZoomSyncStore(memory(true));
+  it('drops the window once the last member leaves', () => {
+    const store = createZoomSyncStore(memory(['a', 'b']));
     store.publish(win());
-    store.setEnabled(false);
-    expect(store.current()).toBeNull();
-    store.setEnabled(true, 'b');
+    store.setMembers(['a'], false);
+    expect(store.current()?.sourceIndex).toBe('a');
+    store.setMembers(['b'], false);
     expect(store.current()).toBeNull();
   });
 
-  it('lets a listener publish while the store notifies (the leader answering the switch)', () => {
+  it('lets a listener publish while the store notifies (the leader answering its join)', () => {
     const store = createZoomSyncStore(memory());
     const seen: Array<ZoomWindow | null> = [];
     store.subscribe(() => {
       if (store.leader() === 'a' && store.current() === null) store.publish(win());
     });
     store.subscribe(() => seen.push(store.current()));
-    store.setEnabled(true, 'a');
+    store.setMembers(['a', 'b'], true, 'a');
     expect(seen[seen.length - 1]?.sourceIndex).toBe('a');
   });
 
+  it('counts registrations, so a tile drawn twice stays until both are gone', () => {
+    const store = createZoomSyncStore(memory());
+    const off1 = store.register('a');
+    const off2 = store.register('a');
+    off1();
+    off1();
+    expect(store.canSync('a')).toBe(true);
+    off2();
+    expect(store.canSync('a')).toBe(false);
+  });
+
+  it('forgets the oldest members past the cap', () => {
+    const store = createZoomSyncStore(memory());
+    const many = Array.from({ length: ZOOM_SYNC_MAX_REMEMBERED + 5 }, (_, i) => `t${i}`);
+    store.setMembers(many, true);
+    expect(store.isMember('t0')).toBe(false);
+    expect(store.isMember(`t${many.length - 1}`)).toBe(true);
+  });
+
   it('stops notifying once disposed', () => {
-    const store = createZoomSyncStore(memory(true));
+    const store = createZoomSyncStore(memory(['a']));
     let heard = 0;
     store.subscribe(() => heard++);
     store.dispose();

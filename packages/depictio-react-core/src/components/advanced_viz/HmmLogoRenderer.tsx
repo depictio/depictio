@@ -610,7 +610,14 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
     return h?.key ?? null;
   }, [hitRange, pickedHitEntity, hitSelection.drawn]);
 
-  const zoomSync = useZoomSyncHandle(index, profileEntity, positionCol);
+  // Synced through each state's reference residue; a profile without any has
+  // no residue axis.
+  const zoomSync = useZoomSyncHandle(
+    index,
+    profileEntity,
+    positionCol,
+    Boolean(profile?.positions.some((p) => p != null)),
+  );
 
   const incoming = useHighlight(index, follow);
   const highlight = useMemo(() => {
@@ -1063,7 +1070,7 @@ const HmmLogoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
   return (
     <AdvancedVizFrame
       title={metadata.title || 'HMM logo'}
-      zoomSync={zoomSync !== null && Boolean(profile?.positions.some((p) => p != null))}
+      zoomSync={zoomSync !== null}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       primaryControls={primaryControls}
       controls={controls}

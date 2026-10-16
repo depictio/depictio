@@ -443,7 +443,8 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
   }, [filters, metadata.index]);
 
   // Every protein at once, so no entity: it follows a window on any of them.
-  const zoomSync = useZoomSyncHandle(index, null, positionCol);
+  // Per-protein scales draw no one residue axis.
+  const zoomSync = useZoomSyncHandle(index, null, positionCol, scale === 'shared');
 
   const incoming = useHighlight(index, follow);
   const highlight = useMemo<EntitySpan | null>(() => {
@@ -875,7 +876,7 @@ const DomainArchitectureRenderer: React.FC<Props> = ({
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Domain architecture'}
-      zoomSync={zoomSync !== null && scale === 'shared'}
+      zoomSync={zoomSync !== null}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       primaryControls={primaryControls}
       controls={controls}

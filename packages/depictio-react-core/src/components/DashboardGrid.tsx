@@ -18,6 +18,8 @@ import { StoredMetadata, InteractiveFilter } from '../api';
 import type { FilterSectionSpec } from '../api';
 import { ActiveHighlight } from '../highlight';
 import { HighlightProvider } from '../highlight/bus';
+import { useZoomSyncRegistered } from '../highlight/zoomSync';
+import ZoomSyncSectionButton from './ZoomSyncSectionButton';
 import type { GroupRenderState } from '../selectionGroups';
 import {
   PANEL_RESIZE_END_EVENT,
@@ -485,6 +487,10 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     collapseStorageKey === undefined ? `grid-section-collapsed:${dashboardId}` : collapseStorageKey,
     sectionsCollapsedByDefault,
   );
+  // Tiles that can zoom together now, for the sections' sync button. Read from
+  // the host's provider: the viewer and the editor wrap the grid in one, which
+  // the grid's own provider below reuses.
+  const zoomSyncable = useZoomSyncRegistered();
 
   // One bucket per `section`. A dashboard that sets none produces a single
   // unnamed bucket and renders exactly as it did before sections existed.
@@ -1413,13 +1419,18 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
    *  and, for an open linked view, its own Reset and Autofit before it. */
   const sectionActions = (section: ComponentSection, kind: 'grid' | 'linked') => {
     const host = renderSectionActions?.(section.sectionName ?? null);
-    const own =
-      kind === 'linked' && sectionCollapse.isOpen(section.key)
-        ? renderLinkedViewControls(section)
-        : null;
-    return own ? (
+    const open = sectionCollapse.isOpen(section.key);
+    const linked = kind === 'linked' && open ? renderLinkedViewControls(section) : null;
+    // Offered once two of the section's tiles can zoom together; a folded
+    // section has none mounted, so none registered.
+    const syncTiles = section.members
+      .map((m) => String(m.index))
+      .filter((i) => zoomSyncable.has(i));
+    const sync = syncTiles.length >= 2 ? <ZoomSyncSectionButton tiles={syncTiles} /> : null;
+    return sync || linked ? (
       <Group gap={4} wrap="nowrap" align="center">
-        {own}
+        {sync}
+        {linked}
         {host}
       </Group>
     ) : (

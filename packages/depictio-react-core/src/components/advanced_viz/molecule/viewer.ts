@@ -102,8 +102,9 @@ export interface StructureViewer {
   setSelection(span: ResidueSpan | null, asSite?: boolean): void;
   /** Marks, labels and hover highlight (shapes only, no restyle). */
   setOverlay(overlay: OverlayState): void;
-  /** Zoom onto a span, or back onto the whole model with `null`. */
-  focus(span: ResidueSpan | null, animate?: boolean): void;
+  /** Zoom onto a span, or back onto the whole model with `null`. `animate`:
+   *  the default move, none, or a duration in ms. */
+  focus(span: ResidueSpan | null, animate?: boolean | number): void;
   setColours(colours: ViewerColours): void;
   setSpin(on: boolean): void;
   resetView(): void;
@@ -580,7 +581,8 @@ export async function createStructureViewer(
       // A programmatic fit: later resizes keep this span in frame.
       focusSpan = span;
       userMoved = false;
-      viewer.zoomTo(span ? frameSelection(span) : {}, animate ? 500 : 0);
+      const ms = typeof animate === 'number' ? animate : animate ? 500 : 0;
+      viewer.zoomTo(span ? frameSelection(span) : {}, ms);
     },
 
     setColours(next) {

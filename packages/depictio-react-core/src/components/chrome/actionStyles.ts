@@ -41,9 +41,9 @@ export const TILE_ACTION_STYLE = {
   loadAll: { icon: 'mdi:database-arrow-down', color: 'gray', label: 'Load all' },
   settings: { icon: 'tabler:adjustments-horizontal', color: 'teal', label: 'Viz settings' },
   data: { icon: 'tabler:table', color: 'violet', label: 'Show data' },
-  /** Residue tiles: zoom and scroll together (`highlight/zoomSync.ts`). One
-   *  switch for the view, filled on every residue tile while it is on. */
-  zoomSync: { icon: 'tabler:link', label: 'Sync zoom across tiles' },
+  /** Residue tiles and the 3D model: zoom and scroll with the other synced
+   *  tiles (`highlight/zoomSync.ts`). Per tile, filled while it is in. */
+  zoomSync: { icon: 'tabler:link', label: 'Sync zoom with other tiles' },
   source: { icon: 'mdi:arrow-top-right', label: 'Open in its tab' },
   /** The editor's per-tile menu trigger. */
   menu: { icon: 'tabler:dots-vertical', label: 'Component actions' },

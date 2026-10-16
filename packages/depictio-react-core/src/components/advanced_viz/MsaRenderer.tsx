@@ -287,7 +287,8 @@ const MsaRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilter
     [ownRows, follow, filters, index, seqIdCol],
   );
 
-  const zoomSync = useZoomSyncHandle(index, msaId, positionCol);
+  // A complex numbers each chain apart: no one residue axis to sync.
+  const zoomSync = useZoomSyncHandle(index, msaId, positionCol, !chains);
 
   const incoming = useHighlight(index, follow);
   const highlight = useMemo(() => {
@@ -486,7 +487,7 @@ const MsaRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilter
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Sequence alignment'}
-      zoomSync={zoomSync !== null && !chains}
+      zoomSync={zoomSync !== null}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       primaryControls={primaryControls}
       controls={controls}

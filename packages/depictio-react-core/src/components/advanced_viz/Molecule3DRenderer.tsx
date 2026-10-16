@@ -13,6 +13,7 @@ import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../a
 import { mantineCategoricalPalette, resolveCategoricalPalette, stableColorMap } from '../../colors';
 import { useHighlight, usePublishHighlight } from '../../highlight/bus';
 import { useSharedOpeningEntity } from '../../highlight/openingEntity';
+import { useZoomSyncHandle } from '../../highlight/zoomSync';
 import {
   residueEntityFromFilters,
   residueRangeFilterIndex,
@@ -77,6 +78,7 @@ import {
 } from './molecule/Overlays';
 import { SplitView, splitOrientation } from './molecule/SplitView';
 import SequenceText from './molecule/SequenceText';
+import { type FollowBounds, useStructureZoomFollow } from './molecule/zoomFollow';
 import { textKey, type TextResidue } from './molecule/sequenceLines';
 import { plddtIsFractional } from './protein/residueColours';
 import { chainRangeToConcat, concatRangeToChain } from './protein/alignment';
@@ -806,6 +808,22 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewerReady, structure.data, selectionKey, selectionIsOwn, followSelection, highlightSite]);
 
+  // Zoom sync: frame the residues the synced tiles show. A follower only (see
+  // molecule/zoomFollow.ts); on a complex, the primary chain is framed.
+  const zoomSync = useZoomSyncHandle(index, entity, positionCol, true, false);
+  const followBounds = useMemo<FollowBounds | null>(() => {
+    const chain = multiChain ? residueIndex.primaryChain : null;
+    let first = Infinity;
+    let last = -Infinity;
+    for (const r of residues) {
+      if (chain !== null && r.chain !== chain) continue;
+      first = Math.min(first, r.position);
+      last = Math.max(last, r.position);
+    }
+    return first <= last ? { first, last, chain } : null;
+  }, [residues, multiChain, residueIndex.primaryChain]);
+  useStructureZoomFollow(zoomSync, viewerRef, viewerReady && Boolean(structure.data), followBounds);
+
   const highlightKey = spanKey(highlightSpan);
   useEffect(() => {
     if (!viewerReady || !structure.data) return;
@@ -1355,6 +1373,7 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
       badges={badges.length ? badges : undefined}
       dataRows={frame ?? undefined}
       dataColumns={fetchCols}
+      zoomSync={zoomSync !== null}
     >
       <div
         ref={bodyRef}

@@ -12,7 +12,7 @@ import type { TierAnnotation } from '../data/DataGridBody';
 import type { LoadAllState } from '../chrome/LoadAllButton';
 import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
 import { TILE_ACTION_STYLE } from '../chrome/actionStyles';
-import { useZoomSyncSwitch } from '../../highlight/zoomSync';
+import { useZoomSyncMember } from '../../highlight/zoomSync';
 import { VizControlsGrid } from './controls/VizControls';
 
 /**
@@ -208,24 +208,24 @@ export const AdvancedVizDockToggle: React.FC<{ open: boolean; onToggle: () => vo
 );
 
 /**
- * The zoom sync switch in the tile's row (see highlight/zoomSync.ts): one
- * setting for the view, so every residue tile shows it filled while it is on,
- * and the tile it is turned on from leads. Hidden where there is nothing to
- * sync with (outside a dashboard view).
+ * This tile's zoom sync switch, in its row (see highlight/zoomSync.ts): filled
+ * while the tile zooms with the other synced tiles. Hidden until the tile has
+ * registered (nothing to sync with outside a dashboard view, or an axis the
+ * sync cannot follow).
  */
 export const AdvancedVizZoomSyncToggle: React.FC<{ index: string }> = ({ index }) => {
-  const { available, enabled, setEnabled } = useZoomSyncSwitch();
+  const { available, member, setMember } = useZoomSyncMember(index);
   if (!available) return null;
-  const label = enabled ? 'Stop syncing zoom' : TILE_ACTION_STYLE.zoomSync.label;
+  const label = member ? 'Stop syncing zoom' : TILE_ACTION_STYLE.zoomSync.label;
   return (
     <ActionIcon
-      variant={enabled ? 'filled' : 'subtle'}
+      variant={member ? 'filled' : 'subtle'}
       size="sm"
       aria-label={label}
-      aria-pressed={enabled}
+      aria-pressed={member}
       title={label}
       data-tile-action="zoom-sync"
-      onClick={() => setEnabled(!enabled, index)}
+      onClick={() => setMember(!member)}
     >
       <Icon icon={TILE_ACTION_STYLE.zoomSync.icon} width={16} height={16} />
     </ActionIcon>
