@@ -3,6 +3,62 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.19.1
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.19.1</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.19.0 → 1.19.1 [ff3dbd732]
+* fix(export): write a card's secondary strip and a table's row selection [2129ad301]
+* Proteinannotator Structure intro tile tall enough for its text [4e1f92d24]
+* Linked view can be set and arranged from the editor [a03c4e72a]
+* Zoom sync window holds while any tile is in [396a3c163]
+* Zoom sync per tile, with a section button, and the 3D model follows [a8cf629a0]
+* Zoom sync switch moves to the tile's hover row [e0697b9d7]
+* Zoom sync: a scroll never re-fits the other tiles [25e58bb9f]
+* Residue tiles can sync their zoom [7736a17d7]
+* Linked view keeps its panes when a pick opens a record card [f71a8d541]
+* Linked view tiles keep settings and data in the hover row [a70d0daeb]
+* Secondary structure fills its pane, like the sequence track [d4246bd66]
+* Zoom hint shows when it helps, banner names fit, sober kind badge [6fef1c446]
+* Figures zoom on Ctrl/Cmd + wheel or a pinch, never on a plain wheel [aa306249f]
+* Scope banner: stat tiles with icons, a picker as wide as its names [00775c753]
+* Viz controls: drop the duplicate menu, reach the placement picker again [b835eefb3]
+* Track lanes fill a linked-view pane; short unit names stay on one line [2349d141c]
+* Rename the workbench section display to linked view [ceeb5e7a9]
+* Workbench: taller panes with a floor, reset and autofit, tighter chrome [0bde0a636]
+* Viz controls modes in workbench tiles, kind tags, proteinannotator linked tabs [ab3aaf014]
+* Banner names wrap instead of truncating; structure tile opens on a foldable protein [bc611bb79]
+* Workbench: drop the dock mode, add draggable gutters between tiles [4d9eb043f]
+* Float a light 3D structure panel like the map panel [b3c6b1217]
+* Tiles: drop the unit chip, tag kinds in workbenches, live 3D hover [ec1fef073]
+* Turn the scope banner into an identity card with an inline picker [e85afee13]
+* Render workbench and dock sections, switchable with ?layout= [ab471395f]
+* fix(telemetry): stop image builds and the CI smoke test counting as installs [f955ba9c2]
+* Serve banner facts from a row lookup, keep workbench tables full width [424fe20e1]
+* Model banner facts and workbench sections, use them on protein tabs [5432dda94]
+* Add a scope banner and a unit chip for one-unit tabs [cd3b661c7]
+* Update CHANGELOG.md for v1.19.0 [c093c49e5]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.19.0
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
