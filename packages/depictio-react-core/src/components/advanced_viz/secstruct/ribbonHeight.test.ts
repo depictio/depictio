@@ -4,30 +4,25 @@ import {
   baseRibbonHeight,
   chosenRibbonHeight,
   DEFAULT_RIBBON_PX,
-  mainRibbonLaneHeight,
+  mainRibbonMax,
   MAIN_RIBBON_MAX_PX,
+  MAIN_RIBBON_SOLO_MAX_PX,
 } from './ribbonHeight';
 
-describe('mainRibbonLaneHeight', () => {
-  it('draws a chosen height exactly, whatever room is spare', () => {
-    for (const h of [16, 24, 30, 40, 52, 64]) {
-      expect(mainRibbonLaneHeight(h, 0, 1)).toBe(h);
-      expect(mainRibbonLaneHeight(h, 400, 1)).toBe(h);
-      expect(mainRibbonLaneHeight(h, 400, 0.35)).toBe(h);
-    }
-  });
-
-  it('keeps the auto-grow when no height is chosen', () => {
-    expect(mainRibbonLaneHeight(null, 0, 1)).toBe(DEFAULT_RIBBON_PX);
-    expect(mainRibbonLaneHeight(undefined, 10, 1)).toBe(DEFAULT_RIBBON_PX + 10);
-    expect(mainRibbonLaneHeight(null, 400, 1)).toBe(MAIN_RIBBON_MAX_PX);
-    expect(mainRibbonLaneHeight(null, 40, 0.35)).toBeCloseTo(DEFAULT_RIBBON_PX + 14);
-  });
-
+describe('ribbon height', () => {
   it('treats a value that is not a height as none', () => {
     expect(chosenRibbonHeight(0)).toBeNull();
     expect(chosenRibbonHeight(Number.NaN)).toBeNull();
+    expect(chosenRibbonHeight(null)).toBeNull();
+    expect(chosenRibbonHeight(44)).toBe(44);
     expect(baseRibbonHeight(null)).toBe(DEFAULT_RIBBON_PX);
     expect(baseRibbonHeight(44)).toBe(44);
+  });
+
+  it('lets the lane grow further when it is the only data lane', () => {
+    expect(mainRibbonMax(true)).toBe(MAIN_RIBBON_MAX_PX);
+    expect(mainRibbonMax(false)).toBe(MAIN_RIBBON_SOLO_MAX_PX);
+    expect(MAIN_RIBBON_MAX_PX).toBeGreaterThan(DEFAULT_RIBBON_PX);
+    expect(MAIN_RIBBON_SOLO_MAX_PX).toBeGreaterThan(MAIN_RIBBON_MAX_PX);
   });
 });

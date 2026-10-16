@@ -43,7 +43,8 @@ import { useEntityPicker } from './protein/useEntityPicker';
 import ZoomHintLabel from './protein/ZoomHint';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { compositionBadges } from './secstruct/compositionBadges';
-import SecondaryStructurePanel, { naturalPanelHeight } from './secstruct/SecondaryStructurePanel';
+import { naturalPanelHeight } from './secstruct/panelLanes';
+import SecondaryStructurePanel from './secstruct/SecondaryStructurePanel';
 import { DEFAULT_RIBBON_PX } from './secstruct/ribbonHeight';
 import SegmentList, { SEGMENT_LIST_MAX_PX } from './secstruct/SegmentList';
 import {
