@@ -77,6 +77,7 @@ const UnitPicker: React.FC<{
       component="span"
       className="depictio-scope-banner__name"
       fw={700}
+      style={{ '--scope-name-chars': Math.max((value ?? '').length, 1) } as React.CSSProperties}
       data-testid="scope-banner-value"
     >
       {value ?? '…'}

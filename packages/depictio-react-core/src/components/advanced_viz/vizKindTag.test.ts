@@ -49,10 +49,49 @@ describe('vizKindTag', () => {
 
 describe('vizKindLabel', () => {
   it('pairs each tag with an icon', () => {
-    expect(vizKindLabel('molecule_3d')).toEqual({ tag: '3D', icon: 'tabler:cube-3d-sphere' });
+    expect(vizKindLabel('molecule_3d')).toMatchObject({ tag: '3D', icon: 'tabler:cube-3d-sphere' });
     for (const kind of taggedVizKinds()) {
       expect(vizKindLabel(kind)?.icon, kind).toMatch(/^[a-z][a-z0-9]*:[a-z0-9-]+$/);
     }
+  });
+
+  // The badge's tooltip: a protein tile's tag ("SS", "PAE", "Rama") is cryptic
+  // to a reader who is not a structural biologist, so each says what it shows.
+  const PROTEIN_KINDS = [
+    'molecule_3d',
+    'hmm_logo',
+    'msa',
+    'sequence_track',
+    'pae_matrix',
+    'secondary_structure',
+    'ramachandran',
+    'domain_architecture',
+    'contact_map',
+    'fusion_structure',
+  ];
+  it('describes every protein kind for the badge tooltip', () => {
+    for (const kind of PROTEIN_KINDS) {
+      const description = vizKindLabel(kind)?.description;
+      expect(description, kind).toBeTruthy();
+      expect(description, kind).toBe(description!.trim());
+    }
+  });
+
+  it('keeps every description to one short line without em or en dashes', () => {
+    for (const kind of taggedVizKinds()) {
+      const description = vizKindLabel(kind)?.description;
+      // A kind may go without one (its badge then falls back to the tag).
+      if (description === undefined) continue;
+      expect(description.length, kind).toBeGreaterThan(0);
+      expect(description.length, kind).toBeLessThanOrEqual(90);
+      expect(description, kind).not.toMatch(/[\u2013\u2014\n]/);
+    }
+  });
+
+  it('gives a legacy alias the description of the kind it became', () => {
+    expect(vizKindLabel('ancombc_differentials')?.description).toBe(
+      vizKindLabel('da_barplot')?.description,
+    );
   });
 
   // The icons are the builder picker's own (KIND_METADATA, served over the

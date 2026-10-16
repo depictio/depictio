@@ -37,14 +37,17 @@
   color: var(--mantine-color-white);
 }
 
-/* Room for a long identifier on one line before the figures take the rest:
- * the facts wrap to the next line rather than squeeze the name. */
+/* The name takes the room the line has: a basis wide enough for most
+ * identifiers, growing into whatever the figures leave, which wrap to the
+ * next line rather than squeeze it. A size container, so the name's type can
+ * follow its width (below). */
 .depictio-scope-banner__identity {
   display: flex;
   flex-direction: column;
-  flex: 0 1 auto;
-  min-width: min(100%, 22rem);
+  flex: 1 1 22rem;
+  min-width: min(100%, 14rem);
   max-width: 100%;
+  container-type: inline-size;
 }
 
 .depictio-scope-banner__eyebrow {
@@ -54,17 +57,27 @@
   text-transform: uppercase;
 }
 
+/* The name's type fits its length to the room: heading size while it fits,
+ * smaller as the name gets longer than the identity is wide, never under the
+ * body size. `--scope-name-chars` is the name's length (ScopeBanner.tsx), and
+ * 0.64em a bold character's width, rounded up so the estimate errs towards
+ * fitting; the selector icon's width comes off the room first. */
 .depictio-scope-banner__name {
+  --scope-name-max: var(--mantine-h3-font-size);
   display: block;
   min-width: 0;
-  font-size: var(--mantine-h3-font-size);
+  font-size: clamp(
+    var(--mantine-font-size-sm),
+    calc((100cqi - 32px) / (var(--scope-name-chars, 12) * 0.64)),
+    var(--scope-name-max)
+  );
   line-height: 1.25;
 }
 
-/* Never truncated: a unit's name is often an identifier with no spaces, so it
- * breaks inside a word, but only when the line has no room for it.
- * (`anywhere` would also shrink the name's min-content width to one letter,
- * and the card would then wrap even a short name.) */
+/* Never truncated: a name too long even at the smallest size breaks inside a
+ * word (it is often an identifier with no spaces), but only when the line has
+ * no room for it. (`anywhere` would also shrink the name's min-content width
+ * to one letter, and the card would then wrap even a short name.) */
 .depictio-scope-banner__name,
 .depictio-scope-banner__option {
   overflow-wrap: break-word;
@@ -146,7 +159,7 @@
     border-radius: 10px;
   }
   .depictio-scope-banner__name {
-    font-size: var(--mantine-h4-font-size);
+    --scope-name-max: var(--mantine-h4-font-size);
   }
   .depictio-scope-banner__facts {
     margin-inline-start: 0;

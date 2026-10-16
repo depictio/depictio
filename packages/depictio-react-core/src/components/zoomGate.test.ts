@@ -4,9 +4,12 @@ import {
   createOnceFlag,
   isZoomWheel,
   plotlyCanZoom,
+  shouldShowZoomHint,
   visibleCenter,
   wheelVerdict,
-  ZOOM_HINT_STORAGE_KEY,
+  ZOOM_HINT_REPEAT_MS,
+  ZOOM_HINT_WHEEL_DWELL_MS,
+  ZOOM_LEARNED_STORAGE_KEY,
   zoomHintDelayMs,
   zoomHintText,
   type PlotlyZoomProbe,
@@ -52,6 +55,36 @@ describe('zoomHintText', () => {
   it('asks for a pinch on a touch screen, whatever the platform', () => {
     expect(zoomHintText(true, mac)).toBe('Pinch to zoom');
     expect(zoomHintText(true, win)).toBe('Pinch to zoom');
+  });
+});
+
+describe('shouldShowZoomHint', () => {
+  const fresh = { learned: false, hoverShown: false, lastShownAt: null };
+
+  it('shows on the first figure hovered in a page load, not on the next ones', () => {
+    expect(shouldShowZoomHint('hover', fresh, 0)).toBe(true);
+    expect(shouldShowZoomHint('hover', { ...fresh, hoverShown: true, lastShownAt: 0 }, 99999)).toBe(
+      false,
+    );
+  });
+
+  it('shows on a plain wheel over a figure the pointer rests on, not one scrolling past', () => {
+    expect(shouldShowZoomHint('wheel', fresh, 0, ZOOM_HINT_WHEEL_DWELL_MS)).toBe(true);
+    expect(shouldShowZoomHint('wheel', fresh, 0, ZOOM_HINT_WHEEL_DWELL_MS - 1)).toBe(false);
+    expect(shouldShowZoomHint('wheel', fresh, 0)).toBe(false);
+  });
+
+  it('repeats the wheel hint, but not on every notch', () => {
+    const shown = { ...fresh, hoverShown: true, lastShownAt: 1000 };
+    const rested = ZOOM_HINT_WHEEL_DWELL_MS;
+    expect(shouldShowZoomHint('wheel', shown, 1000 + ZOOM_HINT_REPEAT_MS - 1, rested)).toBe(false);
+    expect(shouldShowZoomHint('wheel', shown, 1000 + ZOOM_HINT_REPEAT_MS, rested)).toBe(true);
+  });
+
+  it('stops once the reader has zoomed', () => {
+    const learned = { ...fresh, learned: true };
+    expect(shouldShowZoomHint('hover', learned, 0)).toBe(false);
+    expect(shouldShowZoomHint('wheel', learned, 0, ZOOM_HINT_WHEEL_DWELL_MS)).toBe(false);
   });
 });
 
@@ -102,7 +135,7 @@ function memoryStorage(): StorageLike & { data: Map<string, string> } {
 
 describe('createOnceFlag', () => {
   it('is unset until marked, then set', () => {
-    const flag = createOnceFlag(ZOOM_HINT_STORAGE_KEY, () => memoryStorage());
+    const flag = createOnceFlag(ZOOM_LEARNED_STORAGE_KEY, () => memoryStorage());
     expect(flag.seen()).toBe(false);
     flag.mark();
     expect(flag.seen()).toBe(true);
@@ -110,9 +143,9 @@ describe('createOnceFlag', () => {
 
   it('is kept in storage, so a later page load sees it', () => {
     const storage = memoryStorage();
-    createOnceFlag(ZOOM_HINT_STORAGE_KEY, () => storage).mark();
-    expect(storage.data.get(ZOOM_HINT_STORAGE_KEY)).toBe('1');
-    expect(createOnceFlag(ZOOM_HINT_STORAGE_KEY, () => storage).seen()).toBe(true);
+    createOnceFlag(ZOOM_LEARNED_STORAGE_KEY, () => storage).mark();
+    expect(storage.data.get(ZOOM_LEARNED_STORAGE_KEY)).toBe('1');
+    expect(createOnceFlag(ZOOM_LEARNED_STORAGE_KEY, () => storage).seen()).toBe(true);
     expect(createOnceFlag('another.key', () => storage).seen()).toBe(false);
   });
 
@@ -125,7 +158,7 @@ describe('createOnceFlag', () => {
         throw new Error('QuotaExceededError');
       },
     };
-    const flag = createOnceFlag(ZOOM_HINT_STORAGE_KEY, () => broken);
+    const flag = createOnceFlag(ZOOM_LEARNED_STORAGE_KEY, () => broken);
     expect(flag.seen()).toBe(false);
     expect(() => flag.mark()).not.toThrow();
     expect(flag.seen()).toBe(true);
@@ -135,12 +168,12 @@ describe('createOnceFlag', () => {
     const throwing = () => {
       throw new Error('access denied');
     };
-    const flag = createOnceFlag(ZOOM_HINT_STORAGE_KEY, throwing);
+    const flag = createOnceFlag(ZOOM_LEARNED_STORAGE_KEY, throwing);
     expect(flag.seen()).toBe(false);
     expect(() => flag.mark()).not.toThrow();
     expect(flag.seen()).toBe(true);
 
-    const none = createOnceFlag(ZOOM_HINT_STORAGE_KEY, () => null);
+    const none = createOnceFlag(ZOOM_LEARNED_STORAGE_KEY, () => null);
     expect(none.seen()).toBe(false);
     none.mark();
     expect(none.seen()).toBe(true);
@@ -155,7 +188,7 @@ describe('createOnceFlag', () => {
       },
       setItem: () => {},
     };
-    const flag = createOnceFlag(ZOOM_HINT_STORAGE_KEY, () => storage);
+    const flag = createOnceFlag(ZOOM_LEARNED_STORAGE_KEY, () => storage);
     expect(flag.seen()).toBe(true);
     expect(flag.seen()).toBe(true);
     expect(reads).toBe(1);
