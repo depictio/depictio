@@ -27,7 +27,7 @@ import {
   PanelToggleDetail,
   isPanelResizing,
 } from '../utils/panelToggle';
-import { Accordion, Badge, Button, Group, Paper, Text, Tooltip } from '@mantine/core';
+import { Accordion, ActionIcon, Badge, Button, Group, Paper, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { collapsedSectionKeys, sectionComponents } from '../utils/groupInteractive';
 import type { ComponentSection } from '../utils/groupInteractive';
@@ -617,6 +617,17 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // Nothing a read-only grid lays out is ever persisted, which is what lets it
   // fit tiles to their content and count in half rows.
   const readOnly = !(isDraggable || isResizable);
+  // Edit mode: the linked views an author is arranging, drawn as the plain
+  // grid so their tiles can be moved and resized, then turned back into a
+  // linked view built from the new positions. This editor session only.
+  const [arranging, setArranging] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleArranging = useCallback((key: string) => {
+    setArranging((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
+  }, []);
 
   // The height each tile is stored with, and which of them follow their
   // content. Both are needed on the way back out: what the editor renders is
@@ -694,7 +705,8 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     if (!panelsEnabled || recordLinks.size === 0) return byCard;
     for (const section of sections) {
       const base = baseLayoutForSection(section.members, section.spec);
-      const linkedView = groupDisplay(section, layoutOverride, groupsWide, onGrid) === 'linked';
+      const override = arranging.has(section.key) ? 'classic' : layoutOverride;
+      const linkedView = groupDisplay(section, override, groupsWide, onGrid) === 'linked';
       for (const panel of sectionSidePanels(base, recordLinks, linkedView)) {
         byCard.set(panel.cardId, panel);
       }
@@ -706,6 +718,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     sections,
     baseLayoutForSection,
     layoutOverride,
+    arranging,
     groupsWide,
     onGrid,
   ]);
@@ -870,7 +883,12 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   /** How a section is drawn: its `display`, the reader's `?layout=` and the
    *  room there is deciding. Anything this cannot place is an ordinary section. */
   const kindOf = (section: ComponentSection): 'grid' | 'linked' =>
-    groupDisplay(section, layoutOverride, groupsWide, onGrid) ?? 'grid';
+    groupDisplay(
+      section,
+      arranging.has(section.key) ? 'classic' : layoutOverride,
+      groupsWide,
+      onGrid,
+    ) ?? 'grid';
   const hasLinkedView = sections.some((s) => kindOf(s) === 'linked');
 
   // The part of the scrolling container a reader sees, which is what a linked view
@@ -1415,6 +1433,37 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     );
   };
 
+  /** Edit mode: move a linked view's tiles on the plain grid, and back. Offered
+   *  on a section that declares a linked view and is drawn as one here (not
+   *  under `?layout=classic`, not on a narrow screen). */
+  const renderArrangeToggle = (section: ComponentSection) => {
+    if (readOnly || layoutOverride === 'classic') return null;
+    if (groupDisplay(section, null, groupsWide, onGrid) !== 'linked') return null;
+    const on = arranging.has(section.key);
+    const label = on ? 'Back to the linked view' : 'Arrange tiles';
+    const tip = on
+      ? 'Show the section as a linked view again, built from the positions set here'
+      : 'Show the section as a plain grid to move and resize its tiles; the linked view follows their positions';
+    return (
+      <Tooltip label={tip} withArrow multiline w={240} openDelay={300}>
+        <ActionIcon
+          size="sm"
+          variant={on ? 'filled' : 'subtle'}
+          color={on ? undefined : 'gray'}
+          aria-label={label}
+          aria-pressed={on}
+          data-testid="linked-view-arrange"
+          onClick={(event) => {
+            event.stopPropagation();
+            toggleArranging(section.key);
+          }}
+        >
+          <Icon icon="mdi:cursor-move" width={16} />
+        </ActionIcon>
+      </Tooltip>
+    );
+  };
+
   /** What sits beside a section's fold control: the host's (the editor's "…")
    *  and, for an open linked view, its own Reset and Autofit before it. */
   const sectionActions = (section: ComponentSection, kind: 'grid' | 'linked') => {
@@ -1427,9 +1476,11 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       .map((m) => String(m.index))
       .filter((i) => zoomSyncable.has(i));
     const sync = syncTiles.length >= 2 ? <ZoomSyncSectionButton tiles={syncTiles} /> : null;
-    return sync || linked ? (
+    const arrange = open ? renderArrangeToggle(section) : null;
+    return sync || linked || arrange ? (
       <Group gap={4} wrap="nowrap" align="center">
         {sync}
+        {arrange}
         {linked}
         {host}
       </Group>

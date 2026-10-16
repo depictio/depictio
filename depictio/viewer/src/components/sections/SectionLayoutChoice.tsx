@@ -22,6 +22,23 @@ const bar = (width: number | string, height = 4, color = INK): React.CSSProperti
   flexShrink: 0,
 });
 
+/** A section heading over one screen of panes: a tall one beside a stack of
+ *  two, the gutters between them marked. */
+export const LinkedPreview: React.FC = () => (
+  <Stack gap={5} w="100%">
+    <div style={bar(46, 5)} />
+    <Group gap={3} wrap="nowrap" align="stretch" style={{ height: 40 }}>
+      <div style={{ flex: 2, borderRadius: 3, border: `1px solid ${INK}` }} />
+      <div style={{ width: 2, borderRadius: 1, background: ACCENT, flexShrink: 0 }} />
+      <Stack gap={3} style={{ flex: 3 }}>
+        <div style={{ flex: 1, borderRadius: 3, border: `1px solid ${INK}` }} />
+        <div style={{ height: 2, borderRadius: 1, background: ACCENT }} />
+        <div style={{ flex: 1, borderRadius: 3, border: `1px solid ${INK}` }} />
+      </Stack>
+    </Group>
+  </Stack>
+);
+
 /** A section heading over a 3×2 grid of tiles. */
 export const TilesPreview: React.FC = () => (
   <Stack gap={5} w="100%">
