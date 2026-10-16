@@ -119,7 +119,7 @@ describe('createZoomSyncStore', () => {
     });
     store.subscribe(() => seen.push(store.current()));
     store.setEnabled(true, 'a');
-    expect(seen.at(-1)?.sourceIndex).toBe('a');
+    expect(seen[seen.length - 1]?.sourceIndex).toBe('a');
   });
 
   it('stops notifying once disposed', () => {

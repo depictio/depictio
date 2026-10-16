@@ -194,32 +194,53 @@ function useResidueZoomSync(
     [scrollRef],
   );
 
-  const publish = useCallback(() => {
-    const s = opts.current.sync;
-    const el = scrollRef.current;
-    if (!s || !el || !s.ready || !s.store.isEnabled()) return;
-    const gridW = el.clientWidth - opts.current.gutter - (s.trailing ?? 0);
-    if (!(gridW > 0)) return;
-    const x0 = el.scrollLeft;
-    lastLeft.current = x0;
-    s.store.publish({
-      sourceIndex: s.peer.index,
-      entity: s.peer.entity ?? undefined,
-      positionColumn: s.peer.positionColumn ?? undefined,
-      start: s.axis.posAt(x0),
-      end: s.axis.posAt(x0 + gridW),
-      // A fitted panel that still scrolls (a long alignment at its narrowest
-      // column) shows a window, not its whole axis.
-      fit: !(s.requested > 0) && el.scrollWidth <= el.clientWidth + 1,
-    });
-  }, [scrollRef, opts]);
+  const publish = useCallback(
+    (scrollOnly = false) => {
+      const s = opts.current.sync;
+      const el = scrollRef.current;
+      if (!s || !el || !s.ready || !s.store.isEnabled()) return;
+      const gridW = el.clientWidth - opts.current.gutter - (s.trailing ?? 0);
+      if (!(gridW > 0)) return;
+      const x0 = el.scrollLeft;
+      lastLeft.current = x0;
+      const start = s.axis.posAt(x0);
+      // A scroll keeps the span in force on this axis. Measured instead, an
+      // alignment's span would change as gap columns slide in and out of
+      // view, and every follower would re-fit on a plain scroll.
+      const held = s.store.current();
+      const keep =
+        scrollOnly &&
+        held !== null &&
+        !held.fit &&
+        held.end > held.start &&
+        (held.sourceIndex === s.peer.index || followsWindow(held, s.peer));
+      s.store.publish({
+        sourceIndex: s.peer.index,
+        entity: s.peer.entity ?? undefined,
+        positionColumn: s.peer.positionColumn ?? undefined,
+        start,
+        end: keep ? start + (held.end - held.start) : s.axis.posAt(x0 + gridW),
+        // A fitted panel that still scrolls (a long alignment at its narrowest
+        // column) shows a window, not its whole axis.
+        fit: !(s.requested > 0) && el.scrollWidth <= el.clientWidth + 1,
+        scrollOnly: keep,
+      });
+    },
+    [scrollRef, opts],
+  );
 
+  // `join`: a tile arriving under a window fits it whole, scroll or not.
   const apply = useCallback(
-    (w: ZoomWindow) => {
+    (w: ZoomWindow, join = false) => {
       const o = opts.current;
       const s = o.sync;
       const el = scrollRef.current;
       if (!s || !el || !s.ready || !o.setValue) return;
+      if (w.scrollOnly && !join && !w.fit) {
+        applying.current = null;
+        writeLeft(s.axis.xOf(w.start, o.value));
+        return;
+      }
       const gridW = el.clientWidth - o.gutter - (s.trailing ?? 0);
       if (!(gridW > 0)) return;
       const target = w.fit ? 0 : followerWidth(s.axis, w.start, w.end, gridW, s.fit, o.max);
@@ -267,7 +288,7 @@ function useResidueZoomSync(
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
-        publish();
+        publish(true);
       });
     };
     el.addEventListener('scroll', onScroll, { passive: true });
@@ -306,6 +327,6 @@ function useResidueZoomSync(
     if (!store || !ready || !store.isEnabled()) return;
     const s = opts.current.sync;
     const w = store.current();
-    if (s && followsWindow(w, s.peer)) apply(w);
+    if (s && followsWindow(w, s.peer)) apply(w, true);
   }, [store, ready, entity, positionColumn, opts, apply]);
 }

@@ -38,6 +38,8 @@ export interface ZoomWindow {
   end: number;
   /** The source shows its whole axis: followers fit theirs. */
   fit: boolean;
+  /** The source only scrolled: followers scroll and keep their width. */
+  scrollOnly?: boolean;
 }
 
 /** What a tile says about its own axis. */

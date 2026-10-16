@@ -964,7 +964,9 @@ theirs; the domain architecture, which shows every protein, follows any window.
   to fit theirs.
 - Only the reader's moves go out (a width from the wheel or the slider, a horizontal scroll).
   What a tile writes to follow another never does, so two tiles cannot chase each other's
-  rounding.
+  rounding. A scroll keeps the span in force and followers only scroll: measured instead, an
+  alignment's span changes as gap columns slide through the view, and every follower would
+  re-fit its width on a plain scroll.
 - Not synced: the chains of a complex (each numbers its residues apart), an alignment with a
   chain layout, a logo without reference residues, the per-protein scale. Outside a provider
   (record panels, catalog previews) the switch is hidden.
