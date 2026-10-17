@@ -634,6 +634,10 @@ class DaBarplotConfig(_BaseVizConfig):
             "the MA table, so that table needs a column of this name."
         ),
     )
+    hover_category: bool = Field(
+        default=False,
+        description="Also name the panel's contrast (contrast_col) in the hover.",
+    )
     significance_threshold: float = Field(default=0.05, ge=0.0, le=1.0)
     top_n: int = Field(default=15, ge=1, description="Top features (by |lfc|) shown per panel")
     contrast_view: str = Field(

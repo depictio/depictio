@@ -27,6 +27,8 @@ interface DaBarplotConfig {
   label_col?: string | null;
   /** Second hover line (e.g. the Kingdom). */
   hover_col?: string | null;
+  /** Name the contrast of the panel in the hover. */
+  hover_category?: boolean;
   significance_threshold?: number;
   top_n?: number;
   contrast_view?: string;
@@ -42,8 +44,9 @@ interface Props {
   groupRender?: GroupRenderState;
 }
 
-const POSITIVE = '#1f77b4';
-const NEGATIVE = '#d62728';
+// The volcano's UP / DN colours, so a taxon reads the same on both: up pink, down blue.
+const POSITIVE = '#e64980';
+const NEGATIVE = '#1c7ed6';
 const FADED = 'rgba(127,127,127,0.45)';
 const ALL_TAB = 'all';
 
@@ -211,8 +214,10 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
           orientation: 'h' as const,
           x: ranked.map((r) => r.lfc),
           y: ranked.map((r) => r.label),
-          text: ranked.map((r) => r.label),
-          customdata: ranked.map((r) => [r.feat, r.sig, r.hover]),
+          // Long names are cut here (the hover has the whole name): the text sits
+          // outside the bar, in a margin of fixed width.
+          text: ranked.map((r) => (r.label.length > 24 ? `${r.label.slice(0, 23)}…` : r.label)),
+          customdata: ranked.map((r) => [r.feat, r.sig, r.hover, r.label]),
           textposition: 'outside' as const,
           // The label sits past the bar's end, outside the plot area for the
           // longest bars; clipping it to the axis cut the names in half.
@@ -220,8 +225,9 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
           textfont: { size: BAR_FONT_SIZE },
           marker: { color: colour, line: { width: 0 } },
           hovertemplate:
-            `<b>%{text}</b>` +
+            `<b>%{customdata[3]}</b>` +
             (config.hover_col ? `<br>%{customdata[2]}` : '') +
+            (config.hover_category ? `<br>${config.contrast_col}: ${contrastName}` : '') +
             `<br>${config.lfc_col}: %{x:.3f}` +
             (config.significance_col
               ? `<br>${config.significance_col}: %{customdata[1]:.2e}`
@@ -233,15 +239,15 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
       layout: {
         ...plotlyThemeFragment(isDark, theme),
         font: { ...plotlyThemeFragment(isDark, theme).font, size: BAR_FONT_SIZE },
-        margin: { l: 130, r: 130, t: 12, b: 36 },
+        margin: { l: 170, r: 170, t: 12, b: 36 },
         xaxis: {
           ...plotlyAxisOverrides(isDark, theme),
           title: { text: config.lfc_col },
           zeroline: true,
           // Room beyond the longest bar for its label, on whichever side it points.
           range: [
-            Math.min(0, ...ranked.map((r) => r.lfc)) * 1.25,
-            Math.max(0, ...ranked.map((r) => r.lfc)) * 1.25,
+            Math.min(0, ...ranked.map((r) => r.lfc)) * 1.4,
+            Math.max(0, ...ranked.map((r) => r.lfc)) * 1.4,
           ],
         },
         yaxis: {
