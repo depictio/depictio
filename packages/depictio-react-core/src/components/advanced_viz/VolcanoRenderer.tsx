@@ -52,6 +52,9 @@ import {
 import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
 import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
 
+/** Point labels and the axes' text: 10 read as fine print next to the tile's title. */
+const LABEL_FONT_SIZE = 13;
+
 interface VolcanoConfig {
   feature_id_col: string;
   effect_size_col: string;
@@ -805,7 +808,7 @@ function buildVolcano(input: {
             arrowcolor: 'rgba(120,120,120,0.6)',
             ax: 0,
             ay: -16,
-            font: { size: 10 },
+            font: { size: LABEL_FONT_SIZE },
           };
         })
         .filter(Boolean)
@@ -851,6 +854,7 @@ function buildVolcano(input: {
     ],
     layout: {
       ...plotlyThemeFragment(input.isDark, input.theme),
+      font: { ...plotlyThemeFragment(input.isDark, input.theme).font, size: LABEL_FONT_SIZE },
       margin: { l: 50, r: 20, t: 30, b: 40 },
       xaxis: {
         ...plotlyAxisOverrides(input.isDark, input.theme),
@@ -932,7 +936,7 @@ function buildMa(input: {
             y: ys[i],
             text: String(labels[i] ?? ids[i] ?? ''),
             showarrow: false,
-            font: { size: 10 },
+            font: { size: LABEL_FONT_SIZE },
           };
         })
         .filter(Boolean)
@@ -973,6 +977,7 @@ function buildMa(input: {
     ],
     layout: {
       ...plotlyThemeFragment(input.isDark, input.theme),
+      font: { ...plotlyThemeFragment(input.isDark, input.theme).font, size: LABEL_FONT_SIZE },
       margin: { l: 50, r: 20, t: 30, b: 40 },
       xaxis: {
         ...plotlyAxisOverrides(input.isDark, input.theme),
@@ -1103,7 +1108,7 @@ function buildQq(input: {
         y: ranked.map((r) => series.observed[r.i] + observedMax * 0.03),
         text: ranked.map((r) => series.ids[r.i]),
         textposition: 'top center' as const,
-        textfont: { size: 10, color: input.isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.85)' },
+        textfont: { size: LABEL_FONT_SIZE, color: input.isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.85)' },
         hoverinfo: 'skip',
         showlegend: false,
       });
@@ -1162,6 +1167,7 @@ function buildQq(input: {
     data: traces,
     layout: {
       ...plotlyThemeFragment(input.isDark, input.theme),
+      font: { ...plotlyThemeFragment(input.isDark, input.theme).font, size: LABEL_FONT_SIZE },
       margin: { l: 60, r: 20, t: 20, b: 50 },
       xaxis: {
         ...plotlyAxisOverrides(input.isDark, input.theme),

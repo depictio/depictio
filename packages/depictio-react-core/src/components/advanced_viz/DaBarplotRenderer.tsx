@@ -16,6 +16,9 @@ import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
 import { demandForItems } from './contentDemand';
 
+/** Bar labels and axis text; the default 12 was small beside the tile's title. */
+const BAR_FONT_SIZE = 14;
+
 interface DaBarplotConfig {
   feature_id_col: string;
   contrast_col: string;
@@ -211,6 +214,7 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
           text: ranked.map((r) => r.label),
           customdata: ranked.map((r) => [r.feat, r.sig, r.hover]),
           textposition: 'outside' as const,
+          textfont: { size: BAR_FONT_SIZE },
           marker: { color: colour, line: { width: 0 } },
           hovertemplate:
             `<b>%{text}</b>` +
@@ -225,7 +229,8 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
       ],
       layout: {
         ...plotlyThemeFragment(isDark, theme),
-        margin: { l: 8, r: 80, t: 12, b: 36 },
+        font: { ...plotlyThemeFragment(isDark, theme).font, size: BAR_FONT_SIZE },
+        margin: { l: 8, r: 120, t: 12, b: 36 },
         xaxis: {
           ...plotlyAxisOverrides(isDark, theme),
           title: { text: config.lfc_col },
