@@ -569,6 +569,9 @@ export interface StoredMetadata {
   /** Filter bar only (a grid section with `display: 'strip'`): the short label
    *  shown instead of the title. */
   strip_label?: string | null;
+  /** SegmentedControl only: draw one card per option (label, icon, description),
+   *  keyed by the option's value. See `OptionCard` in lite.py. */
+  option_cards?: Record<string, { label?: string; icon?: string; description?: string }> | null;
   /** Filter bar only: whether the icon badge precedes the label. Unset = shown. */
   strip_icon?: boolean | null;
   /** RangeSlider only: draw the column's histogram above the slider. */

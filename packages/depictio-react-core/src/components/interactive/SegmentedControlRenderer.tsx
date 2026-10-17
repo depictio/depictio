@@ -7,7 +7,9 @@ import { useAvailableSet, useFunnelState } from '../../availableValues';
 import ComponentSkeleton from '../ComponentSkeleton';
 import { orderCategoricalOptions } from './categoricalOptions';
 import { FunnelAvailabilityBadge, FunnelOptionMarker } from './funnelDecorations';
-import { InteractiveFrame, InteractiveTitle, interactiveAccentRaw } from './frame';
+import { InteractiveFrame, InteractiveTitle, interactiveAccent, interactiveAccentRaw } from './frame';
+import SwitchCards from './SwitchCards';
+import { orderByDeclared } from './switchCardsOrder';
 import { useUniqueValues } from './useInteractiveData';
 
 /**
@@ -57,8 +59,12 @@ const SegmentedControlRenderer: React.FC<{
   // With the funnel active, segments carry a colored dot: teal = still leads
   // to a non-empty result set, dimmed grey = exhausted by the other filters.
   const funnelHighlight = funnel.active && availableSet !== null;
+  const cards = metadata.option_cards ?? null;
   const data = useMemo(() => {
-    const sorted = orderCategoricalOptions(options, availableSet);
+    let sorted = orderCategoricalOptions(options, availableSet);
+    // Cards read in the order the YAML declares them (SILVA before PR2), not
+    // alphabetically: the first is the one a reader expects to be the default.
+    if (cards) sorted = orderByDeclared(sorted, Object.keys(cards));
     return sorted.map((v) => ({
       value: v,
       label: funnelHighlight ? (
@@ -68,7 +74,7 @@ const SegmentedControlRenderer: React.FC<{
       ),
       disabled: availableSet ? !availableSet.has(v) : false,
     }));
-  }, [options, availableSet, funnelHighlight]);
+  }, [options, availableSet, funnelHighlight, cards]);
   const availableCount = funnelHighlight
     ? options.filter((v) => availableSet!.has(v)).length
     : null;
@@ -127,6 +133,28 @@ const SegmentedControlRenderer: React.FC<{
           Too many options for SegmentedControl, use Select instead
         </Text>
       );
+  }
+
+  // Cards stand on their own: the frame's border and title would box them in twice.
+  if (cards) {
+    return (
+      <SwitchCards
+        label={metadata.title ?? metadata.column_name}
+        value={selectedValue ?? data[0]?.value}
+        onChange={handleChange}
+        accent={interactiveAccent(metadata)}
+        options={data.map((d) => {
+          const card = cards[d.value] ?? {};
+          return {
+            value: d.value,
+            label: card.label ?? d.value,
+            icon: card.icon,
+            description: card.description,
+            disabled: d.disabled,
+          };
+        })}
+      />
+    );
   }
 
   return frame(
