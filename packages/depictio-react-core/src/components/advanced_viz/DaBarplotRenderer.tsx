@@ -214,6 +214,9 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
           text: ranked.map((r) => r.label),
           customdata: ranked.map((r) => [r.feat, r.sig, r.hover]),
           textposition: 'outside' as const,
+          // The label sits past the bar's end, outside the plot area for the
+          // longest bars; clipping it to the axis cut the names in half.
+          cliponaxis: false,
           textfont: { size: BAR_FONT_SIZE },
           marker: { color: colour, line: { width: 0 } },
           hovertemplate:
@@ -230,11 +233,16 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
       layout: {
         ...plotlyThemeFragment(isDark, theme),
         font: { ...plotlyThemeFragment(isDark, theme).font, size: BAR_FONT_SIZE },
-        margin: { l: 8, r: 120, t: 12, b: 36 },
+        margin: { l: 130, r: 130, t: 12, b: 36 },
         xaxis: {
           ...plotlyAxisOverrides(isDark, theme),
           title: { text: config.lfc_col },
           zeroline: true,
+          // Room beyond the longest bar for its label, on whichever side it points.
+          range: [
+            Math.min(0, ...ranked.map((r) => r.lfc)) * 1.25,
+            Math.max(0, ...ranked.map((r) => r.lfc)) * 1.25,
+          ],
         },
         yaxis: {
           ...plotlyAxisOverrides(isDark, theme),

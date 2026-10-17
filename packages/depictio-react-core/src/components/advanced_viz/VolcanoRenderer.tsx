@@ -63,6 +63,8 @@ interface VolcanoConfig {
   /** Second hover line; in the MA view it is read from the MA table. */
   hover_col?: string;
   category_col?: string;
+  /** Name the category (e.g. the contrast) in the hover, in every view. */
+  hover_category?: boolean;
   significance_is_neg_log10?: boolean;
   significance_threshold?: number;
   effect_threshold?: number;
@@ -295,8 +297,13 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
   // The MA table: same filters as the test's table (its contrast column is
   // narrowed by the same contrast filter), kept whole below the cutoff.
   const maColumns = useMemo(
-    () => (config.hover_col ? [...MA_TABLE_COLUMN_LIST, config.hover_col] : MA_TABLE_COLUMN_LIST),
-    [config.hover_col],
+    () =>
+      [
+        ...MA_TABLE_COLUMN_LIST,
+        ...(config.hover_col ? [config.hover_col] : []),
+        ...(config.hover_category && config.category_col ? [config.category_col] : []),
+      ].filter((c, i, all) => all.indexOf(c) === i),
+    [config.hover_col, config.hover_category, config.category_col],
   );
   const [maRows, setMaRows] = useState<Record<string, unknown[]> | null>(null);
   const [maLoading, setMaLoading] = useState<boolean>(false);
@@ -349,14 +356,13 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
     const labels = config.label_col
       ? ((rows[config.label_col] || []) as (string | number)[])
       : ids;
-    const hovers = config.hover_col
-      ? ((rows[config.hover_col] || []) as (string | number)[])
-      : undefined;
+    const hovers = hoverLines(rows, config);
 
     if (activeView === 'qq') {
       return buildQq({
         ps: (rows[pValueCol] || []) as number[],
         ids: config.feature_id_col ? ids : null,
+        hoverCategory: Boolean(config.hover_category),
         cats: config.category_col ? ((rows[config.category_col] || []) as (string | number)[]) : null,
         catColours: categoryPinned,
         showCi,
@@ -379,7 +385,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
         sigRaw: (maRows[c.significance] || []) as number[],
         ids: maIds,
         labels: (maRows[c.label] as (string | number)[] | undefined) ?? maIds,
-        hovers: config.hover_col ? ((maRows[config.hover_col] || []) as (string | number)[]) : undefined,
+        hovers: hoverLines(maRows, config),
         xTitle: 'Mean log abundance',
         yTitle: config.effect_label || 'Log fold change',
         sigTitle: c.significance,
@@ -1008,8 +1014,35 @@ function buildMa(input: {
  * line still spans both corners, so it visibly exits the x frame when the
  * observed tail breaks from the null, which is the point of the plot.
  */
+/**
+ * The extra hover lines per point: `hover_col`'s value, then the category's
+ * (`hover_category`), joined for a Plotly hover. Undefined when neither is set.
+ */
+function hoverLines(
+  rows: Record<string, unknown[]>,
+  config: Pick<VolcanoConfig, 'hover_col' | 'hover_category' | 'category_col'>,
+): string[] | undefined {
+  const extra = config.hover_col ? ((rows[config.hover_col] || []) as unknown[]) : null;
+  const cats =
+    config.hover_category && config.category_col
+      ? ((rows[config.category_col] || []) as unknown[])
+      : null;
+  if (!extra && !cats) return undefined;
+  const n = Math.max(extra?.length ?? 0, cats?.length ?? 0);
+  return Array.from({ length: n }, (_, i) =>
+    [
+      extra ? String(extra[i] ?? '') : '',
+      cats ? `${config.category_col}: ${String(cats[i] ?? '')}` : '',
+    ]
+      .filter(Boolean)
+      .join('<br>'),
+  );
+}
+
 function buildQq(input: {
   ps: number[];
+  /** Name the category (the series) in the hover. */
+  hoverCategory?: boolean;
   ids: (string | number)[] | null;
   cats: (string | number)[] | null;
   /** Colours pinned for the categories (the dashboard's, see
@@ -1030,8 +1063,10 @@ function buildQq(input: {
   let lambdaOverall = NaN;
   const lambdaByCat: { cat: string; lambda: number }[] = [];
 
-  const hoverTemplate = (withId: boolean) =>
-    (withId ? '<b>%{text}</b><br>' : '') + 'expected: %{x:.3f}<br>observed: %{y:.3f}<extra></extra>';
+  const hoverTemplate = (withId: boolean, withCategory = false) =>
+    (withId ? '<b>%{text}</b><br>' : '') +
+    (withCategory ? '%{fullData.name}<br>' : '') +
+    'expected: %{x:.3f}<br>observed: %{y:.3f}<extra></extra>';
 
   if (cats) {
     const names = Array.from(new Set(cats.map(String))).sort();
@@ -1062,7 +1097,7 @@ function buildQq(input: {
             // Slot 0 is the feature, and only when the binding names one: with
             // no id column there is no identity to carry.
             ...(ids ? { customdata: series.ids.map((id) => [id]) } : {}),
-            hovertemplate: hoverTemplate(Boolean(series.ids[0])),
+            hovertemplate: hoverTemplate(Boolean(series.ids[0]), input.hoverCategory),
             marker: { color: colours.get(name), size: input.pointSize, opacity: 0.85 },
           },
           input.glGranted,

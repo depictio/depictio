@@ -98,6 +98,14 @@ class VolcanoConfig(_BaseVizConfig):
     category_col: str | None = Field(
         default=None, description="Optional column for point colour/category"
     )
+    hover_category: bool = Field(
+        default=False,
+        description=(
+            "Also name the point's category (category_col, e.g. the contrast) in the "
+            "hover, in every view. In the MA view the MA table needs a column of the "
+            "category_col's name."
+        ),
+    )
 
     # Display defaults — editable from the viz UI as Tier-2 (intra-viz) controls.
     significance_is_neg_log10: bool = Field(
