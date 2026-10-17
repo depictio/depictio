@@ -57,6 +57,8 @@ interface VolcanoConfig {
   effect_size_col: string;
   significance_col: string;
   label_col?: string;
+  /** Second hover line; in the MA view it is read from the MA table. */
+  hover_col?: string;
   category_col?: string;
   significance_is_neg_log10?: boolean;
   significance_threshold?: number;
@@ -174,6 +176,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
             config.effect_size_col,
             config.significance_col,
             config.label_col,
+            config.hover_col,
             config.category_col,
             config.avg_log_intensity_col,
             config.log2_fold_change_col,
@@ -288,6 +291,10 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
 
   // The MA table: same filters as the test's table (its contrast column is
   // narrowed by the same contrast filter), kept whole below the cutoff.
+  const maColumns = useMemo(
+    () => (config.hover_col ? [...MA_TABLE_COLUMN_LIST, config.hover_col] : MA_TABLE_COLUMN_LIST),
+    [config.hover_col],
+  );
   const [maRows, setMaRows] = useState<Record<string, unknown[]> | null>(null);
   const [maLoading, setMaLoading] = useState<boolean>(false);
   const [maError, setMaError] = useState<string | null>(null);
@@ -301,7 +308,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       {
         wfId: maTable.wfId,
         dcId: maTable.dcId,
-        columns: MA_TABLE_COLUMN_LIST,
+        columns: maColumns,
         filters,
         fullLoad,
         vizKind: 'ma',
@@ -327,7 +334,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       cancelled = true;
       ctrl.abort();
     };
-  }, [maFromTable, maTable?.wfId, maTable?.dcId, filterSig, refreshTick, fullLoad]);
+  }, [maFromTable, maTable?.wfId, maTable?.dcId, filterSig, refreshTick, fullLoad, maColumns]);
 
   // Every view draws a marker cloud, so the tile always competes for one of the
   // bounded WebGL slots. Without one it renders as SVG, see webglBudget.
@@ -339,6 +346,9 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
     const labels = config.label_col
       ? ((rows[config.label_col] || []) as (string | number)[])
       : ids;
+    const hovers = config.hover_col
+      ? ((rows[config.hover_col] || []) as (string | number)[])
+      : undefined;
 
     if (activeView === 'qq') {
       return buildQq({
@@ -366,6 +376,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
         sigRaw: (maRows[c.significance] || []) as number[],
         ids: maIds,
         labels: (maRows[c.label] as (string | number)[] | undefined) ?? maIds,
+        hovers: config.hover_col ? ((maRows[config.hover_col] || []) as (string | number)[]) : undefined,
         xTitle: 'Mean log abundance',
         yTitle: config.effect_label || 'Log fold change',
         sigTitle: c.significance,
@@ -388,6 +399,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
         sigRaw: (rows[config.significance_col] || []) as number[],
         ids,
         labels,
+        hovers,
         xTitle: config.avg_log_intensity_col ?? '',
         yTitle: maYCol,
         sigTitle: config.significance_col,
@@ -408,6 +420,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       sigRaw: (rows[config.significance_col] || []) as number[],
       ids,
       labels,
+      hovers,
       isNegLog10: Boolean(config.significance_is_neg_log10),
       effectTitle: config.effect_label || config.effect_size_col,
       sigTitle: config.significance_col,
@@ -679,7 +692,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       error={error || (maFromTable ? maError : null)}
       emptyMessage={shownRows && Object.values(shownRows)[0]?.length === 0 ? 'No data' : undefined}
       dataRows={shownRows ?? undefined}
-      dataColumns={maFromTable ? MA_TABLE_COLUMN_LIST : requiredCols}
+      dataColumns={maFromTable ? maColumns : requiredCols}
       counts={figure?.counts}
       tierAnnotation={tierAnnotation}
       badges={annotations.badges}
@@ -732,6 +745,8 @@ function buildVolcano(input: {
   sigRaw: number[];
   ids: (string | number)[];
   labels: (string | number)[];
+  /** Second hover line per point (`hover_col`). */
+  hovers?: (string | number)[];
   isNegLog10: boolean;
   effectTitle: string;
   sigTitle: string;
@@ -746,7 +761,7 @@ function buildVolcano(input: {
   theme: ReturnType<typeof useMantineTheme>;
   glGranted: boolean;
 }): BuiltFigure {
-  const { xs, sigRaw, ids, labels, isNegLog10 } = input;
+  const { xs, sigRaw, ids, labels, hovers, isNegLog10 } = input;
   const ys = isNegLog10
     ? sigRaw
     : sigRaw.map((p) => (p == null || p <= 0 ? null : -Math.log10(p)));
@@ -814,9 +829,11 @@ function buildVolcano(input: {
             String(labels[i] ?? ids[i] ?? ''),
             sigRaw[i] ?? null,
             tiers[i],
+            hovers ? String(hovers[i] ?? '') : '',
           ]),
           hovertemplate:
             `<b>%{customdata[0]}</b>  <span style="opacity:0.7">[%{customdata[2]}]</span>` +
+            (hovers ? `<br>%{customdata[3]}` : '') +
             `<br>${input.effectTitle}: %{x:.3f}` +
             `<br>${input.sigTitle}: %{customdata[1]:.2e}` +
             `<br>-log10(sig): %{y:.2f}` +
@@ -871,6 +888,7 @@ function buildMa(input: {
   sigRaw: number[];
   ids: (string | number)[];
   labels: (string | number)[];
+  hovers?: (string | number)[];
   xTitle: string;
   yTitle: string;
   sigTitle: string;
@@ -884,7 +902,7 @@ function buildMa(input: {
   theme: ReturnType<typeof useMantineTheme>;
   glGranted: boolean;
 }): BuiltFigure {
-  const { xs, ys, sigRaw, ids, labels } = input;
+  const { xs, ys, sigRaw, ids, labels, hovers } = input;
   const hasSig = sigRaw.length > 0;
   const tiers = classifyTiers(
     ys,
@@ -935,9 +953,11 @@ function buildMa(input: {
             String(labels[i] ?? ids[i] ?? ''),
             hasSig ? sigRaw[i] ?? null : null,
             tiers[i],
+            hovers ? String(hovers[i] ?? '') : '',
           ]),
           hovertemplate:
             `<b>%{customdata[0]}</b>  <span style="opacity:0.7">[%{customdata[2]}]</span>` +
+            (hovers ? `<br>%{customdata[3]}` : '') +
             `<br>${input.xTitle}: %{x:.3f}` +
             `<br>${input.yTitle}: %{y:.3f}` +
             (hasSig ? `<br>${input.sigTitle}: %{customdata[1]:.2e}` : '') +

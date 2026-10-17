@@ -52,6 +52,7 @@ OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "label": pl.Utf8,
     "contrast": pl.Utf8,
     "taxonomy": pl.Utf8,
+    "Kingdom": pl.Utf8,
 }
 
 
@@ -127,6 +128,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             "label",
             "contrast",
             "taxonomy",
+            "Kingdom",
         )
         if c in df.columns
     ]

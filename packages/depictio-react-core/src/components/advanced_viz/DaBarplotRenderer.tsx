@@ -22,6 +22,8 @@ interface DaBarplotConfig {
   lfc_col: string;
   significance_col?: string | null;
   label_col?: string | null;
+  /** Second hover line (e.g. the Kingdom). */
+  hover_col?: string | null;
   significance_threshold?: number;
   top_n?: number;
   contrast_view?: string;
@@ -50,7 +52,7 @@ const FACET_GAP_PX = 20;
 /** The tab strip above the panels and the axis furniture below the last one. */
 const TABS_CHROME_PX = 72;
 
-type FeatureRow = { feat: string; label: string; lfc: number; sig: number };
+type FeatureRow = { feat: string; label: string; lfc: number; sig: number; hover: string };
 
 const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, groupRender }) => {
   const { colorScheme } = useMantineColorScheme();
@@ -67,6 +69,7 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
     if (config.significance_col && !cols.includes(config.significance_col))
       cols.push(config.significance_col);
     if (config.label_col && !cols.includes(config.label_col)) cols.push(config.label_col);
+    if (config.hover_col && !cols.includes(config.hover_col)) cols.push(config.hover_col);
     return cols;
   }, [config]);
 
@@ -143,6 +146,7 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
       ? ((rows[config.significance_col] || []) as number[])
       : null;
     const labels = config.label_col ? (rows[config.label_col] as (string | number)[]) : null;
+    const hovers = config.hover_col ? (rows[config.hover_col] as (string | number)[]) : null;
 
     for (let i = 0; i < feats.length; i++) {
       const c = String(contrasts[i] ?? '');
@@ -154,6 +158,7 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
         label: labels ? String(labels[i] ?? '') : String(feats[i] ?? ''),
         lfc,
         sig: Number.isFinite(sig) ? sig : 1,
+        hover: hovers ? String(hovers[i] ?? '') : '',
       };
       const arr = map.get(c) ?? [];
       arr.push(r);
@@ -204,11 +209,13 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
           x: ranked.map((r) => r.lfc),
           y: ranked.map((r) => r.label),
           text: ranked.map((r) => r.label),
-          customdata: ranked.map((r) => [r.feat, r.sig]),
+          customdata: ranked.map((r) => [r.feat, r.sig, r.hover]),
           textposition: 'outside' as const,
           marker: { color: colour, line: { width: 0 } },
           hovertemplate:
-            `<b>%{text}</b><br>${config.lfc_col}: %{x:.3f}` +
+            `<b>%{text}</b>` +
+            (config.hover_col ? `<br>%{customdata[2]}` : '') +
+            `<br>${config.lfc_col}: %{x:.3f}` +
             (config.significance_col
               ? `<br>${config.significance_col}: %{customdata[1]:.2e}`
               : '') +

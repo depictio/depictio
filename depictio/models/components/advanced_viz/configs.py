@@ -87,6 +87,14 @@ class VolcanoConfig(_BaseVizConfig):
         default="significance", description="Column with p-value or padj/q-value"
     )
     label_col: str | None = Field(default=None, description="Optional column for hover labels")
+    hover_col: str | None = Field(
+        default=None,
+        description=(
+            "Optional column shown as a second line in the hover (e.g. the Kingdom of a "
+            "taxon, which the label alone does not say). In the MA view it is read from "
+            "the MA table, so that table needs a column of this name."
+        ),
+    )
     category_col: str | None = Field(
         default=None, description="Optional column for point colour/category"
     )
@@ -610,6 +618,14 @@ class DaBarplotConfig(_BaseVizConfig):
         default=None, description="FDR-adjusted p-value (for highlighting significant bars)"
     )
     label_col: str | None = Field(default=None, description="Optional display label")
+    hover_col: str | None = Field(
+        default=None,
+        description=(
+            "Optional column shown as a second line in the hover (e.g. the Kingdom of a "
+            "taxon, which the label alone does not say). In the MA view it is read from "
+            "the MA table, so that table needs a column of this name."
+        ),
+    )
     significance_threshold: float = Field(default=0.05, ge=0.0, le=1.0)
     top_n: int = Field(default=15, ge=1, description="Top features (by |lfc|) shown per panel")
     contrast_view: str = Field(
