@@ -240,6 +240,19 @@ def _banner_facts_payload(facts: Any) -> list[dict[str, Any]]:
     return out
 
 
+def _option_cards_payload(cards: Any) -> dict[str, dict[str, Any]]:
+    """A SegmentedControl's `option_cards` as stored: dicts, unset fields left out.
+
+    Takes the parsed specs or the stored dicts alike, like `_banner_facts_payload`.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for value, card in (cards or {}).items():
+        raw = card.model_dump() if isinstance(card, BaseModel) else card
+        if isinstance(raw, dict):
+            out[str(value)] = {k: v for k, v in raw.items() if v is not None}
+    return out
+
+
 class FilterSectionSpec(BaseModel):
     """Presentation of one left-panel filter section, or one grid section.
 
@@ -1601,6 +1614,8 @@ class DashboardDataLite(BaseModel):
                     lite_comp["default_range"] = default_state["default_range"]
                 elif default_state.get("default_value") is not None:
                     lite_comp["default_value"] = default_state["default_value"]
+                if comp.get("option_cards"):
+                    lite_comp["option_cards"] = _option_cards_payload(comp["option_cards"])
                 if comp.get("always_selected"):
                     lite_comp["always_selected"] = True
                     if comp.get("default_by"):
@@ -2071,6 +2086,8 @@ class DashboardDataLite(BaseModel):
                 )
                 # Written only when on, so stored components that never set it
                 # keep their shape (and their snapshot hash).
+                if comp_dict.get("option_cards"):
+                    full_comp["option_cards"] = _option_cards_payload(comp_dict["option_cards"])
                 if comp_dict.get("always_selected"):
                     full_comp["always_selected"] = True
                     if comp_dict.get("default_by"):

@@ -687,6 +687,26 @@ class CardLiteComponent(BaseLiteComponent):
 _RANGE_DEFAULT_TYPES: tuple[str, ...] = ("RangeSlider", "DateRangePicker", "DatePicker")
 
 
+class OptionCard(BaseModel):
+    """How one option of a ``SegmentedControl`` reads when it is drawn as a card.
+
+    Example YAML (under a SegmentedControl's ``option_cards``, keyed by the value):
+        SILVA: {label: SILVA 138.2, icon: mdi:bacteria, description: 16S and 18S reads}
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: str | None = Field(
+        default=None, description="Title of the card. Unset: the value itself."
+    )
+    icon: str | None = Field(
+        default=None, description="Iconify icon name drawn in the card's chip."
+    )
+    description: str | None = Field(
+        default=None, description="One line under the title: what picking this option shows."
+    )
+
+
 class BannerFact(BaseModel):
     """One fact a scope banner shows for the value an ``always_selected`` filter holds.
 
@@ -857,6 +877,16 @@ class InteractiveLiteComponent(BaseLiteComponent):
         "``always_selected: true``.",
     )
 
+    option_cards: dict[str, OptionCard] | None = Field(
+        default=None,
+        description="SegmentedControl only: draw the control as one card per option, "
+        "keyed by the option's value, each with a label, an icon and a line of "
+        "description, instead of a plain row of labels. A value with no entry keeps "
+        "its own name as the title. For a choice that changes what the whole tab "
+        "shows (a reference database, a model), where the labels alone do not say "
+        "what the reader gets.",
+    )
+
     # Styling (optional)
     title_size: str | None = Field(default=None, description="Title size")
     custom_color: str | None = Field(default=None, description="Custom accent color")
@@ -927,6 +957,8 @@ class InteractiveLiteComponent(BaseLiteComponent):
             raise ValueError(
                 f"A list default_value is only valid for Select / MultiSelect, not {kind}."
             )
+        if self.option_cards is not None and kind != "SegmentedControl":
+            raise ValueError(f"option_cards is only valid for a SegmentedControl, not {kind}.")
         if self.default_by is not None and not self.always_selected:
             raise ValueError(
                 "default_by ranks the options an always_selected Select starts on: set "

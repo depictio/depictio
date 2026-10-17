@@ -1,0 +1,95 @@
+/* The project page's switch, as a filter: equal cards across the width, the open
+ * one lit in the accent with a filled icon chip. The glass chrome's tokens
+ * (--gl-*) lead; Mantine's stand in under the classic chrome. */
+.dp-switch-cards {
+  --sc-paper: var(--gl-paper, var(--mantine-color-body));
+  --sc-hair: var(--gl-hair, var(--mantine-color-default-border));
+  --sc-faint: var(--gl-faint, var(--mantine-color-gray-5));
+  --sc-well: var(--gl-well, var(--mantine-color-gray-light));
+  --sc-fg: var(--gl-fg, var(--mantine-color-text));
+  --sc-muted: var(--gl-muted, var(--mantine-color-dimmed));
+  --sc-accent: var(--gl-accent, var(--mantine-primary-color-filled));
+  --sc-accent-soft: var(--gl-accent-soft, var(--mantine-primary-color-light));
+  display: grid;
+  gap: 12px;
+  width: 100%;
+}
+.dp-switch-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--sc-paper);
+  color: var(--sc-fg);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px var(--sc-hair);
+  transition:
+    box-shadow 150ms ease,
+    background-color 150ms ease;
+}
+.dp-switch-card:hover:not([data-active]):not(:disabled) {
+  box-shadow: 0 0 0 1px var(--sc-faint);
+}
+.dp-switch-card:focus-visible {
+  outline: 2px solid var(--sc-accent);
+  outline-offset: 2px;
+}
+.dp-switch-card[data-active] {
+  background: linear-gradient(var(--sc-accent-soft), var(--sc-accent-soft)), var(--sc-paper);
+  box-shadow: 0 0 0 2px var(--sc-accent);
+}
+.dp-switch-card:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.dp-switch-card-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--sc-well);
+  color: var(--sc-muted);
+}
+.dp-switch-card[data-active] .dp-switch-card-icon {
+  background: var(--sc-accent);
+  color: var(--mantine-primary-color-contrast, #fff);
+}
+.dp-switch-card-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.dp-switch-card-label {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.dp-switch-card-meta {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--sc-muted);
+}
+
+/* Phone: the cards stack. */
+@media (max-width: 36em) {
+  .dp-switch-cards {
+    grid-template-columns: 1fr !important;
+    gap: 8px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dp-switch-card {
+    transition: none;
+  }
+}
