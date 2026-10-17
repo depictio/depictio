@@ -9,7 +9,7 @@
   --sc-fg: var(--gl-fg, var(--mantine-color-text));
   --sc-muted: var(--gl-muted, var(--mantine-color-dimmed));
   --sc-accent: var(--gl-accent, var(--mantine-primary-color-filled));
-  --sc-accent-soft: var(--gl-accent-soft, var(--mantine-primary-color-light));
+  --sc-accent-soft: color-mix(in srgb, var(--sc-accent) 12%, transparent);
   display: grid;
   gap: 12px;
   width: 100%;
@@ -59,7 +59,7 @@
 }
 .dp-switch-card[data-active] .dp-switch-card-icon {
   background: var(--sc-accent);
-  color: var(--mantine-primary-color-contrast, #fff);
+  color: #fff;
 }
 .dp-switch-card-text {
   display: grid;

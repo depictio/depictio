@@ -17,6 +17,11 @@ export interface SwitchCardOption {
  * For a choice that changes what a whole tab shows, where a row of bare labels
  * does not say what the reader gets.
  *
+ * The icons are bundled by scanning the source for `prefix:name` literals, so a
+ * dashboard that names one needs it written somewhere in a scanned tree: the TREC
+ * dashboard's cards use 'mdi:set-merge', 'mdi:bacteria-outline' and
+ * 'mdi:jellyfish-outline'.
+ *
  * A radio group, not tabs: it filters one data collection, it does not open a
  * panel.
  */
@@ -25,12 +30,19 @@ const SwitchCards: React.FC<{
   value: string;
   onChange: (value: string) => void;
   label?: string;
-}> = ({ options, value, onChange, label }) => (
+  /** CSS colour of the open card (the tab's colour); the chrome's accent when unset. */
+  accent?: string;
+}> = ({ options, value, onChange, label, accent }) => (
   <div
     className="dp-switch-cards"
     role="radiogroup"
     aria-label={label}
-    style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
+    style={
+      {
+        gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))`,
+        ...(accent ? { '--sc-accent': accent } : null),
+      } as React.CSSProperties
+    }
   >
     {options.map((o) => {
       const active = o.value === value;

@@ -1168,7 +1168,13 @@ const App: React.FC = () => {
     [dashboard],
   );
   const topComponents = useMemo(
-    () => interactiveComponents.filter((m) => m.placement === 'top'),
+    () => interactiveComponents.filter((m) => m.placement === 'top' && !m.option_cards),
+    [interactiveComponents],
+  );
+  // A switch drawn as cards chooses what the whole tab shows, so it sits in the
+  // canvas under the tab's title and description, not in the strip below it.
+  const switchComponents = useMemo(
+    () => interactiveComponents.filter((m) => m.placement === 'top' && m.option_cards),
     [interactiveComponents],
   );
   const leftComponents = useMemo(() => {
@@ -1721,6 +1727,30 @@ const App: React.FC = () => {
             holds — including a foreign `pin: top` section, which would
             otherwise introduce another tab before this one is named. */}
         <TabIntro dashboard={dashboard} activeTab={activeTab} />
+        {switchComponents.length > 0 && (
+          <Box
+            px={4}
+            pt={4}
+            pb="sm"
+            style={{
+              flexShrink: 0,
+              // Pinned under the header as the canvas scrolls, so the choice
+              // that frames the tab stays in reach.
+              position: 'sticky',
+              top: 0,
+              zIndex: 20,
+              background: 'var(--mantine-color-body)',
+            }}
+          >
+            <TopPanel
+              bare
+              components={switchComponents}
+              filters={filters}
+              onFilterChange={handleFilterChange}
+              refreshTick={refreshTick}
+            />
+          </Box>
+        )}
         {/* Only claims the leftover height when nothing follows it —
             otherwise a short grid would push the bottom-pinned sections
             to the fold with a gap above them. */}

@@ -7,7 +7,7 @@ import { useAvailableSet, useFunnelState } from '../../availableValues';
 import ComponentSkeleton from '../ComponentSkeleton';
 import { orderCategoricalOptions } from './categoricalOptions';
 import { FunnelAvailabilityBadge, FunnelOptionMarker } from './funnelDecorations';
-import { InteractiveFrame, InteractiveTitle, interactiveAccentRaw } from './frame';
+import { InteractiveFrame, InteractiveTitle, interactiveAccent, interactiveAccentRaw } from './frame';
 import SwitchCards from './SwitchCards';
 import { orderByDeclared } from './switchCardsOrder';
 import { useUniqueValues } from './useInteractiveData';
@@ -142,6 +142,7 @@ const SegmentedControlRenderer: React.FC<{
         label={metadata.title ?? metadata.column_name}
         value={selectedValue ?? data[0]?.value}
         onChange={handleChange}
+        accent={interactiveAccent(metadata)}
         options={data.map((d) => {
           const card = cards[d.value] ?? {};
           return {

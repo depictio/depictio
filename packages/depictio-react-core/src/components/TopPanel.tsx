@@ -11,6 +11,8 @@ interface TopPanelProps {
   /** Realtime refresh counter — forwarded so the Timeline scrubber re-fetches
    *  its datetime bounds (and range extends) as new rows stream in. */
   refreshTick?: number;
+  /** Drop the bordered strip: for controls that bring their own card. */
+  bare?: boolean;
 }
 
 /**
@@ -24,22 +26,27 @@ const TopPanel: React.FC<TopPanelProps> = ({
   filters,
   onFilterChange,
   refreshTick,
+  bare,
 }) => {
   if (components.length === 0) return null;
+  const row = (
+    <Group gap="md" wrap="nowrap" align="center">
+      {components.map((m) => (
+        <div key={m.index} data-component-id={m.index} style={{ flex: 1, minWidth: 0 }}>
+          <ComponentRenderer
+            metadata={m}
+            filters={filters}
+            onFilterChange={onFilterChange}
+            refreshTick={refreshTick}
+          />
+        </div>
+      ))}
+    </Group>
+  );
+  if (bare) return row;
   return (
     <Paper withBorder radius={0} p="xs" mb="xs">
-      <Group gap="md" wrap="nowrap" align="center">
-        {components.map((m) => (
-          <div key={m.index} data-component-id={m.index} style={{ flex: 1, minWidth: 0 }}>
-            <ComponentRenderer
-              metadata={m}
-              filters={filters}
-              onFilterChange={onFilterChange}
-              refreshTick={refreshTick}
-            />
-          </div>
-        ))}
-      </Group>
+      {row}
     </Paper>
   );
 };
