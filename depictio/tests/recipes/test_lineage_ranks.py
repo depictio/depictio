@@ -27,6 +27,7 @@ from depictio.recipes.lib.lineage import (
     asv_table_to_ranks,
     kingdom_phylum,
     parent_rank,
+    root_rank,
 )
 
 # (lineage, expected Kingdom, expected Phylum)
@@ -63,6 +64,22 @@ def test_parent_rank_never_returns_the_domain_of_an_8_rank_lineage() -> None:
     assert df.with_columns(parent_rank(pl.col("lineage")).alias("k"))["k"].to_list() == [
         "Pseudomonadota"
     ]
+
+
+def test_root_rank_is_the_kingdom_at_any_depth() -> None:
+    """The leaf's parent is the Kingdom only at Phylum depth; deeper (PR2 read at its
+    Subdivision) it is a Supergroup, which is why the root is read instead."""
+    lineages = [
+        "Eukaryota;TSAR;Alveolata;Dinoflagellata",
+        "Bacteria;Pseudomonadota",
+        "Bacteria;Bacteria;Pseudomonadota",
+        "Eukaryota:plas;Archaeplastida:plas;;",
+        ";",
+        "",
+    ]
+    df = pl.DataFrame({"lineage": lineages})
+    got = df.with_columns(root_rank(pl.col("lineage")).alias("k"))["k"].to_list()
+    assert got == ["Eukaryota", "Bacteria", "Bacteria", "Eukaryota:plas", UNCLASSIFIED, UNCLASSIFIED]
 
 
 def _run(recipe: str, data_dir: Path, extra: dict[str, pl.DataFrame] | None = None) -> pl.DataFrame:

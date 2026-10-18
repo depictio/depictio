@@ -11,7 +11,7 @@ on ``taxonomy``.
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
-from depictio.recipes.lib.lineage import kingdom_phylum
+from depictio.recipes.lib.lineage import leaf_rank, root_rank
 
 # INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
@@ -113,11 +113,13 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     for name in ["p_val", "q_val", "w", "se"]:
         result = result.join(melted[name], on=["id", "taxonomy", "contrast"], how="left")
 
-    # Ranks are read from the tail of the lineage: the template points the five
-    # slices at the ANCOM-BC level that *is* Phylum for the run's reference
-    # database, so the leaf is the Phylum whatever depth sits above it.
+    # The Phylum is the lineage's leaf: the template points the five slices at the
+    # ANCOM-BC level that *is* Phylum for the run's reference database, whatever
+    # depth sits above it. The Kingdom is its root, not the leaf's parent, which is a
+    # Supergroup or Division for a database read below Phylum (PR2).
     result = result.with_columns(
-        *kingdom_phylum(pl.col("id")),
+        root_rank(pl.col("id")).alias("Kingdom"),
+        leaf_rank(pl.col("id")).alias("Phylum"),
         (-pl.col("q_val").log(base=10)).alias("neg_log10_qval"),
         (pl.col("q_val") < 0.05).alias("significant"),
         pl.when(pl.col("taxonomy") == _NO_LABEL)
