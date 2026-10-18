@@ -79,7 +79,14 @@ def test_root_rank_is_the_kingdom_at_any_depth() -> None:
     ]
     df = pl.DataFrame({"lineage": lineages})
     got = df.with_columns(root_rank(pl.col("lineage")).alias("k"))["k"].to_list()
-    assert got == ["Eukaryota", "Bacteria", "Bacteria", "Eukaryota:plas", UNCLASSIFIED, UNCLASSIFIED]
+    assert got == [
+        "Eukaryota",
+        "Bacteria",
+        "Bacteria",
+        "Eukaryota:plas",
+        UNCLASSIFIED,
+        UNCLASSIFIED,
+    ]
 
 
 def _run(recipe: str, data_dir: Path, extra: dict[str, pl.DataFrame] | None = None) -> pl.DataFrame:
