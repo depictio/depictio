@@ -1,0 +1,21 @@
+id: bedtools_strand_bins
+name: Strand coverage in genomic windows
+mode: coverage/strand-bins
+description: >-
+  Read bases of the plus and minus strand coverage bedGraphs in 250 kb windows,
+  one row per library per window, in parts per million of the library's signal,
+  streamed out of files of several million intervals without holding one. Every
+  library gets every window of the chromosomes, a window without reads at 0, so
+  libraries and time points compare on one complete matrix.
+find:
+  path_glob: "**/*.plus.bedGraph"
+recipe: bedtools/strand_bins.py
+fixture: strand_bins.tsv
+renders_as:
+  - { id: strand_signal_genome_view, component: advanced_viz, kind: genome_view, roles: {chr: chromosome, pos: start, end: end, score: log2_signal, sample: sample} }
+  - { id: strand_signal_track, component: advanced_viz, kind: coverage_track, roles: {chromosome: chromosome, position: position, end: end, value: signal_rpm, sample: sample} }
+  - { component: card, column: signal_rpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: plus_share_pct, aggregation: median, secondary_layout: gauge, coverage_max: 100 }
+  - { component: card, column: signal_rpm, aggregation: count, secondary_layout: top_n, breakdown_col: chromosome, top_n_count: 3 }
+  - { component: interactive, interactive_type: MultiSelect, column_name: chromosome }
+  - { component: table }

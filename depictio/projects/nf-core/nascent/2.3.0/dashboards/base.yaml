@@ -1,0 +1,1643 @@
+version: 1
+# nf-core/nascent 2.3.0, on the family rules of depictio/projects/nf-core/RULES.md
+# (ampliseq/2.18.0 is the reference implementation).
+#
+# One unit carries every tile: the library (one run-on library, the `sample` of
+# the samplesheet), placed on the time course by its time point. Funnel: whether
+# each library has the depth, the complexity and the strand balance to be read
+# (Data & QC) -> which genes change transcription and when, how far each time
+# point has moved from the baseline, and where along the genome the signal
+# changes (Time course). The pipeline writes no MultiQC report, so the family has
+# no MultiQC tab; the megatest run published no transcript identification
+# (groHMM, PINTS, HOMER), so there is no Transcripts tab either.
+#
+# The sample hub (`samples`) carries the persistent filters. Its links reach the
+# per-library collections by `sample` and the per-time-point ones (trajectories,
+# curves, chromosome shares) by `time_point`; the per-gene and per-window calls
+# by the time point of their peak.
+#
+# Time is drawn on log2(1 + hours) (`time_axis`): a nascent time course is
+# sampled every few minutes at the start and every day at the end, and a linear
+# axis would crowd the early points into a few pixels.
+#
+# Routes: without the design table the metadata collection goes, and with it the
+# group filter and colours. A run without its strand bedGraphs loses the binned
+# collections, and with them the Genome signal and Signal dynamics tabs, their
+# steps and their Findings rows; without the bigWigs the strand lanes go.
+main_dashboard:
+  title: nf-core/nascent
+  subtitle: Nascent transcription over a time course, from run-on reads to responding genes
+  project_tag: Nascent Transcription Time Course
+  main_tab_name: Overview
+  tab_icon: mdi:compass-outline
+  tab_icon_color: brandPrimary
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_panel_default: collapsed
+  content_width_default: compact
+  show_tab_header: false
+  # Declared once here, read by every tab of the family: figures, advanced viz
+  # and filter chips all colour a value the same way.
+  category_colors:
+    '{GROUP_COL}': auto
+    # Response classes of a gene: warm when induced, cool when repressed, darker
+    # the later the peak.
+    response:
+      Induced early: '#ffa94d'
+      Induced mid: '#f76707'
+      Induced late: '#c92a2a'
+      Repressed early: '#74c0fc'
+      Repressed mid: '#1c7ed6'
+      Repressed late: '#364fc7'
+      Stable: '#868e96'
+    direction:
+      Induced: '#e8590c'
+      Repressed: '#1971c2'
+      Stable: '#868e96'
+    trend:
+      Rising: '#e8590c'
+      Falling: '#1971c2'
+      Stable: '#868e96'
+    # The phase of a time point (and of a peak), from the baseline on.
+    phase:
+      Baseline: '#868e96'
+      Early: '#fab005'
+      Mid: '#12b886'
+      Late: '#7048e8'
+    peak_phase:
+      Early: '#fab005'
+      Mid: '#12b886'
+      Late: '#7048e8'
+    comparison:
+      Against the baseline: '#7048e8'
+      Against the previous time point: '#12b886'
+  # Persistent: drawn in every tab's filter panel, picks kept across tabs. All
+  # three are bound to the sample hub, the source of every library and time
+  # point link.
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab
+    persistent: true
+    pin: top
+  grid_sections:
+  - name: Key figures
+    icon: mdi:counter
+    color: gray
+    appearance: plain
+    card_variant: headline
+    filter_bar: true
+    visible_filters: 2
+    description: The run in four numbers. The filters here narrow these four only.
+  - name: Findings
+    icon: mdi:star-outline
+    color: gray
+    appearance: plain
+    figure_style: minimal
+    filter_bar: true
+    visible_filters: 2
+    description: What the data says, each with the tab that shows it, then the figures behind it.
+  - name: How to read this dashboard
+    icon: mdi:information-outline
+    color: gray
+    appearance: plain
+    description: The tabs by group, each with the question it answers.
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: gray
+    description: The libraries with their time point and QC, the table every tab filters through
+    collapsed: true
+    persistent: true
+    pin: bottom
+    exclude_tabs:
+    - Overview
+  components:
+  # First in component order on purpose: the Guide demos the first categorical
+  # filter that shares a data collection with the first card (Libraries, below).
+  - component_type: interactive
+    workflow_tag: nascent
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Key figures
+    tag: nc-ov-kf-group
+    index: nc-ov-kf-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: nascent
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+      strip_label: Library
+    section: Key figures
+    tag: nc-ov-kf-sample
+    index: nc-ov-kf-sample
+    title: Library
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # The pipeline's wordmark, read from its repository; where it cannot load (no
+  # internet), the title is drawn as text.
+  - component_type: text
+    title: nf-core/nascent
+    logo: https://raw.githubusercontent.com/nf-core/nascent/master/docs/images/nf-core-nascent_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/nascent/master/docs/images/nf-core-nascent_logo_dark.png
+    order: 1
+    body: >
+      Run-on libraries of nascent RNA along a time course, counted over every gene and read as
+      strand coverage along the genome: which genes change transcription, when, and how far each
+      time point moves from the first. [Run parameters](params:)
+    tag: nc-ov-hero
+    index: nc-ov-hero
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/nascent aligns each run-on library, counts its reads over every gene body and writes its coverage strand by strand. Each tab behind this page answers one question about the time course, against the earliest time point as the baseline.
+
+      The sample filters in the left panel apply to every tab. A bar above a section narrows that section only.
+    tag: nc-ov-about
+    index: nc-ov-about
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash.
+  - component_type: text
+    surface: card
+    values:
+      libs: {dc: samples, column: sample, aggregation: nunique, format: integer}
+      points: {dc: samples, column: time_point, aggregation: nunique, format: integer}
+    body: |
+      ### The run
+      - ![](icon:mdi:test-tube) **Libraries** {{libs}}
+      - ![](icon:mdi:chart-timeline-variant) **Time points** {{points}}
+      - ![](icon:mdi:flask-outline) **Assay** {{param:assay_type}}
+      - ![](icon:mdi:dna) **Genome** {{param:genome}}
+      - ![](icon:mdi:sort-variant) **Aligner** {{param:aligner}}
+      - ![](icon:mdi:barcode) **UMIs** {{param:with_umi}}
+    tag: nc-ov-run
+    index: nc-ov-run
+    layout: {x: 5, y: 1, w: 3, h: 3}
+  # A step citing a value goes with its collection when the run lacks it.
+  - component_type: text
+    surface: card
+    accent: green
+    values:
+      n_libs: {dc: samples, column: sample, aggregation: nunique, format: integer}
+      n_genes: {dc: gene_dynamics, column: gene_id, aggregation: nunique, format: integer}
+      n_windows: {dc: signal_window_dynamics, column: window_id, aggregation: nunique, format: integer}
+      n_points: {dc: samples, column: time_point, aggregation: nunique, format: integer}
+    body: |
+      ### Five steps from run-on reads to the time course
+      Each step names its settings and the tab that shows its result.
+
+      ::: steps
+      1. ![](icon:mdi:filter-variant) **Prepare** Trim and check {{n_libs}} libraries with fastp and FastQC · [Settings](params:skip_trimming) · [Library QC](tab:Library QC)
+      2. ![](icon:mdi:sort-variant) **Align** Each library to {{param:genome}} with {{param:aligner}} · [Settings](params:aligner) · [Library QC](tab:Library QC)
+      3. ![](icon:mdi:counter) **Count** Reads over every gene body, {{n_genes}} genes expressed · [Gene dynamics](tab:Gene dynamics)
+      4. ![](icon:mdi:waves) **Cover** Strand coverage, binned into {{n_windows}} comparable windows · [Settings](params:genome) · [Genome signal](tab:Genome signal) · [Signal dynamics](tab:Signal dynamics)
+      5. ![](icon:mdi:chart-timeline-variant) **Compare** {{n_points}} time points against the baseline · [Sample similarity](tab:Sample similarity)
+      :::
+    tag: nc-ov-steps
+    index: nc-ov-steps
+    layout: {x: 0, y: 4, w: 8, h: 3}
+  # Key figures: one card per stage of the funnel, each opening the tab that
+  # explains it. The icon colour is that tab's colour.
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: samples
+    aggregation: count
+    column_name: sample
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: '{GROUP_COL}'
+    display:
+      icon_name: mdi:test-tube
+      icon_color: teal
+      caption: libraries, by {GROUP_COL_DISPLAY}
+      link: tab:Library QC
+    section: Key figures
+    tag: nc-ov-kf-libraries
+    index: nc-ov-kf-libraries
+    title: Libraries
+    description: Run-on libraries of the run, one per samplesheet row. The bar splits them over the groups of the design.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: samples
+    aggregation: sum
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: assigned_reads
+    column_type: int64
+    display:
+      icon_name: mdi:counter
+      icon_color: blue
+      caption: reads in genes; the box spreads them over the libraries
+      link: tab:Library QC
+      format: si
+    section: Key figures
+    tag: nc-ov-kf-reads
+    index: nc-ov-kf-reads
+    title: Reads in genes
+    description: Reads featureCounts counted over gene bodies, summed over the libraries in view.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: gene_dynamics
+    aggregation: count
+    column_name: gene_id
+    column_type: object
+    filter_expr: col('direction') != 'Stable'
+    secondary_layout: donut
+    breakdown_col: direction
+    display:
+      icon_name: mdi:chart-timeline-variant
+      icon_color: grape
+      caption: genes, induced and repressed
+      link: tab:Gene dynamics
+    section: Key figures
+    tag: nc-ov-kf-responsive
+    index: nc-ov-kf-responsive
+    title: Responsive genes
+    description: Genes whose transcription changes by a log2 fold change of 1 against the baseline at two time points or more.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: samples
+    aggregation: median
+    column_name: plus_share_pct
+    column_type: float64
+    filter_expr: col('total_read_bases') > 0
+    secondary_layout: gauge
+    coverage_max: 100
+    display:
+      icon_name: mdi:scale-balance
+      icon_color: indigo
+      caption: median share of the signal on the plus strand
+      link: tab:Library QC
+      decimals: 1
+    section: Key figures
+    tag: nc-ov-kf-strand
+    index: nc-ov-kf-strand
+    title: Plus-strand share (%)
+    description: Share of a library's coverage on the plus strand, median over the libraries in view; genes sit on both strands, so a library far from half has lost one.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Findings filter bar: the group, then the library.
+  - component_type: interactive
+    workflow_tag: nascent
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Findings
+    tag: nc-ov-findings-group
+    index: nc-ov-findings-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: nascent
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+      strip_label: Library
+    section: Findings
+    tag: nc-ov-findings-sample
+    index: nc-ov-findings-sample
+    title: Library
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # One result row per analysis tab, each citing one data collection, so the
+  # import removes a row with its data. Every row states a measure and lets the
+  # value fill in.
+  - component_type: text
+    surface: card
+    values:
+      n_up: {dc: gene_dynamics, column: gene_id, aggregation: count, filter_expr: "col('direction') == 'Induced'", format: integer}
+      n_down: {dc: gene_dynamics, column: gene_id, aggregation: count, filter_expr: "col('direction') == 'Repressed'", format: integer}
+      pc1_var: {dc: sample_similarity, column: pc1_variance, aggregation: max, format: 'decimals:0'}
+      top_chr: {dc: chromosome_signal, column: chromosome, aggregation: top, weight: share_pct}
+      n_rise: {dc: signal_window_dynamics, column: window_id, aggregation: count, filter_expr: "col('trend') == 'Rising'", format: integer}
+      n_fall: {dc: signal_window_dynamics, column: window_id, aggregation: count, filter_expr: "col('trend') == 'Falling'", format: integer}
+    body: |
+      - **{{n_up}}** genes induced and **{{n_down}}** repressed – a log2 fold change of 1 against the baseline at two time points or more [Gene dynamics](tab:Gene dynamics)
+      - **{{pc1_var}}%** of the variance between libraries lies on the first component – in a time course, usually the time axis itself [Sample similarity](tab:Sample similarity)
+      - **{{top_chr}}** holds the largest share of the nascent signal – a share that moves over time marks a large response or a hotspot [Genome signal](tab:Genome signal)
+      - **{{n_rise}}** windows rise and **{{n_fall}}** fall – the same rule on the strand coverage, without a gene annotation [Signal dynamics](tab:Signal dynamics)
+    section: Findings
+    tag: nc-ov-findings
+    index: nc-ov-findings
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # One highlight per analysis tab, in the order of the rows above. The tiles of
+  # a row share a stored height.
+  - component_type: highlight
+    section: Findings
+    source_tab: Gene dynamics
+    source_component: gd-av-response
+    caption: Median change of each response class against the baseline, with its band; warm classes are induced, cool ones repressed.
+    hide_legend: true
+    tag: nc-ov-hl-response
+    index: nc-ov-hl-response
+    layout: {x: 0, y: 2, w: 4, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Sample similarity
+    source_component: ss-av-embedding
+    caption: One point per library on the first two components, coloured by its group; a time course draws a path.
+    hide_legend: true
+    tag: nc-ov-hl-embedding
+    index: nc-ov-hl-embedding
+    layout: {x: 4, y: 2, w: 4, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Genome signal
+    source_component: gs-fig-chromosomes
+    caption: Each chromosome's share of the signal per time point; a row that changes colour carries a response or a hotspot.
+    tag: nc-ov-hl-chromosomes
+    index: nc-ov-hl-chromosomes
+    layout: {x: 0, y: 7, w: 4, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Signal dynamics
+    source_component: sd-av-trends
+    caption: Median change of the rising, falling and stable windows against the baseline, with its band.
+    hide_legend: true
+    tag: nc-ov-hl-trends
+    index: nc-ov-hl-trends
+    layout: {x: 4, y: 7, w: 4, h: 5}
+  # Link-only tab tiles: each tile prints its tab's subtitle, the question the
+  # tab answers.
+  - component_type: text
+    body: |
+      ### Data & QC
+      - [Library QC](tab:Library QC)
+
+      ### Time course
+      - [Gene dynamics](tab:Gene dynamics)
+      - [Sample similarity](tab:Sample similarity)
+      - [Genome signal](tab:Genome signal)
+      - [Signal dynamics](tab:Signal dynamics)
+    section: How to read this dashboard
+    tag: nc-ov-how-to-read
+    index: nc-ov-how-to-read
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Persistent sample filters, the group first.
+  - component_type: interactive
+    workflow_tag: nascent
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: violet
+    section: Sample filters
+    group: Sample scope
+    tag: nc-filter-group
+    index: sample-filters-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: nascent
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+    section: Sample filters
+    group: Sample scope
+    tag: nc-filter-sample
+    index: sample-filters-sample
+    title: Library
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: nascent
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: time_point
+    column_type: object
+    display:
+      icon_name: mdi:chart-timeline-variant
+      custom_color: cyan
+    section: Sample filters
+    group: Sample scope
+    tag: nc-filter-time
+    index: sample-filters-time
+    title: Time point
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  # Row selection feeds the Analysis panel.
+  - component_type: table
+    workflow_tag: nascent
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Sample sheet
+    tag: nc-sheet-samples
+    index: nc-sheet-samples
+    title: Libraries
+    description: One row per library with its time point, the design columns and its QC. Ticking rows narrows every tab to those libraries.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+
+tabs:
+# =========================================================================
+# Data & QC
+# =========================================================================
+- title: Library QC
+  subtitle: Does each library have the depth and balance to be read?
+  tab_group: Data & QC
+  tab_order: 1
+  tab_icon: mdi:shield-check-outline
+  tab_icon_color: blue
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Library scope
+    icon: mdi:tune
+    color: blue
+    description: Keep libraries inside a depth or hotspot band
+  grid_sections:
+  - name: Libraries at a glance
+    icon: mdi:counter
+    color: blue
+    description: Depth, genes detected, strand balance and hotspots over the libraries
+  - name: Depth and complexity
+    icon: mdi:chart-bar
+    color: blue
+    description: Reads in genes per time point, and depth against genes detected
+  - name: Strand and hotspots
+    icon: mdi:scale-balance
+    color: blue
+    description: Strand balance per time point, and where the signal outside genes goes
+  - name: Library tables
+    icon: mdi:table
+    color: gray
+    description: Gene-count summary and strand coverage totals per library
+    collapsed: true
+  components:
+  - component_type: interactive
+    workflow_tag: nascent
+    data_collection_tag: subread_library_summary
+    interactive_component_type: RangeSlider
+    column_name: assigned_reads
+    column_type: int64
+    display:
+      icon_name: mdi:counter
+      custom_color: blue
+    placement: left
+    section: Library scope
+    group: Libraries
+    tag: nc-qc-filter-reads
+    index: nc-qc-reads-range
+    title: Reads in genes
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: nascent
+    data_collection_tag: bedtools_strand_summary
+    interactive_component_type: RangeSlider
+    column_name: hotspot_share_pct
+    column_type: float64
+    display:
+      icon_name: mdi:alert-outline
+      custom_color: orange
+    placement: left
+    section: Library scope
+    group: Libraries
+    tag: nc-qc-filter-hotspot
+    index: nc-qc-hotspot-range
+    title: Signal in hotspot windows (%)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: text
+    order: 1
+    body: >
+      Each library is checked on what the run publishes: the reads [featureCounts](https://subread.sourceforge.net/featureCounts.html)
+      counted over gene bodies, and the strand coverage
+      [bedtools genomecov](https://bedtools.readthedocs.io/en/latest/content/tools/genomecov.html) wrote. A
+      library short of reads, far from an even strand split, or holding much of its signal in a few
+      hotspot windows (ribosomal DNA, poor depletion) reads its genes from what is left.
+    tag: nc-qc-intro
+    index: nc-qc-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: samples
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: assigned_reads
+    column_type: int64
+    display:
+      icon_name: mdi:counter
+      icon_color: blue
+      caption: median reads, with their spread
+      format: si
+    section: Libraries at a glance
+    tag: nc-qc-card-reads
+    index: nc-qc-card-reads
+    title: Reads in genes per library
+    description: Median reads counted over gene bodies per library. The box shows how the depth spreads over the libraries.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: samples
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: histogram
+    column_name: genes_detected
+    column_type: int64
+    display:
+      icon_name: mdi:dna
+      icon_color: teal
+      caption: libraries by genes detected
+    section: Libraries at a glance
+    tag: nc-qc-card-genes
+    index: nc-qc-card-genes
+    title: Genes detected
+    description: Genes with at least 10 reads in a library, median over the libraries in view.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: samples
+    aggregation: median
+    column_name: plus_share_pct
+    column_type: float64
+    filter_expr: col('total_read_bases') > 0
+    secondary_layout: gauge
+    coverage_max: 100
+    display:
+      icon_name: mdi:scale-balance
+      icon_color: indigo
+      caption: median share on the plus strand
+      decimals: 1
+    section: Libraries at a glance
+    tag: nc-qc-card-strand
+    index: nc-qc-card-strand
+    title: Plus-strand share (%)
+    description: Share of a library's strand coverage on the plus strand, median over the libraries in view.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: samples
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: hotspot_share_pct
+    column_type: float64
+    filter_expr: col('total_read_bases') > 0
+    display:
+      icon_name: mdi:alert-outline
+      icon_color: orange
+      caption: median share in the top 1% of windows, with its spread
+      decimals: 1
+    section: Libraries at a glance
+    tag: nc-qc-card-hotspot
+    index: nc-qc-card-hotspot
+    title: Signal in hotspots (%)
+    description: Share of a library's chromosome signal held by its busiest 1% of 250 kb windows, median over the libraries in view.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: nascent
+    data_collection_tag: samples
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Reads in genes per library, in time order, coloured by the group: Analysis
+      # mode's groups when it has some, else the design's group column.
+      grp = depictio_group_by[0] if depictio_group_by else '{GROUP_COL}'
+      colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('{GROUP_COL}') or {}
+      d = df if grp in df.columns else df.with_columns(pl.lit('All libraries').alias(grp))
+      d = d.filter(pl.col('assigned_reads').is_not_null()).sort(['time_order', 'sample'], nulls_last=True)
+      fig = px.bar(d.to_pandas(), x='sample', y='assigned_reads', color=grp, color_discrete_map=colors, category_orders={'sample': d['sample'].to_list()}, hover_data=['time_point'], labels={'sample': '', 'assigned_reads': 'Reads in genes', grp: ''})
+      fig.update_layout(margin=dict(t=10))
+      fig.update_xaxes(tickangle=-45, automargin=True)
+    section: Depth and complexity
+    tag: nc-qc-fig-reads
+    index: nc-qc-fig-reads
+    title: Reads in genes per library
+    description: One bar per library, in time order. A short bar reads its genes from fewer reads.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: figure
+    workflow_tag: nascent
+    data_collection_tag: samples
+    visu_type: scatter
+    mode: code
+    selection_enabled: true
+    selection_column: sample
+    code_content: |-
+      # Depth against genes detected, one point per library, in the group's colours.
+      grp = depictio_group_by[0] if depictio_group_by else '{GROUP_COL}'
+      colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('{GROUP_COL}') or {}
+      d = df if grp in df.columns else df.with_columns(pl.lit('All libraries').alias(grp))
+      d = d.filter(pl.col('assigned_reads').is_not_null())
+      fig = px.scatter(d.to_pandas(), x='assigned_reads', y='genes_detected', color=grp, color_discrete_map=colors, hover_name='sample', hover_data=['time_point', 'top100_share_pct'], custom_data=['sample'], log_x=True, labels={'assigned_reads': 'Reads in genes', 'genes_detected': 'Genes detected (10 reads)', grp: ''})
+      fig.update_traces(marker=dict(size=11))
+      fig.update_layout(margin=dict(t=10))
+    section: Depth and complexity
+    tag: nc-qc-fig-depth-genes
+    index: nc-qc-fig-depth-genes
+    title: Depth against genes detected
+    description: One point per library. Lasso a group of libraries to narrow the other tiles.
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: figure
+    workflow_tag: nascent
+    data_collection_tag: samples
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Plus-strand share per library, in time order, with the even split marked.
+      grp = depictio_group_by[0] if depictio_group_by else '{GROUP_COL}'
+      colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('{GROUP_COL}') or {}
+      d = df if grp in df.columns else df.with_columns(pl.lit('All libraries').alias(grp))
+      d = d.filter(pl.col('plus_share_pct').is_not_null()).sort(['time_order', 'sample'], nulls_last=True)
+      fig = px.bar(d.to_pandas(), x='sample', y='plus_share_pct', color=grp, color_discrete_map=colors, category_orders={'sample': d['sample'].to_list()}, hover_data=['time_point'], labels={'sample': '', 'plus_share_pct': 'Plus-strand share (%)', grp: ''})
+      fig.add_hline(y=50, line_dash='dot')
+      fig.update_layout(yaxis_range=[0, 100], margin=dict(t=10))
+      fig.update_xaxes(tickangle=-45, automargin=True)
+    section: Strand and hotspots
+    tag: nc-qc-fig-strand
+    index: nc-qc-fig-strand
+    title: Plus-strand share per library
+    description: One bar per library, in time order; the dotted line is the even split.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: figure
+    workflow_tag: nascent
+    data_collection_tag: samples
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Where the signal goes outside the gene bodies: the busiest windows, the
+      # contigs outside the chromosomes and the mitochondrion, per library.
+      names = {'hotspot_share_pct': 'Top 1% of windows', 'off_main_pct': 'Outside the chromosomes', 'mito_pct': 'Mitochondrion'}
+      d = df.filter(pl.col('total_read_bases').is_not_null()).sort(['time_order', 'sample'], nulls_last=True)
+      long = d.unpivot(index=['sample', 'time_point'], on=list(names), variable_name='measure', value_name='share').with_columns(pl.col('measure').replace(names))
+      fig = px.bar(long.to_pandas(), x='sample', y='share', color='measure', barmode='group', category_orders={'sample': d['sample'].to_list(), 'measure': list(names.values())}, hover_data=['time_point'], labels={'sample': '', 'share': 'Share of the signal (%)', 'measure': ''})
+      fig.update_layout(margin=dict(t=10), legend=dict(orientation='h', y=-0.35))
+      fig.update_xaxes(tickangle=-45, automargin=True)
+    section: Strand and hotspots
+    tag: nc-qc-fig-hotspots
+    index: nc-qc-fig-hotspots
+    title: Signal in hotspots and off the chromosomes
+    description: Three shares per library, in time order. A tall first bar is a library dominated by a few windows.
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: table
+    workflow_tag: nascent
+    data_collection_tag: subread_library_summary
+    use: subread/library_summary
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Library tables
+    tag: nc-qc-table-counts
+    index: nc-qc-table-counts
+    title: Gene-count summary per library
+    description: Reads counted over genes, genes detected and the share of the 100 most counted genes, one row per library.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: nascent
+    data_collection_tag: bedtools_strand_summary
+    use: bedtools/strand_summary
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Library tables
+    tag: nc-qc-table-strand
+    index: nc-qc-table-strand
+    title: Strand coverage totals per library
+    description: Read bases per strand, covered bases, deepest base and the mitochondrial, off-chromosome and hotspot shares, one row per library.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+
+# =========================================================================
+# Time course
+# =========================================================================
+- title: Gene dynamics
+  subtitle: Which genes change transcription over the time course, and when?
+  tab_group: Time course
+  tab_order: 2
+  tab_icon: mdi:chart-timeline-variant
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Gene scope
+    icon: mdi:tune
+    color: grape
+    description: Narrow the gene calls by the size of their change or their level
+  grid_sections:
+  - name: Genes at a glance
+    icon: mdi:counter
+    color: grape
+    description: Genes tested, induced and repressed, and the size of their change
+  - name: Response over time
+    icon: mdi:chart-line
+    color: grape
+    description: The typical course of each response class, and the genes that move most
+  - name: Most dynamic genes
+    icon: mdi:chart-box-outline
+    color: grape
+    description: The forty genes that change most, one row each, in time order
+  - name: Gene tables
+    icon: mdi:table
+    color: gray
+    description: The call of every expressed gene, and its value at every time point
+    collapsed: true
+  components:
+  - component_type: interactive
+    workflow_tag: nascent
+    data_collection_tag: gene_dynamics
+    interactive_component_type: RangeSlider
+    column_name: abs_peak_log2fc
+    column_type: float64
+    display:
+      icon_name: mdi:chart-bell-curve
+      custom_color: grape
+    placement: left
+    section: Gene scope
+    group: Genes
+    tag: nc-gd-filter-change
+    index: nc-gd-change-range
+    title: Peak change (absolute log2 fold change)
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: nascent
+    data_collection_tag: gene_dynamics
+    interactive_component_type: RangeSlider
+    column_name: mean_log2_cpm
+    column_type: float64
+    display:
+      icon_name: mdi:counter
+      custom_color: blue
+    placement: left
+    section: Gene scope
+    group: Genes
+    tag: nc-gd-filter-level
+    index: nc-gd-level-range
+    title: Mean level (log2 CPM)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: text
+    order: 1
+    body: >
+      A run-on library counts transcription while it happens, so a gene's
+      [featureCounts](https://nf-co.re/nascent/2.3.0/docs/output) count at a time point is its rate then.
+      Each expressed gene is compared with the baseline, the earliest time point: induced or repressed
+      when its log2 fold change reaches 1 at two time points or more, and classed by the phase of its
+      peak. The curves are drawn on log2 of one plus the hours, so the first minutes keep their room.
+    tag: nc-gd-intro
+    index: nc-gd-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: gene_dynamics
+    aggregation: count
+    column_name: gene_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: direction
+    display:
+      icon_name: mdi:dna
+      icon_color: teal
+      caption: genes, by the direction of their change
+    section: Genes at a glance
+    tag: nc-gd-card-tested
+    index: nc-gd-card-tested
+    title: Expressed genes
+    description: Genes with at least 10 reads in half of the libraries, the genes the time course is read on.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: gene_dynamics
+    aggregation: count
+    column_name: gene_id
+    column_type: object
+    filter_expr: col('direction') == 'Induced'
+    secondary_layout: composition
+    breakdown_col: peak_phase
+    display:
+      icon_name: mdi:trending-up
+      icon_color: orange
+      caption: induced genes, by the phase of their peak
+    section: Genes at a glance
+    tag: nc-gd-card-induced
+    index: nc-gd-card-induced
+    title: Induced genes
+    description: Genes up by a log2 fold change of 1 against the baseline at two time points or more.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: gene_dynamics
+    aggregation: count
+    column_name: gene_id
+    column_type: object
+    filter_expr: col('direction') == 'Repressed'
+    secondary_layout: composition
+    breakdown_col: peak_phase
+    display:
+      icon_name: mdi:trending-down
+      icon_color: blue
+      caption: repressed genes, by the phase of their dip
+    section: Genes at a glance
+    tag: nc-gd-card-repressed
+    index: nc-gd-card-repressed
+    title: Repressed genes
+    description: Genes down by a log2 fold change of 1 against the baseline at two time points or more.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: gene_dynamics
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: abs_peak_log2fc
+    column_type: float64
+    filter_expr: col('direction') != 'Stable'
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: grape
+      caption: median over the responsive genes, with its spread
+      decimals: 2
+    section: Genes at a glance
+    tag: nc-gd-card-change
+    index: nc-gd-card-change
+    title: Peak change (log2)
+    description: Absolute log2 fold change of a responsive gene at its peak, median over the genes in view.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: nascent
+    data_collection_tag: response_profiles
+    viz_kind: profile
+    config:
+      viz_kind: profile
+      series_col: response
+      x_col: time_axis
+      y_col: median_log2fc
+      lower_col: q1_log2fc
+      upper_col: q3_log2fc
+      reference_x: 0
+      reference_label: Baseline
+      x_title: Time, log2(1 + hours)
+      y_title: log2 fold change against the baseline
+      band_opacity: 0.15
+      legend_pos: bottom
+    section: Response over time
+    tag: nc-gd-av-response
+    index: gd-av-response
+    title: Response classes over time
+    description: Median log2 fold change of each class's genes at each time point, with the band from the first to the third quartile.
+    layout: {x: 0, y: 0, w: 4, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: nascent
+    data_collection_tag: top_gene_trajectories
+    viz_kind: profile
+    config:
+      viz_kind: profile
+      series_col: gene_id
+      x_col: time_axis
+      y_col: log2fc
+      reference_x: 0
+      reference_label: Baseline
+      x_title: Time, log2(1 + hours)
+      y_title: log2 fold change against the baseline
+      legend_pos: bottom
+    section: Response over time
+    tag: nc-gd-av-top-genes
+    index: gd-av-top-genes
+    title: The ten genes that move most
+    description: One curve per gene, the responsive genes with the largest change at their peak among those transcribed at a usable level.
+    layout: {x: 4, y: 0, w: 4, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: nascent
+    data_collection_tag: top_gene_heatmap
+    viz_kind: complex_heatmap
+    config:
+      viz_kind: complex_heatmap
+      index_column: gene_id
+      row_annotation_cols: [response]
+      # Rows z-scored so a row reads as when the gene is high, not how high;
+      # columns stay in time order.
+      normalize: row_z
+      cluster_rows: true
+      cluster_cols: false
+      cluster_method: average
+      cluster_metric: correlation
+      colorscale: RdBu_r
+    section: Most dynamic genes
+    tag: nc-gd-av-heatmap
+    index: gd-av-heatmap
+    title: Transcription of the forty most dynamic genes
+    description: log2 CPM per time point, z-scored per gene, rows clustered by shape and annotated by response class; columns in time order.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    workflow_tag: nascent
+    data_collection_tag: gene_dynamics
+    columns: [gene_id, chromosome, start, end, strand, response, peak_log2fc, peak_time_point, n_changed, baseline_log2_cpm, mean_log2_cpm, last_log2fc, rank]
+    section: Gene tables
+    tag: nc-gd-table-calls
+    index: nc-gd-table-calls
+    title: Call per expressed gene
+    description: The peak change, its time point, the time points changed and the response class of every expressed gene, largest change first.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: nascent
+    data_collection_tag: gene_trajectories
+    section: Gene tables
+    tag: nc-gd-table-trajectories
+    index: nc-gd-table-trajectories
+    title: Gene value per time point
+    description: Mean log2 CPM and log2 fold change against the baseline of every expressed gene at every time point.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+
+- title: Sample similarity
+  subtitle: How far has each time point moved from the baseline?
+  tab_group: Time course
+  tab_order: 3
+  tab_icon: mdi:chart-scatter-plot-hexbin
+  tab_icon_color: pink
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Library scope
+    icon: mdi:tune
+    color: pink
+    description: Narrow the libraries by phase or by their correlation with the baseline
+  grid_sections:
+  - name: Similarity at a glance
+    icon: mdi:counter
+    color: pink
+    description: Libraries, the first component, and the correlation along the time course
+  - name: Library correlation
+    icon: mdi:relation-many-to-many
+    color: pink
+    description: Spearman correlation of every pair of libraries over the expressed genes
+  - name: Libraries over time
+    icon: mdi:chart-scatter-plot
+    color: pink
+    description: The libraries on the first two components, and the drift from the baseline
+  - name: Similarity table
+    icon: mdi:table
+    color: gray
+    description: Components and correlations per library
+    collapsed: true
+  components:
+  - component_type: interactive
+    workflow_tag: nascent
+    data_collection_tag: sample_similarity
+    interactive_component_type: MultiSelect
+    column_name: phase
+    column_type: object
+    display:
+      icon_name: mdi:chart-timeline-variant
+      custom_color: yellow
+    placement: left
+    section: Library scope
+    group: Libraries
+    tag: nc-ss-filter-phase
+    index: nc-ss-phase-select
+    title: Phase
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: nascent
+    data_collection_tag: sample_similarity
+    interactive_component_type: RangeSlider
+    column_name: corr_to_baseline
+    column_type: float64
+    display:
+      icon_name: mdi:relation-many-to-many
+      custom_color: pink
+    placement: left
+    section: Library scope
+    group: Libraries
+    tag: nc-ss-filter-corr
+    index: nc-ss-corr-range
+    title: Correlation with the baseline
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: text
+    order: 1
+    body: >
+      Libraries compared over the genes detected in half of them, on log2 CPM: a Spearman correlation
+      for every pair, and a [PCA](https://en.wikipedia.org/wiki/Principal_component_analysis) over the
+      2,000 most variable genes. A time course draws a path on the first components, and its correlation
+      with the baseline falls as the response unfolds. Lasso libraries on the embedding to narrow the other tiles.
+    tag: nc-ss-intro
+    index: nc-ss-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: sample_similarity
+    aggregation: count
+    column_name: sample
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: phase
+    display:
+      icon_name: mdi:test-tube
+      icon_color: teal
+      caption: libraries, by phase of the time course
+    section: Similarity at a glance
+    tag: nc-ss-card-libraries
+    index: nc-ss-card-libraries
+    title: Libraries compared
+    description: Libraries on the embedding and in the correlation curves.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: sample_similarity
+    aggregation: max
+    column_name: pc1_variance
+    column_type: float64
+    secondary_layout: gauge
+    coverage_max: 100
+    display:
+      icon_name: mdi:chart-scatter-plot
+      icon_color: pink
+      caption: share of the variance on the first component
+      decimals: 1
+    section: Similarity at a glance
+    tag: nc-ss-card-pc1
+    index: nc-ss-card-pc1
+    title: First component (%)
+    description: Variance between libraries explained by the first principal component of the PCA.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: sample_similarity
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: corr_to_baseline
+    column_type: float64
+    filter_expr: col('time_order') > 1
+    display:
+      icon_name: mdi:relation-many-to-many
+      icon_color: violet
+      caption: median after the baseline, with its spread
+      decimals: 3
+    section: Similarity at a glance
+    tag: nc-ss-card-baseline
+    index: nc-ss-card-baseline
+    title: Correlation with the baseline
+    description: Spearman correlation of a later library with the mean baseline library, median over the libraries in view.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: sample_similarity
+    aggregation: min
+    aggregations: [box_plot_stats]
+    secondary_layout: histogram
+    column_name: corr_to_previous
+    column_type: float64
+    filter_expr: col('time_order') > 1
+    display:
+      icon_name: mdi:chart-timeline-variant
+      icon_color: green
+      caption: lowest step correlation, and how the steps spread
+      decimals: 3
+    section: Similarity at a glance
+    tag: nc-ss-card-step
+    index: nc-ss-card-step
+    title: Largest step
+    description: Spearman correlation of a library with the previous time point; the lowest marks the step where transcription changed most.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: nascent
+    data_collection_tag: subread_correlation
+    use: subread/correlation_heatmap
+    config:
+      index_column: sample
+      # Average linkage on a correlation distance: these rows are
+      # correlations, not coordinates.
+      cluster_rows: true
+      cluster_cols: true
+      cluster_method: average
+      cluster_metric: correlation
+    section: Library correlation
+    tag: nc-ss-av-correlation
+    index: ss-av-correlation
+    title: Library correlation matrix
+    description: Spearman correlation of log2 CPM over the expressed genes; neighbouring time points cluster together.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: nascent
+    data_collection_tag: sample_similarity
+    viz_kind: embedding
+    config:
+      viz_kind: embedding
+      sample_id_col: sample
+      dim_1_col: pc1
+      dim_2_col: pc2
+      color_col: '{GROUP_COL}'
+      default_color_by: '{GROUP_COL}'
+      axis_prefix: PC
+      point_size: 14
+      marker_outline: true
+      hover_cols: [time_point]
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: sample
+    section: Libraries over time
+    tag: nc-ss-av-embedding
+    index: ss-av-embedding
+    title: Libraries on the first two components
+    description: One point per library over the 2,000 most variable genes; the time course draws a path.
+    layout: {x: 0, y: 0, w: 4, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: nascent
+    data_collection_tag: sample_drift
+    viz_kind: profile
+    config:
+      viz_kind: profile
+      series_col: comparison
+      x_col: time_axis
+      y_col: correlation
+      reference_x: 0
+      reference_label: Baseline
+      x_title: Time, log2(1 + hours)
+      y_title: Spearman correlation
+      legend_pos: bottom
+    section: Libraries over time
+    tag: nc-ss-av-drift
+    index: ss-av-drift
+    title: Correlation along the time course
+    description: Each time point against the baseline and against the previous time point; a dip in the second marks a large step.
+    layout: {x: 4, y: 0, w: 4, h: 6}
+  - component_type: table
+    workflow_tag: nascent
+    data_collection_tag: sample_similarity
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Similarity table
+    tag: nc-ss-table
+    index: nc-ss-table
+    title: Components and correlations per library
+    description: PCA coordinates, variance explained and the two correlations, one row per library.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+
+- title: Genome signal
+  subtitle: Where along the genome is nascent transcription read?
+  tab_group: Time course
+  tab_order: 4
+  tab_icon: mdi:dna
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Signal scope
+    icon: mdi:tune
+    color: teal
+    description: Narrow the binned signal to chromosomes or a signal band
+  grid_sections:
+  - name: Signal at a glance
+    icon: mdi:counter
+    color: teal
+    description: Window signal, strand balance, silent windows and the busiest window
+  - name: Binned signal along the genome
+    icon: mdi:waves
+    color: teal
+    description: Both strands in 250 kb windows, one lane per library; brush a region
+  - name: Strand coverage
+    icon: mdi:dna
+    color: teal
+    description: The plus and minus bigWigs of each library over the region in view
+  - name: Signal by chromosome
+    icon: mdi:chart-box-outline
+    color: teal
+    description: Each chromosome's share of the signal, per time point
+  - name: Binned signal table
+    icon: mdi:table
+    color: gray
+    description: Every 250 kb window of every library, with both strands
+    collapsed: true
+  components:
+  - component_type: interactive
+    workflow_tag: nascent
+    data_collection_tag: bedtools_strand_bins
+    interactive_component_type: MultiSelect
+    column_name: chromosome
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: teal
+    placement: left
+    section: Signal scope
+    group: Windows
+    tag: nc-gs-filter-chrom
+    index: nc-gs-chrom-select
+    title: Chromosome
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: nascent
+    data_collection_tag: bedtools_strand_bins
+    interactive_component_type: RangeSlider
+    column_name: log2_signal
+    column_type: float64
+    display:
+      icon_name: mdi:waves
+      custom_color: cyan
+    placement: left
+    section: Signal scope
+    group: Windows
+    tag: nc-gs-filter-signal
+    index: nc-gs-signal-range
+    title: Window signal (log2)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: text
+    order: 1
+    body: >
+      The strand coverage [bedtools genomecov](https://nf-co.re/nascent/2.3.0/docs/output) writes is
+      binned into 250 kb windows, per million of each library's signal, one lane per library. Brush a
+      region on the binned lanes and the bigWig lanes below zoom to it, strand by strand. Hotspot windows
+      (ribosomal DNA) tower over the rest, so the lanes are drawn on log2 of one plus the signal.
+    tag: nc-gs-intro
+    index: nc-gs-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: bedtools_strand_bins
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: signal_rpm
+    column_type: float64
+    follow_region_filter: true
+    display:
+      icon_name: mdi:waves
+      icon_color: teal
+      caption: median per window and library, with its spread
+      decimals: 1
+    section: Signal at a glance
+    tag: nc-gs-card-signal
+    index: nc-gs-card-signal
+    title: Window signal (per million)
+    description: Both strands of a 250 kb window, per million of the library's signal, median over the windows in view.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: bedtools_strand_bins
+    aggregation: median
+    column_name: plus_share_pct
+    column_type: float64
+    filter_expr: col('signal_rpm') > 0
+    secondary_layout: gauge
+    coverage_max: 100
+    follow_region_filter: true
+    display:
+      icon_name: mdi:scale-balance
+      icon_color: indigo
+      caption: median plus-strand share of a window
+      decimals: 1
+    section: Signal at a glance
+    tag: nc-gs-card-strand
+    index: nc-gs-card-strand
+    title: Plus-strand share (%)
+    description: The plus strand's share of a window's signal, median over the windows with signal in view.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: bedtools_strand_bins
+    aggregation: count
+    column_name: signal_rpm
+    column_type: float64
+    filter_expr: col('signal_rpm') == 0
+    secondary_layout: top_n
+    breakdown_col: chromosome
+    top_n_count: 3
+    follow_region_filter: true
+    display:
+      icon_name: mdi:alert-outline
+      icon_color: orange
+      caption: the 3 chromosomes holding most
+    section: Signal at a glance
+    tag: nc-gs-card-silent
+    index: nc-gs-card-silent
+    title: Silent windows
+    description: Windows of a library with no read on either strand, counted over the libraries in view.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: bedtools_strand_bins
+    aggregation: max
+    aggregations: [box_plot_stats]
+    secondary_layout: histogram
+    column_name: log2_signal
+    column_type: float64
+    follow_region_filter: true
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: grape
+      caption: how the windows spread on the log2 scale
+      decimals: 1
+    section: Signal at a glance
+    tag: nc-gs-card-peak
+    index: nc-gs-card-peak
+    title: Busiest window (log2)
+    description: The highest log2 signal of any window in view; a hotspot sits far right of the rest.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # The navigator: its brush emits the chromosome + position filters the
+  # bigWig lanes below follow (a file-backed tile needs no link for it).
+  - component_type: advanced_viz
+    workflow_tag: nascent
+    data_collection_tag: bedtools_strand_bins
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      chr_col: chromosome
+      pos_col: position
+      end_col: end
+      score_col: log2_signal
+      sample_col: sample
+      mark: bar
+      facet_by_sample: true
+      max_facets: 12
+      score_title: log2 signal
+      assembly: '{GENOME}'
+      annotation: '{GENOME}'
+      region_filter_enabled: true
+      default_region: first
+    section: Binned signal along the genome
+    tag: nc-gs-av-binned
+    index: gs-av-binned
+    title: Binned signal, one lane per library
+    description: Both strands in 250 kb windows, log2 of one plus the signal per million; brush or type a region to move the lanes below.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  # TODO(jbrowse): swap indexed_file+genome_view for a JBrowse2 DC once jbrowse.py is rebuilt
+  - component_type: advanced_viz
+    workflow_tag: nascent
+    data_collection_tag: coverage_bigwigs
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      source: file
+      chr_col: chrom
+      pos_col: pos
+      assembly: '{GENOME}'
+      annotation: '{GENOME}'
+      # 22 lanes: the plus and minus bigWig of every library of the megatest.
+      file_max_lanes: 24
+      # 250 Mb, the size of the largest human chromosome: a bigWig carries its
+      # own zoom levels, so the lanes draw on the whole contig the navigator
+      # opens on rather than waiting for a zoom under the 1 Mb default.
+      file_window_size: 250000000
+      region_filter_enabled: false
+      follow_region_filter: true
+    section: Strand coverage
+    tag: nc-gs-av-bigwig
+    index: gs-av-bigwig
+    title: Strand coverage from the bigWigs
+    description: The plus and minus bigWig of each library, range-read for the region in view, over the gene lane.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: figure
+    workflow_tag: nascent
+    data_collection_tag: chromosome_signal
+    visu_type: heatmap
+    mode: code
+    code_content: |-
+      # Each chromosome's share of the signal per time point: chromosomes in
+      # karyotype order down, time points in time order across.
+      d = df.sort(['contig_order', 'time_order'])
+      rows = d.select('chromosome', 'contig_order').unique().sort('contig_order')['chromosome'].to_list()
+      cols = d.select('time_point', 'time_order').unique().sort('time_order')['time_point'].to_list()
+      m = d.pivot(on='time_point', index='chromosome', values='share_pct', aggregate_function='first')
+      m = m.select('chromosome', *[c for c in cols if c in m.columns])
+      z = [[m.filter(pl.col('chromosome') == r)[c].item() if c in m.columns else None for c in cols] for r in rows]
+      fig = go.Figure(go.Heatmap(z=z, x=cols, y=rows, colorscale='Viridis', colorbar=dict(title='Share (%)'), hovertemplate='%{y} at %{x}: %{z:.2f}%<extra></extra>'))
+      fig.update_yaxes(autorange='reversed', automargin=True)
+      fig.update_layout(margin=dict(t=10), xaxis_title='Time point', yaxis_title='')
+    section: Signal by chromosome
+    tag: nc-gs-fig-chromosomes
+    index: gs-fig-chromosomes
+    title: Share of the signal per chromosome and time point
+    description: Each chromosome's share of the signal on the chromosomes, per time point; libraries of a time point averaged.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: table
+    workflow_tag: nascent
+    data_collection_tag: bedtools_strand_bins
+    use: bedtools/strand_bins
+    section: Binned signal table
+    tag: nc-gs-table-bins
+    index: nc-gs-table-bins
+    title: Binned strand signal per library and window
+    description: Plus, minus and total signal per million of the library, and the plus-strand share, for every 250 kb window.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+
+- title: Signal dynamics
+  subtitle: Which genomic windows gain or lose nascent signal over time?
+  tab_group: Time course
+  tab_order: 5
+  tab_icon: mdi:chart-bell-curve
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Window scope
+    icon: mdi:tune
+    color: orange
+    description: Narrow the window calls to chromosomes or by the size of their change
+  grid_sections:
+  - name: Windows at a glance
+    icon: mdi:counter
+    color: orange
+    description: Windows compared, rising and falling, and the size of their change
+  - name: Windows that change most
+    icon: mdi:chart-box-outline
+    color: orange
+    description: The forty windows that change most, one row each, in time order
+  - name: Trends over time
+    icon: mdi:chart-line
+    color: orange
+    description: The typical course of the rising, falling and stable windows
+  - name: Window table
+    icon: mdi:table
+    color: gray
+    description: The call of every window compared
+    collapsed: true
+  components:
+  - component_type: interactive
+    workflow_tag: nascent
+    data_collection_tag: signal_window_dynamics
+    interactive_component_type: MultiSelect
+    column_name: chromosome
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: teal
+    placement: left
+    section: Window scope
+    group: Windows
+    tag: nc-sd-filter-chrom
+    index: nc-sd-chrom-select
+    title: Chromosome
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: nascent
+    data_collection_tag: signal_window_dynamics
+    interactive_component_type: RangeSlider
+    column_name: abs_peak_log2fc
+    column_type: float64
+    display:
+      icon_name: mdi:chart-bell-curve
+      custom_color: grape
+    placement: left
+    section: Window scope
+    group: Windows
+    tag: nc-sd-filter-change
+    index: nc-sd-change-range
+    title: Peak change (absolute log2 fold change)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: text
+    order: 1
+    body: >
+      The rule of [Gene dynamics](tab:Gene dynamics), applied to the 250 kb windows of the strand coverage
+      instead of gene bodies, so a change outside any annotated gene shows too. The windows compared
+      are the transcribed half of the genome without its hotspots, whose share follows depletion rather
+      than transcription. A window rises or falls when its log2 fold change reaches 1 at two time points or more.
+    tag: nc-sd-intro
+    index: nc-sd-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: signal_window_dynamics
+    aggregation: count
+    column_name: window_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: trend
+    display:
+      icon_name: mdi:waves
+      icon_color: teal
+      caption: windows, by trend
+    section: Windows at a glance
+    tag: nc-sd-card-windows
+    index: nc-sd-card-windows
+    title: Windows compared
+    description: Transcribed 250 kb windows without the hotspots, the windows the time course is read on.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: signal_window_dynamics
+    aggregation: count
+    column_name: window_id
+    column_type: object
+    filter_expr: col('trend') == 'Rising'
+    secondary_layout: composition
+    breakdown_col: peak_phase
+    display:
+      icon_name: mdi:trending-up
+      icon_color: orange
+      caption: rising windows, by the phase of their peak
+    section: Windows at a glance
+    tag: nc-sd-card-rising
+    index: nc-sd-card-rising
+    title: Rising windows
+    description: Windows up by a log2 fold change of 1 against the baseline at two time points or more.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: signal_window_dynamics
+    aggregation: count
+    column_name: window_id
+    column_type: object
+    filter_expr: col('trend') == 'Falling'
+    secondary_layout: composition
+    breakdown_col: peak_phase
+    display:
+      icon_name: mdi:trending-down
+      icon_color: blue
+      caption: falling windows, by the phase of their dip
+    section: Windows at a glance
+    tag: nc-sd-card-falling
+    index: nc-sd-card-falling
+    title: Falling windows
+    description: Windows down by a log2 fold change of 1 against the baseline at two time points or more.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nascent
+    data_collection_tag: signal_window_dynamics
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: abs_peak_log2fc
+    column_type: float64
+    filter_expr: col('trend') != 'Stable'
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: grape
+      caption: median over the changing windows, with its spread
+      decimals: 2
+    section: Windows at a glance
+    tag: nc-sd-card-change
+    index: nc-sd-card-change
+    title: Peak change (log2)
+    description: Absolute log2 fold change of a rising or falling window at its peak, median over the windows in view.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: nascent
+    data_collection_tag: signal_window_heatmap
+    viz_kind: complex_heatmap
+    config:
+      viz_kind: complex_heatmap
+      index_column: window_id
+      row_annotation_cols: [trend]
+      normalize: row_z
+      cluster_rows: true
+      cluster_cols: false
+      cluster_method: average
+      cluster_metric: correlation
+      colorscale: RdBu_r
+    section: Windows that change most
+    tag: nc-sd-av-heatmap
+    index: sd-av-heatmap
+    title: Signal of the forty windows that change most
+    description: log2 signal per time point, z-scored per window, rows clustered by shape and annotated by trend; columns in time order.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: nascent
+    data_collection_tag: signal_trends
+    viz_kind: profile
+    config:
+      viz_kind: profile
+      series_col: trend
+      x_col: time_axis
+      y_col: median_log2fc
+      lower_col: q1_log2fc
+      upper_col: q3_log2fc
+      reference_x: 0
+      reference_label: Baseline
+      x_title: Time, log2(1 + hours)
+      y_title: log2 fold change against the baseline
+      band_opacity: 0.15
+      legend_pos: bottom
+    section: Trends over time
+    tag: nc-sd-av-trends
+    index: sd-av-trends
+    title: Rising, falling and stable windows over time
+    description: Median log2 fold change of each trend's windows at each time point, with the band from the first to the third quartile.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: nascent
+    data_collection_tag: signal_window_dynamics
+    columns: [window_id, chromosome, start, end, trend, peak_log2fc, peak_time_point, peak_phase, n_changed, mean_rpm, baseline_log2_signal, last_log2fc, rank]
+    section: Window table
+    tag: nc-sd-table
+    index: nc-sd-table
+    title: Call per window
+    description: The peak change, its time point, the time points changed and the trend of every window compared.
+    layout: {x: 0, y: 0, w: 8, h: 6}

@@ -1,0 +1,25 @@
+# Subread's featureCounts: reads counted over the features of a GTF, one column
+# per BAM. Catalogued for the count matrix itself (`<name>.featureCounts.txt`),
+# which pipelines such as nf-core/nascent publish as the gene-level
+# quantification of the run. The `.summary` file MultiQC reads (assigned and
+# unassigned reads by reason) is the featurecounts section of
+# `depictio/catalog/multiqc/featurecounts.yaml`; a run that publishes the matrix
+# without it still gets per-library depth and complexity from
+# `subread_library_summary` here.
+#
+# Three outputs: the long gene x library table the other two read through
+# `dc_ref` (so the 15 MB matrix is parsed once), the per-library summary and the
+# library correlation matrix. The library PCA a template draws is computed from
+# the same gene selection by `depictio/recipes/lib/count_matrix.py`.
+id: subread
+name: Subread featureCounts
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/subread/featurecounts
+homepage: http://bioinf.wehi.edu.au/featureCounts/
+description: >-
+  featureCounts is a highly efficient general-purpose read summarization
+  program that counts mapped reads for genomic features such as genes, exons,
+  promoter, gene bodies, genomic bins and chromosomal locations.
+biotools_url: https://bio.tools/subread
+edam_topics:
+  - http://edamontology.org/topic_3170 # RNA-Seq
+stage: quantification

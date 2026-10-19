@@ -1,0 +1,17 @@
+id: subread_correlation
+name: Library correlation matrix
+mode: exploratory/correlation
+description: >-
+  Spearman correlation of log2(cpm + 1) between every pair of libraries, over
+  the features detected in at least half of them, square (libraries x
+  libraries). Libraries of one condition or of neighbouring time points
+  correlate; one that correlates with nothing is an outlier.
+find:
+  path_glob: "**/*.featureCounts.txt"
+recipe: subread/correlation.py
+fixture: correlation.tsv
+renders_as:
+  # `index` is not optional in practice: ComplexHeatmapConfig.index_column falls
+  # back to the literal "sample_id", which this matrix does not have.
+  - { id: correlation_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: sample} }
+  - { component: table }
