@@ -365,18 +365,41 @@ async function checkComponent(
   // panel has no react-grid ancestor at all (its grid is edit-mode only), so
   // measuring there would read true in the editor and false in the viewer and
   // flag every filter as a cross-surface disagreement.
-  const fullWidth =
-    home === "grid"
-      ? await cell.evaluate((node) => {
-          const item =
-            (node as HTMLElement).closest(".react-grid-item") ?? (node as HTMLElement);
-          const grid = item.closest(".react-grid-layout");
-          if (!grid) return false;
-          return (
-            item.getBoundingClientRect().width >= grid.getBoundingClientRect().width - 24
-          );
-        })
-      : undefined;
+  //
+  // Read once the geometry holds still. The viewer's grid widens for about a
+  // second and a half after load while its chrome settles, and a tile follows
+  // it on a CSS transition: measured inside that window, a full-row table
+  // reads 811px wide in a 916px grid and is reported as a disagreement the
+  // settled page does not have.
+  const measureSpan = () =>
+    cell.evaluate((node) => {
+      const item =
+        (node as HTMLElement).closest(".react-grid-item") ?? (node as HTMLElement);
+      const grid = item.closest(".react-grid-layout");
+      if (!grid) return null;
+      return [
+        Math.round(item.getBoundingClientRect().width),
+        Math.round(grid.getBoundingClientRect().width),
+      ];
+    });
+  let fullWidth: boolean | undefined;
+  if (home === "grid") {
+    let span = await measureSpan();
+    await pwExpect
+      .poll(
+        async () => {
+          const next = await measureSpan();
+          const settled = JSON.stringify(next) === JSON.stringify(span);
+          span = next;
+          return settled;
+        },
+        { timeout: 10_000, intervals: [300] },
+      )
+      .toBe(true)
+      // Still moving after 10s: judge the last reading rather than fail here.
+      .catch(() => undefined);
+    fullWidth = span ? span[0] >= span[1] - 24 : false;
+  }
 
   const selector = contentSelectorFor(offer);
   if (selector) {
