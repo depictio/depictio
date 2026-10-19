@@ -4,6 +4,12 @@
 # gzip-compatible), so no pipeline needs a VCF dependency to get a per-variant
 # table. There is no nf-core/modules entry to point `nf_core_url` at, as for
 # bambu, enchantr and QIIME 2.
+#
+# Besides `variants`, four outputs summarise those rows for a pipeline that
+# publishes VCFs without a bcftools stats report (nf-core/rnavar): the
+# per-callset summary, the folded substitution spectrum, the FILTER breakdown
+# and the per-sample variant density in fixed windows (the ideogram input).
+# All four read the `vcf_variants` collection through `dc_ref`.
 id: vcf
 name: VCF
 description: >-

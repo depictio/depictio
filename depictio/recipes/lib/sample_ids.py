@@ -56,6 +56,10 @@ STAGE_TOKENS: frozenset[str] = frozenset(
         "markdup",
         "sorted",
         "dedup",
+        # rnavar / sarek: the STAR alignment before and after MarkDuplicates
+        # (`GM12878_REP1.aligned.stats`, `GM12878_REP1.md.stats`)
+        "aligned",
+        "md",
     }
 )
 
