@@ -4107,6 +4107,262 @@ class RamachandranConfig(_BaseVizConfig):
         return self
 
 
+class SpatialCellsConfig(_BaseVizConfig):
+    """Segmented cells drawn where they sit in the image.
+
+    One marker per cell at its centroid, in the coordinate frame of the image
+    the cells were segmented from: origin top-left, y growing downwards
+    (``y_axis: image``, the default), equal aspect always, marker area taken
+    from the cell's own area so the picture reads as tissue rather than as a
+    scatter. The driving table is a single-cell quantification such as
+    nf-core/mcmicro's mcquant output (``CellID``, ``X_centroid``,
+    ``Y_centroid``, ``Area`` and one mean-intensity column per marker), which
+    is WIDE: the colouring marker is switched from a control over
+    ``value_columns`` (or the numeric columns matching
+    ``value_columns_pattern``), never by rebinding.
+
+    A sample is one image, so two samples are never drawn in one frame:
+    ``sample_display: select`` shows one at a time behind a picker,
+    ``facet`` puts up to ``max_facets`` of them side by side, each in its own
+    frame. Cells of different segmenters on the same image share its frame
+    and are told apart by ``category_col``.
+    """
+
+    viz_kind: Literal["spatial_cells"] = "spatial_cells"
+
+    cell_id_col: str = Field(
+        default="cell_id",
+        description=(
+            "Column identifying each cell. A selection emits its values, so it "
+            "should be unique across samples (mcquant's CellID restarts at 1 "
+            "per image: bind a sample-qualified id when several images share "
+            "the table)"
+        ),
+    )
+    x_col: str = Field(default="x", description="Centroid x, in image pixels (or microns)")
+    y_col: str = Field(default="y", description="Centroid y, in image pixels (or microns)")
+    value_col: str | None = Field(
+        default=None,
+        description=(
+            "Numeric column the cells are coloured by first (one marker's "
+            "intensity). The marker picker writes it back"
+        ),
+    )
+    category_col: str | None = Field(
+        default=None,
+        description=(
+            "Categorical column (cell type, phenotype, segmenter) for the "
+            "categorical colouring; takes the dashboard's `category_colors`"
+        ),
+    )
+    sample_col: str | None = Field(
+        default=None,
+        description="Column naming the image (sample, ROI, core) a cell belongs to",
+    )
+    area_col: str | None = Field(
+        default=None,
+        description="Cell area in squared coordinate units, which sizes the markers",
+    )
+    value_columns: list[str] | None = Field(
+        default=None,
+        description=(
+            "Marker columns the colour picker offers. Null offers `value_col` "
+            "alone, or the columns `value_columns_pattern` matches"
+        ),
+    )
+    value_columns_pattern: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Regular expression naming the marker columns, for a table whose "
+            "markers are only known at ingest (one column per channel of the "
+            "panel). Matched with a search against the numeric columns, less "
+            "the bound coordinate, id and area columns, in table order. "
+            "Mutually exclusive with `value_columns`"
+        ),
+    )
+    color_by: Literal["value", "category"] | None = Field(
+        default=None,
+        description=(
+            "Colour the cells by the marker (continuous) or by `category_col`. "
+            "Null takes the marker when one is bound, else the category"
+        ),
+    )
+    sample_display: Literal["select", "facet"] = Field(
+        default="select",
+        description=(
+            "One image at a time behind a picker (`select`), or up to "
+            "`max_facets` images side by side, each in its own frame (`facet`)"
+        ),
+    )
+    default_sample: str | None = Field(
+        default=None, description="Sample shown first in `select` mode; null takes the first"
+    )
+    max_facets: int = Field(default=4, ge=1, le=12, description="Images drawn in `facet` mode")
+    y_axis: Literal["image", "cartesian"] = Field(
+        default="image",
+        description=(
+            "`image`: origin top-left, y downwards, as the pixels of the image "
+            "(mcquant, Xenium, MERFISH). `cartesian`: y upwards"
+        ),
+    )
+    colour_scale: ColourScale = Field(
+        default="Viridis", description="Continuous colour scale of the marker colouring"
+    )
+    reverse_scale: bool = Field(default=False, description="Reverse the continuous colour scale")
+    transform: Literal["none", "asinh", "log1p"] = Field(
+        default="none",
+        description=(
+            "Transform applied to the marker before colouring: `asinh` is "
+            "asinh(x / cofactor), the cytometry convention; `log1p` is log(1 + x)"
+        ),
+    )
+    asinh_cofactor: float = Field(
+        default=150.0,
+        gt=0.0,
+        description="Cofactor of the asinh transform (5 for mass cytometry, about 150 for flow)",
+    )
+    clip_low_pct: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=50.0,
+        description="Lower percentile of the colour range; cells under it take the lowest colour",
+    )
+    clip_high_pct: float = Field(
+        default=99.0,
+        ge=50.0,
+        le=100.0,
+        description="Upper percentile of the colour range; cells over it take the highest colour",
+    )
+    size_by_area: bool = Field(
+        default=True,
+        description=(
+            "Draw each cell at the diameter its area implies at the current "
+            "zoom, so cells look like cells; off draws every cell at `point_size`"
+        ),
+    )
+    point_size: float = Field(
+        default=4.0,
+        gt=0.0,
+        le=40.0,
+        description="Marker diameter in px without an area, and the floor with one",
+    )
+    max_point_size: float = Field(
+        default=40.0, gt=0.0, le=200.0, description="Ceiling of an area-sized marker, in px"
+    )
+    opacity: float = Field(default=0.9, ge=0.05, le=1.0, description="Marker opacity")
+    legend_pos: Literal["right", "bottom", "none"] = Field(
+        default="right", description="Where the category legend sits"
+    )
+    hover_cols: list[str] = Field(
+        default_factory=list, description="Extra columns shown in the hover tooltip"
+    )
+    max_cells: int = Field(
+        default=100_000,
+        ge=1_000,
+        le=1_000_000,
+        description=(
+            "Most cells drawn per tile. The server already samples a large "
+            "table to the figure point budget; past this, a full load is "
+            "thinned evenly in the browser and the badge says so"
+        ),
+    )
+
+    # --- Image underlay ------------------------------------------------------
+    # An image of the same sample under the cells, placed on the coordinate
+    # frame with Plotly's `layout.images`: pixel (0, 0) at the origin, the
+    # image `width x height` pixels wide times `background_image_scale`.
+    background_wf_id: str | None = Field(
+        default=None, description="Workflow id of the Image DC holding the underlay previews"
+    )
+    background_dc_id: str | None = Field(
+        default=None, description="Data-collection id of the Image DC holding the underlay previews"
+    )
+    background_dc_tag: str | None = Field(
+        default=None, description="Data-collection tag of the Image DC (resolved to ids at import)"
+    )
+    background_image_col: str | None = Field(
+        default=None,
+        description="Column of the Image DC naming each preview; null takes its `image_column`",
+    )
+    background_sample_col: str = Field(
+        default="sample",
+        description="Column of the Image DC matching `sample_col`, one preview per sample",
+    )
+    background_width_col: str = Field(
+        default="width", description="Column of the Image DC with the preview's width in pixels"
+    )
+    background_height_col: str = Field(
+        default="height", description="Column of the Image DC with the preview's height in pixels"
+    )
+    background_url: str | None = Field(
+        default=None,
+        description=(
+            "Direct URL of the underlay instead of an Image DC; `{sample}` is "
+            "replaced by the sample shown. Needs `background_width` and "
+            "`background_height`"
+        ),
+    )
+    background_width: int | None = Field(
+        default=None, ge=1, description="Width in pixels of the image at `background_url`"
+    )
+    background_height: int | None = Field(
+        default=None, ge=1, description="Height in pixels of the image at `background_url`"
+    )
+    background_image_scale: float = Field(
+        default=1.0,
+        gt=0.0,
+        description=(
+            "Coordinate units per image pixel: 1 when the centroids are in "
+            "pixels of that image, the downscale factor of a preview, or the "
+            "pixel size in microns for micron coordinates"
+        ),
+    )
+    background_opacity: float = Field(
+        default=0.7, ge=0.0, le=1.0, description="Opacity of the image underlay"
+    )
+    show_background: bool = Field(
+        default=True, description="Draw the underlay when one is configured"
+    )
+
+    # --- Selection as a cross-filter ---------------------------------------
+    selection_enabled: bool = Field(
+        default=False,
+        description=(
+            "Let a lasso / box / click on cells emit a dashboard filter on the "
+            "selection column. Off by default, like every scatter kind"
+        ),
+    )
+    selection_column: str | None = Field(
+        default=None, description="Column the selection values belong to; null uses `cell_id_col`"
+    )
+
+    @field_validator("value_columns_pattern")
+    @classmethod
+    def _value_columns_pattern_compiles(cls, v: str | None) -> str | None:
+        return _pattern_compiles("value_columns_pattern", v)
+
+    @model_validator(mode="after")
+    def _check_spatial_cells(self) -> SpatialCellsConfig:
+        # An empty list is what the builder writes when the picker is cleared,
+        # and it lists nothing, so it does not compete with a pattern.
+        if self.value_columns and self.value_columns_pattern is not None:
+            raise ValueError(
+                "value_columns and value_columns_pattern are mutually exclusive: list the "
+                "markers or name them by pattern, not both"
+            )
+        if self.clip_low_pct >= self.clip_high_pct:
+            raise ValueError("clip_low_pct must be below clip_high_pct")
+        if self.background_url and not (self.background_width and self.background_height):
+            raise ValueError(
+                "background_url needs background_width and background_height: the "
+                "underlay is placed on the coordinate frame by its pixel size"
+            )
+        if self.color_by == "category" and not self.category_col:
+            raise ValueError("color_by: category needs category_col")
+        return self
+
+
 # ---------------------------------------------------------------------------
 # Retired kinds, kept alive as views of the kind that survived
 # ---------------------------------------------------------------------------
@@ -4275,7 +4531,8 @@ _VizConfigUnion = Annotated[
     | SecondaryStructureConfig
     | DomainArchitectureConfig
     | PaeMatrixConfig
-    | RamachandranConfig,
+    | RamachandranConfig
+    | SpatialCellsConfig,
     Field(discriminator="viz_kind"),
 ]
 

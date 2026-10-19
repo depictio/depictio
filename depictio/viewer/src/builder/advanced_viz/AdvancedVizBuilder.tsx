@@ -77,6 +77,7 @@ import {
 } from './PhylogeneticSections';
 import RecordCardLinkSettings from './RecordCardLinkSettings';
 import ProteinBindingSettings, { isProteinKind } from './ProteinBindingSettings';
+import SpatialCellsSettings from './SpatialCellsSettings';
 
 /** Acceptable polars dtype names per canonical role (mirrors
  *  depictio/models/components/advanced_viz/schemas.py). */
@@ -1052,6 +1053,29 @@ const AdvancedVizBuilder: React.FC = () => {
           />
         </>
       ) : null}
+      {/* Spatial cells: an mcquant / Xenium table is wide, one column per
+          marker. The markers listed here are what the tile's colour picker
+          offers, so a reader switches marker without rebinding. */}
+      {selectedKind === 'spatial_cells' ? (
+        <MultiSelect
+          label={roleBindingLabel(
+            'marker columns',
+            NUMERIC_ANY,
+            'Numeric columns the tile offers in its Marker picker (one per channel). Leave empty to offer the value column alone, or name them by pattern in the YAML (value_columns_pattern).',
+            false,
+          )}
+          placeholder="Pick the marker intensity columns"
+          value={
+            Array.isArray(columnMapping.value_columns)
+              ? (columnMapping.value_columns as string[])
+              : []
+          }
+          onChange={(v) => setRole('value_columns', v)}
+          data={columnOptions(NUMERIC_ANY)}
+          searchable
+          clearable
+        />
+      ) : null}
       {/* Embedding live-compute mode: surface compute_method Select
           in place of dim_1/dim_2 pickers. Renderer dispatches the
           chosen reduction as a Celery task. */}
@@ -1417,6 +1441,10 @@ const AdvancedVizBuilder: React.FC = () => {
           idCol={typeof columnMapping.id === 'string' ? columnMapping.id : null}
           onChange={setOverrideFields}
         />
+      ) : null}
+
+      {selectedKind === 'spatial_cells' ? (
+        <SpatialCellsSettings config={effectiveConfig} onChange={setOverrideFields} />
       ) : null}
 
       {selectedKind && isProteinKind(selectedKind) ? (

@@ -1226,6 +1226,47 @@ workflows:
               p_strand: "Probability of strand, for the S4PRED source."
               p_coil: "Probability of coil, for the S4PRED source."
 
+      # Spatial cells (the 8e7x block, so it cannot collide with the blocks
+      # other kinds reserve). An mcquant single-cell table of two synthetic
+      # tonsil images, drawn by `spatial_cells` and, beside it, by an
+      # `embedding` bound to the centroids, for the section 8 comparison.
+      - id: "646b0f3c1e4a2d7f8e5b8e71"
+        data_collection_tag: "spatial_cells_demo"
+        description: "mcquant single-cell table of two tonsil images (about 3,900 cells each): eight marker intensities, centroids in image pixels, regionprops morphology and a called cell type"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/spatial_cells_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              CellID: "Segmentation label of the cell, as mcquant writes it. Restarts at 1 in each image."
+              DNA_1: "Mean nuclear stain (Hoechst) intensity over the cell mask."
+              CD3: "Mean CD3 intensity: T cells, in the zone around and between the follicles."
+              CD20: "Mean CD20 intensity: B cells, in the follicles."
+              CD45: "Mean CD45 intensity: every immune cell."
+              PanCK: "Mean pan-cytokeratin intensity: the epithelial band along the top edge."
+              Ki67: "Mean Ki67 intensity: proliferating cells, the germinal centres in the middle of the follicles."
+              CD68: "Mean CD68 intensity: macrophages, scattered through the section."
+              aSMA: "Mean alpha smooth muscle actin intensity: the walls of the vessels."
+              X_centroid: "Cell centroid x, in pixels of its image."
+              Y_centroid: "Cell centroid y, in pixels of its image, growing downwards from the top edge."
+              Area: "Cell mask area in pixels."
+              MajorAxisLength: "Major axis of the ellipse fitted to the mask, in pixels."
+              MinorAxisLength: "Minor axis of the ellipse fitted to the mask, in pixels."
+              Eccentricity: "Eccentricity of that ellipse: 0 is a circle."
+              Solidity: "Mask area over its convex hull area."
+              Extent: "Mask area over its bounding box area."
+              Orientation: "Angle of the major axis, in radians."
+              sample: "Image the cell was segmented from: tonsil_1 (1000 x 800 px) or tonsil_2 (900 x 900 px, a weaker stain)."
+              cell_id: "Cell id qualified by its image (sample:CellID), unique across the table. What a lasso selects."
+              cell_type: "Cell type called from the markers: B cell, Germinal centre B, T cell, Epithelial, Macrophage or Stromal."
+
 # Region links. A genomic region travels as a chromosome filter plus a
 # position range on the emitting collection's own columns; a region link
 # renames that pair onto the target's columns (depictio/models/models/links.py),

@@ -178,6 +178,10 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
       return named;
     case 'profile':
       return named ?? configColumn('series_col');
+    case 'spatial_cells':
+      // A lassoed cell is its id; the coordinates are numeric and the
+      // category is a grouping, so neither names the cells that were caught.
+      return named ?? configColumn('cell_id_col') ?? 'cell_id';
     case 'scatter_xy':
       // The label column, because that is what identifies a point: the axes are
       // numeric by definition and the colour column is a grouping, so filtering

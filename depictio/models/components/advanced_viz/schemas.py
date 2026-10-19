@@ -349,6 +349,15 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     "ramachandran": {
         "position": _NUMERIC,
     },
+    # One row per segmented cell: its id and its centroid in the frame of the
+    # image it was segmented from (mcquant's CellID / X_centroid / Y_centroid).
+    # The id is a string or an integer, because mcquant writes an integer
+    # label and a multi-image table a sample-qualified string.
+    "spatial_cells": {
+        "cell_id": _STRING | _INT,
+        "x": _NUMERIC,
+        "y": _NUMERIC,
+    },
 }
 
 # Per-role column-name aliases used by `suggest_viz_kinds`. The suggester
@@ -872,6 +881,46 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "gene": frozenset({"gene", "gene_name", "symbol", "gene_symbol"}),
         "sequence": frozenset({"sequence", "protein_sequence", "aa_sequence", "seq"}),
     },
+    # mcquant (nf-core/mcmicro), Xenium `cells.csv`, molkart and SpatialData
+    # tables. Names are matched after snake_casing, so `X_centroid` is
+    # `x_centroid` here.
+    "spatial_cells": {
+        "cell_id": frozenset(
+            {"cell_id", "cellid", "cell", "cell_uid", "object_id", "objectnumber", "cell_label"}
+        ),
+        "x": frozenset(
+            {
+                "x_centroid",
+                "centroid_x",
+                "x_location",
+                "x_position",
+                "center_x",
+                "cell_x",
+                "x_coord",
+                "spatial_x",
+                "x",
+            }
+        ),
+        "y": frozenset(
+            {
+                "y_centroid",
+                "centroid_y",
+                "y_location",
+                "y_position",
+                "center_y",
+                "cell_y",
+                "y_coord",
+                "spatial_y",
+                "y",
+            }
+        ),
+        "value": frozenset({"value", "intensity", "mean_intensity", "expression"}),
+        "category": frozenset(
+            {"category", "cell_type", "celltype", "phenotype", "cluster", "annotation"}
+        ),
+        "sample": frozenset({"sample", "sample_id", "image", "roi", "fov", "core"}),
+        "area": frozenset({"area", "cell_area", "nucleus_area", "size"}),
+    },
 }
 
 
@@ -1100,6 +1149,15 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "uniprot": _STRING,
         "gene": _STRING,
         "sequence": _STRING,
+    },
+    # `value` is the first marker shown (the picker offers `value_columns`, a
+    # list field rather than a role), `area` sizes the markers, `sample` keeps
+    # each image in its own frame.
+    "spatial_cells": {
+        "value": _NUMERIC,
+        "category": _STRING,
+        "sample": _STRING,
+        "area": _NUMERIC,
     },
 }
 
@@ -1681,6 +1739,24 @@ _PROTEIN_EVIDENCE_RE = re.compile(
 _DOMAIN_EVIDENCE = frozenset({"hmm_from", "protein_length", "i_evalue", "evalue", "accession"})
 
 
+# spatial_cells binds an id and an x / y pair, which every scatter table has.
+# What makes a table segmented cells is a centroid column or a morphology
+# column of the segmentation (regionprops: area, eccentricity, solidity...).
+_SPATIAL_EVIDENCE_RE = re.compile(
+    r"centroid|^(area|cell_area|nucleus_area|eccentricity|solidity|extent|orientation|"
+    r"perimeter|major_axis_length|minor_axis_length|majoraxislength|minoraxislength)$"
+)
+
+
+def _shape_spatial_cells(dc_schema: dict[str, str], draft: _Draft) -> None:
+    """spatial_cells: an x / y pair is only a cell table with a centroid or a morphology column."""
+    if any(_SPATIAL_EVIDENCE_RE.search(_normalize_name(c)) for c in dc_schema):
+        return
+    draft.score = min(draft.score, _STRUCTURAL_ONLY_SCORE)
+    draft.match = "weak"
+    draft.reasons = ["no centroid or cell morphology column (X_centroid, Area, Eccentricity)"]
+
+
 def _shape_protein(dc_schema: dict[str, str], draft: _Draft) -> None:
     """Residue-keyed protein kinds: a position alone does not make a protein table."""
     if any(_PROTEIN_EVIDENCE_RE.match(_normalize_name(c)) for c in dc_schema):
@@ -1903,6 +1979,8 @@ def _score_kind(
         _shape_domain_architecture(dc_schema, draft)
     elif kind == "hmm_logo":
         _shape_hmm_logo(dc_schema, draft)
+    elif kind == "spatial_cells":
+        _shape_spatial_cells(dc_schema, draft)
     elif kind == "sunburst" and not any(
         _is_string(d) and _RANK_NAME_RE.match(_normalize_name(c)) for c, d in dc_schema.items()
     ):
@@ -2199,6 +2277,15 @@ _KIND_ROLE_DESCRIPTIONS: dict[AdvancedVizKind, dict[str, str]] = {
         "uniprot": "UniProt accession used to fetch a predicted structure (resolve mode).",
         "gene": "Gene symbol used to fetch a predicted structure (resolve mode).",
         "sequence": "Protein sequence folded on demand when no accession resolves (resolve mode).",
+    },
+    "spatial_cells": {
+        "cell_id": "One row per segmented cell; a lasso emits these ids, so keep them unique.",
+        "x": "Cell centroid x in the image frame (pixels, or microns with a pixel size).",
+        "y": "Cell centroid y in the image frame, growing downwards from the top-left.",
+        "value": "Optional marker intensity the cells are coloured by first.",
+        "category": "Optional cell type, phenotype or segmenter, coloured categorically.",
+        "sample": "Optional image the cell belongs to: each one is drawn in its own frame.",
+        "area": "Optional cell area, which sizes each marker like the cell it stands for.",
     },
 }
 
@@ -2603,6 +2690,16 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         ),
         "icon": "tabler:angle",
     },
+    "spatial_cells": {
+        "label": "Spatial cells",
+        "description": (
+            "Segmented cells where they sit in the image: one marker per cell "
+            "at its centroid, sized by its area, coloured by a marker picked "
+            "from the panel or by cell type, over an optional image of the "
+            "sample. A lasso selects cells."
+        ),
+        "icon": "tabler:microscope",
+    },
 }
 
 
@@ -2623,6 +2720,12 @@ INCUBATING: frozenset[str] = frozenset(
         # showcase's synthetic fixture binds it. Kept and flagged rather than
         # deleted; revisit on a re-pin.
         "gsea_running_score",
+        # Pending the section 8 gate review against an embedding spatial view
+        # (an `embedding` bound to the centroids with an equal aspect); the
+        # showcase's spatial_cells tab draws both on the same cells so the
+        # review can compare them. No catalog output binds it yet: the
+        # nf-core/mcmicro mcquant tables are its first producer.
+        "spatial_cells",
     }
 )
 

@@ -213,6 +213,9 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   lollipop: 'colour',
   da_barplot: 'colour',
   metric_ci_bars: 'colour',
+  // Cells sit in the frame of their image: a per-group panel would redraw the
+  // same tissue with holes in it, so a group is a colour on the cells.
+  spatial_cells: 'colour',
 
   // Neither. Either the rows are not samples a group can name (terms, truth-set
   // results, one locus's structure), or a subset re-derives the layout itself

@@ -110,6 +110,13 @@ AdvancedVizKind = Literal[
     "domain_architecture",
     "pae_matrix",
     "ramachandran",
+    # Segmented cells drawn where they sit in the tissue: one marker per cell
+    # at its centroid, in IMAGE coordinates (origin top-left, y down), at the
+    # cell's own size, coloured by one marker of a wide single-cell table
+    # (mcquant, Xenium, molkart) with an optional image underlay. Pending the
+    # section 8 gate review against an `embedding` bound to the centroids;
+    # see INCUBATING in advanced_viz/schemas.py.
+    "spatial_cells",
 ]
 
 # Map visualization types

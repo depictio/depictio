@@ -266,3 +266,15 @@ class TestComponentFormats:
         highlight = {"component_type": "highlight", "source_component": "fig-1"}
         assert component_formats(highlight) == frozenset()
         assert "source" in (component_html_unavailable_reason(highlight) or "")
+
+
+def test_spatial_cells_is_drawn_in_the_browser_and_exports_as_html() -> None:
+    """A browser-built scattergl: no JSON spec, but the offline bundle renders it."""
+    from depictio.api.v1.services.export.capabilities import HTML_UNAVAILABLE_KINDS
+
+    assert AV_JSON_SOURCE["spatial_cells"] == "client_only"
+    assert advanced_viz_json_source("spatial_cells") == "client_only"
+    assert ExportFormat.JSON not in formats_for("advanced_viz", "spatial_cells")
+    assert ExportFormat.HTML in formats_for("advanced_viz", "spatial_cells")
+    assert "spatial_cells" not in HTML_UNAVAILABLE_KINDS
+    assert "format=html" in (unsupported_reason("advanced_viz", "spatial_cells") or "")

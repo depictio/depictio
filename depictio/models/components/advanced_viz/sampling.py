@@ -148,6 +148,14 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     "domain_architecture": "none",
     "pae_matrix": "none",
     "ramachandran": "none",
+    # One marker per cell and no aggregate read off the frame, so a uniform
+    # subset of a tissue is the same tissue at a lower cell density, exactly
+    # as for `embedding`. A Xenium or mcquant table holds 10^5 to 10^6 cells:
+    # the hash keeps every sample and every region in proportion, where a
+    # `head` prefix would be the first image's first rows. Load-All lifts the
+    # cap to the full-load ceiling, and `SpatialCellsConfig.max_cells` bounds
+    # what the browser then draws (thinned evenly, and reported).
+    "spatial_cells": "hash",
 }
 
 #: The role whose tail a ``tail`` kind must keep, and whether the interesting

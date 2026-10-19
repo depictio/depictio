@@ -255,6 +255,8 @@ STATIC_IDS = {
             "protein_family_hits_demo": "646b0f3c1e4a2d7f8e5b8de2",
             "protein_pae_demo": "646b0f3c1e4a2d7f8e5b8de3",
             "protein_ss_demo": "646b0f3c1e4a2d7f8e5b8de4",
+            # Spatial cells tab (the 8e7x block): the mcquant cell table.
+            "spatial_cells_demo": "646b0f3c1e4a2d7f8e5b8e71",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
@@ -313,6 +315,8 @@ STATIC_IDS = {
             # collections.
             "advanced_viz_protein_families": "646b0f3c1e4a2d7f8e5b8de0",
             "advanced_viz_protein_quality": "646b0f3c1e4a2d7f8e5b8de5",
+            # The spatial cells tab opens the 8e7x block; 8e71 is its collection.
+            "advanced_viz_spatial_cells": "646b0f3c1e4a2d7f8e5b8e70",
             "advanced_viz_benchmark_pr": "646b0f3c1e4a2d7f8e5b8d62",
             "advanced_viz_benchmark_confusion": "646b0f3c1e4a2d7f8e5b8d63",
             "advanced_viz_benchmark_ci": "646b0f3c1e4a2d7f8e5b8d64",

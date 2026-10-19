@@ -198,6 +198,9 @@ AV_JSON_SOURCE: dict[str, AvJsonSource] = {
     "domain_architecture": "client_only",
     "pae_matrix": "client_only",
     "ramachandran": "client_only",
+    # A Plotly scattergl whose marker sizes follow the zoom and whose colour
+    # range is clipped in the browser; no Python builder stands for it.
+    "spatial_cells": "client_only",
 }
 
 
