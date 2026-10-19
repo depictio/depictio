@@ -121,7 +121,7 @@ None of these could be checked without a running stack; each is pending a live c
 | EP4 | **peptides or proteins only** | a sheet without VCF plus `--var NO_VARIANT_INPUT=1` | no `variant_peptides/`, no bcftools | Variant peptides and pairs pruned; MultiQC bcftools panels pruned. |
 | EP5 | **one tool per class** | `--tools mhcflurry` plus `--var SINGLE_PREDICTOR=1` | no pair of tools | Agreement section, row and highlight pruned. |
 | EP6 | **NetMHCpan / MixMHCpred** | `--tools netmhcpan,mixmhcpred` (licensed, external) | other rank scales, MixMHCpred without IC50 | IC50 null for MixMHCpred (its predictions read `No IC50`); the agreement pairs need an IC50 on both sides to draw. |
-| EP7 | **a real cohort with typed alleles** | an hlatyping run feeding `alleles` | several alleles per sample | The dot plot and allele filters gain depth; the allele cross-link to hlatyping (`TODO(wave4c)`) can be exercised. |
+| EP7 | **a real cohort with typed alleles** | an hlatyping run feeding `alleles` | several alleles per sample | The dot plot and allele filters gain depth; the hlatyping genotype table's `alleles` column is this sheet's `alleles` cell, spelled the same way. No live link: the two runs are separate projects (docs/dashboards.md). |
 
 **Ranking by template stress:** EP2 > EP6 > EP4 > EP5 > EP3 > EP7 > EP1
 

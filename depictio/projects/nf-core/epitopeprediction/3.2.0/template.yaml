@@ -483,8 +483,9 @@ links:
     description: "Filter the variant peptides by samplesheet samples"
     enabled: true
   # The allele, normalised to HLA-A*02:01 in every collection, carries an
-  # allele pick from the predictions to the tables that hold one.
-  # TODO(wave4c): link allele filter with hlatyping allele_grid
+  # allele pick from the predictions to the tables that hold one. The
+  # nf-core/hlatyping template spells its typed alleles the same way, but it is
+  # another project: no link reaches it (docs/dashboards.md, Cross-selection).
   - source_dc_tag: "epitopeprediction_predictions"
     source_column: "allele"
     target_dc_tag: "epitopeprediction_allele_summary"

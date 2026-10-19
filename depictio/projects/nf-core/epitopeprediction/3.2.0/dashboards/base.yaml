@@ -8,9 +8,13 @@ version: 1
 # behind the calls agree (Predictors). The samplesheet (`samples`) is what every
 # filter starts from: its links carry a pick to every collection by sample.
 #
-# Alleles are normalised to HLA-A*02:01 in every collection, so the allele
-# filters here can later be driven by an HLA typing run of the same samples.
-# TODO(wave4c): link allele filter with hlatyping allele_grid
+# Alleles are normalised to HLA-A*02:01 in every collection, the spelling the
+# nf-core/hlatyping template gives its OptiType calls (both go through
+# depictio.recipes.lib.epitope_predictions.normalize_allele). The two runs are
+# separate projects and a link joins collections of one project only, so the
+# hlatyping allele grid cannot drive these filters live; an allele copied from
+# it selects the same rows here, and its genotype table writes each sample's
+# alleles as this samplesheet's `alleles` column takes them (docs/dashboards.md).
 #
 # Routes: NO_VARIANT_INPUT (no VCF in the sheet) prunes the variant peptides and
 # the mutant / wild-type pairs, NO_WILD_TYPE the pairs only, SINGLE_PREDICTOR
@@ -633,7 +637,8 @@ tabs:
     tag: ep-pred-intro
     index: pred-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
-  # TODO(wave4c): link allele filter with hlatyping allele_grid
+  # Takes the HLA-A*02:01 spelling of the hlatyping template's allele grid; no
+  # link crosses projects, so the value carries over, not the pick.
   - component_type: interactive
     workflow_tag: epitopeprediction
     data_collection_tag: epitopeprediction_predictions
