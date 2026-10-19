@@ -374,8 +374,8 @@ main_dashboard:
   - component_type: highlight
     section: Findings
     source_tab: Genome
-    source_component: gen-density
-    caption: Distinct PASS variants per 1 Mb window along the genome; calls gather where genes are dense and expressed.
+    source_component: gen-karyotype
+    caption: One sample's PASS variants per 1 Mb on each chromosome; the bands darken where genes are dense and expressed.
     tag: rv-ov-hl-genome
     index: ov-hl-genome
     layout: {x: 4, y: 6, w: 4, h: 4}
@@ -1504,10 +1504,9 @@ tabs:
 # The navigator (a genome_view on variant_windows) drives the call track
 # through the region link in template.yaml and the file track through
 # follow_region_filter. The cards opt in to the region with
-# follow_region_filter, so they recount what the region holds.
-# TODO(wave4c): variant density ideogram tile once the ideogram kind lands
-# (reads the per-sample vcf/variant_density output, declared commented out in
-# template.yaml).
+# follow_region_filter, so they recount what the region holds. Above them, the
+# karyotype reads the per-sample density (vcf_variant_density, catalog
+# vcf/variant_density) and shows one sample at a time.
 - title: Genome
   subtitle: Where along the genome do the calls fall?
   tab_group: Variants
@@ -1530,7 +1529,7 @@ tabs:
   - name: Calls along the genome
     icon: mdi:chart-timeline-variant
     color: indigo
-    description: Distinct PASS variants per 1 Mb window over the primary contigs
+    description: One sample's distinct PASS variants per 1 Mb window, on the karyotype
   - name: One region, three tracks
     icon: mdi:dna
     color: indigo
@@ -1539,9 +1538,10 @@ tabs:
   - component_type: text
     order: 1
     body: >
-      The navigator draws the cohort's PASS variants in 1 Mb windows; the calls and the filtered
-      VCFs follow its region. Type a locus or a gene in its header, or brush its axis, and the
-      tracks and cards follow. The VCF lanes are range-read from the files for the region in view.
+      The karyotype bands one sample's PASS variants per 1 Mb; the navigator draws the cohort's in
+      the same windows, and the calls and filtered VCFs follow its region. Type a locus or a gene in
+      its header, or brush its axis, and the tracks and cards follow. The VCF lanes are range-read
+      from the files for the region in view.
     tag: rv-gen-intro
     index: gen-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1653,23 +1653,24 @@ tabs:
     title: Depth at the call
     description: Median read depth HaplotypeCaller reported at the calls inside the region.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  # TODO(wave4c): variant density ideogram tile once the ideogram kind lands
+  # One karyotype per sample would be eight side by side, past the six facets
+  # a tile draws: the tile shows one sample, picked in its controls (the first
+  # until then), and the left panel's sample filter narrows the list.
   - component_type: advanced_viz
     workflow_tag: rnavar
-    data_collection_tag: variant_windows
-    viz_kind: manhattan
+    data_collection_tag: vcf_variant_density
+    use: vcf/density_karyotype
     config:
-      viz_kind: manhattan
-      chr_col: chrom
-      pos_col: pos
-      score_col: variants
-      score_kind: PASS variants per 1 Mb
-      top_n_labels: 0
+      assembly: '{GENOME}'
+      mode: density
+      orientation: vertical
+      facet_by_sample: false
+      colour_scale: Viridis
     section: Calls along the genome
-    tag: rv-gen-av-density
-    index: gen-density
-    title: PASS variants per 1 Mb window
-    description: One point per window holding a PASS call, as high as its distinct variants; the peaks are gene-dense, expressed regions.
+    tag: rv-gen-av-karyotype
+    index: gen-karyotype
+    title: PASS variants per 1 Mb on the karyotype
+    description: Each chromosome drawn to its length, banded by one sample's distinct PASS variants per 1 Mb; the dark bands are gene-dense, expressed regions.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: rnavar

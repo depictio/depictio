@@ -35,7 +35,7 @@ keeps it. The prefix holds 235 objects (not the 290 first reported), 136.0 GB.
 | `depictio dev catalog validate`, `depictio/tests/models/test_catalog.py` | pass (121 tools) |
 | `depictio/tests/catalog/test_conformance_project.py` | 4 fail until the conformance project is regenerated (RV-D8) |
 | Every recipe of the template over the mirrored megatest (`execute_recipe`, input and output schemas, in declaration order) | pass, row counts below |
-| `depictio ingest --template nf-core/rnavar/1.3.0 --dry-run` on the megatest with `METADATA_FILE` | 18 collections ingest, the 3 snpEff scans empty, their 3 recipes missing (optional) |
+| `depictio ingest --template nf-core/rnavar/1.3.0 --dry-run` on the megatest with `METADATA_FILE` | 19 collections ingest (`vcf_variant_density` included), the 3 snpEff scans empty, their 3 recipes missing (optional) |
 | The same template on a root holding real snpEff output of the same subworkflow (RV-D3) | the 6 snpEff collections resolve `ok` |
 
 The text tiles, KPI strips and open-row budgets are held by the lint above (stored text heights,
@@ -65,7 +65,7 @@ persistent filters reaching MultiQC). The row budgets below are counted from the
 | vcf_files | 8 VCFs + 8 .tbi (indexed_file) |
 | snpeff_* (6 collections) | 0 (no `--tools`; on the proxy root: 89,653 annotated calls, 100 composition rows, 39,968 gene rows for 2 samples) |
 | samples | 8 |
-| vcf_variant_density (catalog `vcf/variant_density`, not declared yet) | 17,441 at 1 Mb |
+| vcf_variant_density (catalog `vcf/variant_density`) | 17,441 (8 samples x 1 Mb windows holding a PASS call, primary contigs) |
 
 ## Routes (RULES section 13)
 
@@ -92,7 +92,7 @@ highlights); the live import is pending (section 15 below).
 | Coverage | 17 | strip + 3 (depth 6, contig classes 4, mitochondrial and ribosomal 4; table collapsed) |
 | Callset | 19 | strip + 3 (quality 6, spectrum 4, depth and allele fraction 6; tables collapsed) |
 | Annotation | 18 | strip + 3 (impact 4, consequences 5, coding calls 6; tables collapsed) |
-| Genome | 20 | strip + 2 (density 5, navigator 3 + calls 5 + files 4) |
+| Genome | 20 | strip + 2 (karyotype 5, navigator 3 + calls 5 + files 4) |
 
 ## Findings on the megatest
 
@@ -152,6 +152,12 @@ highlights); the live import is pending (section 15 below).
   for `test_conformance_project.py` to pass again.
 - **RV-D9** the T to C excess is the editing signal only in aggregate; the template does not flag
   individual editing sites (no REDIportal / RADAR lookup is published by the pipeline).
+- **RV-D11** (wave 4c) the variant karyotype: `vcf_variant_density` (catalog
+  `vcf/variant_density`, 1 Mb bins) is now declared after `vcf_variants`, linked from the sample
+  hub, and drawn on the Genome tab as an `ideogram` in density mode on `{GENOME}` (`use:
+  vcf/density_karyotype`, a render added to the catalog output). It takes the slot and the 5 rows
+  of the cohort manhattan it replaces, so the tab keeps its 20-row budget; the Overview's Genome
+  highlight now reads it.
 - **RV-D10** `samtools/stats_sections` decimates the COV histogram to 200 geometric bins, so
   `bases_10x_pct` counts from the bin whose centre is at or above 10x, a few tenths of a point off
   the exact share.
@@ -189,15 +195,16 @@ Every item below is **pending live check**; nothing here has been seen rendered.
   so the median is the intended reading.
 - The `allele fraction against depth` scatter binds the 383,508-row call table; it is sampled by
   the server like sarek's and was not seen live.
-- No variant-density ideogram yet: the catalog output `vcf/variant_density` is ready and tested,
-  its collection is declared commented out in template.yaml (`TODO(wave4c)`).
+- The Genome karyotype shows one sample at a time (`facet_by_sample: false`): the eight samples
+  of the megatest are past the six karyotypes a tile draws side by side. The sample is picked in
+  the tile's controls (the first until then); not seen live.
 - `indexed_file` + `genome_view` stands in for a JBrowse2 collection (`TODO(jbrowse)`).
 
 ## Validation scenarios
 
 | # | Label | Profile / Flags | What differs | Template impact |
 |---|-------|-----------------|--------------|-----------------|
-| RV1 | **test_full megatest (validated offline)** | `test_full`, pinned `5e72bcb5` | none | 18 of 24 collections populate: 383,508 `vcf_variants`, 8 callsets, 2,543 navigator windows; the 6 snpEff collections are absent and the Annotation tab is pruned. |
+| RV1 | **test_full megatest (validated offline)** | `test_full`, pinned `5e72bcb5` | none | 19 of 25 collections populate: 383,508 `vcf_variants`, 8 callsets, 2,543 navigator windows, 17,441 karyotype windows; the 6 snpEff collections are absent and the Annotation tab is pruned. |
 | RV2 | **snpEff annotation** | `--tools snpeff` | `annotation/<s>/*_snpEff.ann.vcf.gz`, `reports/snpeff/<s>/` appear | The Annotation tab and the Annotate step appear; recipes validated on the same subworkflow's sarek output (RV-D3); the rnavar file layout itself is unseen. |
 | RV3 | **VEP only / merge** | `--tools vep` or `merge` | `_VEP.ann.vcf.gz` / `_snpEff_VEP.ann.vcf.gz` | VEP's CSQ is not parsed by any catalog recipe: VEP-only has no Annotation tab; with `merge`, the `_snpEff_VEP` file does not match the snpEff regex (it ends in `_VEP.ann`), so only a `snpeff` entry in `--tools` feeds the tab. |
 | RV4 | **no VariantFiltration** | `--skip_tools variantfiltration` | only `<s>.haplotypecaller.vcf.gz` | `variants.py` falls back to the unfiltered VCF; `vcf_files` pruned with the file track; FILTER tiles show one value. |
