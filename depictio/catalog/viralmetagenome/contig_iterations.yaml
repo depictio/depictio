@@ -1,0 +1,25 @@
+id: viralmetagenome_contig_iterations
+name: De novo consensus across refinement steps
+mode: per-genome/refinement
+description: >-
+  Every de novo consensus at every step of its iterative refinement: the
+  scaffold built from the contigs, each mapping iteration and the final
+  variant-calling round, with the ambiguous bases, the mismatches and identity
+  to the closest reference and the depth at each step. Read along a genome,
+  it shows how far the refinement moved the consensus away from the scaffold.
+find:
+  path_glob: "**/overview-tables/*contigs_overview-with-iterations.tsv"
+recipe: viralmetagenome/contig_iterations.py
+fixture: contig_iterations.tsv
+renders_as:
+  - id: ambiguous_by_step
+    component: advanced_viz
+    kind: profile
+    roles: { series: genome_id, x: step_order, y: n_pct }
+  - id: identity_by_step
+    component: advanced_viz
+    kind: profile
+    roles: { series: genome_id, x: step_order, y: annotation_identity_pct }
+  - { component: card, column: annotation_mismatches, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table, row_selection_enabled: true, row_selection_column: genome_id }
