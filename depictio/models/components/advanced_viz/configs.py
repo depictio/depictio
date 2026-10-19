@@ -2915,6 +2915,129 @@ class GenomeChordConfig(_BaseVizConfig):
     )
 
 
+class IdeogramConfig(_BaseVizConfig):
+    """A karyotype: one bar per chromosome from a common origin, glyphs on each bar.
+
+    Every bar starts at the same origin and is drawn to its chromosome's length,
+    so the reader compares chromosomes, and genomes, by length first. On the
+    bars go the features: in ``marks`` mode one glyph per row (a BUSCO gene
+    coloured by its status), in ``density`` mode one heat band per bin (the
+    rows' own ``value`` when bound, else a count of rows per ``bin_size``).
+
+    Chromosome lengths come from ``chrom_length_col`` when bound, else from the
+    ``assembly`` table the genome chord ring uses, else from the furthest
+    feature on each chromosome.
+    """
+
+    viz_kind: Literal["ideogram"] = "ideogram"
+
+    chrom_col: str = Field(default="chrom", description="Chromosome the feature sits on")
+    start_col: str = Field(default="start", description="Feature start (bp)")
+    end_col: str = Field(default="end", description="Feature end (bp)")
+    value_col: str | None = Field(
+        default=None,
+        description="Optional numeric value (a density, a count), drawn on a sequential colour scale",
+    )
+    category_col: str | None = Field(
+        default=None,
+        description="Optional feature class (BUSCO status, variant type), drawn in categorical colours",
+    )
+    sample_col: str | None = Field(
+        default=None,
+        description="Optional sample or genome column: one karyotype per value",
+    )
+    label_col: str | None = Field(
+        default=None, description="Optional feature name, shown in the hover"
+    )
+    chrom_length_col: str | None = Field(
+        default=None,
+        description="Optional per-row chromosome length (bp); wins over the assembly table",
+    )
+
+    assembly: str | None = Field(
+        default=None,
+        description=(
+            "Chromosome sizes to scale the bars on (hg38, hg19, mm10); null uses "
+            "``chrom_length_col``, else the furthest feature on each chromosome"
+        ),
+    )
+    mode: Literal["marks", "density"] = Field(
+        default="marks",
+        description=(
+            "``marks``: one glyph per feature. ``density``: one heat band per bin, "
+            "the mean ``value`` when bound, else the number of features per bin"
+        ),
+    )
+    bin_size: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Density bin width in bp. Null keeps the rows as their own bins when "
+            "``value_col`` is bound, else picks a width giving about 100 bins on the "
+            "longest chromosome"
+        ),
+    )
+    orientation: Literal["horizontal", "vertical"] = Field(
+        default="horizontal", description="Bars along x (one row each) or along y"
+    )
+    chromosomes: list[str] | None = Field(
+        default=None,
+        description=(
+            "Chromosomes to draw, in this order (``chr`` prefix and case ignored); "
+            "null draws every chromosome in natural order"
+        ),
+    )
+    colour_scale: ColourScale = Field(
+        default="Viridis", description="Sequential colour scale for ``value`` and density bands"
+    )
+    facet_by_sample: bool = Field(
+        default=True,
+        description="One karyotype per sample (small multiples); off shows the selected sample only",
+    )
+    sample: str | None = Field(
+        default=None, description="Sample shown when not faceting; null picks the first"
+    )
+    max_facets: int = Field(
+        default=6, ge=1, le=24, description="Guard on the number of karyotypes drawn side by side"
+    )
+    max_chromosomes: int = Field(
+        default=60,
+        ge=1,
+        le=500,
+        description="Guard on the bars per karyotype; the longest are kept and the rest reported",
+    )
+    max_features: int = Field(
+        default=20000,
+        ge=1,
+        le=500000,
+        description=(
+            "Guard on the glyphs drawn in ``marks`` mode. Above it the tile draws "
+            "the density bands instead and says so, never a subset of the marks"
+        ),
+    )
+
+    # --- Region as a cross-filter ------------------------------------------
+    # On by default, as for genome_view's brush: a chromosome and a range are
+    # never ambiguous, so the gesture needs no opt-in.
+    region_filter_enabled: bool = Field(
+        default=True,
+        description=(
+            "Let a click on a chromosome, or a drag along it, emit a chromosome "
+            "multi-select plus a position range on this tile's own collection "
+            "(the ``genome_selection`` pair a genome_view brush emits)"
+        ),
+    )
+
+    @field_validator("chromosomes")
+    @classmethod
+    def _drop_blank_chromosomes(cls, value: list[str] | None) -> list[str] | None:
+        """An empty list or blank entries mean "no restriction", not "draw nothing"."""
+        if value is None:
+            return None
+        cleaned = [c.strip() for c in value if isinstance(c, str) and c.strip()]
+        return cleaned or None
+
+
 class RecordCardConfig(_BaseVizConfig):
     """One row of a collection, read as labelled fields rather than as a mark.
 
@@ -4266,6 +4389,7 @@ _VizConfigUnion = Annotated[
     | TranscriptStructureConfig
     | CnvProfileConfig
     | GenomeChordConfig
+    | IdeogramConfig
     | RecordCardConfig
     | ParallelCoordinatesConfig
     | Molecule3DConfig

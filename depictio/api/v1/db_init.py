@@ -442,6 +442,7 @@ async def create_initial_dashboards(
                 "transcript_structure",
                 "cnv_profile",
                 "genome_chord",
+                "ideogram",
                 "record_card",
                 "parallel_coordinates",
                 "locus_section",

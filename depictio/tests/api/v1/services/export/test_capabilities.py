@@ -224,6 +224,20 @@ class TestComponentFormats:
             assert "format=html" in reason
             assert ExportFormat.HTML in formats_for("advanced_viz", kind)
 
+    def test_ideogram_is_drawn_in_the_browser_and_embeds_as_html(self) -> None:
+        """A hand-drawn SVG reading its own rows: no JSON spec, but the offline
+        bundle carries the rows, so the HTML export renders it."""
+        from depictio.api.v1.services.export.capabilities import (
+            HTML_UNAVAILABLE_KINDS,
+            component_formats,
+        )
+
+        assert AV_JSON_SOURCE["ideogram"] == "client_only"
+        assert "ideogram" not in HTML_UNAVAILABLE_KINDS
+        assert ExportFormat.JSON not in formats_for("advanced_viz", "ideogram")
+        assert ExportFormat.HTML in formats_for("advanced_viz", "ideogram")
+        assert ExportFormat.HTML in component_formats(_av_component("ideogram", mode="density"))
+
     def test_only_the_protein_kinds_that_fetch_a_file_lack_html(self) -> None:
         from depictio.api.v1.services.export.capabilities import HTML_UNAVAILABLE_KINDS
 

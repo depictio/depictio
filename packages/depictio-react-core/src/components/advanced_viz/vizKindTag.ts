@@ -237,6 +237,11 @@ const VIZ_KIND: Readonly<Record<string, VizKindLabel>> = {
     'tabler:circle-dotted',
     'Links between genomic loci, drawn as chords on a chromosome ring',
   ),
+  ideogram: label(
+    'Karyotype',
+    'tabler:align-left',
+    'One bar per chromosome scaled to its length, with the features on it',
+  ),
   parallel_coordinates: label(
     'Parallel',
     'tabler:chart-line',

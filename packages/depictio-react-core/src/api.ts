@@ -1605,6 +1605,7 @@ export type AdvancedVizKind =
   | 'transcript_structure'
   | 'cnv_profile'
   | 'genome_chord'
+  | 'ideogram'
   | 'record_card'
   | 'parallel_coordinates'
   | 'molecule_3d'

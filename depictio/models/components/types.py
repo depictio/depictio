@@ -110,6 +110,11 @@ AdvancedVizKind = Literal[
     "domain_architecture",
     "pae_matrix",
     "ramachandran",
+    # A karyotype: one bar per chromosome from a common origin, scaled to its
+    # length, with a glyph per feature (BUSCO genes coloured by status) or a
+    # heat band per bin (variant density). The genomic kinds above all draw one
+    # locus axis at a time; this is the whole genome as a set of bars.
+    "ideogram",
 ]
 
 # Map visualization types
