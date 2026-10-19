@@ -1,0 +1,4 @@
+sample	lib_A	lib_B	lib_C
+lib_A	1.0	0.9372	0.9176
+lib_C	0.9176	0.9389	1.0
+lib_B	0.9372	1.0	0.9389

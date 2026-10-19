@@ -1,0 +1,105 @@
+# Megatest manifest for nf-core/nascent 2.3.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the subset of
+# it the template recipes and the genome tracks read. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline nascent --version 2.3.0 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing, plus the vendored design table
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+# fnmatch `*` crosses `/`, so a leading `*` matches the file at any depth.
+#
+# test_full profile: one GRO-seq time course of 11 single-end libraries
+# (0 h to 72 h), aligned with BWA to the iGenomes assembly. The run is 37 GB,
+# 31 GB of it BAMs (bwa/*.sorted.bam and a merged BAM at the root). Published
+# besides: the strand coverage (coverage_graphs/: 22 bigWig of 15 to 29 MB,
+# 32 bedGraph of 107 to 442 MB), the gene counts and pipeline_info/.
+#
+# The run did not finish: its PINTS caller failed, which aborted groHMM and
+# HOMER, so transcript_identification/ and quantification/nascent/ hold
+# directory markers only. preprocessing/ and quality_control/ (fastp, FastQC,
+# preseq, RSeQC, BBMap) were never published either, and no MultiQC report was
+# written: there is nothing MultiQC 1.35 could reprocess, so the template has no
+# MultiQC collection.
+#
+# Size: the keys below come to about 5.2 GB, 4.8 GB of it the 22 strand
+# bedGraphs the binned collections stream (the default --max-file-mb 500 keeps
+# them all). The template validation streamed them one pair at a time (fetch,
+# bin, delete) and kept the bedGraphs of two time points in the mirror; see
+# VALIDATION_REPORT.md.
+#
+# The pipeline publishes no samplesheet and no design: download_test_data.sh
+# copies the test_full samplesheet (input/samplesheet.csv) and a design table
+# written for the megatest from its library names (input/design.tsv: sample,
+# stage, time_point, time_h) into {dest}/input/.
+pipeline: nascent
+version: "2.3.0"
+# s3://nf-core-awsmegatests/nascent/results-<results_sha>/ == the 2.3.0 release tag_sha.
+results_sha: "7d4fe61975015f652c271886e661764b05cfd3bf"
+run_root: ""
+multiqc:
+  version: null
+  parquet: null
+  reprocess: false
+keys:
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  - pipeline_info/execution_trace_*.txt
+  # Reads counted over gene bodies, one column per library (catalog
+  # subread/gene_counts.py). Anchored on gene/: a run that identified
+  # transcripts writes a second matrix under quantification/nascent/.
+  - "*gene/*.featureCounts.txt"
+  # Strand coverage. The bigWigs are uploaded as files (indexed_file); the
+  # bedGraphs are streamed into 250 kb windows (catalog bedtools/*).
+  - "*coverage_graphs/*.plus.bigWig"
+  - "*coverage_graphs/*.minus.bigWig"
+  - "*coverage_graphs/*.plus.bedGraph"
+  - "*coverage_graphs/*.minus.bedGraph"
+  #
+  # Deliberately NOT fetched:
+  #   bwa/*.sorted.bam and GM.bam (0.8 to 14 GB each): the alignments.
+  #   coverage_graphs/*.dreg.bedGraph (128 to 311 MB): the dREG input, a signed
+  #     3' end count rather than coverage; no tile reads it.
+  #   pipeline_info/*.html: the Nextflow report, timeline and DAG.
+prefix_keys: []
+renames: {}
+# Megatest-specific terms that must never appear in the dashboard texts
+# (checked by the template lint test): library names, the cell line, the
+# assay and the assembly of this run, and the genes and locus it puts on top.
+forbidden_terms:
+  - GM_0h
+  - GM_30min
+  - GM_1h
+  - GM_2h
+  - GM_4h
+  - GM_6h
+  - GM_9h
+  - GM_12h
+  - GM_18h
+  - GM_48h
+  - GM_72h
+  - GM12878
+  - lymphoblastoid
+  - GRO-seq
+  - GROseq
+  - hg38
+  - GRCh38
+  - chr21
+  - CHAC1
+  - IFIT1
+  - IFIT2
+  - RSAD2
+  - CMPK2
+post_fetch_help: |
+  === Quick test commands ===
+
+  # The design table is not published by the pipeline: the template's reference
+  # vars read {dest}/input/design.tsv (download_test_data.sh copies the vendored
+  # one there). Pass --var METADATA_FILE=... for another run.
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli run --template nf-core/nascent/2.3.0 --data-root {dest} --var METADATA_FILE={dest}/input/design.tsv --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli run --template nf-core/nascent/2.3.0 --data-root {dest} --var METADATA_FILE={dest}/input/design.tsv

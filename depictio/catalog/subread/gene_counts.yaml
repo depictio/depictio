@@ -1,0 +1,19 @@
+id: subread_gene_counts
+name: Gene counts per library
+mode: quantification/gene-counts
+description: >-
+  The featureCounts count matrix as a long table, one row per feature per
+  library, with counts per million and log2(cpm + 1). Each feature keeps its
+  first contig and strand and the span of its exons, so the same rows feed a
+  table, a per-gene trajectory and a genome axis. Features with no read in any
+  library are dropped.
+find:
+  path_glob: "**/*.featureCounts.txt"
+recipe: subread/gene_counts.py
+fixture: gene_counts.tsv
+renders_as:
+  - { component: card, column: gene_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: chromosome, top_n_count: 3 }
+  - { component: card, column: counts, aggregation: sum, secondary_layout: composition, breakdown_col: sample }
+  - { component: figure, visu_type: box, dict_kwargs: {x: sample, y: log2_cpm, title: log2 counts per million per library} }
+  - { component: interactive, interactive_type: MultiSelect, column_name: gene_id }
+  - { component: table }
