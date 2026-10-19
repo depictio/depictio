@@ -53,6 +53,33 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: bddca7729ba92ac05bd354eb
+    data_collection_tag: agat_gene_models
+    description: 'Gene models per annotation: recipe output (agat/gene_models.py), seeded from the catalog
+      fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: agat/gene_models.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: a98464f3da15ece01c1364c0
+    data_collection_tag: agat_statistics
+    description: 'Annotation statistics: recipe output (agat/statistics.py), seeded from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: agat/statistics.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 10ea452e48d10fe976eda340
     data_collection_tag: ampcombi_clusters
     description: 'Peptide clusters: recipe output (ampcombi/clusters.py), seeded from the catalog fixture'
@@ -1993,6 +2020,33 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 115b80d8753cfd003f85bb75
+    data_collection_tag: fcsadaptor_actions
+    description: 'Adaptor and vector calls: recipe output (fcsadaptor/actions.py), seeded from the catalog
+      fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: fcsadaptor/actions.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 1e90f11efac3e6f4ae3fd677
+    data_collection_tag: fcsgx_actions
+    description: 'Contamination calls: recipe output (fcsgx/actions.py), seeded from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: fcsgx/actions.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 27f16c6cb818184c24636983
     data_collection_tag: funcscan_contig_annotation
     description: 'Contig annotation: recipe output (funcscan/contig_annotation.py), seeded from the catalog
@@ -3520,6 +3574,48 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: db418643eaca0ac50c40dee5
+    data_collection_tag: orthofinder_orthogroup_matrix
+    description: 'Orthogroups shared between species: recipe output (orthofinder/orthogroup_matrix.py),
+      seeded from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: orthofinder/orthogroup_matrix.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 409763d43cced176aa8099cc
+    data_collection_tag: orthofinder_orthologue_matrix
+    description: 'One-to-one orthologues between species: recipe output (orthofinder/orthologue_matrix.py),
+      seeded from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: orthofinder/orthologue_matrix.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 87dc78bb225e8353f805e268
+    data_collection_tag: orthofinder_species_stats
+    description: 'Orthogroup assignment per species: recipe output (orthofinder/species_stats.py), seeded
+      from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: orthofinder/species_stats.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 503f301de57d976501111a94
     data_collection_tag: pangolin_report
     description: 'Lineage report: recipe output (pangolin/pangolin_lineages.py), seeded from the catalog
@@ -4182,6 +4278,34 @@ workflows:
       source: transformed
       transform:
         recipe: quast/reference_report.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 1d307fa69b6547a21a1b614d
+    data_collection_tag: repeatmasker_masking_summary
+    description: 'Masking summary per assembly: recipe output (repeatmasker/masking_summary.py), seeded
+      from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: repeatmasker/masking_summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 5e08d6a55b8763cec6034076
+    data_collection_tag: repeatmasker_repeat_classes
+    description: 'Repeat classes per assembly: recipe output (repeatmasker/repeat_classes.py), seeded
+      from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: repeatmasker/repeat_classes.py
       dc_specific_properties:
         format: TSV
         polars_kwargs:
@@ -5185,6 +5309,34 @@ workflows:
       source: transformed
       transform:
         recipe: taxpasta/sample_summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 967bcb67016e7699aae3cd3b
+    data_collection_tag: tiara_classifications
+    description: 'Sequence classes: recipe output (tiara/classifications.py), seeded from the catalog
+      fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: tiara/classifications.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 3f8082ad4f1f42e952e4398a
+    data_collection_tag: tidk_search_windows
+    description: 'Telomeric repeats per window: recipe output (tidk/search_windows.py), seeded from the
+      catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: tidk/search_windows.py
       dc_specific_properties:
         format: TSV
         polars_kwargs:

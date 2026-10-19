@@ -146,6 +146,191 @@
       "stage": "qc"
     },
     {
+      "biotools_url": "https://bio.tools/agat",
+      "description": "Another Gtf/Gff Analysis Toolkit: validates, fixes and summarises genome annotations; sp_statistics reports the gene, transcript, exon and intron numbers of a GFF per feature type.",
+      "dir": "depictio/catalog/agat",
+      "homepage": "https://github.com/NBISweden/AGAT",
+      "id": "agat",
+      "name": "AGAT",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/agat/spstatistics",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "One row per assembly and transcript type from AGAT's sp_statistics: genes, transcripts per gene, exons per transcript, single-exon genes, overlapping genes and the gene, transcript, exon, intron and CDS lengths. Counts read the whole annotation, the per-transcript shape its longest isoforms, so a fragmented annotation shows as short genes with few exons and a surplus of single-exon models, whatever the isoform count.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.stats.txt",
+            "path_glob_alt": [
+              "**/stats/*.stats.txt"
+            ]
+          },
+          "fixture": "gene_models.tsv",
+          "fixtureContent": "genome\tfeature_type\tgenes\ttranscripts\ttranscripts_per_gene\texons\texons_per_transcript\tsingle_exon_genes\tsingle_exon_gene_pct\toverlapping_genes\tmean_gene_length\tmedian_gene_length\tmean_transcript_length\tmean_exon_length\tmean_intron_length\tmean_cds_length\ttotal_gene_length\nApis_mellifera\tmrna\t9934\t23471\t2.4\t243171\t7.5\t284\t2.86\t1120\t16890.0\t3989.0\t15035.0\t357.0\t2783.0\t1823.0\t167784517\nApis_mellifera\tlnc_rna\t1858\t3146\t1.7\t14118\t3.2\t0\t0.0\t34\t9290.0\t3053.0\t8798.0\t568.0\t2800.0\t\t17260718\nApis_mellifera\ttranscript\t477\t949\t2.0\t9713\t10.2\t0\t0.0\t3\t35436.0\t10206.0\t27340.0\t397.0\t2669.0\t\t16903163\nApis_mellifera\tmirna\t238\t248\t1.0\t248\t1.0\t238\t100.0\t4\t24.0\t22.0\t22.0\t22.0\t\t\t5606\nBombus_impatiens\tmrna\t10632\t24471\t2.3\t233415\t7.2\t402\t3.78\t1313\t16195.0\t3990.0\t14660.0\t360.0\t2361.0\t1746.0\t172182795\nBombus_impatiens\tlnc_rna\t2009\t2481\t1.2\t7041\t2.6\t1\t0.05\t38\t7125.0\t2336.0\t6821.0\t546.0\t3348.0\t\t14313695\nBombus_impatiens\ttranscript\t495\t780\t1.6\t7170\t9.5\t0\t0.0\t7\t27620.0\t8703.0\t23101.0\t343.0\t2633.0\t\t13672033\nBombus_impatiens\ttrna\t203\t203\t1.0\t215\t1.1\t191\t94.09\t0\t76.0\t73.0\t76.0\t70.0\t29.0\t\t15327\nPolistes_canadensis\tmrna\t9876\t19297\t2.0\t182372\t7.3\t371\t3.76\t892\t12163.0\t3621.0\t11335.0\t338.0\t1923.0\t1793.0\t120117026\nPolistes_canadensis\tlnc_rna\t596\t799\t1.3\t2496\t2.9\t0\t0.0\t5\t9422.0\t2171.0\t9109.0\t384.0\t4039.0\t\t5615455\nPolistes_canadensis\ttranscript\t267\t365\t1.4\t3789\t10.4\t0\t0.0\t3\t12926.0\t6368.0\t11251.0\t300.0\t842.0\t\t3451276\nPolistes_canadensis\ttrna\t194\t194\t1.0\t205\t1.1\t183\t94.33\t0\t76.0\t73.0\t76.0\t70.0\t25.0\t\t14657\n",
+          "id": "agat_gene_models",
+          "mode": "sp-statistics/gene-models",
+          "name": "Gene models per annotation",
+          "path_glob": "**/*.stats.txt",
+          "rawYaml": "id: agat_gene_models\nname: Gene models per annotation\nmode: sp-statistics/gene-models\ndescription: >-\n  One row per assembly and transcript type from AGAT's sp_statistics: genes,\n  transcripts per gene, exons per transcript, single-exon genes, overlapping\n  genes and the gene, transcript, exon, intron and CDS lengths. Counts read the\n  whole annotation, the per-transcript shape its longest isoforms, so a\n  fragmented annotation shows as short genes with few exons and a surplus of\n  single-exon models, whatever the isoform count.\nfind:\n  path_glob: \"**/*.stats.txt\"\n  path_glob_alt:\n    - \"**/stats/*.stats.txt\"\nrecipe: agat/gene_models.py\nfixture: gene_models.tsv\nrenders_as:\n  - { id: genes_vs_exons, component: advanced_viz, kind: scatter_xy,\n      roles: {x: genes, y: exons_per_transcript, label: genome, color: feature_type, size: mean_gene_length} }\n  - { component: figure, visu_type: bar,\n      dict_kwargs: {x: genome, y: genes, color: feature_type, barmode: stack, title: Genes per annotation by type} }\n  - { id: gene_count, component: card, column: genes, aggregation: sum,\n      secondary_layout: composition, breakdown_col: feature_type,\n      filter_expr: \"col('feature_type') == 'mrna'\" }\n  - { id: exons_per_transcript, component: card, column: exons_per_transcript, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot,\n      filter_expr: \"col('feature_type') == 'mrna'\" }\n  - { id: single_exon_share, component: card, column: single_exon_gene_pct, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot,\n      filter_expr: \"col('feature_type') == 'mrna'\" }\n  - { component: table }\n",
+          "recipe": "agat/gene_models.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "genes_vs_exons",
+              "kind": "scatter_xy",
+              "roles": {
+                "color": "feature_type",
+                "label": "genome",
+                "size": "mean_gene_length",
+                "x": "genes",
+                "y": "exons_per_transcript"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "barmode": "stack",
+                "color": "feature_type",
+                "title": "Genes per annotation by type",
+                "x": "genome",
+                "y": "genes"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "feature_type",
+              "column": "genes",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "filter_expr": "col('feature_type') == 'mrna'",
+              "headline": false,
+              "id": "gene_count",
+              "roles": {},
+              "secondary_layout": "composition"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "exons_per_transcript",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "filter_expr": "col('feature_type') == 'mrna'",
+              "headline": false,
+              "id": "exons_per_transcript",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "single_exon_gene_pct",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "filter_expr": "col('feature_type') == 'mrna'",
+              "headline": false,
+              "id": "single_exon_share",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "gene_models",
+          "yamlPath": "depictio/catalog/agat/gene_models.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Every number of AGAT's sp_statistics report, one row per assembly, feature type (mRNA, lncRNA, tRNA...), isoform view and metric, in the order AGAT prints them. The longest-isoform view keeps one transcript per gene, so it is the one to compare annotations that kept different numbers of isoforms.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.stats.txt",
+            "path_glob_alt": [
+              "**/stats/*.stats.txt"
+            ]
+          },
+          "fixture": "statistics.tsv",
+          "fixtureContent": "genome\tisoforms\tfeature_type\tmetric\tvalue\tmetric_order\nApis_mellifera\tall\tmrna\tNumber of gene\t9934.0\t1\nApis_mellifera\tall\tmrna\tNumber of mrna\t23471.0\t2\nApis_mellifera\tall\tmrna\tNumber of mrnas with utr both sides\t21873.0\t3\nApis_mellifera\tall\tmrna\tNumber of mrnas with at least one utr\t23213.0\t4\nApis_mellifera\tlongest\tmrna\tNumber of gene\t9934.0\t1\nApis_mellifera\tlongest\tmrna\tNumber of mrna\t9934.0\t2\nApis_mellifera\tlongest\tmrna\tNumber of mrnas with utr both sides\t9126.0\t3\nApis_mellifera\tlongest\tmrna\tNumber of mrnas with at least one utr\t9783.0\t4\nBombus_impatiens\tall\tmrna\tNumber of gene\t10632.0\t1\nBombus_impatiens\tall\tmrna\tNumber of mrna\t24471.0\t2\nBombus_impatiens\tall\tmrna\tNumber of mrnas with utr both sides\t22036.0\t3\nBombus_impatiens\tall\tmrna\tNumber of mrnas with at least one utr\t24194.0\t4\nBombus_impatiens\tlongest\tmrna\tNumber of gene\t10632.0\t1\nBombus_impatiens\tlongest\tmrna\tNumber of mrna\t10632.0\t2\nBombus_impatiens\tlongest\tmrna\tNumber of mrnas with utr both sides\t9404.0\t3\nBombus_impatiens\tlongest\tmrna\tNumber of mrnas with at least one utr\t10404.0\t4\nPolistes_canadensis\tall\tmrna\tNumber of gene\t9876.0\t1\nPolistes_canadensis\tall\tmrna\tNumber of mrna\t19297.0\t2\nPolistes_canadensis\tall\tmrna\tNumber of mrnas with utr both sides\t17731.0\t3\nPolistes_canadensis\tall\tmrna\tNumber of mrnas with at least one utr\t18689.0\t4\nPolistes_canadensis\tlongest\tmrna\tNumber of gene\t9876.0\t1\nPolistes_canadensis\tlongest\tmrna\tNumber of mrna\t9876.0\t2\nPolistes_canadensis\tlongest\tmrna\tNumber of mrnas with utr both sides\t8526.0\t3\nPolistes_canadensis\tlongest\tmrna\tNumber of mrnas with at least one utr\t9270.0\t4\n",
+          "id": "agat_statistics",
+          "mode": "sp-statistics/long",
+          "name": "Annotation statistics",
+          "path_glob": "**/*.stats.txt",
+          "rawYaml": "id: agat_statistics\nname: Annotation statistics\nmode: sp-statistics/long\ndescription: >-\n  Every number of AGAT's sp_statistics report, one row per assembly, feature\n  type (mRNA, lncRNA, tRNA...), isoform view and metric, in the order AGAT\n  prints them. The longest-isoform view keeps one transcript per gene, so it is\n  the one to compare annotations that kept different numbers of isoforms.\nfind:\n  path_glob: \"**/*.stats.txt\"\n  path_glob_alt:\n    - \"**/stats/*.stats.txt\"\nrecipe: agat/statistics.py\nfixture: statistics.tsv\nrenders_as:\n  - { component: figure, visu_type: bar,\n      dict_kwargs: {x: genome, y: value, color: isoforms, barmode: group, title: One AGAT metric per annotation} }\n  - { component: interactive, interactive_type: MultiSelect, column_name: feature_type }\n  - { component: table }\n",
+          "recipe": "agat/statistics.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "barmode": "group",
+                "color": "isoforms",
+                "title": "One AGAT metric per annotation",
+                "x": "genome",
+                "y": "value"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "feature_type",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "statistics",
+          "yamlPath": "depictio/catalog/agat/statistics.yaml"
+        }
+      ],
+      "stage": "annotation"
+    },
+    {
       "biotools_url": null,
       "description": "Aggregates, filters and classifies antimicrobial peptide predictions from several AMP tools into one summary per sample.",
       "dir": "depictio/catalog/ampcombi",
@@ -4840,7 +5025,7 @@
       "outputs": [
         {
           "columns": {},
-          "description": "One row per assessed assembly from BUSCO's batch summary: the complete, single-copy, duplicated, fragmented and missing percentages against the lineage dataset, plus the contiguity BUSCO measures on the way. Complete single-copy is the headline; a high duplicated share on a haploid target points at retained haplotigs, a high fragmented share at a base-level error rate high enough to break gene models.",
+          "description": "One row per assessed assembly from BUSCO's batch summary: the complete, single-copy, duplicated, fragmented and missing percentages against the lineage dataset, plus the contiguity BUSCO measures on the way. Complete single-copy is the headline; a high duplicated share on a haploid target points at retained haplotigs, a high fragmented share at a base-level error rate high enough to break gene models. A pipeline that runs BUSCO on both the assembly and its annotated proteins (nf-core/genomeqc) names the mode in the run, read into busco_mode, so the two scores of one assembly stay two rows.",
           "edam_formats": [],
           "edam_operations": [],
           "find": {
@@ -4851,12 +5036,12 @@
             ]
           },
           "fixture": "batch_summary.tsv",
-          "fixtureContent": "assembly_id\tinput_file\tlineage\tcomplete_pct\tsingle_pct\tduplicated_pct\tfragmented_pct\tmissing_pct\tn_markers\tstop_codon_pct\tscaffold_n50\tcontig_n50\tpercent_gaps\tn_scaffolds\ntest_hifi_hifiasm_assembly\ttest_hifi_hifiasm.fa\tbrassicales_odb12.2\t99.8\t99.4\t0.4\t0.0\t0.2\t7083\t0.7\t17670732\t17670732\t0.0\t760\ntest_hifiasm_flye_assembly\ttest_hifiasm_flye_assembly_patch.patch.fa\tbrassicales_odb12.2\t99.8\t99.4\t0.4\t0.0\t0.2\t7083\t0.7\t10710070\t10710070\t0.0\t62\ntest_hifiasm_flye_links\ttest_hifiasm_flye_links.scaffolds.fa\tbrassicales_odb12.2\t99.8\t99.4\t0.4\t0.0\t0.2\t7083\t0.7\t10743537\t10710070\t0.001\t52\n",
+          "fixtureContent": "assembly_id\tinput_file\tlineage\tbusco_mode\tcomplete_pct\tsingle_pct\tduplicated_pct\tfragmented_pct\tmissing_pct\tn_markers\tstop_codon_pct\tscaffold_n50\tcontig_n50\tpercent_gaps\tn_scaffolds\ntest_hifi_hifiasm_assembly\ttest_hifi_hifiasm.fa\tbrassicales_odb12.2\t\t99.8\t99.4\t0.4\t0.0\t0.2\t7083\t0.7\t17670732\t17670732\t0.0\t760\ntest_hifiasm_flye_assembly\ttest_hifiasm_flye_assembly_patch.patch.fa\tbrassicales_odb12.2\t\t99.8\t99.4\t0.4\t0.0\t0.2\t7083\t0.7\t10710070\t10710070\t0.0\t62\ntest_hifiasm_flye_links\ttest_hifiasm_flye_links.scaffolds.fa\tbrassicales_odb12.2\t\t99.8\t99.4\t0.4\t0.0\t0.2\t7083\t0.7\t10743537\t10710070\t0.001\t52\n",
           "id": "busco_batch_summary",
           "mode": "batch-summary",
           "name": "BUSCO completeness per assembly",
           "path_glob": "**/*-busco.batch_summary.txt",
-          "rawYaml": "id: busco_batch_summary\nname: BUSCO completeness per assembly\nmode: batch-summary\ndescription: >-\n  One row per assessed assembly from BUSCO's batch summary: the complete,\n  single-copy, duplicated, fragmented and missing percentages against the lineage\n  dataset, plus the contiguity BUSCO measures on the way. Complete single-copy is\n  the headline; a high duplicated share on a haploid target points at retained\n  haplotigs, a high fragmented share at a base-level error rate high enough to\n  break gene models.\nfind:\n  path_glob: \"**/*-busco.batch_summary.txt\"\n  path_glob_alt:\n    - \"**/*-busco/batch_summary.txt\"\n    - \"**/*batch_summary.txt\"\nrecipe: busco/batch_summary.py\nfixture: batch_summary.tsv\nrenders_as:\n  - { id: completeness_vs_duplication, component: advanced_viz, kind: scatter_xy,\n      roles: {x: complete_pct, y: duplicated_pct, label: assembly_id, color: lineage, size: contig_n50} }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: assembly_id, y: complete_pct, color: lineage, title: Complete BUSCOs per assembly} }\n  - { component: card, column: complete_pct, aggregation: max,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: duplicated_pct, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: missing_pct, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: assembly_id, aggregation: nunique,\n      secondary_layout: donut, breakdown_col: lineage }\n  - { component: table }\n",
+          "rawYaml": "id: busco_batch_summary\nname: BUSCO completeness per assembly\nmode: batch-summary\ndescription: >-\n  One row per assessed assembly from BUSCO's batch summary: the complete,\n  single-copy, duplicated, fragmented and missing percentages against the lineage\n  dataset, plus the contiguity BUSCO measures on the way. Complete single-copy is\n  the headline; a high duplicated share on a haploid target points at retained\n  haplotigs, a high fragmented share at a base-level error rate high enough to\n  break gene models. A pipeline that runs BUSCO on both the assembly and its\n  annotated proteins (nf-core/genomeqc) names the mode in the run, read into\n  busco_mode, so the two scores of one assembly stay two rows.\nfind:\n  path_glob: \"**/*-busco.batch_summary.txt\"\n  path_glob_alt:\n    - \"**/*-busco/batch_summary.txt\"\n    - \"**/*batch_summary.txt\"\nrecipe: busco/batch_summary.py\nfixture: batch_summary.tsv\nrenders_as:\n  - { id: completeness_vs_duplication, component: advanced_viz, kind: scatter_xy,\n      roles: {x: complete_pct, y: duplicated_pct, label: assembly_id, color: lineage, size: contig_n50} }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: assembly_id, y: complete_pct, color: lineage, title: Complete BUSCOs per assembly} }\n  - { component: card, column: complete_pct, aggregation: max,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: duplicated_pct, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: missing_pct, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: assembly_id, aggregation: nunique,\n      secondary_layout: donut, breakdown_col: lineage }\n  - { component: table }\n",
           "recipe": "busco/batch_summary.py",
           "renders_as": [
             {
@@ -4972,12 +5157,12 @@
             ]
           },
           "fixture": "composition.tsv",
-          "fixtureContent": "assembly_id\tlineage\tbusco_class\trank\tclass_order\tpercent\ntest_hifi_hifiasm_assembly\tbrassicales_odb12.2\tComplete single-copy\tBUSCO class\t1\t99.4\ntest_hifi_hifiasm_assembly\tbrassicales_odb12.2\tComplete duplicated\tBUSCO class\t2\t0.4\ntest_hifi_hifiasm_assembly\tbrassicales_odb12.2\tFragmented\tBUSCO class\t3\t0.0\ntest_hifi_hifiasm_assembly\tbrassicales_odb12.2\tMissing\tBUSCO class\t4\t0.2\ntest_hifiasm_flye_assembly\tbrassicales_odb12.2\tComplete single-copy\tBUSCO class\t1\t99.4\ntest_hifiasm_flye_assembly\tbrassicales_odb12.2\tComplete duplicated\tBUSCO class\t2\t0.4\ntest_hifiasm_flye_assembly\tbrassicales_odb12.2\tFragmented\tBUSCO class\t3\t0.0\ntest_hifiasm_flye_assembly\tbrassicales_odb12.2\tMissing\tBUSCO class\t4\t0.2\ntest_hifiasm_flye_links\tbrassicales_odb12.2\tComplete single-copy\tBUSCO class\t1\t99.4\ntest_hifiasm_flye_links\tbrassicales_odb12.2\tComplete duplicated\tBUSCO class\t2\t0.4\ntest_hifiasm_flye_links\tbrassicales_odb12.2\tFragmented\tBUSCO class\t3\t0.0\ntest_hifiasm_flye_links\tbrassicales_odb12.2\tMissing\tBUSCO class\t4\t0.2\n",
+          "fixtureContent": "assembly_id\tlineage\tbusco_mode\trun_id\tbusco_class\trank\tclass_order\tpercent\ntest_hifi_hifiasm_assembly\tbrassicales_odb12.2\t\ttest_hifi_hifiasm_assembly\tComplete single-copy\tBUSCO class\t1\t99.4\ntest_hifi_hifiasm_assembly\tbrassicales_odb12.2\t\ttest_hifi_hifiasm_assembly\tComplete duplicated\tBUSCO class\t2\t0.4\ntest_hifi_hifiasm_assembly\tbrassicales_odb12.2\t\ttest_hifi_hifiasm_assembly\tFragmented\tBUSCO class\t3\t0.0\ntest_hifi_hifiasm_assembly\tbrassicales_odb12.2\t\ttest_hifi_hifiasm_assembly\tMissing\tBUSCO class\t4\t0.2\ntest_hifiasm_flye_assembly\tbrassicales_odb12.2\t\ttest_hifiasm_flye_assembly\tComplete single-copy\tBUSCO class\t1\t99.4\ntest_hifiasm_flye_assembly\tbrassicales_odb12.2\t\ttest_hifiasm_flye_assembly\tComplete duplicated\tBUSCO class\t2\t0.4\ntest_hifiasm_flye_assembly\tbrassicales_odb12.2\t\ttest_hifiasm_flye_assembly\tFragmented\tBUSCO class\t3\t0.0\ntest_hifiasm_flye_assembly\tbrassicales_odb12.2\t\ttest_hifiasm_flye_assembly\tMissing\tBUSCO class\t4\t0.2\ntest_hifiasm_flye_links\tbrassicales_odb12.2\t\ttest_hifiasm_flye_links\tComplete single-copy\tBUSCO class\t1\t99.4\ntest_hifiasm_flye_links\tbrassicales_odb12.2\t\ttest_hifiasm_flye_links\tComplete duplicated\tBUSCO class\t2\t0.4\ntest_hifiasm_flye_links\tbrassicales_odb12.2\t\ttest_hifiasm_flye_links\tFragmented\tBUSCO class\t3\t0.0\ntest_hifiasm_flye_links\tbrassicales_odb12.2\t\ttest_hifiasm_flye_links\tMissing\tBUSCO class\t4\t0.2\n",
           "id": "busco_composition",
           "mode": "batch-summary/composition",
           "name": "BUSCO class composition",
           "path_glob": "**/*-busco.batch_summary.txt",
-          "rawYaml": "id: busco_composition\nname: BUSCO class composition\nmode: batch-summary/composition\ndescription: >-\n  The same BUSCO scores unpivoted into the four classes that add up to the\n  lineage set: complete single-copy, complete duplicated, fragmented and missing.\n  Read as one stacked bar per assembly, it separates an assembly that lost genes\n  from one that kept them twice, which a single complete percentage cannot.\nfind:\n  path_glob: \"**/*-busco.batch_summary.txt\"\n  path_glob_alt:\n    - \"**/*-busco/batch_summary.txt\"\n    - \"**/*batch_summary.txt\"\nrecipe: busco/composition.py\nfixture: composition.tsv\nrenders_as:\n  - { id: class_composition, component: advanced_viz, kind: stacked_taxonomy,\n      roles: {sample_id: assembly_id, taxon: busco_class, rank: rank, abundance: percent} }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: assembly_id, y: percent, color: busco_class, barmode: stack, title: BUSCO classes per assembly} }\n  - { component: card, column: percent, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: table }\n",
+          "rawYaml": "id: busco_composition\nname: BUSCO class composition\nmode: batch-summary/composition\ndescription: >-\n  The same BUSCO scores unpivoted into the four classes that add up to the\n  lineage set: complete single-copy, complete duplicated, fragmented and missing.\n  Read as one stacked bar per assembly, it separates an assembly that lost genes\n  from one that kept them twice, which a single complete percentage cannot.\nfind:\n  path_glob: \"**/*-busco.batch_summary.txt\"\n  path_glob_alt:\n    - \"**/*-busco/batch_summary.txt\"\n    - \"**/*batch_summary.txt\"\nrecipe: busco/composition.py\nfixture: composition.tsv\nrenders_as:\n  - { id: class_composition, component: advanced_viz, kind: stacked_taxonomy,\n      roles: {sample_id: assembly_id, taxon: busco_class, rank: rank, abundance: percent} }\n  # One bar per BUSCO run: an assembly assessed in two modes (genome and its\n  # annotated proteins) draws two bars side by side instead of one at 200%.\n  - { id: class_composition_by_run, component: advanced_viz, kind: stacked_taxonomy,\n      roles: {sample_id: run_id, taxon: busco_class, rank: rank, abundance: percent} }\n  - { component: figure, visu_type: bar, dict_kwargs: {x: assembly_id, y: percent, color: busco_class, barmode: stack, title: BUSCO classes per assembly} }\n  - { component: card, column: percent, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: table }\n",
           "recipe": "busco/composition.py",
           "renders_as": [
             {
@@ -4993,6 +5178,22 @@
                 "abundance": "percent",
                 "rank": "rank",
                 "sample_id": "assembly_id",
+                "taxon": "busco_class"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "class_composition_by_run",
+              "kind": "stacked_taxonomy",
+              "roles": {
+                "abundance": "percent",
+                "rank": "rank",
+                "sample_id": "run_id",
                 "taxon": "busco_class"
               }
             },
@@ -14090,6 +14291,152 @@
         }
       ],
       "stage": "alignment"
+    },
+    {
+      "biotools_url": null,
+      "description": "NCBI Foreign Contamination Screen for adaptor and vector sequence: reports the ranges of an assembly to trim or exclude because they match a known adaptor or vector.",
+      "dir": "depictio/catalog/fcsadaptor",
+      "homepage": "https://github.com/ncbi/fcs",
+      "id": "fcsadaptor",
+      "name": "FCS-adaptor",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/fcs/fcsadaptor",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "One row per range FCS-adaptor flags as adaptor or vector sequence, with the action (trim the range, exclude the sequence), the matching adaptor and the bases involved. An assembly screened with nothing flagged keeps one row with action `none`.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.fcs_adaptor_report.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "actions.tsv",
+          "fixtureContent": "genome\tseq_id\tseq_len\taction\tstart\tend\tflagged_bp\tadaptor\tsource_type\nApis_mellifera\tNC_037639.1\t16089512\tTRIM\t15586906\t15586930\t25\tPacific Biosciences Blunt Adapter\tADAPTOR\nBombus_impatiens\t\t\tnone\t\t\t0\t\t\nPolistes_canadensis\t\t\tnone\t\t\t0\t\t\n",
+          "id": "fcsadaptor_actions",
+          "mode": "fcsadaptor/report",
+          "name": "Adaptor and vector calls",
+          "path_glob": "**/*.fcs_adaptor_report.txt",
+          "rawYaml": "id: fcsadaptor_actions\nname: Adaptor and vector calls\nmode: fcsadaptor/report\ndescription: >-\n  One row per range FCS-adaptor flags as adaptor or vector sequence, with the\n  action (trim the range, exclude the sequence), the matching adaptor and the\n  bases involved. An assembly screened with nothing flagged keeps one row with\n  action `none`.\nfind:\n  path_glob: \"**/*.fcs_adaptor_report.txt\"\nrecipe: fcsadaptor/actions.py\nfixture: actions.tsv\nrenders_as:\n  - { id: adaptor_ranges, component: card, column: seq_id, aggregation: count,\n      secondary_layout: composition, breakdown_col: action,\n      filter_expr: \"col('action') != 'none'\" }\n  - { component: table }\n",
+          "recipe": "fcsadaptor/actions.py",
+          "renders_as": [
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "action",
+              "column": "seq_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "filter_expr": "col('action') != 'none'",
+              "headline": false,
+              "id": "adaptor_ranges",
+              "roles": {},
+              "secondary_layout": "composition"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "actions",
+          "yamlPath": "depictio/catalog/fcsadaptor/actions.yaml"
+        }
+      ],
+      "stage": "qc"
+    },
+    {
+      "biotools_url": null,
+      "description": "NCBI Foreign Contamination Screen, cross-species aligner: flags the sequences and ranges of an assembly that come from another organism, with the action to take (exclude, trim, fix).",
+      "dir": "depictio/catalog/fcsgx",
+      "homepage": "https://github.com/ncbi/fcs",
+      "id": "fcsgx",
+      "name": "FCS-GX",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/fcsgx/rungx",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "One row per range FCS-GX flags as foreign, with the action it recommends (EXCLUDE a whole sequence, TRIM or FIX a range, REVIEW), the taxonomic division and the top taxon of the contaminant, and its length. An assembly screened with nothing flagged keeps one row with action `none`, so a clean assembly counts as screened rather than going missing.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.fcs_gx_report.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "actions.tsv",
+          "fixtureContent": "genome\tseq_id\tstart\tend\tseq_len\taction\tdivision\tdivision_group\tcontaminant_cov\ttop_taxon\tflagged_bp\nApis_mellifera\t\t\t\t\tnone\t\t\t\t\t0\nBombus_impatiens\t\t\t\t\tnone\t\t\t\t\t0\nPolistes_canadensis\tNW_014571578.1\t1\t2136\t2136\tEXCLUDE\tprok:CFB group bacteria\tprok\t89.0\tBacteroides ihuae\t2136\n",
+          "id": "fcsgx_actions",
+          "mode": "rungx/report",
+          "name": "Contamination calls",
+          "path_glob": "**/*.fcs_gx_report.txt",
+          "rawYaml": "id: fcsgx_actions\nname: Contamination calls\nmode: rungx/report\ndescription: >-\n  One row per range FCS-GX flags as foreign, with the action it recommends\n  (EXCLUDE a whole sequence, TRIM or FIX a range, REVIEW), the taxonomic\n  division and the top taxon of the contaminant, and its length. An assembly\n  screened with nothing flagged keeps one row with action `none`, so a clean\n  assembly counts as screened rather than going missing.\nfind:\n  path_glob: \"**/*.fcs_gx_report.txt\"\nrecipe: fcsgx/actions.py\nfixture: actions.tsv\nrenders_as:\n  - { id: flagged_ranges, component: card, column: seq_id, aggregation: count,\n      secondary_layout: composition, breakdown_col: action,\n      filter_expr: \"col('action') != 'none'\" }\n  - { id: flagged_bases, component: card, column: flagged_bp, aggregation: sum,\n      secondary_layout: top_n, breakdown_col: division, top_n_count: 4 }\n  - { component: figure, visu_type: bar,\n      dict_kwargs: {x: genome, y: flagged_bp, color: division, title: Bases flagged as foreign} }\n  - { component: table }\n",
+          "recipe": "fcsgx/actions.py",
+          "renders_as": [
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "action",
+              "column": "seq_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "filter_expr": "col('action') != 'none'",
+              "headline": false,
+              "id": "flagged_ranges",
+              "roles": {},
+              "secondary_layout": "composition"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "division",
+              "column": "flagged_bp",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "flagged_bases",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 4
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "division",
+                "title": "Bases flagged as foreign",
+                "x": "genome",
+                "y": "flagged_bp"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "actions",
+          "yamlPath": "depictio/catalog/fcsgx/actions.yaml"
+        }
+      ],
+      "stage": "qc"
     },
     {
       "biotools_url": null,
@@ -26768,6 +27115,218 @@
       "stage": "quantification"
     },
     {
+      "biotools_url": "https://bio.tools/orthofinder",
+      "description": "Phylogenetic orthology inference for comparative genomics: groups the genes of several species into orthogroups, infers orthologues and the rooted species tree.",
+      "dir": "depictio/catalog/orthofinder",
+      "homepage": "https://github.com/davidemms/OrthoFinder",
+      "id": "orthofinder",
+      "name": "OrthoFinder",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/orthofinder",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "One row per orthogroup with a 0/1 column per species, the species it reaches, its genes and whether it is single-copy. Read as an UpSet, it splits the orthogroups into the core every species shares, the ones a clade shares, and the ones a single genome holds alone.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/Orthogroups/Orthogroups.GeneCount.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "orthogroup_matrix.tsv",
+          "fixtureContent": "orthogroup\tApis_mellifera\tBombus_impatiens\tPolistes_canadensis\tn_genomes\ttotal_genes\tcopy_class\tsharing\nOG0000000\t0\t1\t1\t2\t55\tmulti-copy\tshared\nOG0000001\t1\t1\t1\t3\t40\tmulti-copy\tcore\nOG0000002\t1\t1\t1\t3\t37\tmulti-copy\tcore\nOG0000003\t0\t1\t1\t2\t31\tmulti-copy\tshared\nOG0000004\t1\t1\t0\t2\t29\tmulti-copy\tshared\nOG0000005\t1\t1\t1\t3\t27\tmulti-copy\tcore\nOG0000006\t1\t1\t1\t3\t27\tmulti-copy\tcore\nOG0000007\t0\t1\t0\t1\t26\tmulti-copy\tunique\nOG0000007\t0\t1\t0\t1\t26\tmulti-copy\tunique\nOG0000018\t0\t1\t0\t1\t17\tmulti-copy\tunique\nOG0000035\t0\t1\t0\t1\t12\tmulti-copy\tunique\nOG0000043\t0\t0\t1\t1\t11\tmulti-copy\tunique\nOG0000000\t0\t1\t1\t2\t55\tmulti-copy\tshared\nOG0000003\t0\t1\t1\t2\t31\tmulti-copy\tshared\nOG0000004\t1\t1\t0\t2\t29\tmulti-copy\tshared\nOG0000009\t0\t1\t1\t2\t22\tmulti-copy\tshared\n",
+          "id": "orthofinder_orthogroup_matrix",
+          "mode": "orthogroups/membership",
+          "name": "Orthogroups shared between species",
+          "path_glob": "**/Orthogroups/Orthogroups.GeneCount.tsv",
+          "rawYaml": "id: orthofinder_orthogroup_matrix\nname: Orthogroups shared between species\nmode: orthogroups/membership\ndescription: >-\n  One row per orthogroup with a 0/1 column per species, the species it\n  reaches, its genes and whether it is single-copy. Read as an UpSet, it\n  splits the orthogroups into the core every species shares, the ones a clade\n  shares, and the ones a single genome holds alone.\nfind:\n  path_glob: \"**/Orthogroups/Orthogroups.GeneCount.tsv\"\nrecipe: orthofinder/orthogroup_matrix.py\nfixture: orthogroup_matrix.tsv\nrenders_as:\n  # The renderer enumerates the binary species columns itself.\n  - { id: orthogroup_upset, component: advanced_viz, kind: upset_plot }\n  - { id: orthogroups_total, component: card, column: orthogroup, aggregation: count,\n      secondary_layout: composition, breakdown_col: copy_class }\n  - { component: card, column: n_genomes, aggregation: average,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: interactive, interactive_type: MultiSelect, column_name: copy_class }\n  - { component: table }\n",
+          "recipe": "orthofinder/orthogroup_matrix.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "orthogroup_upset",
+              "kind": "upset_plot",
+              "roles": {}
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "copy_class",
+              "column": "orthogroup",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "orthogroups_total",
+              "roles": {},
+              "secondary_layout": "composition"
+            },
+            {
+              "aggregation": "average",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "n_genomes",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "copy_class",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "orthogroup_matrix",
+          "yamlPath": "depictio/catalog/orthofinder/orthogroup_matrix.yaml"
+        },
+        {
+          "columns": {},
+          "description": "The one-to-one orthologues OrthoFinder found between every pair of species, as a square matrix with a column per species and a null diagonal. Close, well-annotated genomes share the most; a genome short of them against every other one has lost or split gene models.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/Comparative_Genomics_Statistics/OrthologuesStats_one-to-one.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "orthologue_matrix.tsv",
+          "fixtureContent": "genome\tApis_mellifera\tBombus_impatiens\tPolistes_canadensis\nApis_mellifera\t\t8421\t8184\nBombus_impatiens\t8421\t\t8111\nPolistes_canadensis\t8184\t8111\t\n",
+          "id": "orthofinder_orthologue_matrix",
+          "mode": "comparative-statistics/one-to-one",
+          "name": "One-to-one orthologues between species",
+          "path_glob": "**/Comparative_Genomics_Statistics/OrthologuesStats_one-to-one.tsv",
+          "rawYaml": "id: orthofinder_orthologue_matrix\nname: One-to-one orthologues between species\nmode: comparative-statistics/one-to-one\ndescription: >-\n  The one-to-one orthologues OrthoFinder found between every pair of species,\n  as a square matrix with a column per species and a null diagonal. Close,\n  well-annotated genomes share the most; a genome short of them against every\n  other one has lost or split gene models.\nfind:\n  path_glob: \"**/Comparative_Genomics_Statistics/OrthologuesStats_one-to-one.tsv\"\nrecipe: orthofinder/orthologue_matrix.py\nfixture: orthologue_matrix.tsv\nrenders_as:\n  - { id: one_to_one_heatmap, component: advanced_viz, kind: complex_heatmap,\n      roles: {index: genome} }\n  - { component: table }\n",
+          "recipe": "orthofinder/orthologue_matrix.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "one_to_one_heatmap",
+              "kind": "complex_heatmap",
+              "roles": {
+                "index": "genome"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "orthologue_matrix",
+          "yamlPath": "depictio/catalog/orthofinder/orthologue_matrix.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per species from OrthoFinder's per-species statistics: genes in its proteome, the share placed in orthogroups, the orthogroups it takes part in and the ones it holds alone. A proteome whose genes stay unassigned far more than its neighbours' carries fragmented or spurious gene models.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/Comparative_Genomics_Statistics/Statistics_PerSpecies.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "species_stats.tsv",
+          "fixtureContent": "genome\tgenes\tgenes_in_orthogroups\tunassigned_genes\tgenes_in_orthogroups_pct\tunassigned_genes_pct\torthogroups\torthogroups_pct\tspecies_specific_orthogroups\tgenes_in_species_specific\tgenes_in_species_specific_pct\nApis_mellifera\t9934\t9622\t312\t96.9\t3.1\t9228\t96.7\t3\t7\t0.1\nBombus_impatiens\t10632\t10184\t448\t95.8\t4.2\t9415\t98.7\t27\t133\t1.3\nPolistes_canadensis\t9876\t9507\t369\t96.3\t3.7\t8933\t93.6\t22\t66\t0.7\n",
+          "id": "orthofinder_species_stats",
+          "mode": "comparative-statistics/per-species",
+          "name": "Orthogroup assignment per species",
+          "path_glob": "**/Comparative_Genomics_Statistics/Statistics_PerSpecies.tsv",
+          "rawYaml": "id: orthofinder_species_stats\nname: Orthogroup assignment per species\nmode: comparative-statistics/per-species\ndescription: >-\n  One row per species from OrthoFinder's per-species statistics: genes in its\n  proteome, the share placed in orthogroups, the orthogroups it takes part in\n  and the ones it holds alone. A proteome whose genes stay unassigned far more\n  than its neighbours' carries fragmented or spurious gene models.\nfind:\n  path_glob: \"**/Comparative_Genomics_Statistics/Statistics_PerSpecies.tsv\"\nrecipe: orthofinder/species_stats.py\nfixture: species_stats.tsv\nrenders_as:\n  - { id: assigned_share, component: card, column: genes_in_orthogroups_pct, aggregation: min,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { id: species_specific, component: card, column: species_specific_orthogroups, aggregation: sum,\n      secondary_layout: top_n, breakdown_col: genome, top_n_count: 4 }\n  - { component: figure, visu_type: bar,\n      dict_kwargs: {x: genome, y: genes_in_orthogroups_pct, title: Genes placed in orthogroups} }\n  - { component: table }\n",
+          "recipe": "orthofinder/species_stats.py",
+          "renders_as": [
+            {
+              "aggregation": "min",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "genes_in_orthogroups_pct",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "assigned_share",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "genome",
+              "column": "species_specific_orthogroups",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "species_specific",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 4
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "title": "Genes placed in orthogroups",
+                "x": "genome",
+                "y": "genes_in_orthogroups_pct"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "species_stats",
+          "yamlPath": "depictio/catalog/orthofinder/species_stats.yaml"
+        }
+      ],
+      "stage": "annotation"
+    },
+    {
       "biotools_url": "https://bio.tools/pangolin_cov-lineages",
       "description": "Assigns SARS-CoV-2 genomes to global outbreak lineages.",
       "dir": "depictio/catalog/pangolin",
@@ -32077,6 +32636,167 @@
         }
       ],
       "stage": "qc"
+    },
+    {
+      "biotools_url": "https://bio.tools/repeatmasker",
+      "description": "Screens DNA sequences for interspersed repeats and low-complexity regions against a repeat library, and masks them.",
+      "dir": "depictio/catalog/repeatmasker",
+      "homepage": "https://www.repeatmasker.org",
+      "id": "repeatmasker",
+      "name": "RepeatMasker",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/repeatmasker/repeatmasker",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "One row per assembly from the header of RepeatMasker's summary table: sequences, length with and without runs of N, GC and the bases masked, with the interspersed, retroelement, DNA transposon, unclassified and simple repeat shares. A large unclassified share is a library that could not name the repeats; a masked share far from the genome's relatives is a library that missed them or a de novo one that over-called.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.tbl",
+            "path_glob_alt": []
+          },
+          "fixture": "masking_summary.tsv",
+          "fixtureContent": "genome\tsequences\ttotal_length\tlength_excl_n\tgc_pct\tmasked_bp\tmasked_pct\tinterspersed_pct\tretroelements_pct\tdna_transposons_pct\tunclassified_pct\tsimple_repeats_pct\nApis_mellifera\t177\t225250884\t223937270\t32.53\t38935182\t17.29\t12.29\t1.24\t3.54\t7.49\t3.78\nBombus_impatiens\t5460\t246856484\t241993441\t37.76\t52893408\t21.43\t19.39\t5.18\t4.82\t9.37\t1.46\nPolistes_canadensis\t3836\t211202212\t197103996\t32.15\t61927359\t29.32\t21.99\t4.38\t4.98\t12.43\t5.44\n",
+          "id": "repeatmasker_masking_summary",
+          "mode": "tbl/summary",
+          "name": "Masking summary per assembly",
+          "path_glob": "**/*.tbl",
+          "rawYaml": "id: repeatmasker_masking_summary\nname: Masking summary per assembly\nmode: tbl/summary\ndescription: >-\n  One row per assembly from the header of RepeatMasker's summary table:\n  sequences, length with and without runs of N, GC and the bases masked, with\n  the interspersed, retroelement, DNA transposon, unclassified and simple\n  repeat shares. A large unclassified share is a library that could not name\n  the repeats; a masked share far from the genome's relatives is a library\n  that missed them or a de novo one that over-called.\nfind:\n  path_glob: \"**/*.tbl\"\nrecipe: repeatmasker/masking_summary.py\nfixture: masking_summary.tsv\nrenders_as:\n  - { id: masked_share, component: card, column: masked_pct, aggregation: median,\n      secondary_layout: gauge, coverage_max: 100 }\n  - { id: interspersed_share, component: card, column: interspersed_pct, aggregation: median,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { id: masked_vs_length, component: advanced_viz, kind: scatter_xy,\n      roles: {x: total_length, y: masked_pct, label: genome, size: masked_bp} }\n  - { component: table }\n",
+          "recipe": "repeatmasker/masking_summary.py",
+          "renders_as": [
+            {
+              "aggregation": "median",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "masked_pct",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 100.0,
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "masked_share",
+              "roles": {},
+              "secondary_layout": "gauge"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "interspersed_pct",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "interspersed_share",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "masked_vs_length",
+              "kind": "scatter_xy",
+              "roles": {
+                "label": "genome",
+                "size": "masked_bp",
+                "x": "total_length",
+                "y": "masked_pct"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "masking_summary",
+          "yamlPath": "depictio/catalog/repeatmasker/masking_summary.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Every class and family line of RepeatMasker's summary table, one row per assembly and line: elements masked, bases they occupy and their share of the assembly, ranked Class (the classes that partition the masked bases), Family (the families inside them) or Summary (Retroelements, Total interspersed repeats). A composition bar stacks the classes; the rank switch opens the families.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/*.tbl",
+            "path_glob_alt": []
+          },
+          "fixture": "repeat_classes.tsv",
+          "fixtureContent": "genome\trepeat_class\tparent_class\trank\tclass_order\telements\tlength_bp\tgenome_pct\nApis_mellifera\tRetroelements\t\tSummary\t1\t18689\t2803554\t1.24\nApis_mellifera\tSINEs\tRetroelements\tClass\t2\t335\t41217\t0.02\nApis_mellifera\tPenelope\tRetroelements\tClass\t3\t383\t21093\t0.01\nApis_mellifera\tLINEs\tRetroelements\tClass\t4\t7575\t825602\t0.37\nApis_mellifera\tCRE/SLACS\tLINEs\tFamily\t5\t4\t2032\t0.0\nApis_mellifera\tL2/CR1/Rex\tLINEs\tFamily\t6\t2394\t171922\t0.08\nApis_mellifera\tR1/LOA/Jockey\tLINEs\tFamily\t7\t2018\t306551\t0.14\nApis_mellifera\tR2/R4/NeSL\tLINEs\tFamily\t8\t458\t98269\t0.04\nApis_mellifera\tRTE/Bov-B\tLINEs\tFamily\t9\t898\t58583\t0.03\nApis_mellifera\tL1/CIN4\tLINEs\tFamily\t10\t448\t31546\t0.01\nApis_mellifera\tLTR elements\tRetroelements\tClass\t11\t10779\t1936735\t0.86\nApis_mellifera\tBEL/Pao\tLTR elements\tFamily\t12\t1656\t536594\t0.24\nApis_mellifera\tTy1/Copia\tLTR elements\tFamily\t13\t2130\t572412\t0.25\nApis_mellifera\tGypsy/DIRS1\tLTR elements\tFamily\t14\t6459\t769629\t0.34\nApis_mellifera\tRetroviral\tGypsy/DIRS1\tFamily\t15\t311\t29253\t0.01\nApis_mellifera\tDNA transposons\t\tClass\t16\t47012\t7984878\t3.54\nApis_mellifera\thobo-Activator\tDNA transposons\tFamily\t17\t4069\t679024\t0.3\nApis_mellifera\tTc1-IS630-Pogo\tDNA transposons\tFamily\t18\t23213\t4713298\t2.09\nApis_mellifera\tEn-Spm\tDNA transposons\tFamily\t19\t0\t0\t0.0\nApis_mellifera\tMULE-MuDR\tDNA transposons\tFamily\t20\t977\t98395\t0.04\nApis_mellifera\tPiggyBac\tDNA transposons\tFamily\t21\t2211\t465313\t0.21\nApis_mellifera\tTourist/Harbinger\tDNA transposons\tFamily\t22\t701\t71784\t0.03\nApis_mellifera\tOther (Mirage, P-element, Transib)\tDNA transposons\tFamily\t23\t344\t25903\t0.01\nApis_mellifera\tRolling-circles\t\tClass\t24\t2596\t399797\t0.18\nApis_mellifera\tUnclassified\t\tClass\t25\t99209\t16873128\t7.49\nApis_mellifera\tTotal interspersed repeats\t\tSummary\t26\t\t27682653\t12.29\nApis_mellifera\tSmall RNA\t\tClass\t27\t941\t159860\t0.07\nApis_mellifera\tSatellites\t\tClass\t28\t1137\t158513\t0.07\nApis_mellifera\tSimple repeats\t\tClass\t29\t188378\t8525555\t3.78\nApis_mellifera\tLow complexity\t\tClass\t30\t39965\t2038010\t0.9\n",
+          "id": "repeatmasker_repeat_classes",
+          "mode": "tbl/classes",
+          "name": "Repeat classes per assembly",
+          "path_glob": "**/*.tbl",
+          "rawYaml": "id: repeatmasker_repeat_classes\nname: Repeat classes per assembly\nmode: tbl/classes\ndescription: >-\n  Every class and family line of RepeatMasker's summary table, one row per\n  assembly and line: elements masked, bases they occupy and their share of the\n  assembly, ranked Class (the classes that partition the masked bases), Family\n  (the families inside them) or Summary (Retroelements, Total interspersed\n  repeats). A composition bar stacks the classes; the rank switch opens the\n  families.\nfind:\n  path_glob: \"**/*.tbl\"\nrecipe: repeatmasker/repeat_classes.py\nfixture: repeat_classes.tsv\nrenders_as:\n  - { id: class_composition, component: advanced_viz, kind: stacked_taxonomy,\n      roles: {sample_id: genome, taxon: repeat_class, rank: rank, abundance: genome_pct} }\n  - { id: repeat_elements, component: card, column: elements, aggregation: sum,\n      secondary_layout: composition, breakdown_col: repeat_class,\n      filter_expr: \"col('rank') == 'Class'\" }\n  - { component: interactive, interactive_type: MultiSelect, column_name: repeat_class }\n  - { component: table }\n",
+          "recipe": "repeatmasker/repeat_classes.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "class_composition",
+              "kind": "stacked_taxonomy",
+              "roles": {
+                "abundance": "genome_pct",
+                "rank": "rank",
+                "sample_id": "genome",
+                "taxon": "repeat_class"
+              }
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "repeat_class",
+              "column": "elements",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "filter_expr": "col('rank') == 'Class'",
+              "headline": false,
+              "id": "repeat_elements",
+              "roles": {},
+              "secondary_layout": "composition"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "repeat_class",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "repeat_classes",
+          "yamlPath": "depictio/catalog/repeatmasker/repeat_classes.yaml"
+        }
+      ],
+      "stage": "annotation"
     },
     {
       "biotools_url": null,
@@ -39265,6 +39985,182 @@
       "stage": "other"
     },
     {
+      "biotools_url": "https://bio.tools/tiara",
+      "description": "Deep-learning classification of assembly sequences into eukaryotic, prokaryotic and organellar ones, for decontaminating eukaryotic assemblies.",
+      "dir": "depictio/catalog/tiara",
+      "homepage": "https://ibe-uw.github.io/tiara/",
+      "id": "tiara",
+      "name": "Tiara",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/tiara/tiara",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "One row per classified sequence: Tiara's first-stage class (eukarya, bacteria, archaea, prokarya, organelle, unknown), its organelle call, and one class that merges the two (mitochondrion and plastid replace organelle). In a eukaryotic assembly every class but eukarya, mitochondrion and plastid is a candidate contaminant or a sequence too short or repetitive to call.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/tiara/**/*.txt",
+            "path_glob_alt": []
+          },
+          "fixture": "classifications.tsv",
+          "fixtureContent": "genome\ttiara_class\tstage\tsequence\tclass_fst_stage\tclass_snd_stage\tis_eukaryotic\nApis_mellifera\tarchaea\traw\tNW_020555932.1\tarchaea\t\tfalse\nApis_mellifera\tbacteria\traw\tNW_020555800.1\tbacteria\t\tfalse\nApis_mellifera\teukarya\traw\tNW_020555788.1\teukarya\t\ttrue\nApis_mellifera\tmitochondrion\traw\tNC_001566.1\torganelle\tmitochondrion\ttrue\nApis_mellifera\tplastid\traw\tNW_020555852.1\torganelle\tplastid\ttrue\nApis_mellifera\tprokarya\traw\tNW_020555793.1\tprokarya\t\tfalse\nApis_mellifera\tunknown\traw\tNC_037638.1\tunknown\t\tfalse\nBombus_impatiens\tarchaea\traw\tNT_176426.1\tarchaea\t\tfalse\nBombus_impatiens\tbacteria\traw\tNT_176459.1\tbacteria\t\tfalse\nBombus_impatiens\teukarya\traw\tNT_176421.1\teukarya\t\ttrue\nBombus_impatiens\tmitochondrion\traw\tNT_177628.1\torganelle\tmitochondrion\ttrue\nBombus_impatiens\tplastid\traw\tNT_178862.1\torganelle\tplastid\ttrue\nBombus_impatiens\tprokarya\traw\tNT_176670.1\tprokarya\t\tfalse\nBombus_impatiens\tunknown\traw\tNT_176482.1\tunknown\t\tfalse\nPolistes_canadensis\tarchaea\traw\tNW_014570372.1\tarchaea\t\tfalse\nPolistes_canadensis\tbacteria\traw\tNW_014569966.1\tbacteria\t\tfalse\nPolistes_canadensis\teukarya\traw\tNW_014569547.1\teukarya\t\ttrue\nPolistes_canadensis\tmitochondrion\traw\tNW_014570710.1\torganelle\tmitochondrion\ttrue\nPolistes_canadensis\torganelle\traw\tNW_014570593.1\torganelle\tunknown\tfalse\nPolistes_canadensis\tplastid\traw\tNW_014570496.1\torganelle\tplastid\ttrue\nPolistes_canadensis\tprokarya\traw\tNW_014570151.1\tprokarya\t\tfalse\nPolistes_canadensis\tunknown\traw\tNW_014569645.1\tunknown\t\tfalse\n",
+          "id": "tiara_classifications",
+          "mode": "tiara/classifications",
+          "name": "Sequence classes",
+          "path_glob": "**/tiara/**/*.txt",
+          "rawYaml": "id: tiara_classifications\nname: Sequence classes\nmode: tiara/classifications\ndescription: >-\n  One row per classified sequence: Tiara's first-stage class (eukarya,\n  bacteria, archaea, prokarya, organelle, unknown), its organelle call, and one\n  class that merges the two (mitochondrion and plastid replace organelle). In a\n  eukaryotic assembly every class but eukarya, mitochondrion and plastid is a\n  candidate contaminant or a sequence too short or repetitive to call.\nfind:\n  path_glob: \"**/tiara/**/*.txt\"\nrecipe: tiara/classifications.py\nfixture: classifications.tsv\nrenders_as:\n  - { id: sequence_classes, component: card, column: sequence, aggregation: count,\n      secondary_layout: composition, breakdown_col: tiara_class }\n  - { component: figure, visu_type: histogram,\n      dict_kwargs: {x: genome, color: tiara_class, title: Sequences per Tiara class} }\n  - { component: interactive, interactive_type: MultiSelect, column_name: tiara_class }\n  - { component: table }\n",
+          "recipe": "tiara/classifications.py",
+          "renders_as": [
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "tiara_class",
+              "column": "sequence",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "sequence_classes",
+              "roles": {},
+              "secondary_layout": "composition"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "tiara_class",
+                "title": "Sequences per Tiara class",
+                "x": "genome"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "tiara_class",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "classifications",
+          "yamlPath": "depictio/catalog/tiara/classifications.yaml"
+        }
+      ],
+      "stage": "qc"
+    },
+    {
+      "biotools_url": null,
+      "description": "Telomeric repeat identification toolkit: finds the candidate telomeric repeat unit of an assembly and counts it in windows along every sequence.",
+      "dir": "depictio/catalog/tidk",
+      "homepage": "https://github.com/tolkit/telomeric-identifier",
+      "id": "tidk",
+      "name": "tidk",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/tidk/search",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "One row per assembly, sequence and window of `tidk search`: the repeat unit counted forward and reverse, their sum, and the length of the sequence (the end of its last window). A sequence capped by telomeres lights up at both ends; one lit at a single end was broken there, and repeats in the middle of a sequence are an interstitial array or a unit that is not the telomere at all.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/search/*/*.tsv",
+            "path_glob_alt": [
+              "**/search/*/*/*.tsv",
+              "**/*_telomeric_repeat_windows.tsv"
+            ]
+          },
+          "fixture": "search_windows.tsv",
+          "fixtureContent": "genome\tsequence\tstart\tend\tforward_repeats\treverse_repeats\trepeats\trepeat_unit\tsearch\tsequence_length\nApis_mellifera\tNC_037638.1\t0\t10000\t2\t1\t3\tAAAAAAAAAAG\taposteriori\t27754200\nApis_mellifera\tNC_037638.1\t10000\t20000\t0\t2\t2\tAAAAAAAAAAG\taposteriori\t27754200\nApis_mellifera\tNC_037638.1\t20000\t30000\t0\t2\t2\tAAAAAAAAAAG\taposteriori\t27754200\nApis_mellifera\tNC_037638.1\t30000\t40000\t1\t3\t4\tAAAAAAAAAAG\taposteriori\t27754200\nApis_mellifera\tNC_037638.1\t40000\t50000\t1\t0\t1\tAAAAAAAAAAG\taposteriori\t27754200\nBombus_impatiens\tNT_176422.1\t10000\t20000\t0\t1\t1\tACGCACGC\taposteriori\t24053\nBombus_impatiens\tNT_176427.1\t0\t10000\t1\t0\t1\tACGCACGC\taposteriori\t270154\nBombus_impatiens\tNT_176429.1\t40000\t50000\t1\t0\t1\tACGCACGC\taposteriori\t1335514\nBombus_impatiens\tNT_176429.1\t90000\t100000\t1\t0\t1\tACGCACGC\taposteriori\t1335514\nBombus_impatiens\tNT_176429.1\t110000\t120000\t1\t0\t1\tACGCACGC\taposteriori\t1335514\nPolistes_canadensis\tNW_014569547.1\t10000\t20000\t3\t2\t5\tAAAAGAT\taposteriori\t3185661\nPolistes_canadensis\tNW_014569547.1\t20000\t30000\t2\t1\t3\tAAAAGAT\taposteriori\t3185661\nPolistes_canadensis\tNW_014569547.1\t30000\t40000\t3\t1\t4\tAAAAGAT\taposteriori\t3185661\nPolistes_canadensis\tNW_014569547.1\t40000\t50000\t2\t1\t3\tAAAAGAT\taposteriori\t3185661\nPolistes_canadensis\tNW_014569547.1\t50000\t60000\t6\t5\t11\tAAAAGAT\taposteriori\t3185661\n",
+          "id": "tidk_search_windows",
+          "mode": "search/windows",
+          "name": "Telomeric repeats per window",
+          "path_glob": "**/search/*/*.tsv",
+          "rawYaml": "id: tidk_search_windows\nname: Telomeric repeats per window\nmode: search/windows\ndescription: >-\n  One row per assembly, sequence and window of `tidk search`: the repeat unit\n  counted forward and reverse, their sum, and the length of the sequence (the\n  end of its last window). A sequence capped by telomeres lights up at both\n  ends; one lit at a single end was broken there, and repeats in the middle of a\n  sequence are an interstitial array or a unit that is not the telomere at all.\nfind:\n  path_glob: \"**/search/*/*.tsv\"\n  path_glob_alt:\n    - \"**/search/*/*/*.tsv\"\n    - \"**/*_telomeric_repeat_windows.tsv\"\nrecipe: tidk/search_windows.py\nfixture: search_windows.tsv\nrenders_as:\n  - { id: telomere_karyotype, component: advanced_viz, kind: ideogram,\n      roles: {chrom: sequence, start: start, end: end, value: repeats, sample: genome,\n              chrom_length: sequence_length} }\n  - { id: repeats_along_sequences, component: advanced_viz, kind: coverage_track,\n      roles: {chromosome: sequence, position: start, end: end, value: repeats, sample: genome} }\n  - { component: card, column: repeats, aggregation: sum,\n      secondary_layout: composition, breakdown_col: genome }\n  - { component: table }\n",
+          "recipe": "tidk/search_windows.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "telomere_karyotype",
+              "kind": "ideogram",
+              "roles": {
+                "chrom": "sequence",
+                "chrom_length": "sequence_length",
+                "end": "end",
+                "sample": "genome",
+                "start": "start",
+                "value": "repeats"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "repeats_along_sequences",
+              "kind": "coverage_track",
+              "roles": {
+                "chromosome": "sequence",
+                "end": "end",
+                "position": "start",
+                "sample": "genome",
+                "value": "repeats"
+              }
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "genome",
+              "column": "repeats",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {},
+              "secondary_layout": "composition"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "search_windows",
+          "yamlPath": "depictio/catalog/tidk/search_windows.yaml"
+        }
+      ],
+      "stage": "qc"
+    },
+    {
       "biotools_url": "https://bio.tools/truvari",
       "description": "Structural variant comparison tool for VCFs.",
       "dir": "depictio/catalog/truvari",
@@ -39644,7 +40540,7 @@
           "mode": "per-variant/density",
           "name": "Variant density",
           "path_glob": "**/variant_calling/**/*.vcf.gz",
-          "rawYaml": "id: vcf_variant_density\nname: Variant density\nmode: per-variant/density\ndescription: >-\n  Distinct PASS variants per sample in fixed windows (1 Mb by default) along\n  the primary contigs, one row per sample and window: chrom, start, end, value\n  and sample, the shape a genome-wide density panel reads. Alt, unplaced and\n  decoy contigs are left out, since no assembly-aware panel can place them.\nfind:\n  path_glob: \"**/variant_calling/**/*.vcf.gz\"\n  path_glob_alt:\n    - \"**/variant_calling/*/*/*.vcf.gz\"\n    - \"**/*.filtered.vcf.gz\"\nrecipe: vcf/variant_density.py\nfixture: variant_density.tsv\nrenders_as:\n  - { id: density_windows, component: card, column: value, aggregation: max,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { id: density_track, component: advanced_viz, kind: coverage_track,\n      roles: {chromosome: chrom, position: start, end: end, value: value, sample: sample} }\n  - { component: table }\n",
+          "rawYaml": "id: vcf_variant_density\nname: Variant density\nmode: per-variant/density\ndescription: >-\n  Distinct PASS variants per sample in fixed windows (1 Mb by default) along\n  the primary contigs, one row per sample and window: chrom, start, end, value\n  and sample, the shape a genome-wide density panel reads. Alt, unplaced and\n  decoy contigs are left out, since no assembly-aware panel can place them.\nfind:\n  path_glob: \"**/variant_calling/**/*.vcf.gz\"\n  path_glob_alt:\n    - \"**/variant_calling/*/*/*.vcf.gz\"\n    - \"**/*.filtered.vcf.gz\"\nrecipe: vcf/variant_density.py\nfixture: variant_density.tsv\nrenders_as:\n  - { id: density_windows, component: card, column: value, aggregation: max,\n      aggregations: [box_plot_stats], secondary_layout: box_plot }\n  # The karyotype: every primary contig drawn to the assembly's length, one\n  # heat band per window (the rows are their own bins).\n  - { id: density_karyotype, component: advanced_viz, kind: ideogram,\n      roles: {chrom: chrom, start: start, end: end, value: value, sample: sample} }\n  - { id: density_track, component: advanced_viz, kind: coverage_track,\n      roles: {chromosome: chrom, position: start, end: end, value: value, sample: sample} }\n  - { component: table }\n",
           "recipe": "vcf/variant_density.py",
           "renders_as": [
             {
@@ -39661,6 +40557,23 @@
               "id": "density_windows",
               "roles": {},
               "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "density_karyotype",
+              "kind": "ideogram",
+              "roles": {
+                "chrom": "chrom",
+                "end": "end",
+                "sample": "sample",
+                "start": "start",
+                "value": "value"
+              }
             },
             {
               "aggregations": [],
