@@ -45,6 +45,7 @@ import TranscriptStructureRenderer from './TranscriptStructureRenderer';
 import CnvProfileRenderer from './CnvProfileRenderer';
 import GenomeChordRenderer from './GenomeChordRenderer';
 import IdeogramRenderer from './IdeogramRenderer';
+import AlleleGridRenderer from './AlleleGridRenderer';
 import RecordCardRenderer from './RecordCardRenderer';
 import ParallelCoordinatesRenderer from './ParallelCoordinatesRenderer';
 import RankedDistributionRenderer from './RankedDistributionRenderer';
@@ -269,6 +270,7 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   pae_matrix: PaeMatrixRenderer,
   ramachandran: RamachandranRenderer,
   spatial_cells: SpatialCellsRenderer,
+  allele_grid: AlleleGridRenderer,
 };
 
 /**

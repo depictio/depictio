@@ -214,6 +214,13 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
       // identifies it, as a chord's is for a link. `selection_column` names a
       // per-hit key when several hits share a label.
       return named ?? configColumn('label_col') ?? 'label';
+    case 'allele_grid':
+      // A click on a half picks the allele it holds: the allele column is what
+      // a peptide-by-allele prediction table (epitopeprediction) joins on. A
+      // click on a sample label picks the sample instead, on `sample_id_col`
+      // (the renderer names it): the same filter key, so the last gesture
+      // wins.
+      return named ?? configColumn('allele_col') ?? 'allele';
     case 'msa':
       // A row click picks one sequence of the alignment.
       return configColumn('seq_id_col') ?? 'seq_id';
@@ -236,7 +243,9 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
 }
 
 /** Kinds that read their drawn selection back out of the filter list. */
-const CHROME_RESET_KINDS = new Set(['upset_plot']);
+// The allele grid repaints its picked alleles from the filter list too, so a
+// Reset from the chrome clears the highlight with the filter.
+const CHROME_RESET_KINDS = new Set(['upset_plot', 'allele_grid']);
 
 /**
  * Whether the tile's chrome offers "Reset selection" for an advanced_viz.

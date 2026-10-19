@@ -152,6 +152,7 @@ describe('splitPanels', () => {
       'pae_matrix',
       'ramachandran',
       'ranked_distribution',
+      'allele_grid',
     ];
 
     it('places every model kind in its bucket, and no kind twice', () => {

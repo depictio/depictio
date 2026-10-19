@@ -206,6 +206,8 @@ AV_JSON_SOURCE: dict[str, AvJsonSource] = {
     # A Plotly scattergl whose marker sizes follow the zoom and whose colour
     # range is clipped in the browser; no Python builder stands for it.
     "spatial_cells": "client_only",
+    # Hand-drawn SVG (two halves per genotype cell): no Plotly figure exists.
+    "allele_grid": "client_only",
 }
 
 

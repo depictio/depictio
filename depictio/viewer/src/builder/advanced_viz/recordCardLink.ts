@@ -114,6 +114,10 @@ function advancedVizEmits(m: StoredMetadata): { emits: boolean; column: string |
     case 'msa':
       column = str(config.seq_id_col) ?? 'seq_id';
       break;
+    case 'allele_grid':
+      // An allele half picks the allele; a sample label the sample.
+      column = named ?? str(config.allele_col) ?? 'allele';
+      break;
     case 'lollipop':
       column = named ?? str(config.label_col) ?? str(config.position_col) ?? 'position';
       break;

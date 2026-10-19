@@ -129,6 +129,11 @@ AdvancedVizKind = Literal[
     # section 8 gate review against an `embedding` bound to the centroids;
     # see INCUBATING in advanced_viz/schemas.py.
     "spatial_cells",
+    # Immunogenetics: a sample x locus grid of diploid genotypes, each cell
+    # split into its two haplotypes and coloured by allele group (HLA typing
+    # from nf-core/hlatyping, LILAC in oncoanalyser). Incubating against an
+    # oncoplot view of the same table; see `INCUBATING` in schemas.py.
+    "allele_grid",
 ]
 
 # Map visualization types

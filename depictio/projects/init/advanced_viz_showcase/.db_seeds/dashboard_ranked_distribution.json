@@ -354,7 +354,7 @@
   "parent_dashboard_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
-  "tab_order": 57,
+  "tab_order": 52,
   "main_tab_name": null,
   "tab_icon": "mdi:chart-box-outline",
   "tab_icon_color": "grape",

@@ -442,7 +442,7 @@
   "parent_dashboard_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8d00"
   },
-  "tab_order": 50,
+  "tab_order": 51,
   "main_tab_name": null,
   "tab_icon": "tabler:microscope",
   "tab_icon_color": "grape",

@@ -1617,7 +1617,8 @@ export type AdvancedVizKind =
   | 'pae_matrix'
   | 'ramachandran'
   | 'ranked_distribution'
-  | 'spatial_cells';
+  | 'spatial_cells'
+  | 'allele_grid';
 
 /** Accepted dtypes for one role, plus whether the role is required. Sourced
  *  from the backend canonical schema so the builder never duplicates the

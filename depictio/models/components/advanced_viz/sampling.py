@@ -167,6 +167,11 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     # cap to the full-load ceiling, and `SpatialCellsConfig.max_cells` bounds
     # what the browser then draws (thinned evenly, and reported).
     "spatial_cells": "hash",
+    # A genotype is a pair of rows: a sample drops a haplotype, and a locus
+    # turns falsely homozygous, under any row sample. The grid is small (samples
+    # x loci x 2) and ``AlleleGridConfig.max_samples`` / ``max_loci`` cap what
+    # is drawn after ordering, counting the rest.
+    "allele_grid": "none",
 }
 
 #: The role whose tail a ``tail`` kind must keep, and whether the interesting

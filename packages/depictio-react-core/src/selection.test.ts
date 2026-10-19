@@ -117,3 +117,43 @@ describe('reading a selection back out of the filter list', () => {
     expect(next).toHaveLength(2);
   });
 });
+
+const alleleGrid = (config: Record<string, unknown>): StoredMetadata =>
+  ({
+    index: 'adv-alleles',
+    component_type: 'advanced_viz',
+    viz_kind: 'allele_grid',
+    dc_id: 'dc-hla',
+    config: { viz_kind: 'allele_grid', ...config },
+  }) as unknown as StoredMetadata;
+
+describe('the allele grid as a selection source', () => {
+  it('selects on the allele column once opted in, and on a named column over it', () => {
+    expect(advancedVizSelectionColumn(alleleGrid({ allele_col: 'hla_allele' }))).toBeUndefined();
+    expect(
+      advancedVizSelectionColumn(alleleGrid({ selection_enabled: true, allele_col: 'hla_allele' })),
+    ).toBe('hla_allele');
+    expect(advancedVizSelectionColumn(alleleGrid({ selection_enabled: true }))).toBe('allele');
+    expect(
+      advancedVizSelectionColumn(
+        alleleGrid({ selection_enabled: true, allele_col: 'hla_allele', selection_column: 'allele4' }),
+      ),
+    ).toBe('allele4');
+  });
+
+  it('gets the chrome Reset, since it repaints its picks from the filter list', () => {
+    expect(advancedVizChromeReset(alleleGrid({ selection_enabled: true }))).toBe(true);
+    expect(advancedVizChromeReset(alleleGrid({}))).toBe(false);
+  });
+
+  it('emits an allele pick and a sample pick on the same filter key', () => {
+    const md = alleleGrid({ selection_enabled: true });
+    const byAllele = advancedVizSelectionFilter(md, 'allele', ['A*02:01']);
+    const bySample = advancedVizSelectionFilter(md, 'sample_id', ['DONOR_07']);
+    expect(byAllele).toMatchObject({ index: 'adv-alleles', source: 'scatter_selection', column_name: 'allele' });
+    expect(bySample).toMatchObject({ index: 'adv-alleles', source: 'scatter_selection', column_name: 'sample_id' });
+    const merged = mergeFiltersBySource(mergeFiltersBySource([], byAllele), bySample);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].column_name).toBe('sample_id');
+  });
+});

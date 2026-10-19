@@ -1369,6 +1369,55 @@ workflows:
               cell_id: "Cell id qualified by its image (sample:CellID), unique across the table. What a lasso selects."
               cell_type: "Cell type called from the markers: B cell, Germinal centre B, T cell, Epithelial, Macrophage or Stromal."
 
+      # Allele grid tab (the 8dax block; 8da0 is the dashboard): HLA genotypes
+      # one row per allele call, and the epitope predictions an allele pick on
+      # the grid narrows through the direct link at the end of this file.
+      - id: "646b0f3c1e4a2d7f8e5b8da1"
+        data_collection_tag: "allele_grid_demo"
+        description: "HLA class I and II genotypes of 24 donors at 5 loci, one row per allele call (OptiType's A1..C2 columns melted long, plus DRB1 and DQB1)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/allele_grid_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              sample_id: "Donor the genotype belongs to. DONOR_04 and DONOR_15 are homozygous for the 8.1 ancestral haplotype at every locus, DONOR_09 carries one copy of it."
+              locus: "HLA gene the call is at: HLA-A, HLA-B and HLA-C (class I), HLA-DRB1 and HLA-DQB1 (class II)."
+              allele: "Allele called, at two-field resolution as OptiType writes it (A*02:01). Two rows per donor and locus; equal values are a homozygous locus."
+              haplotype: "Which of the two calls the row is, 1 or 2. Phase is not known, so this only orders the halves of a cell."
+              hla_class: "HLA class of the locus. Groups the grid's columns under a header."
+              objective: "OptiType's objective for the donor, the same on every row of the donor. Grows with the reads it explains."
+              reads: "Reads the typing used for the donor, the same on every row of the donor."
+
+      - id: "646b0f3c1e4a2d7f8e5b8da2"
+        data_collection_tag: "epitope_predictions_demo"
+        description: "Predicted binding of 40 viral peptides to the 12 commonest class I alleles of the cohort, nf-core/epitopeprediction style"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/epitope_predictions_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              peptide: "Peptide sequence the prediction is for, 9 or 10 residues."
+              protein: "Source protein of the peptide."
+              length: "Peptide length."
+              allele: "HLA allele the binding is predicted for, spelled as the genotype table spells it, so an allele picked on the grid narrows this table."
+              affinity_nm: "Predicted binding affinity, in nM. Lower binds tighter."
+              percentile_rank: "Percentile rank of the affinity among random peptides for the allele."
+              binder: "strong below 50 nM, weak below 500 nM, none above."
+
 # Region links. A genomic region travels as a chromosome filter plus a
 # position range on the emitting collection's own columns; a region link
 # renames that pair onto the target's columns (depictio/models/models/links.py),
@@ -1392,3 +1441,11 @@ links:
       resolver: "region"
       columns: { chrom: "chrom", pos: "start" }
     description: "A region brushed or typed on the CTCF peak track narrows the ChIP coverage"
+  # An allele picked on the allele grid narrows the epitope predictions to the
+  # peptides predicted for that allele.
+  - source_dc_id: "646b0f3c1e4a2d7f8e5b8da1"  # allele_grid_demo
+    source_column: "allele"
+    target_dc_id: "646b0f3c1e4a2d7f8e5b8da2"  # epitope_predictions_demo
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "allele"}
+    description: "An allele picked on the genotype grid narrows the epitope predictions to that allele"

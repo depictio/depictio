@@ -1,0 +1,528 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8da0"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8da0"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "hla-text",
+      "component_type": "text",
+      "title": "HLA genotypes",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "Genotypes, two ways",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "One table, two pictures. Left, the allele grid: a row per donor, a column per locus, each cell split into its two haplotypes and coloured by allele group, so every A*02 shares a hue; a homozygous locus is one merged cell with a dot. Right, an oncoplot of the same rows with the allele as the category: one value per cell, so a heterozygous locus shows only one of its two alleles. Click an allele half to narrow the predictions below to it, a donor name to pick that donor. Input: OptiType calls from nf-core/hlatyping, predictions from nf-core/epitopeprediction.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null,
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "hla-grid",
+      "component_type": "advanced_viz",
+      "title": "Allele grid: both haplotypes per cell",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "allele_grid_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8da1"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "HLA class I and II genotypes of 24 donors at 5 loci, one row per allele call (OptiType's A1..C2 columns melted long, plus DRB1 and DQB1)",
+        "data_collection_tag": "allele_grid_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8da1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Each locus split into haplotype 1 and 2, coloured by allele group (hue) and allele (shade); side bars give the OptiType objective and the reads.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Genotypes, two ways",
+      "viz_kind": "allele_grid",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "allele_grid",
+        "sample_id_col": "sample_id",
+        "locus_col": "locus",
+        "allele_col": "allele",
+        "haplotype_col": "haplotype",
+        "category_col": "hla_class",
+        "value_col": "objective",
+        "reads_col": "reads",
+        "resolution": 2,
+        "locus_order": null,
+        "sample_order": "alphabetical",
+        "order_locus": null,
+        "show_labels": true,
+        "side_bars": [
+          "value",
+          "reads"
+        ],
+        "reads_as_opacity": false,
+        "value_label": "Objective",
+        "reads_label": "Reads",
+        "max_samples": 200,
+        "max_loci": 24,
+        "selection_enabled": true,
+        "selection_column": "allele"
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "hla-onco",
+      "component_type": "advanced_viz",
+      "title": "Oncoplot of the same rows",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "allele_grid_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8da1"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "HLA class I and II genotypes of 24 donors at 5 loci, one row per allele call (OptiType's A1..C2 columns melted long, plus DRB1 and DQB1)",
+        "data_collection_tag": "allele_grid_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8da1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The closest existing kind: allele as the mutation category, one colour per cell, so the second allele of a heterozygous locus is hidden.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Genotypes, two ways",
+      "viz_kind": "oncoplot",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "oncoplot",
+        "sample_id_col": "sample_id",
+        "gene_col": "locus",
+        "mutation_type_col": "allele",
+        "sort_by_freq": false
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "hla-epitopes",
+      "component_type": "table",
+      "title": "Epitope predictions",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "epitope_predictions_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8da2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Predicted binding of 40 viral peptides to the 12 commonest class I alleles of the cohort, nf-core/epitopeprediction style",
+        "data_collection_tag": "epitope_predictions_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8da2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Epitope predictions",
+      "columns": [],
+      "page_size": 100,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "hla-f-locus",
+      "component_type": "interactive",
+      "title": "Locus",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "allele_grid_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8da1"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "HLA class I and II genotypes of 24 donors at 5 loci, one row per allele call (OptiType's A1..C2 columns melted long, plus DRB1 and DQB1)",
+        "data_collection_tag": "allele_grid_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8da1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Typing scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "locus",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Typing filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "icon_name": "mdi:dna",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "hla-f-class",
+      "component_type": "interactive",
+      "title": "HLA class",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "allele_grid_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8da1"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "HLA class I and II genotypes of 24 donors at 5 loci, one row per allele call (OptiType's A1..C2 columns melted long, plus DRB1 and DQB1)",
+        "data_collection_tag": "allele_grid_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8da1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Typing scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "hla_class",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Typing filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "icon_name": "mdi:shape-outline",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "hla-f-binder",
+      "component_type": "interactive",
+      "title": "Binder class",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "epitope_predictions_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8da2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Predicted binding of 40 viral peptides to the 12 commonest class I alleles of the cohort, nf-core/epitopeprediction style",
+        "data_collection_tag": "epitope_predictions_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8da2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Prediction scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "binder",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Prediction filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "icon_name": "mdi:magnet",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-hla-f-locus",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-hla-f-class",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-hla-f-binder",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-hla-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-hla-grid",
+      "x": 0,
+      "y": 2,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-hla-onco",
+      "x": 4,
+      "y": 2,
+      "w": 4,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-hla-epitopes",
+      "x": 0,
+      "y": 7,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "HLA genotypes",
+  "subtitle": "24 donors typed at HLA-A, -B, -C, -DRB1 and -DQB1, drawn twice: as an allele grid and as an oncoplot of the same rows.",
+  "icon": "mdi:dna",
+  "icon_color": "grape",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 50,
+  "main_tab_name": null,
+  "tab_icon": "mdi:dna",
+  "tab_icon_color": "grape",
+  "tab_group": null,
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Typing scope",
+      "icon": "mdi:filter-variant",
+      "color": "grape",
+      "description": "Restricts which loci and donors the two genotype views draw",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Prediction scope",
+      "icon": "mdi:filter-variant",
+      "color": "grape",
+      "description": "Restricts the epitope predictions by binder class",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Genotypes, two ways",
+      "icon": "mdi:scale-balance",
+      "color": "grape",
+      "description": "The same genotype table as an allele grid (left) and as an oncoplot (right)",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Epitope predictions",
+      "icon": "mdi:table",
+      "color": "grape",
+      "description": "Peptide by allele binding predictions, narrowed by an allele picked on the grid",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "category_colors": null,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

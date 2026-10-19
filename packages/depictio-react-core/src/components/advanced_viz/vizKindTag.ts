@@ -257,6 +257,11 @@ const VIZ_KIND: Readonly<Record<string, VizKindLabel>> = {
     'tabler:microscope',
     'Segmented cells where they sit in the image, coloured by a marker or a cell type',
   ),
+  allele_grid: label(
+    'Alleles',
+    'tabler:layout-columns',
+    'Genotype per sample and locus, one half per haplotype, coloured by allele group',
+  ),
   // `record_card` is a card of fields, not a figure: no label.
 };
 

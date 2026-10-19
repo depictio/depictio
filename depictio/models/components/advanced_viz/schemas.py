@@ -375,6 +375,15 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "x": _NUMERIC,
         "y": _NUMERIC,
     },
+    # One row per allele call: a sample, a locus and the allele called there,
+    # two rows per diploid locus (OptiType's A1/A2 melted long, LILAC as it is).
+    # The allele is a nomenclature string ("HLA-A*02:01:01"), parsed and
+    # truncated to the display resolution by the renderer.
+    "allele_grid": {
+        "sample_id": _STRING,
+        "locus": _STRING,
+        "allele": _STRING,
+    },
 }
 
 # Per-role column-name aliases used by `suggest_viz_kinds`. The suggester
@@ -986,6 +995,18 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "sample": frozenset({"sample", "sample_id", "image", "roi", "fov", "core"}),
         "area": frozenset({"area", "cell_area", "nucleus_area", "size"}),
     },
+    # The names OptiType (melted), LILAC, arcasHLA and HLA-HD write. `gene` is
+    # LILAC's locus column ("HLA-A"), which is why it is an alias of the locus
+    # rather than of anything gene-like.
+    "allele_grid": {
+        "sample_id": frozenset({"sample_id", "sample", "sample_name", "subject", "donor"}),
+        "locus": frozenset({"locus", "hla_locus", "gene", "hla_gene", "hla"}),
+        "allele": frozenset({"allele", "hla_allele", "genotype", "allele_name", "call"}),
+        "haplotype": frozenset({"haplotype", "hap", "allele_index", "copy", "chromosome_copy"}),
+        "category": frozenset({"category", "hla_class", "class", "mhc_class", "locus_class"}),
+        "value": frozenset({"value", "objective", "score", "quality", "confidence"}),
+        "reads": frozenset({"reads", "read_count", "n_reads", "fragments", "ref_fragments"}),
+    },
 }
 
 
@@ -1244,6 +1265,15 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "category": _STRING,
         "sample": _STRING,
         "area": _NUMERIC,
+    },
+    # `haplotype` is 1 / 2 (or a string ending in one: "A1", "hap2"); without it
+    # the order of a sample's rows at a locus decides. `value` and `reads` are
+    # per-sample numbers repeated on every row of the long table.
+    "allele_grid": {
+        "haplotype": _NUMERIC | _STRING,
+        "category": _STRING,
+        "value": _NUMERIC,
+        "reads": _NUMERIC,
     },
 }
 
@@ -2433,6 +2463,15 @@ _KIND_ROLE_DESCRIPTIONS: dict[AdvancedVizKind, dict[str, str]] = {
         "sample": "Optional image the cell belongs to: each one is drawn in its own frame.",
         "area": "Optional cell area, which sizes each marker like the cell it stands for.",
     },
+    "allele_grid": {
+        "sample_id": "One grid row per sample (donor, tumour, library).",
+        "locus": "One grid column per locus (HLA-A, HLA-B, DRB1); the 'HLA-' prefix is dropped.",
+        "allele": "Allele called at the locus, in HLA nomenclature (A*02:01, HLA-A*02:01:01).",
+        "haplotype": "Optional 1 or 2: which half of the cell a call fills; else row order.",
+        "category": "Optional locus class (HLA class I / II): groups the columns under a header.",
+        "value": "Optional per-sample score (OptiType objective), drawn as a side bar.",
+        "reads": "Optional per-sample read support, drawn as a side bar or as cell opacity.",
+    },
 }
 
 
@@ -2863,6 +2902,15 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         ),
         "icon": "tabler:microscope",
     },
+    "allele_grid": {
+        "label": "Allele grid",
+        "description": (
+            "Sample by locus grid of diploid genotypes: each cell split into its "
+            "two haplotypes, coloured by allele group, homozygous loci merged. "
+            "Click an allele to filter the dashboard to it (HLA typing)."
+        ),
+        "icon": "tabler:layout-columns",
+    },
 }
 
 
@@ -2889,6 +2937,13 @@ INCUBATING: frozenset[str] = frozenset(
         # review can compare them. No catalog output binds it yet: the
         # nf-core/mcmicro mcquant tables are its first producer.
         "spatial_cells",
+        # Bound only by the showcase tab, which draws it beside an oncoplot of
+        # the same table: pending the §8 gate review against oncoplot view;
+        # showcase tab compares both. The candidate marks (a cell split per
+        # haplotype, a merged homozygous cell, hue families per allele group)
+        # and the allele pick are the case for a kind; an oncoplot `view` is
+        # the case against.
+        "allele_grid",
     }
 )
 

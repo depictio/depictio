@@ -55,6 +55,9 @@ SELECTION_EMITTING_KINDS: dict[str, tuple[str, ...]] = {
     "ramachandran": ("position_col", "=position"),
     # A lassoed cell is its id. Opt-in, like the other scatter kinds.
     "spatial_cells": ("selection_column", "cell_id_col", "=cell_id"),
+    # An allele half picks the allele (a sample label picks the sample, on the
+    # same filter key). Opt-in, like the other non-protein kinds.
+    "allele_grid": ("selection_column", "allele_col", "=allele"),
 }
 
 # Kinds whose pick reaches a record card as a `residue_selection` pair (an

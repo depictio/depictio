@@ -13,7 +13,7 @@ icon_variant: filled
 workflow_system: python
 dashboard_id: '646b0f3c1e4a2d7f8e5b8f50'
 is_main_tab: false
-tab_order: 57
+tab_order: 52
 parent_dashboard_tag: volcano
 tab_icon: 'mdi:chart-box-outline'
 tab_icon_color: 'grape'

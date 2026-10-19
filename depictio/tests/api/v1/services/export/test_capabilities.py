@@ -302,3 +302,18 @@ def test_spatial_cells_is_drawn_in_the_browser_and_exports_as_html() -> None:
     assert ExportFormat.HTML in formats_for("advanced_viz", "spatial_cells")
     assert "spatial_cells" not in HTML_UNAVAILABLE_KINDS
     assert "format=html" in (unsupported_reason("advanced_viz", "spatial_cells") or "")
+
+
+def test_allele_grid_is_drawn_in_the_browser_and_exports_as_html() -> None:
+    """A hand-drawn SVG grid: no server-side figure, but the offline bundle draws it.
+
+    It reads nothing but its own rows (no file, no GenomeSpy), so the HTML export
+    serves it through the real renderer and only JSON is refused.
+    """
+    from depictio.api.v1.services.export.capabilities import HTML_UNAVAILABLE_KINDS
+
+    assert AV_JSON_SOURCE["allele_grid"] == "client_only"
+    assert advanced_viz_json_source("allele_grid") == "client_only"
+    assert "allele_grid" not in HTML_UNAVAILABLE_KINDS
+    assert formats_for("advanced_viz", "allele_grid") == frozenset({ExportFormat.HTML})
+    assert "format=html" in (unsupported_reason("advanced_viz", "allele_grid") or "")

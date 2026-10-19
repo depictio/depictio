@@ -4360,3 +4360,191 @@ def generate_spatial_cells_demo() -> None:
 
 
 generate_spatial_cells_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Allele grid: HLA class I and II genotypes, one row per allele call.
+# columns (allele_grid_demo): sample_id, locus, allele, haplotype, hla_class,
+#          objective, reads
+# columns (epitope_predictions_demo): peptide, protein, length, allele,
+#          affinity_nm, percentile_rank, binder
+# ---------------------------------------------------------------------------
+# The shape nf-core/hlatyping's OptiType result takes once its A1 ... C2
+# columns are melted long, plus the two class II loci an HLA-HD or arcasHLA
+# run adds. Allele frequencies are rounded European ones (Allele Frequency Net
+# Database orders of magnitude), so A*02:01 is the commonest A allele, the
+# 8.1 ancestral haplotype (A*01:01-B*08:01-C*07:01-DRB1*03:01-DQB1*02:01)
+# recurs, and a few donors are homozygous at a locus by chance or by design.
+# The epitope table is epitopeprediction's per-peptide per-allele output for
+# the class I alleles the cohort carries, with the same allele spelling, so a
+# pick on the grid narrows it through a direct project link.
+_HLA_FREQUENCIES: dict[str, dict[str, float]] = {
+    "HLA-A": {
+        "A*02:01": 0.28,
+        "A*01:01": 0.15,
+        "A*03:01": 0.14,
+        "A*24:02": 0.10,
+        "A*11:01": 0.06,
+        "A*26:01": 0.04,
+        "A*32:01": 0.04,
+        "A*68:01": 0.04,
+        "A*31:01": 0.03,
+        "A*29:02": 0.03,
+        "A*23:01": 0.02,
+        "A*02:05": 0.02,
+        "A*30:01": 0.02,
+        "A*25:01": 0.02,
+        "A*02:06": 0.01,
+    },
+    "HLA-B": {
+        "B*07:02": 0.13,
+        "B*08:01": 0.11,
+        "B*44:02": 0.08,
+        "B*35:01": 0.06,
+        "B*15:01": 0.06,
+        "B*40:01": 0.06,
+        "B*44:03": 0.05,
+        "B*51:01": 0.05,
+        "B*18:01": 0.05,
+        "B*57:01": 0.04,
+        "B*27:05": 0.04,
+        "B*14:02": 0.03,
+        "B*13:02": 0.03,
+        "B*38:01": 0.02,
+        "B*35:03": 0.02,
+    },
+    "HLA-C": {
+        "C*07:01": 0.15,
+        "C*07:02": 0.14,
+        "C*04:01": 0.11,
+        "C*06:02": 0.09,
+        "C*05:01": 0.08,
+        "C*03:04": 0.07,
+        "C*12:03": 0.05,
+        "C*02:02": 0.05,
+        "C*03:03": 0.05,
+        "C*08:02": 0.04,
+        "C*16:01": 0.04,
+        "C*01:02": 0.04,
+        "C*15:02": 0.03,
+    },
+    "HLA-DRB1": {
+        "DRB1*15:01": 0.14,
+        "DRB1*03:01": 0.12,
+        "DRB1*07:01": 0.12,
+        "DRB1*04:01": 0.09,
+        "DRB1*01:01": 0.09,
+        "DRB1*13:01": 0.07,
+        "DRB1*11:01": 0.06,
+        "DRB1*13:02": 0.05,
+        "DRB1*04:04": 0.04,
+        "DRB1*11:04": 0.03,
+        "DRB1*08:01": 0.03,
+        "DRB1*12:01": 0.02,
+        "DRB1*14:01": 0.02,
+        "DRB1*16:01": 0.02,
+        "DRB1*01:02": 0.02,
+    },
+    "HLA-DQB1": {
+        "DQB1*03:01": 0.17,
+        "DQB1*06:02": 0.13,
+        "DQB1*02:01": 0.12,
+        "DQB1*05:01": 0.12,
+        "DQB1*03:02": 0.09,
+        "DQB1*02:02": 0.08,
+        "DQB1*06:03": 0.06,
+        "DQB1*03:03": 0.04,
+        "DQB1*04:02": 0.03,
+        "DQB1*06:04": 0.03,
+        "DQB1*05:03": 0.02,
+    },
+}
+_HLA_CLASS = {"HLA-A": "Class I", "HLA-B": "Class I", "HLA-C": "Class I"}
+_HLA_ANCESTRAL_81 = {
+    "HLA-A": "A*01:01",
+    "HLA-B": "B*08:01",
+    "HLA-C": "C*07:01",
+    "HLA-DRB1": "DRB1*03:01",
+    "HLA-DQB1": "DQB1*02:01",
+}
+# Donors given a designed genotype on top of the random draw: two 8.1
+# homozygotes (every locus homozygous), one 8.1 carrier (first haplotype only),
+# and an A*02:01 homozygote.
+_HLA_DESIGNED: dict[int, dict[str, tuple[str, str]]] = {
+    4: {locus: (a, a) for locus, a in _HLA_ANCESTRAL_81.items()},
+    15: {locus: (a, a) for locus, a in _HLA_ANCESTRAL_81.items()},
+    9: {locus: (a, "") for locus, a in _HLA_ANCESTRAL_81.items()},
+    20: {"HLA-A": ("A*02:01", "A*02:01")},
+}
+_EPITOPE_PROTEINS = ("SARS2_S", "SARS2_N", "EBV_EBNA1", "CMV_pp65")
+_EPITOPE_AA = "ACDEFGHIKLMNPQRSTVWY"
+
+
+def _hla_draw(rng: random.Random, locus: str) -> str:
+    alleles = list(_HLA_FREQUENCIES[locus])
+    weights = list(_HLA_FREQUENCIES[locus].values())
+    return rng.choices(alleles, weights=weights, k=1)[0]
+
+
+def generate_allele_grid_demo() -> None:
+    """Write allele_grid_demo.tsv (24 donors x 5 loci x 2) and its epitope table."""
+    rng = random.Random(20261019)
+    header = ["sample_id", "locus", "allele", "haplotype", "hla_class", "objective", "reads"]
+    rows: list[list] = []
+    for donor in range(1, 25):
+        sample = f"DONOR_{donor:02d}"
+        reads = int(rng.lognormvariate(math.log(5200), 0.45))
+        # OptiType's objective grows with the read support it explains; a
+        # low-coverage donor scores visibly lower on the side bar.
+        objective = round(reads * rng.uniform(0.17, 0.21), 2)
+        designed = _HLA_DESIGNED.get(donor, {})
+        for locus in _HLA_FREQUENCIES:
+            pair = designed.get(locus, ("", ""))
+            first = pair[0] or _hla_draw(rng, locus)
+            second = pair[1] or _hla_draw(rng, locus)
+            for haplotype, allele in ((1, first), (2, second)):
+                rows.append(
+                    [
+                        sample,
+                        locus,
+                        allele,
+                        haplotype,
+                        _HLA_CLASS.get(locus, "Class II"),
+                        objective,
+                        reads,
+                    ]
+                )
+    write_tsv(OUT / "allele_grid_demo.tsv", header, rows)
+
+    copies: dict[str, int] = {}
+    for r in rows:
+        if r[4] == "Class I":
+            copies[r[2]] = copies.get(r[2], 0) + 1
+    carried = sorted(copies, key=lambda a: (-copies[a], a))[:12]
+    peptides: list[tuple[str, str]] = []
+    for i in range(40):
+        length = 9 if i % 4 else 10
+        peptide = "".join(rng.choice(_EPITOPE_AA) for _ in range(length))
+        peptides.append((peptide, _EPITOPE_PROTEINS[i % 4]))
+    epitope_header = [
+        "peptide",
+        "protein",
+        "length",
+        "allele",
+        "affinity_nm",
+        "percentile_rank",
+        "binder",
+    ]
+    epitope_rows: list[list] = []
+    for peptide, protein in peptides:
+        for allele in carried:
+            # Log-normal affinities: most pairs do not bind, a few per allele
+            # fall under the 50 nM strong-binder line.
+            affinity = round(min(50000.0, rng.lognormvariate(math.log(3000), 1.8)), 1)
+            rank = round(min(100.0, max(0.01, affinity / 500.0 * rng.uniform(0.6, 1.4))), 2)
+            binder = "strong" if affinity < 50 else "weak" if affinity < 500 else "none"
+            epitope_rows.append([peptide, protein, len(peptide), allele, affinity, rank, binder])
+    write_tsv(OUT / "epitope_predictions_demo.tsv", epitope_header, epitope_rows)
+
+
+generate_allele_grid_demo()

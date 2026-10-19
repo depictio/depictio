@@ -258,6 +258,16 @@ const ROLE_DISPLAY_NAMES: Record<string, Record<string, string>> = {
     accession: 'Accession',
   },
   pae_matrix: { value: 'pLDDT (axis strips)' },
+  // One row per allele call (OptiType melted long, LILAC as written).
+  allele_grid: {
+    sample_id: 'Sample',
+    locus: 'Locus (HLA gene)',
+    allele: 'Allele call',
+    haplotype: 'Haplotype (1 / 2)',
+    category: 'Locus class',
+    value: 'Per-sample score',
+    reads: 'Read support',
+  },
   ramachandran: {
     value: 'Colour value',
     category: 'Colour category',
