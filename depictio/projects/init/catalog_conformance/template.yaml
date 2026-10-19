@@ -4777,6 +4777,118 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 07925f58f1275e2d2a6ccdae
+    data_collection_tag: stableexpression_dataset_funnel
+    description: 'Samples through the filters: recipe output (stableexpression/dataset_funnel.py), seeded
+      from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: stableexpression/dataset_funnel.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: ba63940708af4a8b3ad4f04b
+    data_collection_tag: stableexpression_dataset_summary
+    description: 'Downloaded datasets: recipe output (stableexpression/dataset_summary.py), seeded from
+      the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: stableexpression/dataset_summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 1831587cd1d691fe0ceb49fa
+    data_collection_tag: stableexpression_gene_stability
+    description: 'Candidate gene stability: recipe output (stableexpression/gene_stability.py), seeded
+      from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: stableexpression/gene_stability.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 9d4539554f7aafca43c6f60b
+    data_collection_tag: stableexpression_gene_statistics
+    description: 'Gene expression statistics: recipe output (stableexpression/gene_statistics.py), seeded
+      from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: stableexpression/gene_statistics.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 7b336f82069c256f379313b6
+    data_collection_tag: stableexpression_id_mapping
+    description: 'Gene ID mapping: recipe output (stableexpression/id_mapping.py), seeded from the catalog
+      fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: stableexpression/id_mapping.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 914152424dde22b09d13a969
+    data_collection_tag: stableexpression_score_components
+    description: 'Stability score components: recipe output (stableexpression/score_components.py), seeded
+      from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: stableexpression/score_components.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 5b7a447d497bcbabe783e083
+    data_collection_tag: stableexpression_stable_gene_distribution
+    description: 'Most stable genes, box statistics: recipe output (stableexpression/stable_gene_distribution.py),
+      seeded from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: stableexpression/stable_gene_distribution.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 2dc6308be89867bfbabedbe0
+    data_collection_tag: stableexpression_stable_gene_values
+    description: 'Most stable genes, sample values: recipe output (stableexpression/stable_gene_values.py),
+      seeded from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: stableexpression/stable_gene_values.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: 618f5f1d6acd1f545870644c
     data_collection_tag: star_junctions
     description: 'Splice junctions: recipe output (star/junctions.py), seeded from the catalog fixture'

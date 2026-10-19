@@ -36309,6 +36309,886 @@
       "stage": "benchmarking"
     },
     {
+      "biotools_url": null,
+      "description": "Gene expression stability across public datasets, from nf-core/stableexpression: the stability score of every candidate gene and the measures behind it, the spread of the most stable genes' normalised expression over every sample, the expression statistics of every gene, and what each downloaded dataset went through (platform, gene ID mapping, sample filters, merge).",
+      "dir": "depictio/catalog/stableexpression",
+      "homepage": "https://nf-co.re/stableexpression",
+      "id": "stableexpression",
+      "name": "nf-core/stableexpression",
+      "nf_core_url": null,
+      "outputs": [
+        {
+          "columns": {},
+          "description": "The samples of every downloaded dataset at each step, one row per dataset and step: downloaded, after the gene ID mapping, after the zero filter and after the missing-value filter (the samples of the merged matrix), with the samples lost at the step. A step a dataset never reached holds 0, so a step sums to the run's funnel.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/statistics/zero_values_filter_stats.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "dataset_funnel.tsv",
+          "fixtureContent": "step_key\tdataset\tplatform\toutcome\tstep\tstep_order\tsamples\tsamples_lost\tdataset_in\nE_GEOD_10070_A_AFFY_44|1\tE_GEOD_10070_A_AFFY_44\tMicroarray\tMerged\tDownloaded\t1\t13\t0\t1\nE_GEOD_102133_A_AFFY_141|1\tE_GEOD_102133_A_AFFY_141\tMicroarray\tNo gene mapped\tDownloaded\t1\t73\t0\t1\nE_GEOD_58991_rnaseq|1\tE_GEOD_58991_rnaseq\tRNA-seq\tAll samples filtered out\tDownloaded\t1\t9\t0\t1\nE_GEOD_10070_A_AFFY_44|2\tE_GEOD_10070_A_AFFY_44\tMicroarray\tMerged\tGene IDs mapped\t2\t13\t0\t1\nE_GEOD_102133_A_AFFY_141|2\tE_GEOD_102133_A_AFFY_141\tMicroarray\tNo gene mapped\tGene IDs mapped\t2\t0\t73\t0\nE_GEOD_58991_rnaseq|2\tE_GEOD_58991_rnaseq\tRNA-seq\tAll samples filtered out\tGene IDs mapped\t2\t9\t0\t1\nE_GEOD_10070_A_AFFY_44|3\tE_GEOD_10070_A_AFFY_44\tMicroarray\tMerged\tZero filter\t3\t13\t0\t1\nE_GEOD_102133_A_AFFY_141|3\tE_GEOD_102133_A_AFFY_141\tMicroarray\tNo gene mapped\tZero filter\t3\t0\t0\t0\nE_GEOD_58991_rnaseq|3\tE_GEOD_58991_rnaseq\tRNA-seq\tAll samples filtered out\tZero filter\t3\t0\t9\t0\nE_GEOD_10070_A_AFFY_44|4\tE_GEOD_10070_A_AFFY_44\tMicroarray\tMerged\tMissing-value filter\t4\t13\t0\t1\nE_GEOD_102133_A_AFFY_141|4\tE_GEOD_102133_A_AFFY_141\tMicroarray\tNo gene mapped\tMissing-value filter\t4\t0\t0\t0\nE_GEOD_58991_rnaseq|4\tE_GEOD_58991_rnaseq\tRNA-seq\tAll samples filtered out\tMissing-value filter\t4\t0\t0\t0\n",
+          "id": "stableexpression_dataset_funnel",
+          "mode": "expression/sample-funnel",
+          "name": "Samples through the filters",
+          "path_glob": "**/statistics/zero_values_filter_stats.csv",
+          "rawYaml": "id: stableexpression_dataset_funnel\nname: Samples through the filters\nmode: expression/sample-funnel\ndescription: >-\n  The samples of every downloaded dataset at each step, one row per dataset and\n  step: downloaded, after the gene ID mapping, after the zero filter and after\n  the missing-value filter (the samples of the merged matrix), with the samples\n  lost at the step. A step a dataset never reached holds 0, so a step sums to\n  the run's funnel.\nfind:\n  path_glob: \"**/statistics/zero_values_filter_stats.csv\"\nrecipe: stableexpression/dataset_funnel.py\nfixture: dataset_funnel.tsv\nrenders_as:\n  - { id: sample_funnel, component: figure, visu_type: histogram,\n      dict_kwargs: { x: step, y: samples, color: platform, histfunc: sum } }\n  - { id: samples_lost, component: figure, visu_type: histogram,\n      dict_kwargs: { x: step, y: samples_lost, color: outcome, histfunc: sum } }\n  - { component: interactive, interactive_type: MultiSelect, column_name: step }\n  - { component: table }\n",
+          "recipe": "stableexpression/dataset_funnel.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "platform",
+                "histfunc": "sum",
+                "x": "step",
+                "y": "samples"
+              },
+              "headline": false,
+              "id": "sample_funnel",
+              "roles": {},
+              "visu_type": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "outcome",
+                "histfunc": "sum",
+                "x": "step",
+                "y": "samples_lost"
+              },
+              "headline": false,
+              "id": "samples_lost",
+              "roles": {},
+              "visu_type": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "step",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "dataset_funnel",
+          "yamlPath": "depictio/catalog/stableexpression/dataset_funnel.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per public dataset the run downloaded: accession, platform, normalisation state and array design, the samples and conditions it came with, its gene ID mapping (ids in, kept, collapsed, rare, unmapped, mapped share), the samples each filter rejected and the samples kept in the merged matrix, the median zero share, missing share and skewness of its samples, and its outcome: merged, no gene mapped, only rare genes, or all samples filtered out.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/statistics/zero_values_filter_stats.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "dataset_summary.tsv",
+          "fixtureContent": "dataset\taccession\tplatform\tnormalisation\tarray_design\toutcome\tconditions\tsamples_downloaded\tsamples_id_mapped\tsamples_after_zero_filter\tsamples_kept\tsamples_rejected_zeros\tsamples_rejected_missing\tkept_share\tgene_ids_in\tgenes_kept\tids_collapsed\tgenes_rare\tids_unmapped\tmapped_share\tzero_share\tmissing_share\tskewness\tdownloaded\tid_mapped\tmerged\tfailure_reason\tmapping_note\nE_GEOD_10070_A_AFFY_44\tE-GEOD-10070\tMicroarray\tNormalised\tA-AFFY-44\tMerged\t4\t13\t13\t13\t13\t0\t0\t1.000000\t21330\t21136\t158\t4\t32\t0.998500\t0.000000\t0.624543\t0.000000\t1\t1\t1\t\t99.85% of genes were mapped (21298 out of 21330). Example of unmapped genes: ['214756_x_at', '218397_at', '205103_at', '227879_at', '231674_at']\nE_GEOD_102133_A_AFFY_141\tE-GEOD-102133\tMicroarray\tNormalised\tA-AFFY-141\tNo gene mapped\t6\t73\t0\t0\t0\t0\t0\t0.000000\t12744\t0\t0\t0\t12744\t0.000000\t\t\t\t1\t0\t0\tNO GENES WERE MAPPED. EXAMPLE OF GENE IDS: ['8173941', '8168737', '8067017', '7922250', '7907183']\t\nE_GEOD_10406_A_AFFY_44\tE-GEOD-10406\tMicroarray\tNormalised\tA-AFFY-44\tMerged\t3\t24\t24\t24\t24\t0\t0\t1.000000\t21330\t21140\t154\t5\t31\t0.998500\t0.000000\t0.624472\t0.000000\t1\t1\t1\t\t99.85% of genes were mapped (21299 out of 21330). Example of unmapped genes: ['217485_x_at', '218397_at', '205103_at', '227879_at', '217109_at']\nE_GEOD_26371_A_AFFY_141\tE-GEOD-26371\tMicroarray\tNormalised\tA-AFFY-141\tNo gene mapped\t2\t6\t0\t0\t0\t0\t0\t0.000000\t22685\t0\t0\t0\t22685\t0.000000\t\t\t\t1\t0\t0\tNO GENES WERE MAPPED. EXAMPLE OF GENE IDS: ['8173941', '8168737', '8067017', '7922250', '7907183']\t\nE_GEOD_103501_rnaseq\tE-GEOD-103501\tRNA-seq\tRaw counts\t\tMerged\t6\t32\t32\t32\t32\t0\t0\t1.000000\t58735\t55718\t0\t1570\t1447\t0.975400\t0.530834\t0.010232\t0.064700\t1\t1\t1\t\t97.54% of genes were mapped (57288 out of 58735). Example of unmapped genes: ['ENSG00000002079', 'ENSG00000112096', 'ENSG00000116883', 'ENSG00000130489', 'ENSG00000130723']\nE_GEOD_150316_rnaseq\tE-GEOD-150316\tRNA-seq\tRaw counts\t\tMerged\t3\t27\t27\t26\t26\t1\t0\t0.963000\t58735\t55718\t0\t1570\t1447\t0.975400\t0.666517\t0.010232\t0.370050\t1\t1\t1\t\t97.54% of genes were mapped (57288 out of 58735). Example of unmapped genes: ['ENSG00000002079', 'ENSG00000112096', 'ENSG00000116883', 'ENSG00000130489', 'ENSG00000130723']\nE_GEOD_58991_rnaseq\tE-GEOD-58991\tRNA-seq\tRaw counts\t\tAll samples filtered out\t3\t9\t9\t0\t0\t9\t0\t0.000000\t58735\t55718\t0\t1570\t1447\t0.975400\t0.989734\t\t\t1\t1\t0\t\t97.54% of genes were mapped (57288 out of 58735). Example of unmapped genes: ['ENSG00000002079', 'ENSG00000112096', 'ENSG00000116883', 'ENSG00000130489', 'ENSG00000130723']\n",
+          "id": "stableexpression_dataset_summary",
+          "mode": "expression/datasets",
+          "name": "Downloaded datasets",
+          "path_glob": "**/statistics/zero_values_filter_stats.csv",
+          "rawYaml": "id: stableexpression_dataset_summary\nname: Downloaded datasets\nmode: expression/datasets\ndescription: >-\n  One row per public dataset the run downloaded: accession, platform,\n  normalisation state and array design, the samples and conditions it came with,\n  its gene ID mapping (ids in, kept, collapsed, rare, unmapped, mapped share),\n  the samples each filter rejected and the samples kept in the merged matrix,\n  the median zero share, missing share and skewness of its samples, and its\n  outcome: merged, no gene mapped, only rare genes, or all samples filtered out.\nfind:\n  path_glob: \"**/statistics/zero_values_filter_stats.csv\"\nrecipe: stableexpression/dataset_summary.py\nfixture: dataset_summary.tsv\nrenders_as:\n  # Datasets through the pipeline's steps, as attrition: downloaded, ID-mapped,\n  # merged.\n  - { id: dataset_attrition, component: card, column: downloaded, aggregation: sum,\n      secondary_layout: attrition, attrition_cols: [id_mapped, merged], headline: true }\n  - { id: sample_attrition, component: card, column: samples_downloaded, aggregation: sum,\n      secondary_layout: attrition, attrition_cols: [samples_id_mapped, samples_after_zero_filter, samples_kept] }\n  - { id: dataset_outcomes, component: card, column: dataset, aggregation: count, secondary_layout: donut, breakdown_col: outcome }\n  - { id: mapped_share_card, component: card, column: mapped_share, aggregation: median, secondary_layout: histogram }\n  - { id: samples_per_dataset, component: figure, visu_type: histogram, dict_kwargs: { x: samples_kept, color: platform } }\n  - id: dataset_plane\n    component: advanced_viz\n    kind: scatter_xy\n    roles: { x: samples_kept, y: missing_share, label: accession, color: platform }\n  - { component: interactive, interactive_type: MultiSelect, column_name: outcome }\n  - { component: interactive, interactive_type: MultiSelect, column_name: platform }\n  - { id: dataset_table, component: table, row_selection_enabled: true, row_selection_column: dataset }\n  - id: dataset_record\n    component: advanced_viz\n    kind: record_card\n    roles: { id: dataset, title: accession }\n",
+          "recipe": "stableexpression/dataset_summary.py",
+          "renders_as": [
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [
+                "id_mapped",
+                "merged"
+              ],
+              "column": "downloaded",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": true,
+              "id": "dataset_attrition",
+              "roles": {},
+              "secondary_layout": "attrition"
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [
+                "samples_id_mapped",
+                "samples_after_zero_filter",
+                "samples_kept"
+              ],
+              "column": "samples_downloaded",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "sample_attrition",
+              "roles": {},
+              "secondary_layout": "attrition"
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "outcome",
+              "column": "dataset",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "dataset_outcomes",
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "mapped_share",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "mapped_share_card",
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "platform",
+                "x": "samples_kept"
+              },
+              "headline": false,
+              "id": "samples_per_dataset",
+              "roles": {},
+              "visu_type": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "dataset_plane",
+              "kind": "scatter_xy",
+              "roles": {
+                "color": "platform",
+                "label": "accession",
+                "x": "samples_kept",
+                "y": "missing_share"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "outcome",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "platform",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "dataset_table",
+              "roles": {},
+              "row_selection_column": "dataset",
+              "row_selection_enabled": true
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "dataset_record",
+              "kind": "record_card",
+              "roles": {
+                "id": "dataset",
+                "title": "accession"
+              }
+            }
+          ],
+          "slug": "dataset_summary",
+          "yamlPath": "depictio/catalog/stableexpression/dataset_summary.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per candidate gene (the candidates of each expression section): the stability score (lower is more stable), its rank within the section and over every candidate, the four measures behind it (Normfinder stability value, geNorm M, coefficient of variation, robust MAD-based CV), each normalised to 0-1, the score split into its weighted parts plus the missing-value penalty, and the gene's expression level, measured share and platforms.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/reporting/all_genes_summary.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "gene_stability.tsv",
+          "fixtureContent": "gene_id\tgene_name\tgene_symbol\tdescription\tsection\tsection_index\tsection_rank\toverall_rank\trank_weight\tstability_score\tnormfinder_stability\tgenorm_m\tcv\trobust_cv\tnormfinder_norm\tgenorm_norm\tcv_norm\trobust_cv_norm\tmissing_penalty\tnormfinder_part\tgenorm_part\tcv_part\trobust_cv_part\tmean\tmedian\tmeasured_share\tzero_share\texpression_percentile\texpression_level\tplatforms\tsource_ids\trnaseq_cv\tmicroarray_cv\nENSG00000198804\tMT-CO1\tMT-CO1\tmitochondrially encoded cytochrome c oxidase I\tSection 01\t1\t1\t201\t0.004975\t0.827987\t0.000066\t0.001832\t0.000690\t0.000192\t0.110778\t0.154911\t0.292254\t0.108894\t0.661278\t0.027695\t0.038728\t0.073064\t0.027224\t0.999663\t0.999813\t0.309540\t0.000000\t99.000000\tVery high expression\tRNA-seq only\t1\t0.001115\t\nENSG00000198938\tMT-CO3\tMT-CO3\tmitochondrially encoded cytochrome c oxidase III\tSection 01\t1\t2\t241\t0.004149\t0.880477\t0.000081\t0.002070\t0.000945\t0.000104\t0.155689\t0.257897\t0.404489\t0.058723\t0.661278\t0.038922\t0.064474\t0.101122\t0.014681\t0.999651\t0.999858\t0.309540\t0.000000\t99.000000\tVery high expression\tRNA-seq only\t1\t0.001550\t\nENSG00000121766\tZCCHC17\tZCCHC17\tzinc finger CCHC-type containing 17\tSection 02\t2\t1\t35\t0.028571\t0.638396\t0.012670\t1.043058\t0.080872\t0.065145\t0.667590\t0.475041\t0.821513\t0.589441\t0.000000\t0.166898\t0.118760\t0.205378\t0.147360\t0.791287\t0.788478\t0.914299\t0.001386\t88.000000\tMedium range\tBoth platforms\t6\t0.107698\t0.065815\nENSG00000158019\tBABAM2\tBABAM2\tBRISC and BRCA1 A complex member 2\tSection 02\t2\t2\t36\t0.027778\t0.641531\t0.015010\t0.696624\t0.083321\t0.068701\t0.805431\t0.259715\t0.846918\t0.621727\t0.008083\t0.201358\t0.064929\t0.211729\t0.155432\t0.806131\t0.812381\t0.992608\t0.000462\t89.000000\tMedium range\tBoth platforms\t7\t0.085470\t0.075015\nENSG00000293473\tCENPBD1P\tCENPBD1P\tCENPB DNA-binding domain containing 1; pseudogene\tSection 03\t3\t1\t165\t0.006061\t0.781919\t0.011972\t0.319352\t0.085792\t0.068115\t0.602146\t0.029016\t0.686224\t0.455402\t0.338722\t0.150536\t0.007254\t0.171556\t0.113850\t0.636998\t0.631821\t0.604528\t0.000000\t75.000000\tMedium range\tMicroarray only\t5\t\t0.102125\nENSG00000291317\tTMEM276\tTMEM276\ttransmembrane protein 276\tSection 03\t3\t2\t258\t0.003876\t0.899552\t0.011985\t0.318776\t0.090619\t0.075557\t0.602858\t0.028781\t0.725553\t0.505222\t0.433948\t0.150715\t0.007195\t0.181388\t0.126305\t0.678244\t0.664547\t0.517441\t0.000000\t79.000000\tMedium range\tMicroarray only\t3\t\t0.100216\nENSG00000241346\tSNRPCP11\tSNRPCP11\tsmall nuclear ribonucleoprotein polypeptide C pseudogene 11\tSection 04\t4\t1\t105\t0.009524\t0.731761\t0.011472\t0.337294\t0.094157\t0.080018\t0.487170\t0.019917\t0.546183\t0.293578\t0.395049\t0.121792\t0.004979\t0.136546\t0.073395\t0.546770\t0.547460\t0.553015\t0.000000\t67.000000\tMedium range\tMicroarray only\t3\t\t0.115218\nENSG00000307358\tENSG00000307358\t\tnovel transcript\tSection 04\t4\t2\t135\t0.007407\t0.756885\t0.008377\t0.325701\t0.088452\t0.078040\t0.342246\t0.016623\t0.512204\t0.286297\t0.467542\t0.085561\t0.004156\t0.128051\t0.071574\t0.522942\t0.518391\t0.486717\t0.000000\t65.000000\tMedium range\tMicroarray only\t2\t\t0.103989\nENSG00000280222\tENSG00000280222\t\tTEC\tSection 05\t5\t1\t220\t0.004545\t0.850046\t0.009890\t0.209283\t0.109080\t0.093520\t0.499276\t0.326262\t0.561524\t0.432923\t0.395049\t0.124819\t0.081565\t0.140381\t0.108231\t0.424051\t0.426861\t0.553015\t0.000000\t57.000000\tMedium range\tMicroarray only\t3\t\t0.129445\nENSG00000278987\tENSG00000278987\t\tTEC\tSection 05\t5\t2\t263\t0.003802\t0.903346\t0.009833\t0.210810\t0.103064\t0.086750\t0.496102\t0.332528\t0.528220\t0.401522\t0.463753\t0.124025\t0.083132\t0.132055\t0.100380\t0.419959\t0.420411\t0.490182\t0.000000\t56.000000\tMedium range\tMicroarray only\t3\t\t0.122223\nENSG00000278864\tENSG00000278864\t\tnovel transcript\tSection 06\t6\t1\t185\t0.005405\t0.811294\t0.011311\t0.284260\t0.140826\t0.111133\t0.524492\t0.282156\t0.527705\t0.330628\t0.395049\t0.131123\t0.070539\t0.131926\t0.082657\t0.322850\t0.321822\t0.553015\t0.000000\t47.000000\tMedium range\tMicroarray only\t3\t\t0.174774\nENSG00000279030\tENSG00000279030\t\tnovel transcript\tSection 06\t6\t2\t232\t0.004310\t0.860621\t0.010726\t0.295996\t0.161096\t0.148494\t0.494981\t0.314881\t0.610123\t0.442304\t0.395049\t0.123745\t0.078720\t0.152531\t0.110576\t0.326508\t0.321561\t0.553015\t0.000000\t48.000000\tMedium range\tMicroarray only\t3\t\t0.184944\nENSG00000226499\tENSG00000226499\t\tribosomal protein S2 (RPS2) pseudogene\tSection 07\t7\t1\t492\t0.002033\t0.996092\t0.000740\t0.222239\t0.012885\t0.000473\t0.000000\t0.000000\t0.000000\t0.000530\t0.995959\t0.000000\t0.000000\t0.000000\t0.000132\t0.131060\t0.131062\t0.003465\t0.000000\t31.000000\tMedium range\tMicroarray only\t2\t\t0.218893\nENSG00000279386\tENSG00000279386\t\tTEC\tSection 07\t7\t2\t503\t0.001988\t0.998102\t0.000769\t0.222264\t0.014206\t0.000342\t0.002833\t0.000086\t0.005654\t0.000000\t0.995959\t0.000708\t0.000022\t0.001414\t0.000000\t0.195663\t0.195651\t0.003465\t0.000000\t37.000000\tMedium range\tMicroarray only\t2\t\t0.241234\nENSG00000279065\tENSG00000279065\t\tTEC\tSection 08\t8\t1\t44\t0.022727\t0.662160\t0.009409\t1.940769\t0.299125\t0.236486\t0.364450\t0.022099\t0.344526\t0.337370\t0.395049\t0.091112\t0.005525\t0.086131\t0.084343\t0.117804\t0.114543\t0.553015\t0.000000\t29.000000\tMedium range\tMicroarray only\t3\t\t0.366573\nENSG00000279589\tENSG00000279589\t\tnovel transcript\tSection 08\t8\t2\t53\t0.018868\t0.674080\t0.008382\t1.998913\t0.343385\t0.256762\t0.320270\t0.029105\t0.400368\t0.366382\t0.395049\t0.080067\t0.007276\t0.100092\t0.091595\t0.078682\t0.076820\t0.553015\t0.000000\t24.000000\tMedium range\tMicroarray only\t3\t\t0.440542\nENSG00000251329\tLINC02353\tLINC02353\tlong intergenic non-protein coding RNA 2353\tSection 09\t9\t1\t1\t1.000000\t0.469985\t0.010540\t6.100199\t1.175613\t1.130435\t0.327041\t0.072541\t0.511109\t0.762126\t0.051781\t0.081760\t0.018135\t0.127777\t0.190531\t0.044844\t0.044182\t0.866944\t0.306005\t18.000000\tMedium range\tBoth platforms\t4\t9.474005\t0.812444\nENSG00000249521\tLINC02114\tLINC02114\tlong intergenic non-protein coding RNA 2114\tSection 09\t9\t2\t2\t0.500000\t0.476627\t0.009105\t6.010570\t1.150694\t1.291610\t0.271867\t0.056639\t0.499884\t0.870994\t0.051781\t0.067967\t0.014160\t0.124971\t0.217749\t0.038946\t0.035319\t0.866944\t0.306697\t17.000000\tMedium range\tBoth platforms\t4\t10.278484\t0.715258\nENSG00000225797\tUBDP1\tUBDP1\tubiquitin D pseudogene 1\tSection 10\t10\t1\t46\t0.021739\t0.665868\t0.004041\t7.618174\t1.035141\t0.518302\t0.296546\t0.297200\t0.147489\t0.342041\t0.395049\t0.074136\t0.074300\t0.036872\t0.085510\t0.010973\t0.008528\t0.553015\t0.001386\t8.000000\tLow expression\tMicroarray only\t3\t\t1.229939\nENSG00000261182\tLINC03121\tLINC03121\tlong intergenic non-protein coding RNA 3121\tSection 10\t10\t2\t47\t0.021277\t0.666311\t0.005205\t9.684543\t2.046982\t1.482600\t0.447676\t0.608907\t0.383354\t1.000000\t0.056327\t0.111919\t0.152227\t0.095838\t0.250000\t0.011743\t0.008018\t0.862786\t0.307159\t8.000000\tLow expression\tBoth platforms\t3\t11.485059\t0.897094\n",
+          "id": "stableexpression_gene_stability",
+          "mode": "expression/stability",
+          "name": "Candidate gene stability",
+          "path_glob": "**/reporting/all_genes_summary.csv",
+          "rawYaml": "id: stableexpression_gene_stability\nname: Candidate gene stability\nmode: expression/stability\ndescription: >-\n  One row per candidate gene (the candidates of each expression section): the\n  stability score (lower is more stable), its rank within the section and over\n  every candidate, the four measures behind it (Normfinder stability value,\n  geNorm M, coefficient of variation, robust MAD-based CV), each normalised to\n  0-1, the score split into its weighted parts plus the missing-value penalty,\n  and the gene's expression level, measured share and platforms.\nfind:\n  path_glob: \"**/reporting/all_genes_summary.csv\"\nrecipe: stableexpression/gene_stability.py\nfixture: gene_stability.tsv\nrenders_as:\n  # Two of the four measures against each other: they agree for a gene stable\n  # by every account, and a gene good by one only stands off the diagonal.\n  - id: measure_agreement\n    component: advanced_viz\n    kind: scatter_xy\n    roles: { x: normfinder_stability, y: genorm_m, label: gene_name, color: section }\n  - id: candidate_record\n    component: advanced_viz\n    kind: record_card\n    roles: { id: gene_id, title: gene_name }\n  - { id: candidate_count, component: card, column: gene_id, aggregation: count, secondary_layout: histogram, headline: true }\n  - { id: best_score, component: card, column: stability_score, aggregation: min, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }\n  - { id: candidate_measured, component: card, column: measured_share, aggregation: median, secondary_layout: histogram }\n  - { id: score_by_section, component: figure, visu_type: box, dict_kwargs: { x: section, y: stability_score, color: section } }\n  - { component: interactive, interactive_type: MultiSelect, column_name: section }\n  - { component: interactive, interactive_type: MultiSelect, column_name: expression_level }\n  - { component: interactive, interactive_type: RangeSlider, column_name: stability_score }\n  - { id: candidate_table, component: table, row_selection_enabled: true, row_selection_column: gene_id }\n",
+          "recipe": "stableexpression/gene_stability.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "measure_agreement",
+              "kind": "scatter_xy",
+              "roles": {
+                "color": "section",
+                "label": "gene_name",
+                "x": "normfinder_stability",
+                "y": "genorm_m"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "candidate_record",
+              "kind": "record_card",
+              "roles": {
+                "id": "gene_id",
+                "title": "gene_name"
+              }
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "gene_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": true,
+              "id": "candidate_count",
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregation": "min",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "stability_score",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": true,
+              "id": "best_score",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "measured_share",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "candidate_measured",
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "section",
+                "x": "section",
+                "y": "stability_score"
+              },
+              "headline": false,
+              "id": "score_by_section",
+              "roles": {},
+              "visu_type": "box"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "section",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "expression_level",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "stability_score",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "RangeSlider",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "candidate_table",
+              "roles": {},
+              "row_selection_column": "gene_id",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "gene_stability",
+          "yamlPath": "depictio/catalog/stableexpression/gene_stability.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per gene of the merged expression matrix: mean, median, standard deviation, MAD and both coefficients of variation over the samples that measured it, the share of samples that measured it and the share that read zero, its expression section, percentile and level, whether it was a candidate, which platforms measured it, the per-platform mean and CV, and how many source ids (probes, transcripts) map onto it.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/reporting/all_genes_summary.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "gene_statistics.tsv",
+          "fixtureContent": "gene_id\tgene_name\tgene_symbol\tdescription\tsection\tsection_index\texpression_percentile\texpression_level\tcandidate\tmean\tmedian\tstandard_deviation\tmad\tcv\trobust_cv\tmeasured_share\tzero_share\tplatforms\tsource_ids\trnaseq_mean\trnaseq_cv\tmicroarray_mean\tmicroarray_cv\nENSG00000121089\tNACA3P\tNACA3P\tNACA family member 3; pseudogene\tSection 01\t1\t99.000000\tVery high expression\tCandidate\t0.982318\t0.982390\t0.000872\t0.000032\t0.000888\t0.000048\t0.015015\t0.000000\tMicroarray only\t2\t\t\t0.980388\t0.006116\nENSG00000001631\tKRIT1\tKRIT1\tKRIT1 ankyrin repeat containing\tSection 02\t2\t84.000000\tMedium range\tCandidate\t0.734613\t0.735706\t0.052540\t0.023519\t0.071520\t0.047395\t0.309540\t0.001848\tRNA-seq only\t1\t0.727518\t0.111734\t\t\nENSG00000117262\tGPR89A\tGPR89A\tG protein-coupled receptor 89A\tSection 03\t3\t73.000000\tMedium range\tCandidate\t0.614757\t0.618479\t0.072225\t0.026944\t0.117486\t0.064589\t0.309540\t0.008083\tRNA-seq only\t1\t0.618975\t0.200229\t\t\nENSG00000123870\tZNF137P\tZNF137P\tzinc finger protein 137; pseudogene\tSection 04\t4\t62.000000\tMedium range\tCandidate\t0.484918\t0.484918\t0.001751\t0.000212\t0.003612\t0.000648\t0.003927\t0.000000\tMicroarray only\t2\t\t\t0.485143\t0.056939\nENSG00000122872\tARL4AP1\tARL4AP1\tADP ribosylation factor like GTPase 4A pseudogene 1\tSection 05\t5\t50.000000\tMedium range\tCandidate\t0.357374\t0.348530\t0.062151\t0.012816\t0.173910\t0.054518\t0.051282\t0.000000\tMicroarray only\t2\t\t\t0.380264\t0.371795\nENSG00000119440\tLCN1P1\tLCN1P1\tlipocalin 1 pseudogene 1\tSection 06\t6\t43.000000\tMedium range\tCandidate\t0.261555\t0.259833\t0.012864\t0.005728\t0.049182\t0.032686\t0.028644\t0.000000\tMicroarray only\t2\t\t\t0.276229\t0.206327\nENSG00000166408\tOR5P1P\tOR5P1P\tolfactory receptor family 5 subfamily P member 1 pseudogene\tSection 07\t7\t37.000000\tMedium range\tCandidate\t0.195426\t0.194710\t0.042135\t0.023611\t0.215604\t0.179786\t0.051282\t0.000000\tMicroarray only\t2\t\t\t0.242543\t0.544372\nENSG00000129845\tTTTY1\tTTTY1\ttestis expressed transcript; Y-linked 1\tSection 08\t8\t29.000000\tMedium range\tCandidate\t0.116319\t0.159752\t0.079835\t0.014442\t0.686344\t0.134035\t0.403788\t0.309238\tBoth platforms\t2\t0.000749\t26.034456\t0.174220\t0.253073\nENSG00000103426\tCORO7-PAM16\tCORO7-PAM16\tCORO7-PAM16 readthrough\tSection 09\t9\t19.000000\tMedium range\tCandidate\t0.045616\t0.023168\t0.096429\t0.011979\t2.113949\t0.766560\t0.309540\t0.264665\tRNA-seq only\t1\t0.071538\t2.300805\t\t\nENSG00000102076\tOPN1LW\tOPN1LW\topsin 1; long wave sensitive\tSection 10\t10\t9.000000\tLow expression\tCandidate\t0.014540\t0.011850\t0.051989\t0.000289\t3.575522\t0.036144\t0.309540\t0.312702\tRNA-seq only\t1\t0.018475\t5.023684\t\t\nENSG00000000419\tDPM1\tDPM1\tdolichyl-phosphate mannosyltransferase subunit 1; catalytic\tSection 01\t1\t95.000000\tVery high expression\tNot a candidate\t0.902616\t0.936817\t0.093351\t0.028901\t0.103423\t0.045738\t1.000000\t0.001386\tBoth platforms\t4\t0.858745\t0.091246\t0.922297\t0.100670\nENSG00000001036\tFUCA2\tFUCA2\talpha-L-fucosidase 2\tSection 01\t1\t90.000000\tHigh expression\tNot a candidate\t0.811294\t0.838868\t0.108524\t0.064017\t0.133766\t0.113142\t0.914299\t0.000693\tBoth platforms\t4\t0.853776\t0.094714\t0.787054\t0.151409\nENSG00000001084\tGCLC\tGCLC\tglutamate-cysteine ligase catalytic subunit\tSection 01\t1\t90.000000\tHigh expression\tNot a candidate\t0.819249\t0.854629\t0.127685\t0.073251\t0.155856\t0.127075\t1.000000\t0.001617\tBoth platforms\t6\t0.883352\t0.093530\t0.790489\t0.169192\nENSG00000001629\tANKIB1\tANKIB1\tankyrin repeat and IBR domain containing 1\tSection 01\t1\t91.000000\tHigh expression\tNot a candidate\t0.831153\t0.854013\t0.098708\t0.034077\t0.118760\t0.059159\t0.914299\t0.000693\tBoth platforms\t7\t0.859028\t0.074635\t0.825652\t0.130667\n",
+          "id": "stableexpression_gene_statistics",
+          "mode": "expression/gene-statistics",
+          "name": "Gene expression statistics",
+          "path_glob": "**/reporting/all_genes_summary.csv",
+          "rawYaml": "id: stableexpression_gene_statistics\nname: Gene expression statistics\nmode: expression/gene-statistics\ndescription: >-\n  One row per gene of the merged expression matrix: mean, median, standard\n  deviation, MAD and both coefficients of variation over the samples that\n  measured it, the share of samples that measured it and the share that read\n  zero, its expression section, percentile and level, whether it was a\n  candidate, which platforms measured it, the per-platform mean and CV, and how\n  many source ids (probes, transcripts) map onto it.\nfind:\n  path_glob: \"**/reporting/all_genes_summary.csv\"\nrecipe: stableexpression/gene_statistics.py\nfixture: gene_statistics.tsv\nrenders_as:\n  # Spread against level, every gene: the candidates sit on the lower edge of\n  # each section's band.\n  - id: expression_plane\n    component: advanced_viz\n    kind: scatter_xy\n    roles: { x: mean, y: cv, label: gene_name, color: candidate }\n  - { id: gene_count, component: card, column: gene_id, aggregation: count, secondary_layout: donut, breakdown_col: candidate, headline: true }\n  - { id: gene_measured_share, component: card, column: measured_share, aggregation: median, secondary_layout: histogram }\n  - { id: level_composition, component: card, column: gene_id, aggregation: count, secondary_layout: composition, breakdown_col: expression_level }\n  - { id: cv_by_section, component: figure, visu_type: box, dict_kwargs: { x: section, y: cv, color: candidate } }\n  - { component: figure, visu_type: histogram, dict_kwargs: { x: source_ids } }\n  - { component: interactive, interactive_type: MultiSelect, column_name: expression_level }\n  - { component: interactive, interactive_type: MultiSelect, column_name: platforms }\n  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }\n",
+          "recipe": "stableexpression/gene_statistics.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "expression_plane",
+              "kind": "scatter_xy",
+              "roles": {
+                "color": "candidate",
+                "label": "gene_name",
+                "x": "mean",
+                "y": "cv"
+              }
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "candidate",
+              "column": "gene_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": true,
+              "id": "gene_count",
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "measured_share",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "gene_measured_share",
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "expression_level",
+              "column": "gene_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "level_composition",
+              "roles": {},
+              "secondary_layout": "composition"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "candidate",
+                "x": "section",
+                "y": "cv"
+              },
+              "headline": false,
+              "id": "cv_by_section",
+              "roles": {},
+              "visu_type": "box"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "x": "source_ids"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "expression_level",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "platforms",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {},
+              "row_selection_column": "gene_id",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "gene_statistics",
+          "yamlPath": "depictio/catalog/stableexpression/gene_statistics.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Where the gene ids of every downloaded dataset went, one row per dataset and fate: kept as a gene of the merged matrix, collapsed (one of several ids of the same gene), dropped as a rare gene (seen in too few datasets), or not mapped to an Ensembl gene. The four fates add up to the ids the dataset came with.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/statistics/id_mapping_stats.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "id_mapping.tsv",
+          "fixtureContent": "fate_key\tdataset\taccession\tplatform\toutcome\tfate\tfate_order\tgene_ids\tshare\nE_GEOD_10070_A_AFFY_44|Kept\tE_GEOD_10070_A_AFFY_44\tE-GEOD-10070\tMicroarray\tMerged\tKept\t1\t21136\t0.990900\nE_GEOD_10070_A_AFFY_44|Collapsed\tE_GEOD_10070_A_AFFY_44\tE-GEOD-10070\tMicroarray\tMerged\tCollapsed\t2\t158\t0.007400\nE_GEOD_10070_A_AFFY_44|Rare gene\tE_GEOD_10070_A_AFFY_44\tE-GEOD-10070\tMicroarray\tMerged\tRare gene\t3\t4\t0.000200\nE_GEOD_10070_A_AFFY_44|Unmapped\tE_GEOD_10070_A_AFFY_44\tE-GEOD-10070\tMicroarray\tMerged\tUnmapped\t4\t32\t0.001500\nE_GEOD_102133_A_AFFY_141|Kept\tE_GEOD_102133_A_AFFY_141\tE-GEOD-102133\tMicroarray\tNo gene mapped\tKept\t1\t0\t0.000000\nE_GEOD_102133_A_AFFY_141|Collapsed\tE_GEOD_102133_A_AFFY_141\tE-GEOD-102133\tMicroarray\tNo gene mapped\tCollapsed\t2\t0\t0.000000\nE_GEOD_102133_A_AFFY_141|Rare gene\tE_GEOD_102133_A_AFFY_141\tE-GEOD-102133\tMicroarray\tNo gene mapped\tRare gene\t3\t0\t0.000000\nE_GEOD_102133_A_AFFY_141|Unmapped\tE_GEOD_102133_A_AFFY_141\tE-GEOD-102133\tMicroarray\tNo gene mapped\tUnmapped\t4\t12744\t1.000000\nE_GEOD_58991_rnaseq|Kept\tE_GEOD_58991_rnaseq\tE-GEOD-58991\tRNA-seq\tAll samples filtered out\tKept\t1\t55718\t0.948600\nE_GEOD_58991_rnaseq|Collapsed\tE_GEOD_58991_rnaseq\tE-GEOD-58991\tRNA-seq\tAll samples filtered out\tCollapsed\t2\t0\t0.000000\nE_GEOD_58991_rnaseq|Rare gene\tE_GEOD_58991_rnaseq\tE-GEOD-58991\tRNA-seq\tAll samples filtered out\tRare gene\t3\t1570\t0.026700\nE_GEOD_58991_rnaseq|Unmapped\tE_GEOD_58991_rnaseq\tE-GEOD-58991\tRNA-seq\tAll samples filtered out\tUnmapped\t4\t1447\t0.024600\n",
+          "id": "stableexpression_id_mapping",
+          "mode": "expression/id-mapping",
+          "name": "Gene ID mapping",
+          "path_glob": "**/statistics/id_mapping_stats.csv",
+          "rawYaml": "id: stableexpression_id_mapping\nname: Gene ID mapping\nmode: expression/id-mapping\ndescription: >-\n  Where the gene ids of every downloaded dataset went, one row per dataset and\n  fate: kept as a gene of the merged matrix, collapsed (one of several ids of\n  the same gene), dropped as a rare gene (seen in too few datasets), or not\n  mapped to an Ensembl gene. The four fates add up to the ids the dataset came\n  with.\nfind:\n  path_glob: \"**/statistics/id_mapping_stats.csv\"\nrecipe: stableexpression/id_mapping.py\nfixture: id_mapping.tsv\nrenders_as:\n  - { id: id_fates, component: card, column: gene_ids, aggregation: sum, secondary_layout: composition, breakdown_col: fate }\n  - { id: id_fate_bars, component: figure, visu_type: bar, dict_kwargs: { x: dataset, y: share, color: fate } }\n  - { id: id_fate_by_platform, component: figure, visu_type: histogram,\n      dict_kwargs: { x: platform, y: gene_ids, color: fate, histfunc: sum } }\n  - { component: interactive, interactive_type: MultiSelect, column_name: fate }\n  - { component: table }\n",
+          "recipe": "stableexpression/id_mapping.py",
+          "renders_as": [
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "fate",
+              "column": "gene_ids",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "id_fates",
+              "roles": {},
+              "secondary_layout": "composition"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "fate",
+                "x": "dataset",
+                "y": "share"
+              },
+              "headline": false,
+              "id": "id_fate_bars",
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "fate",
+                "histfunc": "sum",
+                "x": "platform",
+                "y": "gene_ids"
+              },
+              "headline": false,
+              "id": "id_fate_by_platform",
+              "roles": {},
+              "visu_type": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "fate",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "id_mapping",
+          "yamlPath": "depictio/catalog/stableexpression/id_mapping.yaml"
+        },
+        {
+          "columns": {},
+          "description": "The stability score of every candidate gene split into its parts, one row per gene and part: each of the four normalised measures (Normfinder, geNorm M, coefficient of variation, robust CV) times its weight, and the penalty for the samples where the gene was not measured. A gene's parts add up to its score.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/reporting/all_genes_summary.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "score_components.tsv",
+          "fixtureContent": "part_key\tgene_id\tgene_name\tsection\tsection_index\tsection_rank\toverall_rank\tstability_score\tcomponent\tcomponent_order\tcontribution\tnormalised_value\nENSG00000198804|Normfinder\tENSG00000198804\tMT-CO1\tSection 01\t1\t1\t201\t0.827987\tNormfinder\t1\t0.027695\t0.110778\nENSG00000198804|geNorm M\tENSG00000198804\tMT-CO1\tSection 01\t1\t1\t201\t0.827987\tgeNorm M\t2\t0.038728\t0.154911\nENSG00000198804|Coefficient of variation\tENSG00000198804\tMT-CO1\tSection 01\t1\t1\t201\t0.827987\tCoefficient of variation\t3\t0.073064\t0.292254\nENSG00000198804|Robust CV\tENSG00000198804\tMT-CO1\tSection 01\t1\t1\t201\t0.827987\tRobust CV\t4\t0.027224\t0.108894\nENSG00000198804|Missing values\tENSG00000198804\tMT-CO1\tSection 01\t1\t1\t201\t0.827987\tMissing values\t5\t0.661278\t0.661278\nENSG00000121766|Normfinder\tENSG00000121766\tZCCHC17\tSection 02\t2\t1\t35\t0.638396\tNormfinder\t1\t0.166898\t0.667590\nENSG00000121766|geNorm M\tENSG00000121766\tZCCHC17\tSection 02\t2\t1\t35\t0.638396\tgeNorm M\t2\t0.118760\t0.475041\nENSG00000121766|Coefficient of variation\tENSG00000121766\tZCCHC17\tSection 02\t2\t1\t35\t0.638396\tCoefficient of variation\t3\t0.205378\t0.821513\nENSG00000121766|Robust CV\tENSG00000121766\tZCCHC17\tSection 02\t2\t1\t35\t0.638396\tRobust CV\t4\t0.147360\t0.589441\nENSG00000121766|Missing values\tENSG00000121766\tZCCHC17\tSection 02\t2\t1\t35\t0.638396\tMissing values\t5\t0.000000\t0.000000\nENSG00000293473|Normfinder\tENSG00000293473\tCENPBD1P\tSection 03\t3\t1\t165\t0.781919\tNormfinder\t1\t0.150536\t0.602146\nENSG00000293473|geNorm M\tENSG00000293473\tCENPBD1P\tSection 03\t3\t1\t165\t0.781919\tgeNorm M\t2\t0.007254\t0.029016\nENSG00000293473|Coefficient of variation\tENSG00000293473\tCENPBD1P\tSection 03\t3\t1\t165\t0.781919\tCoefficient of variation\t3\t0.171556\t0.686224\nENSG00000293473|Robust CV\tENSG00000293473\tCENPBD1P\tSection 03\t3\t1\t165\t0.781919\tRobust CV\t4\t0.113850\t0.455402\nENSG00000293473|Missing values\tENSG00000293473\tCENPBD1P\tSection 03\t3\t1\t165\t0.781919\tMissing values\t5\t0.338722\t0.338722\n",
+          "id": "stableexpression_score_components",
+          "mode": "expression/stability-components",
+          "name": "Stability score components",
+          "path_glob": "**/reporting/all_genes_summary.csv",
+          "rawYaml": "id: stableexpression_score_components\nname: Stability score components\nmode: expression/stability-components\ndescription: >-\n  The stability score of every candidate gene split into its parts, one row per\n  gene and part: each of the four normalised measures (Normfinder, geNorm M,\n  coefficient of variation, robust CV) times its weight, and the penalty for\n  the samples where the gene was not measured. A gene's parts add up to its\n  score.\nfind:\n  path_glob: \"**/reporting/all_genes_summary.csv\"\nrecipe: stableexpression/score_components.py\nfixture: score_components.tsv\nrenders_as:\n  # The mean part per section, stacked: the height is the section's mean score\n  # and the segments say what drives it.\n  - { id: components_by_section, component: figure, visu_type: histogram,\n      dict_kwargs: { x: section, y: contribution, color: component, histfunc: avg } }\n  - { component: interactive, interactive_type: MultiSelect, column_name: component }\n  - { component: table }\n",
+          "recipe": "stableexpression/score_components.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "component",
+                "histfunc": "avg",
+                "x": "section",
+                "y": "contribution"
+              },
+              "headline": false,
+              "id": "components_by_section",
+              "roles": {},
+              "visu_type": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "component",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "score_components",
+          "yamlPath": "depictio/catalog/stableexpression/score_components.yaml"
+        },
+        {
+          "columns": {},
+          "description": "The best-ranked candidates of every expression section (25 per section by default, as many as the pipeline's report draws), one row per gene: stability score, rank within the section and over every candidate, and the box statistics of its normalised expression over the samples that measured it (quartiles, Tukey whisker ends, mean, standard deviation, minimum, maximum, samples measured and their share of the cohort). Computed from the merged matrix before imputation, so thousands of samples ship as one row per gene.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/reporting/all_genes_summary.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "stable_gene_distribution.tsv",
+          "fixtureContent": "gene_id\tgene_name\tsection\tsection_index\tsection_rank\toverall_rank\tstability_score\tq1\tmedian\tq3\tlower\tupper\tmean\tsd\tmin\tmax\tn_measured\tn_samples\tmeasured_share\texpression_level\nENSG00000198804\tMT-CO1\tSection 01\t1\t1\t201\t0.827987\t0.999572\t0.999796\t0.999960\t0.999003\t1.000000\t0.999575\t0.001114\t0.984173\t1.000000\t1341\t4330\t0.309700\tVery high expression\nENSG00000198938\tMT-CO3\tSection 01\t1\t2\t241\t0.880477\t0.999621\t0.999873\t0.999952\t0.999145\t1.000000\t0.999517\t0.001549\t0.981595\t1.000000\t1341\t4330\t0.309700\tVery high expression\nENSG00000121766\tZCCHC17\tSection 02\t2\t1\t35\t0.638396\t0.754199\t0.788319\t0.823642\t0.650311\t0.927478\t0.791468\t0.065170\t0.000000\t0.972831\t3959\t4330\t0.914300\tMedium range\nENSG00000158019\tBABAM2\tSection 02\t2\t2\t36\t0.641531\t0.764920\t0.812678\t0.842438\t0.649264\t0.957941\t0.806992\t0.066671\t0.000000\t0.996017\t4298\t4330\t0.992600\tMedium range\nENSG00000293473\tCENPBD1P\tSection 03\t3\t1\t165\t0.781919\t0.604418\t0.633722\t0.668491\t0.508756\t0.763623\t0.638183\t0.065174\t0.299149\t0.971639\t2618\t4330\t0.604600\tMedium range\nENSG00000291317\tTMEM276\tSection 03\t3\t2\t258\t0.899552\t0.632877\t0.662089\t0.707692\t0.523537\t0.819729\t0.675730\t0.067719\t0.446133\t0.934424\t2241\t4330\t0.517600\tMedium range\nENSG00000241346\tSNRPCP11\tSection 04\t4\t1\t105\t0.731761\t0.515350\t0.557773\t0.586576\t0.409191\t0.690883\t0.550273\t0.063401\t0.292051\t0.920570\t2395\t4330\t0.553100\tMedium range\nENSG00000307358\tENSG00000307358\tSection 04\t4\t2\t135\t0.756885\t0.499802\t0.531940\t0.558265\t0.412491\t0.645447\t0.531068\t0.055225\t0.351413\t0.904719\t2108\t4330\t0.486800\tMedium range\nENSG00000280222\tENSG00000280222\tSection 05\t5\t1\t220\t0.850046\t0.396137\t0.432380\t0.462539\t0.296974\t0.561815\t0.430293\t0.055699\t0.259000\t0.801696\t2395\t4330\t0.553100\tMedium range\nENSG00000278987\tENSG00000278987\tSection 05\t5\t2\t263\t0.903346\t0.390024\t0.420753\t0.449402\t0.301562\t0.536987\t0.418180\t0.051111\t0.228228\t0.637482\t2123\t4330\t0.490300\tMedium range\nENSG00000278864\tENSG00000278864\tSection 06\t6\t1\t185\t0.811294\t0.289289\t0.319706\t0.353142\t0.195195\t0.447164\t0.322784\t0.056414\t0.118118\t0.780623\t2395\t4330\t0.553100\tMedium range\nENSG00000279030\tENSG00000279030\tSection 06\t6\t2\t232\t0.860621\t0.300108\t0.332701\t0.364327\t0.204497\t0.460341\t0.336086\t0.062157\t0.158407\t0.802938\t2395\t4330\t0.553100\tMedium range\nENSG00000226499\tENSG00000226499\tSection 07\t7\t1\t492\t0.996092\t0.112899\t0.131527\t0.143847\t0.087573\t0.179725\t0.130832\t0.028638\t0.087573\t0.179725\t16\t4330\t0.003700\tMedium range\nENSG00000279386\tENSG00000279386\tSection 07\t7\t2\t503\t0.998102\t0.162100\t0.192539\t0.208145\t0.126346\t0.271280\t0.195698\t0.047209\t0.126346\t0.300230\t16\t4330\t0.003700\tMedium range\nENSG00000279065\tENSG00000279065\tSection 08\t8\t1\t44\t0.662160\t0.089729\t0.118309\t0.147251\t0.008360\t0.233233\t0.120882\t0.044312\t0.008360\t0.302888\t2395\t4330\t0.553100\tMedium range\nENSG00000279589\tENSG00000279589\tSection 08\t8\t2\t53\t0.674080\t0.055055\t0.075388\t0.098388\t0.000876\t0.162771\t0.079305\t0.034937\t0.000876\t0.274448\t2395\t4330\t0.553100\tMedium range\nENSG00000251329\tLINC02353\tSection 09\t9\t1\t1\t0.469985\t0.000000\t0.035035\t0.062877\t0.000000\t0.155266\t0.040721\t0.055234\t0.000000\t0.869190\t3754\t4330\t0.867000\tMedium range\nENSG00000249521\tLINC02114\tSection 09\t9\t2\t2\t0.476627\t0.000000\t0.028462\t0.055484\t0.000000\t0.138216\t0.036207\t0.047179\t0.000000\t0.598626\t3754\t4330\t0.867000\tMedium range\nENSG00000225797\tUBDP1\tSection 10\t10\t1\t46\t0.665868\t0.003577\t0.007226\t0.014769\t0.000000\t0.031403\t0.012079\t0.014856\t0.000000\t0.119295\t2395\t4330\t0.553100\tLow expression\nENSG00000261182\tLINC03121\tSection 10\t10\t2\t47\t0.666311\t0.000000\t0.005409\t0.014907\t0.000000\t0.037241\t0.010989\t0.025688\t0.000000\t0.677743\t3736\t4330\t0.862800\tLow expression\n",
+          "id": "stableexpression_stable_gene_distribution",
+          "mode": "expression/stability-distribution",
+          "name": "Most stable genes, box statistics",
+          "path_glob": "**/reporting/all_genes_summary.csv",
+          "rawYaml": "id: stableexpression_stable_gene_distribution\nname: Most stable genes, box statistics\nmode: expression/stability-distribution\ndescription: >-\n  The best-ranked candidates of every expression section (25 per section by\n  default, as many as the pipeline's report draws), one row per gene: stability\n  score, rank within the section and over every candidate, and the box\n  statistics of its normalised expression over the samples that measured it\n  (quartiles, Tukey whisker ends, mean, standard deviation, minimum, maximum,\n  samples measured and their share of the cohort). Computed from the merged\n  matrix before imputation, so thousands of samples ship as one row per gene.\nfind:\n  path_glob: \"**/reporting/all_genes_summary.csv\"\nrecipe: stableexpression/stable_gene_distribution.py\nfixture: stable_gene_distribution.tsv\nrenders_as:\n  # The pipeline's own view: each gene's spread across the cohort beside the\n  # score that ranked it. Ranked within the section, so the first ten rows are\n  # the best gene of each of ten sections, the next ten the second best.\n  - id: stability_ranking\n    component: advanced_viz\n    kind: ranked_distribution\n    roles: { feature_id: gene_id, score: stability_score, rank: section_rank, label: gene_name, group: section,\n             q1: q1, median: median, q3: q3, lower: lower, upper: upper, mean: mean }\n  - { id: ranked_gene_count, component: card, column: gene_id, aggregation: nunique, secondary_layout: histogram }\n  - { id: ranked_measured_share, component: card, column: measured_share, aggregation: median, secondary_layout: histogram }\n  - { id: ranked_iqr_figure, component: figure, visu_type: scatter, dict_kwargs: { x: median, y: stability_score, color: section } }\n  - { component: interactive, interactive_type: MultiSelect, column_name: section }\n  - { component: interactive, interactive_type: RangeSlider, column_name: stability_score }\n  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }\n",
+          "recipe": "stableexpression/stable_gene_distribution.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "stability_ranking",
+              "kind": "ranked_distribution",
+              "roles": {
+                "feature_id": "gene_id",
+                "group": "section",
+                "label": "gene_name",
+                "lower": "lower",
+                "mean": "mean",
+                "median": "median",
+                "q1": "q1",
+                "q3": "q3",
+                "rank": "section_rank",
+                "score": "stability_score",
+                "upper": "upper"
+              }
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "gene_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "ranked_gene_count",
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "measured_share",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "ranked_measured_share",
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "section",
+                "x": "median",
+                "y": "stability_score"
+              },
+              "headline": false,
+              "id": "ranked_iqr_figure",
+              "roles": {},
+              "visu_type": "scatter"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "section",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "stability_score",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "RangeSlider",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {},
+              "row_selection_column": "gene_id",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "stable_gene_distribution",
+          "yamlPath": "depictio/catalog/stableexpression/stable_gene_distribution.yaml"
+        },
+        {
+          "columns": {},
+          "description": "The normalised expression of the very top candidates of each expression section (2 per section by default), one row per gene and sample that measured it, with the sample's dataset. The long form lets a dashboard recompute each gene's box (or violin) from the samples in view, a platform or a dataset at a time, which the pre-aggregated box statistics cannot.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/merged_data/all_counts.parquet",
+            "path_glob_alt": []
+          },
+          "fixture": "stable_gene_values.tsv",
+          "fixtureContent": "value_key\tgene_id\tgene_name\tsection\tsection_index\tsection_rank\toverall_rank\tstability_score\tsample\tdataset\tvalue\nENSG00000198804|E_GEOD_103501_rnaseq_SRR6006875\tENSG00000198804\tMT-CO1\tSection 01\t1\t1\t201\t0.827987\tE_GEOD_103501_rnaseq_SRR6006875\tE_GEOD_103501_rnaseq\t0.999364\nENSG00000198804|E_GEOD_103501_rnaseq_SRR6006876\tENSG00000198804\tMT-CO1\tSection 01\t1\t1\t201\t0.827987\tE_GEOD_103501_rnaseq_SRR6006876\tE_GEOD_103501_rnaseq\t0.999309\nENSG00000198804|E_GEOD_103501_rnaseq_SRR6006877\tENSG00000198804\tMT-CO1\tSection 01\t1\t1\t201\t0.827987\tE_GEOD_103501_rnaseq_SRR6006877\tE_GEOD_103501_rnaseq\t0.999355\nENSG00000198804|E_GEOD_103501_rnaseq_SRR6006878\tENSG00000198804\tMT-CO1\tSection 01\t1\t1\t201\t0.827987\tE_GEOD_103501_rnaseq_SRR6006878\tE_GEOD_103501_rnaseq\t0.999399\nENSG00000198804|E_GEOD_103501_rnaseq_SRR6006879\tENSG00000198804\tMT-CO1\tSection 01\t1\t1\t201\t0.827987\tE_GEOD_103501_rnaseq_SRR6006879\tE_GEOD_103501_rnaseq\t0.999393\nENSG00000198804|E_GEOD_103501_rnaseq_SRR6006880\tENSG00000198804\tMT-CO1\tSection 01\t1\t1\t201\t0.827987\tE_GEOD_103501_rnaseq_SRR6006880\tE_GEOD_103501_rnaseq\t0.999371\nENSG00000121766|E_GEOD_10070_A_AFFY_44_MCF10A_Monolayer_1\tENSG00000121766\tZCCHC17\tSection 02\t2\t1\t35\t0.638396\tE_GEOD_10070_A_AFFY_44_MCF10A_Monolayer_1\tE_GEOD_10070_A_AFFY_44\t0.765695\nENSG00000121766|E_GEOD_10070_A_AFFY_44_MCF10A_Monolayer_2\tENSG00000121766\tZCCHC17\tSection 02\t2\t1\t35\t0.638396\tE_GEOD_10070_A_AFFY_44_MCF10A_Monolayer_2\tE_GEOD_10070_A_AFFY_44\t0.777375\nENSG00000121766|E_GEOD_10070_A_AFFY_44_MCF10A_Monolayer_3\tENSG00000121766\tZCCHC17\tSection 02\t2\t1\t35\t0.638396\tE_GEOD_10070_A_AFFY_44_MCF10A_Monolayer_3\tE_GEOD_10070_A_AFFY_44\t0.754660\nENSG00000121766|E_GEOD_10070_A_AFFY_44_MCF10A_Transwell.Base_1\tENSG00000121766\tZCCHC17\tSection 02\t2\t1\t35\t0.638396\tE_GEOD_10070_A_AFFY_44_MCF10A_Transwell.Base_1\tE_GEOD_10070_A_AFFY_44\t0.724040\nENSG00000121766|E_GEOD_10070_A_AFFY_44_MCF10A_Transwell.Base_2\tENSG00000121766\tZCCHC17\tSection 02\t2\t1\t35\t0.638396\tE_GEOD_10070_A_AFFY_44_MCF10A_Transwell.Base_2\tE_GEOD_10070_A_AFFY_44\t0.727747\nENSG00000121766|E_GEOD_10070_A_AFFY_44_MCF10A_Transwell.Base_3\tENSG00000121766\tZCCHC17\tSection 02\t2\t1\t35\t0.638396\tE_GEOD_10070_A_AFFY_44_MCF10A_Transwell.Base_3\tE_GEOD_10070_A_AFFY_44\t0.713459\n",
+          "id": "stableexpression_stable_gene_values",
+          "mode": "expression/stability-values",
+          "name": "Most stable genes, sample values",
+          "path_glob": "**/merged_data/all_counts.parquet",
+          "rawYaml": "id: stableexpression_stable_gene_values\nname: Most stable genes, sample values\nmode: expression/stability-values\ndescription: >-\n  The normalised expression of the very top candidates of each expression\n  section (2 per section by default), one row per gene and sample that measured\n  it, with the sample's dataset. The long form lets a dashboard recompute each\n  gene's box (or violin) from the samples in view, a platform or a dataset at a\n  time, which the pre-aggregated box statistics cannot.\nfind:\n  path_glob: \"**/merged_data/all_counts.parquet\"\nrecipe: stableexpression/stable_gene_values.py\nfixture: stable_gene_values.tsv\nrenders_as:\n  - id: stability_violins\n    component: advanced_viz\n    kind: ranked_distribution\n    roles: { feature_id: gene_id, score: stability_score, rank: section_rank, label: gene_name, group: section, value: value }\n  - { id: value_box, component: figure, visu_type: box, dict_kwargs: { x: gene_name, y: value, color: section } }\n  - { component: card, column: sample, aggregation: nunique, secondary_layout: histogram }\n  - { component: interactive, interactive_type: MultiSelect, column_name: dataset }\n",
+          "recipe": "stableexpression/stable_gene_values.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "stability_violins",
+              "kind": "ranked_distribution",
+              "roles": {
+                "feature_id": "gene_id",
+                "group": "section",
+                "label": "gene_name",
+                "rank": "section_rank",
+                "score": "stability_score",
+                "value": "value"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "section",
+                "x": "gene_name",
+                "y": "value"
+              },
+              "headline": false,
+              "id": "value_box",
+              "roles": {},
+              "visu_type": "box"
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "sample",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {},
+              "secondary_layout": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "dataset",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            }
+          ],
+          "slug": "stable_gene_values",
+          "yamlPath": "depictio/catalog/stableexpression/stable_gene_values.yaml"
+        }
+      ],
+      "stage": "quantification"
+    },
+    {
       "biotools_url": "https://bio.tools/star",
       "description": "Spliced Transcripts Alignment to a Reference: aligns RNA-seq reads across splice junctions, reports where each read went (uniquely mapped, multi-mapped or unmapped and why) and collapses the junctions it crossed.",
       "dir": "depictio/catalog/star",
