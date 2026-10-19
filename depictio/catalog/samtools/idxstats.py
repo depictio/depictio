@@ -41,7 +41,7 @@ import re
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
-from depictio.recipes.lib.sample_ids import strip_stage_suffixes
+from depictio.recipes.lib.sample_ids import ALIGNMENT_STAGE_TOKENS, strip_stage_suffixes
 
 SOURCE_PATH_COL = "source_path"
 
@@ -92,7 +92,7 @@ def _sample_and_stage(path: str) -> tuple[str, str]:
     """``reports/samtools/S1/S1.md.idxstats`` -> ``("S1", "md")``."""
     name = str(path).replace("\\", "/").rsplit("/", 1)[-1]
     stem = re.sub(r"\.idxstats$", "", name)
-    sample = strip_stage_suffixes(stem)
+    sample = strip_stage_suffixes(stem, extra=ALIGNMENT_STAGE_TOKENS)
     stage = stem[len(sample) :].lstrip(".")
     return sample, stage
 

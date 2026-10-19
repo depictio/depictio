@@ -18,7 +18,7 @@ import polars as pl
 import pytest
 
 from depictio.recipes import execute_recipe
-from depictio.recipes.lib.sample_ids import strip_stage_suffixes
+from depictio.recipes.lib.sample_ids import ALIGNMENT_STAGE_TOKENS, strip_stage_suffixes
 from depictio.recipes.lib.star_logs import parse_log_final, sample_from_path
 
 LOG_FINAL = """                                 Started job on |\tJun 01 16:30:34
@@ -217,7 +217,12 @@ def test_idxstats_classes_contigs_and_keeps_the_duplicate_marked_stage(run_dir: 
     ],
 )
 def test_rnavar_stage_tokens_are_stripped(name: str, sample: str) -> None:
-    assert strip_stage_suffixes(name) == sample
+    assert strip_stage_suffixes(name, extra=ALIGNMENT_STAGE_TOKENS) == sample
+
+
+def test_alignment_stages_stay_out_of_the_shared_tokens() -> None:
+    """The CLI's MultiQC sample mapping reads the shared list: `S1_2.md` keeps its `_2`."""
+    assert strip_stage_suffixes("S1_2.md") == "S1_2.md"
 
 
 def test_picard_report_name_drops_the_md_stage(tmp_path: Path) -> None:
