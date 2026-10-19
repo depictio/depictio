@@ -1,0 +1,30 @@
+id: stableexpression_stable_gene_distribution
+name: Most stable genes, box statistics
+mode: expression/stability-distribution
+description: >-
+  The best-ranked candidates of every expression section (25 per section by
+  default, as many as the pipeline's report draws), one row per gene: stability
+  score, rank within the section and over every candidate, and the box
+  statistics of its normalised expression over the samples that measured it
+  (quartiles, Tukey whisker ends, mean, standard deviation, minimum, maximum,
+  samples measured and their share of the cohort). Computed from the merged
+  matrix before imputation, so thousands of samples ship as one row per gene.
+find:
+  path_glob: "**/reporting/all_genes_summary.csv"
+recipe: stableexpression/stable_gene_distribution.py
+fixture: stable_gene_distribution.tsv
+renders_as:
+  # The pipeline's own view: each gene's spread across the cohort beside the
+  # score that ranked it. Ranked within the section, so the first ten rows are
+  # the best gene of each of ten sections, the next ten the second best.
+  - id: stability_ranking
+    component: advanced_viz
+    kind: ranked_distribution
+    roles: { feature_id: gene_id, score: stability_score, rank: section_rank, label: gene_name, group: section,
+             q1: q1, median: median, q3: q3, lower: lower, upper: upper, mean: mean }
+  - { id: ranked_gene_count, component: card, column: gene_id, aggregation: nunique, secondary_layout: histogram }
+  - { id: ranked_measured_share, component: card, column: measured_share, aggregation: median, secondary_layout: histogram }
+  - { id: ranked_iqr_figure, component: figure, visu_type: scatter, dict_kwargs: { x: median, y: stability_score, color: section } }
+  - { component: interactive, interactive_type: MultiSelect, column_name: section }
+  - { component: interactive, interactive_type: RangeSlider, column_name: stability_score }
+  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }

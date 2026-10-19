@@ -1,0 +1,516 @@
+# nf-core/stableexpression Template v1.1.0 - the most stable genes across public expression data
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio ingest --template nf-core/stableexpression/1.1.0 --data-root /path/to/results \
+#     [--var METADATA_FILE=/path/to/annotated_design.csv]
+#
+# Validated against the nf-core/stableexpression AWS megatest results
+#   s3://nf-core-awsmegatests/stableexpression/results-d6b1654c4784332cbad71f1d928cc8b75a77272f/
+# a complete test_full run (Homo sapiens) written 2026-07-16 by a development
+# build (`v1.0.0-gd6b1654`), pinned because the 1.1.0 release prefix holds
+# pipeline_info/ only and the 1.0.0 release has no prefix at all;
+# megatest.yaml says why in full. Nothing below is specific to that run.
+#
+# What the run publishes, and so what this template reads (paths under DATA_ROOT):
+#   reporting/all_genes_summary.csv     every gene: expression statistics, section,
+#                                       and for the candidates the four stability
+#                                       measures, score and rank (stableexpression/gene_*,
+#                                       score_components)
+#   merged_data/all_counts.parquet      the merged gene x sample matrix before
+#                                       imputation (stable_gene_distribution, _values)
+#   merged_data/whole_design.csv        dataset, condition and sample of every sample
+#                                       (the samples hub, METADATA_FILE)
+#   datasets/<platform>/<normalisation>/<dataset>/<dataset>.design.csv
+#                                       one per downloaded dataset: its platform and
+#                                       normalisation state are the directory names
+#   statistics/{id_mapping_stats,zero_values_filter_stats,missing_values_filter_stats}.csv
+#   statistics/{ratio_zeros,ratio_nulls,skewness}.csv, ratio_nulls_per_sample.csv
+#   errors/renaming_failure_reasons.tsv, warnings/renaming_warning_reasons.tsv
+#                                       the dataset collections (dataset_summary,
+#                                       dataset_funnel, id_mapping)
+# Not read: the per-step dataset matrices under datasets/ (debugging copies, 3 GB on
+# the megatest), all_counts.imputed.parquet (point the two distribution recipes'
+# `counts` source at it to draw the imputed values the pipeline's own report
+# draws), id_mapping/*.csv, annotation/ and accessions/. The 1.1.0 MultiQC report
+# (reporting/multiqc_report.html, custom content only) and Dash app
+# (reporting/dash_app/) were not published by the pinned run (both tasks failed),
+# so the template declares no MultiQC collection and has no MultiQC tab.
+#
+# Design. stableexpression takes a species, not a samplesheet: the samples are
+# those of the public datasets it downloaded, and their design is
+# merged_data/whole_design.csv (batch = dataset, condition = a group local to its
+# dataset). METADATA_FILE points there by default; a copy with extra columns
+# (tissue, treatment) can replace it and GROUP_COL can name any of them. The
+# samples hub derives platform (the default GROUP_COL), normalisation and the
+# dataset's accession, and marks the samples a filter removed.
+#
+# Genes have no sample axis: the stability score is a statistic of the whole
+# cohort, so the left-panel sample filters narrow the dataset tabs and the
+# per-sample values of the Ranking tab, never the scores themselves.
+#
+# Routes (RULES.md section 13):
+#   - --skip_id_mapping: no statistics/id_mapping_stats.csv, so id_mapping is
+#     optional and NO_ID_MAPPING prunes it with the ID mapping tab;
+#   - nb_sections / nb_candidates_per_section change the number of sections and of
+#     candidates per section, nothing else; TOP_PER_SECTION and
+#     VALUES_PER_SECTION set how many genes per section the two distribution
+#     collections carry.
+# ============================================================================
+template:
+  template_id: "nf-core/stableexpression/1.1.0"
+  description: "nf-core/stableexpression template: the most stable candidate genes of each expression section, ranked by stability score with the spread of their normalised expression across every public sample, the four measures behind the score, how stability varies with expression level, and what each downloaded dataset went through (platform, gene ID mapping, sample filters)."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "stableexpression output directory (reporting/, merged_data/, datasets/, statistics/, errors/, warnings/, id_mapping/, pipeline_info/)."
+      required: true
+    - name: "METADATA_FILE"
+      description: "Sample design table: batch (the dataset), condition and sample, plus any annotation column. Defaults to the pipeline's merged_data/whole_design.csv."
+      required: false
+      default: "{DATA_ROOT}/merged_data/whole_design.csv"
+    - name: "METADATA_ID_COL"
+      description: "Design id column. stableexpression fixes it to sample; recorded for the metadata auto-detection."
+      required: false
+      default: "sample"
+    - name: "GROUP_COL"
+      description: "Sample hub column the dashboard groups and filters samples by. Defaults to platform (Microarray or RNA-seq), derived from the dataset directories; name an annotation column of METADATA_FILE instead."
+      required: false
+      default: "platform"
+    - name: "GROUP_COL_DISPLAY"
+      description: "Reader-facing label of GROUP_COL, used in filter and card titles."
+      required: false
+      default: "Platform"
+    - name: "TOP_PER_SECTION"
+      description: "Candidates per expression section summarised as box statistics (stableexpression_stable_gene_distribution). Default 25, as many as the pipeline's report draws."
+      required: false
+      default: "25"
+    - name: "VALUES_PER_SECTION"
+      description: "Candidates per expression section kept as one row per sample (stableexpression_stable_gene_values), the boxes the sample filters can redraw. Default 2; each gene adds a row per sample."
+      required: false
+      default: "2"
+    - name: "NO_ID_MAPPING"
+      description: "Set (--var NO_ID_MAPPING=true) for a run with --skip_id_mapping: no ID mapping statistics are written, so the ID mapping collection and tab are removed."
+      required: false
+  # Variables used when materialising the bundled reference dataset.
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/merged_data/whole_design.csv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "platform"
+      GROUP_COL_DISPLAY: "Platform"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "hook_url"  # nf-core runs put a live Slack webhook here
+          - "email*"
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Datasets"
+        key_patterns: ["species", "keywords", "datasets", "accessions*", "excluded_accessions*", "skip_fetch_eatlas_accessions", "fetch_geo_accessions", "platform", "download_only", "random_sampling_*"]
+      - group: "Gene IDs"
+        key_patterns: ["gprofiler_target_db", "gene_id_mapping", "gene_metadata", "skip_id_mapping", "skip_cleaning_gene_ids", "min_occurrence_*", "gene_length", "gff"]
+      - group: "Filters and normalisation"
+        key_patterns: ["max_zero_ratio", "max_null_ratio*", "normalisation_method", "quantile_norm_target_distrib", "missing_value_imputer"]
+      - group: "Stability"
+        key_patterns: ["nb_sections", "nb_candidates_per_section", "stability_score_weights", "skip_genorm", "target_genes*"]
+      - group: "Run context"
+        key_patterns: ["input", "outdir", "version", "publish_dir_mode", "monochrome_logs", "validate_params", "help*", "show_hidden", "pipelines_testdata_base_path", "trace_report_suffix", "config_profile_*", "custom_config_*", "multiqc_*", "max_multiqc_email_size", "plaintext_email"]
+    highlight:
+      - "species"
+      - "normalisation_method"
+      - "max_zero_ratio"
+      - "max_null_ratio"
+      - "nb_sections"
+      - "nb_candidates_per_section"
+      - "stability_score_weights"
+      - "missing_value_imputer"
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    - if_var_present: "NO_ID_MAPPING"
+      remove_dc_tags: ["stableexpression_id_mapping"]
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "stableexpression Gene Stability"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "stableexpression"
+    version: "1.1.0"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/stableexpression"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Hub: the public samples, one row per sample
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "The run's public samples, one row per sample, with their dataset, platform and normalisation, and whether they reached the merged matrix"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/stableexpression/samples.py"
+            source_overrides:
+              design:
+                path: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id, as the merged matrix names it (dataset id, then the sample)"
+              "dataset": "Dataset the sample comes from (an Expression Atlas experiment, by array design for microarrays)"
+              "accession": "Accession of the dataset, as the database writes it"
+              "array_design": "Array design of a microarray dataset"
+              "platform": "Microarray or RNA-seq, from the dataset's directory"
+              "normalisation": "Normalised (as published by the database) or Raw counts"
+              "condition": "The sample's condition, prefixed with its dataset (conditions are local to a dataset)"
+              "status": "Analysed (in the merged matrix) or Filtered out (removed by the zero or missing-value filter)"
+              "missing_share": "Share of the merged matrix's genes the sample did not measure"
+
+      # ----------------------------------------------------------------
+      # Datasets, from datasets/*/*/*/*.design.csv and statistics/
+      # ----------------------------------------------------------------
+      - data_collection_tag: "stableexpression_dataset_summary"
+        description: "One row per downloaded dataset: platform, samples, gene ID mapping, the samples each filter removed and its outcome"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "stableexpression/dataset_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "dataset": "Dataset id"
+              "accession": "Accession of the dataset"
+              "platform": "Microarray or RNA-seq"
+              "normalisation": "Normalised or Raw counts, as downloaded"
+              "array_design": "Array design of a microarray dataset"
+              "outcome": "Merged, No gene mapped, Only rare genes, or All samples filtered out"
+              "conditions": "Conditions in the dataset's design"
+              "samples_downloaded": "Samples the dataset came with"
+              "samples_id_mapped": "Samples still in after the gene ID mapping (0 when no gene mapped)"
+              "samples_after_zero_filter": "Samples kept by the zero filter"
+              "samples_kept": "Samples kept by the missing-value filter, those of the merged matrix"
+              "samples_rejected_zeros": "Samples removed for too many zeros"
+              "samples_rejected_missing": "Samples removed for too many missing values"
+              "kept_share": "Samples kept over samples downloaded"
+              "gene_ids_in": "Gene ids (probes, transcripts, genes) the dataset came with"
+              "genes_kept": "Genes of the merged matrix the dataset contributes"
+              "ids_collapsed": "Ids collapsed into another id of the same gene"
+              "genes_rare": "Genes dropped as seen in too few datasets"
+              "ids_unmapped": "Ids g:Profiler could not map to an Ensembl gene"
+              "mapped_share": "Ids mapped to a gene over ids in"
+              "zero_share": "Median share of zero values per sample"
+              "missing_share": "Median share of the merged matrix's genes a sample did not measure"
+              "skewness": "Median skewness of the samples' normalised values"
+              "downloaded": "1 for every downloaded dataset"
+              "id_mapped": "1 when at least one gene id mapped"
+              "merged": "1 when at least one sample reached the merged matrix"
+              "failure_reason": "Why the gene ids did not map"
+              "mapping_note": "The pipeline's note on the mapping (share mapped, example ids)"
+
+      - data_collection_tag: "stableexpression_dataset_funnel"
+        description: "The samples of each dataset at each step: downloaded, ID-mapped, after the zero filter, after the missing-value filter"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "stableexpression/dataset_funnel.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "step_key": "Dataset and step of the row"
+              "dataset": "Dataset id"
+              "platform": "Microarray or RNA-seq"
+              "outcome": "The dataset's outcome"
+              "step": "Downloaded, Gene IDs mapped, Zero filter or Missing-value filter"
+              "step_order": "Order of the step"
+              "samples": "Samples still in after the step"
+              "samples_lost": "Samples lost at the step"
+              "dataset_in": "1 when the dataset still has samples after the step"
+
+      - data_collection_tag: "stableexpression_id_mapping"
+        optional: true  # --skip_id_mapping writes no statistics (NO_ID_MAPPING prunes it)
+        description: "Where each dataset's gene ids went: kept, collapsed, rare gene or unmapped"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "stableexpression/id_mapping.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "fate_key": "Dataset and fate of the row"
+              "dataset": "Dataset id"
+              "accession": "Accession of the dataset"
+              "platform": "Microarray or RNA-seq"
+              "outcome": "The dataset's outcome"
+              "fate": "Kept, Collapsed, Rare gene or Unmapped"
+              "fate_order": "Order of the fate"
+              "gene_ids": "Ids with this fate"
+              "share": "Their share of the dataset's ids"
+
+      # ----------------------------------------------------------------
+      # Genes, from reporting/all_genes_summary.csv
+      # ----------------------------------------------------------------
+      - data_collection_tag: "stableexpression_gene_statistics"
+        description: "Every gene of the merged matrix: expression level, spread, measured share, section and whether it was a candidate"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "stableexpression/gene_statistics.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "gene_id": "Ensembl gene id"
+              "gene_name": "Gene symbol, or the id when there is none"
+              "gene_symbol": "Gene symbol"
+              "description": "Gene description"
+              "section": "Expression section, Section 01 holding the most expressed genes"
+              "section_index": "Number of the section"
+              "expression_percentile": "Percentile of the gene's mean expression"
+              "expression_level": "Very high expression to Very low expression, the pipeline's level"
+              "candidate": "Candidate (scored for stability) or Not a candidate"
+              "mean": "Mean normalised expression (0 to 1) over the samples that measured it"
+              "median": "Median normalised expression"
+              "standard_deviation": "Standard deviation of the normalised expression"
+              "mad": "Median absolute deviation"
+              "cv": "Coefficient of variation"
+              "robust_cv": "Robust coefficient of variation (MAD over median)"
+              "measured_share": "Share of the samples that measured the gene"
+              "zero_share": "Share of the samples where it reads zero"
+              "platforms": "Both platforms, Microarray only or RNA-seq only"
+              "source_ids": "Source ids (probes, transcripts) mapped onto the gene"
+              "rnaseq_mean": "Mean over the RNA-seq samples"
+              "rnaseq_cv": "Coefficient of variation over the RNA-seq samples"
+              "microarray_mean": "Mean over the microarray samples"
+              "microarray_cv": "Coefficient of variation over the microarray samples"
+
+      - data_collection_tag: "stableexpression_gene_stability"
+        description: "Every candidate gene: stability score, ranks, the four measures behind the score and the score split in parts"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "stableexpression/gene_stability.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "gene_id": "Ensembl gene id"
+              "gene_name": "Gene symbol, or the id when there is none"
+              "gene_symbol": "Gene symbol"
+              "description": "Gene description"
+              "section": "Expression section"
+              "section_index": "Number of the section"
+              "section_rank": "Rank within the section, 1 the most stable"
+              "overall_rank": "Rank over every candidate, 1 the most stable"
+              "rank_weight": "1 over the overall rank: weights a text value so it names the most stable gene in view"
+              "stability_score": "Stability score, lower is more stable"
+              "normfinder_stability": "Normfinder stability value"
+              "genorm_m": "geNorm M measure"
+              "cv": "Coefficient of variation"
+              "robust_cv": "Robust coefficient of variation"
+              "normfinder_norm": "Normfinder value normalised to 0-1 over the candidates"
+              "genorm_norm": "geNorm M normalised to 0-1"
+              "cv_norm": "Coefficient of variation normalised to 0-1"
+              "robust_cv_norm": "Robust CV normalised to 0-1"
+              "missing_penalty": "Share of the valid samples that did not measure the gene, added to the score"
+              "normfinder_part": "Normfinder's part of the score (weight times normalised value)"
+              "genorm_part": "geNorm's part of the score"
+              "cv_part": "The coefficient of variation's part of the score"
+              "robust_cv_part": "The robust CV's part of the score"
+              "mean": "Mean normalised expression"
+              "median": "Median normalised expression"
+              "measured_share": "Share of the samples that measured the gene"
+              "zero_share": "Share of the samples where it reads zero"
+              "expression_percentile": "Percentile of the gene's mean expression"
+              "expression_level": "The pipeline's expression level"
+              "platforms": "Both platforms, Microarray only or RNA-seq only"
+              "source_ids": "Source ids mapped onto the gene"
+              "rnaseq_cv": "Coefficient of variation over the RNA-seq samples"
+              "microarray_cv": "Coefficient of variation over the microarray samples"
+
+      - data_collection_tag: "stableexpression_score_components"
+        description: "The stability score of every candidate split into its five parts, one row per gene and part"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "stableexpression/score_components.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "part_key": "Gene and part of the row"
+              "gene_id": "Ensembl gene id"
+              "gene_name": "Gene symbol, or the id"
+              "section": "Expression section"
+              "section_index": "Number of the section"
+              "section_rank": "Rank within the section"
+              "overall_rank": "Rank over every candidate"
+              "stability_score": "Stability score"
+              "component": "Normfinder, geNorm M, Coefficient of variation, Robust CV or Missing values"
+              "component_order": "Order of the part"
+              "contribution": "The part's contribution to the score"
+              "normalised_value": "The measure normalised to 0-1 (the missing share for Missing values)"
+
+      # ----------------------------------------------------------------
+      # Distributions, from merged_data/all_counts.parquet
+      # ----------------------------------------------------------------
+      - data_collection_tag: "stableexpression_stable_gene_distribution"
+        description: "Box statistics of the normalised expression of the best candidates of each section, over every sample that measured them"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "stableexpression/stable_gene_distribution.py"
+            params:
+              top_per_section: "{TOP_PER_SECTION}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "gene_id": "Ensembl gene id"
+              "gene_name": "Gene symbol, or the id"
+              "section": "Expression section"
+              "section_index": "Number of the section"
+              "section_rank": "Rank within the section"
+              "overall_rank": "Rank over every candidate"
+              "stability_score": "Stability score, lower is more stable"
+              "q1": "First quartile of the normalised expression"
+              "median": "Median"
+              "q3": "Third quartile"
+              "lower": "Lower whisker end (furthest value within 1.5 IQR)"
+              "upper": "Upper whisker end"
+              "mean": "Mean"
+              "sd": "Standard deviation"
+              "min": "Minimum"
+              "max": "Maximum"
+              "n_measured": "Samples that measured the gene"
+              "n_samples": "Samples of the merged matrix"
+              "measured_share": "Samples measured over samples of the matrix"
+              "expression_level": "The pipeline's expression level"
+
+      - data_collection_tag: "stableexpression_stable_gene_values"
+        description: "The normalised expression of the top candidates of each section, one row per gene and sample"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "stableexpression/stable_gene_values.py"
+            params:
+              top_per_section: "{VALUES_PER_SECTION}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "value_key": "Gene and sample of the row"
+              "gene_id": "Ensembl gene id"
+              "gene_name": "Gene symbol, or the id"
+              "section": "Expression section"
+              "section_index": "Number of the section"
+              "section_rank": "Rank within the section"
+              "overall_rank": "Rank over every candidate"
+              "stability_score": "Stability score"
+              "sample": "Sample id"
+              "dataset": "Dataset of the sample"
+              "value": "Normalised expression, 0 to 1 (measured values only)"
+
+# ============================================================================
+# LINKS: the samples fan out by sample and by dataset; the gene collections
+# share their section and gene id
+# ============================================================================
+links:
+  - source_dc_tag: "samples"
+    source_column: "dataset"
+    target_dc_tag: "stableexpression_dataset_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "dataset"}
+    description: "Filter the datasets by the samples in view"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "dataset"
+    target_dc_tag: "stableexpression_dataset_funnel"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "dataset"}
+    description: "Filter the sample funnel by the samples in view"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "dataset"
+    target_dc_tag: "stableexpression_id_mapping"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "dataset"}
+    description: "Filter the ID mapping by the samples in view"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "stableexpression_stable_gene_values"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Redraw the per-sample values from the samples in view"
+    enabled: true
+  # A dataset-level pick (outcome, platform) on the dataset table reaches the
+  # funnel and the ID mapping of the same datasets.
+  - source_dc_tag: "stableexpression_dataset_summary"
+    source_column: "dataset"
+    target_dc_tag: "stableexpression_dataset_funnel"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "dataset"}
+    description: "Carry a dataset pick to the sample funnel"
+    enabled: true
+  - source_dc_tag: "stableexpression_dataset_summary"
+    source_column: "dataset"
+    target_dc_tag: "stableexpression_id_mapping"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "dataset"}
+    description: "Carry a dataset pick to the ID mapping"
+    enabled: true
+  # Gene collections: a section pick, or a gene clicked on the ranking, reaches
+  # every collection that holds the gene.
+  - source_dc_tag: "stableexpression_stable_gene_distribution"
+    source_column: "gene_id"
+    target_dc_tag: "stableexpression_stable_gene_values"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_id"}
+    description: "Carry a section or gene pick on the ranking to the per-sample values"
+    enabled: true
+  - source_dc_tag: "stableexpression_gene_stability"
+    source_column: "gene_id"
+    target_dc_tag: "stableexpression_score_components"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_id"}
+    description: "Carry a candidate pick to the score parts"
+    enabled: true
+  - source_dc_tag: "stableexpression_gene_statistics"
+    source_column: "gene_id"
+    target_dc_tag: "stableexpression_gene_stability"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_id"}
+    description: "Carry a gene pick (expression level, platforms) to the candidates"
+    enabled: true
