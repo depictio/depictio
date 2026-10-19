@@ -27115,6 +27115,268 @@
       "stage": "quantification"
     },
     {
+      "biotools_url": "https://bio.tools/optitype",
+      "description": "HLA class I genotypes (HLA-A, -B and -C, two-field alleles) called by integer linear programming over the reads that map to the HLA reference, with the reads each genotype explains and the solver's objective value.",
+      "dir": "depictio/catalog/optitype",
+      "homepage": "https://github.com/FRED-2/OptiType",
+      "id": "optitype",
+      "name": "OptiType",
+      "nf_core_url": null,
+      "outputs": [
+        {
+          "columns": {},
+          "description": "OptiType's optimal HLA class I genotype of each sample, melted long: one row per sample, locus (HLA-A, -B, -C) and haplotype, with the two-field allele normalised to HLA-A*02:01 (the spelling of the epitopeprediction tables, so an allele pick selects the same string there), its allele group, the zygosity of the locus, and the reads and objective of the solution.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/optitype/*/*_result.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "genotypes.tsv",
+          "fixtureContent": "call_id\tsample_id\tlocus\thaplotype\tallele\tallele_group\thla_class\tzygosity\treads\tobjective\nDONOR_1|HLA-A|1\tDONOR_1\tHLA-A\t1\tHLA-A*02:01\tHLA-A*02\tClass I\tHeterozygous\t1450\t1410.85\nDONOR_1|HLA-A|2\tDONOR_1\tHLA-A\t2\tHLA-A*11:01\tHLA-A*11\tClass I\tHeterozygous\t1450\t1410.85\nDONOR_1|HLA-B|1\tDONOR_1\tHLA-B\t1\tHLA-B*44:02\tHLA-B*44\tClass I\tHeterozygous\t1450\t1410.85\nDONOR_1|HLA-B|2\tDONOR_1\tHLA-B\t2\tHLA-B*44:03\tHLA-B*44\tClass I\tHeterozygous\t1450\t1410.85\nDONOR_1|HLA-C|1\tDONOR_1\tHLA-C\t1\tHLA-C*05:01\tHLA-C*05\tClass I\tHeterozygous\t1450\t1410.85\nDONOR_1|HLA-C|2\tDONOR_1\tHLA-C\t2\tHLA-C*16:01\tHLA-C*16\tClass I\tHeterozygous\t1450\t1410.85\nDONOR_2|HLA-A|1\tDONOR_2\tHLA-A\t1\tHLA-A*02:01\tHLA-A*02\tClass I\tHomozygous\t980\t962.36\nDONOR_2|HLA-A|2\tDONOR_2\tHLA-A\t2\tHLA-A*02:01\tHLA-A*02\tClass I\tHomozygous\t980\t962.36\nDONOR_2|HLA-B|1\tDONOR_2\tHLA-B\t1\tHLA-B*07:02\tHLA-B*07\tClass I\tHeterozygous\t980\t962.36\nDONOR_2|HLA-B|2\tDONOR_2\tHLA-B\t2\tHLA-B*35:01\tHLA-B*35\tClass I\tHeterozygous\t980\t962.36\nDONOR_2|HLA-C|1\tDONOR_2\tHLA-C\t1\tHLA-C*04:01\tHLA-C*04\tClass I\tHeterozygous\t980\t962.36\nDONOR_2|HLA-C|2\tDONOR_2\tHLA-C\t2\tHLA-C*07:02\tHLA-C*07\tClass I\tHeterozygous\t980\t962.36\n",
+          "id": "optitype_genotypes",
+          "mode": "genotypes",
+          "name": "HLA class I genotypes",
+          "path_glob": "**/optitype/*/*_result.tsv",
+          "rawYaml": "id: optitype_genotypes\nname: HLA class I genotypes\nmode: genotypes\ndescription: >-\n  OptiType's optimal HLA class I genotype of each sample, melted long: one row\n  per sample, locus (HLA-A, -B, -C) and haplotype, with the two-field allele\n  normalised to HLA-A*02:01 (the spelling of the epitopeprediction tables, so an\n  allele pick selects the same string there), its allele group, the zygosity of\n  the locus, and the reads and objective of the solution.\nfind:\n  path_glob: \"**/optitype/*/*_result.tsv\"\nrecipe: optitype/genotypes.py\nfixture: genotypes.tsv\nrenders_as:\n  # Sample by locus, each cell split into its two haplotypes; an allele click\n  # selects on the normalised allele.\n  - id: genotype_grid\n    component: advanced_viz\n    kind: allele_grid\n    roles: { sample_id: sample_id, locus: locus, allele: allele, haplotype: haplotype, category: hla_class, value: objective, reads: reads }\n  - { id: allele_count, component: card, column: allele, aggregation: nunique, secondary_layout: top_n, breakdown_col: locus, top_n_count: 3, headline: true }\n  - { id: homozygous_loci, component: card, column: call_id, aggregation: count, filter_expr: \"(col('zygosity') == 'Homozygous') & (col('haplotype') == 1)\", secondary_layout: composition, breakdown_col: locus, headline: true }\n  - { id: allele_calls, component: card, column: call_id, aggregation: count, secondary_layout: composition, breakdown_col: zygosity }\n  # Allele frequency within each locus: one trace per locus, each normalised\n  # over its own calls (two per sample).\n  - id: allele_frequency\n    component: figure\n    visu_type: histogram\n    dict_kwargs: { x: allele, color: locus, histnorm: percent }\n  - { component: interactive, interactive_type: MultiSelect, column_name: allele }\n  - { component: interactive, interactive_type: MultiSelect, column_name: locus }\n  - { component: interactive, interactive_type: MultiSelect, column_name: zygosity }\n  - { component: table, row_selection_enabled: true, row_selection_column: call_id }\n",
+          "recipe": "optitype/genotypes.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "genotype_grid",
+              "kind": "allele_grid",
+              "roles": {
+                "allele": "allele",
+                "category": "hla_class",
+                "haplotype": "haplotype",
+                "locus": "locus",
+                "reads": "reads",
+                "sample_id": "sample_id",
+                "value": "objective"
+              }
+            },
+            {
+              "aggregation": "nunique",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "locus",
+              "column": "allele",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": true,
+              "id": "allele_count",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "locus",
+              "column": "call_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "filter_expr": "(col('zygosity') == 'Homozygous') & (col('haplotype') == 1)",
+              "headline": true,
+              "id": "homozygous_loci",
+              "roles": {},
+              "secondary_layout": "composition"
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "zygosity",
+              "column": "call_id",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "allele_calls",
+              "roles": {},
+              "secondary_layout": "composition"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "locus",
+                "histnorm": "percent",
+                "x": "allele"
+              },
+              "headline": false,
+              "id": "allele_frequency",
+              "roles": {},
+              "visu_type": "histogram"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "allele",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "locus",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "zygosity",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {},
+              "row_selection_column": "call_id",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "genotypes",
+          "yamlPath": "depictio/catalog/optitype/genotypes.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per sample from OptiType's optimal solution: the HLA-A, -B and -C allele pairs, the distinct alleles as the ;-separated list an epitopeprediction samplesheet takes, the loci typed and how many are homozygous or heterozygous, the reads the genotype explains, the objective and the objective per read (about 1 minus beta per heterozygous locus, so it reads the zygosity rather than the fit), and with --enumerations the number of solutions and the objective gap to the runner-up.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/optitype/*/*_result.tsv",
+            "path_glob_alt": []
+          },
+          "fixture": "summary.tsv",
+          "fixtureContent": "sample_id\thla_a\thla_b\thla_c\talleles\tdistinct_alleles\ttyped_loci\thomozygous_loci\theterozygous_loci\thomozygous_class\treads\tobjective\tobjective_per_read\tsolutions\trunner_up_gap\nDONOR_1\tHLA-A*02:01 / HLA-A*11:01\tHLA-B*44:02 / HLA-B*44:03\tHLA-C*05:01 / HLA-C*16:01\tHLA-A*02:01;HLA-A*11:01;HLA-B*44:02;HLA-B*44:03;HLA-C*05:01;HLA-C*16:01\t6\t3\t0\t3\tNo homozygous locus\t1450\t1410.85\t0.973\t1\t\nDONOR_2\tHLA-A*02:01 / HLA-A*02:01\tHLA-B*07:02 / HLA-B*35:01\tHLA-C*04:01 / HLA-C*07:02\tHLA-A*02:01;HLA-B*07:02;HLA-B*35:01;HLA-C*04:01;HLA-C*07:02\t5\t3\t1\t2\t1 homozygous locus\t980\t962.36\t0.982\t1\t\nDONOR_3\tHLA-A*03:01 / HLA-A*24:02\tHLA-B*15:01 / HLA-B*18:01\tHLA-C*03:03 / HLA-C*12:03\tHLA-A*03:01;HLA-A*24:02;HLA-B*15:01;HLA-B*18:01;HLA-C*03:03;HLA-C*12:03\t6\t3\t0\t3\tNo homozygous locus\t212\t206.276\t0.973\t2\t2.176\n",
+          "id": "optitype_summary",
+          "mode": "summary",
+          "name": "HLA typing per sample",
+          "path_glob": "**/optitype/*/*_result.tsv",
+          "rawYaml": "id: optitype_summary\nname: HLA typing per sample\nmode: summary\ndescription: >-\n  One row per sample from OptiType's optimal solution: the HLA-A, -B and -C\n  allele pairs, the distinct alleles as the ;-separated list an\n  epitopeprediction samplesheet takes, the loci typed and how many are\n  homozygous or heterozygous, the reads the genotype explains, the objective and\n  the objective per read (about 1 minus beta per heterozygous locus, so it reads\n  the zygosity rather than the fit), and with --enumerations the number of\n  solutions and the objective gap to the runner-up.\nfind:\n  path_glob: \"**/optitype/*/*_result.tsv\"\nrecipe: optitype/summary.py\nfixture: summary.tsv\nrenders_as:\n  - { id: typing_reads, component: card, column: reads, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }\n  - { id: objective_per_read, component: card, column: objective_per_read, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { id: heterozygous_loci, component: card, column: heterozygous_loci, aggregation: median, secondary_layout: gauge, coverage_max: 3 }\n  # The objective sits under the diagonal by beta per heterozygous locus, so\n  # the points split by zygosity.\n  - id: reads_objective\n    component: advanced_viz\n    kind: scatter_xy\n    roles: { x: reads, y: objective, label: sample_id, color: homozygous_class }\n  - { component: figure, visu_type: bar, dict_kwargs: { x: sample_id, y: reads } }\n  - { component: table, row_selection_enabled: true, row_selection_column: sample_id }\n",
+          "recipe": "optitype/summary.py",
+          "renders_as": [
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "reads",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": true,
+              "id": "typing_reads",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "objective_per_read",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "objective_per_read",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [],
+              "attrition_cols": [],
+              "column": "heterozygous_loci",
+              "columns": [],
+              "component": "card",
+              "coverage_max": 3.0,
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "heterozygous_loci",
+              "roles": {},
+              "secondary_layout": "gauge"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "reads_objective",
+              "kind": "scatter_xy",
+              "roles": {
+                "color": "homozygous_class",
+                "label": "sample_id",
+                "x": "reads",
+                "y": "objective"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "x": "sample_id",
+                "y": "reads"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {},
+              "row_selection_column": "sample_id",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "summary",
+          "yamlPath": "depictio/catalog/optitype/summary.yaml"
+        }
+      ],
+      "stage": "immune"
+    },
+    {
       "biotools_url": "https://bio.tools/orthofinder",
       "description": "Phylogenetic orthology inference for comparative genomics: groups the genes of several species into orthogroups, infers orthologues and the rooted species tree.",
       "dir": "depictio/catalog/orthofinder",

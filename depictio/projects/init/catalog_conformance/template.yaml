@@ -3574,6 +3574,34 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: 20a160f07800aab4dc5b0102
+    data_collection_tag: optitype_genotypes
+    description: 'HLA class I genotypes: recipe output (optitype/genotypes.py), seeded from the catalog
+      fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: optitype/genotypes.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 18caa160bf3356f89a36c21b
+    data_collection_tag: optitype_summary
+    description: 'HLA typing per sample: recipe output (optitype/summary.py), seeded from the catalog
+      fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: optitype/summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: db418643eaca0ac50c40dee5
     data_collection_tag: orthofinder_orthogroup_matrix
     description: 'Orthogroups shared between species: recipe output (orthofinder/orthogroup_matrix.py),
