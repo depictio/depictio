@@ -149,6 +149,7 @@ describe('splitPanels', () => {
       'domain_architecture',
       'pae_matrix',
       'ramachandran',
+      'allele_grid',
     ];
 
     it('places every model kind in its bucket, and no kind twice', () => {

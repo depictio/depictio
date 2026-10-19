@@ -51,6 +51,9 @@ SELECTION_EMITTING_KINDS: dict[str, tuple[str, ...]] = {
     "domain_architecture": ("selection_column", "label_col", "=label"),
     "pae_matrix": ("position_col", "=position"),
     "ramachandran": ("position_col", "=position"),
+    # An allele half picks the allele (a sample label picks the sample, on the
+    # same filter key). Opt-in, like the other non-protein kinds.
+    "allele_grid": ("selection_column", "allele_col", "=allele"),
 }
 
 # Kinds whose pick reaches a record card as a `residue_selection` pair (an

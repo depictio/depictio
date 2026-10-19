@@ -255,6 +255,10 @@ STATIC_IDS = {
             "protein_family_hits_demo": "646b0f3c1e4a2d7f8e5b8de2",
             "protein_pae_demo": "646b0f3c1e4a2d7f8e5b8de3",
             "protein_ss_demo": "646b0f3c1e4a2d7f8e5b8de4",
+            # Allele grid tab (the 8dax block): the HLA genotypes and the
+            # epitope predictions an allele pick narrows. 8da0 is the dashboard.
+            "allele_grid_demo": "646b0f3c1e4a2d7f8e5b8da1",
+            "epitope_predictions_demo": "646b0f3c1e4a2d7f8e5b8da2",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
@@ -313,6 +317,7 @@ STATIC_IDS = {
             # collections.
             "advanced_viz_protein_families": "646b0f3c1e4a2d7f8e5b8de0",
             "advanced_viz_protein_quality": "646b0f3c1e4a2d7f8e5b8de5",
+            "advanced_viz_allele_grid": "646b0f3c1e4a2d7f8e5b8da0",
             "advanced_viz_benchmark_pr": "646b0f3c1e4a2d7f8e5b8d62",
             "advanced_viz_benchmark_confusion": "646b0f3c1e4a2d7f8e5b8d63",
             "advanced_viz_benchmark_ci": "646b0f3c1e4a2d7f8e5b8d64",

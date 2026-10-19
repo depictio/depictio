@@ -4108,6 +4108,127 @@ class RamachandranConfig(_BaseVizConfig):
 
 
 # ---------------------------------------------------------------------------
+# Immunogenetics
+# ---------------------------------------------------------------------------
+
+#: How many nomenclature fields an allele keeps on screen: 1 is the allele
+#: group ("A*02"), 2 the protein ("A*02:01", OptiType's resolution), 3 the
+#: synonymous coding change, 4 the non-coding one.
+AlleleResolution = Literal[1, 2, 3, 4]
+
+#: The per-sample bars an allele grid can draw beside it.
+AlleleSideBar = Literal["value", "reads"]
+
+
+def _default_allele_side_bars() -> list[AlleleSideBar]:
+    """Both bars; the renderer draws only those whose column is bound."""
+    return ["value", "reads"]
+
+
+class AlleleGridConfig(_BaseVizConfig):
+    """Sample x locus grid of diploid genotypes (HLA typing).
+
+    One row per allele call: OptiType's A1 / A2 / B1 / ... columns melted long,
+    or LILAC and arcasHLA as they are written. Each cell is split in two
+    halves, one per haplotype, coloured by allele: the allele group (first
+    field) picks a hue family and the full allele a shade inside it, so every
+    A*02 reads as one family across the cohort. A homozygous locus draws as
+    one merged cell with a marker. The colours are the dashboard's
+    ``category_colors`` for the allele column first.
+    """
+
+    viz_kind: Literal["allele_grid"] = "allele_grid"
+
+    sample_id_col: str = Field(default="sample_id", description="Sample column (one grid row each)")
+    locus_col: str = Field(default="locus", description="Locus column (one grid column each)")
+    allele_col: str = Field(default="allele", description="Allele call, in HLA nomenclature")
+    haplotype_col: str | None = Field(
+        default=None,
+        description="Optional haplotype (1 / 2) of the call; null pairs a locus's rows in table order",
+    )
+    category_col: str | None = Field(
+        default=None,
+        description="Optional locus class (HLA class I / II), grouping the columns under a header",
+    )
+    value_col: str | None = Field(
+        default=None,
+        description="Optional per-sample score (OptiType objective), drawn as a side bar",
+    )
+    reads_col: str | None = Field(
+        default=None,
+        description="Optional per-sample read support, drawn as a side bar or as cell opacity",
+    )
+
+    resolution: AlleleResolution = Field(
+        default=2,
+        description=(
+            "Nomenclature fields kept on screen: 1 (A*02), 2 (A*02:01), 3 or 4. "
+            "Two calls that agree at this resolution are drawn as homozygous."
+        ),
+    )
+    locus_order: list[str] | None = Field(
+        default=None,
+        description=(
+            "Loci in column order, with or without the HLA- prefix. Unlisted "
+            "loci follow, in the conventional order (A, B, C, then class II)."
+        ),
+    )
+    sample_order: Literal["alphabetical", "value", "allele"] = Field(
+        default="alphabetical",
+        description=(
+            "Row order: sample name, the value column (highest first), or the "
+            "alleles at `order_locus`, which lines carriers of one allele up"
+        ),
+    )
+    order_locus: str | None = Field(
+        default=None,
+        description="Locus whose alleles order the rows when `sample_order` is `allele`; null uses the first column",
+    )
+    show_labels: bool = Field(
+        default=True, description="Write the allele in each half when it fits"
+    )
+    side_bars: list[AlleleSideBar] = Field(
+        default_factory=_default_allele_side_bars,
+        description="Per-sample bars drawn beside the grid, among the bound value and reads columns",
+    )
+    reads_as_opacity: bool = Field(
+        default=False,
+        description="Fade a sample's cells by its read support instead of (or as well as) a bar",
+    )
+    value_label: str | None = Field(
+        default=None, description="Header of the value bar; null uses the column name"
+    )
+    reads_label: str | None = Field(
+        default=None, description="Header of the reads bar; null uses the column name"
+    )
+    max_samples: int = Field(
+        default=200,
+        ge=1,
+        le=2000,
+        description="Guard on the grid rows drawn; the rest are counted, never sampled",
+    )
+    max_loci: int = Field(default=24, ge=1, le=60, description="Guard on the grid columns drawn")
+
+    # --- Selection as a cross-filter ---------------------------------------
+    # Off by default, as for the other non-protein kinds.
+    selection_enabled: bool = Field(
+        default=False,
+        description=(
+            "Let a click on an allele filter the dashboard to the rows carrying "
+            "it, and a click on a sample label to that sample"
+        ),
+    )
+    selection_column: str | None = Field(
+        default=None,
+        description=(
+            "Column an allele click selects on. Null uses ``allele_col``, which "
+            "is what a peptide-by-allele prediction table (epitopeprediction) "
+            "joins on. A sample-label click always selects on ``sample_id_col``."
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Retired kinds, kept alive as views of the kind that survived
 # ---------------------------------------------------------------------------
 
@@ -4275,7 +4396,8 @@ _VizConfigUnion = Annotated[
     | SecondaryStructureConfig
     | DomainArchitectureConfig
     | PaeMatrixConfig
-    | RamachandranConfig,
+    | RamachandranConfig
+    | AlleleGridConfig,
     Field(discriminator="viz_kind"),
 ]
 

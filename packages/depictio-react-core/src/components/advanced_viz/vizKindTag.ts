@@ -242,6 +242,11 @@ const VIZ_KIND: Readonly<Record<string, VizKindLabel>> = {
     'tabler:chart-line',
     'One line per sample across several metric axes, each one brushable',
   ),
+  allele_grid: label(
+    'Alleles',
+    'tabler:layout-columns',
+    'Genotype per sample and locus, one half per haplotype, coloured by allele group',
+  ),
   // `record_card` is a card of fields, not a figure: no label.
 };
 

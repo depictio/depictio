@@ -271,6 +271,10 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   domain_architecture: 'none',
   pae_matrix: 'none',
   ramachandran: 'none',
+  // One row per sample already: a group is a set of rows, and the grid shows
+  // it by its rows, not by panels re-deriving columns, colours and the allele
+  // legend's frequencies per subset. Drawn whole and badged.
+  allele_grid: 'none',
 };
 
 /** The policy for `vizKind`.

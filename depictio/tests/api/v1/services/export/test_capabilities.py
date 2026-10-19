@@ -266,3 +266,18 @@ class TestComponentFormats:
         highlight = {"component_type": "highlight", "source_component": "fig-1"}
         assert component_formats(highlight) == frozenset()
         assert "source" in (component_html_unavailable_reason(highlight) or "")
+
+
+def test_allele_grid_is_drawn_in_the_browser_and_exports_as_html() -> None:
+    """A hand-drawn SVG grid: no server-side figure, but the offline bundle draws it.
+
+    It reads nothing but its own rows (no file, no GenomeSpy), so the HTML export
+    serves it through the real renderer and only JSON is refused.
+    """
+    from depictio.api.v1.services.export.capabilities import HTML_UNAVAILABLE_KINDS
+
+    assert AV_JSON_SOURCE["allele_grid"] == "client_only"
+    assert advanced_viz_json_source("allele_grid") == "client_only"
+    assert "allele_grid" not in HTML_UNAVAILABLE_KINDS
+    assert formats_for("advanced_viz", "allele_grid") == frozenset({ExportFormat.HTML})
+    assert "format=html" in (unsupported_reason("advanced_viz", "allele_grid") or "")

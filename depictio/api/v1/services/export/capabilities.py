@@ -198,6 +198,8 @@ AV_JSON_SOURCE: dict[str, AvJsonSource] = {
     "domain_architecture": "client_only",
     "pae_matrix": "client_only",
     "ramachandran": "client_only",
+    # Hand-drawn SVG (two halves per genotype cell): no Plotly figure exists.
+    "allele_grid": "client_only",
 }
 
 
