@@ -314,6 +314,8 @@ async function checkComponent(
   componentId: string,
   offer: RenderOffer,
   surface: string,
+  /** The verdict another surface reached; a disagreeing read is retaken settled. */
+  expectFullWidth?: boolean,
 ): Promise<Checked> {
   const home = homeOf(offer);
   // .first(): data-tour-id="filter-panel" sits on both the collapsed rail and
@@ -366,41 +368,48 @@ async function checkComponent(
   // measuring there would read true in the editor and false in the viewer and
   // flag every filter as a cross-surface disagreement.
   //
-  // Read once no CSS transition is running. The viewer's grid widens for about
+  // Read at once, and again once no CSS transition is running only when that
+  // first read disagrees with the editor's. The viewer's grid widens for about
   // a second and a half after load while its chrome settles, and a tile
   // follows it on a transition: measured inside that window, a full-row table
   // reads 811px wide in a 916px grid and is reported as a disagreement the
-  // settled page does not have. Waiting on the transitions themselves costs
-  // nothing on a page that is already still, where a fixed poll interval
-  // added a second per tile and pushed the walk past the job's timeout.
-  const fullWidth =
-    home === "grid"
-      ? await cell.evaluate(async (node) => {
-          const item =
-            (node as HTMLElement).closest(".react-grid-item") ?? (node as HTMLElement);
-          const grid = item.closest(".react-grid-layout");
-          if (!grid) return false;
-          const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
-          const start = performance.now();
-          while (performance.now() - start < 5_000) {
-            // Two frames: a resize observed this frame starts its transitions
-            // on the next render.
-            await frame();
-            await frame();
-            const moving = document
-              .getAnimations()
-              .filter((a) => a instanceof CSSTransition && a.playState === "running");
-            if (moving.length === 0) break;
-            await Promise.race([
-              Promise.all(moving.map((a) => a.finished.catch(() => undefined))),
-              new Promise((resolve) => setTimeout(resolve, 1_000)),
-            ]);
-          }
-          return (
-            item.getBoundingClientRect().width >= grid.getBoundingClientRect().width - 24
-          );
-        })
-      : undefined;
+  // settled page does not have. Waiting on every tile instead cost three and a
+  // half minutes a chunk and pushed the walk past the job's timeout. A read
+  // taken mid-transition errs one way only: the tile lags a grid that is
+  // widening, so it can turn a full row into a short one, never the reverse,
+  // and an agreeing first read needs no second.
+  const spansRow = (settle: boolean) =>
+    cell.evaluate(async (node, settle) => {
+      const item =
+        (node as HTMLElement).closest(".react-grid-item") ?? (node as HTMLElement);
+      const grid = item.closest(".react-grid-layout");
+      if (!grid) return false;
+      const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+      const start = performance.now();
+      while (settle && performance.now() - start < 5_000) {
+        // Two frames: a resize observed this frame starts its transitions
+        // on the next render.
+        await frame();
+        await frame();
+        const moving = document
+          .getAnimations()
+          .filter((a) => a instanceof CSSTransition && a.playState === "running");
+        if (moving.length === 0) break;
+        await Promise.race([
+          Promise.all(moving.map((a) => a.finished.catch(() => undefined))),
+          new Promise((resolve) => setTimeout(resolve, 1_000)),
+        ]);
+      }
+      return item.getBoundingClientRect().width >= grid.getBoundingClientRect().width - 24;
+    }, settle);
+  let fullWidth = home === "grid" ? await spansRow(false) : undefined;
+  if (
+    fullWidth !== undefined &&
+    expectFullWidth !== undefined &&
+    fullWidth !== expectFullWidth
+  ) {
+    fullWidth = await spansRow(true);
+  }
 
   const selector = contentSelectorFor(offer);
   if (selector) {
@@ -642,7 +651,13 @@ test.describe("catalog modules are usable on a dashboard", () => {
           // and no edit chrome — a component can render in one and not the other.
           await page.goto(`/dashboard/${dashboardId}`);
           for (const { componentId, offer, fullWidthInEditor } of placed) {
-            const checked = await checkComponent(page, componentId, offer, "viewer");
+            const checked = await checkComponent(
+              page,
+              componentId,
+              offer,
+              "viewer",
+              fullWidthInEditor,
+            );
             if (checked.problem) report(checked.problem);
             if (
               checked.fullWidth !== undefined &&
