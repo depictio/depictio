@@ -1,0 +1,966 @@
+# nf-core/rnavar Template v1.3.0 - germline variant calling from RNA-seq
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/rnavar/1.3.0 --data-root /path/to/results \
+#     [--var METADATA_FILE=/path/to/design.tsv] [--var GENOME=hg38]
+#
+# Validated against the nf-core/rnavar AWS megatest results
+#   s3://nf-core-awsmegatests/rnavar/results-5e72bcb5520e00422750c978d4153b38f1fd7312/
+# a complete 1.3.0dev run of the test_full profile written 2026-06-01, pinned
+# instead of the 1.3.0 release run (a0e46414), which is a truncated sync with
+# no variant_calling/ and no MultiQC report; megatest.yaml says why in full.
+# Nothing below is specific to that run.
+#
+# What the run publishes, and so what this template reads (paths under DATA_ROOT):
+#   reports/star/<s>/<s>.Log.final.out    STAR read fate, splice and error rates (catalog star/*)
+#   reports/star/<s>/<s>.SJ.out.tab       STAR collapsed splice junctions (star/junctions)
+#   reports/picard/<s>/<s>.md.metrics.txt MarkDuplicates (picard/markduplicates_metrics)
+#   reports/samtools/<s>/<s>.md.stats     samtools stats (samtools/stats_sections)
+#   reports/samtools/<s>/<s>.*.idxstats   reads per contig (samtools/idxstats)
+#   variant_calling/<s>/<s>.haplotypecaller[.filtered].vcf.gz[.tbi]
+#                                         HaplotypeCaller calls, before and after
+#                                         VariantFiltration (vcf/*, this template's variants.py)
+#   annotation/<s>/<s>.haplotypecaller.filtered_snpEff.ann.vcf.gz and
+#   reports/snpeff/<s>/*_snpEff.{csv,genes.txt}
+#                                         snpEff, only with --tools snpeff (snpeff/*)
+#   reports/multiqc/multiqc_data/multiqc.parquet   native MultiQC 1.35 report
+# The BAMs under preprocessing/ (14 to 21 GB each) are never read. rnavar runs
+# no bcftools stats and no mosdepth on a FASTQ start, so callset numbers come
+# from the VCF rows and coverage from samtools stats and idxstats.
+#
+# Design. The pipeline does not publish its samplesheet, and the samplesheet
+# carries no design column anyway (sample, fastq_1, fastq_2), so the design is
+# an optional table declared through METADATA_FILE (sample id in a column
+# named `sample` or in the first column, every other column a factor), the
+# ampliseq convention. The sample hub joins it, so the group filter and the
+# group colours read the hub and GROUP_COL (the first factor column by default)
+# is one of its columns. Without it the metadata collection is pruned and the
+# hub carries one constant group, so every tile keeps working.
+#
+# Assembly. GENOME (default hg38) names the axis and the gene lane of the
+# Genome tab. rnavar's `--genome GRCh38` is the NCBI iGenomes build, whose
+# contigs are chr-prefixed, i.e. hg38 naming; a GRCh37 Ensembl run (contigs
+# 1, 2, ...) passes --var GENOME=none and loses the gene lane only.
+#
+# Routes (RULES.md section 13), each pruned at import with what it feeds:
+#   - snpEff (--tools snpeff): the snpeff_* collections, the Annotation tab,
+#     its pipeline step and its findings line. The megatest ran without
+#     --tools, so this route is validated on the same subworkflow's snpEff
+#     output from the sarek 3.10.0 megatest (VALIDATION_REPORT.md);
+#   - --skip_tools variantfiltration: only the unfiltered VCF is published;
+#     variants.py reads it instead and vcf_files (filtered VCFs) is pruned;
+#   - the design table (METADATA_FILE): the group filter, colours and splits;
+#   - a run started from BAM, CRAM or VCF (samplesheet bam/cram/vcf columns)
+#     skips STAR and MarkDuplicates (and, from VCF, every alignment report):
+#     star_*, picard_* and samtools_* are optional, the Alignment and Coverage
+#     tabs go with them, and the hub keys on the callset's samples instead.
+# ============================================================================
+template:
+  template_id: "nf-core/rnavar/1.3.0"
+  description: "nf-core/rnavar template for germline variant calling on RNA-seq: STAR alignment, splicing and duplication, transcriptome coverage, the HaplotypeCaller callset with its filters, Ts/Tv and substitution spectrum, optional snpEff consequences, and a genome browser over the filtered VCFs."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory of one rnavar run (reports/, variant_calling/, annotation/, pipeline_info/)."
+      required: true
+    - name: "METADATA_FILE"
+      description: "Optional design table (TSV): sample id in a column named sample (or in the first column), one column per factor such as a cell line or condition. Joined into the sample hub: enables the design filters, the group colours and the group splits."
+      required: false
+    - name: "METADATA_ID_COL"
+      description: "Design table sample-id column. Auto-detected as the first column; defaults to 'sample'."
+      required: false
+    - name: "GROUP_COL"
+      description: "Design column the dashboards group and filter samples by. Auto-detected as the first factor column of METADATA_FILE."
+      required: false
+    - name: "GROUP_COL_DISPLAY"
+      description: "Auto-populated: title-cased GROUP_COL for titles."
+      required: false
+    - name: "ANNOTATION_COLS"
+      description: "Auto-populated: comma-separated factor columns of METADATA_FILE."
+      required: false
+    - name: "GENOME"
+      description: "UCSC name of the assembly the run was aligned to (hg38, mm10): the axis and gene lane of the Genome tab. Use none for an assembly without chr-prefixed contigs."
+      required: false
+      default: "hg38"
+  # Variables for the BUNDLED reference dataset: the megatest run with the
+  # design table vendored in input/ (download_test_data.sh copies it there).
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/sample_metadata.tsv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "cell_line"
+      GROUP_COL_DISPLAY: "Cell line"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "genomes"   # the whole iGenomes catalogue, identical every run
+          - "hook_url"  # nf-core runs put a live Slack webhook here
+          - "email*"
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Alignment"
+        key_patterns: ["aligner", "star_*", "read_length", "seq_platform", "seq_center", "save_unaligned", "save_align_intermeds", "bam_csi_index", "remove_duplicates", "extract_umi", "umitools_*", "save_merged_fastq"]
+      - group: "Variant calling"
+        key_patterns: ["tools", "skip_tools", "skip_*", "gatk_*", "generate_gvcf", "no_intervals", "feature_type", "exon_bed", "dbsnp*", "known_indels*", "known_snps*"]
+      - group: "Annotation"
+        key_patterns: ["snpeff_*", "vep_*", "dbnsfp*", "spliceai_*", "bcftools_annotations*", "download_cache"]
+      - group: "Reference genome"
+        key_patterns: ["genome", "igenomes_*", "fasta*", "dict", "gtf", "gff", "star_index", "save_reference"]
+      - group: "Run context"
+        key_patterns: ["input", "outdir", "version", "publish_dir_mode", "monochrome_logs", "validate_params", "help*", "show_hidden", "config_profile_*", "custom_config_*", "multiqc_*", "max_multiqc_email_size", "plaintext_email", "modules_testdata_base_path", "pipelines_testdata_base_path", "trace_report_suffix"]
+    highlight:
+      - "genome"
+      - "aligner"
+      - "star_twopass"
+      - "tools"
+      - "gatk_hc_call_conf"
+      - "gatk_vf_fs_filter"
+      - "gatk_vf_qd_filter"
+      - "skip_baserecalibration"
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    - if_var_absent: "METADATA_FILE"
+      remove_dc_tags: ["metadata"]
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "RNA-seq Germline Variant Calling"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "rnavar"
+    version: "1.3.0"
+    engine:
+      name: "nextflow"
+      version: "26.04.3"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/rnavar"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Design table (optional), read by the sample hub at the end
+      # ----------------------------------------------------------------
+      - data_collection_tag: "metadata"
+        optional: true
+        description: "Sample design table (optional, --var METADATA_FILE=...): one row per sample, one column per factor"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "sample": "Sample id, as named in the pipeline samplesheet. Every other column is a design factor and is passed through."
+
+      # ----------------------------------------------------------------
+      # MultiQC. Native 1.35 parquet (not reprocessed). Module and plot names
+      # come from multiqc.list_plots() on the pinned run; snpeff and vep are
+      # listed for a run with --tools snpeff,vep and simply have no panel
+      # otherwise. The megatest's report holds no FastQC section.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "Native MultiQC report: STAR alignment, MarkDuplicates and samtools idxstats, plus snpEff and VEP when the run annotated"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
+          dc_specific_properties:
+            s3_location: null
+            modules:
+              - "star"
+              - "samtools"
+              - "picard"
+              - "fastqc"
+              - "snpeff"
+              - "vep"
+            plots:
+              star:
+                - "Summary Statistics"
+                - "Alignment Scores"
+              samtools:
+                - "XY counts"
+                - "Mapped reads per contig":
+                    - "Normalised Counts"
+                    - "Observed over Expected Counts"
+                    - "Raw Counts"
+              picard:
+                - "Mark Duplicates"
+
+      # ----------------------------------------------------------------
+      # STAR: read fate, splicing and error rates, and the junctions. All
+      # three read the reports themselves through a glob (catalog star/*),
+      # so no raw scan lands in the database: SJ.out.tab is 200 to 400
+      # thousand rows per sample and only its per-sample sums are kept.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "star_log_final"
+        description: "STAR alignment summary per sample: input reads, read fate, splices and error rates"
+        optional: true  # a run started from BAM, CRAM or VCF skips STAR
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "star/log_final.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id (STAR's file prefix)"
+              "input_reads": "Reads given to STAR"
+              "avg_input_read_length": "Mean input read length, both mates of a pair"
+              "uniquely_mapped": "Reads placed at one locus"
+              "uniquely_mapped_pct": "Uniquely mapped reads, percent of the input"
+              "multimapped": "Reads placed at several loci"
+              "multimapped_pct": "Multi-mapped reads, percent of the input"
+              "too_many_loci_pct": "Reads mapped to too many loci, percent of the input"
+              "unmapped_pct": "Unmapped reads (too short, too many mismatches, other), percent of the input"
+              "mapped_pct": "Uniquely plus multi-mapped reads, percent of the input"
+              "avg_mapped_length": "Mean aligned length of a uniquely mapped read"
+              "splices_total": "Splices crossed by uniquely mapped reads"
+              "splices_annotated": "Of which on an annotated junction"
+              "splices_annotated_pct": "Annotated splices, percent of all splices"
+              "splices_noncanonical": "Splices on a non-canonical intron motif"
+              "splices_noncanonical_pct": "Non-canonical splices, percent of all splices"
+              "mismatch_rate_pct": "Mismatches per aligned base, percent"
+              "deletion_rate_pct": "Deletions per aligned base, percent"
+              "insertion_rate_pct": "Insertions per aligned base, percent"
+              "chimeric_pct": "Chimeric reads, percent of the input"
+
+      - data_collection_tag: "star_read_fate"
+        description: "Where each sample's input reads went: uniquely mapped, multi-mapped, too many loci, or unmapped and why"
+        optional: true  # as star_log_final
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "star/read_fate.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "fate": "Read fate as STAR reports it"
+              "fate_order": "1 to 6, mapped fates first"
+              "reads": "Reads with that fate"
+              "reads_pct": "Of the sample's input, percent"
+
+      - data_collection_tag: "star_junctions"
+        description: "STAR splice junctions per sample, by intron motif class and annotated or novel"
+        optional: true  # as star_log_final
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "star/junctions.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "motif_class": "Intron motif: GT/AG, GC/AG, AT/AC or non-canonical"
+              "motif_order": "1 to 4, the order above"
+              "annotation": "annotated (in the splice-junction database) or novel"
+              "junctions": "Junctions in the cell"
+              "unique_reads": "Uniquely mapping reads crossing them"
+              "multimapping_reads": "Multi-mapping reads crossing them"
+              "junctions_pct": "Of the sample's junctions, percent"
+              "unique_reads_pct": "Of the sample's unique junction reads, percent"
+
+      # ----------------------------------------------------------------
+      # Picard MarkDuplicates, one report per sample (catalog
+      # picard/markduplicates_metrics reads it line by line).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "picard_markduplicates_metrics_raw"
+        description: "Raw Picard MarkDuplicates reports, one line per row (input of picard_markduplicates_metrics)"
+        optional: true  # a run started from BAM, CRAM or VCF skips MarkDuplicates
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.md\\.metrics\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1f"
+              has_header: false
+              new_columns: ["raw"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw": "One line of the MarkDuplicates report"
+              "source_path": "File the line came from; the sample id is derived from its name"
+
+      - data_collection_tag: "picard_markduplicates_metrics"
+        description: "Duplication rate per sample from Picard MarkDuplicates"
+        optional: true  # as its raw scan
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "picard/markduplicates_metrics.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "library": "Picard's LIBRARY field, as written"
+              "unpaired_reads_examined": "Single-end reads considered"
+              "read_pairs_examined": "Read pairs considered"
+              "unmapped_reads": "Reads MarkDuplicates could not place"
+              "unpaired_read_duplicates": "Single-end duplicates flagged"
+              "read_pair_duplicates": "Paired duplicates flagged"
+              "read_pair_optical_duplicates": "Of those, optical duplicates"
+              "duplicate_reads": "Unpaired plus twice the paired duplicates"
+              "reads_after_dedup": "Examined reads left once duplicates are removed"
+              "percent_duplication": "Picard's PERCENT_DUPLICATION, 0 to 1"
+              "estimated_library_size": "Picard's library-size estimate"
+
+      # ----------------------------------------------------------------
+      # samtools stats on the duplicate-marked BAM (the one the calls are
+      # made on). The `.aligned.stats` twin holds the same alignments before
+      # MarkDuplicates and is left out, so every sample is read once.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samtools_stats_raw"
+        description: "Raw samtools stats reports of the duplicate-marked BAMs, one line per row (input of samtools_stats_sections)"
+        optional: true  # a run started from VCF has no alignment
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.md\\.stats$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\x1e"
+              has_header: false
+              comment_prefix: "#"
+              new_columns: ["raw_line"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw_line": "One full tab-separated samtools stats data line (record type first: SN, RL, COV, ID, IS, ...), comments already stripped"
+              "source_path": "File the row came from; the sample is derived from its name"
+
+      - data_collection_tag: "samtools_stats_sections"
+        description: "samtools stats per sample: the SN summary and the read-length, coverage-depth, indel and insert-size histograms"
+        optional: true  # as its raw scan
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "samtools/stats_sections.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "section": "SN (summary), RL (read length), COV (coverage depth), ID (indels) or IS (insert size)"
+              "series": "Curve label: the sample, or the sample and insertions / deletions"
+              "metric": "What the bin counts"
+              "bin": "Read length, depth, indel length or insert size of the bin; null on the SN row"
+              "n_reads": "RL: reads at that length"
+              "n_bases": "COV: reference bases covered at that depth"
+              "n_indels": "ID: indels of that length"
+              "n_pairs": "IS: read pairs at that insert size"
+              "reads_total": "SN: raw total sequences"
+              "reads_mapped": "SN: reads mapped"
+              "reads_mapped_pct": "SN: reads mapped, percent"
+              "bases_mapped": "SN: bases mapped (CIGAR)"
+              "error_rate": "SN: mismatches over bases mapped"
+              "identity_pct": "SN: 100 x (1 - error rate)"
+              "average_length": "SN: mean read length"
+              "maximum_length": "SN: longest read"
+              "average_quality": "SN: mean base quality"
+              "supplementary_alignments": "SN: supplementary alignments"
+
+      # Reads per contig, read straight off the idxstats files (catalog
+      # samtools/idxstats keeps the duplicate-marked stage per sample).
+      - data_collection_tag: "samtools_idxstats"
+        description: "Mapped reads per contig and sample, classed autosome, X, Y, mitochondrion or other (alt, unplaced, decoy)"
+        optional: true  # as samtools_stats_raw
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "samtools/idxstats.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "stage": "Stage of the BAM the kept idxstats ran on (md = duplicate-marked)"
+              "contig": "Reference contig"
+              "contig_class": "autosome, X, Y, mitochondrion or other"
+              "length": "Contig length in base pairs"
+              "mapped_reads": "Reads mapped to the contig"
+              "mapped_pct": "Of the sample's mapped reads, percent"
+              "reads_per_mb": "Mapped reads per megabase of contig"
+
+      # ----------------------------------------------------------------
+      # The calls. One raw scan over both HaplotypeCaller VCFs of each sample
+      # (as called, and after VariantFiltration); variants.py keeps the
+      # filtered one per sample, or the only one on a run that skipped
+      # filtration, so no call is counted twice. Annotated VCFs are excluded
+      # here: they are the snpEff route's own collection. The scan reads one
+      # full line per row because a VCF's last column is named after the
+      # sample, so a header-based scan has no single schema across a run.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "vcf_calls_raw"
+        description: "Raw HaplotypeCaller VCF lines, filtered and unfiltered, annotator output excluded (input of vcf_variants)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "^(?!.*_(?:snpEff|VEP|BCF)).*\\.haplotypecaller(?:\\.filtered)?\\.vcf\\.gz$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\u001e"
+              has_header: false
+              comment_prefix: "#"
+              new_columns: ["raw_line"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw_line": "One full tab-separated VCF data line, the header and the meta lines already stripped"
+              "source_path": "File the row came from; sample and caller are derived from its name"
+
+      - data_collection_tag: "vcf_variants"
+        description: "One row per HaplotypeCaller call, from the filtered VCF of each sample: locus, alleles, quality, FILTER, genotype, depth and allele fraction"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/rnavar/variants.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the call was made on"
+              "caller": "Variant caller (haplotypecaller)"
+              "chrom": "Contig"
+              "pos": "Position, 1-based"
+              "variant_key": "Contig, position and alleles joined, the key a call is matched on across samples"
+              "ref": "Reference allele"
+              "alt": "Alternate allele or alleles"
+              "variant_type": "SNP, MNP, INDEL or SV, from the first alternate allele"
+              "qual": "HaplotypeCaller QUAL"
+              "filter_status": "The call's FILTER field, verbatim (PASS, or the VariantFiltration filters it failed)"
+              "is_pass": "True when no filter failed"
+              "gt": "Genotype"
+              "dp": "Read depth at the call"
+              "vaf": "Variant allele fraction, from the allele depths"
+              "stage": "filtered when the call came from the VariantFiltration VCF, raw otherwise"
+
+      - data_collection_tag: "vcf_callset_summary"
+        description: "One row per sample's callset: calls, PASS share, SNVs, indels, Ts/Tv, het/hom ratio, median quality, depth and heterozygous allele fraction"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "vcf/callset_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the callset belongs to"
+              "caller": "Variant caller"
+              "calls": "Every record of the VCF"
+              "pass_calls": "Records that failed no filter"
+              "pass_pct": "PASS calls over all calls, percent"
+              "snvs": "PASS SNVs"
+              "indels": "PASS indels"
+              "mnps": "PASS multi-nucleotide calls"
+              "multiallelic": "PASS calls with more than one ALT allele"
+              "transitions": "PASS SNVs that are A to G, G to A, C to T or T to C"
+              "transversions": "The other PASS SNVs"
+              "ts_tv": "Transitions over transversions of the PASS SNVs"
+              "het": "Heterozygous PASS calls"
+              "hom_alt": "Homozygous-alternate PASS calls"
+              "het_hom_ratio": "Heterozygous over homozygous-alternate PASS calls"
+              "median_qual": "Median QUAL of the PASS calls"
+              "median_dp": "Median read depth at the PASS calls"
+              "median_het_vaf": "Median allele fraction of the heterozygous PASS calls"
+
+      - data_collection_tag: "vcf_substitution_spectrum"
+        description: "PASS SNVs per sample folded onto the six pyrimidine substitution classes, counted and as a share"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "vcf/substitution_spectrum.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the callset belongs to"
+              "caller": "Variant caller"
+              "callset": "Sample and caller together"
+              "substitution_class": "Substitution folded onto its pyrimidine reference (C to A ... T to G)"
+              "mutation_class": "transition (C to T, T to C) or transversion"
+              "count": "PASS SNVs of the class"
+              "fraction": "Share of the callset's PASS SNVs in the class"
+
+      - data_collection_tag: "vcf_filter_breakdown"
+        description: "How VariantFiltration partitions each sample's calls: one row per FILTER value with its calls and share"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "vcf/filter_breakdown.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the callset belongs to"
+              "caller": "Variant caller"
+              "filter_label": "FILTER value, verbatim; PASS for the kept calls"
+              "is_pass": "True on the PASS row"
+              "failed_filters": "Filters named in the value (0 on PASS)"
+              "calls": "Calls carrying the value"
+              "calls_pct": "Their share of the callset, percent"
+              "snvs": "Of which SNVs"
+              "indels": "Of which indels"
+
+      # The Genome tab's navigator: the cohort's PASS variants in 1 Mb windows
+      # over the primary contigs, named chrom / pos like the call track.
+      - data_collection_tag: "variant_windows"
+        description: "PASS variants of the cohort in 1 Mb windows along the primary contigs; the Genome tab's navigator"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/rnavar/variant_windows.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "chrom": "Primary contig"
+              "pos": "Window start, 0-based"
+              "end": "Window end, exclusive"
+              "variants": "Distinct PASS variants in the window, over every sample"
+              "calls": "PASS calls in the window, a variant counted once per sample carrying it"
+              "samples": "Samples with at least one PASS call in the window"
+              "snv_pct": "Share of the window's distinct variants that are SNVs, percent"
+
+      # TODO(wave4c): declare the per-sample density for the ideogram tile once
+      # the ideogram kind lands. The recipe is the catalog output
+      # vcf/variant_density (chrom, start, end, value, sample; 17,441 rows on
+      # the megatest at 1 Mb):
+      #
+      # - data_collection_tag: "vcf_variant_density"
+      #   description: "Distinct PASS variants per sample in 1 Mb windows along the primary contigs"
+      #   config:
+      #     type: "Table"
+      #     metatype: "Aggregate"
+      #     source: "transformed"
+      #     transform:
+      #       recipe: "vcf/variant_density.py"
+      #       params: {bin_size: "1000000"}
+      #     dc_specific_properties:
+      #       format: "TSV"
+
+      # TODO(jbrowse): swap indexed_file+genome_view for a JBrowse2 DC once jbrowse.py is rebuilt
+      # The filtered VCFs as files, not rows: copied to object storage with
+      # their tabix index and range-read by the browser for the window in
+      # view, one lane per sample. Optional: a run fetched without the .tbi
+      # sidecars, or one that skipped VariantFiltration, has nothing to upload.
+      - data_collection_tag: "vcf_files"
+        description: "Filtered HaplotypeCaller VCF per sample with its tabix index, read by the browser for the region in view"
+        optional: true
+        config:
+          type: "indexed_file"
+          metatype: "Metadata"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "^(?!.*_(?:snpEff|VEP|BCF)).*\\.haplotypecaller\\.filtered\\.vcf\\.gz$"
+          dc_specific_properties:
+            format: "vcf"
+            assembly: "{GENOME}"
+            sample_regex: "(?P<sample>[^/]+?)\\.haplotypecaller\\.filtered\\.vcf\\.gz$"
+            max_file_size_mb: 32
+
+      # ----------------------------------------------------------------
+      # snpEff (--tools snpeff). None of these exists on the megatest, which
+      # ran without --tools; they are optional and the import prunes the
+      # Annotation tab with them. The file names are the vcf_annotate_snpeff
+      # subworkflow's: <sample>.haplotypecaller.filtered_snpEff.ann.vcf.gz under
+      # annotation/<sample>/, and <sample>.haplotypecaller.filtered_snpEff.csv /
+      # .genes.txt under reports/snpeff/<sample>/.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "snpeff_ann_vcf_raw"
+        description: "Raw snpEff-annotated VCF lines (input of snpeff_ann_variants)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*_snpEff\\.ann\\.vcf\\.gz$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\u001e"
+              has_header: false
+              comment_prefix: "#"
+              new_columns: ["raw_line"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw_line": "One full tab-separated annotated VCF data line, meta lines already stripped"
+              "source_path": "File the row came from; sample and caller are derived from its name"
+
+      - data_collection_tag: "snpeff_ann_variants"
+        description: "One row per annotated call: the call, plus snpEff's most severe consequence, impact and gene for it"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "snpeff/ann_variants.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the call was made on"
+              "caller": "Variant caller"
+              "chrom": "Contig"
+              "pos": "Position, 1-based"
+              "variant_key": "Contig, position and alleles joined"
+              "ref": "Reference allele"
+              "alt": "Alternate allele or alleles"
+              "variant_type": "SNP, MNP, INDEL or SV"
+              "qual": "HaplotypeCaller QUAL"
+              "filter_status": "The call's FILTER field, verbatim"
+              "is_pass": "True when no filter failed"
+              "gt": "Genotype"
+              "dp": "Read depth at the call"
+              "vaf": "Variant allele fraction"
+              "gene": "Gene symbol of snpEff's most severe annotation"
+              "gene_id": "Ensembl gene id of that annotation"
+              "impact": "Impact class: HIGH, MODERATE, LOW or MODIFIER"
+              "consequence": "Consequence term, the most severe when several co-occur"
+              "hgvs_p": "Protein change in HGVS notation, when the call changes a codon"
+              "aa_pos": "Amino-acid position parsed from the protein change"
+
+      - data_collection_tag: "snpeff_csv_raw"
+        description: "Raw snpEff CSV summary lines (input of snpeff_csv_stats)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*_snpEff\\.csv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\u001e"
+              has_header: false
+              new_columns: ["raw_line"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw_line": "One full line of the snpEff CSV summary, section markers included"
+              "source_path": "File the row came from; sample and caller are derived from its name"
+
+      - data_collection_tag: "snpeff_csv_stats"
+        description: "What kind of variants each callset holds, as snpEff counts them: impact classes, functional classes, consequences, regions"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "snpeff/csv_stats.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the callset belongs to"
+              "caller": "Variant caller"
+              "section": "impact, functional_class, effect, region, variant_type or zygosity"
+              "category": "The class counted inside that section"
+              "count": "Effects or calls in the class"
+              "percent": "Share of the section, percent; null in the zygosity section"
+
+      - data_collection_tag: "snpeff_genes_raw"
+        description: "Raw snpEff per-transcript effect counts (input of snpeff_genes)"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*_snpEff\\.genes\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\u001e"
+              has_header: false
+              comment_prefix: "#"
+              new_columns: ["raw_line"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "raw_line": "One full tab-separated row of snpEff's gene effect table"
+              "source_path": "File the row came from; sample and caller are derived from its name"
+
+      - data_collection_tag: "snpeff_genes"
+        description: "Per-gene variant counts by impact class, summed over the gene's transcripts, one row per gene and sample"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "snpeff/genes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the callset belongs to"
+              "caller": "Variant caller"
+              "gene_name": "Gene symbol"
+              "gene_id": "Ensembl gene id"
+              "biotype": "Transcript biotype snpEff assigned to the gene"
+              "n_high": "Variants of HIGH impact"
+              "n_low": "Variants of LOW impact"
+              "n_moderate": "Variants of MODERATE impact"
+              "n_modifier": "Variants of MODIFIER impact"
+              "n_variants": "All four impact classes together"
+              "n_coding": "HIGH and MODERATE together"
+
+      # ----------------------------------------------------------------
+      # Hub: one row per sample, every per-sample number and the design,
+      # declared last because it reads every collection above (see
+      # recipes/samples.py). STAR's summary is the only required source.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "Per-sample hub: design columns, alignment, duplication, coverage and callset numbers"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/rnavar/samples.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id, the key every other collection is linked on"
+              "input_reads": "Reads given to STAR"
+              "uniquely_mapped_pct": "Uniquely mapped reads, percent of the input"
+              "multimapped_pct": "Multi-mapped reads, percent of the input"
+              "unmapped_pct": "Unmapped reads, percent of the input"
+              "mismatch_rate_pct": "STAR mismatches per aligned base, percent"
+              "splices_annotated_pct": "Splices on an annotated junction, percent"
+              "novel_junction_pct": "Junctions absent from the annotation, percent"
+              "duplication_pct": "Picard duplication rate, percent"
+              "bases_10x_pct": "Covered bases at depth 10 or more, percent"
+              "mito_reads_pct": "Mapped reads on the mitochondrion, percent"
+              "chry_reads_pct": "Mapped reads on chrY, percent"
+              "other_contig_reads_pct": "Mapped reads on alt, unplaced and decoy contigs (the rDNA repeats on GRCh38), percent"
+              "pass_calls": "PASS calls of the sample"
+              "snvs": "PASS SNVs"
+              "indels": "PASS indels"
+              "pass_pct": "PASS calls over all calls, percent"
+              "ts_tv": "Transitions over transversions of the PASS SNVs"
+              "het_hom_ratio": "Heterozygous over homozygous-alternate PASS calls"
+              "median_dp": "Median read depth at the PASS calls"
+
+links:
+  # Hub -> MultiQC. MultiQC names a sample twice (`GM12878_REP1` for STAR,
+  # `GM12878_REP1.md` for Picard and samtools); the resolver attaches each
+  # name to the hub id it starts with at a token boundary, so no per-run
+  # `mappings` list is needed.
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter every MultiQC panel by the samples picked in the left panel"
+    enabled: true
+
+  # Hub -> every per-sample collection: the persistent sample filters (sample,
+  # and the design columns) reach each tab through these.
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "star_log_final"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the STAR alignment summary by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "star_read_fate"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the read fate by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "star_junctions"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the splice junctions by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "picard_markduplicates_metrics"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the duplication metrics by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "samtools_stats_sections"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the samtools stats histograms by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "samtools_idxstats"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the reads per contig by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "vcf_variants"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the calls by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "vcf_callset_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the callset summary by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "vcf_substitution_spectrum"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the substitution spectrum by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "vcf_filter_breakdown"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the FILTER breakdown by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "snpeff_ann_variants"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the annotated calls by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "snpeff_csv_stats"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the snpEff composition by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "snpeff_genes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the per-gene burden by the samples picked in the left panel"
+    enabled: true
+
+  # A FILTER value picked on the Callset tab narrows the calls too, so the
+  # depth and allele-fraction tiles show what a filter removed.
+  - source_dc_tag: "vcf_filter_breakdown"
+    source_column: "filter_label"
+    target_dc_tag: "vcf_variants"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "filter_status"}
+    description: "Carry the FILTER value picked on the Callset tab over to the calls"
+    enabled: true
+
+  # A gene picked in the burden table opens its calls in the annotated table.
+  - source_dc_tag: "snpeff_genes"
+    source_column: "gene_name"
+    target_dc_tag: "snpeff_ann_variants"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene"}
+    description: "Narrow the annotated calls to the gene picked in the burden table"
+    enabled: true
+
+  # ----------------------------------------------------------------
+  # Genome tab. The navigator (a genome_view on variant_windows) emits a
+  # chromosome and a position filter on its own chrom / pos columns; this
+  # carries that pair to the call track, which names its coordinates the same
+  # way, so it narrows and zooms on the region. No data is read to resolve it
+  # (resolver: region). The file-backed VCF track needs no link: it follows
+  # the region filter itself and reads only the window in view.
+  # ----------------------------------------------------------------
+  - source_dc_tag: "variant_windows"
+    source_column: "chrom"
+    target_dc_tag: "vcf_variants"
+    target_type: "table"
+    link_config:
+      resolver: "region"
+      columns: {chrom: "chrom", pos: "pos"}
+    description: "A region typed or brushed on the variant navigator narrows the call track and the region cards"
+    enabled: true

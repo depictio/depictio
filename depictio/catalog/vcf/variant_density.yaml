@@ -1,0 +1,21 @@
+id: vcf_variant_density
+name: Variant density
+mode: per-variant/density
+description: >-
+  Distinct PASS variants per sample in fixed windows (1 Mb by default) along
+  the primary contigs, one row per sample and window: chrom, start, end, value
+  and sample, the shape a genome-wide density panel reads. Alt, unplaced and
+  decoy contigs are left out, since no assembly-aware panel can place them.
+find:
+  path_glob: "**/variant_calling/**/*.vcf.gz"
+  path_glob_alt:
+    - "**/variant_calling/*/*/*.vcf.gz"
+    - "**/*.filtered.vcf.gz"
+recipe: vcf/variant_density.py
+fixture: variant_density.tsv
+renders_as:
+  - { id: density_windows, component: card, column: value, aggregation: max,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: density_track, component: advanced_viz, kind: coverage_track,
+      roles: {chromosome: chrom, position: start, end: end, value: value, sample: sample} }
+  - { component: table }

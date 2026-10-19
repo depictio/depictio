@@ -1,0 +1,5 @@
+sample	caller	calls	pass_calls	pass_pct	snvs	indels	mnps	multiallelic	transitions	transversions	ts_tv	het	hom_alt	het_hom_ratio	median_qual	median_dp	median_het_vaf
+GM12878_REP1	haplotypecaller	44250	38595	87.22	33321	5273	1	211	24351	8970	2.715	23828	14767	1.614	386.64	20.0	0.4737
+H1_REP1	haplotypecaller	64693	53163	82.18	47454	5709	0	198	33684	13770	2.446	34066	19097	1.784	397.64	23.0	0.4545
+K562_REP1	haplotypecaller	32741	29829	91.11	25627	4202	0	191	18568	7059	2.63	15225	14604	1.043	277.02	14.0	0.4444
+MCF7_REP1	haplotypecaller	50098	44004	87.84	38509	5495	0	243	27701	10808	2.563	24276	19728	1.231	540.62	29.0	0.4444
