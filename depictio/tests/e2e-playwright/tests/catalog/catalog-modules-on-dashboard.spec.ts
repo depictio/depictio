@@ -366,40 +366,41 @@ async function checkComponent(
   // measuring there would read true in the editor and false in the viewer and
   // flag every filter as a cross-surface disagreement.
   //
-  // Read once the geometry holds still. The viewer's grid widens for about a
-  // second and a half after load while its chrome settles, and a tile follows
-  // it on a CSS transition: measured inside that window, a full-row table
+  // Read once no CSS transition is running. The viewer's grid widens for about
+  // a second and a half after load while its chrome settles, and a tile
+  // follows it on a transition: measured inside that window, a full-row table
   // reads 811px wide in a 916px grid and is reported as a disagreement the
-  // settled page does not have.
-  const measureSpan = () =>
-    cell.evaluate((node) => {
-      const item =
-        (node as HTMLElement).closest(".react-grid-item") ?? (node as HTMLElement);
-      const grid = item.closest(".react-grid-layout");
-      if (!grid) return null;
-      return [
-        Math.round(item.getBoundingClientRect().width),
-        Math.round(grid.getBoundingClientRect().width),
-      ];
-    });
-  let fullWidth: boolean | undefined;
-  if (home === "grid") {
-    let span = await measureSpan();
-    await pwExpect
-      .poll(
-        async () => {
-          const next = await measureSpan();
-          const settled = JSON.stringify(next) === JSON.stringify(span);
-          span = next;
-          return settled;
-        },
-        { timeout: 10_000, intervals: [300] },
-      )
-      .toBe(true)
-      // Still moving after 10s: judge the last reading rather than fail here.
-      .catch(() => undefined);
-    fullWidth = span ? span[0] >= span[1] - 24 : false;
-  }
+  // settled page does not have. Waiting on the transitions themselves costs
+  // nothing on a page that is already still, where a fixed poll interval
+  // added a second per tile and pushed the walk past the job's timeout.
+  const fullWidth =
+    home === "grid"
+      ? await cell.evaluate(async (node) => {
+          const item =
+            (node as HTMLElement).closest(".react-grid-item") ?? (node as HTMLElement);
+          const grid = item.closest(".react-grid-layout");
+          if (!grid) return false;
+          const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+          const start = performance.now();
+          while (performance.now() - start < 5_000) {
+            // Two frames: a resize observed this frame starts its transitions
+            // on the next render.
+            await frame();
+            await frame();
+            const moving = document
+              .getAnimations()
+              .filter((a) => a instanceof CSSTransition && a.playState === "running");
+            if (moving.length === 0) break;
+            await Promise.race([
+              Promise.all(moving.map((a) => a.finished.catch(() => undefined))),
+              new Promise((resolve) => setTimeout(resolve, 1_000)),
+            ]);
+          }
+          return (
+            item.getBoundingClientRect().width >= grid.getBoundingClientRect().width - 24
+          );
+        })
+      : undefined;
 
   const selector = contentSelectorFor(offer);
   if (selector) {
