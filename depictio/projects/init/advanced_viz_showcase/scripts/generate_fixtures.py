@@ -3880,3 +3880,147 @@ def generate_protein_family_demo() -> None:
 
 
 generate_protein_family_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Ideogram: BUSCO genes on three assemblies, and binned variant density.
+# ideogram_busco_demo.tsv   columns: genome, sequence, gene_start, gene_end,
+#                                    busco_id, status, sequence_length
+# ideogram_density_demo.tsv columns: sample, chrom, start, end, variant_count
+# ---------------------------------------------------------------------------
+# The BUSCO table is what nf-core/genomeqc's BUSCO ideogram reads: one row per
+# BUSCO gene found in an assembly, with the columns BUSCO's `full_table.tsv`
+# writes, plus the sequence length from the assembly's FASTA index (these are
+# non-model genomes, so no assembly table can size the bars). The three
+# assemblies descend from one ancestral karyotype of 12 linkage groups, so a
+# BUSCO sits on the "same" chromosome in each and the marks line up across the
+# karyotypes. genome_B fused groups 11 and 12 on its chromosome 11 and keeps
+# the tail of group 12 on a short X; genome_C is a draft whose scaffolds split
+# two groups. A Duplicated BUSCO has two rows, at two loci; a Missing one none.
+_IDEO_GROUPS = 12
+_IDEO_N_BUSCO = 255  # eukaryota_odb10
+_IDEO_GENOMES = {
+    # genome: status weights, Complete / Duplicated / Fragmented / Missing
+    "genome_A": (0.93, 0.04, 0.02, 0.01),
+    "genome_B": (0.88, 0.07, 0.03, 0.02),
+    "genome_C": (0.76, 0.05, 0.11, 0.08),
+}
+
+# (sequence, length, [(group, group_from, group_to, seq_from, seq_to)]): the
+# part of an ancestral group a sequence holds, and where along it.
+_IdeoSpan = tuple[int, float, float, float, float]
+
+
+def _ideo_karyotypes(rng: random.Random) -> dict[str, list[tuple[str, int, list[_IdeoSpan]]]]:
+    base = sorted((rng.randint(28, 96) * 1_000_000 for _ in range(_IDEO_GROUPS)), reverse=True)
+    genome_a = [(f"chr{g + 1}", base[g], [(g, 0.0, 1.0, 0.0, 1.0)]) for g in range(_IDEO_GROUPS)]
+    genome_b: list[tuple[str, int, list[_IdeoSpan]]] = [
+        (str(g + 1), int(base[g] * rng.uniform(0.9, 1.15)), [(g, 0.0, 1.0, 0.0, 1.0)])
+        for g in range(10)
+    ]
+    fused = int((base[10] + base[11] * 0.85) * rng.uniform(0.97, 1.05))
+    share = base[10] / (base[10] + base[11] * 0.85)
+    genome_b.append(("11", fused, [(10, 0.0, 1.0, 0.0, share), (11, 0.0, 0.85, share, 1.0)]))
+    genome_b.append(("X", int(base[11] * 0.4), [(11, 0.85, 1.0, 0.1, 0.9)]))
+    genome_c: list[tuple[str, int, list[_IdeoSpan]]] = []
+    k = 1
+    for g in range(_IDEO_GROUPS):
+        length = int(base[g] * rng.uniform(0.85, 1.05))
+        if g in (2, 7):
+            cut = rng.uniform(0.35, 0.65)
+            genome_c.append((f"scaffold_{k}", int(length * cut), [(g, 0.0, cut, 0.0, 1.0)]))
+            genome_c.append(
+                (f"scaffold_{k + 1}", int(length * (1 - cut)), [(g, cut, 1.0, 0.0, 1.0)])
+            )
+            k += 2
+        else:
+            genome_c.append((f"scaffold_{k}", length, [(g, 0.0, 1.0, 0.0, 1.0)]))
+            k += 1
+    return {"genome_A": genome_a, "genome_B": genome_b, "genome_C": genome_c}
+
+
+def generate_ideogram_busco_demo() -> None:
+    """Write ideogram_busco_demo.tsv: 255 BUSCOs placed on 3 assemblies."""
+    header = [
+        "genome",
+        "sequence",
+        "gene_start",
+        "gene_end",
+        "busco_id",
+        "status",
+        "sequence_length",
+    ]
+    rng = random.Random(20261019)
+    karyotypes = _ideo_karyotypes(rng)
+    # Each BUSCO's ancestral home: a linkage group and a relative position.
+    buscos = [
+        (f"{1000 + i * 37}at2759", rng.randrange(_IDEO_GROUPS), rng.uniform(0.02, 0.98))
+        for i in range(_IDEO_N_BUSCO)
+    ]
+
+    def place(genome: str, group: int, frac: float) -> tuple[str, int, int]:
+        for name, length, spans in karyotypes[genome]:
+            for g, gf, gt, sf, st in spans:
+                if g == group and gf <= frac < gt:
+                    rel = sf + (frac - gf) / (gt - gf) * (st - sf)
+                    return name, min(max(int(length * rel), 1_000), length - 20_000), length
+        raise AssertionError(f"group {group} at {frac:.2f} has no home in {genome}")
+
+    rows: list[list] = []
+    statuses = ("Complete", "Duplicated", "Fragmented", "Missing")
+    for genome, weights in _IDEO_GENOMES.items():
+        for busco_id, group, frac in buscos:
+            status = rng.choices(statuses, weights=weights)[0]
+            if status == "Missing":
+                continue
+            # The duplicate copy may land anywhere in the genome.
+            loci = [(group, frac)]
+            if status == "Duplicated":
+                loci.append((rng.randrange(_IDEO_GROUPS), rng.uniform(0.02, 0.98)))
+            for g, f in loci:
+                name, start, length = place(genome, g, f)
+                size = (
+                    rng.randint(800, 4000) if status == "Fragmented" else rng.randint(1500, 15000)
+                )
+                rows.append([genome, name, start, start + size, busco_id, status, length])
+    rows.sort(key=lambda r: (r[0], r[1], r[2]))
+    write_tsv(OUT / "ideogram_busco_demo.tsv", header, rows)
+
+
+generate_ideogram_busco_demo()
+
+
+_IDEO_DENSITY_BIN = 2_000_000
+_IDEO_DENSITY_SAMPLES = ("sample_01", "sample_02")
+# Relative gene density: chr17, chr19 and chr22 are the gene-rich chromosomes
+# a variant density lights up, chr13, chr18 and chrY the poor ones.
+_IDEO_RICHNESS = {"chr17": 1.8, "chr19": 2.4, "chr22": 1.6, "chr13": 0.6, "chr18": 0.7, "chrY": 0.2}
+_IDEO_ACROCENTRIC = {"chr13", "chr14", "chr15", "chr21", "chr22"}
+
+
+def generate_ideogram_density_demo() -> None:
+    """Write ideogram_density_demo.tsv: variant counts in 2 Mb bins on GRCh38, 2 samples."""
+    header = ["sample", "chrom", "start", "end", "variant_count"]
+    rng = random.Random(20261020)
+    rows: list[list] = []
+    for s, sample in enumerate(_IDEO_DENSITY_SAMPLES):
+        for chrom, size in _CHORD_CHROM_SIZES.items():
+            if chrom == "chrY" and s == 1:
+                continue  # an XX sample calls nothing on chrY
+            centromere = 0.08 if chrom in _IDEO_ACROCENTRIC else 0.4
+            level = 1.0
+            for start in range(0, size, _IDEO_DENSITY_BIN):
+                end = min(size, start + _IDEO_DENSITY_BIN)
+                mid = (start + end) / 2 / size
+                # A smooth walk, so neighbouring bins look like a genome, not noise.
+                level = max(0.15, min(3.0, level * math.exp(rng.gauss(0, 0.18))))
+                if abs(mid - centromere) < 0.025 or mid < 0.004 or mid > 0.996:
+                    count = 0  # centromere and telomeres: no mappable sequence
+                else:
+                    lam = 140 * _IDEO_RICHNESS.get(chrom, 1.0) * level * (1.15 if s == 0 else 1.0)
+                    count = max(0, int(round(rng.gauss(lam, math.sqrt(lam)))))
+                rows.append([sample, chrom, start, end, count])
+    write_tsv(OUT / "ideogram_density_demo.tsv", header, rows)
+
+
+generate_ideogram_density_demo()

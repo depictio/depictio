@@ -230,6 +230,9 @@ STATIC_IDS = {
             "group_compare_demo": "646b0f3c1e4a2d7f8e5b8d8b",
             "cnv_profile_demo": "646b0f3c1e4a2d7f8e5b8d8d",
             "genome_chord_demo": "646b0f3c1e4a2d7f8e5b8d8e",
+            # The ideogram's two collections, in the 8dax block from 8da6 (the tab).
+            "ideogram_busco_demo": "646b0f3c1e4a2d7f8e5b8da7",
+            "ideogram_density_demo": "646b0f3c1e4a2d7f8e5b8da8",
             "transcript_structure_demo": "646b0f3c1e4a2d7f8e5b8d9c",
             # The two portal-shaped kinds sit in their own 8dbx block, as the
             # showcase project.yaml explains: several kind agents reserve ids
@@ -298,6 +301,7 @@ STATIC_IDS = {
             "advanced_viz_transcript_structure": "646b0f3c1e4a2d7f8e5b8d7c",
             "advanced_viz_cnv_profile": "646b0f3c1e4a2d7f8e5b8d7d",
             "advanced_viz_genome_chord": "646b0f3c1e4a2d7f8e5b8d7e",
+            "advanced_viz_ideogram": "646b0f3c1e4a2d7f8e5b8da6",
             "advanced_viz_record_card": "646b0f3c1e4a2d7f8e5b8d7f",
             # 8d80 is already the profile_demo collection, so the parallel
             # coordinates tab takes the next free id in the 8dbx block.

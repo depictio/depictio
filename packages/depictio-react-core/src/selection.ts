@@ -219,6 +219,10 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
       // half travels in the `residue_selection` pair like the protein kinds.
       return named ?? configColumn('label_col') ?? configColumn('position_col') ?? 'position';
     default:
+      // `ideogram` lands here on purpose: a karyotype emits a region, not a
+      // value selection. A click on a chromosome or a drag along it publishes
+      // the `genome_selection` pair (`genomeRegionFilters` below), gated by
+      // its own `region_filter_enabled`; a single mark is too small to pick.
       return undefined;
   }
 }

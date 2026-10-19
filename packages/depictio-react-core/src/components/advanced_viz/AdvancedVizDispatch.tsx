@@ -43,6 +43,7 @@ import GroupCompareRenderer from './GroupCompareRenderer';
 import TranscriptStructureRenderer from './TranscriptStructureRenderer';
 import CnvProfileRenderer from './CnvProfileRenderer';
 import GenomeChordRenderer from './GenomeChordRenderer';
+import IdeogramRenderer from './IdeogramRenderer';
 import RecordCardRenderer from './RecordCardRenderer';
 import ParallelCoordinatesRenderer from './ParallelCoordinatesRenderer';
 import MsaRenderer from './MsaRenderer';
@@ -253,6 +254,7 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   transcript_structure: TranscriptStructureRenderer,
   cnv_profile: CnvProfileRenderer,
   genome_chord: GenomeChordRenderer,
+  ideogram: IdeogramRenderer,
   record_card: RecordCardRenderer,
   parallel_coordinates: ParallelCoordinatesRenderer,
   molecule_3d: Molecule3DRenderer,

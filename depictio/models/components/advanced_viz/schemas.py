@@ -285,6 +285,13 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "chrom_b": _STRING,
         "pos_b": _NUMERIC,
     },
+    # Karyotype: one row per feature (a gene, a variant, a bin) on a
+    # chromosome; the bars come from the chromosomes the rows name.
+    "ideogram": {
+        "chrom": _STRING,
+        "start": _NUMERIC,
+        "end": _NUMERIC,
+    },
     # One row read as text. Only the identifier is a role: every other column
     # of the collection is a field the card can show, so listing them here
     # would be a second copy of the schema that goes stale on the next
@@ -749,6 +756,24 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
             {"pos_b", "pos2", "start2", "breakpoint2", "right_pos", "pos_right", "start_b"}
         ),
     },
+    # BUSCO's full_table writes `Sequence`, `Gene Start`, `Gene End`; a binned
+    # VCF density table writes `bin_start` / `bin_end`.
+    "ideogram": {
+        "chrom": frozenset(
+            {"chrom", "chr", "chromosome", "contig", "seqid", "seqname", "sequence", "scaffold"}
+        ),
+        "start": frozenset({"start", "begin", "gene_start", "bin_start", "from"}),
+        "end": frozenset({"end", "stop", "gene_end", "bin_end", "to"}),
+        "value": frozenset(
+            {"value", "density", "count", "variant_count", "n_variants", "score", "depth"}
+        ),
+        "category": frozenset({"category", "status", "busco_status", "class", "type"}),
+        "sample": frozenset({"sample", "sample_id", "genome", "assembly", "library", "id"}),
+        "label": frozenset({"label", "name", "busco_id", "gene", "gene_name", "feature"}),
+        "chrom_length": frozenset(
+            {"chrom_length", "chrom_len", "length", "sequence_length", "seq_length", "size"}
+        ),
+    },
     "record_card": {
         "id": frozenset({"id", "sample", "sample_id", "run_id", "library", "name", "feature_id"}),
         "title": frozenset({"title", "name", "label", "description", "sample_name"}),
@@ -1022,6 +1047,13 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "weight": _NUMERIC,
         "category": _STRING,
         "sample": _STRING,
+    },
+    "ideogram": {
+        "value": _NUMERIC,
+        "category": _STRING,
+        "sample": _STRING,
+        "label": _STRING,
+        "chrom_length": _NUMERIC,
     },
     "record_card": {
         "title": _STRING,
@@ -2104,6 +2136,16 @@ _KIND_ROLE_DESCRIPTIONS: dict[AdvancedVizKind, dict[str, str]] = {
         "effect": "Optional magnitude, drawn as the stem height and the head size.",
         "label": "Optional name for each stem, used in the hover and the top-N labels.",
     },
+    "ideogram": {
+        "chrom": "Chromosome the feature sits on: one bar per distinct value.",
+        "start": "Feature start along its chromosome, in base pairs.",
+        "end": "Feature end along its chromosome, in base pairs.",
+        "value": "Optional number (a density, a count) drawn on a sequential colour scale.",
+        "category": "Optional class (BUSCO status, variant type) drawn in categorical colours.",
+        "sample": "Optional sample or genome: one karyotype per distinct value.",
+        "label": "Optional feature name shown in the hover.",
+        "chrom_length": "Optional chromosome length in base pairs; scales the bar.",
+    },
     "record_card": {
         "id": "Column the incoming selection is matched against: which row the card shows.",
         "title": "Optional column shown as the card's heading.",
@@ -2510,6 +2552,14 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
             "fusions, translocations, structural variants."
         ),
         "icon": "tabler:circle-dotted",
+    },
+    "ideogram": {
+        "label": "Ideogram",
+        "description": (
+            "A karyotype: one bar per chromosome scaled to its length, with a glyph "
+            "per feature or a heat band per bin. Click or drag a bar to filter a region."
+        ),
+        "icon": "tabler:align-left",
     },
     "record_card": {
         "label": "Record card",

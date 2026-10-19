@@ -901,6 +901,53 @@ workflows:
               weight: "Supporting reads. Spans two orders of magnitude, which is what the log-scaled chord width is for."
               category: "Event class: translocation, inversion, deletion or duplication. Colours the chords; only translocations join two chromosomes."
 
+      # Ideogram (the 8dax block, from 8da6: several kind agents reserve ids in
+      # this file at once). Two collections: BUSCO genes on three non-model
+      # assemblies, and a binned variant density on GRCh38. 8da6 is the tab.
+      - id: "646b0f3c1e4a2d7f8e5b8da7"
+        data_collection_tag: "ideogram_busco_demo"
+        description: "BUSCO genes (eukaryota_odb10) located on three synthetic assemblies: 770 hits on 12 to 14 sequences each, coloured by status"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/ideogram_busco_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              genome: "Assembly the BUSCO was searched in. One karyotype per value."
+              sequence: "Chromosome or scaffold the BUSCO gene was found on, as BUSCO's full table names it. One bar per value."
+              gene_start: "Start of the BUSCO gene on its sequence, in base pairs."
+              gene_end: "End of the BUSCO gene on its sequence, in base pairs."
+              busco_id: "BUSCO identifier (eukaryota_odb10). A Duplicated BUSCO appears twice, once per copy."
+              status: "BUSCO status: Complete, Duplicated or Fragmented. Missing BUSCOs have no row."
+              sequence_length: "Length of the sequence from the assembly's FASTA index. Scales the bar, since no assembly table knows these genomes."
+
+      - id: "646b0f3c1e4a2d7f8e5b8da8"
+        data_collection_tag: "ideogram_density_demo"
+        description: "Small-variant density in 2 Mb bins over the 24 GRCh38 chromosomes, for two samples"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/ideogram_density_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              sample: "Sample the variants were called in. The tile shows one at a time."
+              chrom: "Chromosome of the bin, named as GRCh38 names it, so the bars take the assembly's lengths."
+              start: "Bin start in base pairs."
+              end: "Bin end in base pairs: 2 Mb after the start, or the chromosome end."
+              variant_count: "Variants called in the bin. Zero over centromeres and telomeres, highest on the gene-rich chr17, chr19 and chr22."
+
       - id: "646b0f3c1e4a2d7f8e5b8d8d"
         data_collection_tag: "cnv_profile_demo"
         description: "A synthetic somatic copy-number profile: 20 000 bins over 5 chromosomes for 2 tumour samples, with the called segments in the same table"

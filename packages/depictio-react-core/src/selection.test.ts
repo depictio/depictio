@@ -59,6 +59,23 @@ describe('the UpSet as a selection source', () => {
   });
 });
 
+describe('the ideogram as a region source', () => {
+  it('emits no value selection, whatever its config says', () => {
+    const ideogram = (config: Record<string, unknown>) =>
+      ({
+        index: 'adv-ideo',
+        component_type: 'advanced_viz',
+        viz_kind: 'ideogram',
+        config: { viz_kind: 'ideogram', ...config },
+      }) as unknown as StoredMetadata;
+    expect(advancedVizSelectionColumn(ideogram({}))).toBeUndefined();
+    expect(
+      advancedVizSelectionColumn(ideogram({ selection_enabled: true, label_col: 'busco_id' })),
+    ).toBeUndefined();
+    expect(supportsSelectionGrouping(ideogram({ selection_enabled: true }), true)).toBe(false);
+  });
+});
+
 describe('reading a selection back out of the filter list', () => {
   const filters: InteractiveFilter[] = [
     { index: 'adv-upset', source: 'scatter_selection', value: ['Fungi', 'Metazoa'] },

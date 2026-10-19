@@ -183,6 +183,8 @@ AV_JSON_SOURCE: dict[str, AvJsonSource] = {
     "transcript_structure": "client_only",
     "cnv_profile": "client_only",
     "genome_chord": "client_only",
+    # Hand-drawn SVG, like the chord ring: no Plotly figure exists to serialise.
+    "ideogram": "client_only",
     "record_card": "client_only",
     "parallel_coordinates": "client_only",
     # Protein kinds. molecule_3d draws with 3Dmol.js, msa and sequence_track on

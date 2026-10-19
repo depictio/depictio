@@ -124,6 +124,11 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     "cnv_profile": "none",
     # Links are few (fusions, SVs); ``max_links`` guards the request.
     "genome_chord": "none",
+    # A karyotype's marks are each a feature the reader may be looking for (one
+    # BUSCO gene, one variant); a uniform subset would leave holes that read as
+    # missing genes. ``IdeogramConfig.max_features`` is the guard, and above it
+    # the tile switches to density bands rather than drawing a subset.
+    "ideogram": "none",
     # One row, picked by a selection. There is nothing to reduce, and a sample
     # could drop exactly the row the reader clicked.
     "record_card": "none",

@@ -250,6 +250,9 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   transcript_structure: 'none',
   cnv_profile: 'none',
   genome_chord: 'none',
+  // A karyotype already draws one per sample when `sample_col` is bound, on
+  // one shared length scale; per-group copies would rebuild that scale.
+  ideogram: 'none',
   // One row read as text: there is no mark for a group to colour and no
   // distribution for a panel to re-derive.
   record_card: 'none',
