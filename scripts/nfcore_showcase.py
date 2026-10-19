@@ -404,6 +404,66 @@ SCENARIOS: list[Scenario] = [
         note="EMBL cluster test_full run; MultiQC reprocessed; hg19, vendored design",
         vars=(("METADATA_FILE", "{data_root}/input/metadata.tsv"), ("GENOME", "hg19")),
     ),
+    # Wave 4. The design table is vendored (the pipeline publishes none) and copied
+    # into input/ by download_test_data.sh. The run made no annotation, so the
+    # Annotation tab is pruned.
+    Scenario(
+        "rnavar",
+        "1.3.0",
+        "megatest",
+        note="1.3.0dev run 5e72bcb5 (1.3.0 release sync truncated), vendored design; no --tools",
+        vars=(_DESIGN_IN_DATA_ROOT, ("GROUP_COL", "cell_line")),
+    ),
+    Scenario(
+        "epitopeprediction",
+        "3.2.0",
+        "megatest",
+        note="test_full profile (VCF, protein and peptide rows, wide format), vendored samplesheet",
+    ),
+    # The --metadata table is vendored (plus a demo `specimen` column) and copied into
+    # input/ by download_test_data.sh; the MultiQC 1.27 report is rebuilt with 1.35.
+    Scenario(
+        "viralmetagenome",
+        "1.2.0",
+        "megatest",
+        note="test_full, 4 metagenomic libraries, de novo + 3 mapping constraints; vendored metadata, MultiQC reprocessed",
+        vars=(("METADATA_FILE", "{data_root}/input/metadata.tsv"), ("GROUP_COL", "specimen")),
+    ),
+    # The samplesheet and the design table are vendored and copied into input/ by
+    # download_test_data.sh. The run aborted at transcript identification and
+    # published no QC and no MultiQC: no MultiQC tab, no Transcripts tab.
+    Scenario(
+        "nascent",
+        "2.3.0",
+        "megatest",
+        note="test_full GRO-seq time course, 11 libraries 0h-72h; vendored design table; 5.2 GB with the strand bedGraphs",
+        vars=(("METADATA_FILE", "{data_root}/input/design.tsv"),),
+    ),
+    # The samplesheet and marker sheet are vendored and copied into input/ by
+    # download_test_data.sh, which also writes the PNG previews (tifffile + Pillow).
+    Scenario(
+        "mcmicro",
+        "2.0.0",
+        "megatest",
+        note="Full test profile: 2 CyCIF tonsil images x 2 cycles, Mesmer + Cellpose; PNG previews as Image DC",
+    ),
+    # Only run in the bucket: non-tag test_full d6b1654c (dev v1.0.0-gd6b1654);
+    # the 1.1.0 prefix is empty. Design published (merged_data/whole_design.csv).
+    Scenario(
+        "stableexpression",
+        "1.1.0",
+        "megatest",
+        note="test_full homo_sapiens, 162 public datasets; dev-build run d6b1654c; no MultiQC",
+    ),
+    # The design table (family, subfamily) is vendored and copied into input/ by
+    # download_test_data.sh; the samplesheet is not published.
+    Scenario(
+        "genomeqc",
+        "1.0.1",
+        "megatest",
+        note="test_full profile, 3 RefSeq assemblies with annotations, vendored design table",
+        vars=(("METADATA_FILE", "{data_root}/input/genome_metadata.tsv"),),
+    ),
 ]
 
 
