@@ -1,0 +1,20 @@
+id: stableexpression_id_mapping
+name: Gene ID mapping
+mode: expression/id-mapping
+description: >-
+  Where the gene ids of every downloaded dataset went, one row per dataset and
+  fate: kept as a gene of the merged matrix, collapsed (one of several ids of
+  the same gene), dropped as a rare gene (seen in too few datasets), or not
+  mapped to an Ensembl gene. The four fates add up to the ids the dataset came
+  with.
+find:
+  path_glob: "**/statistics/id_mapping_stats.csv"
+recipe: stableexpression/id_mapping.py
+fixture: id_mapping.tsv
+renders_as:
+  - { id: id_fates, component: card, column: gene_ids, aggregation: sum, secondary_layout: composition, breakdown_col: fate }
+  - { id: id_fate_bars, component: figure, visu_type: bar, dict_kwargs: { x: dataset, y: share, color: fate } }
+  - { id: id_fate_by_platform, component: figure, visu_type: histogram,
+      dict_kwargs: { x: platform, y: gene_ids, color: fate, histfunc: sum } }
+  - { component: interactive, interactive_type: MultiSelect, column_name: fate }
+  - { component: table }

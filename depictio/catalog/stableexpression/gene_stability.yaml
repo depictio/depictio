@@ -1,0 +1,33 @@
+id: stableexpression_gene_stability
+name: Candidate gene stability
+mode: expression/stability
+description: >-
+  One row per candidate gene (the candidates of each expression section): the
+  stability score (lower is more stable), its rank within the section and over
+  every candidate, the four measures behind it (Normfinder stability value,
+  geNorm M, coefficient of variation, robust MAD-based CV), each normalised to
+  0-1, the score split into its weighted parts plus the missing-value penalty,
+  and the gene's expression level, measured share and platforms.
+find:
+  path_glob: "**/reporting/all_genes_summary.csv"
+recipe: stableexpression/gene_stability.py
+fixture: gene_stability.tsv
+renders_as:
+  # Two of the four measures against each other: they agree for a gene stable
+  # by every account, and a gene good by one only stands off the diagonal.
+  - id: measure_agreement
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: normfinder_stability, y: genorm_m, label: gene_name, color: section }
+  - id: candidate_record
+    component: advanced_viz
+    kind: record_card
+    roles: { id: gene_id, title: gene_name }
+  - { id: candidate_count, component: card, column: gene_id, aggregation: count, secondary_layout: histogram, headline: true }
+  - { id: best_score, component: card, column: stability_score, aggregation: min, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
+  - { id: candidate_measured, component: card, column: measured_share, aggregation: median, secondary_layout: histogram }
+  - { id: score_by_section, component: figure, visu_type: box, dict_kwargs: { x: section, y: stability_score, color: section } }
+  - { component: interactive, interactive_type: MultiSelect, column_name: section }
+  - { component: interactive, interactive_type: MultiSelect, column_name: expression_level }
+  - { component: interactive, interactive_type: RangeSlider, column_name: stability_score }
+  - { id: candidate_table, component: table, row_selection_enabled: true, row_selection_column: gene_id }
