@@ -1,0 +1,304 @@
+# nf-core/hlatyping Template v2.2.0 - HLA class I typing
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio ingest --template nf-core/hlatyping/2.2.0 --data-root /path/to/results \
+#     [--var METADATA_FILE=/path/to/samplesheet.csv]
+#
+# Tested against nf-core/hlatyping AWS megatest results:
+#   s3://nf-core-awsmegatests/hlatyping/results-3237d20e7e611d8bbf8c37e637202dfe8a23e996
+#   (test_full profile, see megatest.yaml for the fetch manifest and for why the
+#   vendored samplesheet is test-datasets revision 2adcc84)
+# ============================================================================
+#
+# DESIGN METADATA. hlatyping reads its samplesheet from --input and this release
+# does not publish it, so the sample hub reads the file named by METADATA_FILE
+# (default: input/samplesheet.csv under DATA_ROOT, where download_test_data.sh
+# puts the vendored megatest sheet). The pipeline's input schema fixes sample
+# and seq_type (dna or rna), with fastq_1 / fastq_2 or bam; a sample may take
+# several rows (its FASTQ runs are concatenated). The `samples` recipe derives
+# seq_type (DNA or RNA), the default GROUP_COL, plus the input format, the read
+# layout and the number of runs. Any column a user adds to the sheet can
+# replace it. Without a sheet the hub still lists every sample OptiType typed.
+#
+# TYPING. Every typing collection reads optitype/<sample>/<sample>_result.tsv,
+# OptiType's optimal (and, with --enumerations, sub-optimal) solutions. Alleles
+# are normalised to HLA-A*02:01, the spelling the epitopeprediction template
+# uses, and optitype_summary writes each sample's alleles as the ;-separated
+# list an epitopeprediction samplesheet takes in its `alleles` column.
+#
+# READS. FastQC's numbers come from MultiQC's multiqc_fastqc.txt; the yara
+# mapping to the HLA reference publishes BAMs only, so the read support of the
+# typing is OptiType's own count (read_qc joins it per sample).
+#
+# No conditional route: this release has no switch that drops FastQC, OptiType
+# or MultiQC, and HLA-HD (--tools hlahd, licensed, run outside the containers)
+# is not read by this template (see VALIDATION_REPORT.md, HT5).
+template:
+  template_id: "nf-core/hlatyping/2.2.0"
+  description: "nf-core/hlatyping template: HLA class I genotypes typed by OptiType (HLA-A, -B and -C, two-field alleles), sample by locus with both haplotypes, allele frequencies across the samples, the reads and the objective behind each genotype, and the FastQC read quality, with alleles spelled as nf-core/epitopeprediction spells them."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "hlatyping output directory (optitype/, yara/, multiqc/, pipeline_info/ and the FastQC files)."
+      required: true
+    - name: "METADATA_FILE"
+      description: "The samplesheet the run was started with (--input: sample, fastq_1, fastq_2, bam, seq_type, plus any design columns). Defaults to input/samplesheet.csv under DATA_ROOT."
+      required: false
+      default: "{DATA_ROOT}/input/samplesheet.csv"
+    - name: "METADATA_ID_COL"
+      description: "Samplesheet id column. hlatyping fixes it to sample; recorded for the metadata auto-detection."
+      required: false
+      default: "sample"
+    - name: "GROUP_COL"
+      description: "Samplesheet column the dashboard groups and filters samples by. Defaults to seq_type (DNA or RNA), from the sheet; name any design column added to the sheet instead."
+      required: false
+      default: "seq_type"
+    - name: "GROUP_COL_DISPLAY"
+      description: "Reader-facing label of GROUP_COL, used in filter and card titles."
+      required: false
+      default: "Sequencing type"
+  # Variables used when materialising the bundled reference dataset.
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/samplesheet.csv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "seq_type"
+      GROUP_COL_DISPLAY: "Sequencing type"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "hook_url"           # nf-core runs put a live Slack webhook here
+          - "email*"
+          - "genomes"            # the whole iGenomes map, not a setting of the run
+          - "multiqc_logo"
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Typing"
+        key_patterns: ["tools", "solver", "enumerations", "beta", "hlahd_*"]
+      - group: "Inputs"
+        key_patterns: ["input", "genome", "igenomes_*", "save_merged_fastq"]
+      - group: "Run context"
+        key_patterns: ["outdir", "version", "publish_dir_mode", "monochrome_logs", "validate_params", "help*", "show_hidden", "pipelines_testdata_base_path", "trace_report_suffix", "config_profile_*", "custom_config_*", "multiqc_*", "max_multiqc_email_size", "plaintext_email"]
+    highlight:
+      - "tools"
+      - "solver"
+      - "enumerations"
+      - "beta"
+  dashboards:
+    - "dashboards/base.yaml"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "hlatyping HLA Typing"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "hlatyping"
+    version: "2.2.0"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/hlatyping"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Hub: the samplesheet, one row per sample
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "The run's samplesheet, one row per sample, with its sequencing type, input format, read layout and runs"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/hlatyping/samples.py"
+            source_overrides:
+              samplesheet:
+                path: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id, the name of its optitype/<sample>/ folder"
+              "seq_type": "DNA or RNA, the HLA reference the reads are mapped to (Not stated for a sample the sheet does not list)"
+              "input_format": "FASTQ or BAM"
+              "read_layout": "Paired-end or Single-end (FASTQ input), From BAM (the layout is read from the file)"
+              "runs": "Samplesheet rows of the sample, concatenated by the pipeline"
+              "input_files": "Input file names, comma-separated"
+
+      # ----------------------------------------------------------------
+      # MultiQC: FastQC and the OptiType allele summary
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report of the run: FastQC read quality per read file and OptiType's allele summary"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
+          dc_specific_properties:
+            modules:
+              - "general_stats"
+              - "fastqc"
+              - "optitype"
+            plots:
+              fastqc:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence Quality Scores"
+                - "Per Sequence GC Content":
+                    - "Percentages"
+                    - "Counts"
+                - "Per Base N Content"
+                - "Sequence Duplication Levels"
+                - "Overrepresented sequences by sample"
+                - "Adapter Content"
+                - "Status Checks"
+              optitype:
+                - "Summary of alleles"
+
+      # ----------------------------------------------------------------
+      # OptiType, from optitype/<sample>/<sample>_result.tsv
+      # ----------------------------------------------------------------
+      - data_collection_tag: "optitype_genotypes"
+        description: "OptiType's HLA class I genotype, one row per sample, locus and haplotype, alleles normalised to HLA-A*02:01"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "optitype/genotypes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "call_id": "Sample, locus and haplotype of the row"
+              "sample_id": "Sample id"
+              "locus": "HLA-A, HLA-B or HLA-C"
+              "haplotype": "1 or 2: which of the locus's two calls"
+              "allele": "Two-field allele, normalised to HLA-A*02:01 (the spelling of the epitopeprediction tables)"
+              "allele_group": "First field of the allele, e.g. HLA-A*02"
+              "hla_class": "Class I (OptiType types HLA class I only)"
+              "zygosity": "Homozygous (one allele on both haplotypes), Heterozygous, or One allele typed"
+              "reads": "Reads the sample's genotype explains"
+              "objective": "Objective value of the sample's integer linear programme"
+
+      - data_collection_tag: "optitype_summary"
+        description: "One row per sample: the HLA-A, -B and -C allele pairs, the alleles as an epitopeprediction samplesheet lists them, zygosity and the reads and objective behind the genotype"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "optitype/summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample id"
+              "hla_a": "The two HLA-A alleles"
+              "hla_b": "The two HLA-B alleles"
+              "hla_c": "The two HLA-C alleles"
+              "alleles": "Distinct alleles, ;-separated, as the alleles column of an epitopeprediction samplesheet takes them"
+              "distinct_alleles": "Distinct alleles of the genotype, 6 at most"
+              "typed_loci": "Loci with at least one allele called, 3 at most"
+              "homozygous_loci": "Loci with one allele on both haplotypes"
+              "reads": "Reads the genotype explains"
+              "objective": "Objective value of the integer linear programme"
+              "objective_per_read": "Objective over reads"
+              "solutions": "Solutions written (--enumerations)"
+              "runner_up_gap": "Objective of the optimum minus the next best solution (with --enumerations above 1)"
+
+      # ----------------------------------------------------------------
+      # Reads: FastQC per read file, with OptiType's read support. Declared
+      # after `samples` and `optitype_summary`, which its recipe reads.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "read_qc"
+        description: "FastQC per read file (reads, GC, duplicates, module status) with the reads OptiType's genotype explains and their share of the read pairs"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/hlatyping/read_qc.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "read_key": "FastQC sample name of the read file"
+              "sample": "Sample id"
+              "read": "Read 1, Read 2 or Single-end"
+              "total_sequences": "Reads in the file"
+              "pct_gc": "GC content of the reads, percent"
+              "pct_duplicates": "Duplicate reads, percent (100 minus FastQC's deduplicated share)"
+              "mean_length": "Mean read length, bases"
+              "fastqc_fail": "FastQC modules that fail"
+              "fastqc_warn": "FastQC modules that warn"
+              "fastqc_status": "Fail, Warn or Pass: the worst FastQC module"
+              "typing_reads": "Reads OptiType's genotype explains (the sample's)"
+              "typing_share": "typing_reads over the sample's read pairs (the largest read file), 0 to 1"
+
+# ============================================================================
+# LINKS: the samplesheet fans out to every collection by sample
+# ============================================================================
+links:
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+    description: "Filter the MultiQC panels by samplesheet samples (FastQC writes <sample>_1 and <sample>_2)"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "optitype_genotypes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample_id"}
+    description: "Filter the genotypes by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "optitype_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample_id"}
+    description: "Filter the per-sample typing by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "read_qc"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the read files by samplesheet samples"
+    enabled: true
+  # An allele, locus or zygosity pick on the genotypes (the allele grid, the
+  # allele filters) carries the samples that hold it to the per-sample tables.
+  # The allele itself is spelled as in nf-core/epitopeprediction, but that is
+  # another project: no link crosses projects (see docs/dashboards.md).
+  - source_dc_tag: "optitype_genotypes"
+    source_column: "sample_id"
+    target_dc_tag: "optitype_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample_id"}
+    description: "Carry an allele pick to the samples that carry it"
+    enabled: true
+  - source_dc_tag: "optitype_genotypes"
+    source_column: "sample_id"
+    target_dc_tag: "read_qc"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Carry an allele pick to the read files of the samples that carry it"
+    enabled: true
