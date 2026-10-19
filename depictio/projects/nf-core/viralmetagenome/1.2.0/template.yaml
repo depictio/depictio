@@ -1,0 +1,657 @@
+# nf-core/viralmetagenome Template v1.2.0 - viral genomes from metagenomic reads
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/viralmetagenome/1.2.0 --data-root /path/to/results \
+#     [--var METADATA_FILE=/path/to/metadata.tsv] [--var GROUP_COL=<column>]
+#
+# Tested against the nf-core/viralmetagenome AWS megatest results:
+#   s3://nf-core-awsmegatests/viralmetagenome/results-74064a43f4b00c163c22bcfc9cf1d84a2a69e988/
+# `megatest.yaml` next to this file lists the exact subset and fetches it
+# (`bash download_test_data.sh [DIR]`); that directory is DATA_ROOT.
+#
+# What the run publishes, and so what this template reads. Every file name
+# carries the run's --global_prefix (`<prefix>_<date>_<version>_<run name>-`),
+# so every glob matches on the suffix and the recipes strip it:
+#   - overview-tables/*-samples_overview.tsv, *-contigs_overview.tsv,
+#     *-contigs_overview-with-iterations.tsv, *-mapping_overview.tsv: the
+#     pipeline's own merge of its MultiQC sections, one row per sample, per
+#     final de novo consensus, per refinement step and per constraint mapping
+#     (catalog viralmetagenome/*);
+#   - assembly/assemblers/<assembler>/idxstats/, assembly/polishing/: the de
+#     novo contigs, their Kraken2 and Kaiju call and their clusters
+#     (viralmetagenome/contigs, contig_classes, clusters);
+#   - consensus/quality_control/checkv/: CheckV per consensus (checkv/quality_summary);
+#   - variants/ivar/<sample>/*.tsv: the raw iVar calls per sample and reference
+#     (ivar/variants_tsv);
+#   - variants/mapping-info/metrics/mosdepth/<sample>/: depth per base and the
+#     cumulative coverage per mapping (mosdepth/per_base_bins, cumulative_coverage);
+#   - multiqc/: the run's report has no parquet (MultiQC 1.27); the parquet
+#     Depictio reads is rebuilt with MultiQC 1.35 (see megatest.yaml).
+#
+# Genome keys. A consensus genome is a sample and a reference: a constraint
+# reference of --mapping_constraints, or a de novo contig cluster. Every
+# per-genome collection keys it `<sample>_<reference>` (genome_id).
+#
+# Design. The pipeline takes a sample metadata table through --metadata and
+# merges it into the samples overview, but does not publish the table itself.
+# It is declared through METADATA_FILE (sample id in a column named `sample`
+# or in the first column, every other column a factor), the ampliseq
+# convention; GROUP_COL defaults to its first factor column. Without it the
+# metadata collection is pruned and the sample hub carries one constant group
+# (`__no_group__`), plus the factor columns of the overview's metadata block,
+# so `--var GROUP_COL=<column>` still finds one.
+#
+# Routes. A run takes the de novo route, the constraint route or both, and
+# may skip steps. Every collection a route may not write is optional, and the
+# import prunes the tiles that read a missing one:
+#   - --skip_assembly: no contigs, clusters or de novo consensus (the Contigs
+#     tab and the de novo half of the genome hub go);
+#   - no --mapping_constraints: no constraint mappings;
+#   - --skip_precluster: no contig classification (contigs read Not classified);
+#   - --skip_checkv, --skip_variant_calling: no CheckV or iVar collections;
+#   - the design table (METADATA_FILE) feeds the group filter and colours.
+# ============================================================================
+template:
+  template_id: "nf-core/viralmetagenome/1.2.0"
+  description: "nf-core/viralmetagenome template for viral genome reconstruction from metagenomic reads: read preprocessing and host removal, de novo contigs with their taxonomic call and cluster, consensus genomes from de novo refinement and constraint references with their closest reference, ambiguous bases and CheckV call, mapping depth and breadth, and the iVar variant calls."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory of one viralmetagenome run (overview-tables/, preprocessing/, assembly/, consensus/, variants/, multiqc/, pipeline_info/)."
+      required: true
+    - name: "METADATA_FILE"
+      description: "Optional sample metadata table (TSV), the one given to --metadata: sample id in a column named sample (or in the first column), one column per factor. Enables the design filters and grouping."
+      required: false
+    - name: "METADATA_ID_COL"
+      description: "Metadata sample-id column. Auto-detected as the first column; defaults to 'sample'."
+      required: false
+    - name: "GROUP_COL"
+      description: "Column the dashboards group and filter samples by. Auto-detected as the first factor column of METADATA_FILE; without it, any factor of the samples overview's metadata block."
+      required: false
+    - name: "GROUP_COL_DISPLAY"
+      description: "Auto-populated: title-cased GROUP_COL for titles."
+      required: false
+  # Variables for the BUNDLED reference dataset: the megatest run with the
+  # test_full metadata vendored in input/ (see megatest.yaml).
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/metadata.tsv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "specimen"
+      GROUP_COL_DISPLAY: "Specimen"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "hook_url"
+          - "email*"
+          - "genomes"            # the whole iGenomes map, not a run setting
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Inputs"
+        key_patterns: ["input", "metadata", "mapping_constraints", "reference_pool", "prefix", "global_prefix"]
+      - group: "Preprocessing"
+        key_patterns: ["skip_preprocessing", "skip_fastqc", "trim_tool", "skip_trimming", "adapter_fasta", "min_trimmed_reads", "skip_complexity_filtering", "decomplexifier", "skip_hostremoval", "host_k2_db", "with_umi", "umi_*", "merge_reads", "arguments_fastp", "arguments_prinseq_reads"]
+      - group: "Read classification"
+        key_patterns: ["skip_read_classification", "read_classifiers", "kraken2_*", "bracken_db", "kaiju_*", "keep_unclassified"]
+      - group: "Assembly and clustering"
+        key_patterns: ["skip_assembly", "assemblers", "skip_sspace_basic", "skip_contig_prinseq", "spades_*", "skip_polishing", "cluster_method", "network_clustering", "identity_threshold", "min_contig_size", "max_contig_size", "max_n_perc", "perc_reads_contig", "cluster_with_reference_pool", "skip_precluster", "precluster_classifiers", "skip_singleton_filtering"]
+      - group: "Refinement and consensus"
+        key_patterns: ["skip_iterative_refinement", "iterative_refinement_cycles", "intermediate_*", "mapper", "deduplicate", "consensus_caller", "min_consensus_depth", "allele_frequency", "min_mapped_reads"]
+      - group: "Variants"
+        key_patterns: ["skip_variant_calling", "variant_caller", "call_intermediate_variants", "skip_vcf_annotation", "arguments_ivar_*"]
+      - group: "Consensus QC"
+        key_patterns: ["skip_consensus_qc", "skip_checkv", "checkv_db", "skip_prokka", "prokka_db", "skip_quast", "skip_blast_qc", "skip_alignment_qc", "annotation_db", "skip_consensus_annotation", "mmseqs_searchtype"]
+      - group: "Run context"
+        key_patterns: ["outdir", "version", "publish_dir_mode", "monochrome_logs", "validate_params", "help*", "show_hidden", "pipelines_testdata_base_path", "trace_report_suffix", "config_profile_*", "custom_config_*", "multiqc_*", "max_multiqc_email_size", "plaintext_email", "save_*", "custom_table_headers", "transpose_overview_tables"]
+    highlight:
+      - "trim_tool"
+      - "host_k2_db"
+      - "assemblers"
+      - "cluster_method"
+      - "identity_threshold"
+      - "iterative_refinement_cycles"
+      - "mapping_constraints"
+      - "variant_caller"
+      - "consensus_caller"
+      - "min_consensus_depth"
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    - if_var_absent: "METADATA_FILE"
+      remove_dc_tags: ["metadata"]
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Viral Metagenome Genomes"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "viralmetagenome"
+    version: "1.2.0"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/viralmetagenome"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Sample metadata (optional), read by the sample hub below
+      # ----------------------------------------------------------------
+      - data_collection_tag: "metadata"
+        optional: true
+        description: "Sample metadata table (optional, --var METADATA_FILE=...): one row per sample, one column per factor"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "sample": "Sample id, as named in the pipeline samplesheet. Every other column is a design factor and is passed through."
+
+      # ----------------------------------------------------------------
+      # MultiQC: re-generated with MultiQC 1.35 from the run's raw tool
+      # outputs (the run wrote MultiQC 1.27, which ships no parquet)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report of the run, re-generated with MultiQC 1.35: FastQC, fastp and Kraken2 host removal, samtools, Picard and mosdepth on every mapping, bcftools on the calls"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
+          dc_specific_properties:
+            modules:
+              - "fastqc"
+              - "fastp"
+              - "kraken"
+              - "samtools"
+              - "picard"
+              - "mosdepth"
+              - "bcftools"
+            plots:
+              fastqc:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Per Sequence GC Content"
+                - "Sequence Duplication Levels"
+              fastp:
+                - "Filtered Reads"
+                - "Insert Sizes"
+              kraken:
+                - "Top taxa"
+              samtools:
+                - "Percent mapped"
+                - "Alignment stats"
+              picard:
+                - "Mark Duplicates"
+              mosdepth:
+                - "Cumulative coverage distribution"
+                - "Average coverage per contig"
+              bcftools:
+                - "Variant Substitution Types"
+                - "Indel Distribution"
+
+      # ----------------------------------------------------------------
+      # Samples: the overview table and the hub built on it
+      # ----------------------------------------------------------------
+      - data_collection_tag: "vmg_samples_overview"
+        description: "Samples overview of the pipeline, one row per sample: read pairs per preprocessing stage, host share, fastp quality, de novo assembly, clusters and consensus count"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "viralmetagenome/samples_overview.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "raw_read_pairs": "Read pairs before trimming (FastQC)"
+              "trimmed_read_pairs": "Read pairs after trimming (FastQC)"
+              "host_filtered_read_pairs": "Read pairs after host removal (FastQC)"
+              "host_pct": "Read pairs Kraken2 classified against the host database, percent"
+              "retained_pct": "Read pairs left after trimming and host removal, percent of raw"
+              "assembly_length": "De novo assembly length, bp (longest across assemblers)"
+              "assembly_n50": "De novo assembly N50, bp"
+
+      - data_collection_tag: "samples"
+        description: "Sample hub: one row per sample with its reads, host removal and assembly, and the design columns every filter starts from"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralmetagenome/samples.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id, the key every per-sample collection joins on"
+              "raw_read_pairs": "Read pairs before trimming"
+              "raw_gc_pct": "GC content before trimming, percent"
+              "raw_dup_pct": "FastQC duplicate share before trimming, percent"
+              "trimmed_reads": "Reads (both mates) fastp kept"
+              "q30_pct": "Bases at Q30 or better after fastp, percent"
+              "fastp_dup_pct": "fastp duplication estimate, percent"
+              "adapter_pct": "Reads with adapter trimmed, percent"
+              "trimmed_read_pairs": "Read pairs after trimming"
+              "host_pct": "Read pairs classified as host, percent"
+              "host_filtered_read_pairs": "Read pairs after host removal"
+              "retained_pct": "Read pairs left after trimming and host removal, percent of raw"
+              "assembly_length": "De novo assembly length, bp"
+              "assembly_n50": "De novo assembly N50, bp"
+              "clusters": "Contig clusters kept"
+              "removed_clusters": "Contig clusters removed"
+              "mean_cluster_size": "Contigs per cluster"
+              "singletons": "Clusters of one contig"
+              "denovo_consensus": "De novo consensus genomes the sample ended with"
+
+      - data_collection_tag: "read_funnel"
+        description: "Read pairs per sample at each preprocessing stage (raw, trimmed, host removed), long, with the share of the raw read pairs"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralmetagenome/read_funnel.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "stage": "Preprocessing stage: Raw, Trimmed or Host removed"
+              "stage_order": "Stage in pipeline order, 1 to 3"
+              "read_pairs": "Read pairs at the stage"
+              "pct_of_raw": "Read pairs over the raw read pairs, percent"
+
+      # ----------------------------------------------------------------
+      # De novo contigs: taxonomic call, clusters, then the contigs
+      # (the contigs collection reads the other two through dc_ref)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "vmg_contig_classes"
+        optional: true  # absent with --skip_precluster
+        description: "Merged Kraken2 and Kaiju call of every de novo contig before clustering"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "viralmetagenome/contig_classes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "contig": "Sequence id as the assembler (or the reference pool) named it"
+              "classification": "Classified or Unclassified"
+              "taxid": "NCBI taxon id of the merged call"
+
+      - data_collection_tag: "vmg_clusters"
+        optional: true  # absent with --skip_assembly or --skip_polishing
+        description: "Contig clusters per sample: centroid, members, read depth share and whether a consensus was refined from it"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "viralmetagenome/clusters.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "cluster": "Cluster id"
+              "taxid": "Taxon id the cluster was built under"
+              "centroid": "Centroid sequence id"
+              "cluster_type": "Reference-anchored (pool centroid) or Contig-only"
+              "members": "Contigs in the cluster besides the centroid"
+              "member_bp": "Summed length of the member contigs, bp"
+              "read_depth_pct": "Share of the sample's contig read depth the cluster holds, percent"
+              "member_ids": "Member contig ids"
+              "status": "Refined or Filtered out"
+
+      - data_collection_tag: "vmg_contigs"
+        optional: true  # absent with --skip_assembly
+        description: "De novo contigs: length, reads mapped back, taxonomic call and cluster membership"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "viralmetagenome/contigs.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "assembler": "Assembler that built the contig"
+              "contig": "Contig id"
+              "length_bp": "Contig length, bp"
+              "length_class": "Length band"
+              "mapped_reads": "Reads mapping to the contig"
+              "read_share_pct": "Mapped reads over all reads on the sample's contigs, percent"
+              "reads_per_kb": "Mapped reads per kb of contig"
+              "classification": "Classified, Unclassified, or Not classified"
+              "taxid": "Taxon id of the merged call"
+              "cluster": "Cluster the contig belongs to"
+              "cluster_role": "Centroid, Member or Not clustered"
+
+      # ----------------------------------------------------------------
+      # Consensus genomes: the two overview tables, the refinement steps,
+      # CheckV, then the genome hub that stacks them
+      # ----------------------------------------------------------------
+      - data_collection_tag: "vmg_contigs_overview"
+        optional: true  # absent with --skip_assembly
+        description: "Final de novo consensus genomes, one per sample and refined cluster"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "viralmetagenome/contigs_overview.py"
+          dc_specific_properties:
+            format: "TSV"
+
+      - data_collection_tag: "vmg_contig_iterations"
+        optional: true  # absent with --skip_assembly or --skip_iterative_refinement
+        description: "De novo consensus at every refinement step: scaffold, mapping iterations and variant-calling round"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "viralmetagenome/contig_iterations.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome_id": "Genome key, <sample>_<cluster>"
+              "step": "Refinement step: consensus (scaffold), it<N> or itvariant-calling"
+              "step_order": "Step in the order it ran, 0 for the scaffold"
+              "n_pct": "Ambiguous bases (N), percent"
+              "annotation_identity_pct": "Identity to the closest annotated reference, percent"
+              "annotation_mismatches": "Mismatches to the closest annotated reference"
+
+      - data_collection_tag: "vmg_mapping_overview"
+        optional: true  # absent without --mapping_constraints
+        description: "Consensus genomes against the mapping constraint references, one per sample and reference"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "viralmetagenome/mapping_overview.py"
+          dc_specific_properties:
+            format: "TSV"
+
+      - data_collection_tag: "checkv_quality"
+        optional: true  # absent with --skip_checkv or --skip_consensus_qc
+        description: "CheckV quality of every consensus sequence: genes, completeness, contamination and quality tier"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "checkv/quality_summary.py"
+            source_overrides:
+              summary:
+                glob_pattern: "consensus/quality_control/checkv/*/*/quality_summary.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "checkv_run": "CheckV run, <sample>_<reference>"
+              "contig_id": "Consensus sequence id"
+              "checkv_quality": "CheckV quality tier"
+              "completeness": "Estimated completeness, percent (null when the database has no close genome)"
+              "contamination": "Estimated host contamination, percent"
+
+      # Genome hub. Declared after every collection it reads through dc_ref:
+      # a dc_ref is read back from the referenced Delta table, which exists
+      # only once that collection has been processed.
+      - data_collection_tag: "genomes"
+        description: "Consensus genome hub: one row per sample and reference, de novo or constraint, with its closest reference, ambiguous bases, CheckV call, mapping, depth, breadth and variant counts"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralmetagenome/genomes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome_id": "Genome key, <sample>_<reference>, the key the variant and coverage collections join on"
+              "sample": "Sample id"
+              "reference": "Constraint reference id, or de novo cluster id"
+              "route": "de novo or constraint"
+              "step": "Refinement step the de novo consensus ended at"
+              "virus": "What the genome is: the annotation's acronym or name, else Unclassified"
+              "consensus_length": "Consensus length, bp"
+              "n_pct": "Ambiguous bases (N), percent"
+              "annotation_name": "Closest reference of the annotation database"
+              "annotation_identity_pct": "Identity to the closest annotated reference, percent"
+              "annotation_aligned_pct": "Share of the consensus aligned to it, percent"
+              "blast_hit": "Best BLAST hit in the reference pool"
+              "blast_identity_pct": "Identity of the best BLAST hit, percent"
+              "checkv_quality": "CheckV quality tier"
+              "checkv_completeness": "CheckV completeness, percent"
+              "checkv_contamination": "CheckV contamination, percent"
+              "mapped_reads": "Reads mapped (R1+R2)"
+              "mapped_pct": "Reads mapped, percent"
+              "dup_pct": "Picard duplication, percent"
+              "mean_depth": "Mean depth (mosdepth)"
+              "cov_10x_pct": "Bases at 10X or deeper, percent"
+              "snps": "SNPs (bcftools)"
+              "indels": "Indels (bcftools)"
+              "ts_tv": "Transitions over transversions (bcftools)"
+
+      # ----------------------------------------------------------------
+      # Variants and coverage per mapping (catalog ivar/*, mosdepth/*)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "ivar_variants"
+        optional: true  # absent with --skip_variant_calling
+        description: "Raw iVar calls per sample and reference: position, alleles, depths, allele frequency, p-value and PASS verdict"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "ivar/variants_tsv.py"
+            source_overrides:
+              variants:
+                glob_pattern: "variants/ivar/*/*.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome_id": "Genome key, <sample>_<reference>"
+              "chrom": "Reference sequence the variant is on"
+              "pos": "1-based position"
+              "variant_type": "SNV, Insertion or Deletion"
+              "af": "Alternative allele frequency, 0 to 1"
+              "frequency_class": "Fixed (AF at least 0.9), Major (0.5 to 0.9) or Minor"
+              "filter": "PASS when iVar kept the call, else Filtered"
+
+      - data_collection_tag: "coverage_bins"
+        optional: true
+        description: "Read depth along each mapping's reference, binned from mosdepth's per-base depth"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mosdepth/per_base_bins.py"
+            source_overrides:
+              per_base:
+                glob_pattern: "variants/mapping-info/metrics/mosdepth/*/*.per-base.bed.gz"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome_id": "Genome key, <sample>_<reference>"
+              "chrom": "Reference sequence"
+              "start": "Bin start, 0-based"
+              "end": "Bin end"
+              "position": "Bin centre"
+              "mean_depth": "Length-weighted mean depth over the bin"
+              "min_depth": "Lowest depth in the bin"
+
+      - data_collection_tag: "coverage_cumulative"
+        optional: true
+        description: "Share of each mapping's reference covered at least at each depth, from mosdepth's global distribution"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mosdepth/cumulative_coverage.py"
+            source_overrides:
+              dist:
+                glob_pattern: "variants/mapping-info/metrics/mosdepth/*/*.mosdepth.global.dist.txt"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome_id": "Genome key, <sample>_<reference>"
+              "depth": "Depth threshold"
+              "bases_pct": "Bases covered at least at that depth, percent"
+
+# ============================================================================
+# LINKS: the sample hub filters every per-sample collection, the genome hub
+# every per-genome one
+# ============================================================================
+links:
+  # MultiQC names its rows after the files: <prefix>-<sample>_<reference>...,
+  # <sample>_raw_1, <sample>.sort. The sample mapping attaches each to the hub
+  # sample it holds as a whole token.
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config: {resolver: "sample_mapping", target_field: "sample"}
+    description: "Filter the MultiQC panels by the samples picked in the left panel"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "read_funnel"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the read funnel by the selected samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "vmg_contigs"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the de novo contigs by the selected samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "vmg_clusters"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the contig clusters by the selected samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "genomes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the consensus genomes by the selected samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "vmg_contig_iterations"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the refinement steps by the selected samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "checkv_quality"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the CheckV calls by the selected samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "ivar_variants"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the variant calls by the selected samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "coverage_bins"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the depth profiles by the selected samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "coverage_cumulative"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the cumulative coverage curves by the selected samples"
+    enabled: true
+  # The genome hub carries a pick on a genome (route, virus, genome id) to
+  # every per-genome collection.
+  - source_dc_tag: "genomes"
+    source_column: "genome_id"
+    target_dc_tag: "ivar_variants"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome_id"}
+    description: "Filter the variant calls by the selected genomes"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome_id"
+    target_dc_tag: "coverage_bins"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome_id"}
+    description: "Filter the depth profiles by the selected genomes"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome_id"
+    target_dc_tag: "coverage_cumulative"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome_id"}
+    description: "Filter the cumulative coverage curves by the selected genomes"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome_id"
+    target_dc_tag: "vmg_contig_iterations"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome_id"}
+    description: "Filter the refinement steps by the selected genomes"
+    enabled: true
+  # Reverse links: a selection on a tab's own scatter narrows the sample hub,
+  # and through it every other tab.
+  - source_dc_tag: "genomes"
+    source_column: "sample"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Narrow the sample hub to the samples of the genomes selected on the genome tiles"
+    enabled: true
+  - source_dc_tag: "vmg_contigs"
+    source_column: "sample"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Narrow the sample hub to the samples of the contigs selected on the contig tiles"
+    enabled: true
