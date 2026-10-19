@@ -1,0 +1,19 @@
+id: mcquant_marker_summary
+name: Marker intensity per image
+mode: imaging/markers
+description: >-
+  One row per image, segmentation method and marker: the cells measured, the
+  mean, median and quartiles of their mean intensity, the median on the asinh
+  scale and the coefficient of variation over the cells, which says how
+  unevenly the marker is expressed across the image. The marker keeps its
+  position in the panel and its role (nuclear stain or marker).
+find:
+  path_glob: "**/quantification/mcquant/*/*.csv"
+recipe: mcquant/marker_summary.py
+fixture: marker_summary.tsv
+renders_as:
+  - { id: brightest_markers, component: card, column: median_intensity, aggregation: median, secondary_layout: top_n, breakdown_col: marker, top_n_count: 3 }
+  - { id: marker_spread, component: card, column: cv, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: figure, visu_type: bar, dict_kwargs: { x: marker, y: median_asinh, color: segmenter, barmode: group } }
+  - { component: interactive, interactive_type: MultiSelect, column_name: marker }
+  - { component: table, row_selection_enabled: true, row_selection_column: summary_key }
