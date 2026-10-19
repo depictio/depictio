@@ -4177,3 +4177,186 @@ def generate_ranked_distribution_demo() -> None:
 
 
 generate_ranked_distribution_demo()
+# NN. Spatial cells: an mcquant single-cell table of two tonsil images.
+# columns: spatial_cells_demo  CellID, DNA_1, CD3, CD20, CD45, PanCK, Ki67,
+#                              CD68, aSMA, X_centroid, Y_centroid, Area,
+#                              MajorAxisLength, MinorAxisLength, Eccentricity,
+#                              Solidity, Extent, Orientation, sample, cell_id,
+#                              cell_type
+# ---------------------------------------------------------------------------
+#
+# The column set of nf-core/mcmicro's mcquant output (one mean intensity per
+# channel, then the centroid and the regionprops morphology), for two images
+# of a tonsil section, plus three columns a depictio recipe adds: the sample,
+# a sample-qualified cell id (mcquant's CellID restarts at 1 per image) and a
+# cell type called from the markers. Centroids are in pixels of each image,
+# origin top-left, y down.
+#
+# The tissue is laid out the way a tonsil reads: an epithelial band
+# (PanCK) along a wavy top edge, B-cell follicles (CD20) with a proliferating
+# germinal centre (Ki67) in their middle, a T-cell zone (CD3) around and
+# between them, a few vessels lined with smooth muscle (aSMA) and macrophages
+# (CD68) scattered through. Cells sit on a jittered grid, so they never stack,
+# and are larger in the epithelium. The second image is dimmer overall (a
+# weaker stain), which is what the per-image percentile clip is for.
+
+_SPATIAL_MARKERS = ("DNA_1", "CD3", "CD20", "CD45", "PanCK", "Ki67", "CD68", "aSMA")
+# Mean intensity per marker for each cell type (16-bit means, as mcquant reports).
+_SPATIAL_PROFILES = {
+    "B cell": (9000, 600, 7000, 5200, 300, 500, 400, 300),
+    "Germinal centre B": (11000, 500, 6200, 5000, 300, 6500, 500, 300),
+    "T cell": (8500, 6800, 500, 5600, 300, 600, 400, 300),
+    "Epithelial": (7000, 300, 300, 600, 8200, 900, 300, 400),
+    "Macrophage": (7600, 500, 500, 4200, 400, 400, 6000, 400),
+    "Stromal": (6500, 300, 300, 500, 400, 300, 400, 5200),
+}
+# Mean area in px^2 per cell type: lymphocytes are small, epithelium large.
+_SPATIAL_AREA = {
+    "B cell": 95.0,
+    "Germinal centre B": 120.0,
+    "T cell": 90.0,
+    "Epithelial": 210.0,
+    "Macrophage": 175.0,
+    "Stromal": 150.0,
+}
+_SPATIAL_SAMPLES = (
+    # name, width, height, follicles (cx, cy, r), vessels (x0, y0, x1, y1), stain
+    (
+        "tonsil_1",
+        1000,
+        800,
+        ((300, 420, 140), (640, 380, 125), (820, 640, 95)),
+        ((80, 700, 480, 760), (560, 160, 980, 260)),
+        1.0,
+    ),
+    (
+        "tonsil_2",
+        900,
+        900,
+        ((330, 520, 150), (660, 600, 130)),
+        ((100, 300, 800, 330), (480, 860, 880, 720)),
+        0.75,
+    ),
+)
+
+
+def _segment_distance(px: float, py: float, seg: tuple[float, float, float, float]) -> float:
+    x0, y0, x1, y1 = seg
+    dx, dy = x1 - x0, y1 - y0
+    t = max(0.0, min(1.0, ((px - x0) * dx + (py - y0) * dy) / (dx * dx + dy * dy)))
+    return math.hypot(px - (x0 + t * dx), py - (y0 + t * dy))
+
+
+def generate_spatial_cells_demo() -> None:
+    """Write spatial_cells_demo.tsv: two tonsil images, about 4,000 cells each."""
+    rng = np.random.default_rng(20261019)
+    header = [
+        "CellID",
+        *_SPATIAL_MARKERS,
+        "X_centroid",
+        "Y_centroid",
+        "Area",
+        "MajorAxisLength",
+        "MinorAxisLength",
+        "Eccentricity",
+        "Solidity",
+        "Extent",
+        "Orientation",
+        "sample",
+        "cell_id",
+        "cell_type",
+    ]
+    rows: list[list] = []
+    spacing = 12.5
+    for sample, width, height, follicles, vessels, stain in _SPATIAL_SAMPLES:
+        cell_id = 0
+        cy = spacing / 2
+        while cy < height:
+            cx = spacing / 2
+            while cx < width:
+                x = cx + rng.uniform(-0.38, 0.38) * spacing
+                y = cy + rng.uniform(-0.38, 0.38) * spacing
+                cx += spacing
+                # Tissue edge: a ragged ellipse a little inside the image, so
+                # the image underlay has background around the section.
+                ex = (x - width / 2) / (width * 0.49)
+                ey = (y - height / 2) / (height * 0.49)
+                ragged = 1.0 + 0.05 * math.sin(7 * math.atan2(ey, ex)) + rng.normal(0, 0.01)
+                if ex * ex + ey * ey > ragged:
+                    continue
+                epithelium_edge = 0.16 * height + 0.05 * height * math.sin(x / 90.0)
+                follicle = min(
+                    (math.hypot(x - fx, y - fy) / fr for fx, fy, fr in follicles), default=9.0
+                )
+                vessel = min((_segment_distance(x, y, v) for v in vessels), default=1e9)
+                roll = rng.random()
+                if y < epithelium_edge:
+                    cell_type = "Epithelial" if roll < 0.9 else "Macrophage"
+                elif vessel < 14:
+                    cell_type = "Stromal" if roll < 0.75 else "T cell"
+                elif follicle < 0.5:
+                    cell_type = "Germinal centre B" if roll < 0.7 else "B cell"
+                elif follicle < 1.0:
+                    cell_type = (
+                        "B cell" if roll < 0.82 else ("T cell" if roll < 0.95 else "Macrophage")
+                    )
+                elif follicle < 1.45:
+                    cell_type = (
+                        "T cell" if roll < 0.8 else ("B cell" if roll < 0.9 else "Macrophage")
+                    )
+                else:
+                    cell_type = (
+                        "T cell" if roll < 0.55 else ("Stromal" if roll < 0.8 else "Macrophage")
+                    )
+                cell_id += 1
+                profile = _SPATIAL_PROFILES[cell_type]
+                # A soft gradient across the section (uneven illumination), the
+                # stain of the image, and per-cell log-normal noise.
+                shading = 0.85 + 0.3 * (x / width)
+                intensities = [
+                    round(
+                        float(
+                            mean * stain * shading * rng.lognormal(0.0, 0.28) + rng.uniform(80, 220)
+                        ),
+                        1,
+                    )
+                    for mean in profile
+                ]
+                # Ki67 is in the nucleus of a germinal centre B cell only while
+                # it cycles: a third of them are dim.
+                if cell_type == "Germinal centre B" and rng.random() < 0.33:
+                    intensities[5] = round(intensities[5] * 0.15, 1)
+                area = max(30, int(rng.lognormal(math.log(_SPATIAL_AREA[cell_type]), 0.22)))
+                eccentricity = float(
+                    np.clip(
+                        rng.beta(2.2, 3.0)
+                        + (0.25 if cell_type in ("Stromal", "Epithelial") else 0.0),
+                        0.05,
+                        0.97,
+                    )
+                )
+                major = 2 * math.sqrt(area / math.pi) / (1 - eccentricity**2) ** 0.25
+                minor = major * math.sqrt(1 - eccentricity**2)
+                rows.append(
+                    [
+                        cell_id,
+                        *intensities,
+                        round(x, 1),
+                        round(y, 1),
+                        area,
+                        round(major, 2),
+                        round(minor, 2),
+                        round(eccentricity, 3),
+                        round(float(rng.uniform(0.86, 0.99)), 3),
+                        round(float(rng.uniform(0.6, 0.85)), 3),
+                        round(float(rng.uniform(-math.pi / 2, math.pi / 2)), 3),
+                        sample,
+                        f"{sample}:{cell_id}",
+                        cell_type,
+                    ]
+                )
+            cy += spacing
+    write_tsv(OUT / "spatial_cells_demo.tsv", header, rows)
+
+
+generate_spatial_cells_demo()

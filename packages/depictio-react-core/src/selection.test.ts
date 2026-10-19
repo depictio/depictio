@@ -57,6 +57,20 @@ describe('the UpSet as a selection source', () => {
     expect(advancedVizSelectionColumn(embedding)).toBe('sample');
     expect(advancedVizChromeReset(embedding)).toBe(false);
   });
+
+  it('selects spatial cells on their id, opt-in', () => {
+    const cells = (config: Record<string, unknown>) =>
+      ({ index: 'cells', viz_kind: 'spatial_cells', config }) as unknown as StoredMetadata;
+    expect(advancedVizSelectionColumn(cells({ cell_id_col: 'cell_uid' }))).toBeUndefined();
+    expect(advancedVizSelectionColumn(cells({ selection_enabled: true, cell_id_col: 'cell_uid' }))).toBe(
+      'cell_uid',
+    );
+    expect(advancedVizSelectionColumn(cells({ selection_enabled: true }))).toBe('cell_id');
+    expect(
+      advancedVizSelectionColumn(cells({ selection_enabled: true, selection_column: 'CellID' })),
+    ).toBe('CellID');
+    expect(advancedVizChromeReset(cells({ selection_enabled: true }))).toBe(false);
+  });
 });
 
 describe('the ideogram as a region source', () => {

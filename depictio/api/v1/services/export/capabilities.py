@@ -203,6 +203,9 @@ AV_JSON_SOURCE: dict[str, AvJsonSource] = {
     # Plotly box (or violin) and lollipop subplots built in TypeScript
     # (`ranked_distribution/rankedLayout.ts`); HTML runs the real renderer.
     "ranked_distribution": "client_only",
+    # A Plotly scattergl whose marker sizes follow the zoom and whose colour
+    # range is clipped in the browser; no Python builder stands for it.
+    "spatial_cells": "client_only",
 }
 
 

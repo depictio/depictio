@@ -252,6 +252,11 @@ const VIZ_KIND: Readonly<Record<string, VizKindLabel>> = {
     'tabler:chart-candle',
     'Top features ranked by a score, each with its distribution across samples',
   ),
+  spatial_cells: label(
+    'Cells',
+    'tabler:microscope',
+    'Segmented cells where they sit in the image, coloured by a marker or a cell type',
+  ),
   // `record_card` is a card of fields, not a figure: no label.
 };
 

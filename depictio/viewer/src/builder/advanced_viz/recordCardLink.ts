@@ -91,6 +91,9 @@ function advancedVizEmits(m: StoredMetadata): { emits: boolean; column: string |
     case 'genome_chord':
       column = named ?? str(config.label_col);
       break;
+    case 'spatial_cells':
+      column = named ?? str(config.cell_id_col) ?? 'cell_id';
+      break;
     case 'manhattan':
     case 'genome_view':
       column = named;

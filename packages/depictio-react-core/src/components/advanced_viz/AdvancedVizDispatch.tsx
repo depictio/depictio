@@ -35,6 +35,7 @@ import GeneArrowTrackRenderer from './GeneArrowTrackRenderer';
 import GseaRunningScoreRenderer from './GseaRunningScoreRenderer';
 import SashimiRenderer from './SashimiRenderer';
 import ScatterXyRenderer from './ScatterXyRenderer';
+import SpatialCellsRenderer from './SpatialCellsRenderer';
 import ContactMapRenderer from './ContactMapRenderer';
 import KneePlotRenderer from './KneePlotRenderer';
 import DamageProfileRenderer from './DamageProfileRenderer';
@@ -267,6 +268,7 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   domain_architecture: DomainArchitectureRenderer,
   pae_matrix: PaeMatrixRenderer,
   ramachandran: RamachandranRenderer,
+  spatial_cells: SpatialCellsRenderer,
 };
 
 /**

@@ -262,6 +262,8 @@ STATIC_IDS = {
             # stability stats and a long-form values table.
             "ranked_distribution_demo": "646b0f3c1e4a2d7f8e5b8f51",
             "ranked_distribution_values_demo": "646b0f3c1e4a2d7f8e5b8f52",
+            # Spatial cells tab (the 8e7x block): the mcquant cell table.
+            "spatial_cells_demo": "646b0f3c1e4a2d7f8e5b8e71",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
@@ -323,6 +325,8 @@ STATIC_IDS = {
             "advanced_viz_protein_quality": "646b0f3c1e4a2d7f8e5b8de5",
             # Opens the 8f5x block; 8f51 and 8f52 are its collections.
             "advanced_viz_ranked_distribution": "646b0f3c1e4a2d7f8e5b8f50",
+            # The spatial cells tab opens the 8e7x block; 8e71 is its collection.
+            "advanced_viz_spatial_cells": "646b0f3c1e4a2d7f8e5b8e70",
             "advanced_viz_benchmark_pr": "646b0f3c1e4a2d7f8e5b8d62",
             "advanced_viz_benchmark_confusion": "646b0f3c1e4a2d7f8e5b8d63",
             "advanced_viz_benchmark_ci": "646b0f3c1e4a2d7f8e5b8d64",

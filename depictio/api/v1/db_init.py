@@ -450,6 +450,7 @@ async def create_initial_dashboards(
                 "protein_structure",
                 "protein_families",
                 "protein_quality",
+                "spatial_cells",
                 "benchmark_pr",
                 "benchmark_confusion",
                 "benchmark_ci",

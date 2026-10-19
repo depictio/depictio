@@ -53,6 +53,8 @@ SELECTION_EMITTING_KINDS: dict[str, tuple[str, ...]] = {
     "domain_architecture": ("selection_column", "label_col", "=label"),
     "pae_matrix": ("position_col", "=position"),
     "ramachandran": ("position_col", "=position"),
+    # A lassoed cell is its id. Opt-in, like the other scatter kinds.
+    "spatial_cells": ("selection_column", "cell_id_col", "=cell_id"),
 }
 
 # Kinds whose pick reaches a record card as a `residue_selection` pair (an

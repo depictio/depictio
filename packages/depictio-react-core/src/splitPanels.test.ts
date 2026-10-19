@@ -117,6 +117,7 @@ describe('splitPanels', () => {
       'lollipop',
       'da_barplot',
       'metric_ci_bars',
+      'spatial_cells',
     ];
     const NONE = [
       'phylogenetic',
