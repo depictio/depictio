@@ -1,0 +1,1361 @@
+version: 1
+# nf-core/epitopeprediction 3.2.0, on the family rules of depictio/projects/nf-core/RULES.md
+# (ampliseq/2.18.0 is the reference implementation).
+#
+# Funnel: the MultiQC report (Data & QC) -> which alleles the peptides bind,
+# sample by sample (Predictions) -> the peptides that bind, with their length,
+# their source and, for mutants, their wild type (Peptides) -> how far the tools
+# behind the calls agree (Predictors). The samplesheet (`samples`) is what every
+# filter starts from: its links carry a pick to every collection by sample.
+#
+# Alleles are normalised to HLA-A*02:01 in every collection, so the allele
+# filters here can later be driven by an HLA typing run of the same samples.
+# TODO(wave4c): link allele filter with hlatyping allele_grid
+#
+# Routes: NO_VARIANT_INPUT (no VCF in the sheet) prunes the variant peptides and
+# the mutant / wild-type pairs, NO_WILD_TYPE the pairs only, SINGLE_PREDICTOR
+# (one tool per class) the tool agreement. Their tiles go with them: the
+# Mutant against wild type and Variant peptides sections of Peptides, the
+# Agreement section of Predictors, two findings rows and one highlight.
+main_dashboard:
+  title: nf-core/epitopeprediction
+  subtitle: MHC binding prediction, from variants, proteins or peptides to the binders
+  project_tag: epitopeprediction MHC Binding
+  main_tab_name: Overview
+  tab_icon: mdi:compass-outline
+  tab_icon_color: brandPrimary
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_panel_default: collapsed
+  content_width_default: compact
+  show_tab_header: false
+  # Declared once here, read by every tab of the family.
+  category_colors:
+    '{GROUP_COL}': auto
+    call:
+      Binder: '#2f9e44'
+      Non-binder: '#adb5bd'
+      Unsupported: '#e8590c'
+    affinity_class:
+      Strong (50 nM or less): '#2b8a3e'
+      Binder (50 to 500 nM): '#74b816'
+      Weak (500 to 5000 nM): '#fab005'
+      Non-binding (over 5000 nM): '#adb5bd'
+      No IC50: '#868e96'
+    origin:
+      Mutant: '#e8590c'
+      Wild type: '#1c7ed6'
+      Mutant and wild type: '#ae3ec9'
+      Input sequence: '#868e96'
+    mhc_class:
+      Class I: '#1c7ed6'
+      Class II: '#ae3ec9'
+    agreement:
+      Both binder: '#2f9e44'
+      Neither: '#adb5bd'
+      '*': auto
+    pair_call:
+      Mutant binds, wild type does not: '#e8590c'
+      Both bind: '#2f9e44'
+      Wild type binds, mutant does not: '#1c7ed6'
+      Neither binds: '#adb5bd'
+    consequence:
+      Missense: '#1c7ed6'
+      Frameshift: '#e8590c'
+      In-frame deletion: '#ae3ec9'
+      In-frame insertion: '#0ca678'
+    predictor: auto
+    hla_locus: auto
+    length_class: auto
+  # Persistent: drawn in every tab's filter panel, picks kept across tabs. All
+  # three are bound to the samplesheet, the source of every sample link.
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab
+    persistent: true
+    pin: top
+  grid_sections:
+  - name: Key figures
+    icon: mdi:counter
+    color: gray
+    appearance: plain
+    card_variant: headline
+    filter_bar: true
+    visible_filters: 2
+    description: The run in four numbers. The filters here narrow these four only.
+  - name: Findings
+    icon: mdi:star-outline
+    color: gray
+    appearance: plain
+    figure_style: minimal
+    filter_bar: true
+    visible_filters: 2
+    description: What the data says, each with the tab that shows it, then the figures behind it.
+  - name: How to read this dashboard
+    icon: mdi:information-outline
+    color: gray
+    appearance: plain
+    description: The tabs by group, each with the question it answers.
+  # Declared on the main tab, which no route removes.
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: gray
+    description: The samplesheet behind every tab, narrowed by the sample filters
+    collapsed: true
+    persistent: true
+    pin: bottom
+    exclude_tabs:
+    - Overview
+  components:
+  # First in component order on purpose: the Guide demos the first categorical
+  # filter that shares a data collection with the first card (Samples, below).
+  - component_type: interactive
+    workflow_tag: epitopeprediction
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Key figures
+    tag: ep-ov-kf-group
+    index: ov-kf-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: epitopeprediction
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: teal
+      strip_label: Sample
+    section: Key figures
+    tag: ep-ov-kf-sample
+    index: ov-kf-sample
+    title: Sample
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # The pipeline's wordmark, read from its repository; where it cannot load (no
+  # internet), the title is drawn as text.
+  - component_type: text
+    title: nf-core/epitopeprediction
+    logo: https://raw.githubusercontent.com/nf-core/epitopeprediction/master/docs/images/nf-core-epitopeprediction_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/epitopeprediction/master/docs/images/nf-core-epitopeprediction_logo_dark.png
+    order: 1
+    body: >
+      Peptides from variants, proteins or peptide lists scored for binding to each
+      sample's MHC alleles: which alleles they bind, which peptides bind and where
+      they come from, and how far the prediction tools agree. [Run parameters](params:)
+    tag: ep-ov-hero
+    index: ov-hero
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/epitopeprediction cuts peptides from somatic variants, proteins or a peptide list and scores each one against the sample's MHC alleles with one or more prediction tools. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
+    tag: ep-ov-about
+    index: ov-about
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash.
+  - component_type: text
+    surface: card
+    values:
+      samples: {dc: samples, column: sample, aggregation: nunique, format: integer}
+      alleles: {dc: epitopeprediction_predictions, column: allele, aggregation: nunique, format: integer}
+    body: |
+      ### The run
+      - ![](icon:mdi:flask-outline) **Samples** {{samples}}
+      - ![](icon:mdi:dna) **Alleles** {{alleles}} scored
+      - ![](icon:mdi:tools) **Tools** {{param:tools}}
+      - ![](icon:mdi:ruler) **Class I lengths** {{param:min_peptide_length_classI}} to {{param:max_peptide_length_classI}}
+      - ![](icon:mdi:ruler) **Class II lengths** {{param:min_peptide_length_classII}} to {{param:max_peptide_length_classII}}
+    tag: ep-ov-run
+    index: ov-run
+    layout: {x: 5, y: 1, w: 3, h: 3}
+  # The marks take the family's colour (the header's), not the theme's blue.
+  # The Compare step cites the agreement collection, so a single-tool run
+  # (SINGLE_PREDICTOR) drops it with its data.
+  - component_type: text
+    surface: card
+    accent: green
+    values:
+      n_pairs: {dc: epitopeprediction_predictor_agreement, column: pair_key, aggregation: count, format: si}
+    body: |
+      ### Five steps from inputs to binders
+      Each step names its settings and the tab that shows its result.
+
+      ::: steps
+      1. ![](icon:mdi:dna) **Peptides** Cut from variants with VEP and pVACseq, or from proteins · [Settings](params:vep) · [Peptides](tab:Peptides)
+      2. ![](icon:mdi:ruler) **Lengths** Peptides split by the class lengths · [Settings](params:peptide_length) · [Peptides](tab:Peptides)
+      3. ![](icon:mdi:target) **Predict** {{param:tools}} score each allele · [Settings](params:tools) · [Predictions](tab:Predictions)
+      4. ![](icon:mdi:check-decagram-outline) **Call** Binders by each tool's threshold · [Settings](params:use_ba_rank) · [Predictions](tab:Predictions)
+      5. ![](icon:mdi:compare-horizontal) **Compare** {{n_pairs}} peptides scored by two tools · [Settings](params:tools) · [Predictors](tab:Predictors)
+      :::
+    tag: ep-ov-steps
+    index: ov-steps
+    layout: {x: 0, y: 4, w: 8, h: 3}
+  # Key figures: one card per stage of the funnel, each opening the tab that
+  # explains it. All four read collections every route writes.
+  - component_type: card
+    workflow_tag: epitopeprediction
+    data_collection_tag: samples
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: '{GROUP_COL}'
+    display:
+      icon_name: mdi:flask-outline
+      icon_color: orange
+      caption: in the samplesheet, by {GROUP_COL_DISPLAY}
+      link: tab:MultiQC
+    section: Key figures
+    tag: ep-ov-kf-samples
+    index: ov-kf-samples
+    title: Samples
+    description: Samples in the samplesheet, each one input file and one allele set. The bar splits them by {GROUP_COL_DISPLAY}.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_peptides
+    use: epitopeprediction/peptide_count
+    aggregation: count
+    column_name: peptide_key
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: call
+    display:
+      icon_name: mdi:dna
+      icon_color: violet
+      caption: per sample, by binder call
+      link: tab:Peptides
+      format: si
+    section: Key figures
+    tag: ep-ov-kf-peptides
+    index: ov-kf-peptides
+    title: Peptides
+    description: Peptides scored over the samples in view, one per sample and sequence. The bar splits binders, non-binders and unsupported.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictions
+    use: epitopeprediction/allele_count
+    aggregation: nunique
+    column_name: allele
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: hla_locus
+    top_n_count: 4
+    display:
+      icon_name: mdi:shield-account-outline
+      icon_color: blue
+      caption: alleles, ranked by locus
+      link: tab:Predictions
+    section: Key figures
+    tag: ep-ov-kf-alleles
+    index: ov-kf-alleles
+    title: Alleles
+    description: Distinct MHC alleles the peptides were scored against. The bars rank the loci by how many alleles they hold.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_peptides
+    use: epitopeprediction/binder_count
+    aggregation: count
+    column_name: peptide_key
+    column_type: object
+    filter_expr: col('binder') == 1
+    secondary_layout: composition
+    breakdown_col: length_class
+    display:
+      icon_name: mdi:check-decagram-outline
+      icon_color: green
+      caption: peptides binding an allele, by length
+      link: tab:Peptides
+    section: Key figures
+    tag: ep-ov-kf-binders
+    index: ov-kf-binders
+    title: Predicted binders
+    description: Peptides at least one tool calls a binder of at least one allele, by the tool's own threshold.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Findings filter bar: the group, then the allele.
+  - component_type: interactive
+    workflow_tag: epitopeprediction
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Findings
+    tag: ep-ov-findings-group
+    index: ov-findings-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictions
+    interactive_component_type: MultiSelect
+    column_name: allele
+    column_type: object
+    display:
+      icon_name: mdi:shield-account-outline
+      custom_color: blue
+      strip_label: Allele
+    section: Findings
+    tag: ep-ov-findings-allele
+    index: ov-findings-allele
+    title: Allele
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # One result row per finding, each citing one data collection, so the import
+  # removes a row with its data.
+  - component_type: text
+    surface: card
+    values:
+      top_allele: {dc: epitopeprediction_allele_summary, column: allele, aggregation: top, weight: binders}
+      top_share: {dc: epitopeprediction_allele_summary, column: allele, aggregation: top_share,
+        weight: binders, format: percent}
+      bind_share: {dc: epitopeprediction_peptides, column: binder, aggregation: average, format: percent}
+      n_bind: {dc: epitopeprediction_peptides, column: peptide_key, aggregation: count, filter_expr: col('binder') == 1, format: integer}
+      mt_only: {dc: epitopeprediction_wildtype_pairs, column: sequence, aggregation: nunique, filter_expr: "col('pair_call') == 'Mutant binds, wild type does not'", format: integer}
+      agree: {dc: epitopeprediction_predictor_agreement, column: concordant, aggregation: average, format: percent}
+    body: |
+      - **{{top_allele}}** is called the binder of the most peptides – {{top_share}} of the binder calls [Predictions](tab:Predictions)
+      - **{{bind_share}}** of the peptides bind at least one allele – {{n_bind}} predicted binders [Peptides](tab:Peptides)
+      - **{{mt_only}}** mutant peptides bind where their wild type does not – the classic neoepitope candidates [Peptides](tab:Peptides)
+      - **{{agree}}** of the peptides two tools scored get the same call from both [Predictors](tab:Predictors)
+    section: Findings
+    tag: ep-ov-findings
+    index: ov-findings
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # One highlight per analysis tab, the Predictors tab twice (the agreement
+  # needs two tools, SINGLE_PREDICTOR drops it). The tiles of a row share a
+  # stored height.
+  - component_type: highlight
+    section: Findings
+    source_tab: Predictions
+    source_component: pred-allele-dots
+    caption: One dot per allele and sample; size is the share of the peptides that bind, colour their median affinity.
+    tag: ep-ov-hl-alleles
+    index: ov-hl-alleles
+    layout: {x: 0, y: 2, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Peptides
+    source_component: pep-length-histogram
+    caption: Peptides by length, stacked by call; the binders are the green part of each bar.
+    hide_legend: true
+    tag: ep-ov-hl-length
+    index: ov-hl-length
+    layout: {x: 4, y: 2, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Predictors
+    source_component: prd-affinity-rank
+    caption: One point per prediction, IC50 against percentile rank; colour is the tool.
+    hide_legend: true
+    tag: ep-ov-hl-affinity
+    index: ov-hl-affinity
+    layout: {x: 0, y: 6, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Predictors
+    source_component: prd-agreement
+    caption: One point per peptide and allele two tools scored, one IC50 against the other; colour is who calls a binder.
+    hide_legend: true
+    tag: ep-ov-hl-agreement
+    index: ov-hl-agreement
+    layout: {x: 4, y: 6, w: 4, h: 4}
+  # Link-only tab tiles: each tile prints its tab's subtitle, the question the
+  # tab answers.
+  - component_type: text
+    body: |
+      ### Data & QC
+      - [MultiQC](tab:MultiQC)
+
+      ### Neoepitopes
+      - [Predictions](tab:Predictions)
+      - [Peptides](tab:Peptides)
+      - [Predictors](tab:Predictors)
+    section: How to read this dashboard
+    tag: ep-ov-how-to-read
+    index: ov-how-to-read
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Persistent sample filters, the group first.
+  - component_type: interactive
+    workflow_tag: epitopeprediction
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+    section: Sample filters
+    group: Sample scope
+    tag: ep-filter-group
+    index: sample-filters-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: epitopeprediction
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: teal
+    section: Sample filters
+    group: Sample scope
+    tag: ep-filter-sample
+    index: sample-filters-sample
+    title: Sample
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: epitopeprediction
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: mhc_class
+    column_type: object
+    display:
+      icon_name: mdi:shield-half-full
+      custom_color: indigo
+    section: Sample filters
+    group: Sample scope
+    tag: ep-filter-mhc-class
+    index: sample-filters-mhc-class
+    title: MHC class
+    layout: {x: 0, y: 5, w: 1, h: 2}
+  # Row selection feeds the Analysis panel.
+  - component_type: table
+    workflow_tag: epitopeprediction
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Sample sheet
+    tag: ep-sample-sheet
+    index: sample-sheet
+    title: Samplesheet
+    description: One row per sample, with its input type, MHC class, alleles and input file.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+tabs:
+# ============================================================================
+# Data & QC
+# ============================================================================
+- title: MultiQC
+  subtitle: How many peptides does each tool call a binder?
+  tab_group: Data & QC
+  tab_order: 1
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  grid_sections:
+  - name: Binding predictions
+    icon: mdi:chart-box-outline
+    color: orange
+    description: Binders per sample and tool, and the rank, affinity and length of the binders
+  - name: Input variants
+    icon: mdi:file-document-outline
+    color: gray
+    description: bcftools statistics of the VCF inputs, after normalisation
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      epitopeprediction writes its own [MultiQC](https://multiqc.info) sections: binders,
+      non-binders and unsupported peptides per sample and tool, then the rank, affinity and
+      length of the predictions. Read the counts first, then check the distributions of a
+      sample with few binders; the bcftools panels describe the VCF inputs.
+    tag: ep-mqc-intro
+    index: mqc-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    workflow_tag: epitopeprediction
+    data_collection_tag: multiqc_data
+    selected_module: peptide_binding_prediction_stats
+    selected_plot: peptide_binding_prediction_stats-section
+    section: Binding predictions
+    tag: ep-mqc-stats
+    title: Binding prediction statistics
+    description: Binders, non-binders and unsupported peptides per sample and tool, wild types left out.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: epitopeprediction
+    data_collection_tag: multiqc_data
+    selected_module: binder_rank_distribution
+    selected_plot: binder_rank_distribution-section
+    section: Binding predictions
+    tag: ep-mqc-rank
+    title: Rank distribution
+    description: Percentile rank of the predictions per sample; a binder sits at the low end.
+    layout: {x: 0, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: epitopeprediction
+    data_collection_tag: multiqc_data
+    selected_module: binding_affinity_distribution
+    selected_plot: binding_affinity_distribution-section
+    section: Binding predictions
+    tag: ep-mqc-affinity
+    title: Binding affinity distribution
+    description: Affinity score of the predictions per sample, higher is stronger.
+    layout: {x: 4, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: epitopeprediction
+    data_collection_tag: multiqc_data
+    selected_module: binder_length_distribution
+    selected_plot: binder_length_distribution-section
+    section: Binding predictions
+    tag: ep-mqc-length
+    title: Binder length distribution
+    description: Lengths of the predicted binders per sample.
+    layout: {x: 0, y: 8, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: epitopeprediction
+    data_collection_tag: multiqc_data
+    use: multiqc/general_stats
+    selected_module: general_stats
+    selected_plot: general_stats
+    section: Input variants
+    tag: ep-mqc-general-stats
+    title: General statistics
+    description: One row per VCF input, with its records, SNPs, indels and Ts/Tv.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: epitopeprediction
+    data_collection_tag: multiqc_data
+    use: multiqc/bcftools
+    selected_module: bcftools
+    selected_plot: Variant Substitution Types
+    section: Input variants
+    tag: ep-mqc-subtypes
+    title: Substitution types
+    description: Single-base substitutions of the input variants, by type.
+    layout: {x: 0, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: epitopeprediction
+    data_collection_tag: multiqc_data
+    use: multiqc/bcftools
+    selected_module: bcftools
+    selected_plot: Indel Distribution
+    section: Input variants
+    tag: ep-mqc-indels
+    title: Indel length distribution
+    description: Lengths of the input insertions and deletions, which make the frameshift peptides.
+    layout: {x: 4, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: epitopeprediction
+    data_collection_tag: multiqc_data
+    use: multiqc/bcftools
+    selected_module: bcftools
+    selected_plot: Variant Quality
+    section: Input variants
+    tag: ep-mqc-quality
+    title: Variant quality
+    description: Quality of the input variants, by variant class.
+    layout: {x: 0, y: 8, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: epitopeprediction
+    data_collection_tag: multiqc_data
+    use: multiqc/bcftools
+    selected_module: bcftools
+    selected_plot: Variant depths
+    section: Input variants
+    tag: ep-mqc-depths
+    title: Variant depths
+    description: Read depth at the input variants.
+    layout: {x: 4, y: 8, w: 4, h: 4}
+# ============================================================================
+# Neoepitopes
+# ============================================================================
+- title: Predictions
+  subtitle: Which alleles do the peptides bind, sample by sample?
+  tab_group: Neoepitopes
+  tab_order: 2
+  tab_icon: mdi:shield-account-outline
+  tab_icon_color: blue
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Allele filters
+    icon: mdi:filter-variant
+    color: blue
+    description: Narrow by allele, locus, tool or affinity
+  grid_sections:
+  - name: Predictions at a glance
+    icon: mdi:counter
+    color: blue
+    description: Predictions, binder calls, alleles and the typical affinity
+  - name: Binding by allele
+    icon: mdi:chart-donut
+    color: blue
+    description: The share of each sample's peptides that bind each allele
+  - name: Affinity distribution
+    icon: mdi:chart-bell-curve
+    color: blue
+    description: How the predicted IC50s spread, by tool and by sample
+  - name: Allele table
+    icon: mdi:table
+    color: gray
+    description: Peptides, binders and IC50 per sample and allele
+    collapsed: true
+  - name: Prediction table
+    icon: mdi:table
+    color: gray
+    description: Every prediction, one row per peptide, allele and tool
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      Each tool scores every peptide against every allele of its sample: an IC50 in nM, lower
+      is stronger, and a percentile rank. A peptide is a binder when a tool's own threshold
+      calls it one ([binder definition](https://nf-co.re/epitopeprediction/3.2.0/docs/output)).
+      Pick an allele or a locus on the left; the dot plot opens on thirty alleles, those whose
+      affinity differs most between samples, and draws every allele on demand.
+    tag: ep-pred-intro
+    index: pred-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # TODO(wave4c): link allele filter with hlatyping allele_grid
+  - component_type: interactive
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictions
+    interactive_component_type: MultiSelect
+    column_name: allele
+    column_type: object
+    display:
+      icon_name: mdi:shield-account-outline
+      custom_color: blue
+    section: Allele filters
+    group: Alleles
+    tag: ep-pred-filter-allele
+    index: pred-allele-filter
+    title: Allele
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictions
+    interactive_component_type: MultiSelect
+    column_name: hla_locus
+    column_type: object
+    display:
+      icon_name: mdi:map-marker-outline
+      custom_color: cyan
+    section: Allele filters
+    group: Alleles
+    tag: ep-pred-filter-locus
+    index: pred-locus-filter
+    title: HLA locus
+    layout: {x: 0, y: 3, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictions
+    interactive_component_type: MultiSelect
+    column_name: predictor
+    column_type: object
+    display:
+      icon_name: mdi:tools
+      custom_color: grape
+    section: Allele filters
+    group: Alleles
+    tag: ep-pred-filter-predictor
+    index: pred-predictor-filter
+    title: Tool
+    layout: {x: 0, y: 5, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictions
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: log10_ic50
+    column_type: float64
+    display:
+      icon_name: mdi:chart-bell-curve
+      custom_color: green
+    section: Allele filters
+    group: Alleles
+    tag: ep-pred-filter-ic50
+    index: pred-ic50-range
+    title: log10 IC50 (nM)
+    layout: {x: 0, y: 7, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictions
+    use: epitopeprediction/prediction_count
+    aggregation: count
+    column_name: row_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: affinity_class
+    display:
+      icon_name: mdi:target
+      icon_color: blue
+      caption: peptide-allele scores, by IC50 band
+      format: si
+    section: Predictions at a glance
+    tag: ep-pred-card-predictions
+    index: pred-card-predictions
+    title: Predictions
+    description: One per peptide, allele and tool that scored it, split by IC50 band.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictions
+    use: epitopeprediction/binder_calls
+    aggregation: count
+    column_name: row_id
+    column_type: object
+    filter_expr: col('binder') == 1
+    secondary_layout: composition
+    breakdown_col: length_class
+    display:
+      icon_name: mdi:check-decagram-outline
+      icon_color: green
+      caption: binder calls, by peptide length
+    section: Predictions at a glance
+    tag: ep-pred-card-binder-calls
+    index: pred-card-binder-calls
+    title: Binder calls
+    description: Predictions a tool calls a binder, by its own threshold, split by peptide length.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictions
+    use: epitopeprediction/allele_count
+    aggregation: nunique
+    column_name: allele
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: hla_locus
+    top_n_count: 4
+    display:
+      icon_name: mdi:shield-account-outline
+      icon_color: cyan
+      caption: alleles, ranked by locus
+    section: Predictions at a glance
+    tag: ep-pred-card-alleles
+    index: pred-card-alleles
+    title: Alleles
+    description: Distinct alleles scored; the bars rank the loci by how many they hold.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictions
+    use: epitopeprediction/median_ic50
+    aggregation: median
+    column_name: ic50_nm
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 500
+    threshold_direction: max
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: orange
+      caption: median nM, against the 500 nM binder line
+      format: si
+    section: Predictions at a glance
+    tag: ep-pred-card-ic50
+    index: pred-card-ic50
+    title: Median IC50
+    description: Median predicted IC50 of the predictions; below 500 nM a peptide is usually read as a binder.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_allele_summary
+    use: epitopeprediction/allele_dot_plot
+    config:
+      max_genes: 30
+      gene_sort: frac
+      cluster_sort: name
+      colour_scale: Viridis
+    section: Binding by allele
+    tag: ep-pred-av-allele-dots
+    index: pred-allele-dots
+    title: Binder share per allele and sample
+    description: Thirty alleles, those that differ most between samples first; size is the binder share, colour the median affinity.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: figure
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictions
+    visu_type: histogram
+    dict_kwargs:
+      x: log10_ic50
+      color: predictor
+      barmode: overlay
+      opacity: 0.7
+      labels: {log10_ic50: log10 IC50 (nM), predictor: ''}
+    section: Affinity distribution
+    tag: ep-pred-fig-ic50
+    index: pred-ic50-histogram
+    title: Predicted IC50 by tool
+    description: log10 IC50 of every prediction, one colour per tool; 2.7 is the 500 nM binder line.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: figure
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictions
+    visu_type: histogram
+    dict_kwargs:
+      x: sample
+      color: affinity_class
+      barmode: stack
+      labels: {sample: '', affinity_class: ''}
+    section: Affinity distribution
+    tag: ep-pred-fig-affinity-class
+    index: pred-affinity-class-bars
+    title: Affinity classes per sample
+    description: Predictions per sample, stacked by IC50 band from strong to non-binding.
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: table
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_allele_summary
+    use: epitopeprediction/allele_summary
+    row_selection_enabled: true
+    row_selection_column: allele_key
+    section: Allele table
+    tag: ep-pred-table-alleles
+    index: pred-table-alleles
+    title: Binding per sample and allele
+    description: Peptides scored, binders, binder share and IC50, one row per sample and allele.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictions
+    use: epitopeprediction/predictions
+    row_selection_enabled: true
+    row_selection_column: row_id
+    section: Prediction table
+    tag: ep-pred-table-predictions
+    index: pred-table-predictions
+    title: Every prediction
+    description: Affinity, IC50, rank and binder call, one row per sample, peptide, allele and tool.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Peptides
+  subtitle: Which peptides bind, and which variant or protein do they come from?
+  tab_group: Neoepitopes
+  tab_order: 3
+  tab_icon: mdi:dna
+  tab_icon_color: violet
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Peptide filters
+    icon: mdi:filter-variant
+    color: violet
+    description: Narrow by binder call, peptide length or origin
+  grid_sections:
+  - name: Peptides at a glance
+    icon: mdi:counter
+    color: violet
+    description: Peptides, binders, their alleles and the typical best affinity
+  - name: Length
+    icon: mdi:ruler
+    color: violet
+    description: Peptides by length and call
+  - name: Mutant against wild type
+    icon: mdi:scale-balance
+    color: violet
+    description: Each missense mutant peptide against its wild type, allele by allele
+  - name: Variant peptides
+    icon: mdi:file-document-outline
+    color: gray
+    description: The candidate peptides cut from each variant, before prediction
+    collapsed: true
+  - name: Peptide detail
+    icon: mdi:file-document-outline
+    color: gray
+    description: Pick a peptide in the table to read its record
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      One row per sample and peptide, at its best prediction over the alleles and tools. For
+      variant input [pVACseq](https://pvactools.readthedocs.io) cuts every peptide that overlaps
+      a mutation, and with the wild-type option each missense mutant meets its wild type. A
+      mutant that binds where its wild type does not is the classic neoepitope candidate; pick
+      one in the table to read where it comes from.
+    tag: ep-pep-intro
+    index: pep-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_peptides
+    interactive_component_type: MultiSelect
+    column_name: call
+    column_type: object
+    display:
+      icon_name: mdi:check-decagram-outline
+      custom_color: green
+    section: Peptide filters
+    group: Peptides
+    tag: ep-pep-filter-call
+    index: pep-call-filter
+    title: Binder call
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_peptides
+    interactive_component_type: MultiSelect
+    column_name: length_class
+    column_type: object
+    display:
+      icon_name: mdi:ruler
+      custom_color: pink
+    section: Peptide filters
+    group: Peptides
+    tag: ep-pep-filter-length
+    index: pep-length-filter
+    title: Peptide length
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_peptides
+    interactive_component_type: MultiSelect
+    column_name: origin
+    column_type: object
+    display:
+      icon_name: mdi:source-branch
+      custom_color: orange
+    section: Peptide filters
+    group: Peptides
+    tag: ep-pep-filter-origin
+    index: pep-origin-filter
+    title: Origin
+    layout: {x: 0, y: 5, w: 1, h: 2}
+  - component_type: card
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_peptides
+    use: epitopeprediction/peptide_count
+    aggregation: count
+    column_name: peptide_key
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: call
+    display:
+      icon_name: mdi:dna
+      icon_color: violet
+      caption: per sample, by binder call
+      format: si
+    section: Peptides at a glance
+    tag: ep-pep-card-peptides
+    index: pep-card-peptides
+    title: Peptides
+    description: Peptides scored, one per sample and sequence, split into binders, non-binders and unsupported.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_peptides
+    use: epitopeprediction/binder_count
+    aggregation: count
+    column_name: peptide_key
+    column_type: object
+    filter_expr: col('binder') == 1
+    secondary_layout: composition
+    breakdown_col: best_affinity_class
+    display:
+      icon_name: mdi:check-decagram-outline
+      icon_color: green
+      caption: binders, by best IC50 band
+    section: Peptides at a glance
+    tag: ep-pep-card-binders
+    index: pep-card-binders
+    title: Predicted binders
+    description: Peptides a tool calls a binder of at least one allele, split by the IC50 band of their best prediction.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_peptides
+    use: epitopeprediction/binding_alleles
+    aggregation: median
+    column_name: binding_alleles
+    column_type: int64
+    filter_expr: col('binder') == 1
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:shield-account-outline
+      icon_color: blue
+      caption: median per binder, with its distribution
+      decimals: 0
+    section: Peptides at a glance
+    tag: ep-pep-card-binding-alleles
+    index: pep-card-binding-alleles
+    title: Alleles per binder
+    description: How many alleles each binder binds; a promiscuous binder is presented more widely.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_peptides
+    aggregation: median
+    column_name: best_ic50_nm
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 500
+    threshold_direction: max
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: orange
+      caption: median nM, against the 500 nM binder line
+      format: si
+    section: Peptides at a glance
+    tag: ep-pep-card-best-ic50
+    index: pep-card-best-ic50
+    title: Best IC50
+    description: Median of each peptide's lowest IC50 over its alleles and tools.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_peptides
+    use: epitopeprediction/length_histogram
+    visu_type: histogram
+    dict_kwargs:
+      x: length
+      color: call
+      barmode: stack
+      labels: {length: Peptide length (residues), call: ''}
+    section: Length
+    tag: ep-pep-fig-length
+    index: pep-length-histogram
+    title: Peptides by length and call
+    description: Peptides per length, stacked by binder call.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: advanced_viz
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_wildtype_pairs
+    use: epitopeprediction/wildtype_scatter
+    config:
+      x_title: Wild-type IC50 (nM)
+      y_title: Mutant IC50 (nM)
+      log_x: true
+      log_y: true
+      reference_line: diagonal
+      opacity: 0.7
+      marker_size: 6
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: sequence
+    section: Mutant against wild type
+    tag: ep-pep-av-wildtype
+    index: pep-wildtype-scatter
+    title: Mutant against wild-type affinity
+    description: One point per mutant peptide, allele and tool. Below the diagonal, the mutation strengthens binding.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: figure
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_variant_peptides
+    use: epitopeprediction/consequence_bar
+    visu_type: bar
+    dict_kwargs:
+      x: consequence
+      color: length_class
+      barmode: stack
+      labels: {consequence: '', length_class: ''}
+    section: Variant peptides
+    tag: ep-pep-fig-consequence
+    index: pep-consequence-bars
+    title: Candidate peptides by consequence
+    description: Peptides cut from each kind of variant, stacked by length.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: table
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_variant_peptides
+    use: epitopeprediction/variant_peptides
+    row_selection_enabled: true
+    row_selection_column: peptide_key
+    section: Variant peptides
+    tag: ep-pep-table-variant
+    index: pep-table-variant
+    title: Candidate peptides per variant
+    description: Gene, transcript, consequence, protein change and genomic anchor of every candidate peptide.
+    layout: {x: 0, y: 4, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_peptides
+    use: epitopeprediction/peptides
+    row_selection_enabled: true
+    row_selection_column: peptide_key
+    section: Peptide detail
+    tag: ep-pep-table-peptides
+    index: pep-table-peptides
+    title: Predicted peptides
+    description: Every peptide with its call, best allele and IC50 and its source. Select a row to open its record.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_peptides
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: ep-pep-table-peptides
+      id_col: peptide_key
+      title_col: sequence
+      selection_source: table_selection
+      sections:
+        Peptide: [sequence, sample, peptide_id, length_class, origin, call]
+        Binding: [best_allele, best_predictor, best_ic50_nm, best_affinity_class, alleles_scored, binding_alleles, binding_allele_list, predictors]
+        Source: [gene, transcript, consequence, HGVSp, genomic_anchor, uniprot, protein_ids, source_records]
+        Wild type: [wildtype, wt_best_ic50_nm, agretopicity]
+      link_templates:
+        uniprot: https://www.uniprot.org/uniprotkb/{value}
+    section: Peptide detail
+    tag: ep-pep-av-peptide-record
+    index: pep-peptide-record
+    title: Peptide record
+    description: The selected peptide, with its best prediction, its source and its wild type.
+    layout: {x: 5, y: 0, w: 3, h: 6}
+- title: Predictors
+  subtitle: How far do the prediction tools agree on the binders?
+  tab_group: Neoepitopes
+  tab_order: 4
+  tab_icon: mdi:compare-horizontal
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Tool filters
+    icon: mdi:filter-variant
+    color: grape
+    description: Narrow by tool, or by how two tools call a peptide
+  grid_sections:
+  - name: Tools at a glance
+    icon: mdi:counter
+    color: grape
+    description: Binders, binder share, unscored peptides and IC50, by tool
+  - name: Calls by tool
+    icon: mdi:chart-bar
+    color: grape
+    description: Each tool's binder share, sample by sample
+  - name: Affinity and rank
+    icon: mdi:chart-scatter-plot
+    color: grape
+    description: The two scores of every prediction, one colour per tool
+  - name: Agreement between tools
+    icon: mdi:scale-balance
+    color: grape
+    description: One tool's IC50 against the other's, for peptides both scored
+  - name: Tool tables
+    icon: mdi:table
+    color: gray
+    description: Calls per sample and tool, and the paired predictions
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      The tools differ in training data, allele coverage and binder threshold: MHCflurry calls
+      by rank, MHCnuggets by an IC50 of 500 nM. Two tools that agree on a peptide make a
+      sturdier call than either alone, and a peptide only one calls a binder is worth checking.
+    tag: ep-prd-intro
+    index: prd-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictor_summary
+    interactive_component_type: MultiSelect
+    column_name: predictor
+    column_type: object
+    display:
+      icon_name: mdi:tools
+      custom_color: grape
+    section: Tool filters
+    group: Tools
+    tag: ep-prd-filter-predictor
+    index: prd-predictor-filter
+    title: Tool
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictor_agreement
+    interactive_component_type: MultiSelect
+    column_name: agreement
+    column_type: object
+    display:
+      icon_name: mdi:compare-horizontal
+      custom_color: green
+    section: Tool filters
+    group: Tools
+    tag: ep-prd-filter-agreement
+    index: prd-agreement-filter
+    title: Agreement
+    layout: {x: 0, y: 2, w: 1, h: 2}
+  - component_type: card
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictor_summary
+    use: epitopeprediction/tool_binders
+    aggregation: sum
+    column_name: binders
+    column_type: int64
+    secondary_layout: donut
+    breakdown_col: predictor
+    display:
+      icon_name: mdi:check-decagram-outline
+      icon_color: green
+      caption: binder calls, by tool
+    section: Tools at a glance
+    tag: ep-prd-card-binders
+    index: prd-card-binders
+    title: Binders per tool
+    description: Peptides each tool calls a binder of at least one allele, summed over samples; wild types left out.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictor_summary
+    aggregation: median
+    column_name: binder_rate
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:percent-outline
+      icon_color: blue
+      caption: median per sample and tool, with its spread
+      format: percent
+    section: Tools at a glance
+    tag: ep-prd-card-rate
+    index: prd-card-rate
+    title: Binder share
+    description: Share of a sample's scored peptides that a tool calls binders, per sample and tool.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictor_summary
+    use: epitopeprediction/tool_unsupported
+    aggregation: sum
+    column_name: unsupported
+    column_type: int64
+    secondary_layout: composition
+    breakdown_col: predictor
+    display:
+      icon_name: mdi:help-circle-outline
+      icon_color: orange
+      caption: peptides a tool could not score, by tool
+    section: Tools at a glance
+    tag: ep-prd-card-unsupported
+    index: prd-card-unsupported
+    title: Unscored peptides
+    description: Peptides a tool could not score for any allele, its length or alleles unsupported.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictor_summary
+    aggregation: max
+    column_name: alleles
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: predictor
+    top_n_count: 3
+    display:
+      icon_name: mdi:shield-account-outline
+      icon_color: cyan
+      caption: most alleles in one sample, by tool
+      format: si
+    section: Tools at a glance
+    tag: ep-prd-card-alleles
+    index: prd-card-alleles
+    title: Alleles per tool
+    description: The most alleles a tool scored in one sample; tools support different allele sets.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictor_summary
+    use: epitopeprediction/binder_rate_bar
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: binder_rate
+      color: predictor
+      barmode: group
+      labels: {sample: '', binder_rate: Share of scored peptides called binders, predictor: ''}
+    section: Calls by tool
+    tag: ep-prd-fig-rate
+    index: prd-rate-bars
+    title: Binder share per sample and tool
+    description: One bar per sample and tool. Tools with different thresholds can differ several-fold.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: advanced_viz
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictions
+    use: epitopeprediction/affinity_rank_scatter
+    config:
+      x_title: Predicted IC50 (nM)
+      y_title: Percentile rank
+      log_x: true
+      log_y: true
+      reference_line: vertical
+      reference_value: 500
+      density_threshold: 20000
+      opacity: 0.5
+      marker_size: 5
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: sequence
+    section: Affinity and rank
+    tag: ep-prd-av-affinity-rank
+    index: prd-affinity-rank
+    title: IC50 against percentile rank
+    description: One point per prediction; the line marks 500 nM. MHCnuggets writes its rank as a fraction.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictor_agreement
+    use: epitopeprediction/agreement_scatter
+    config:
+      x_title: IC50, first tool of the pair (nM)
+      y_title: IC50, second tool of the pair (nM)
+      log_x: true
+      log_y: true
+      reference_line: diagonal
+      density_threshold: 20000
+      opacity: 0.6
+      marker_size: 5
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: sequence
+    section: Agreement between tools
+    tag: ep-prd-av-agreement
+    index: prd-agreement
+    title: One tool's IC50 against the other's
+    description: One point per peptide and allele both tools scored; colour is who calls a binder. On the diagonal, they agree.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictor_summary
+    use: epitopeprediction/predictor_summary
+    row_selection_enabled: true
+    row_selection_column: summary_key
+    section: Tool tables
+    tag: ep-prd-table-summary
+    index: prd-table-summary
+    title: Calls per sample and tool
+    description: Peptides scored, unsupported and binders, binder share, alleles and median IC50.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: epitopeprediction
+    data_collection_tag: epitopeprediction_predictor_agreement
+    use: epitopeprediction/predictor_agreement
+    row_selection_enabled: true
+    row_selection_column: pair_key
+    section: Tool tables
+    tag: ep-prd-table-agreement
+    index: prd-table-agreement
+    title: Paired predictions
+    description: Both IC50s, both calls and the outcome, per sample, peptide, allele and tool pair.
+    layout: {x: 0, y: 6, w: 8, h: 6}
