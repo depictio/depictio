@@ -17,5 +17,5 @@ renders_as:
     kind: ranked_distribution
     roles: { feature_id: gene_id, score: stability_score, rank: section_rank, label: gene_name, group: section, value: value }
   - { id: value_box, component: figure, visu_type: box, dict_kwargs: { x: gene_name, y: value, color: section } }
-  - { component: card, column: sample, aggregation: nunique, secondary_layout: histogram }
+  - { component: card, column: sample, aggregation: nunique }
   - { component: interactive, interactive_type: MultiSelect, column_name: dataset }

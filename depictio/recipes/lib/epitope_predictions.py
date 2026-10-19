@@ -267,7 +267,7 @@ def _melt_wide(header: list[str], body: pl.DataFrame) -> pl.DataFrame:
     rows = body.with_row_index("_peptide_row")
     cells = (
         rows.with_columns(pl.int_ranges(pl.col("fields").list.len()).alias("_pos"))
-        .explode(["fields", "_pos"], empty_as_null=True)
+        .explode(["fields", "_pos"])
         .with_columns(
             pl.col("_pos").cast(pl.Int64),
             pl.when(pl.col("fields").str.strip_chars().is_in(_BLANKS))

@@ -115,7 +115,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
                 (pl.col("run_end") - 1) // pl.col("width") + 1,
             ).alias("bin")
         )
-        .explode("bin", empty_as_null=True)
+        .explode("bin")
         .with_columns(
             (pl.col("bin") * pl.col("width")).alias("start"),
             pl.min_horizontal((pl.col("bin") + 1) * pl.col("width"), pl.col("length")).alias("end"),

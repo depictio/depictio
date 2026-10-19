@@ -22,7 +22,7 @@ renders_as:
     kind: ranked_distribution
     roles: { feature_id: gene_id, score: stability_score, rank: section_rank, label: gene_name, group: section,
              q1: q1, median: median, q3: q3, lower: lower, upper: upper, mean: mean }
-  - { id: ranked_gene_count, component: card, column: gene_id, aggregation: nunique, secondary_layout: histogram }
+  - { id: ranked_gene_count, component: card, column: gene_id, aggregation: nunique }
   - { id: ranked_measured_share, component: card, column: measured_share, aggregation: median, secondary_layout: histogram }
   - { id: ranked_iqr_figure, component: figure, visu_type: scatter, dict_kwargs: { x: median, y: stability_score, color: section } }
   - { component: interactive, interactive_type: MultiSelect, column_name: section }
