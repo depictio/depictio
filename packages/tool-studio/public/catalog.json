@@ -37548,7 +37548,7 @@
           "mode": "expression/stability",
           "name": "Candidate gene stability",
           "path_glob": "**/reporting/all_genes_summary.csv",
-          "rawYaml": "id: stableexpression_gene_stability\nname: Candidate gene stability\nmode: expression/stability\ndescription: >-\n  One row per candidate gene (the candidates of each expression section): the\n  stability score (lower is more stable), its rank within the section and over\n  every candidate, the four measures behind it (Normfinder stability value,\n  geNorm M, coefficient of variation, robust MAD-based CV), each normalised to\n  0-1, the score split into its weighted parts plus the missing-value penalty,\n  and the gene's expression level, measured share and platforms.\nfind:\n  path_glob: \"**/reporting/all_genes_summary.csv\"\nrecipe: stableexpression/gene_stability.py\nfixture: gene_stability.tsv\nrenders_as:\n  # Two of the four measures against each other: they agree for a gene stable\n  # by every account, and a gene good by one only stands off the diagonal.\n  - id: measure_agreement\n    component: advanced_viz\n    kind: scatter_xy\n    roles: { x: normfinder_stability, y: genorm_m, label: gene_name, color: section }\n  - id: candidate_record\n    component: advanced_viz\n    kind: record_card\n    roles: { id: gene_id, title: gene_name }\n  - { id: candidate_count, component: card, column: gene_id, aggregation: count, headline: true }\n  - { id: best_score, component: card, column: stability_score, aggregation: min, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }\n  - { id: candidate_measured, component: card, column: measured_share, aggregation: median, secondary_layout: histogram }\n  - { id: score_by_section, component: figure, visu_type: box, dict_kwargs: { x: section, y: stability_score, color: section } }\n  - { component: interactive, interactive_type: MultiSelect, column_name: section }\n  - { component: interactive, interactive_type: MultiSelect, column_name: expression_level }\n  - { component: interactive, interactive_type: RangeSlider, column_name: stability_score }\n  - { id: candidate_table, component: table, row_selection_enabled: true, row_selection_column: gene_id }\n",
+          "rawYaml": "id: stableexpression_gene_stability\nname: Candidate gene stability\nmode: expression/stability\ndescription: >-\n  One row per candidate gene (the candidates of each expression section): the\n  stability score (lower is more stable), its rank within the section and over\n  every candidate, the four measures behind it (Normfinder stability value,\n  geNorm M, coefficient of variation, robust MAD-based CV), each normalised to\n  0-1, the score split into its weighted parts plus the missing-value penalty,\n  and the gene's expression level, measured share and platforms.\nfind:\n  path_glob: \"**/reporting/all_genes_summary.csv\"\nrecipe: stableexpression/gene_stability.py\nfixture: gene_stability.tsv\nrenders_as:\n  # Two of the four measures against each other: they agree for a gene stable\n  # by every account, and a gene good by one only stands off the diagonal.\n  - id: measure_agreement\n    component: advanced_viz\n    kind: scatter_xy\n    roles: { x: normfinder_stability, y: genorm_m, label: gene_name, color: section }\n  - id: candidate_record\n    component: advanced_viz\n    kind: record_card\n    roles: { id: gene_id, title: gene_name }\n  - { id: candidate_count, component: card, column: gene_id, aggregation: count, secondary_layout: composition, breakdown_col: expression_level, headline: true }\n  - { id: best_score, component: card, column: stability_score, aggregation: min, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }\n  - { id: candidate_measured, component: card, column: measured_share, aggregation: median, secondary_layout: histogram }\n  - { id: score_by_section, component: figure, visu_type: box, dict_kwargs: { x: section, y: stability_score, color: section } }\n  - { component: interactive, interactive_type: MultiSelect, column_name: section }\n  - { component: interactive, interactive_type: MultiSelect, column_name: expression_level }\n  - { component: interactive, interactive_type: RangeSlider, column_name: stability_score }\n  - { id: candidate_table, component: table, row_selection_enabled: true, row_selection_column: gene_id }\n",
           "recipe": "stableexpression/gene_stability.py",
           "renders_as": [
             {
@@ -37585,13 +37585,15 @@
               "aggregation": "count",
               "aggregations": [],
               "attrition_cols": [],
+              "breakdown_col": "expression_level",
               "column": "gene_id",
               "columns": [],
               "component": "card",
               "dict_kwargs": {},
               "headline": true,
               "id": "candidate_count",
-              "roles": {}
+              "roles": {},
+              "secondary_layout": "composition"
             },
             {
               "aggregation": "min",
@@ -37984,7 +37986,7 @@
           "mode": "expression/stability-distribution",
           "name": "Most stable genes, box statistics",
           "path_glob": "**/reporting/all_genes_summary.csv",
-          "rawYaml": "id: stableexpression_stable_gene_distribution\nname: Most stable genes, box statistics\nmode: expression/stability-distribution\ndescription: >-\n  The best-ranked candidates of every expression section (25 per section by\n  default, as many as the pipeline's report draws), one row per gene: stability\n  score, rank within the section and over every candidate, and the box\n  statistics of its normalised expression over the samples that measured it\n  (quartiles, Tukey whisker ends, mean, standard deviation, minimum, maximum,\n  samples measured and their share of the cohort). Computed from the merged\n  matrix before imputation, so thousands of samples ship as one row per gene.\nfind:\n  path_glob: \"**/reporting/all_genes_summary.csv\"\nrecipe: stableexpression/stable_gene_distribution.py\nfixture: stable_gene_distribution.tsv\nrenders_as:\n  # The pipeline's own view: each gene's spread across the cohort beside the\n  # score that ranked it. Ranked within the section, so the first ten rows are\n  # the best gene of each of ten sections, the next ten the second best.\n  - id: stability_ranking\n    component: advanced_viz\n    kind: ranked_distribution\n    roles: { feature_id: gene_id, score: stability_score, rank: section_rank, label: gene_name, group: section,\n             q1: q1, median: median, q3: q3, lower: lower, upper: upper, mean: mean }\n  - { id: ranked_gene_count, component: card, column: gene_id, aggregation: nunique }\n  - { id: ranked_measured_share, component: card, column: measured_share, aggregation: median, secondary_layout: histogram }\n  - { id: ranked_iqr_figure, component: figure, visu_type: scatter, dict_kwargs: { x: median, y: stability_score, color: section } }\n  - { component: interactive, interactive_type: MultiSelect, column_name: section }\n  - { component: interactive, interactive_type: RangeSlider, column_name: stability_score }\n  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }\n",
+          "rawYaml": "id: stableexpression_stable_gene_distribution\nname: Most stable genes, box statistics\nmode: expression/stability-distribution\ndescription: >-\n  The best-ranked candidates of every expression section (25 per section by\n  default, as many as the pipeline's report draws), one row per gene: stability\n  score, rank within the section and over every candidate, and the box\n  statistics of its normalised expression over the samples that measured it\n  (quartiles, Tukey whisker ends, mean, standard deviation, minimum, maximum,\n  samples measured and their share of the cohort). Computed from the merged\n  matrix before imputation, so thousands of samples ship as one row per gene.\nfind:\n  path_glob: \"**/reporting/all_genes_summary.csv\"\nrecipe: stableexpression/stable_gene_distribution.py\nfixture: stable_gene_distribution.tsv\nrenders_as:\n  # The pipeline's own view: each gene's spread across the cohort beside the\n  # score that ranked it. Ranked within the section, so the first ten rows are\n  # the best gene of each of ten sections, the next ten the second best.\n  - id: stability_ranking\n    component: advanced_viz\n    kind: ranked_distribution\n    roles: { feature_id: gene_id, score: stability_score, rank: section_rank, label: gene_name, group: section,\n             q1: q1, median: median, q3: q3, lower: lower, upper: upper, mean: mean }\n  - { id: ranked_gene_count, component: card, column: gene_id, aggregation: nunique, secondary_layout: composition, breakdown_col: expression_level }\n  - { id: ranked_measured_share, component: card, column: measured_share, aggregation: median, secondary_layout: histogram }\n  - { id: ranked_iqr_figure, component: figure, visu_type: scatter, dict_kwargs: { x: median, y: stability_score, color: section } }\n  - { component: interactive, interactive_type: MultiSelect, column_name: section }\n  - { component: interactive, interactive_type: RangeSlider, column_name: stability_score }\n  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }\n",
           "recipe": "stableexpression/stable_gene_distribution.py",
           "renders_as": [
             {
@@ -38014,13 +38016,15 @@
               "aggregation": "nunique",
               "aggregations": [],
               "attrition_cols": [],
+              "breakdown_col": "expression_level",
               "column": "gene_id",
               "columns": [],
               "component": "card",
               "dict_kwargs": {},
               "headline": false,
               "id": "ranked_gene_count",
-              "roles": {}
+              "roles": {},
+              "secondary_layout": "composition"
             },
             {
               "aggregation": "median",
@@ -38102,7 +38106,7 @@
           "mode": "expression/stability-values",
           "name": "Most stable genes, sample values",
           "path_glob": "**/merged_data/all_counts.parquet",
-          "rawYaml": "id: stableexpression_stable_gene_values\nname: Most stable genes, sample values\nmode: expression/stability-values\ndescription: >-\n  The normalised expression of the very top candidates of each expression\n  section (2 per section by default), one row per gene and sample that measured\n  it, with the sample's dataset. The long form lets a dashboard recompute each\n  gene's box (or violin) from the samples in view, a platform or a dataset at a\n  time, which the pre-aggregated box statistics cannot.\nfind:\n  path_glob: \"**/merged_data/all_counts.parquet\"\nrecipe: stableexpression/stable_gene_values.py\nfixture: stable_gene_values.tsv\nrenders_as:\n  - id: stability_violins\n    component: advanced_viz\n    kind: ranked_distribution\n    roles: { feature_id: gene_id, score: stability_score, rank: section_rank, label: gene_name, group: section, value: value }\n  - { id: value_box, component: figure, visu_type: box, dict_kwargs: { x: gene_name, y: value, color: section } }\n  - { component: card, column: sample, aggregation: nunique }\n  - { component: interactive, interactive_type: MultiSelect, column_name: dataset }\n",
+          "rawYaml": "id: stableexpression_stable_gene_values\nname: Most stable genes, sample values\nmode: expression/stability-values\ndescription: >-\n  The normalised expression of the very top candidates of each expression\n  section (2 per section by default), one row per gene and sample that measured\n  it, with the sample's dataset. The long form lets a dashboard recompute each\n  gene's box (or violin) from the samples in view, a platform or a dataset at a\n  time, which the pre-aggregated box statistics cannot.\nfind:\n  path_glob: \"**/merged_data/all_counts.parquet\"\nrecipe: stableexpression/stable_gene_values.py\nfixture: stable_gene_values.tsv\nrenders_as:\n  - id: stability_violins\n    component: advanced_viz\n    kind: ranked_distribution\n    roles: { feature_id: gene_id, score: stability_score, rank: section_rank, label: gene_name, group: section, value: value }\n  - { id: value_box, component: figure, visu_type: box, dict_kwargs: { x: gene_name, y: value, color: section } }\n  - { component: card, column: sample, aggregation: nunique, secondary_layout: top_n, breakdown_col: dataset, top_n_count: 3 }\n  - { component: interactive, interactive_type: MultiSelect, column_name: dataset }\n",
           "recipe": "stableexpression/stable_gene_values.py",
           "renders_as": [
             {
@@ -38142,12 +38146,15 @@
               "aggregation": "nunique",
               "aggregations": [],
               "attrition_cols": [],
+              "breakdown_col": "dataset",
               "column": "sample",
               "columns": [],
               "component": "card",
               "dict_kwargs": {},
               "headline": false,
-              "roles": {}
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
             },
             {
               "aggregations": [],
