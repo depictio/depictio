@@ -420,6 +420,14 @@ SCENARIOS: list[Scenario] = [
         "megatest",
         note="test_full profile (VCF, protein and peptide rows, wide format), vendored samplesheet",
     ),
+    # Three launches share the prefix; only the last completed. The sheet params.json
+    # names was replaced upstream, so the one the run read is vendored.
+    Scenario(
+        "hlatyping",
+        "2.2.0",
+        "megatest",
+        note="test_full, last of three launches; vendored samplesheet (test-datasets 2adcc84)",
+    ),
     # The --metadata table is vendored (plus a demo `specimen` column) and copied into
     # input/ by download_test_data.sh; the MultiQC 1.27 report is rebuilt with 1.35.
     Scenario(

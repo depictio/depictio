@@ -374,13 +374,14 @@ files, template lint and a CLI dry run.
 | crisprseq | 2.3.0 | 2.3.0 | no | `0e9f915c` | none | flat | 12 (1) | `test_full` targeted analysis: 6,195 single-end amplicon libraries, 122 protospacers, no donor template; 43,206 per-library CIGAR-parser and clonality tables (2.3 GB), samplesheet vendored under `input/` |
 | rnavar | 1.3.0 | 1.3.0 | no | `5e72bcb5` (1.3.0dev run; the 1.3.0 release sync is truncated) | 1.35 | flat | 25 (16) | `test_full`: 8 RNA-seq libraries (4 cell lines x 2), GRCh38, STAR + HaplotypeCaller + VariantFiltration, no `--tools`; 16 VCF + TBI pairs; design table vendored under `input/` (the pipeline publishes none) |
 | epitopeprediction | 3.2.0 | 3.2.0 | no | `e637bc7c` | 1.35 (custom content + bcftools) | flat | 9 (3) | `test_full`: 11 synthetic rows (6 VCF, 1 protein FASTA, 4 peptide tables, 2 of them against every supported allele), mhcflurry + mhcnuggets + mhcnuggetsii, wide format, `--wild_type`; samplesheet vendored under `input/` |
+| hlatyping | 2.2.0 | 2.2.0 | no | `3237d20e` | 1.32 (FastQC, OptiType) | flat | 5 (0) | `test_full`: 5 samples (one DNA individual as FASTQ, split FASTQ and BAM; one RNA individual as FASTQ and split FASTQ), samplesheet test-datasets `2adcc84` vendored under `input/` |
 | viralmetagenome | 1.2.0 | 1.2.0 | no | `74064a43` | 1.27 (no parquet, reprocessed with 1.35) | flat | 16 (11) | `test_full`: 4 paired-end metagenomic libraries (3 cell culture, 1 clinical), de novo + 3 mapping constraints; the `--metadata` table is vendored under `input/metadata.tsv` with a demo `specimen` column |
 | nascent | 2.3.0 | 2.3.0 | no | `7d4fe619` | none | flat | 20 (9) | `test_full`: one GRO-seq time course of 11 single-end libraries (0 h to 72 h), hg38; gene counts, 22 strand bigWig and 22 strand bedGraph (5.2 GB); transcript identification aborted and no QC/MultiQC published; samplesheet and design table vendored under `input/` |
 | mcmicro | 2.0.0 | 2.0.0 | no | `f4400001` | 1.32 (custom content only) | flat | 10 (2) | `test_full`: 2 CyCIF tonsil images of 2 cycles (4 channels each), BaSiCPy, Backsub, Mesmer + Cellpose, MCQUANT; samplesheet and marker sheet vendored under `input/`; PNG previews written at fetch time |
 | stableexpression | 1.1.0 | 1.1.0 | no | `d6b1654c` (dev-build run `v1.0.0-gd6b1654`; the 1.1.0 run is empty) | none (MULTIQC failed) | flat | 9 (1) | `test_full`: every Expression Atlas experiment of homo_sapiens, 162 datasets (118 microarray, 44 RNA-seq), 4,330 samples and 40,980 genes in the merged matrix; design published by the pipeline (`merged_data/whole_design.csv`), nothing vendored |
 | genomeqc | 1.0.1 | 1.0.1 | no | `bce44e5b` | 1.35 (QUAST only) | flat | 24 (19) | `test_full`: 3 RefSeq assemblies with annotations, one BUSCO lineage; design table (family, subfamily) vendored under `input/` |
 
-With these, 39 templates ship (one directory per pipeline under `depictio/projects/nf-core/`).
+With these, 40 templates ship (one directory per pipeline under `depictio/projects/nf-core/`).
 
 ---
 

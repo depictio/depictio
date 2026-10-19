@@ -856,8 +856,9 @@ Nomenclature parsing (HLA-A*02:01:01:01, A*02:01, A02:01, pre-2010 A*0201, N/G s
 pairing, ordering and the `max_samples` / `max_loci` guards live in
 `allele_grid/alleleGridLayout.ts`. The server never samples: a sampled genotype loses a
 haplotype. A click on an allele half emits a `scatter_selection` carrying every raw value that
-truncates to the picked label, which a project link takes to the epitopeprediction peptide
-tables. The case for a kind: an oncoplot cell holds one value, so a heterozygous locus shows
+truncates to the picked label. Alleles are spelled as epitopeprediction spells them
+(`HLA-A*02:01`), but the two runs are separate projects and links join collections within one
+project only, so the pick does not reach the peptide tables yet. The case for a kind: an oncoplot cell holds one value, so a heterozygous locus shows
 one of its two alleles.
 
 **`spatial_cells`.** Segmented cells drawn where they sit in the image. One row per cell

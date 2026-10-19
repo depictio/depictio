@@ -215,6 +215,7 @@ dump.rdb
 # Wave 4 templates (vendored designs, samplesheets and marker sheets).
 !depictio/projects/nf-core/rnavar/*/input/*.tsv
 !depictio/projects/nf-core/epitopeprediction/*/input/*.csv
+!depictio/projects/nf-core/hlatyping/*/input/*.csv
 !depictio/projects/nf-core/viralmetagenome/*/input/*.csv
 !depictio/projects/nf-core/viralmetagenome/*/input/*.tsv
 !depictio/projects/nf-core/nascent/*/input/*.csv

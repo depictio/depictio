@@ -1061,7 +1061,7 @@ Source: `depictio/projects/nf-core/nascent/2.3.0/VALIDATION_REPORT.md`.
 | EP4 | **peptides or proteins only** | a sheet without VCF plus `--var NO_VARIANT_INPUT=1` | no `variant_peptides/`, no bcftools | Variant peptides and pairs pruned; MultiQC bcftools panels pruned. |
 | EP5 | **one tool per class** | `--tools mhcflurry` plus `--var SINGLE_PREDICTOR=1` | no pair of tools | Agreement section, row and highlight pruned. |
 | EP6 | **NetMHCpan / MixMHCpred** | `--tools netmhcpan,mixmhcpred` (licensed, external) | other rank scales, MixMHCpred without IC50 | IC50 null for MixMHCpred (its predictions read `No IC50`); the agreement pairs need an IC50 on both sides to draw. |
-| EP7 | **a real cohort with typed alleles** | an hlatyping run feeding `alleles` | several alleles per sample | The dot plot and allele filters gain depth; the allele cross-link to hlatyping (`TODO(wave4c)`) can be exercised. |
+| EP7 | **a real cohort with typed alleles** | an hlatyping run feeding `alleles` | several alleles per sample | The dot plot and allele filters gain depth; the hlatyping genotype table's `alleles` column is this sheet's `alleles` cell, spelled the same way. No live link: the two runs are separate projects (docs/dashboards.md). |
 
 **Ranking by template stress:** EP2 > EP6 > EP4 > EP5 > EP3 > EP7 > EP1
 
@@ -1172,6 +1172,30 @@ Source: `depictio/projects/nf-core/stableexpression/1.1.0/VALIDATION_REPORT.md`.
 **Ranking by template stress:** GQ2 > GQ8 > GQ4 > GQ7 > GQ3 > GQ5 > GQ6 > GQ1 > GQ9
 
 Source: `depictio/projects/nf-core/genomeqc/1.0.1/VALIDATION_REPORT.md`.
+
+---
+
+## hlatyping 2.2.0
+
+**Megatest:** `s3://nf-core-awsmegatests/hlatyping/results-3237d20e7e611d8bbf8c37e637202dfe8a23e996/`
+(tag 2.2.0, run_root `.`, manifest megatest.yaml; the last of three launches, samplesheet
+test-datasets `2adcc84`)
+
+**MultiQC:** run wrote 1.32 -> used as-is (FastQC and OptiType sections, general statistics)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| HT1 | **test_full megatest (validated offline)** | none | none | Every recipe runs on the real files, FASTQ, concatenated FASTQ and BAM routes, DNA and RNA; CLI dry run resolves 5 of 5 collections. |
+| HT2 | **a real cohort** | a sheet of many individuals | many alleles per locus | The allele frequency axis and the allele filters grow with the alleles; the grid caps at 200 samples (`max_samples`). Highest-value check: no megatest has more than two individuals. |
+| HT3 | **several solutions** | `--enumerations 3` | three rows per result table | The optimum is kept, `solutions` and `runner_up_gap` fill in; tested on synthetic tables only. |
+| HT4 | **single-end reads** | a sheet with `fastq_1` only | FastQC names the file `<sample>` | `read_qc` reads it as `Single-end`; the typing share divides by the one file. Synthetic test only. |
+| HT5 | **HLA-HD** | `--tools optitype,hlahd` (licensed, local install) | `hlahd/` class I and II tables | Not read: no class II tile, no HLA-HD collection. A catalog `hlahd` module would add DRB1, DQB1 and DPB1 to the grid. |
+| HT6 | **no samplesheet given** | another run's DATA_ROOT without `input/` | `samples` from `optitype/` only | Every sample enters with `seq_type` `Not stated`; one group, every tile still draws. |
+| HT7 | **with epitopeprediction** | the `alleles` column fed into an epitopeprediction sheet | two projects | Same allele strings; no live cross-project link (see docs/dashboards.md). |
+
+**Ranking by template stress:** HT2 > HT5 > HT3 > HT4 > HT6 > HT1 > HT7
+
+Source: `depictio/projects/nf-core/hlatyping/2.2.0/VALIDATION_REPORT.md`.
 
 ---
 

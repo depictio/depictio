@@ -67,6 +67,7 @@ and are lower bounds for the big runs.
 | isoseq | 3.0.1 | `6c944831` | ok | `.` | yes (`multiqc/multiqc_data/`) | **Templated.** `test_full` profile: one Iso-Seq sample, CCS in 100 chunks, uLTRA mapping. 287 MB fetched, 234 MB of it the indexed GTF (BAMs and FASTA skipped). Reads the CCS and refine reports, the TAMA poly(A), collapse and merge outputs, the GTF and the MultiQC 1.33 parquet (ccs, lima). The samplesheet is not published and has no design column: the design table is vendored under `input/`. |
 | rnavar | 1.3.0 | `a0e46414` | partial | `.` | no | **Templated (wave 4).** The release prefix is a truncated sync: 148 objects, six of the eight BAMs and the per-sample alignment reports, but no `variant_calling/` and no MultiQC. **Selected run is the 1.3.0dev non-tag `5e72bcb5`** (235 objects / 136 GB, written 2026-06-01): 8 samples (4 cell lines x 2), STAR + HaplotypeCaller + VariantFiltration, MultiQC 1.35, no `--tools`, so no snpEff or VEP. Tables-only fetch 145 files / 140 MB with the 16 VCF + TBI pairs. The design is not published: vendored under `input/`. |
 | epitopeprediction | 3.2.0 | `e637bc7c` | ok | `.` | yes (`multiqc/multiqc_data/`) | **Templated (wave 4).** `test_full` profile, release run (three runs of the release under one prefix, the last written 2026-10-17). MultiQC 1.35 parquet: binding-prediction custom content plus bcftools. 179 objects / 19 MB; 31 files / 6.1 MB fetched (predictions, variant peptides, parquet, pipeline_info). The samplesheet is not published and is vendored under `input/`. |
+| hlatyping | 2.2.0 | `3237d20e` | ok | `.` | yes (`multiqc/multiqc_data/`) | **Templated (wave 4).** `test_full`, 176 objects / 153 MB; three launches under one prefix (2026-02-02 and 2026-02-16 10:30 failed at YARA_MAPPER, 10:48 complete). MultiQC 1.32 (FastQC, OptiType). The sheet params.json names was replaced upstream on 2026-07-10; the run's sheet (test-datasets 2adcc84, 5 samples) is vendored under `input/`. 9 files / 1.9 MB fetched. |
 | viralmetagenome | 1.2.0 | `74064a43` | ok | `.` | no (MultiQC 1.27 at `multiqc/<prefix>-multiqc_data/`) | **Templated (wave 4).** `test_full`: 4 paired-end metagenomic libraries of one virus, MEGAHIT + CD-HIT-EST + 1 refinement cycle + iVar, 3 mapping constraints. 994 objects / 320 MB; tables-only fetch 580 files / 42 MB (`--max-file-mb 20`); BAM/FASTQ/mpileup skipped. Every file name carries the run's `--global_prefix`. Reprocessed with 1.35 (`--exclude '*_mqc.tsv'`). The `--metadata` table is not published: vendored under `input/`. |
 | nascent | 2.3.0 | `7d4fe619` | partial | `.` | no | **Templated (wave 4).** `test_full`: one GRO-seq time course, 11 single-end libraries (0 h to 72 h), hg38. 90 objects / 37 GB, 31 GB of BAMs; fetch is 48 files / 5.2 GB (22 strand bigWig, 22 strand bedGraph, the gene featureCounts matrix). The run aborted at transcript identification (PINTS failed; groHMM and HOMER aborted) and published no QC reports and no MultiQC, so the template has no MultiQC and no Transcripts tab. No samplesheet or design is published; both are vendored under `input/`. |
 | mcmicro | 2.0.0 | `f4400001` | ok | `.` | yes (1.32, custom content only) | **Templated (wave 4).** Full test profile, release run. 59 objects / 48 MB; 45 files / 44 MB fetched (images included, for the PNG previews). Samplesheet and marker sheet not published, vendored under `input/`. No bioimage viewer yet: PNG previews are written at fetch time as an optional Image collection. |
@@ -242,6 +243,7 @@ validation and lists every RULES section 15 item as pending.
 |---|---|---|---|---|
 | rnavar | 1.3.0 (1.3.0dev run) | `5e72bcb5520e00422750c978d4153b38f1fd7312` | `.` | 1.35 native parquet |
 | epitopeprediction | 3.2.0 | `e637bc7c49e6e05a09f5207501a142ec68d8570b` | `.` | 1.35, custom content plus bcftools |
+| hlatyping | 2.2.0 | `3237d20e7e611d8bbf8c37e637202dfe8a23e996` | `.` | 1.32 (FastQC, OptiType) |
 | viralmetagenome | 1.2.0 | `74064a43f4b00c163c22bcfc9cf1d84a2a69e988` | `.` | 1.27, no parquet; reprocessed with 1.35 |
 | nascent | 2.3.0 | `7d4fe61975015f652c271886e661764b05cfd3bf` | `.` | none published |
 | mcmicro | 2.0.0 | `f4400001578642e370a72668966c6602fe172ef6` | `.` | 1.32, custom content only |
@@ -281,6 +283,12 @@ What else is particular to this wave:
   each sequence by complete BUSCOs per Mb (genomeqc's own per-sequence count) and takes lengths
   from tidk. tidk ran without `--repeat`, so its units on this run are simple repeats, not
   telomeres. FCS-GX ran on NCBI's test-only database.
+- **hlatyping 2.2.0**'s prefix holds three launches of the release. Only the last (2026-02-16
+  10:48) got past YARA_MAPPER, so every output comes from it. Its `params.json` names
+  `samplesheet_full.csv` by URL, and test-datasets replaced that file in July 2026 with a
+  three-row sheet the 2.2.0 schema rejects; the five-sample sheet the run read (revision
+  `2adcc84`) is vendored under `input/`. The five samples are two individuals typed through
+  several input routes, so the genotypes repeat by design.
 - **epitopeprediction** ran a synthetic `test_full` sheet (6 VCF rows, 1 protein FASTA, 4
   peptide tables) with mhcflurry, mhcnuggets and mhcnuggetsii, `--wide_format_output` and
   `--wild_type`.
