@@ -40,6 +40,7 @@ carry a pick on a sample or a design group to every per-sample collection and to
 | `vcf_variants` | `variant_calling/<s>/<s>.haplotypecaller[.filtered].vcf.gz` | call |
 | `vcf_callset_summary`, `vcf_substitution_spectrum`, `vcf_filter_breakdown` | `vcf_variants` (catalog `vcf/*`) | sample; sample and class; sample and FILTER value |
 | `variant_windows` | `vcf_variants` | 1 Mb window of the cohort, primary contigs |
+| `vcf_variant_density` | `vcf_variants` (catalog `vcf/variant_density`) | sample and 1 Mb window, primary contigs |
 | `vcf_files` | the filtered VCFs and their `.tbi`, as files (`indexed_file`) | sample |
 | `snpeff_ann_variants`, `snpeff_csv_stats`, `snpeff_genes` | `annotation/<s>/*_snpEff.ann.vcf.gz`, `reports/snpeff/<s>/*_snpEff.{csv,genes.txt}` (optional) | call; sample and class; sample and gene |
 | `samples` | the collections above | sample |
@@ -79,7 +80,7 @@ The import prunes what depends on an absent collection (RULES section 13):
   share, Ts/Tv and the T to C share where RNA editing folds, windows holding a call and the contig
   with most variants) and four highlights, one per analysis tab every route keeps: unique mapping
   against duplication (Alignment), the depth curves (Coverage), Ts/Tv against het/hom (Callset) and
-  the variants per 1 Mb window (Genome).
+  the variant karyotype of one sample (Genome).
 
 ## The tabs
 
@@ -102,9 +103,10 @@ The import prunes what depends on an absent collection (RULES section 13):
   allele fraction against depth by impact. Gene and call tables collapsed; a gene picked in the gene
   table narrows the call table.
 - **Genome**: cards on the region in view (calls by type, distinct PASS variants, allele fraction,
-  depth); PASS variants per 1 Mb window along the genome; then the navigator over the same windows
-  (`default_region: first`), the calls over the gene lane with one lane per sample, and each
-  sample's filtered VCF range-read from its file for the region in view (`file_window_size`
-  250 Mb, so the lanes open on the whole first contig: an RNA VCF is 1 to 3 MB). A variant-density ideogram
-  tile is planned on this tab once the ideogram kind lands; its collection is the catalog output
-  `vcf/variant_density` (declared commented out in `template.yaml`).
+  depth); the karyotype (an `ideogram` in density mode on `{GENOME}`): every chromosome drawn to
+  its length and banded by one sample's distinct PASS variants per 1 Mb, the sample picked in its
+  controls (eight samples are past the six karyotypes a tile draws side by side, so it does not
+  facet) and narrowed by the left panel's sample filter; then the navigator over the cohort's
+  windows (`default_region: first`), the calls over the gene lane with one lane per sample, and
+  each sample's filtered VCF range-read from its file for the region in view (`file_window_size`
+  250 Mb, so the lanes open on the whole first contig: an RNA VCF is 1 to 3 MB).

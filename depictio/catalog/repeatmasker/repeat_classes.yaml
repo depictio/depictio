@@ -1,0 +1,22 @@
+id: repeatmasker_repeat_classes
+name: Repeat classes per assembly
+mode: tbl/classes
+description: >-
+  Every class and family line of RepeatMasker's summary table, one row per
+  assembly and line: elements masked, bases they occupy and their share of the
+  assembly, ranked Class (the classes that partition the masked bases), Family
+  (the families inside them) or Summary (Retroelements, Total interspersed
+  repeats). A composition bar stacks the classes; the rank switch opens the
+  families.
+find:
+  path_glob: "**/*.tbl"
+recipe: repeatmasker/repeat_classes.py
+fixture: repeat_classes.tsv
+renders_as:
+  - { id: class_composition, component: advanced_viz, kind: stacked_taxonomy,
+      roles: {sample_id: genome, taxon: repeat_class, rank: rank, abundance: genome_pct} }
+  - { id: repeat_elements, component: card, column: elements, aggregation: sum,
+      secondary_layout: composition, breakdown_col: repeat_class,
+      filter_expr: "col('rank') == 'Class'" }
+  - { component: interactive, interactive_type: MultiSelect, column_name: repeat_class }
+  - { component: table }

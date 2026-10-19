@@ -576,22 +576,26 @@ workflows:
               "samples": "Samples with at least one PASS call in the window"
               "snv_pct": "Share of the window's distinct variants that are SNVs, percent"
 
-      # TODO(wave4c): declare the per-sample density for the ideogram tile once
-      # the ideogram kind lands. The recipe is the catalog output
-      # vcf/variant_density (chrom, start, end, value, sample; 17,441 rows on
-      # the megatest at 1 Mb):
-      #
-      # - data_collection_tag: "vcf_variant_density"
-      #   description: "Distinct PASS variants per sample in 1 Mb windows along the primary contigs"
-      #   config:
-      #     type: "Table"
-      #     metatype: "Aggregate"
-      #     source: "transformed"
-      #     transform:
-      #       recipe: "vcf/variant_density.py"
-      #       params: {bin_size: "1000000"}
-      #     dc_specific_properties:
-      #       format: "TSV"
+      # The Genome tab's karyotype: each sample's distinct PASS variants in
+      # 1 Mb windows over the primary contigs (catalog vcf/variant_density).
+      # Declared after vcf_variants, which it reads through dc_ref.
+      - data_collection_tag: "vcf_variant_density"
+        description: "Distinct PASS variants per sample in 1 Mb windows along the primary contigs; the Genome tab's karyotype"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "vcf/variant_density.py"
+            params: {bin_size: "1000000"}
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "chrom": "Primary contig"
+              "start": "Window start, 0-based"
+              "end": "Window end, exclusive"
+              "value": "Distinct PASS variants of the sample in the window"
+              "sample": "Sample the calls were made on"
 
       # TODO(jbrowse): swap indexed_file+genome_view for a JBrowse2 DC once jbrowse.py is rebuilt
       # The filtered VCFs as files, not rows: copied to object storage with
@@ -902,6 +906,14 @@ links:
     target_type: "table"
     link_config: {resolver: "direct", target_field: "sample"}
     description: "Filter the FILTER breakdown by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "vcf_variant_density"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the variant karyotype by the samples picked in the left panel"
     enabled: true
 
   - source_dc_tag: "samples"

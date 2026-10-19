@@ -1,0 +1,99 @@
+AGAT_SPKEEPLONGESTISOFORM:
+  agat: 1.6.1
+AGAT_SPSTATISTICS:
+  agat: 1.6.1
+AGAT_VALIDATE:
+  agat: 1.6.1
+BUSCO_DOWNLOAD:
+  busco: 6.1.0
+BUSCO_GENOME:
+  busco: 6.1.0
+BUSCO_PROTEIN:
+  busco: 6.1.0
+BUSCO_SEQS_GENOME_ANNO:
+  python: 3.13.5
+FAMDBPYEMBL:
+  repeatmasker: 4.2.2
+FCSGX_CLEANADAPTOR:
+  fcsgx: 0.5.5
+FCSGX_CLEANGENOME:
+  fcsgx: 0.5.5
+FCSGX_FETCHDB:
+  fcsgx: 0.5.5
+FCSGX_RUNGX:
+  fcsgx: 0.5.5
+FCS_FCSADAPTOR:
+  fcsadaptor: 0.5.0
+FILTER_BY_LENGTH:
+  seqkit: 2.13.0
+FIND_CONCATENATE:
+  coreutils: 9.4
+  find: 4.6.0
+  pigz: 2.8
+GAWK_GENO:
+  gawk: 5.3.1
+GAWK_PROT:
+  gawk: 5.3.1
+GENEOVERLAPS:
+  genomicranges: 1.54.1
+  r_base: 4.3.3
+GFFREAD:
+  gffread: 0.12.7
+IDEOGRAM_GENOMEANNOTATION:
+  r_base: 4.4.1
+  r_rideogram: 0.2.2
+MMSEQS_EASYLINCLUST:
+  mmseqs: 18.8cc5c
+NCBIGENOMEDOWNLOAD:
+  ncbigenomedownload: 0.3.3
+ORTHOFINDER_V3:
+  orthofinder: 3.1.3
+ORTHOSEQCOUNT:
+  pandas: 2.3.1
+  python: 3.13.5
+QUAST:
+  quast: 5.3.0
+REPEATMASKER_DOWNLOADDB:
+  <curl>: 7.80.0
+REPEATMASKER_REPEATMASKER:
+  repeatmasker: 4.1.5
+REPORT_EXCEL:
+  python: 3.9.5
+REPORT_HTML:
+  python: 3.9.5
+SHINY_APP_GENOME_ANNO:
+  cat: 8.32
+SORT_BY_LENGTH:
+  seqkit: 2.13.0
+TABLE_FCSGX:
+  python: 3.9.5
+TABLE_TE:
+  python: 3.9.5
+TIARA_CLEANED:
+  tiara: 1.0.3
+TIARA_RAW:
+  tiara: 1.0.3
+TIDK_EXPLORE:
+  tidk: 0.2.7
+TIDK_PLOT_APOSTERIORI:
+  tidk: 0.2.7
+TIDK_SEARCH_APOSTERIORI:
+  tidk: 0.2.7
+TREE_SUMMARY_GENO_ANNO:
+  argparse: 2.3.1
+  dplyr: 1.1.4
+  ggplot2: 4.0.1
+  ggtree: 4.0.4
+  patchwork: 1.3.2
+  python: 3.13.11
+  r_base: 4.5.2
+  scales: 1.4.0
+  scatterpie: 0.2.6
+  tidyr: 1.3.2
+UNCOMPRESS_FASTA:
+  pigz: 2.8
+UNCOMPRESS_GXF:
+  pigz: 2.8
+Workflow:
+    nf-core/genomeqc: v1.0.1-gbce44e5
+    Nextflow: 26.04.6
