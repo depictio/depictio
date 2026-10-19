@@ -45,6 +45,7 @@ import CnvProfileRenderer from './CnvProfileRenderer';
 import GenomeChordRenderer from './GenomeChordRenderer';
 import RecordCardRenderer from './RecordCardRenderer';
 import ParallelCoordinatesRenderer from './ParallelCoordinatesRenderer';
+import RankedDistributionRenderer from './RankedDistributionRenderer';
 import MsaRenderer from './MsaRenderer';
 import SequenceTrackRenderer from './SequenceTrackRenderer';
 import {
@@ -255,6 +256,7 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   genome_chord: GenomeChordRenderer,
   record_card: RecordCardRenderer,
   parallel_coordinates: ParallelCoordinatesRenderer,
+  ranked_distribution: RankedDistributionRenderer,
   molecule_3d: Molecule3DRenderer,
   msa: MsaRenderer,
   sequence_track: SequenceTrackRenderer,

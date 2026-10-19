@@ -444,6 +444,7 @@ async def create_initial_dashboards(
                 "genome_chord",
                 "record_card",
                 "parallel_coordinates",
+                "ranked_distribution",
                 "locus_section",
                 "protein_structure",
                 "protein_families",

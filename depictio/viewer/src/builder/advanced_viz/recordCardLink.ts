@@ -114,6 +114,9 @@ function advancedVizEmits(m: StoredMetadata): { emits: boolean; column: string |
     case 'lollipop':
       column = named ?? str(config.label_col) ?? str(config.position_col) ?? 'position';
       break;
+    case 'ranked_distribution':
+      column = named ?? str(config.feature_id_col) ?? 'feature_id';
+      break;
     default:
       return { emits: false, column: null };
   }

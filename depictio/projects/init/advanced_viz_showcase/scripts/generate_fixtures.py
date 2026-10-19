@@ -3880,3 +3880,159 @@ def generate_protein_family_demo() -> None:
 
 
 generate_protein_family_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Ranked distribution: gene stability, nf-core/stableexpression shape.
+# columns: ranked_distribution_demo         gene_id, gene_name, rank,
+#                                           stability_score, section, q1,
+#                                           median, q3, lower, upper, mean,
+#                                           n_samples
+#          ranked_distribution_values_demo  gene_id, gene_name, sample,
+#                                           stability_score, section, value
+# ---------------------------------------------------------------------------
+# stableexpression scores every gene's stability across a public cohort
+# (lower is more stable) and publishes it beside the gene's normalised counts.
+# The cohort is thousands of samples, far too many to ship raw, so the first
+# table is what a recipe makes of it: one row per gene with the box statistics
+# of its counts over 4332 simulated samples. The second keeps the raw values of
+# the 40 most stable genes over 60 samples, the long form the renderer
+# aggregates itself (and the only shape a violin can be drawn from). Both use
+# the same `gene_id` values, so a gene picked on one tile is marked on the other.
+#
+# Three expression sections, as stableexpression bins its genes by mean
+# expression: a stable gene can sit in any of them, which is why the section
+# colours the boxes rather than ordering them.
+_RD_SECTIONS = (
+    # name, n genes, log median count (centre, spread)
+    ("high", 60, 9.0, 0.6),
+    ("medium", 80, 6.5, 0.6),
+    ("low", 60, 4.0, 0.6),
+)
+# Real housekeeping symbols for the genes the picture is about; the rest are
+# numbered. Synthetic counts all the same: no symbol here carries its real data.
+_RD_HOUSEKEEPING = (
+    "ACTB",
+    "GAPDH",
+    "RPLP0",
+    "B2M",
+    "PPIA",
+    "TBP",
+    "HPRT1",
+    "UBC",
+    "YWHAZ",
+    "SDHA",
+    "GUSB",
+    "HMBS",
+    "PGK1",
+    "TFRC",
+    "RPL13A",
+    "POLR2A",
+    "EEF1A1",
+    "PSMB2",
+    "VCP",
+    "REEP5",
+)
+_RD_COHORT = 4332
+_RD_LONG_GENES = 40
+_RD_LONG_SAMPLES = 60
+
+
+def _rd_tukey(values: np.ndarray) -> tuple[float, float, float, float, float]:
+    """q1, median, q3 and the Tukey whisker ends of `values`."""
+    q1, median, q3 = (float(v) for v in np.percentile(values, [25, 50, 75]))
+    iqr = q3 - q1
+    inside = values[(values >= q1 - 1.5 * iqr) & (values <= q3 + 1.5 * iqr)]
+    return q1, median, q3, float(inside.min()), float(inside.max())
+
+
+def generate_ranked_distribution_demo() -> None:
+    """Write the gene-stability pair: 200 genes pre-aggregated, 40 x 60 long form."""
+    rng = np.random.default_rng(20261019)
+    genes: list[dict] = []
+    index = 0
+    for section, count, centre, spread in _RD_SECTIONS:
+        for _ in range(count):
+            index += 1
+            # The stability score is a robust CV-like number: a gamma skewed
+            # towards stable genes, with a long unstable tail.
+            score = float(rng.gamma(2.2, 0.09)) + 0.02
+            genes.append(
+                {
+                    "gene_id": f"ENSG{900000 + index:011d}",
+                    "section": section,
+                    "log_median": float(rng.normal(centre, spread)),
+                    "score": round(score, 4),
+                }
+            )
+    genes.sort(key=lambda g: (g["score"], g["gene_id"]))
+    for rank, gene in enumerate(genes, start=1):
+        gene["rank"] = rank
+        gene["gene_name"] = (
+            _RD_HOUSEKEEPING[rank - 1] if rank <= len(_RD_HOUSEKEEPING) else f"GENE{rank:03d}"
+        )
+
+    def counts(gene: dict, n: int) -> np.ndarray:
+        # Log-normal counts whose spread grows with the score, so the boxes of
+        # the most stable genes are visibly the tightest.
+        sigma = 0.08 + 1.6 * gene["score"]
+        return np.exp(rng.normal(gene["log_median"], sigma, n))
+
+    header = [
+        "gene_id",
+        "gene_name",
+        "rank",
+        "stability_score",
+        "section",
+        "q1",
+        "median",
+        "q3",
+        "lower",
+        "upper",
+        "mean",
+        "n_samples",
+    ]
+    rows: list[list] = []
+    for gene in genes:
+        values = counts(gene, _RD_COHORT)
+        q1, median, q3, lower, upper = _rd_tukey(values)
+        rows.append(
+            [
+                gene["gene_id"],
+                gene["gene_name"],
+                gene["rank"],
+                gene["score"],
+                gene["section"],
+                round(q1, 2),
+                round(median, 2),
+                round(q3, 2),
+                round(lower, 2),
+                round(upper, 2),
+                round(float(values.mean()), 2),
+                _RD_COHORT,
+            ]
+        )
+    # Shipped in id order, not rank order: the tile ranks, the table does not
+    # have to arrive sorted.
+    rows.sort(key=lambda r: r[0])
+    write_tsv(OUT / "ranked_distribution_demo.tsv", header, rows)
+
+    long_header = ["gene_id", "gene_name", "sample", "stability_score", "section", "value"]
+    long_rows: list[list] = []
+    for gene in genes[:_RD_LONG_GENES]:
+        values = counts(gene, _RD_LONG_SAMPLES)
+        for s, value in enumerate(values, start=1):
+            long_rows.append(
+                [
+                    gene["gene_id"],
+                    gene["gene_name"],
+                    f"SRR{7000000 + s}",
+                    gene["score"],
+                    gene["section"],
+                    round(float(value), 2),
+                ]
+            )
+    write_tsv(OUT / "ranked_distribution_values_demo.tsv", long_header, long_rows)
+
+
+generate_ranked_distribution_demo()

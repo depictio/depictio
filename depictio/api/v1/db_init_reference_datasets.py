@@ -255,6 +255,10 @@ STATIC_IDS = {
             "protein_family_hits_demo": "646b0f3c1e4a2d7f8e5b8de2",
             "protein_pae_demo": "646b0f3c1e4a2d7f8e5b8de3",
             "protein_ss_demo": "646b0f3c1e4a2d7f8e5b8de4",
+            # Ranked distribution tab (the 8f5x block): pre-aggregated gene
+            # stability stats and a long-form values table.
+            "ranked_distribution_demo": "646b0f3c1e4a2d7f8e5b8f51",
+            "ranked_distribution_values_demo": "646b0f3c1e4a2d7f8e5b8f52",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
@@ -313,6 +317,8 @@ STATIC_IDS = {
             # collections.
             "advanced_viz_protein_families": "646b0f3c1e4a2d7f8e5b8de0",
             "advanced_viz_protein_quality": "646b0f3c1e4a2d7f8e5b8de5",
+            # Opens the 8f5x block; 8f51 and 8f52 are its collections.
+            "advanced_viz_ranked_distribution": "646b0f3c1e4a2d7f8e5b8f50",
             "advanced_viz_benchmark_pr": "646b0f3c1e4a2d7f8e5b8d62",
             "advanced_viz_benchmark_confusion": "646b0f3c1e4a2d7f8e5b8d63",
             "advanced_viz_benchmark_ci": "646b0f3c1e4a2d7f8e5b8d64",

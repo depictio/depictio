@@ -148,6 +148,12 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     "domain_architecture": "none",
     "pae_matrix": "none",
     "ramachandran": "none",
+    # The renderer ranks the features and, in long form, takes each one's
+    # quartiles from every value it holds: a uniform sample would move the
+    # boxes and could drop a feature from the top-N. Pre-aggregated, it is one
+    # row per feature. ``RankedDistributionConfig.max_features`` caps what is
+    # drawn.
+    "ranked_distribution": "none",
 }
 
 #: The role whose tail a ``tail`` kind must keep, and whether the interesting

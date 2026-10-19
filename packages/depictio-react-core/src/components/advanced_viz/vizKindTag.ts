@@ -242,6 +242,11 @@ const VIZ_KIND: Readonly<Record<string, VizKindLabel>> = {
     'tabler:chart-line',
     'One line per sample across several metric axes, each one brushable',
   ),
+  ranked_distribution: label(
+    'Ranked',
+    'tabler:chart-candle',
+    'Top features ranked by a score, each with its distribution across samples',
+  ),
   // `record_card` is a card of fields, not a figure: no label.
 };
 

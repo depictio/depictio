@@ -218,6 +218,10 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
       // when one is bound; otherwise the pick is the position, whose feature
       // half travels in the `residue_selection` pair like the protein kinds.
       return named ?? configColumn('label_col') ?? configColumn('position_col') ?? 'position';
+    case 'ranked_distribution':
+      // A box and its lollipop are one feature, and its id is what the other
+      // tiles join on; the display label may repeat across features.
+      return named ?? configColumn('feature_id_col') ?? 'feature_id';
     default:
       return undefined;
   }

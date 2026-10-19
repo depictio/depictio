@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import difflib
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -348,6 +349,15 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     # bound residue table only colours the points.
     "ramachandran": {
         "position": _NUMERIC,
+    },
+    # Top-N features ranked by a score, each with its distribution across
+    # samples. Only the feature and its score are required: the distribution
+    # comes either long form (`value`, one row per feature and sample) or
+    # pre-aggregated (`q1` / `median` / `q3`), both optional roles here, and
+    # `validate_binding` reports a binding that gives neither.
+    "ranked_distribution": {
+        "feature_id": _STRING,
+        "score": _NUMERIC,
     },
 }
 
@@ -872,6 +882,36 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "gene": frozenset({"gene", "gene_name", "symbol", "gene_symbol"}),
         "sequence": frozenset({"sequence", "protein_sequence", "aa_sequence", "seq"}),
     },
+    # nf-core/stableexpression's `all_genes_summary.csv` names, plus the
+    # generic ones a housekeeping or NanoString normaliser table carries. The
+    # score aliases are deliberately specific: a bare `score` column is far
+    # too common to make every table a ranked distribution.
+    "ranked_distribution": {
+        "feature_id": frozenset({"feature_id", "gene_id", "ensembl_gene_id", "gene", "probe_id"}),
+        "score": frozenset(
+            {
+                "stability_score",
+                "stability",
+                "stability_value",
+                "normfinder_stability",
+                "genorm_m",
+                "m_value",
+                "coefficient_of_variation",
+                "cv",
+                "robust_cv",
+            }
+        ),
+        "rank": frozenset({"rank", "stability_rank", "gene_rank"}),
+        "label": frozenset({"label", "gene_name", "symbol", "gene_symbol", "name"}),
+        "group": frozenset({"section", "group", "category", "expression_level", "class"}),
+        "value": frozenset({"value", "normalised_count", "normalized_count", "expression", "tpm"}),
+        "q1": frozenset({"q1", "quartile_1", "q25", "p25", "first_quartile"}),
+        "median": frozenset({"median", "q2", "q50", "p50"}),
+        "q3": frozenset({"q3", "quartile_3", "q75", "p75", "third_quartile"}),
+        "lower": frozenset({"lower", "lower_fence", "whisker_low", "min", "p5"}),
+        "upper": frozenset({"upper", "upper_fence", "whisker_high", "max", "p95"}),
+        "mean": frozenset({"mean", "average", "avg"}),
+    },
 }
 
 
@@ -1101,6 +1141,20 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "gene": _STRING,
         "sequence": _STRING,
     },
+    # The two distribution shapes are both optional here; `_SHAPE_CHECKS`
+    # below is what requires one of them.
+    "ranked_distribution": {
+        "rank": _NUMERIC,
+        "label": _STRING,
+        "group": _STRING,
+        "value": _NUMERIC,
+        "q1": _NUMERIC,
+        "median": _NUMERIC,
+        "q3": _NUMERIC,
+        "lower": _NUMERIC,
+        "upper": _NUMERIC,
+        "mean": _NUMERIC,
+    },
 }
 
 # `hmm_logo` with `profile_source: msa` derives the logo from an alignment table
@@ -1324,7 +1378,43 @@ def validate_binding(config: VizConfig, dc_schema: dict[str, str]) -> list[Bindi
         if actual not in accepted_dtypes:
             errors.append(_dtype_binding_error(role, col, actual, accepted_dtypes, optional=True))
 
+    shape_check = _SHAPE_CHECKS.get(kind)
+    if shape_check is not None:
+        errors.extend(shape_check(config))
+
     return errors
+
+
+def _ranked_distribution_shape(config: VizConfig) -> list[BindingError]:
+    """A ranked distribution draws a box per feature, so it needs values or stats.
+
+    Both shapes are optional roles (one row per feature and sample, or one row
+    per feature with its quartiles), which leaves the role loop above happy with
+    a binding that gives neither. The model refuses half a shape; this is the
+    check that refuses no shape at all, at binding time rather than at save
+    time, because the builder stores configs before every role is bound.
+    """
+    if getattr(config, "value_col", None):
+        return []
+    if all(getattr(config, f"{role}_col", None) for role in ("q1", "median", "q3")):
+        return []
+    return [
+        BindingError(
+            role="value",
+            column=None,
+            reason=(
+                "bind either value (one row per feature and sample) or q1, median "
+                "and q3 (one row per feature)"
+            ),
+        )
+    ]
+
+
+# Kinds whose valid bindings are not "every required role bound": a check run
+# after the role loop of `validate_binding`, adding its own errors.
+_SHAPE_CHECKS: dict[str, Callable[[VizConfig], list[BindingError]]] = {
+    "ranked_distribution": _ranked_distribution_shape,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -2200,6 +2290,20 @@ _KIND_ROLE_DESCRIPTIONS: dict[AdvancedVizKind, dict[str, str]] = {
         "gene": "Gene symbol used to fetch a predicted structure (resolve mode).",
         "sequence": "Protein sequence folded on demand when no accession resolves (resolve mode).",
     },
+    "ranked_distribution": {
+        "feature_id": "One feature per value (gene id): a category on the shared axis.",
+        "score": "Score the features are ranked by (stability score, CV), drawn as the lollipop.",
+        "rank": "Optional precomputed rank, 1 first; otherwise ranked by the score.",
+        "label": "Optional display name (gene symbol) shown on the category axis.",
+        "group": "Optional class colouring each feature (a stability section, a gene class).",
+        "value": "Long form: one value per feature and sample, summarised as a box or violin.",
+        "q1": "Pre-aggregated: first quartile of the feature's values.",
+        "median": "Pre-aggregated: median of the feature's values.",
+        "q3": "Pre-aggregated: third quartile of the feature's values.",
+        "lower": "Pre-aggregated: optional lower whisker end.",
+        "upper": "Pre-aggregated: optional upper whisker end.",
+        "mean": "Pre-aggregated: optional mean, drawn as a dashed line in the box.",
+    },
 }
 
 
@@ -2602,6 +2706,15 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
             "linked tiles."
         ),
         "icon": "tabler:angle",
+    },
+    "ranked_distribution": {
+        "label": "Ranked distribution",
+        "description": (
+            "The top-N features ranked by a score, each with its distribution "
+            "across samples as a box or violin beside a lollipop of the score, "
+            "on one shared feature axis. Gene stability, housekeeping genes."
+        ),
+        "icon": "tabler:chart-candle",
     },
 }
 

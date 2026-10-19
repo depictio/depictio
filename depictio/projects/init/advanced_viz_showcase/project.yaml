@@ -989,6 +989,61 @@ workflows:
               percent_rrna: "Percentage of reads assigned to rRNA. The clearest single separator of the degraded group."
               genes_detected: "Number of genes with at least one assigned read."
 
+      # Ranked distribution (the 8f5x block): gene stability in the shape of
+      # nf-core/stableexpression, once pre-aggregated (one row per gene with its
+      # box statistics over a 4332-sample cohort) and once long form (the 40
+      # most stable genes over 60 samples). Both carry the same `gene_id`
+      # values, so a gene picked on one tile is marked on the other.
+      - id: "646b0f3c1e4a2d7f8e5b8f51"
+        data_collection_tag: "ranked_distribution_demo"
+        description: "200 genes with a stability score, a rank, an expression section and the box statistics of their normalised counts over 4332 samples"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/ranked_distribution_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              gene_id: "Ensembl-style gene identifier, one row per gene. What a click on the tile selects."
+              gene_name: "Gene symbol shown on the feature axis."
+              rank: "Stability rank, 1 for the most stable gene."
+              stability_score: "Stability score, lower is more stable. Drawn as the lollipop."
+              section: "Expression section of the gene: high, medium or low mean expression. Colours the boxes."
+              q1: "First quartile of the gene's normalised counts across the cohort."
+              median: "Median normalised count across the cohort."
+              q3: "Third quartile of the gene's normalised counts."
+              lower: "Lower whisker end: the smallest count within 1.5 IQR of the box."
+              upper: "Upper whisker end: the largest count within 1.5 IQR of the box."
+              mean: "Mean normalised count across the cohort."
+              n_samples: "Number of samples the statistics summarise."
+
+      - id: "646b0f3c1e4a2d7f8e5b8f52"
+        data_collection_tag: "ranked_distribution_values_demo"
+        description: "The normalised counts of the 40 most stable genes over 60 samples, one row per gene and sample"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/ranked_distribution_values_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              gene_id: "Ensembl-style gene identifier, the same values as the pre-aggregated table."
+              gene_name: "Gene symbol shown on the feature axis."
+              sample: "Sample the count was measured in."
+              stability_score: "Stability score of the gene, repeated on each of its rows. Lower is more stable."
+              section: "Expression section of the gene: high, medium or low mean expression."
+              value: "Normalised count of the gene in the sample."
+
       # Protein structure (the 8ddx block). One predicted structure and the
       # four tables the protein tiles read, all keyed on the same `entity` and
       # `position` column names: that shared naming is what lets a residue
