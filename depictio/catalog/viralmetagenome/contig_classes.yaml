@@ -1,0 +1,15 @@
+id: viralmetagenome_contig_classes
+name: Taxonomic call of each contig
+mode: per-contig/classification
+description: >-
+  The merged Kraken2 and Kaiju call the pipeline makes on every de novo
+  contig before clustering, classified or not and the taxon id, plus the
+  reference-pool sequences clustered with them.
+find:
+  path_glob: "**/precluster/merged_classifications/*.resolved.txt"
+recipe: viralmetagenome/contig_classes.py
+fixture: contig_classes.tsv
+renders_as:
+  - { component: card, column: contig, aggregation: count,
+      secondary_layout: donut, breakdown_col: classification }
+  - { component: table }

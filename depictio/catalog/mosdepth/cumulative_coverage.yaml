@@ -1,0 +1,18 @@
+id: mosdepth_cumulative_coverage
+name: Cumulative coverage curve
+mode: coverage
+description: >-
+  Share of the reference covered at least at each depth, per mapping, from
+  mosdepth's global distribution: every depth to 100X, then a log-spaced
+  grid. The depth at which a curve falls off is the depth a consensus caller
+  can rely on.
+find:
+  path_glob: "**/mosdepth/**/*.mosdepth.global.dist.txt"
+recipe: mosdepth/cumulative_coverage.py
+fixture: cumulative_coverage.tsv
+renders_as:
+  - { id: cumulative_curve, component: advanced_viz, kind: profile,
+      roles: {series: genome_id, x: depth, y: bases_pct} }
+  - { component: card, column: bases_pct, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }
