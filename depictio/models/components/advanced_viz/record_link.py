@@ -31,6 +31,8 @@ SELECTION_EMITTING_KINDS: dict[str, tuple[str, ...]] = {
     "profile": ("selection_column", "series_col"),
     "scatter_xy": ("selection_column", "label_col"),
     "genome_chord": ("selection_column", "label_col"),
+    # A feature (its box or its lollipop): its id, which the other tiles join on.
+    "ranked_distribution": ("selection_column", "feature_id_col", "=feature_id"),
     # Protein kinds (lot 3). A picked residue is a position (the entity half
     # travels in the `residue_selection` filter pair); an MSA row is a sequence.
     # The trailing literal is the model default, used when the field is unset.

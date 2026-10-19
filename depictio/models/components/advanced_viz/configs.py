@@ -3176,6 +3176,163 @@ class ParallelCoordinatesConfig(_BaseVizConfig):
     line_opacity: float = Field(default=0.6, ge=0.05, le=1.0)
 
 
+#: The pre-aggregated box statistics `ranked_distribution` reads, by role. The
+#: three quartiles are what make a box; the fences and the mean are optional.
+RANKED_DISTRIBUTION_STAT_ROLES: tuple[str, ...] = ("q1", "median", "q3", "lower", "upper", "mean")
+RANKED_DISTRIBUTION_QUARTILE_ROLES: tuple[str, ...] = ("q1", "median", "q3")
+
+
+class RankedDistributionConfig(_BaseVizConfig):
+    """Top-N features ranked by a score, each with its distribution across samples.
+
+    Two panels share ONE ordered category axis: a box (or violin) per feature of
+    its values across samples, and a lollipop of the score that put it there.
+    The driving case is nf-core/stableexpression (a stability score per gene and
+    the gene's normalised counts across thousands of samples), and the same
+    picture serves housekeeping-gene panels, NanoString normalisers or any "rank
+    features by a metric" view.
+
+    The distribution comes in one of two shapes, told apart by which columns are
+    bound (``validate_binding`` reports a config that binds neither):
+
+    * long form, ``value_col``: one row per feature and sample; the renderer
+      ranks the features and aggregates each one's values itself. The only shape
+      a violin can be drawn from.
+    * pre-aggregated, ``q1_col`` / ``median_col`` / ``q3_col`` (plus optional
+      ``lower_col`` / ``upper_col`` fences and ``mean_col``): one row per
+      feature, the statistics a recipe computed. What a cohort of thousands of
+      samples ships as, since its raw values are far too large to send.
+    """
+
+    viz_kind: Literal["ranked_distribution"] = "ranked_distribution"
+
+    feature_id_col: str = Field(
+        default="feature_id", description="Column identifying each feature (gene id)"
+    )
+    score_col: str = Field(
+        default="score", description="Score the features are ranked by (stability, variance)"
+    )
+    rank_col: str | None = Field(
+        default=None,
+        description=(
+            "Optional precomputed rank (1 = best). Unset ranks by ``score_col`` "
+            "in the direction ``ascending`` gives."
+        ),
+    )
+    label_col: str | None = Field(
+        default=None, description="Optional display name (gene symbol) for the category axis"
+    )
+    group_col: str | None = Field(
+        default=None,
+        description="Optional categorical column colouring each feature (a section, a gene class)",
+    )
+    value_col: str | None = Field(
+        default=None,
+        description="Long form: one value per feature and sample, aggregated by the renderer",
+    )
+    q1_col: str | None = Field(default=None, description="Pre-aggregated: first quartile")
+    median_col: str | None = Field(default=None, description="Pre-aggregated: median")
+    q3_col: str | None = Field(default=None, description="Pre-aggregated: third quartile")
+    lower_col: str | None = Field(
+        default=None,
+        description="Pre-aggregated: lower whisker end; unset draws the whisker from Q1 - 1.5 IQR",
+    )
+    upper_col: str | None = Field(
+        default=None,
+        description="Pre-aggregated: upper whisker end; unset draws the whisker to Q3 + 1.5 IQR",
+    )
+    mean_col: str | None = Field(default=None, description="Pre-aggregated: optional mean")
+
+    top_n: int = Field(
+        default=25, ge=1, description="How many of the best-ranked features are drawn"
+    )
+    ascending: bool = Field(
+        default=True,
+        description=(
+            "Rank the lowest score first. True suits a stability score or a "
+            "coefficient of variation, where lower is more stable; false suits "
+            "a variance or an expression level. Ignored when ``rank_col`` is bound."
+        ),
+    )
+    distribution: Literal["box", "violin"] = Field(
+        default="box",
+        description="How each feature's values are drawn; ``violin`` needs the long form",
+    )
+    orientation: Literal["horizontal", "vertical"] = Field(
+        default="horizontal",
+        description=(
+            "``horizontal``: features down the y axis, distribution on the left "
+            "and score on the right. ``vertical``: features along the x axis, "
+            "distribution above the score"
+        ),
+    )
+    score_label: str | None = Field(
+        default=None, description="Score axis title; null uses the score column's name"
+    )
+    value_label: str | None = Field(
+        default=None, description="Distribution axis title; null says 'Value'"
+    )
+    log_value: bool = Field(
+        default=False,
+        description="Draw the distribution on log10(value + 1), for counts spanning decades",
+    )
+    max_features: int = Field(
+        default=200,
+        ge=1,
+        le=2000,
+        description=(
+            "Guard on the features a tile may draw: ``top_n`` and its control "
+            "are capped here, so a reader cannot ask for a category axis of "
+            "ten thousand genes"
+        ),
+    )
+
+    # --- Selection as a cross-filter ---------------------------------------
+    # Off by default, same reasoning as EmbeddingConfig above.
+    selection_enabled: bool = Field(
+        default=False,
+        description=(
+            "Let a click on a feature (its box or its lollipop) emit a dashboard "
+            "filter on ``selection_column``, else on ``feature_id_col``"
+        ),
+    )
+    selection_column: str | None = Field(
+        default=None,
+        description=(
+            "Column the emitted selection values belong to. Null uses "
+            "``feature_id_col``: a feature is what the reader picks, and its id "
+            "is what the other tiles of the dashboard join on"
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _one_coherent_shape(self) -> RankedDistributionConfig:
+        """Refuse half a pre-aggregated shape, both shapes at once, and a violin of stats.
+
+        A config binding neither shape is left to ``validate_binding``: the
+        builder saves configs before every role is bound, and a stored
+        component must stay loadable while it is being edited.
+        """
+        bound = [r for r in RANKED_DISTRIBUTION_QUARTILE_ROLES if getattr(self, f"{r}_col")]
+        if bound and len(bound) < len(RANKED_DISTRIBUTION_QUARTILE_ROLES):
+            missing = [f"{r}_col" for r in RANKED_DISTRIBUTION_QUARTILE_ROLES if r not in bound]
+            raise ValueError(
+                f"ranked_distribution: a pre-aggregated box needs q1_col, median_col and "
+                f"q3_col together (missing {', '.join(missing)})"
+            )
+        if bound and self.value_col:
+            raise ValueError(
+                "ranked_distribution: bind either value_col (long form) or "
+                "q1_col / median_col / q3_col (pre-aggregated), not both"
+            )
+        if self.distribution == "violin" and bound:
+            raise ValueError(
+                "ranked_distribution: a violin needs the raw values (value_col); "
+                "pre-aggregated statistics can only draw a box"
+            )
+        return self
+
+
 # ---------------------------------------------------------------------------
 # Protein kinds (lot 3). The 3D structure, the MSA and the linear sequence
 # track of one entity share the `residue_selection` cross-filter: the same
@@ -4392,6 +4549,7 @@ _VizConfigUnion = Annotated[
     | IdeogramConfig
     | RecordCardConfig
     | ParallelCoordinatesConfig
+    | RankedDistributionConfig
     | Molecule3DConfig
     | MsaConfig
     | SequenceTrackConfig

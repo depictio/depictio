@@ -115,6 +115,13 @@ AdvancedVizKind = Literal[
     # heat band per bin (variant density). The genomic kinds above all draw one
     # locus axis at a time; this is the whole genome as a set of bars.
     "ideogram",
+    # Top-N features ranked by a score, each drawn with its distribution across
+    # samples: a box (or violin) panel and a lollipop of the score on ONE
+    # shared, ordered category axis. Gene stability (nf-core/stableexpression),
+    # housekeeping candidates, any "rank features by a metric" view. Two panels
+    # linked by order are a new set of marks: a box figure cannot sort by a
+    # column it does not draw, nor hold the score beside it.
+    "ranked_distribution",
 ]
 
 # Map visualization types

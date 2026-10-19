@@ -1,0 +1,425 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f50"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f50"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "rankdist-text",
+      "component_type": "text",
+      "title": "Gene stability",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "Stability ranking",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Each row is a gene, ranked by its stability score (lower is more stable, as in nf-core/stableexpression): the box on the left is the spread of its normalised counts across 4332 samples, the lollipop on the right is the score itself. The boxes are coloured by expression section, so a stable gene reads the same whether it is highly or lowly expressed. Click a gene to select it on both tiles, and change Top N or the order in the controls.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null,
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "rankdist-cohort",
+      "component_type": "advanced_viz",
+      "title": "Most stable genes across the cohort",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ranked_distribution_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f51"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "200 genes with a stability score, a rank, an expression section and the box statistics of their normalised counts over 4332 samples",
+        "data_collection_tag": "ranked_distribution_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f51"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The 25 genes with the lowest stability score out of 200. Each box summarises 4332 samples from statistics computed upstream, on a log axis because the sections span four decades of counts.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Stability ranking",
+      "viz_kind": "ranked_distribution",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "ranked_distribution",
+        "feature_id_col": "gene_id",
+        "score_col": "stability_score",
+        "rank_col": "rank",
+        "label_col": "gene_name",
+        "group_col": "section",
+        "value_col": null,
+        "q1_col": "q1",
+        "median_col": "median",
+        "q3_col": "q3",
+        "lower_col": "lower",
+        "upper_col": "upper",
+        "mean_col": "mean",
+        "top_n": 25,
+        "ascending": true,
+        "distribution": "box",
+        "orientation": "horizontal",
+        "score_label": "Stability score (lower is more stable)",
+        "value_label": "Normalised count",
+        "log_value": true,
+        "max_features": 200,
+        "selection_enabled": true,
+        "selection_column": null
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "rankdist-values",
+      "component_type": "advanced_viz",
+      "title": "Per-sample counts of the most stable genes",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ranked_distribution_values_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f52"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "The normalised counts of the 40 most stable genes over 60 samples, one row per gene and sample",
+        "data_collection_tag": "ranked_distribution_values_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f52"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "The same ranking from the raw counts of 40 genes over 60 samples, one row per gene and sample: the tile computes each box itself, and can draw violins instead.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Per-sample values",
+      "viz_kind": "ranked_distribution",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "ranked_distribution",
+        "feature_id_col": "gene_id",
+        "score_col": "stability_score",
+        "rank_col": null,
+        "label_col": "gene_name",
+        "group_col": "section",
+        "value_col": "value",
+        "q1_col": null,
+        "median_col": null,
+        "q3_col": null,
+        "lower_col": null,
+        "upper_col": null,
+        "mean_col": null,
+        "top_n": 20,
+        "ascending": true,
+        "distribution": "violin",
+        "orientation": "horizontal",
+        "score_label": "Stability score (lower is more stable)",
+        "value_label": "Normalised count",
+        "log_value": true,
+        "max_features": 40,
+        "selection_enabled": true,
+        "selection_column": null
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "rankdist-f-section",
+      "component_type": "interactive",
+      "title": "Expression section",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ranked_distribution_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f51"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "200 genes with a stability score, a rank, an expression section and the box statistics of their normalised counts over 4332 samples",
+        "data_collection_tag": "ranked_distribution_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f51"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Gene scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "section",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Gene filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "icon_name": "mdi:layers-outline",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "rankdist-f-score",
+      "component_type": "interactive",
+      "title": "Stability score",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ranked_distribution_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f51"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "200 genes with a stability score, a rank, an expression section and the box statistics of their normalised counts over 4332 samples",
+        "data_collection_tag": "ranked_distribution_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f51"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Gene scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "stability_score",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Gene filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": true,
+      "slider_mode": null,
+      "icon_name": "mdi:chart-bell-curve",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-rankdist-f-section",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-rankdist-f-score",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-rankdist-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-rankdist-cohort",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-rankdist-values",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Gene stability",
+  "subtitle": "The most stable genes of a synthetic cohort, ranked by their stability score, each drawn with the spread of its normalised counts beside the score that ranked it.",
+  "icon": "mdi:chart-box-outline",
+  "icon_color": "grape",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 57,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-box-outline",
+  "tab_icon_color": "grape",
+  "tab_group": null,
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Gene scope",
+      "icon": "mdi:filter-variant",
+      "color": "grape",
+      "description": "Restricts which genes are ranked, by expression section and by stability score",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Stability ranking",
+      "icon": "mdi:chart-box-outline",
+      "color": "grape",
+      "description": "The top genes by stability score, with the box statistics of their counts over the whole cohort",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Per-sample values",
+      "icon": "mdi:chart-bell-curve",
+      "color": "grape",
+      "description": "The raw counts of the 40 most stable genes, summarised by the tile itself",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "category_colors": null,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

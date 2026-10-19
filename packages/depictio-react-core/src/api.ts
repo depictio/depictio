@@ -1615,7 +1615,8 @@ export type AdvancedVizKind =
   | 'secondary_structure'
   | 'domain_architecture'
   | 'pae_matrix'
-  | 'ramachandran';
+  | 'ramachandran'
+  | 'ranked_distribution';
 
 /** Accepted dtypes for one role, plus whether the role is required. Sourced
  *  from the backend canonical schema so the builder never duplicates the

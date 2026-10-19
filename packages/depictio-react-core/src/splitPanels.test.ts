@@ -150,6 +150,7 @@ describe('splitPanels', () => {
       'domain_architecture',
       'pae_matrix',
       'ramachandran',
+      'ranked_distribution',
     ];
 
     it('places every model kind in its bucket, and no kind twice', () => {

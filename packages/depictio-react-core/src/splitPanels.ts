@@ -274,6 +274,10 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   domain_architecture: 'none',
   pae_matrix: 'none',
   ramachandran: 'none',
+  // One box per feature across every sample: the rows are features, which no
+  // sample group names, and a per-group copy would rank them again on its own
+  // axis, so two panels would not share the order the picture is about.
+  ranked_distribution: 'none',
 };
 
 /** The policy for `vizKind`.

@@ -259,6 +259,16 @@ class TestComponentFormats:
         for kind in ("pae_matrix", "ramachandran"):
             assert "Open the dashboard instead" in HTML_UNAVAILABLE_KINDS[kind]
 
+    def test_ranked_distribution_is_html_only(self) -> None:
+        """Its two Plotly panels are built in TypeScript and fetch nothing of their own."""
+        from depictio.api.v1.services.export.capabilities import HTML_UNAVAILABLE_KINDS
+
+        assert AV_JSON_SOURCE["ranked_distribution"] == "client_only"
+        assert advanced_viz_json_source("ranked_distribution") == "client_only"
+        assert "ranked_distribution" not in HTML_UNAVAILABLE_KINDS
+        assert formats_for("advanced_viz", "ranked_distribution") == frozenset({ExportFormat.HTML})
+        assert "format=html" in (unsupported_reason("advanced_viz", "ranked_distribution") or "")
+
     def test_a_genomespy_view_has_no_html_but_the_plotly_view_does(self) -> None:
         from depictio.api.v1.services.export.capabilities import (
             component_formats,

@@ -445,6 +445,7 @@ async def create_initial_dashboards(
                 "ideogram",
                 "record_card",
                 "parallel_coordinates",
+                "ranked_distribution",
                 "locus_section",
                 "protein_structure",
                 "protein_families",
