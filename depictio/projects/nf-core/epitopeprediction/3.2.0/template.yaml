@@ -1,0 +1,524 @@
+# nf-core/epitopeprediction Template v3.2.0 - MHC binding prediction
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio ingest --template nf-core/epitopeprediction/3.2.0 --data-root /path/to/results \
+#     [--var METADATA_FILE=/path/to/samplesheet.csv]
+#
+# Tested against nf-core/epitopeprediction AWS megatest results:
+#   s3://nf-core-awsmegatests/epitopeprediction/results-e637bc7c49e6e05a09f5207501a142ec68d8570b
+#   (test_full profile, see megatest.yaml for the fetch manifest)
+# ============================================================================
+#
+# DESIGN METADATA. epitopeprediction reads its samplesheet from --input and this
+# release does not publish it, so the sample hub reads the file named by
+# METADATA_FILE (default: input/samplesheet.csv under DATA_ROOT, where
+# download_test_data.sh puts the vendored megatest sheet). The pipeline's input
+# schema fixes sample, alleles, mhc_class and filename; the `samples` recipe
+# derives input_type (Variants, Proteins or Peptides, from the file extension),
+# which is the default GROUP_COL. Any column a user adds to the sheet can
+# replace it.
+#
+# PREDICTIONS. Every collection but the variant peptides reads
+# predictions/<sample>.tsv, the pipeline's merged table, in either of its two
+# shapes (long, the default, or --wide_format_output). The sample is the file
+# name, which is also the samplesheet's sample, so every collection links to the
+# hub by `sample`. Alleles are normalised to HLA-A*02:01 in every collection.
+#
+# OPTIONAL ROUTES. Three collections exist only for some runs; the import prunes
+# them and their tiles when the matching variable is set (see `conditional`):
+#   NO_VARIANT_INPUT  no VCF row in the sheet: no variant_peptides/, no
+#                     mutant / wild-type pairs;
+#   NO_WILD_TYPE      run without --wild_type (or no missense variant): no
+#                     wild-type predictions to pair with the mutants;
+#   SINGLE_PREDICTOR  one tool per MHC class (--tools mhcflurry, say): no pair
+#                     of tools to compare, so no Predictors tab.
+# They are also marked optional, so an ingest that meets no input skips them.
+template:
+  template_id: "nf-core/epitopeprediction/3.2.0"
+  description: "nf-core/epitopeprediction template: MHC binding predictions of peptides from variants, proteins or peptide lists, by allele, by sample and by tool, the peptides that bind with their source variant or protein, mutant against wild-type affinity, and how far the tools agree."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "epitopeprediction output directory (predictions/, variant_peptides/, variant_fasta/, the per-tool directories, multiqc/, pipeline_info/)."
+      required: true
+    - name: "METADATA_FILE"
+      description: "The samplesheet the run was started with (--input: sample, alleles, mhc_class, filename, optional tumor_sample and germline_vcf, plus any design columns). Defaults to input/samplesheet.csv under DATA_ROOT."
+      required: false
+      default: "{DATA_ROOT}/input/samplesheet.csv"
+    - name: "METADATA_ID_COL"
+      description: "Samplesheet id column. epitopeprediction fixes it to sample; recorded for the metadata auto-detection."
+      required: false
+      default: "sample"
+    - name: "GROUP_COL"
+      description: "Samplesheet column the dashboard groups and filters samples by. Defaults to input_type (Variants, Proteins or Peptides), derived from the sheet; name any design column added to the sheet instead."
+      required: false
+      default: "input_type"
+    - name: "GROUP_COL_DISPLAY"
+      description: "Reader-facing label of GROUP_COL, used in filter and card titles."
+      required: false
+      default: "Input type"
+    - name: "NO_VARIANT_INPUT"
+      description: "Set (--var NO_VARIANT_INPUT=true) for a run whose samplesheet has no VCF: variant_peptides/ is absent and no mutant peptide has a wild type, so both collections are removed."
+      required: false
+    - name: "NO_WILD_TYPE"
+      description: "Set (--var NO_WILD_TYPE=true) for a run without --wild_type, or with no missense variant: no wild-type peptide was predicted, so the mutant / wild-type collection is removed."
+      required: false
+    - name: "SINGLE_PREDICTOR"
+      description: "Set (--var SINGLE_PREDICTOR=true) for a run with one prediction tool per MHC class: no peptide is scored by two tools, so the agreement collection and the Predictors tab are removed."
+      required: false
+  # Variables used when materialising the bundled reference dataset.
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/samplesheet.csv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "input_type"
+      GROUP_COL_DISPLAY: "Input type"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "hook_url"           # nf-core runs put a live Slack webhook here
+          - "email*"
+          - "external_tools_meta"  # absolute path inside the Nextflow asset clone
+          - "multiqc_logo"
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Prediction"
+        key_patterns: ["tools", "binder_only", "use_ba_rank", "wide_format_output", "peptide_col_name", "accept_mixmhcpred_license", "peptides_split_*"]
+      - group: "Peptide lengths"
+        key_patterns: ["min_peptide_length_*", "max_peptide_length_*"]
+      - group: "Variant input"
+        key_patterns: ["ref_fasta", "vep_*", "mutation_flanking_aas", "wild_type", "proteome_reference", "germline_*", "proximal_*"]
+      - group: "Run context"
+        key_patterns: ["input", "outdir", "version", "publish_dir_mode", "monochrome_logs", "validate_params", "help*", "show_hidden", "pipelines_testdata_base_path", "trace_report_suffix", "config_profile_*", "custom_config_*", "multiqc_*", "max_multiqc_email_size", "plaintext_email"]
+    highlight:
+      - "tools"
+      - "min_peptide_length_classI"
+      - "max_peptide_length_classI"
+      - "min_peptide_length_classII"
+      - "max_peptide_length_classII"
+      - "wild_type"
+      - "use_ba_rank"
+      - "binder_only"
+      - "vep_genome"
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    - if_var_present: "NO_VARIANT_INPUT"
+      remove_dc_tags: ["epitopeprediction_variant_peptides", "epitopeprediction_wildtype_pairs"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "NO_WILD_TYPE"
+      remove_dc_tags: ["epitopeprediction_wildtype_pairs"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_present: "SINGLE_PREDICTOR"
+      remove_dc_tags: ["epitopeprediction_predictor_agreement"]
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "epitopeprediction MHC Binding"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "epitopeprediction"
+    version: "3.2.0"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/epitopeprediction"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Hub: the samplesheet, one row per sample
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "The run's samplesheet, one row per sample, with its input type, MHC class and alleles"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/epitopeprediction/samples.py"
+            source_overrides:
+              samplesheet:
+                path: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id, the name of the sample's predictions/<sample>.tsv"
+              "input_type": "Variants (VCF), Proteins (FASTA) or Peptides (a peptide table), from the input file"
+              "mhc_class": "MHC class the sample was predicted for: Class I, Class II or H-2"
+              "allele_source": "Listed in the sheet, read from an allele file, or all supported alleles (HLA-all)"
+              "alleles": "The listed alleles normalised to HLA-A*02:01, the allele file name, or All supported"
+              "input_file": "Input file name"
+              "tumor_sample": "Tumour sample name in the VCF (variant input)"
+              "germline_vcf": "Germline VCF file name, when the row gives one (variant input)"
+
+      # ----------------------------------------------------------------
+      # MultiQC: bcftools stats of the input variants and the pipeline's
+      # own binding-prediction sections (custom content)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "MultiQC report of the run: binder statistics per sample and tool, binder length, rank and affinity distributions, and bcftools statistics of the input variants"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
+          dc_specific_properties:
+            # The four prediction sections are custom content, so their module
+            # ids are their own section anchors, each holding one plot named
+            # after its section. bcftools is a real MultiQC module.
+            modules:
+              - "general_stats"
+              - "peptide_binding_prediction_stats"
+              - "binder_length_distribution"
+              - "binder_rank_distribution"
+              - "binding_affinity_distribution"
+              - "bcftools"
+            plots:
+              peptide_binding_prediction_stats: ["peptide_binding_prediction_stats-section"]
+              binder_length_distribution: ["binder_length_distribution-section"]
+              binder_rank_distribution: ["binder_rank_distribution-section"]
+              binding_affinity_distribution: ["binding_affinity_distribution-section"]
+              bcftools:
+                - "Variant Substitution Types"
+                - "Variant Quality"
+                - "Indel Distribution"
+                - "Variant depths"
+
+      # ----------------------------------------------------------------
+      # Predictions, from predictions/<sample>.tsv
+      # ----------------------------------------------------------------
+      - data_collection_tag: "epitopeprediction_predictions"
+        description: "Every binding prediction: one row per sample, peptide, allele and tool, with affinity, IC50, rank and the binder call"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "epitopeprediction/predictions.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "row_id": "Sample, peptide, allele and tool of the row"
+              "sample": "Sample id"
+              "sequence": "Peptide sequence"
+              "length": "Peptide length in residues"
+              "length_class": "Peptide length as a label, e.g. 9-mer"
+              "origin": "Mutant, Wild type, Mutant and wild type (variant input) or Input sequence"
+              "predictor": "Prediction tool"
+              "mhc_class": "Class I or Class II"
+              "allele": "MHC allele, normalised to HLA-A*02:01"
+              "hla_locus": "HLA locus of the allele: HLA-A, HLA-B, HLA-C ... HLA-DR, HLA-DQ, HLA-DP"
+              "affinity_score": "Binding affinity score between 0 and 1, higher is stronger (the pipeline's BA)"
+              "ic50_nm": "Predicted IC50 in nM, from the affinity score (empty for tools without one)"
+              "log10_ic50": "log10 of the IC50"
+              "percentile_rank": "The tool's percentile rank, lower is stronger (MHCnuggets: a fraction of the proteome, 0 to 1)"
+              "binder": "1 when the pipeline calls the peptide a binder of the allele by this tool"
+              "call": "Binder or Non-binder"
+              "affinity_class": "IC50 band: Strong (50 nM or less), Binder (50 to 500 nM), Weak (500 to 5000 nM), Non-binding, No IC50"
+              "peptide_id": "Peptide id of a peptide-table input"
+              "gene": "Gene of the variant behind the peptide (variant input)"
+              "consequence": "Missense, Frameshift, In-frame deletion or In-frame insertion (variant input)"
+              "HGVSp": "Protein change in HGVS notation (variant input)"
+              "genomic_anchor": "Variant position as chr:pos:ref:alt (variant input)"
+              "wildtype": "Wild-type peptide at the same position (missense mutants)"
+              "wt_ic50_nm": "IC50 of the wild-type peptide for the same allele and tool (with --wild_type)"
+              "agretopicity": "Mutant IC50 over wild-type IC50; below 1, the mutation strengthens binding"
+
+      - data_collection_tag: "epitopeprediction_peptides"
+        description: "One row per sample and peptide: best prediction over alleles and tools, binder call and source variant, protein or id"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "epitopeprediction/peptides.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "peptide_key": "Sample and peptide of the row"
+              "sample": "Sample id"
+              "sequence": "Peptide sequence"
+              "peptide_id": "Peptide id of a peptide-table input"
+              "length": "Peptide length in residues"
+              "length_class": "Peptide length as a label, e.g. 9-mer"
+              "origin": "Mutant, Wild type, Mutant and wild type (variant input) or Input sequence"
+              "call": "Binder (a tool calls it a binder of an allele), Non-binder, or Unsupported (no tool could score it)"
+              "binder": "1 when the peptide binds at least one allele"
+              "alleles_scored": "Alleles a tool scored the peptide against"
+              "binding_alleles": "Alleles a tool calls the peptide a binder of"
+              "binder_calls": "Binder calls over alleles and tools"
+              "predictors": "Tools that scored the peptide"
+              "best_allele": "Allele with the lowest IC50"
+              "best_predictor": "Tool of that lowest IC50"
+              "best_ic50_nm": "Lowest IC50 over alleles and tools, nM"
+              "best_affinity_class": "IC50 band of the best prediction"
+              "binding_allele_list": "The binding alleles, alphabetical, first 10"
+              "gene": "Gene of the variant (variant input)"
+              "transcript": "Ensembl transcript(s) (variant input)"
+              "consequence": "Consequence of the variant (variant input)"
+              "HGVSp": "Protein change(s) in HGVS notation (variant input)"
+              "genomic_anchor": "Variant position as chr:pos:ref:alt (variant input)"
+              "uniprot": "UniProt accession(s) (variant input)"
+              "protein_ids": "Sequence records that contain the peptide (variant and protein input)"
+              "source_records": "Number of sequence records that contain the peptide"
+              "wildtype": "Wild-type peptide at the same position (missense mutants)"
+              "wt_best_ic50_nm": "IC50 of the wild-type peptide for the best allele and tool"
+              "agretopicity": "Mutant over wild-type IC50 for the best allele and tool"
+
+      - data_collection_tag: "epitopeprediction_allele_summary"
+        description: "One row per sample and allele: peptides scored, binders, binder share and IC50"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "epitopeprediction/allele_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "allele_key": "Sample and allele of the row"
+              "sample": "Sample id"
+              "allele": "MHC allele, normalised to HLA-A*02:01"
+              "hla_locus": "HLA locus of the allele"
+              "mhc_class": "Class I or Class II"
+              "predictors": "Tools that scored the allele"
+              "peptides": "Distinct peptides scored against the allele"
+              "binders": "Of those, peptides at least one tool calls a binder"
+              "binder_rate": "Binders over peptides scored"
+              "median_ic50_nm": "Median IC50 of the peptides, each at its lowest over the tools, nM"
+              "best_ic50_nm": "Lowest IC50 of any peptide, nM"
+              "median_affinity_score": "Median affinity score of the peptides, each at its highest over the tools"
+
+      - data_collection_tag: "epitopeprediction_predictor_summary"
+        description: "One row per sample and tool: peptides scored, unsupported and called binders, as in the MultiQC binder statistics"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "epitopeprediction/predictor_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "summary_key": "Sample and tool of the row"
+              "sample": "Sample id"
+              "predictor": "Prediction tool"
+              "mhc_class": "Class I or Class II"
+              "peptides": "Peptides of the sample, wild-type peptides left out"
+              "scored": "Peptides the tool scored for at least one allele"
+              "unsupported": "Peptides the tool could not score (allele or length unsupported)"
+              "binders": "Peptides the tool calls a binder of at least one allele"
+              "binder_rate": "Binders over peptides scored"
+              "alleles": "Alleles the tool scored"
+              "median_ic50_nm": "Median IC50 of the tool's predictions, nM"
+
+      - data_collection_tag: "epitopeprediction_predictor_agreement"
+        optional: true  # needs two tools on the same class (SINGLE_PREDICTOR prunes it)
+        description: "Peptides scored by two tools against the same allele: both IC50s, both binder calls and whether they agree"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "epitopeprediction/predictor_agreement.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "pair_key": "Sample, peptide, allele and tool pair of the row"
+              "sample": "Sample id"
+              "sequence": "Peptide sequence"
+              "length_class": "Peptide length as a label"
+              "allele": "MHC allele, normalised to HLA-A*02:01"
+              "hla_locus": "HLA locus of the allele"
+              "mhc_class": "Class I or Class II"
+              "predictor_pair": "The two tools compared, alphabetical"
+              "predictor_a": "First tool of the pair"
+              "predictor_b": "Second tool of the pair"
+              "ic50_a_nm": "IC50 by the first tool, nM"
+              "ic50_b_nm": "IC50 by the second tool, nM"
+              "log10_ratio": "log10 of the second IC50 over the first"
+              "abs_log10_ratio": "Absolute log10 ratio of the two IC50s"
+              "binder_a": "1 when the first tool calls a binder"
+              "binder_b": "1 when the second tool calls a binder"
+              "agreement": "Both binder, Neither, or <tool> only"
+              "concordant": "1 when both tools make the same call"
+
+      - data_collection_tag: "epitopeprediction_wildtype_pairs"
+        optional: true  # needs a missense variant and --wild_type (NO_VARIANT_INPUT / NO_WILD_TYPE prune it)
+        description: "Missense mutant peptides beside their wild-type peptide: both IC50s, both calls and the agretopicity"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "epitopeprediction/wildtype_pairs.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "pair_key": "Sample, mutant peptide, allele and tool of the row"
+              "sample": "Sample id"
+              "sequence": "Mutant peptide sequence"
+              "wildtype": "Wild-type peptide at the same position"
+              "length_class": "Peptide length as a label"
+              "allele": "MHC allele, normalised to HLA-A*02:01"
+              "hla_locus": "HLA locus of the allele"
+              "predictor": "Prediction tool"
+              "gene": "Gene of the variant"
+              "HGVSp": "Protein change in HGVS notation"
+              "genomic_anchor": "Variant position as chr:pos:ref:alt"
+              "ic50_nm": "Mutant peptide IC50, nM"
+              "wt_ic50_nm": "Wild-type peptide IC50, nM"
+              "agretopicity": "Mutant IC50 over wild-type IC50"
+              "log10_agretopicity": "log10 of the agretopicity; below 0, the mutation strengthens binding"
+              "binder": "1 when the mutant peptide is called a binder"
+              "wt_binder": "1 when the wild-type peptide is called a binder"
+              "pair_call": "Mutant binds and wild type does not, both bind, only the wild type binds, or neither"
+
+      - data_collection_tag: "epitopeprediction_variant_peptides"
+        optional: true  # VCF input only (NO_VARIANT_INPUT prunes it)
+        description: "Candidate peptides cut from the variants, one row per sample and peptide, with gene, consequence and protein change"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "epitopeprediction/variant_peptides.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "peptide_key": "Sample and peptide of the row"
+              "sample": "Sample id"
+              "sequence": "Peptide sequence"
+              "length": "Peptide length in residues"
+              "length_class": "Peptide length as a label"
+              "origin": "Mutant, Wild type or Mutant and wild type"
+              "gene": "HGNC gene symbol(s)"
+              "transcript": "Ensembl transcript(s) with version"
+              "consequence": "Missense, Frameshift, In-frame deletion or In-frame insertion"
+              "HGVSp": "Protein change(s) in HGVS notation"
+              "genomic_anchor": "Variant position as chr:pos:ref:alt"
+              "uniprot": "UniProt accession(s)"
+              "protein_ids": "Sequence records that contain the peptide"
+              "source_records": "Number of sequence records that contain the peptide"
+              "wildtype": "Wild-type peptide at the same position (missense mutants)"
+
+# ============================================================================
+# LINKS: the samplesheet fans out to every collection by sample
+# ============================================================================
+links:
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+    description: "Filter the MultiQC panels by samplesheet samples (<sample>_<tool> and <sample>.prep)"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "epitopeprediction_predictions"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the predictions by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "epitopeprediction_peptides"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the peptides by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "epitopeprediction_allele_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the per-allele summary by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "epitopeprediction_predictor_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the per-tool summary by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "epitopeprediction_predictor_agreement"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the tool agreement by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "epitopeprediction_wildtype_pairs"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the mutant / wild-type pairs by samplesheet samples"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "epitopeprediction_variant_peptides"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the variant peptides by samplesheet samples"
+    enabled: true
+  # The allele, normalised to HLA-A*02:01 in every collection, carries an
+  # allele pick from the predictions to the tables that hold one.
+  # TODO(wave4c): link allele filter with hlatyping allele_grid
+  - source_dc_tag: "epitopeprediction_predictions"
+    source_column: "allele"
+    target_dc_tag: "epitopeprediction_allele_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "allele"}
+    description: "Carry an allele pick to the per-allele summary"
+    enabled: true
+  - source_dc_tag: "epitopeprediction_predictions"
+    source_column: "allele"
+    target_dc_tag: "epitopeprediction_predictor_agreement"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "allele"}
+    description: "Carry an allele pick to the tool agreement"
+    enabled: true
+  - source_dc_tag: "epitopeprediction_predictions"
+    source_column: "allele"
+    target_dc_tag: "epitopeprediction_wildtype_pairs"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "allele"}
+    description: "Carry an allele pick to the mutant / wild-type pairs"
+    enabled: true
+  # A peptide-level pick (length, call) on the peptide table reaches the
+  # predictions of the same peptides.
+  - source_dc_tag: "epitopeprediction_peptides"
+    source_column: "length_class"
+    target_dc_tag: "epitopeprediction_predictions"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "length_class"}
+    description: "Carry a peptide-length pick to the predictions"
+    enabled: true
+  - source_dc_tag: "epitopeprediction_peptides"
+    source_column: "length_class"
+    target_dc_tag: "epitopeprediction_variant_peptides"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "length_class"}
+    description: "Carry a peptide-length pick to the variant peptides"
+    enabled: true

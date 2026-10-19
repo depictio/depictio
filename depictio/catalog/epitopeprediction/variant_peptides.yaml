@@ -1,0 +1,22 @@
+id: epitopeprediction_variant_peptides
+name: Variant peptides
+mode: epitope/variant-peptides
+description: >-
+  The candidate peptides pVACseq cuts from the annotated variants, one row per
+  sample and peptide: every peptide of each requested length that overlaps the
+  mutation, with the gene, transcript, consequence (missense, in-frame indel,
+  frameshift), protein change, genomic anchor and UniProt accession behind it,
+  plus the wild-type peptides added by --wild_type.
+find:
+  path_glob: "**/variant_peptides/*_length_*.tsv"
+recipe: epitopeprediction/variant_peptides.py
+fixture: variant_peptides.tsv
+renders_as:
+  - id: consequence_bar
+    component: figure
+    visu_type: bar
+    dict_kwargs: { x: consequence, color: length_class, barmode: stack }
+  - { id: variant_count, component: card, column: genomic_anchor, aggregation: nunique, secondary_layout: top_n, breakdown_col: consequence, top_n_count: 3 }
+  - { id: candidate_count, component: card, column: peptide_key, aggregation: count, secondary_layout: composition, breakdown_col: consequence }
+  - { component: interactive, interactive_type: MultiSelect, column_name: consequence }
+  - { component: table, row_selection_enabled: true, row_selection_column: peptide_key }
