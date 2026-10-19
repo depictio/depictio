@@ -156,8 +156,19 @@ tools, HLA loci and peptide lengths are coloured `auto`.
 - The sample sheet selects on `sample`, which the links carry to every collection and to the
   MultiQC panels.
 - The allele filter of Predictions (and of the Overview's Findings bar) works on the
-  normalised allele (`HLA-A*02:01`), which every collection shares; a later HLA typing
-  template can drive it (`TODO(wave4c)` in the dashboard and the template).
+  normalised allele (`HLA-A*02:01`), which every collection shares; the allele pick reaches
+  the allele summary, the agreement and the mutant / wild-type pairs through the project links.
+- **With nf-core/hlatyping.** The hlatyping template spells its OptiType calls exactly as this
+  one spells the predicted alleles: two-field `HLA-<gene>*<field1>:<field2>`, through the same
+  function (`depictio.recipes.lib.epitope_predictions.normalize_allele`), so OptiType's
+  `A*02:01` and a predictor's `HLA-A02:01` both read `HLA-A*02:01`, `hla_locus` here matches
+  `locus` there (`HLA-A`, `HLA-B`, `HLA-C`) and `mhc_class` matches `hla_class` (`Class I`).
+  The two runs are imported as two projects, and a Depictio link joins collections of one
+  project only, so the hlatyping allele grid cannot narrow this dashboard live: the value
+  carries over, not the pick. An allele read off the grid selects the same rows in the allele
+  filters here, and the hlatyping genotype table writes each sample's alleles as the
+  `;`-separated list this samplesheet's `alleles` column takes, so a typed sample can be
+  predicted against its own genotype.
 - The peptide table selects on `peptide_key` (sample and sequence) and opens its record card;
   the scatters select on `sequence`.
 
