@@ -1,0 +1,16 @@
+id: orthofinder_orthologue_matrix
+name: One-to-one orthologues between species
+mode: comparative-statistics/one-to-one
+description: >-
+  The one-to-one orthologues OrthoFinder found between every pair of species,
+  as a square matrix with a column per species and a null diagonal. Close,
+  well-annotated genomes share the most; a genome short of them against every
+  other one has lost or split gene models.
+find:
+  path_glob: "**/Comparative_Genomics_Statistics/OrthologuesStats_one-to-one.tsv"
+recipe: orthofinder/orthologue_matrix.py
+fixture: orthologue_matrix.tsv
+renders_as:
+  - { id: one_to_one_heatmap, component: advanced_viz, kind: complex_heatmap,
+      roles: {index: genome} }
+  - { component: table }

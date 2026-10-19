@@ -11,6 +11,12 @@ nf-core/genomeassembler `<sample>_<stage>`), which is what the other QC tools
 publish under too; the `Input_file` column is only the FASTA name, which can
 differ from it (a renamed or patched FASTA).
 
+A pipeline that runs BUSCO in more than one mode on the same assembly names the
+mode after the lineage (nf-core/genomeqc: `<assembly>-<lineage>-genome-busco`
+for the assembly, `<assembly>-<lineage>-proteins-busco` for its annotated
+proteins). That token is read into `busco_mode`, so the two runs of one assembly
+stay two rows; a name without it leaves `busco_mode` null.
+
 Input: the ``busco_batch_raw`` data collection, a recursive Table scan::
 
     config:
@@ -24,6 +30,7 @@ Output schema:
     assembly_id : Utf8        the published prefix, lineage and `-busco` suffix removed
     input_file : Utf8         the FASTA BUSCO read
     lineage : Utf8            the lineage dataset the scores are against
+    busco_mode : Utf8         genome, proteins or transcriptome when the run name says so, else null
     complete_pct : Float64    complete BUSCOs, percent of the lineage set
     single_pct : Float64      complete and single-copy, percent
     duplicated_pct : Float64  complete and duplicated, percent
@@ -62,6 +69,7 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "assembly_id": pl.Utf8,
     "input_file": pl.Utf8,
     "lineage": pl.Utf8,
+    "busco_mode": pl.Utf8,
     "complete_pct": pl.Float64,
     "single_pct": pl.Float64,
     "duplicated_pct": pl.Float64,
@@ -80,6 +88,12 @@ SOURCE_PATH_COL = "source_path"
 #: `<prefix>-<lineage or auto mode>-busco`, the nf-core module's run name.
 _RUN_NAME = re.compile(r"^(?P<prefix>.+?)-[^-]+-busco$")
 
+#: BUSCO's `--mode` values, as a pipeline spells them after the lineage.
+BUSCO_MODES: frozenset[str] = frozenset({"genome", "proteins", "transcriptome"})
+
+#: `<prefix>-<lineage>-<mode>-busco`, a run name that also carries the mode.
+_MODE_RUN_NAME = re.compile(r"^(?P<prefix>.+?)-[^-]+-(?P<mode>[^-]+)-busco$")
+
 #: BUSCO column header -> (output column, dtype). Absent headers become nulls.
 _COLUMNS: dict[str, tuple[str, type[pl.DataType]]] = {
     "Dataset": ("lineage", pl.Utf8),
@@ -97,14 +111,27 @@ _COLUMNS: dict[str, tuple[str, type[pl.DataType]]] = {
 }
 
 
+def _run_stem(source_path: str) -> str:
+    path = PurePosixPath(source_path.replace("\\", "/"))
+    if path.name == "batch_summary.txt":
+        return path.parent.name
+    return path.name.removesuffix(".batch_summary.txt")
+
+
+def run_mode(source_path: str) -> str | None:
+    """The BUSCO mode a run name carries after its lineage, or None."""
+    match = _MODE_RUN_NAME.match(_run_stem(source_path))
+    if match is not None and match.group("mode") in BUSCO_MODES:
+        return match.group("mode")
+    return None
+
+
 def run_label(source_path: str) -> str:
     """The published prefix of a batch summary, from its path."""
-    path = PurePosixPath(source_path.replace("\\", "/"))
-    name = path.name
-    if name == "batch_summary.txt":
-        stem = path.parent.name
-    else:
-        stem = name.removesuffix(".batch_summary.txt")
+    stem = _run_stem(source_path)
+    with_mode = _MODE_RUN_NAME.match(stem)
+    if with_mode is not None and with_mode.group("mode") in BUSCO_MODES:
+        return with_mode.group("prefix")
     match = _RUN_NAME.match(stem)
     return match.group("prefix") if match else stem
 
@@ -134,15 +161,19 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     )
     if SOURCE_PATH_COL in raw.columns:
         raw = raw.with_columns(
-            pl.col(SOURCE_PATH_COL).map_elements(run_label, return_dtype=pl.Utf8).alias("_label")
+            pl.col(SOURCE_PATH_COL).map_elements(run_label, return_dtype=pl.Utf8).alias("_label"),
+            pl.col(SOURCE_PATH_COL).map_elements(run_mode, return_dtype=pl.Utf8).alias("_mode"),
         )
     else:
-        raw = raw.with_columns(pl.lit(None, dtype=pl.Utf8).alias("_label"))
+        raw = raw.with_columns(
+            pl.lit(None, dtype=pl.Utf8).alias("_label"),
+            pl.lit(None, dtype=pl.Utf8).alias("_mode"),
+        )
 
     stems = pl.col("Input_file").map_elements(_fasta_stem, return_dtype=pl.Utf8)
     # A summary with one input row is keyed on its run name; a multi-FASTA batch
     # falls back to the FASTA names, which are the only thing that tells its rows apart.
-    rows_per_label = pl.len().over("_label")
+    rows_per_label = pl.len().over("_label", "_mode")
     assembly_id = (
         pl.when(pl.col("_label").is_not_null() & (rows_per_label == 1))
         .then(pl.col("_label"))
@@ -152,6 +183,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     selected = [
         assembly_id.alias("assembly_id"),
         pl.col("Input_file").cast(pl.Utf8).alias("input_file"),
+        pl.col("_mode").alias("busco_mode"),
     ]
     for header, (name, dtype) in _COLUMNS.items():
         if header in raw.columns:
@@ -159,7 +191,9 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         else:
             selected.append(pl.lit(None, dtype=dtype).alias(name))
 
-    out = raw.select(selected).unique(subset=["assembly_id", "lineage"], keep="first")
+    out = raw.select(selected).unique(subset=["assembly_id", "lineage", "busco_mode"], keep="first")
     if out.is_empty():
         raise ValueError("busco_batch_summary: no batch summary carried a data row")
-    return out.select(list(OUTPUT_SCHEMA)).sort(["assembly_id", "lineage"])
+    return out.select(list(OUTPUT_SCHEMA)).sort(
+        ["assembly_id", "lineage", "busco_mode"], nulls_last=True
+    )

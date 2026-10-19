@@ -1,0 +1,14 @@
+# FCS-adaptor: NCBI's Foreign Contamination Screen for adaptors and vectors
+# left in an assembly (sequencing adaptors, cloning vectors). Its
+# `fcs_adaptor_report.txt` is read: one row per flagged range, plus one row per
+# screened assembly that had nothing flagged.
+id: fcsadaptor
+name: FCS-adaptor
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/fcs/fcsadaptor
+homepage: https://github.com/ncbi/fcs
+biotools_url: null
+description: >-
+  NCBI Foreign Contamination Screen for adaptor and vector sequence: reports
+  the ranges of an assembly to trim or exclude because they match a known
+  adaptor or vector.
+stage: qc

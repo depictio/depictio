@@ -1,0 +1,22 @@
+id: fcsgx_actions
+name: Contamination calls
+mode: rungx/report
+description: >-
+  One row per range FCS-GX flags as foreign, with the action it recommends
+  (EXCLUDE a whole sequence, TRIM or FIX a range, REVIEW), the taxonomic
+  division and the top taxon of the contaminant, and its length. An assembly
+  screened with nothing flagged keeps one row with action `none`, so a clean
+  assembly counts as screened rather than going missing.
+find:
+  path_glob: "**/*.fcs_gx_report.txt"
+recipe: fcsgx/actions.py
+fixture: actions.tsv
+renders_as:
+  - { id: flagged_ranges, component: card, column: seq_id, aggregation: count,
+      secondary_layout: composition, breakdown_col: action,
+      filter_expr: "col('action') != 'none'" }
+  - { id: flagged_bases, component: card, column: flagged_bp, aggregation: sum,
+      secondary_layout: top_n, breakdown_col: division, top_n_count: 4 }
+  - { component: figure, visu_type: bar,
+      dict_kwargs: {x: genome, y: flagged_bp, color: division, title: Bases flagged as foreign} }
+  - { component: table }
