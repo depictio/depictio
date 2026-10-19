@@ -20249,6 +20249,618 @@
     },
     {
       "biotools_url": null,
+      "description": "Single-cell quantification of multiplexed tissue images: one row per segmented cell with its mean intensity in every channel of the panel, its centroid in the image and its morphology (area, axes, eccentricity, solidity), per image and per segmentation method, with per-image summaries of cell counts, sizes and marker intensities, the correlation between markers and how far two segmenters agree on the same image.",
+      "dir": "depictio/catalog/mcquant",
+      "homepage": "https://github.com/labsyspharm/quantification",
+      "id": "mcquant",
+      "name": "MCQUANT",
+      "nf_core_url": "https://github.com/nf-core/modules/tree/master/modules/nf-core/mcquant",
+      "outputs": [
+        {
+          "columns": {},
+          "description": "The MCQUANT cell table melted on its marker columns: one row per cell and marker with the cell's mean intensity in the channel and the same through asinh(x / 150), which puts markers of very different brightness on one axis, the marker's position in the panel and whether it is a nuclear stain or a marker. The cell key matches the cell table, so a selection of cells reaches their intensities.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/quantification/mcquant/*/*.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "cell_markers.tsv",
+          "fixtureContent": "cell_key\tsample\tsegmenter\tCellID\tmarker\tmarker_order\tmarker_role\tintensity\tasinh_intensity\nTEST1|Cellpose|1\tTEST1\tCellpose\t1\tDNA_6\t1\tNuclear stain\t14242.894\t5.2466\nTEST1|Cellpose|1\tTEST1\tCellpose\t1\tELANE\t2\tMarker\t5317.178\t4.2614\nTEST1|Cellpose|1\tTEST1\tCellpose\t1\tCD57\t3\tMarker\t1401.894\t2.9309\nTEST1|Cellpose|1\tTEST1\tCellpose\t1\tCD45\t4\tMarker\t2229.517\t3.3932\nTEST1|Cellpose|1\tTEST1\tCellpose\t1\tDNA_7\t5\tNuclear stain\t0.0\t0.0\nTEST1|Cellpose|1\tTEST1\tCellpose\t1\tCD577\t6\tMarker\t47762.089\t6.4565\nTEST1|Cellpose|1\tTEST1\tCellpose\t1\tCD457\t7\tMarker\t839.361\t2.423\nTEST1|Mesmer|1\tTEST1\tMesmer\t1\tDNA_6\t1\tNuclear stain\t25326.233\t5.8221\nTEST1|Mesmer|1\tTEST1\tMesmer\t1\tELANE\t2\tMarker\t3547.167\t3.8569\nTEST1|Mesmer|1\tTEST1\tMesmer\t1\tCD57\t3\tMarker\t2697.5\t3.5834\nTEST1|Mesmer|1\tTEST1\tMesmer\t1\tCD45\t4\tMarker\t7740.3\t4.6368\nTEST1|Mesmer|1\tTEST1\tMesmer\t1\tDNA_7\t5\tNuclear stain\t0.0\t0.0\nTEST1|Mesmer|1\tTEST1\tMesmer\t1\tCD577\t6\tMarker\t0.0\t0.0\nTEST1|Mesmer|1\tTEST1\tMesmer\t1\tCD457\t7\tMarker\t0.0\t0.0\nTEST2|Cellpose|1\tTEST2\tCellpose\t1\tDNA_6\t1\tNuclear stain\t15484.064\t5.3301\nTEST2|Cellpose|1\tTEST2\tCellpose\t1\tELANE\t2\tMarker\t6866.584\t4.5171\nTEST2|Cellpose|1\tTEST2\tCellpose\t1\tCD57\t3\tMarker\t41502.36\t6.316\nTEST2|Cellpose|1\tTEST2\tCellpose\t1\tCD45\t4\tMarker\t882.281\t2.4722\nTEST2|Cellpose|1\tTEST2\tCellpose\t1\tDNA_7\t5\tNuclear stain\t2393.262\t3.4639\nTEST2|Cellpose|1\tTEST2\tCellpose\t1\tCD577\t6\tMarker\t1927.363\t3.2479\nTEST2|Cellpose|1\tTEST2\tCellpose\t1\tCD457\t7\tMarker\t2711.963\t3.5887\nTEST2|Mesmer|1\tTEST2\tMesmer\t1\tDNA_6\t1\tNuclear stain\t13838.143\t5.2177\nTEST2|Mesmer|1\tTEST2\tMesmer\t1\tELANE\t2\tMarker\t6187.914\t4.413\nTEST2|Mesmer|1\tTEST2\tMesmer\t1\tCD57\t3\tMarker\t5506.714\t4.2964\nTEST2|Mesmer|1\tTEST2\tMesmer\t1\tCD45\t4\tMarker\t1109.743\t2.6989\nTEST2|Mesmer|1\tTEST2\tMesmer\t1\tDNA_7\t5\tNuclear stain\t2575.171\t3.537\nTEST2|Mesmer|1\tTEST2\tMesmer\t1\tCD577\t6\tMarker\t3191.714\t3.7514\nTEST2|Mesmer|1\tTEST2\tMesmer\t1\tCD457\t7\tMarker\t4347.114\t4.0601\n",
+          "id": "mcquant_cell_markers",
+          "mode": "imaging/markers",
+          "name": "Marker intensity per cell",
+          "path_glob": "**/quantification/mcquant/*/*.csv",
+          "rawYaml": "id: mcquant_cell_markers\nname: Marker intensity per cell\nmode: imaging/markers\ndescription: >-\n  The MCQUANT cell table melted on its marker columns: one row per cell and\n  marker with the cell's mean intensity in the channel and the same through\n  asinh(x / 150), which puts markers of very different brightness on one axis,\n  the marker's position in the panel and whether it is a nuclear stain or a\n  marker. The cell key matches the cell table, so a selection of cells reaches\n  their intensities.\nfind:\n  path_glob: \"**/quantification/mcquant/*/*.csv\"\nrecipe: mcquant/cell_markers.py\nfixture: cell_markers.tsv\nrenders_as:\n  # One box per marker, split by segmenter: the panel's dynamic range at a glance.\n  - id: marker_box\n    component: figure\n    visu_type: box\n    dict_kwargs: { x: marker, y: asinh_intensity, color: segmenter }\n  - { id: marker_violin, component: figure, visu_type: violin, dict_kwargs: { x: marker, y: asinh_intensity, color: segmenter } }\n  - { id: measurement_count, component: card, column: cell_key, aggregation: count, secondary_layout: donut, breakdown_col: marker_role }\n  - { component: card, column: asinh_intensity, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: interactive, interactive_type: MultiSelect, column_name: marker }\n  - { component: interactive, interactive_type: MultiSelect, column_name: marker_role }\n  - { component: table, row_selection_enabled: true, row_selection_column: cell_key }\n",
+          "recipe": "mcquant/cell_markers.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "segmenter",
+                "x": "marker",
+                "y": "asinh_intensity"
+              },
+              "headline": false,
+              "id": "marker_box",
+              "roles": {},
+              "visu_type": "box"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "segmenter",
+                "x": "marker",
+                "y": "asinh_intensity"
+              },
+              "headline": false,
+              "id": "marker_violin",
+              "roles": {},
+              "visu_type": "violin"
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "marker_role",
+              "column": "cell_key",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "measurement_count",
+              "roles": {},
+              "secondary_layout": "donut"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "asinh_intensity",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "marker",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "marker_role",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {},
+              "row_selection_column": "cell_key",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "cell_markers",
+          "yamlPath": "depictio/catalog/mcquant/cell_markers.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per segmented cell of every image and segmentation method: MCQUANT's mean intensity of the cell in each channel of the panel (one column per marker), its centroid in pixels of the registered image (origin top-left, y down) and its regionprops morphology (area, axes, eccentricity, solidity, extent, orientation), with the image (sample), the segmenter and a run-wide cell key, since MCQUANT's CellID restarts at 1 for every image and mask.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/quantification/mcquant/*/*.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "cells.tsv",
+          "fixtureContent": "sample\tsegmenter\tcell_key\tCellID\tDNA_6\tELANE\tCD57\tCD45\tDNA_7\tCD577\tCD457\tX_centroid\tY_centroid\tArea\tMajorAxisLength\tMinorAxisLength\tEccentricity\tSolidity\tExtent\tOrientation\taspect_ratio\nTEST1\tCellpose\tTEST1|Cellpose|1\t1\t14242.894\t5317.178\t1401.894\t2229.517\t0.0\t47762.089\t839.361\t395.378\t16.811\t180.0\t18.908\t12.278\t0.76\t0.933\t0.714\t0.4\t1.54\nTEST1\tCellpose\tTEST1|Cellpose|2\t2\t20487.484\t4479.726\t8583.876\t16473.79\t0.0\t265.226\t1530.387\t464.543\t19.177\t186.0\t16.275\t14.635\t0.438\t0.959\t0.827\t-0.73\t1.112\nTEST1\tMesmer\tTEST1|Mesmer|1\t1\t25326.233\t3547.167\t2697.5\t7740.3\t0.0\t0.0\t0.0\t16.033\t1.967\t30.0\t7.225\t5.37\t0.669\t0.938\t0.714\t-1.162\t1.346\nTEST1\tMesmer\tTEST1|Mesmer|2\t2\t23868.412\t3842.353\t1378.647\t2605.118\t0.0\t0.0\t0.0\t46.824\t1.794\t34.0\t8.386\t5.182\t0.786\t0.971\t0.85\t1.497\t1.618\nTEST2\tCellpose\tTEST2|Cellpose|1\t1\t15484.064\t6866.584\t41502.36\t882.281\t2393.262\t1927.363\t2711.963\t394.888\t13.285\t267.0\t20.532\t17.848\t0.494\t0.934\t0.669\t-0.052\t1.15\nTEST2\tCellpose\tTEST2|Cellpose|2\t2\t17748.479\t17933.755\t13150.079\t1155.936\t2979.721\t2311.649\t5338.023\t284.377\t41.298\t265.0\t23.032\t14.788\t0.767\t0.96\t0.709\t0.453\t1.558\nTEST2\tMesmer\tTEST2|Mesmer|1\t1\t13838.143\t6187.914\t5506.714\t1109.743\t2575.171\t3191.714\t4347.114\t316.486\t1.829\t35.0\t8.734\t5.098\t0.812\t0.972\t0.875\t-1.432\t1.713\nTEST2\tMesmer\tTEST2|Mesmer|2\t2\t20568.864\t2893.409\t5393.424\t997.5\t4520.591\t1220.621\t2971.591\t215.379\t2.909\t66.0\t11.049\t7.682\t0.719\t0.985\t0.943\t1.562\t1.438\n",
+          "id": "mcquant_cells",
+          "mode": "imaging/cells",
+          "name": "Segmented cells",
+          "path_glob": "**/quantification/mcquant/*/*.csv",
+          "rawYaml": "id: mcquant_cells\nname: Segmented cells\nmode: imaging/cells\ndescription: >-\n  One row per segmented cell of every image and segmentation method: MCQUANT's\n  mean intensity of the cell in each channel of the panel (one column per\n  marker), its centroid in pixels of the registered image (origin top-left, y\n  down) and its regionprops morphology (area, axes, eccentricity, solidity,\n  extent, orientation), with the image (sample), the segmenter and a run-wide\n  cell key, since MCQUANT's CellID restarts at 1 for every image and mask.\nfind:\n  path_glob: \"**/quantification/mcquant/*/*.csv\"\nrecipe: mcquant/cells.py\nfixture: cells.tsv\nrenders_as:\n  # The cells where they sit in their image, coloured by a marker picked in the\n  # tile (the marker columns are named by pattern at the dashboard: a panel is\n  # only known at ingest) or by segmenter.\n  - id: spatial_cells\n    component: advanced_viz\n    kind: spatial_cells\n    roles: { cell_id: cell_key, x: X_centroid, y: Y_centroid, category: segmenter, sample: sample, area: Area }\n  # Size against shape: segmentation artefacts (merged or fragmented cells) sit\n  # apart from the bulk.\n  - id: shape_scatter\n    component: advanced_viz\n    kind: scatter_xy\n    roles: { x: Area, y: Eccentricity, label: cell_key, color: segmenter }\n  - { id: cell_count, component: card, column: cell_key, aggregation: count, secondary_layout: composition, breakdown_col: segmenter, headline: true }\n  - { id: median_area, component: card, column: Area, aggregation: median, secondary_layout: top_n, breakdown_col: segmenter, top_n_count: 3, headline: true }\n  - { component: card, column: Eccentricity, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { id: area_box, component: figure, visu_type: box, dict_kwargs: { x: segmenter, y: Area, color: segmenter } }\n  - { component: interactive, interactive_type: MultiSelect, column_name: segmenter }\n  - { component: interactive, interactive_type: RangeSlider, column_name: Area }\n  - { component: table, row_selection_enabled: true, row_selection_column: cell_key }\n",
+          "recipe": "mcquant/cells.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "spatial_cells",
+              "kind": "spatial_cells",
+              "roles": {
+                "area": "Area",
+                "category": "segmenter",
+                "cell_id": "cell_key",
+                "sample": "sample",
+                "x": "X_centroid",
+                "y": "Y_centroid"
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "shape_scatter",
+              "kind": "scatter_xy",
+              "roles": {
+                "color": "segmenter",
+                "label": "cell_key",
+                "x": "Area",
+                "y": "Eccentricity"
+              }
+            },
+            {
+              "aggregation": "count",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "segmenter",
+              "column": "cell_key",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": true,
+              "id": "cell_count",
+              "roles": {},
+              "secondary_layout": "composition"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "segmenter",
+              "column": "Area",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": true,
+              "id": "median_area",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "Eccentricity",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "color": "segmenter",
+                "x": "segmenter",
+                "y": "Area"
+              },
+              "headline": false,
+              "id": "area_box",
+              "roles": {},
+              "visu_type": "box"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "segmenter",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "Area",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "RangeSlider",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {},
+              "row_selection_column": "cell_key",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "cells",
+          "yamlPath": "depictio/catalog/mcquant/cells.yaml"
+        },
+        {
+          "columns": {},
+          "description": "Marker by marker Pearson correlation of the cells' asinh intensities, over every cell a segmentation method found in the run: one row per segmenter and marker, one column per marker of the panel. Markers expressed by the same cells correlate; a marker without signal has no correlation. The marker columns are only known at ingest, so a heatmap draws every numeric column.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/quantification/mcquant/*/*.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "marker_correlation.tsv",
+          "fixtureContent": "marker_row\tsegmenter\tmarker\tmarker_role\tDNA_6\tELANE\tCD57\tCD45\tDNA_7\tCD577\tCD457\nDNA_6 (Cellpose)\tCellpose\tDNA_6\tNuclear stain\t1.0\t-0.4174\t-0.1392\t0.3553\t-0.2368\t-0.1074\t-0.2835\nELANE (Cellpose)\tCellpose\tELANE\tMarker\t-0.4174\t1.0\t0.2069\t-0.087\t-0.0628\t0.0516\t0.059\nCD57 (Cellpose)\tCellpose\tCD57\tMarker\t-0.1392\t0.2069\t1.0\t0.46\t-0.4465\t-0.2576\t-0.2517\nCD45 (Cellpose)\tCellpose\tCD45\tMarker\t0.3553\t-0.087\t0.46\t1.0\t-0.9197\t-0.2732\t-0.7788\nDNA_7 (Cellpose)\tCellpose\tDNA_7\tNuclear stain\t-0.2368\t-0.0628\t-0.4465\t-0.9197\t1.0\t0.2001\t0.8644\nCD577 (Cellpose)\tCellpose\tCD577\tMarker\t-0.1074\t0.0516\t-0.2576\t-0.2732\t0.2001\t1.0\t0.1538\nCD457 (Cellpose)\tCellpose\tCD457\tMarker\t-0.2835\t0.059\t-0.2517\t-0.7788\t0.8644\t0.1538\t1.0\nDNA_6 (Mesmer)\tMesmer\tDNA_6\tNuclear stain\t1.0\t-0.2513\t0.0102\t0.2306\t-0.1143\t-0.0843\t-0.169\nELANE (Mesmer)\tMesmer\tELANE\tMarker\t-0.2513\t1.0\t0.2018\t0.2146\t-0.2376\t0.2\t-0.0271\nCD57 (Mesmer)\tMesmer\tCD57\tMarker\t0.0102\t0.2018\t1.0\t0.4147\t-0.319\t-0.0743\t-0.107\nCD45 (Mesmer)\tMesmer\tCD45\tMarker\t0.2306\t0.2146\t0.4147\t1.0\t-0.7928\t-0.1328\t-0.5506\nDNA_7 (Mesmer)\tMesmer\tDNA_7\tNuclear stain\t-0.1143\t-0.2376\t-0.319\t-0.7928\t1.0\t0.155\t0.7708\nCD577 (Mesmer)\tMesmer\tCD577\tMarker\t-0.0843\t0.2\t-0.0743\t-0.1328\t0.155\t1.0\t0.2427\nCD457 (Mesmer)\tMesmer\tCD457\tMarker\t-0.169\t-0.0271\t-0.107\t-0.5506\t0.7708\t0.2427\t1.0\n",
+          "id": "mcquant_marker_correlation",
+          "mode": "imaging/markers",
+          "name": "Marker correlation",
+          "path_glob": "**/quantification/mcquant/*/*.csv",
+          "rawYaml": "id: mcquant_marker_correlation\nname: Marker correlation\nmode: imaging/markers\ndescription: >-\n  Marker by marker Pearson correlation of the cells' asinh intensities, over\n  every cell a segmentation method found in the run: one row per segmenter and\n  marker, one column per marker of the panel. Markers expressed by the same\n  cells correlate; a marker without signal has no correlation. The marker\n  columns are only known at ingest, so a heatmap draws every numeric column.\nfind:\n  path_glob: \"**/quantification/mcquant/*/*.csv\"\nrecipe: mcquant/marker_correlation.py\nfixture: marker_correlation.tsv\nrenders_as:\n  - id: correlation_heatmap\n    component: advanced_viz\n    kind: complex_heatmap\n    roles: { index: marker_row, row_annotation_cols: [segmenter, marker_role] }\n  - { component: interactive, interactive_type: MultiSelect, column_name: segmenter }\n  - { component: table }\n",
+          "recipe": "mcquant/marker_correlation.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "advanced_viz",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "correlation_heatmap",
+              "kind": "complex_heatmap",
+              "roles": {
+                "index": "marker_row",
+                "row_annotation_cols": [
+                  "segmenter",
+                  "marker_role"
+                ]
+              }
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "segmenter",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {}
+            }
+          ],
+          "slug": "marker_correlation",
+          "yamlPath": "depictio/catalog/mcquant/marker_correlation.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per image, segmentation method and marker: the cells measured, the mean, median and quartiles of their mean intensity, the median on the asinh scale and the coefficient of variation over the cells, which says how unevenly the marker is expressed across the image. The marker keeps its position in the panel and its role (nuclear stain or marker).",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/quantification/mcquant/*/*.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "marker_summary.tsv",
+          "fixtureContent": "summary_key\tsample\tsegmenter\tmarker\tmarker_order\tmarker_role\tn_cells\tmean_intensity\tmedian_intensity\tq1_intensity\tq3_intensity\tmedian_asinh\tcv\nTEST1|Cellpose|DNA_6\tTEST1\tCellpose\tDNA_6\t1\tNuclear stain\t72\t26218.371\t26048.956\t24475.452\t28205.71\t5.8502\t0.1312\nTEST1|Cellpose|ELANE\tTEST1\tCellpose\tELANE\t2\tMarker\t72\t5528.409\t4903.844\t4384.09\t5534.259\t4.1805\t0.5031\nTEST1|Cellpose|CD57\tTEST1\tCellpose\tCD57\t3\tMarker\t72\t5830.927\t5686.559\t4893.862\t6988.336\t4.3286\t0.3412\nTEST1|Mesmer|DNA_6\tTEST1\tMesmer\tDNA_6\t1\tNuclear stain\t2114\t26342.092\t26790.86\t23723.528\t29305.598\t5.8784\t0.1559\nTEST1|Mesmer|ELANE\tTEST1\tMesmer\tELANE\t2\tMarker\t2114\t4882.419\t4144.292\t3612.427\t4969.158\t4.0123\t0.5785\nTEST1|Mesmer|CD57\tTEST1\tMesmer\tCD57\t3\tMarker\t2114\t3272.561\t2488.962\t1477.569\t4553.662\t3.503\t0.6718\nTEST2|Cellpose|DNA_6\tTEST2\tCellpose\tDNA_6\t1\tNuclear stain\t32\t23756.653\t23350.531\t21737.185\t26603.802\t5.7408\t0.1537\nTEST2|Cellpose|ELANE\tTEST2\tCellpose\tELANE\t2\tMarker\t32\t6162.1\t4911.833\t3378.531\t7316.97\t4.1814\t0.6429\nTEST2|Cellpose|CD57\tTEST2\tCellpose\tCD57\t3\tMarker\t32\t4986.988\t4576.437\t1491.36\t4984.509\t4.1114\t1.4466\nTEST2|Mesmer|DNA_6\tTEST2\tMesmer\tDNA_6\t1\tNuclear stain\t2085\t24092.93\t24126.482\t20131.156\t28178.911\t5.7736\t0.2314\nTEST2|Mesmer|ELANE\tTEST2\tMesmer\tELANE\t2\tMarker\t2085\t4401.207\t3262.481\t2965.544\t4224.924\t3.7733\t0.6946\nTEST2|Mesmer|CD57\tTEST2\tMesmer\tCD57\t3\tMarker\t2085\t3818.768\t1738.011\t191.602\t4710.69\t3.1449\t2.1563\n",
+          "id": "mcquant_marker_summary",
+          "mode": "imaging/markers",
+          "name": "Marker intensity per image",
+          "path_glob": "**/quantification/mcquant/*/*.csv",
+          "rawYaml": "id: mcquant_marker_summary\nname: Marker intensity per image\nmode: imaging/markers\ndescription: >-\n  One row per image, segmentation method and marker: the cells measured, the\n  mean, median and quartiles of their mean intensity, the median on the asinh\n  scale and the coefficient of variation over the cells, which says how\n  unevenly the marker is expressed across the image. The marker keeps its\n  position in the panel and its role (nuclear stain or marker).\nfind:\n  path_glob: \"**/quantification/mcquant/*/*.csv\"\nrecipe: mcquant/marker_summary.py\nfixture: marker_summary.tsv\nrenders_as:\n  - { id: brightest_markers, component: card, column: median_intensity, aggregation: median, secondary_layout: top_n, breakdown_col: marker, top_n_count: 3 }\n  - { id: marker_spread, component: card, column: cv, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: figure, visu_type: bar, dict_kwargs: { x: marker, y: median_asinh, color: segmenter, barmode: group } }\n  - { component: interactive, interactive_type: MultiSelect, column_name: marker }\n  - { component: table, row_selection_enabled: true, row_selection_column: summary_key }\n",
+          "recipe": "mcquant/marker_summary.py",
+          "renders_as": [
+            {
+              "aggregation": "median",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "marker",
+              "column": "median_intensity",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "brightest_markers",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [
+                "box_plot_stats"
+              ],
+              "attrition_cols": [],
+              "column": "cv",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "marker_spread",
+              "roles": {},
+              "secondary_layout": "box_plot"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "barmode": "group",
+                "color": "segmenter",
+                "x": "marker",
+                "y": "median_asinh"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "marker",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {},
+              "row_selection_column": "summary_key",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "marker_summary",
+          "yamlPath": "depictio/catalog/mcquant/marker_summary.yaml"
+        },
+        {
+          "columns": {},
+          "description": "One row per image and segmentation method: the cells the mask holds, the median, quartiles, mean and sum of their area, and the medians of their major axis, eccentricity, solidity and aspect ratio. Two methods on one image are two rows, which is how a run segmented with both Mesmer and Cellpose compares them image by image.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/quantification/mcquant/*/*.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "segmentation_summary.tsv",
+          "fixtureContent": "summary_key\tsample\tsegmenter\tn_cells\tmedian_area\tq1_area\tq3_area\tmean_area\ttotal_area\tmedian_major_axis\tmedian_eccentricity\tmedian_solidity\tmedian_aspect_ratio\nTEST1|Cellpose\tTEST1\tCellpose\t72\t211.0\t172.0\t278.25\t240.14\t17290.0\t18.832\t0.6282\t0.9509\t1.2855\nTEST1|Mesmer\tTEST1\tMesmer\t2114\t96.0\t70.0\t118.0\t96.05\t203047.0\t12.328\t0.5802\t0.9286\t1.2278\nTEST2|Cellpose\tTEST2\tCellpose\t32\t325.5\t263.0\t423.0\t356.22\t11399.0\t24.395\t0.622\t0.9522\t1.2771\nTEST2|Mesmer\tTEST2\tMesmer\t2085\t96.0\t72.0\t119.0\t97.48\t203243.0\t12.396\t0.5841\t0.9306\t1.2321\n",
+          "id": "mcquant_segmentation_summary",
+          "mode": "imaging/segmentation",
+          "name": "Segmentation per image",
+          "path_glob": "**/quantification/mcquant/*/*.csv",
+          "rawYaml": "id: mcquant_segmentation_summary\nname: Segmentation per image\nmode: imaging/segmentation\ndescription: >-\n  One row per image and segmentation method: the cells the mask holds, the\n  median, quartiles, mean and sum of their area, and the medians of their major\n  axis, eccentricity, solidity and aspect ratio. Two methods on one image are\n  two rows, which is how a run segmented with both Mesmer and Cellpose compares\n  them image by image.\nfind:\n  path_glob: \"**/quantification/mcquant/*/*.csv\"\nrecipe: mcquant/segmentation_summary.py\nfixture: segmentation_summary.tsv\nrenders_as:\n  - id: cells_per_image\n    component: figure\n    visu_type: bar\n    dict_kwargs: { x: sample, y: n_cells, color: segmenter, barmode: group }\n  - { id: cells_per_image_card, component: card, column: n_cells, aggregation: median, secondary_layout: top_n, breakdown_col: segmenter, top_n_count: 3 }\n  - { component: card, column: n_cells, aggregation: sum, secondary_layout: composition, breakdown_col: segmenter, headline: true }\n  - { component: figure, visu_type: bar, dict_kwargs: { x: sample, y: median_area, color: segmenter, barmode: group } }\n  - { component: interactive, interactive_type: MultiSelect, column_name: segmenter }\n  - { component: table, row_selection_enabled: true, row_selection_column: summary_key }\n",
+          "recipe": "mcquant/segmentation_summary.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "barmode": "group",
+                "color": "segmenter",
+                "x": "sample",
+                "y": "n_cells"
+              },
+              "headline": false,
+              "id": "cells_per_image",
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "segmenter",
+              "column": "n_cells",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "cells_per_image_card",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "sum",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "segmenter",
+              "column": "n_cells",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": true,
+              "roles": {},
+              "secondary_layout": "composition"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "barmode": "group",
+                "color": "segmenter",
+                "x": "sample",
+                "y": "median_area"
+              },
+              "headline": false,
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "segmenter",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {},
+              "row_selection_column": "summary_key",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "segmentation_summary",
+          "yamlPath": "depictio/catalog/mcquant/segmentation_summary.yaml"
+        },
+        {
+          "columns": {},
+          "description": "For an image segmented by several methods (one MCQUANT table each), one row per image, method and other method: the cells of each, their ratio, and the share of the method's cells whose area (as a disc) holds the centroid of a cell of the other method, with the median number held. A nuclear method against a whole-cell one reads asymmetric by design. Needs two methods on an image.",
+          "edam_formats": [],
+          "edam_operations": [],
+          "find": {
+            "path_glob": "**/quantification/mcquant/*/*.csv",
+            "path_glob_alt": []
+          },
+          "fixture": "segmenter_agreement.tsv",
+          "fixtureContent": "pair_key\tsample\tsegmenter\tother_segmenter\tpair\tn_cells\tother_cells\tcount_ratio\tcells_holding_other\tmatched_share\tmedian_held\nTEST1|Cellpose|Mesmer\tTEST1\tCellpose\tMesmer\tCellpose cells holding a Mesmer cell\t72\t2114\t0.0341\t72\t1.0\t2.0\nTEST1|Mesmer|Cellpose\tTEST1\tMesmer\tCellpose\tMesmer cells holding a Cellpose cell\t2114\t72\t29.3611\t80\t0.0378\t0.0\nTEST2|Cellpose|Mesmer\tTEST2\tCellpose\tMesmer\tCellpose cells holding a Mesmer cell\t32\t2085\t0.0153\t32\t1.0\t3.0\nTEST2|Mesmer|Cellpose\tTEST2\tMesmer\tCellpose\tMesmer cells holding a Cellpose cell\t2085\t32\t65.1562\t36\t0.0173\t0.0\n",
+          "id": "mcquant_segmenter_agreement",
+          "mode": "imaging/segmentation",
+          "name": "Segmenter agreement",
+          "path_glob": "**/quantification/mcquant/*/*.csv",
+          "rawYaml": "id: mcquant_segmenter_agreement\nname: Segmenter agreement\nmode: imaging/segmentation\ndescription: >-\n  For an image segmented by several methods (one MCQUANT table each), one row\n  per image, method and other method: the cells of each, their ratio, and the\n  share of the method's cells whose area (as a disc) holds the centroid of a\n  cell of the other method, with the median number held. A nuclear method\n  against a whole-cell one reads asymmetric by design. Needs two methods on an\n  image.\nfind:\n  path_glob: \"**/quantification/mcquant/*/*.csv\"\nrecipe: mcquant/segmenter_agreement.py\nfixture: segmenter_agreement.tsv\nrenders_as:\n  - id: agreement_bar\n    component: figure\n    visu_type: bar\n    dict_kwargs: { x: sample, y: matched_share, color: pair, barmode: group }\n  - { id: agreement_card, component: card, column: matched_share, aggregation: median, secondary_layout: top_n, breakdown_col: segmenter, top_n_count: 3 }\n  - { component: card, column: count_ratio, aggregation: max, secondary_layout: top_n, breakdown_col: segmenter, top_n_count: 3 }\n  - { component: interactive, interactive_type: MultiSelect, column_name: pair }\n  - { component: table, row_selection_enabled: true, row_selection_column: pair_key }\n",
+          "recipe": "mcquant/segmenter_agreement.py",
+          "renders_as": [
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "figure",
+              "dict_kwargs": {
+                "barmode": "group",
+                "color": "pair",
+                "x": "sample",
+                "y": "matched_share"
+              },
+              "headline": false,
+              "id": "agreement_bar",
+              "roles": {},
+              "visu_type": "bar"
+            },
+            {
+              "aggregation": "median",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "segmenter",
+              "column": "matched_share",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "id": "agreement_card",
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregation": "max",
+              "aggregations": [],
+              "attrition_cols": [],
+              "breakdown_col": "segmenter",
+              "column": "count_ratio",
+              "columns": [],
+              "component": "card",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {},
+              "secondary_layout": "top_n",
+              "top_n_count": 3
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "column_name": "pair",
+              "columns": [],
+              "component": "interactive",
+              "dict_kwargs": {},
+              "headline": false,
+              "interactive_type": "MultiSelect",
+              "roles": {}
+            },
+            {
+              "aggregations": [],
+              "attrition_cols": [],
+              "columns": [],
+              "component": "table",
+              "dict_kwargs": {},
+              "headline": false,
+              "roles": {},
+              "row_selection_column": "pair_key",
+              "row_selection_enabled": true
+            }
+          ],
+          "slug": "segmenter_agreement",
+          "yamlPath": "depictio/catalog/mcquant/segmenter_agreement.yaml"
+        }
+      ],
+      "stage": "quantification"
+    },
+    {
+      "biotools_url": null,
       "description": "Taxonomic identification and quantification of long-read metagenomes using marker genes.",
       "dir": "depictio/catalog/melon",
       "homepage": "https://github.com/xinehc/melon",

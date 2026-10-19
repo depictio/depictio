@@ -2744,6 +2744,89 @@ workflows:
         format: TSV
         polars_kwargs:
           separator: "\t"
+  - id: e4a0a62e4bbc425c50f873f5
+    data_collection_tag: mcquant_cell_markers
+    description: 'Marker intensity per cell: recipe output (mcquant/cell_markers.py), seeded from the
+      catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: mcquant/cell_markers.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 0ca869ee70c53c69f1ca9d27
+    data_collection_tag: mcquant_cells
+    description: 'Segmented cells: recipe output (mcquant/cells.py), seeded from the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: mcquant/cells.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 29e0a18acc544d7c55a18d72
+    data_collection_tag: mcquant_marker_correlation
+    description: 'Marker correlation: recipe output (mcquant/marker_correlation.py), seeded from the catalog
+      fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: mcquant/marker_correlation.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 14ed5af1383ce06f9df7a775
+    data_collection_tag: mcquant_marker_summary
+    description: 'Marker intensity per image: recipe output (mcquant/marker_summary.py), seeded from the
+      catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: mcquant/marker_summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 0cd06f09123710d3ba82e3fb
+    data_collection_tag: mcquant_segmentation_summary
+    description: 'Segmentation per image: recipe output (mcquant/segmentation_summary.py), seeded from
+      the catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: mcquant/segmentation_summary.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
+  - id: 0baf8093c7bd4a21482cab19
+    data_collection_tag: mcquant_segmenter_agreement
+    description: 'Segmenter agreement: recipe output (mcquant/segmenter_agreement.py), seeded from the
+      catalog fixture'
+    config:
+      type: Table
+      metatype: Aggregate
+      source: transformed
+      transform:
+        recipe: mcquant/segmenter_agreement.py
+      dc_specific_properties:
+        format: TSV
+        polars_kwargs:
+          separator: "\t"
   - id: bd89d37fb5301417e476c957
     data_collection_tag: melon_ranks
     description: 'Genome-copy composition: recipe output (melon/ranks.py), seeded from the catalog fixture'
