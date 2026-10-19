@@ -1,0 +1,9 @@
+channel_number,cycle_number,marker_name,background,remove,exposure
+1,1,DNA_6,,,80
+2,1,ELANE,,,
+3,1,CD57,,,
+4,1,CD45,,,
+5,2,DNA_7,DNA_6,,100
+6,2,ELANE7,,true,
+7,2,CD577,,,
+8,2,CD457,,,

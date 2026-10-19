@@ -1,0 +1,35 @@
+id: mcquant_cells
+name: Segmented cells
+mode: imaging/cells
+description: >-
+  One row per segmented cell of every image and segmentation method: MCQUANT's
+  mean intensity of the cell in each channel of the panel (one column per
+  marker), its centroid in pixels of the registered image (origin top-left, y
+  down) and its regionprops morphology (area, axes, eccentricity, solidity,
+  extent, orientation), with the image (sample), the segmenter and a run-wide
+  cell key, since MCQUANT's CellID restarts at 1 for every image and mask.
+find:
+  path_glob: "**/quantification/mcquant/*/*.csv"
+recipe: mcquant/cells.py
+fixture: cells.tsv
+renders_as:
+  # The cells where they sit in their image, coloured by a marker picked in the
+  # tile (the marker columns are named by pattern at the dashboard: a panel is
+  # only known at ingest) or by segmenter.
+  - id: spatial_cells
+    component: advanced_viz
+    kind: spatial_cells
+    roles: { cell_id: cell_key, x: X_centroid, y: Y_centroid, category: segmenter, sample: sample, area: Area }
+  # Size against shape: segmentation artefacts (merged or fragmented cells) sit
+  # apart from the bulk.
+  - id: shape_scatter
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: Area, y: Eccentricity, label: cell_key, color: segmenter }
+  - { id: cell_count, component: card, column: cell_key, aggregation: count, secondary_layout: composition, breakdown_col: segmenter, headline: true }
+  - { id: median_area, component: card, column: Area, aggregation: median, secondary_layout: top_n, breakdown_col: segmenter, top_n_count: 3, headline: true }
+  - { component: card, column: Eccentricity, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: area_box, component: figure, visu_type: box, dict_kwargs: { x: segmenter, y: Area, color: segmenter } }
+  - { component: interactive, interactive_type: MultiSelect, column_name: segmenter }
+  - { component: interactive, interactive_type: RangeSlider, column_name: Area }
+  - { component: table, row_selection_enabled: true, row_selection_column: cell_key }
