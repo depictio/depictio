@@ -1,8 +1,8 @@
 """The `ideogram` kind: row contract, config guards, and the showcase bindings.
 
-A karyotype is drawn by hand in SVG (`IdeogramRenderer.tsx`, layout in
-`ideogram/ideogramLayout.ts`), so its contract lives in the canonical schema and
-this config. Both showcase tiles are checked against the real fixture columns
+A karyotype is drawn by hand on a canvas (`IdeogramRenderer.tsx`, layout and
+level of detail in `ideogram/ideogramLayout.ts` and `ideogram/ideogramView.ts`),
+so its contract lives in the canonical schema and this config. Both showcase tiles are checked against the real fixture columns
 here: the BUSCO table (named as BUSCO's full table names them, lengths from the
 FASTA index) and the binned variant density on GRCh38.
 
@@ -132,8 +132,26 @@ def test_defaults():
     assert config.facet_by_sample is True
     assert config.max_features == 20000
     assert config.max_chromosomes == 60
+    assert config.lod_threshold == 2000
+    assert config.feature_opacity == 0.85
+    assert config.hidden_categories is None
     # On by default, as genome_view's brush is: a region is never ambiguous.
     assert config.region_filter_enabled is True
+
+
+def test_auto_is_a_mode_and_marks_stays_the_default():
+    """`auto` (level of detail) was added beside the two existing modes; a
+    dashboard that never set `mode` keeps drawing marks."""
+    assert IdeogramConfig(mode="auto").mode == "auto"
+    assert IdeogramConfig().mode == "marks"
+
+
+def test_hidden_categories_keep_their_spelling_and_empty_means_none():
+    assert IdeogramConfig(hidden_categories=[]).hidden_categories is None
+    assert IdeogramConfig(hidden_categories=["Missing", "Missing", " Dup"]).hidden_categories == [
+        "Missing",
+        " Dup",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -146,9 +164,13 @@ def test_defaults():
         ("max_facets", 0),
         ("max_facets", 100),
         ("bin_size", 0),
+        ("lod_threshold", 0),
+        ("lod_threshold", 1_000_000),
+        ("feature_opacity", 0),
+        ("feature_opacity", 1.5),
     ],
 )
-def test_guards_are_bounded(field: str, bad: int):
+def test_guards_are_bounded(field: str, bad: float):
     with pytest.raises(ValidationError):
         IdeogramConfig(**{field: bad})
 

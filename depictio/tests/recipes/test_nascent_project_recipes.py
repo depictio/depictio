@@ -121,12 +121,12 @@ def test_gene_calls_need_two_time_points(frames):
     assert up["peak_log2fc"] > 2 and up["n_changed"] >= 2
 
 
-def test_trajectories_profiles_and_top_genes(root, frames):
+def test_trajectories_and_top_genes(root, frames):
     traj = frames["trajectories"]
     assert traj.filter(pl.col("time_order") == 1)["log2fc"].abs().max() == pytest.approx(0.0)
-    profiles = run("nf-core/nascent/response_profiles.py", root, trajectories=traj)
-    assert set(profiles["response"]) == set(frames["dynamics"]["response"])
-    assert profiles.group_by("response").len()["len"].unique().to_list() == [4]
+    # Every class reaches every time point, so a profile can draw its median.
+    assert set(traj["response"]) == set(frames["dynamics"]["response"])
+    assert traj.group_by("gene_id").len()["len"].unique().to_list() == [4]
     top = run(
         "nf-core/nascent/top_gene_trajectories.py",
         root,
@@ -183,7 +183,7 @@ def bins(frames) -> pl.DataFrame:
     )
 
 
-def test_window_dynamics_trends_and_heatmap(root, frames, bins):
+def test_window_dynamics_series_and_heatmap(root, frames, bins):
     dyn = run(
         "nf-core/nascent/signal_window_dynamics.py", root, bins=bins, samples=frames["samples"]
     )
@@ -195,10 +195,18 @@ def test_window_dynamics_trends_and_heatmap(root, frames, bins):
     assert trend[w5] == "Rising"
     assert w6 not in trend or trend[w6] == "Falling"
     assert set(trend.values()) <= {"Rising", "Falling", "Stable"}
-    trends = run(
-        "nf-core/nascent/signal_trends.py", root, bins=bins, samples=frames["samples"], dynamics=dyn
+    series = run(
+        "nf-core/nascent/signal_window_series.py",
+        root,
+        bins=bins,
+        samples=frames["samples"],
+        dynamics=dyn,
     )
-    assert trends.group_by("trend").len()["len"].unique().to_list() == [4]
+    # One row per compared window and time point, with the window's call.
+    assert series.group_by("window_id").len()["len"].unique().to_list() == [4]
+    assert set(series["window_id"]) == set(dyn["window_id"])
+    assert series.filter(pl.col("time_order") == 1)["log2fc"].abs().max() == pytest.approx(0.0)
+    assert dict(zip(series["window_id"], series["trend"], strict=True)) == trend
     heat = run(
         "nf-core/nascent/signal_window_heatmap.py",
         root,

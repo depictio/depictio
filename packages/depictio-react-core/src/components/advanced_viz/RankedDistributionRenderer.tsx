@@ -359,15 +359,19 @@ const RankedDistributionRenderer: React.FC<Props> = ({
           min={1}
           max={maxFeatures}
         />
-        <VizSegmented
-          label="Draw"
-          value={violinAllowed ? mark : 'box'}
-          onChange={(v) => setMark(v === 'violin' ? 'violin' : 'box')}
-          data={[
-            { value: 'box', label: 'Box' },
-            { value: 'violin', label: 'Violin', disabled: !violinAllowed },
-          ]}
-        />
+        {/* Pre-aggregated rows carry box statistics only: a violin needs the
+            per-sample values, so the switch is not offered rather than greyed. */}
+        {violinAllowed ? (
+          <VizSegmented
+            label="Draw"
+            value={mark}
+            onChange={(v) => setMark(v === 'violin' ? 'violin' : 'box')}
+            data={[
+              { value: 'box', label: 'Box' },
+              { value: 'violin', label: 'Violin' },
+            ]}
+          />
+        ) : null}
         <VizSegmented
           label="First"
           value={ascending ? 'low' : 'high'}

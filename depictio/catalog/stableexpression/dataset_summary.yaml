@@ -22,10 +22,9 @@ renders_as:
   - { id: dataset_outcomes, component: card, column: dataset, aggregation: count, secondary_layout: donut, breakdown_col: outcome }
   - { id: mapped_share_card, component: card, column: mapped_share, aggregation: median, secondary_layout: histogram }
   - { id: samples_per_dataset, component: figure, visu_type: histogram, dict_kwargs: { x: samples_kept, color: platform } }
-  - id: dataset_plane
-    component: advanced_viz
-    kind: scatter_xy
-    roles: { x: samples_kept, y: missing_share, label: accession, color: platform }
+  # The share of genes a dataset misses is set by what measured it: one
+  # strip per array design (RNA-seq its own), one point per dataset.
+  - { id: missing_by_design, component: figure, visu_type: strip, dict_kwargs: { x: design, y: missing_share, color: platform } }
   - { component: interactive, interactive_type: MultiSelect, column_name: outcome }
   - { component: interactive, interactive_type: MultiSelect, column_name: platform }
   - { id: dataset_table, component: table, row_selection_enabled: true, row_selection_column: dataset }

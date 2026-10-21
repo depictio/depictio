@@ -503,6 +503,17 @@ tabs:
   - component_type: multiqc
     workflow_tag: viralmetagenome
     data_collection_tag: multiqc_data
+    use: multiqc/general_stats
+    selected_module: general_stats
+    selected_plot: general_stats
+    section: Read QC
+    tag: vm-mqc-general-stats
+    title: General statistics
+    description: One row per sample, the headline columns of every tool in the report side by side.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: viralmetagenome
+    data_collection_tag: multiqc_data
     use: multiqc/fastqc
     selected_module: fastqc
     selected_plot: Sequence Counts
@@ -511,7 +522,7 @@ tabs:
     index: mqc-fastqc-counts
     title: Reads per FastQC run
     description: Unique and duplicate reads of every FastQC run, raw, trimmed and host removed.
-    layout: {x: 0, y: 0, w: 4, h: 4}
+    layout: {x: 0, y: 4, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: viralmetagenome
     data_collection_tag: multiqc_data
@@ -523,7 +534,7 @@ tabs:
     index: mqc-fastp-filtered
     title: Reads fastp kept and removed
     description: Reads passing fastp, and the ones removed for low quality, too many N or short length.
-    layout: {x: 4, y: 0, w: 4, h: 4}
+    layout: {x: 4, y: 4, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: viralmetagenome
     data_collection_tag: multiqc_data
@@ -535,7 +546,7 @@ tabs:
     index: mqc-fastqc-quality
     title: Base quality along the read
     description: Mean Phred score at each read position, per FastQC run.
-    layout: {x: 0, y: 4, w: 4, h: 4}
+    layout: {x: 0, y: 8, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: viralmetagenome
     data_collection_tag: multiqc_data
@@ -547,7 +558,7 @@ tabs:
     index: mqc-kraken
     title: Host removal, the taxa Kraken2 found
     description: Reads the host database classified, by taxon; everything unclassified goes on to assembly.
-    layout: {x: 4, y: 4, w: 4, h: 4}
+    layout: {x: 4, y: 8, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: viralmetagenome
     data_collection_tag: multiqc_data
@@ -1012,22 +1023,28 @@ tabs:
     title: Contig length against the reads it holds
     description: One point per contig, sized by its share of the sample's reads. Lasso contigs to narrow every tab to their samples.
     layout: {x: 0, y: 0, w: 8, h: 6}
-  - component_type: figure
+  - component_type: advanced_viz
     workflow_tag: viralmetagenome
     data_collection_tag: vmg_clusters
-    visu_type: bar
-    dict_kwargs:
-      x: sample
-      y: read_depth_pct
-      color: status
-      barmode: stack
-      hover_data: [cluster, cluster_type, members]
-      labels: {sample: Sample, read_depth_pct: Share of contig read depth (%), status: Cluster}
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: sample
+      taxon_col: status
+      rank_col: null
+      abundance_col: read_depth_pct
+      normalise_to_one: true
+      sample_sort: category
+      sort_category: Filtered out
+      y_zoom: auto
+      top_n: 4
+      value_title: Share of the contig read depth
+      hidden_controls: [rank, top_n, group]
     section: Clusters
     tag: vm-ctg-fig-clusters
     index: ctg-clusters
     title: Read depth share of the clusters per sample
-    description: The refined clusters should hold most of a sample's contig reads; a large filtered share is a genome left behind.
+    description: The refined clusters should hold most of a sample's contig reads; a large filtered share is a genome left behind. Sort by Filtered out to put those samples first.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: viralmetagenome

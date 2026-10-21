@@ -81,12 +81,22 @@ template:
         pick: "latest"
         group: "Software versions"
     groups:
-      - group: "Typing"
-        key_patterns: ["tools", "solver", "enumerations", "beta", "hlahd_*"]
-      - group: "Inputs"
-        key_patterns: ["input", "genome", "igenomes_*", "save_merged_fastq"]
+      # The pipeline's own parameter groups (nextflow_schema.json $defs at 2.2.0);
+      # institutional and generic options are folded into Run context.
+      - group: "Input/output"
+        key_patterns: ["input"]
+      - group: "HLA typing"
+        key_patterns: ["tools"]
+      - group: "OptiType optimisation"
+        key_patterns: ["solver", "enumerations", "beta"]
+      - group: "HLA-HD"
+        key_patterns: ["hlahd_path", "hlahd_update_reference_dict"]
+      - group: "Reference genome"
+        key_patterns: ["genome", "igenomes_ignore", "igenomes_base", "genomes"]
+      - group: "Optional outputs"
+        key_patterns: ["save_merged_fastq"]
       - group: "Run context"
-        key_patterns: ["outdir", "version", "publish_dir_mode", "monochrome_logs", "validate_params", "help*", "show_hidden", "pipelines_testdata_base_path", "trace_report_suffix", "config_profile_*", "custom_config_*", "multiqc_*", "max_multiqc_email_size", "plaintext_email"]
+        key_patterns: ["outdir", "email", "version", "publish_dir_mode", "email_on_fail", "plaintext_email", "max_multiqc_email_size", "monochrome_logs", "hook_url", "validate_params", "pipelines_testdata_base_path", "trace_report_suffix", "help", "help_full", "show_hidden", "config_profile_*", "custom_config_*", "multiqc_*"]
     highlight:
       - "tools"
       - "solver"

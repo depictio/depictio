@@ -95,22 +95,26 @@ template:
         pick: "latest"
         group: "Software versions"
     groups:
-      - group: "Inputs"
-        key_patterns: ["input", "metadata", "mapping_constraints", "reference_pool", "prefix", "global_prefix"]
+      # The pipeline's own parameter groups (nextflow_schema.json $defs at 1.2.0);
+      # institutional and generic options are folded into Run context.
+      - group: "Input/output"
+        key_patterns: ["input", "metadata", "transpose_overview_tables"]
       - group: "Preprocessing"
-        key_patterns: ["skip_preprocessing", "skip_fastqc", "trim_tool", "skip_trimming", "adapter_fasta", "min_trimmed_reads", "skip_complexity_filtering", "decomplexifier", "skip_hostremoval", "host_k2_db", "with_umi", "umi_*", "merge_reads", "arguments_fastp", "arguments_prinseq_reads"]
-      - group: "Read classification"
-        key_patterns: ["skip_read_classification", "read_classifiers", "kraken2_*", "bracken_db", "kaiju_*", "keep_unclassified"]
-      - group: "Assembly and clustering"
-        key_patterns: ["skip_assembly", "assemblers", "skip_sspace_basic", "skip_contig_prinseq", "spades_*", "skip_polishing", "cluster_method", "network_clustering", "identity_threshold", "min_contig_size", "max_contig_size", "max_n_perc", "perc_reads_contig", "cluster_with_reference_pool", "skip_precluster", "precluster_classifiers", "skip_singleton_filtering"]
-      - group: "Refinement and consensus"
-        key_patterns: ["skip_iterative_refinement", "iterative_refinement_cycles", "intermediate_*", "mapper", "deduplicate", "consensus_caller", "min_consensus_depth", "allele_frequency", "min_mapped_reads"]
-      - group: "Variants"
-        key_patterns: ["skip_variant_calling", "variant_caller", "call_intermediate_variants", "skip_vcf_annotation", "arguments_ivar_*"]
+        key_patterns: ["skip_preprocessing", "skip_fastqc", "save_final_reads", "save_intermediate_reads", "with_umi", "skip_umi_extract", "umi_deduplicate", "umi_discard_read", "trim_tool", "skip_trimming", "adapter_fasta", "save_trimmed_fail", "save_merged", "min_trimmed_reads", "merge_reads", "skip_complexity_filtering", "decomplexifier", "contaminants", "skip_hostremoval", "host_k2_db", "skip_host_fastqc", "use_host_filtered_reads", "arguments_fastqc", "arguments_fastp", "arguments_trimmomatic", "arguments_umitools_extract", "arguments_humid", "arguments_bbduk", "arguments_prinseq_reads", "arguments_kraken2_host"]
+      - group: "Metagenomic diversity"
+        key_patterns: ["skip_read_classification", "read_classifiers", "save_databases", "kraken2_db", "kraken2_save_reads", "kraken2_save_readclassification", "kraken2_save_minimizers", "bracken_db", "kaiju_db", "kaiju_taxon_rank", "arguments_kraken2", "arguments_kaiju", "arguments_kaiju2table", "arguments_kaiju2krona", "arguments_krona", "arguments_bracken", "arguments_kreport2krona"]
+      - group: "Assembly"
+        key_patterns: ["skip_assembly", "assemblers", "spades_mode", "spades_hmm", "spades_yml", "skip_contig_prinseq", "skip_sspace_basic", "read_distance", "read_distance_sd", "read_orientation", "normalise_reads", "arguments_bbnorm", "arguments_spades", "arguments_megahit", "arguments_trinity", "arguments_quast", "arguments_sspace_basic", "arguments_prinseq_contig"]
+      - group: "Polishing"
+        key_patterns: ["skip_polishing", "save_intermediate_polishing", "reference_pool", "cluster_with_reference_pool", "blacklist", "skip_precluster", "keep_unclassified", "precluster_classifiers", "cluster_method", "network_clustering", "identity_threshold", "perc_reads_contig", "min_contig_size", "max_contig_size", "max_n_perc", "skip_singleton_filtering", "arguments_blast_makeblastdb", "arguments_blastn", "arguments_blast_filter", "arguments_kraken2_contig", "arguments_kaiju_contig", "arguments_extract_precluster", "arguments_cdhit", "arguments_vsearch", "arguments_mmseqs_linclust", "arguments_mmseqs_cluster", "arguments_vrhyme", "arguments_mash_dist", "arguments_network_cluster", "arguments_extract_cluster", "arguments_minimap2_align", "arguments_minimap2_index", "arguments_mash_sketch", "arguments_mash_screen", "arguments_select_reference"]
+      - group: "Iterative consensus refinement"
+        key_patterns: ["skip_iterative_refinement", "iterative_refinement_cycles", "intermediate_mapper", "intermediate_variant_caller", "call_intermediate_variants", "intermediate_consensus_caller", "intermediate_mapping_stats"]
+      - group: "Variant analysis"
+        key_patterns: ["skip_variant_calling", "skip_vcf_annotation", "mapper", "mapping_constraints", "deduplicate", "variant_caller", "consensus_caller", "min_mapped_reads", "keep_unmapped", "min_consensus_depth", "allele_frequency", "mapping_stats", "ivar_header", "arguments_bwamem2_index", "arguments_bowtie2_build", "arguments_bowtie2_align", "arguments_umitools_dedup", "arguments_picard_markduplicates", "arguments_picard_collectmultiplemetrics", "arguments_custom_mpileup", "arguments_mosdepth", "arguments_bcftools_mpileup1", "arguments_bcftools_mpileup2", "arguments_bcftools_mpileup3", "arguments_bcftools_norm", "arguments_bcftools_stats", "arguments_samtools_stats", "arguments_samtools_idxstats", "arguments_samtools_flagstat", "arguments_tabix", "arguments_bedtools_merge", "arguments_bedtools_maskfasta", "arguments_bcftools_consensus", "arguments_ivar_variants1", "arguments_ivar_variants2", "arguments_make_bed_mask", "arguments_ivar_consensus1", "arguments_ivar_consensus2", "arguments_snpeff", "arguments_snpsift_extractfields"]
       - group: "Consensus QC"
-        key_patterns: ["skip_consensus_qc", "skip_checkv", "checkv_db", "skip_prokka", "prokka_db", "skip_quast", "skip_blast_qc", "skip_alignment_qc", "annotation_db", "skip_consensus_annotation", "mmseqs_searchtype"]
+        key_patterns: ["skip_consensus_qc", "skip_checkv", "checkv_db", "skip_consensus_annotation", "annotation_db", "annotation_metadata", "skip_prokka", "prokka_db", "skip_quast", "skip_blast_qc", "skip_alignment_qc", "mmseqs_searchtype", "arguments_checkv", "arguments_mafft_iterations", "arguments_mafft_qc", "arguments_blastn_qc", "arguments_prokka", "arguments_mmseqs_search", "arguments_quast_qc"]
       - group: "Run context"
-        key_patterns: ["outdir", "version", "publish_dir_mode", "monochrome_logs", "validate_params", "help*", "show_hidden", "pipelines_testdata_base_path", "trace_report_suffix", "config_profile_*", "custom_config_*", "multiqc_*", "max_multiqc_email_size", "plaintext_email", "save_*", "custom_table_headers", "transpose_overview_tables"]
+        key_patterns: ["outdir", "email", "version", "publish_dir_mode", "prefix", "global_prefix", "email_on_fail", "plaintext_email", "max_multiqc_email_size", "monochrome_logs", "custom_table_headers", "validate_params", "pipelines_testdata_base_path", "trace_report_suffix", "help", "help_full", "show_hidden", "genomes", "config_profile_*", "custom_config_*", "multiqc_*"]
     highlight:
       - "trim_tool"
       - "host_k2_db"

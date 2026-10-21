@@ -669,14 +669,14 @@ tabs:
       d = df if grp in df.columns else df.with_columns(pl.lit('All libraries').alias(grp))
       d = d.filter(pl.col('plus_share_pct').is_not_null()).sort(['time_order', 'sample'], nulls_last=True)
       fig = px.bar(d.to_pandas(), x='sample', y='plus_share_pct', color=grp, color_discrete_map=colors, category_orders={'sample': d['sample'].to_list()}, hover_data=['time_point'], labels={'sample': '', 'plus_share_pct': 'Plus-strand share (%)', grp: ''})
-      fig.add_hline(y=50, line_dash='dot')
+      fig.add_hline(y=50, line_dash='dot', annotation_text='Even split, 50%', annotation_position='top left')
       fig.update_layout(yaxis_range=[0, 100], margin=dict(t=10))
       fig.update_xaxes(tickangle=-45, automargin=True)
     section: Strand and hotspots
     tag: nc-qc-fig-strand
     index: nc-qc-fig-strand
     title: Plus-strand share per library
-    description: One bar per library, in time order; the dotted line is the even split.
+    description: One bar per library, in time order; the dotted line marks the even split between strands.
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: nascent
@@ -739,7 +739,7 @@ tabs:
   - name: Gene scope
     icon: mdi:tune
     color: grape
-    description: Narrow the gene calls by the size of their change or their level
+    description: Narrow the genes by the size of their change or their level; every tile of the tab follows
   grid_sections:
   - name: Genes at a glance
     icon: mdi:counter
@@ -880,15 +880,16 @@ tabs:
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: nascent
-    data_collection_tag: response_profiles
+    data_collection_tag: gene_trajectories
     viz_kind: profile
     config:
       viz_kind: profile
       series_col: response
       x_col: time_axis
-      y_col: median_log2fc
-      lower_col: q1_log2fc
-      upper_col: q3_log2fc
+      y_col: log2fc
+      # One row per gene and time point: the median and quartiles are taken
+      # over the genes the filters leave, so the curves follow them.
+      aggregate: median_iqr
       reference_x: 0
       reference_label: Baseline
       x_title: Time, log2(1 + hours)
@@ -899,7 +900,7 @@ tabs:
     tag: nc-gd-av-response
     index: gd-av-response
     title: Response classes over time
-    description: Median log2 fold change of each class's genes at each time point, with the band from the first to the third quartile.
+    description: Median log2 fold change of each class's genes in scope at each time point, with the band from the first to the third quartile.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: nascent
@@ -919,7 +920,7 @@ tabs:
     tag: nc-gd-av-top-genes
     index: gd-av-top-genes
     title: The ten genes that move most
-    description: One curve per gene, the responsive genes with the largest change at their peak among those transcribed at a usable level.
+    description: One curve per gene, the ten responsive genes with the largest change at their peak; the gene filters keep those of the ten in scope.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: nascent
@@ -941,7 +942,7 @@ tabs:
     tag: nc-gd-av-heatmap
     index: gd-av-heatmap
     title: Transcription of the forty most dynamic genes
-    description: log2 CPM per time point, z-scored per gene, rows clustered by shape and annotated by response class; columns in time order.
+    description: log2 CPM per time point, z-scored per gene, rows clustered by shape and annotated by response class; the gene filters keep the rows in scope.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: nascent
@@ -1202,7 +1203,7 @@ tabs:
   - name: Signal scope
     icon: mdi:tune
     color: teal
-    description: Narrow the binned signal to chromosomes or a signal band
+    description: Narrow the binned signal to chromosomes or a signal band; brush the binned lanes to move the bigWig lanes
   grid_sections:
   - name: Signal at a glance
     icon: mdi:counter
@@ -1375,7 +1376,10 @@ tabs:
     tag: nc-gs-av-binned
     index: gs-av-binned
     title: Binned signal, one lane per library
-    description: Both strands in 250 kb windows, log2 of one plus the signal per million; brush or type a region to move the lanes below.
+    description: >-
+      Nascent transcription along the genome, one lane per library (time point): the reads of both
+      strands summed in 250 kb windows, as log2(1 + signal per million of the library). Brush or type a region to
+      move the bigWig lanes below to it.
     layout: {x: 0, y: 0, w: 8, h: 6}
   # TODO(jbrowse): swap indexed_file+genome_view for a JBrowse2 DC once jbrowse.py is rebuilt
   - component_type: advanced_viz
@@ -1450,7 +1454,7 @@ tabs:
   - name: Window scope
     icon: mdi:tune
     color: orange
-    description: Narrow the window calls to chromosomes or by the size of their change
+    description: Narrow the windows to chromosomes or by the size of their change; every tile of the tab follows
   grid_sections:
   - name: Windows at a glance
     icon: mdi:counter
@@ -1606,19 +1610,19 @@ tabs:
     tag: nc-sd-av-heatmap
     index: sd-av-heatmap
     title: Signal of the forty windows that change most
-    description: log2 signal per time point, z-scored per window, rows clustered by shape and annotated by trend; columns in time order.
+    description: log2 signal per time point, z-scored per window, rows clustered by shape and annotated by trend; the window filters keep the rows in scope.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: nascent
-    data_collection_tag: signal_trends
+    data_collection_tag: signal_window_series
     viz_kind: profile
     config:
       viz_kind: profile
       series_col: trend
       x_col: time_axis
-      y_col: median_log2fc
-      lower_col: q1_log2fc
-      upper_col: q3_log2fc
+      y_col: log2fc
+      # One row per window and time point, summarised over the windows in scope.
+      aggregate: median_iqr
       reference_x: 0
       reference_label: Baseline
       x_title: Time, log2(1 + hours)
@@ -1629,7 +1633,7 @@ tabs:
     tag: nc-sd-av-trends
     index: sd-av-trends
     title: Rising, falling and stable windows over time
-    description: Median log2 fold change of each trend's windows at each time point, with the band from the first to the third quartile.
+    description: Median log2 fold change of each trend's windows in scope at each time point, with the band from the first to the third quartile.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: nascent

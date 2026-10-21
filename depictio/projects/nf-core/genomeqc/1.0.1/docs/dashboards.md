@@ -51,6 +51,7 @@ links carry a pick on a genome to every per-genome collection.
 | `fcsgx_actions` | `decontamination/fcs-gx/<a>.fcs_gx_report.txt` (optional) | flagged range, or one `none` row per clean assembly |
 | `fcsadaptor_actions` | `decontamination/fcs-adaptor/<a>.fcs_adaptor_report.txt` (optional) | flagged range, or one `none` row |
 | `tiara_classifications` | `decontamination/tiara/raw/<a>.txt` (optional) | sequence of 3 kb or more |
+| `tiara_class_counts` | `tiara_classifications` | assembly and Tiara class |
 | `repeatmasker_repeat_classes` | `repeatmasker/<a>/<a>.tbl` (optional) | assembly and class or family line |
 | `repeatmasker_masking_summary` | the same tables (optional) | assembly |
 | `genomes` | the collections above | assembly |
@@ -113,7 +114,8 @@ The landing page, at compact width with the filter panel collapsed (21 of 24 row
   N50 with the L50, the complete BUSCOs of the assemblies and of their proteins, the sequences that
   carry the BUSCOs with the share of the busiest, and the orthogroups every genome shares with those
   of a single genome. Below them, four figures in two rows: the contiguity scatter beside the BUSCO
-  classes, then the gene models beside the shared-orthogroup UpSet.
+  classes, then the gene models beside each genome's genes by the orthogroups they fall in (shared,
+  genome-specific or none).
 - **How to read this dashboard**: one tile per tab, by group, each showing its question.
 
 The persistent `Sample filters` (group, genome) sit in the collapsed left panel and narrow every
@@ -138,19 +140,23 @@ sequence count.
 **Contamination.** Strip: the highest foreign share FCS-GX reports (a threshold at genomeqc's 0.5%,
 failing above 2%), the bases FCS-GX flags (by action), the adaptor bases (by action) and the
 sequences Tiara classified (by class). Then the foreign share per genome beside Tiara's classes per
-genome. Collapsed: the FCS-GX calls, the FCS-adaptor calls and Tiara's class per sequence. Filters:
+genome, both stacked bars whose axis starts near the smallest bottom share (a `//` marks the cut;
+the Zoom switch shows the whole bar). Collapsed: the FCS-GX calls, the FCS-adaptor calls and Tiara's class per sequence. Filters:
 Tiara class and FCS-GX action.
 
 **Completeness.** Strip: complete BUSCOs in the assembly (a threshold at 95%), complete in the
 proteins (their spread), duplicated (a histogram) and the four classes summed (a composition). Then
-one stacked bar per BUSCO run, each assembly beside its proteins, and the assembly score against the
+one stacked bar per BUSCO run, each assembly beside its proteins (the axis starts above the complete
+share every run shares, marked `//`; Zoom off shows the whole bar), and the assembly score against the
 protein score per genome. Collapsed: the BUSCO scores per run. Filter: complete BUSCOs.
 
 **Karyotype.** Strip: the sequences holding a BUSCO (by genome), the BUSCOs placed (by genome), the
 BUSCOs per Mb (a histogram) and the 10 kb windows holding the tidk repeat (by genome). Then two
 ideograms, one karyotype per genome each, the 24 longest sequences drawn to their length: the first
 shaded by complete BUSCOs per Mb, the second by the copies of the searched repeat per 10 kb window.
-A click on a bar emits a sequence filter on the tile's collection. Collapsed: the BUSCOs per
+The ideograms draw on canvas: a genome picker above the chart, a click on a bar (or Ctrl+wheel)
+opens it zoomed with an overview strip, and the detail view's Filter dashboard action emits a
+sequence or range filter on the tile's collection. Collapsed: the BUSCOs per
 sequence. Filter: sequence length.
 
 **Repeats.** Strip: the masked share (a gauge), the interspersed share (its spread), the simple
@@ -160,13 +166,15 @@ class and family line. Filter: repeat class.
 
 **Annotation.** Strip: protein-coding genes (by genome), exons per mRNA (their spread), single-exon
 genes (a histogram) and overlapping genes (their spread). Then every transcript type of every
-annotation by genes and exons per transcript, then the genes per type beside the genes nested in
-another. Collapsed: the gene models per type and every AGAT statistic. Filters (on the AGAT
+annotation by genes and exons per transcript, then the genes per type beside each annotation's genes split by overlap
+(overlapping none, overlapping another, nested on the opposite or the same strand), both stacked
+bars. Collapsed: the gene models per type and every AGAT statistic. Filters (on the AGAT
 statistics table): feature type and isoform view.
 
 **Orthology.** Strip: the orthogroups (by copy class), the core every genome shares, the share of
-genes placed for the genome with the fewest (its spread) and the orthogroups of one genome. Then the
-UpSet of the genomes each orthogroup reaches and the one-to-one orthologues of every pair of genomes.
+genes placed for the genome with the fewest (its spread) and the orthogroups of one genome. Then each
+genome's genes in shared, genome-specific or no orthogroups (a stacked bar, the Overview's
+highlight), the UpSet of the genomes each orthogroup reaches and the one-to-one orthologues of every pair of genomes.
 Collapsed: the orthogroup assignment per genome and the sequences carrying orthologues. Filter: copy
 class.
 

@@ -104,14 +104,20 @@ template:
         pick: "latest"
         group: "Software versions"
     groups:
-      - group: "Assay and input"
-        key_patterns: ["input", "assay_type", "with_umi", "umitools_*", "skip_trimming"]
+      # The pipeline's own parameter groups (nextflow_schema.json $defs at 2.3.0);
+      # institutional and generic options are folded into Run context.
+      - group: "Input/output"
+        key_patterns: ["input"]
       - group: "Alignment"
-        key_patterns: ["aligner", "skip_alignment", "genome", "fasta", "gtf", "bwa_index", "bwamem2_index", "dragmap", "bowtie2_index", "hisat2_index", "star_index", "save_reference"]
+        key_patterns: ["aligner", "skip_alignment", "skip_trimming"]
+      - group: "UMI"
+        key_patterns: ["with_umi", "umitools_dedup_stats"]
       - group: "Transcript identification"
-        key_patterns: ["skip_grohmm", "grohmm_*", "use_homer_uniqmap", "homer_*", "filter_bed", "intersect_bed"]
+        key_patterns: ["assay_type", "use_homer_uniqmap", "skip_grohmm", "grohmm_min_uts", "grohmm_max_uts", "grohmm_min_ltprobb", "grohmm_max_ltprobb", "filter_bed", "intersect_bed"]
+      - group: "Reference genome"
+        key_patterns: ["genome", "fasta", "gtf", "gff", "gene_bed", "bwa_index", "bwamem2_index", "dragmap", "bowtie2_index", "hisat2_index", "star_index", "homer_uniqmap", "save_reference", "igenomes_ignore", "igenomes_base", "human_pangenomics_base", "genomes"]
       - group: "Run context"
-        key_patterns: ["outdir", "version", "publish_dir_mode", "monochrome_logs", "validate_params", "help*", "show_hidden", "pipelines_testdata_base_path", "trace_report_suffix", "config_profile_*", "custom_config_*", "multiqc_*", "max_multiqc_email_size", "plaintext_email", "igenomes_*", "human_pangenomics_base"]
+        key_patterns: ["outdir", "email", "version", "publish_dir_mode", "email_on_fail", "plaintext_email", "max_multiqc_email_size", "monochrome_logs", "hook_url", "validate_params", "pipelines_testdata_base_path", "trace_report_suffix", "help", "help_full", "show_hidden", "config_profile_*", "custom_config_*", "multiqc_*"]
     highlight:
       - "assay_type"
       - "genome"
@@ -396,29 +402,6 @@ workflows:
               "direction": "Induced, Repressed or Stable (from gene_dynamics)"
               "response": "Response class of the gene (from gene_dynamics)"
 
-      - data_collection_tag: "response_profiles"
-        description: "Median log2 fold change per response class and time point, with its interquartile band"
-        config:
-          type: "Table"
-          metatype: "Aggregate"
-          source: "transformed"
-          transform:
-            recipe: "nf-core/nascent/response_profiles.py"
-          dc_specific_properties:
-            format: "TSV"
-            columns_description:
-              "response": "Response class"
-              "direction": "Induced, Repressed or Stable"
-              "time_point": "Time point label"
-              "time_h": "Hours"
-              "time_order": "Rank of the time point"
-              "time_axis": "log2(1 + hours)"
-              "phase": "Baseline, Early, Mid or Late"
-              "median_log2fc": "Median log2 fold change of the class's genes"
-              "q1_log2fc": "First quartile"
-              "q3_log2fc": "Third quartile"
-              "n_genes": "Genes of the class"
-
       - data_collection_tag: "top_gene_trajectories"
         description: "The ten responsive genes with the largest peak change, one trajectory each"
         config:
@@ -531,28 +514,27 @@ workflows:
               "trend": "Rising or Falling (a log2 fold change of 1 at two time points or more), else Stable"
               "rank": "Rank of the window by absolute peak change"
 
-      - data_collection_tag: "signal_trends"
+      - data_collection_tag: "signal_window_series"
         optional: true
-        description: "Median log2 fold change of the rising, falling and stable windows per time point, with its interquartile band"
+        description: "Per compared window and time point: the log2 fold change of the window signal against the baseline, with the window's chromosome and trend"
         config:
           type: "Table"
           metatype: "Aggregate"
           source: "transformed"
           transform:
-            recipe: "nf-core/nascent/signal_trends.py"
+            recipe: "nf-core/nascent/signal_window_series.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
-              "trend": "Rising, Falling or Stable"
+              "window_id": "Window, as chromosome:start-end"
+              "chromosome": "Chromosome"
+              "trend": "Rising, Falling or Stable (from signal_window_dynamics)"
               "time_point": "Time point label"
               "time_h": "Hours"
-              "time_order": "Rank of the time point"
+              "time_order": "Rank of the time point, 1 the baseline"
               "time_axis": "log2(1 + hours)"
               "phase": "Baseline, Early, Mid or Late"
-              "median_log2fc": "Median log2 fold change of the trend's windows"
-              "q1_log2fc": "First quartile"
-              "q3_log2fc": "Third quartile"
-              "n_windows": "Windows of the trend"
+              "log2fc": "log2 fold change of the window signal against the baseline"
 
       - data_collection_tag: "signal_window_heatmap"
         optional: true
@@ -674,13 +656,6 @@ links:
     enabled: true
   - source_dc_tag: "samples"
     source_column: "time_point"
-    target_dc_tag: "response_profiles"
-    target_type: "table"
-    link_config: {resolver: "direct", target_field: "time_point"}
-    description: "Filter the response class curves to the time points of the libraries picked"
-    enabled: true
-  - source_dc_tag: "samples"
-    source_column: "time_point"
     target_dc_tag: "top_gene_trajectories"
     target_type: "table"
     link_config: {resolver: "direct", target_field: "time_point"}
@@ -695,7 +670,7 @@ links:
     enabled: true
   - source_dc_tag: "samples"
     source_column: "time_point"
-    target_dc_tag: "signal_trends"
+    target_dc_tag: "signal_window_series"
     target_type: "table"
     link_config: {resolver: "direct", target_field: "time_point"}
     description: "Filter the window trend curves to the time points of the libraries picked"
@@ -722,6 +697,51 @@ links:
     target_type: "table"
     link_config: {resolver: "direct", target_field: "peak_time_point"}
     description: "Narrow the window calls to the windows peaking at the time points of the libraries picked"
+    enabled: true
+  # A tab's own filters reach the tiles of the tab drawn from other collections:
+  # the gene and window calls carry the filtered columns (response, size of the
+  # change, chromosome), the long and top-N collections follow by id.
+  - source_dc_tag: "gene_dynamics"
+    source_column: "gene_id"
+    target_dc_tag: "gene_trajectories"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_id"}
+    description: "Narrow the gene trajectories, and the response curves drawn from them, to the genes in scope"
+    enabled: true
+  - source_dc_tag: "gene_dynamics"
+    source_column: "gene_id"
+    target_dc_tag: "top_gene_trajectories"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_id"}
+    description: "Keep the top genes that are in scope"
+    enabled: true
+  - source_dc_tag: "gene_dynamics"
+    source_column: "gene_id"
+    target_dc_tag: "top_gene_heatmap"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_id"}
+    description: "Keep the heatmap rows of the genes in scope"
+    enabled: true
+  - source_dc_tag: "signal_window_dynamics"
+    source_column: "window_id"
+    target_dc_tag: "signal_window_series"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "window_id"}
+    description: "Narrow the window trend curves to the windows in scope"
+    enabled: true
+  - source_dc_tag: "signal_window_dynamics"
+    source_column: "window_id"
+    target_dc_tag: "signal_window_heatmap"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "window_id"}
+    description: "Keep the heatmap rows of the windows in scope"
+    enabled: true
+  - source_dc_tag: "bedtools_strand_bins"
+    source_column: "chromosome"
+    target_dc_tag: "chromosome_signal"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "chromosome"}
+    description: "Narrow the per-chromosome shares to the chromosomes picked"
     enabled: true
   # Reverse links: a selection made on a tab's own scatter or table narrows the
   # hub, and through it every other tab.

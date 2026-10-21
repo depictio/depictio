@@ -113,16 +113,26 @@ template:
         pick: "latest"
         group: "Software versions"
     groups:
-      - group: "Datasets"
-        key_patterns: ["species", "keywords", "datasets", "accessions*", "excluded_accessions*", "skip_fetch_eatlas_accessions", "fetch_geo_accessions", "platform", "download_only", "random_sampling_*"]
-      - group: "Gene IDs"
-        key_patterns: ["gprofiler_target_db", "gene_id_mapping", "gene_metadata", "skip_id_mapping", "skip_cleaning_gene_ids", "min_occurrence_*", "gene_length", "gff"]
-      - group: "Filters and normalisation"
-        key_patterns: ["max_zero_ratio", "max_null_ratio*", "normalisation_method", "quantile_norm_target_distrib", "missing_value_imputer"]
-      - group: "Stability"
-        key_patterns: ["nb_sections", "nb_candidates_per_section", "stability_score_weights", "skip_genorm", "target_genes*"]
+      # The pipeline's own parameter groups (nextflow_schema.json $defs at 1.1.0);
+      # institutional and generic options are folded into Run context.
+      - group: "Input/output"
+        key_patterns: ["species", "datasets", "keywords", "target_genes", "target_gene_file", "platform", "accessions_only", "download_only"]
+      - group: "Public data"
+        key_patterns: ["skip_fetch_eatlas_accessions", "fetch_geo_accessions", "accessions", "accessions_file", "excluded_accessions", "excluded_accessions_file"]
+      - group: "ID mapping"
+        key_patterns: ["skip_id_mapping", "skip_cleaning_gene_ids", "gprofiler_target_db", "gene_id_mapping", "gene_metadata", "min_occurrence_quantile", "min_occurrence_freq"]
+      - group: "Sample filtering"
+        key_patterns: ["max_zero_ratio", "max_null_ratio", "max_null_ratio_valid_sample"]
+      - group: "Normalisation"
+        key_patterns: ["normalisation_method", "gff", "gff_url", "gene_length", "quantile_norm_target_distrib"]
+      - group: "Missing value imputation"
+        key_patterns: ["missing_value_imputer"]
+      - group: "Stability scoring"
+        key_patterns: ["nb_sections", "nb_candidates_per_section", "skip_genorm", "stability_score_weights"]
+      - group: "Scalability"
+        key_patterns: ["random_sampling_size", "random_sampling_seed"]
       - group: "Run context"
-        key_patterns: ["input", "outdir", "version", "publish_dir_mode", "monochrome_logs", "validate_params", "help*", "show_hidden", "pipelines_testdata_base_path", "trace_report_suffix", "config_profile_*", "custom_config_*", "multiqc_*", "max_multiqc_email_size", "plaintext_email"]
+        key_patterns: ["outdir", "email", "version", "publish_dir_mode", "email_on_fail", "plaintext_email", "max_multiqc_email_size", "monochrome_logs", "validate_params", "pipelines_testdata_base_path", "trace_report_suffix", "help", "help_full", "show_hidden", "genomes", "config_profile_*", "custom_config_*", "multiqc_*"]
     highlight:
       - "species"
       - "normalisation_method"

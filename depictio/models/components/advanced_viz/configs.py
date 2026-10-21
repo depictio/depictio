@@ -465,15 +465,52 @@ class ManhattanConfig(_BaseVizConfig):
 
 
 class StackedTaxonomyConfig(_BaseVizConfig):
-    """Stacked composition bar (per-sample relative abundance by taxon)."""
+    """Stacked composition bar: one bar per sample, one segment per category.
+
+    Built for taxa, but stacks any per-sample composition (CCS outcomes per
+    library, BUSCO classes per assembly, score parts per section). Categories
+    stack largest-overall at the bottom, which is what lets ``y_zoom`` crop a
+    near-identical base away.
+    """
 
     viz_kind: Literal["stacked_taxonomy"] = "stacked_taxonomy"
 
     sample_id_col: str = Field(default="sample_id", description="Column with the sample identifier")
     taxon_col: str = Field(default="taxon", description="Column with taxon name")
-    rank_col: str = Field(default="rank", description="Column with taxonomic rank label")
+    rank_col: str | None = Field(
+        default="rank",
+        description=(
+            "Column with the taxonomic rank (or any level) label. Null, or a column "
+            "the table does not carry, draws a single-level composition with no "
+            "rank picker."
+        ),
+    )
     abundance_col: str = Field(
         default="abundance", description="Column with relative or absolute abundance"
+    )
+
+    # Wide tables: one row per sample, one numeric column per category
+    # (orthofinder species stats, FCS-GX actions, AGAT feature counts). The
+    # renderer melts them into the long form, so every option below applies.
+    value_cols: list[str] | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Wide form: the numeric columns to stack, one category each (the "
+            "column is the category, its value the abundance). When set, "
+            "taxon_col, abundance_col and rank_col are not read; only "
+            "sample_id_col and these columns are fetched. Null (default) reads "
+            "the long form."
+        ),
+    )
+    value_labels: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Wide form: column -> display name of its category, e.g. "
+            "{unassigned_genes: Unassigned}. Unlisted columns show their name. "
+            "Colours (`taxon_palette`, `sort_category`) are keyed by the "
+            "display name."
+        ),
     )
 
     default_rank: str | None = Field(
@@ -506,8 +543,58 @@ class StackedTaxonomyConfig(_BaseVizConfig):
             "default cycle, which repeats past twelve taxa."
         ),
     )
-    sample_sort: Literal["input", "total_abundance", "first_taxon"] = Field(
-        default="input", description="Order of samples along the x axis"
+    sample_sort: Literal["input", "name", "total_abundance", "first_taxon", "category"] = Field(
+        default="input",
+        description=(
+            "Order of the bars. ``input``: as the table lists them. ``name``: "
+            "natural alphabetical order (S2 before S10). ``total_abundance``: "
+            "largest raw total first. ``first_taxon``: largest raw value of the "
+            "overall most abundant category first. ``category``: largest plotted "
+            "value (the share, when normalised) of ``sort_category`` first."
+        ),
+    )
+    sort_category: str | None = Field(
+        default=None,
+        description=(
+            "Category whose value orders the bars under ``sample_sort: category``. "
+            "Null, or a category not shown, uses the most abundant one."
+        ),
+    )
+    group_col: str | None = Field(
+        default=None,
+        description=(
+            "Per-sample column that groups the bars (multi-level sort): bars are "
+            "grouped by its value, each group labelled and set apart by a gap, "
+            "and ``sample_sort`` orders the bars within each group. Groups follow "
+            "their first appearance in the table, or natural name order under "
+            "``sample_sort: name``. The viewer can also group by any "
+            "``annotation_strips`` column."
+        ),
+    )
+    y_zoom: Literal["off", "auto"] = Field(
+        default="off",
+        description=(
+            "``auto`` crops the value axis to start just below the smallest "
+            "bottom segment, so a composition that is near-identical across "
+            "bars (every bar 95 % one class) shows the part that varies. The "
+            "cropped axis carries a // break marker and says where it starts. "
+            "No effect when the crop would gain little, or on a log axis."
+        ),
+    )
+    orientation: Literal["v", "h"] = Field(
+        default="v",
+        description=(
+            "``v`` (default): vertical bars, samples along x. ``h``: horizontal "
+            "bars, one row per sample, which reads better for a few samples "
+            "with long names."
+        ),
+    )
+    value_title: str | None = Field(
+        default=None,
+        description=(
+            "Value axis title. Unset shows 'Relative abundance' when normalised, "
+            "else the abundance column; an empty string shows none."
+        ),
     )
     show_legend: bool = Field(default=True, description="Show the taxon colour legend")
     log_y: bool = Field(default=False, description="Log-scale the abundance axis")
@@ -518,12 +605,16 @@ class StackedTaxonomyConfig(_BaseVizConfig):
     # it. All optional, so every taxonomy tile keeps its look. Colours stay with
     # `category_colors` (keyed by `taxon_col`, or by the rank shown), then
     # `taxon_palette`.
-    hidden_controls: list[Literal["rank", "sample_sort", "top_n", "normalise"]] | None = Field(
+    hidden_controls: (
+        list[Literal["rank", "sample_sort", "top_n", "normalise", "group", "zoom"]] | None
+    ) = Field(
         default=None,
         description=(
             "Controls the tile does not offer. The config value still applies: "
             "hide `rank` when rank_col is constant, `top_n` when the categories "
-            "are few and fixed, `sample_sort` when the input order is the point."
+            "are few and fixed, `sample_sort` when the input order is the point, "
+            "`group` when the grouping is fixed, `zoom` when the full axis is the "
+            "point. The rank picker also hides itself when there is one rank."
         ),
     )
     rank_label: str | None = Field(
@@ -1826,6 +1917,13 @@ class ScatterXyConfig(_BaseVizConfig):
     reference_value: float | None = Field(
         default=None, description="Where a horizontal or vertical reference line sits"
     )
+    reference_label: str | None = Field(
+        default=None,
+        description=(
+            "Text naming the reference line on the plot (it has no legend entry); null "
+            "writes ``x = y`` or the line's equation"
+        ),
+    )
     reference_highlight: Literal["none", "above", "below"] = Field(
         default="none",
         description=(
@@ -1846,7 +1944,19 @@ class ScatterXyConfig(_BaseVizConfig):
         default=True, description="Draw a thin outline so overlapping points stay separable"
     )
     top_n_labels: int = Field(
-        default=0, ge=0, description="Label this many points, the largest by size or by |y|"
+        default=0,
+        ge=0,
+        description=(
+            "Label this many points: the smallest by ``label_order_col`` when bound, "
+            "else the largest by size or by |y|"
+        ),
+    )
+    label_order_col: str | None = Field(
+        default=None,
+        description=(
+            "Optional numeric column ranking the labelled points, smallest first (a rank, "
+            "a p-value): the top-N labels go to the points it puts first"
+        ),
     )
     color_scale: str = Field(
         default="Viridis", description="Colourscale used when the colour column is numeric"
@@ -1930,6 +2040,15 @@ class ProfileConfig(_BaseVizConfig):
     )
     upper_col: str | None = Field(
         default=None, description="Optional upper edge of a confidence band"
+    )
+    aggregate: Literal["none", "median_iqr"] = Field(
+        default="none",
+        description=(
+            "``none``: one row per series and x, drawn as is. ``median_iqr``: one row per "
+            "feature, series and x; the tile draws each series' median with its "
+            "interquartile band, computed from the rows the filters leave, so the curves "
+            "follow them (a summary written by a recipe cannot)"
+        ),
     )
 
     reference_x: float | None = Field(
@@ -2916,13 +3035,20 @@ class GenomeChordConfig(_BaseVizConfig):
 
 
 class IdeogramConfig(_BaseVizConfig):
-    """A karyotype: one bar per chromosome from a common origin, glyphs on each bar.
+    """A karyotype browser: one bar per chromosome, glyphs or density bins on each.
 
-    Every bar starts at the same origin and is drawn to its chromosome's length,
-    so the reader compares chromosomes, and genomes, by length first. On the
-    bars go the features: in ``marks`` mode one glyph per row (a BUSCO gene
-    coloured by its status), in ``density`` mode one heat band per bin (the
-    rows' own ``value`` when bound, else a count of rows per ``bin_size``).
+    The overview draws every bar from the same origin to its chromosome's
+    length, so the reader compares chromosomes, and genomes, by length first.
+    On the bars go the features: in ``marks`` mode one glyph per row (a BUSCO
+    gene coloured by its status), in ``density`` mode one bin per window (the
+    rows' own ``value`` when bound, else a count of rows coloured by their
+    dominant category or on the colour scale), and in ``auto`` mode marks while
+    at most ``lod_threshold`` features are in view and bins above it.
+
+    Clicking a chromosome opens it in a horizontal detail view with its own
+    finer bins, a bp axis, zoom and pan; that is local to the tile. Narrowing
+    the rest of the dashboard to the chromosome or the visible range is an
+    explicit action of the detail view (see ``region_filter_enabled``).
 
     Chromosome lengths come from ``chrom_length_col`` when bound, else from the
     ``assembly`` table the genome chord ring uses, else from the furthest
@@ -2961,11 +3087,14 @@ class IdeogramConfig(_BaseVizConfig):
             "``chrom_length_col``, else the furthest feature on each chromosome"
         ),
     )
-    mode: Literal["marks", "density"] = Field(
+    mode: Literal["marks", "density", "auto"] = Field(
         default="marks",
         description=(
-            "``marks``: one glyph per feature. ``density``: one heat band per bin, "
-            "the mean ``value`` when bound, else the number of features per bin"
+            "``marks``: one glyph per feature (density past ``max_features``). "
+            "``density``: one bin per window, the mean ``value`` when bound, else "
+            "the number of features per bin in their dominant category or on the "
+            "colour scale. ``auto``: marks while at most ``lod_threshold`` features "
+            "are in view, bins above it, so zooming in brings the marks back"
         ),
     )
     bin_size: int | None = Field(
@@ -3015,16 +3144,40 @@ class IdeogramConfig(_BaseVizConfig):
             "the density bands instead and says so, never a subset of the marks"
         ),
     )
+    lod_threshold: int = Field(
+        default=2000,
+        ge=1,
+        le=500000,
+        description=(
+            "Level of detail for ``auto`` mode: features in view above which the "
+            "overview or the detail view draws density bins rather than marks"
+        ),
+    )
+    feature_opacity: float = Field(
+        default=0.85,
+        ge=0.05,
+        le=1.0,
+        description="Opacity of the marks and bins drawn over the chromosomes",
+    )
+    hidden_categories: list[str] | None = Field(
+        default=None,
+        description=(
+            "Values of ``category_col`` hidden from the karyotype (toggled from the "
+            "legend); null shows every category"
+        ),
+    )
 
     # --- Region as a cross-filter ------------------------------------------
     # On by default, as for genome_view's brush: a chromosome and a range are
-    # never ambiguous, so the gesture needs no opt-in.
+    # never ambiguous. Emitting is an explicit action of the detail view, not a
+    # side effect of opening a chromosome.
     region_filter_enabled: bool = Field(
         default=True,
         description=(
-            "Let a click on a chromosome, or a drag along it, emit a chromosome "
-            "multi-select plus a position range on this tile's own collection "
-            "(the ``genome_selection`` pair a genome_view brush emits)"
+            'Offer a "Filter dashboard" action in the detail view, which emits a '
+            "chromosome multi-select (plus the visible position range, when zoomed) "
+            "on this tile's own collection: the ``genome_selection`` pair a "
+            "genome_view brush emits"
         ),
     )
 
@@ -3036,6 +3189,14 @@ class IdeogramConfig(_BaseVizConfig):
             return None
         cleaned = [c.strip() for c in value if isinstance(c, str) and c.strip()]
         return cleaned or None
+
+    @field_validator("hidden_categories")
+    @classmethod
+    def _empty_hidden_is_none(cls, value: list[str] | None) -> list[str] | None:
+        """Nothing hidden is stored as null; the values are kept exactly as the data spells them."""
+        if value is None:
+            return None
+        return list(dict.fromkeys(value)) or None
 
 
 class RecordCardConfig(_BaseVizConfig):

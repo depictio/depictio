@@ -1,10 +1,13 @@
-"""The typical course of the rising, falling and stable windows: median change per time point.
+"""Each compared window's log2 fold change at every time point, with its trend.
 
-The window counterpart of ``response_profiles``. For the windows of each trend
-of ``signal_window_dynamics`` (Rising, Falling, Stable), per time point, the
-median log2 fold change of the window signal against the baseline with the first
-and third quartile as a band. The window selection and the averaging are those
-of ``signal_window_dynamics`` (the windows it holds, through
+The window counterpart of ``gene_trajectories``. For every window of
+``signal_window_dynamics``, per time point, the mean log2 signal of the
+libraries of that time point against the window's baseline, with the window's
+chromosome and its trend (Rising, Falling, Stable). A ``profile`` tile with
+``aggregate: median_iqr`` draws the median of each trend with its quartile band
+from these rows, so the curves follow the window filters (chromosome, size of
+the change), which a summary written here could not. The window selection and
+the averaging are those of ``signal_window_dynamics`` (through
 ``depictio/recipes/lib/time_course.py``).
 
 Sources:
@@ -13,10 +16,9 @@ Sources:
     dynamics  ``signal_window_dynamics``
 
 Output schema:
-    trend, time_point : Utf8
+    window_id, chromosome, trend, time_point : Utf8
     time_h : Float64, time_order : Int64, time_axis : Float64, phase : Utf8
-    median_log2fc, q1_log2fc, q3_log2fc : Float64
-    n_windows : Int64
+    log2fc : Float64
 """
 
 from __future__ import annotations
@@ -55,29 +57,28 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="dynamics",
         dc_ref="signal_window_dynamics",
-        input_schema={"window_id": pl.Utf8, "trend": pl.Utf8},
+        input_schema={"window_id": pl.Utf8, "chromosome": pl.Utf8, "trend": pl.Utf8},
     ),
 ]
 
 # OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
+    "window_id": pl.Utf8,
+    "chromosome": pl.Utf8,
     "trend": pl.Utf8,
     "time_point": pl.Utf8,
     "time_h": pl.Float64,
     "time_order": pl.Int64,
     "time_axis": pl.Float64,
     "phase": pl.Utf8,
-    "median_log2fc": pl.Float64,
-    "q1_log2fc": pl.Float64,
-    "q3_log2fc": pl.Float64,
-    "n_windows": pl.Int64,
+    "log2fc": pl.Float64,
 }
 
 
 def window_points(
     bins: pl.DataFrame, samples: pl.DataFrame, dynamics: pl.DataFrame
 ) -> pl.DataFrame:
-    """Per window of ``dynamics`` and time point: mean log2 signal, log2fc, trend."""
+    """Per window of ``dynamics`` and time point: mean log2 signal, log2fc, chromosome, trend."""
     long = bins.with_columns(sc.window_id_expr()).join(
         dynamics.select("window_id"), on="window_id", how="inner"
     )
@@ -88,14 +89,13 @@ def window_points(
         key="window_id",
         value_col="log2_signal",
     )
-    return points.join(dynamics.select("window_id", "trend"), on="window_id", how="inner")
+    return points.join(
+        dynamics.select("window_id", "chromosome", "trend"), on="window_id", how="inner"
+    )
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     points = window_points(sources["bins"], sources["samples"], sources["dynamics"])
-    return (
-        tc.spread_by_class(points, class_col="trend")
-        .rename({"n_features": "n_windows"})
-        .select([pl.col(c).cast(t) for c, t in OUTPUT_SCHEMA.items()])
-        .sort(["trend", "time_order"])
+    return points.select([pl.col(c).cast(t) for c, t in OUTPUT_SCHEMA.items()]).sort(
+        ["window_id", "time_order"]
     )

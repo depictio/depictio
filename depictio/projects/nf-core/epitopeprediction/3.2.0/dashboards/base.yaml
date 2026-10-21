@@ -473,7 +473,7 @@ tabs:
   - name: Binding predictions
     icon: mdi:chart-box-outline
     color: orange
-    description: Binders per sample and tool, and the rank, affinity and length of the binders
+    description: The general statistics, then binders per sample and tool, and the rank, affinity and length of the binders
   - name: Input variants
     icon: mdi:file-document-outline
     color: gray
@@ -493,13 +493,24 @@ tabs:
   - component_type: multiqc
     workflow_tag: epitopeprediction
     data_collection_tag: multiqc_data
+    use: multiqc/general_stats
+    selected_module: general_stats
+    selected_plot: general_stats
+    section: Binding predictions
+    tag: ep-mqc-general-stats
+    title: General statistics
+    description: One row per VCF input, with its records, SNPs, indels and Ts/Tv.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: epitopeprediction
+    data_collection_tag: multiqc_data
     selected_module: peptide_binding_prediction_stats
     selected_plot: peptide_binding_prediction_stats-section
     section: Binding predictions
     tag: ep-mqc-stats
     title: Binding prediction statistics
     description: Binders, non-binders and unsupported peptides per sample and tool, wild types left out.
-    layout: {x: 0, y: 0, w: 8, h: 4}
+    layout: {x: 0, y: 4, w: 8, h: 4}
   - component_type: multiqc
     workflow_tag: epitopeprediction
     data_collection_tag: multiqc_data
@@ -509,7 +520,7 @@ tabs:
     tag: ep-mqc-rank
     title: Rank distribution
     description: Percentile rank of the predictions per sample; a binder sits at the low end.
-    layout: {x: 0, y: 4, w: 4, h: 4}
+    layout: {x: 0, y: 8, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: epitopeprediction
     data_collection_tag: multiqc_data
@@ -519,7 +530,7 @@ tabs:
     tag: ep-mqc-affinity
     title: Binding affinity distribution
     description: Affinity score of the predictions per sample, higher is stronger.
-    layout: {x: 4, y: 4, w: 4, h: 4}
+    layout: {x: 4, y: 8, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: epitopeprediction
     data_collection_tag: multiqc_data
@@ -529,18 +540,7 @@ tabs:
     tag: ep-mqc-length
     title: Binder length distribution
     description: Lengths of the predicted binders per sample.
-    layout: {x: 0, y: 8, w: 8, h: 4}
-  - component_type: multiqc
-    workflow_tag: epitopeprediction
-    data_collection_tag: multiqc_data
-    use: multiqc/general_stats
-    selected_module: general_stats
-    selected_plot: general_stats
-    section: Input variants
-    tag: ep-mqc-general-stats
-    title: General statistics
-    description: One row per VCF input, with its records, SNPs, indels and Ts/Tv.
-    layout: {x: 0, y: 0, w: 8, h: 4}
+    layout: {x: 0, y: 12, w: 8, h: 4}
   - component_type: multiqc
     workflow_tag: epitopeprediction
     data_collection_tag: multiqc_data
@@ -551,7 +551,7 @@ tabs:
     tag: ep-mqc-subtypes
     title: Substitution types
     description: Single-base substitutions of the input variants, by type.
-    layout: {x: 0, y: 4, w: 4, h: 4}
+    layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: epitopeprediction
     data_collection_tag: multiqc_data
@@ -562,7 +562,7 @@ tabs:
     tag: ep-mqc-indels
     title: Indel length distribution
     description: Lengths of the input insertions and deletions, which make the frameshift peptides.
-    layout: {x: 4, y: 4, w: 4, h: 4}
+    layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: epitopeprediction
     data_collection_tag: multiqc_data
@@ -573,7 +573,7 @@ tabs:
     tag: ep-mqc-quality
     title: Variant quality
     description: Quality of the input variants, by variant class.
-    layout: {x: 0, y: 8, w: 4, h: 4}
+    layout: {x: 0, y: 4, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: epitopeprediction
     data_collection_tag: multiqc_data
@@ -584,7 +584,7 @@ tabs:
     tag: ep-mqc-depths
     title: Variant depths
     description: Read depth at the input variants.
-    layout: {x: 4, y: 8, w: 4, h: 4}
+    layout: {x: 4, y: 4, w: 4, h: 4}
 # ============================================================================
 # Neoepitopes
 # ============================================================================
@@ -1138,7 +1138,7 @@ tabs:
   - name: Tool filters
     icon: mdi:filter-variant
     color: grape
-    description: Narrow by tool, or by how two tools call a peptide
+    description: The agreement pick narrows the paired tiles only; the tool pick does not reach the paired table, which names two tools per row
   grid_sections:
   - name: Tools at a glance
     icon: mdi:counter

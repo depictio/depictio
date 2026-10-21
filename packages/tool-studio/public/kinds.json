@@ -2391,7 +2391,7 @@
     },
     {
       "category": "plot",
-      "description": "A karyotype: one bar per chromosome scaled to its length, with a glyph per feature or a heat band per bin. Click or drag a bar to filter a region.",
+      "description": "A karyotype: one bar per chromosome scaled to its length, with a glyph per feature or density bins. Click a chromosome to zoom along it, then filter the dashboard to it or to the visible range.",
       "heavy": false,
       "icon": "tabler:align-left",
       "label": "Ideogram",
@@ -5232,7 +5232,6 @@
       "required_roles": [
         "sample_id",
         "taxon",
-        "rank",
         "abundance"
       ],
       "role_names": {
@@ -5286,12 +5285,12 @@
           "required": true
         },
         "rank": {
-          "description": "Taxonomic rank / level (e.g. Phylum, Genus).",
+          "description": "Optional level column (e.g. Phylum, Genus): adds a rank picker. Omit for a single-level composition.",
           "dtypes": [
             "String",
             "Utf8"
           ],
-          "required": true
+          "required": false
         },
         "sample_id": {
           "description": "Identifier for each sample / observation.",

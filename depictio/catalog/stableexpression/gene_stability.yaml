@@ -13,12 +13,13 @@ find:
 recipe: stableexpression/gene_stability.py
 fixture: gene_stability.tsv
 renders_as:
-  # Two of the four measures against each other: they agree for a gene stable
-  # by every account, and a gene good by one only stands off the diagonal.
+  # Two of the four measures against each other, rank against rank within the
+  # section: they agree for a gene stable by every account, and a gene good by
+  # one only stands off the diagonal.
   - id: measure_agreement
     component: advanced_viz
     kind: scatter_xy
-    roles: { x: normfinder_stability, y: genorm_m, label: gene_name, color: section }
+    roles: { x: normfinder_rank, y: genorm_rank, label: gene_name, color: section }
   - id: candidate_record
     component: advanced_viz
     kind: record_card

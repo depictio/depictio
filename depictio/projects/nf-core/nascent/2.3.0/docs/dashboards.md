@@ -20,9 +20,9 @@ coverage; the family rules it follows are in `depictio/projects/nf-core/RULES.md
 | `bedtools_strand_summary` | the strand bedGraphs, streamed into per-library totals | library |
 | `samples` | the two library summaries and the design table | library |
 | `gene_dynamics`, `gene_trajectories` | `subread_gene_counts` and the hub's time points | gene; gene and time point |
-| `response_profiles`, `top_gene_trajectories`, `top_gene_heatmap` | the gene calls and trajectories | class and time point; gene and time point; gene |
+| `top_gene_trajectories`, `top_gene_heatmap` | the gene calls and trajectories | gene and time point; gene |
 | `sample_similarity`, `sample_drift` | `subread_gene_counts` and the hub | library; comparison and time point |
-| `signal_window_dynamics`, `signal_trends`, `signal_window_heatmap`, `chromosome_signal` | `bedtools_strand_bins` and the hub | window; trend and time point; window; chromosome and time point |
+| `signal_window_dynamics`, `signal_window_series`, `signal_window_heatmap`, `chromosome_signal` | `bedtools_strand_bins` and the hub | window; window and time point; window; chromosome and time point |
 | `coverage_bigwigs` | `coverage_graphs/<sample>.plus.bigWig`, `.minus.bigWig`, uploaded as files | library and strand |
 
 The featureCounts matrix is parsed once into a long table; every other gene collection reads it
@@ -130,8 +130,12 @@ sample sheet sit in the left panel and at the bottom of every other tab.
 
 The sample filters reach the per-library collections by `sample` and the per-time-point ones by
 `time_point`; the per-gene and per-window calls follow them by the time point of their peak, so
-picking late libraries shows the genes and windows that peak late. The heatmaps are fixed
-selections over the whole course and do not follow the filters.
+picking late libraries shows the genes and windows that peak late. A tab's own filters reach
+every tile of the tab: the median curves of Gene dynamics and Signal dynamics are computed in the
+tile from one row per gene (or window) and time point, over the genes or windows in scope, and
+the top-N curves and heatmaps keep those of their fixed selection that are in scope. On Genome
+signal the chromosome filter narrows the binned tiles and the per-chromosome shares; the bigWig
+lanes follow the region brushed on the binned lanes.
 
 ## Reading the dashboard
 

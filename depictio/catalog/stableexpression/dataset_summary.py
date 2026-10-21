@@ -8,7 +8,8 @@ genes dropped, unmapped, the mapped share and the failure reason when nothing
 mapped), the samples each filter rejected and the samples kept in the merged
 matrix, the median zero share, missing share and skewness of its samples, and
 its outcome: ``Merged``, ``No gene mapped``, ``Only rare genes`` or
-``All samples filtered out``.
+``All samples filtered out``. ``design`` is the array design, or the platform
+for RNA-seq: what fixes the share of the genes a dataset can measure.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "platform": pl.Utf8,
     "normalisation": pl.Utf8,
     "array_design": pl.Utf8,
+    "design": pl.Utf8,
     "outcome": pl.Utf8,
     "conditions": pl.Int64,
     "samples_downloaded": pl.Int64,
@@ -55,4 +57,6 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
-    return dataset_table(sources).select(list(OUTPUT_SCHEMA))
+    # What fixes the genes a dataset can measure: its array design, or RNA-seq.
+    design = pl.coalesce("array_design", pl.col("platform"))
+    return dataset_table(sources).with_columns(design.alias("design")).select(list(OUTPUT_SCHEMA))

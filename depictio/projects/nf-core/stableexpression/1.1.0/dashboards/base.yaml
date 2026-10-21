@@ -374,7 +374,7 @@ main_dashboard:
     section: Findings
     source_tab: Candidates
     source_component: cand-measures
-    caption: One point per candidate, Normfinder against geNorm M; a gene steady by both sits low and left.
+    caption: Normfinder rank against geNorm rank per candidate; bottom left on the diagonal is steady by both measures.
     hide_legend: true
     tag: se-ov-hl-measures
     index: ov-hl-measures
@@ -660,29 +660,25 @@ tabs:
     title: Datasets by outcome
     description: Datasets per platform, stacked by what became of them.
     layout: {x: 4, y: 0, w: 4, h: 4}
-  - component_type: advanced_viz
+  - component_type: figure
     workflow_tag: stableexpression
     data_collection_tag: stableexpression_dataset_summary
-    use: stableexpression/dataset_plane
-    viz_kind: scatter_xy
-    config:
-      viz_kind: scatter_xy
-      x_col: samples_kept
-      y_col: missing_share
-      label_col: accession
-      color_col: platform
-      log_x: true
-      x_title: Samples kept (log scale)
-      y_title: Share of the genes not measured
-      top_n_labels: 0
-      selection_enabled: true
-      selection_column: dataset
+    use: stableexpression/missing_by_design
+    visu_type: strip
+    dict_kwargs:
+      x: design
+      y: missing_share
+      color: platform
+      hover_data: [accession, samples_kept]
+      labels: {design: Array design, missing_share: Share of the genes not measured, platform: '', accession: Accession, samples_kept: Samples kept}
     section: Dataset profile
-    tag: se-ds-av-plane
+    tag: se-ds-fig-missing
     index: ds-plane
-    title: Samples kept against genes missing
-    description: One point per dataset; high up, a platform that covers a small part of the genes.
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    title: Genes missing, by array design
+    description: >-
+      One point per dataset. An array measures a fixed set of probes, so the datasets of one
+      design line up at one share; RNA-seq measures almost every gene.
+    layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: stableexpression
     data_collection_tag: stableexpression_dataset_summary
@@ -737,15 +733,14 @@ tabs:
     icon: mdi:counter
     color: cyan
     description: Gene ids in, the share kept, genes per dataset and rare genes dropped
-  - name: Fate of the gene ids
-    icon: mdi:chart-bar
-    color: cyan
-    description: Ids kept, collapsed, rare or unmapped, by platform and by share
   - name: Fate per dataset
     icon: mdi:chart-bar
     color: cyan
     description: Each dataset's ids by fate, as shares of what it came with
-    collapsed: true
+  - name: Fate of the gene ids
+    icon: mdi:chart-bar
+    color: cyan
+    description: Ids kept, collapsed, rare or unmapped, by platform and by share
   - name: Mapping table
     icon: mdi:table
     color: gray
@@ -873,24 +868,28 @@ tabs:
     title: Rare genes
     description: Ids of genes seen in too few datasets, which the pipeline drops before merging.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  - component_type: figure
+  - component_type: advanced_viz
     workflow_tag: stableexpression
     data_collection_tag: stableexpression_id_mapping
-    use: stableexpression/id_fate_by_platform
-    visu_type: histogram
-    dict_kwargs:
-      x: platform
-      y: gene_ids
-      color: fate
-      histfunc: sum
-      barnorm: percent
-      category_orders: {fate: [Kept, Collapsed, Rare gene, Unmapped]}
-      labels: {platform: '', gene_ids: Share of the ids (%), fate: ''}
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: platform
+      taxon_col: fate
+      rank_col: null
+      abundance_col: gene_ids
+      normalise_to_one: true
+      sample_sort: category
+      sort_category: Kept
+      y_zoom: auto
+      top_n: 4
+      value_title: Share of the ids
+      hidden_controls: [rank, top_n, group]
     section: Fate of the gene ids
     tag: se-id-fig-platform
     index: id-platform-bars
     title: Fate of the ids by platform
-    description: Each platform's ids, summed over its datasets, by fate.
+    description: Every dataset of a platform pooled, its ids split by fate. Kept fills most of each bar, so the axis starts near the smallest kept share (the // marks the cut); switch Zoom off for the whole bar.
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: stableexpression
@@ -909,23 +908,29 @@ tabs:
     title: Shares per dataset, by fate
     description: Datasets by the share of their ids in each fate; kept near 1 is a clean mapping.
     layout: {x: 4, y: 0, w: 4, h: 4}
-  - component_type: figure
+  - component_type: advanced_viz
     workflow_tag: stableexpression
     data_collection_tag: stableexpression_id_mapping
-    use: stableexpression/id_fate_bars
-    visu_type: bar
-    dict_kwargs:
-      x: dataset
-      y: share
-      color: fate
-      barmode: stack
-      category_orders: {fate: [Kept, Collapsed, Rare gene, Unmapped]}
-      labels: {dataset: '', share: Share of the ids, fate: ''}
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: dataset
+      taxon_col: fate
+      rank_col: null
+      abundance_col: gene_ids
+      normalise_to_one: true
+      sample_sort: category
+      sort_category: Kept
+      group_col: platform
+      y_zoom: auto
+      top_n: 4
+      value_title: Share of the dataset's ids
+      hidden_controls: [rank, top_n]
     section: Fate per dataset
     tag: se-id-fig-datasets
     index: id-dataset-bars
     title: Fate of the ids, dataset by dataset
-    description: One bar per dataset, its ids split by fate; a grey bar is a dataset that mapped nothing.
+    description: One bar per dataset, its ids split by fate, grouped by platform and sorted by the share kept. Sort by name, total or another fate, or regroup, from the controls; Normalise off shows the id counts.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: stableexpression
@@ -1138,7 +1143,10 @@ tabs:
     tag: se-rank-av-distribution
     index: rank-distribution
     title: The best genes of each section
-    description: Ten genes, the best of each section, then the second best as Top N grows; colour is the section.
+    description: >-
+      Ten genes, the best of each section, then the second best as Top N grows; colour is the
+      section. Boxes over every sample, from statistics the recipe computed (the matrix is too large
+      to ship); the violins are below, drawn from each sample's value.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: stableexpression
@@ -1205,7 +1213,7 @@ tabs:
   - name: Measure agreement
     icon: mdi:chart-scatter-plot
     color: violet
-    description: Normfinder against geNorm M, one point per candidate
+    description: Normfinder rank against geNorm M rank, one point per candidate
   - name: Candidate detail
     icon: mdi:table
     color: gray
@@ -1343,23 +1351,26 @@ tabs:
     title: geNorm M
     description: geNorm's M measure, the mean variation of a gene's ratio to every other candidate; lower is steadier.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  - component_type: figure
+  - component_type: advanced_viz
     workflow_tag: stableexpression
     data_collection_tag: stableexpression_score_components
-    use: stableexpression/components_by_section
-    visu_type: histogram
-    dict_kwargs:
-      x: section
-      y: contribution
-      color: component
-      histfunc: avg
-      category_orders: {component: [Normfinder, geNorm M, Coefficient of variation, Robust CV, Missing values]}
-      labels: {section: '', contribution: Mean part of the score, component: ''}
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: section
+      taxon_col: component
+      rank_col: null
+      abundance_col: contribution
+      normalise_to_one: true
+      sample_sort: name
+      top_n: 5
+      value_title: Share of the score
+      hidden_controls: [rank, top_n, group]
     section: Score parts
     tag: se-cand-fig-parts
     index: cand-parts
     title: The score of each section, part by part
-    description: The mean of each part over a section's candidates, stacked; the bar's height is the section's mean score.
+    description: What each measure adds to the score of a section's candidates, as a share of it; sort by a part to see where it weighs most. Normalise off stacks the summed parts, so the bar's height is the section's total score.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: stableexpression
@@ -1368,22 +1379,29 @@ tabs:
     viz_kind: scatter_xy
     config:
       viz_kind: scatter_xy
-      x_col: normfinder_stability
-      y_col: genorm_m
+      x_col: normfinder_rank
+      y_col: genorm_rank
       label_col: gene_name
+      label_order_col: section_rank
       color_col: section
-      x_title: Normfinder stability value
-      y_title: geNorm M
+      x_title: Normfinder rank in the section (1 = steadiest)
+      y_title: geNorm M rank in the section
       log_x: true
-      top_n_labels: 0
+      log_y: true
+      reference_line: diagonal
+      top_n_labels: 10
       legend_pos: bottom
       selection_enabled: true
       selection_column: gene_id
     section: Measure agreement
     tag: se-cand-av-measures
     index: cand-measures
-    title: Normfinder against geNorm M
-    description: One point per candidate; colour is the section. Steady by both measures, a gene sits low and left.
+    title: Do Normfinder and geNorm agree?
+    description: >-
+      Each candidate's rank by Normfinder against its rank by geNorm M, within its section (log
+      axes, so the best ranks spread out). Near the dashed diagonal both measures agree; bottom
+      left is steady by both, the candidate to trust. A gene far off the diagonal is good by one
+      measure only. Labels name each section's leader.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: stableexpression

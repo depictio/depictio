@@ -7,6 +7,8 @@ stability value, geNorm M, coefficient of variation and its robust, MAD-based
 form), each measure normalised to 0-1 over the candidates, and the score split
 into its parts: each normalised measure times its weight, plus the penalty for
 the samples where the gene was not measured. The parts add up to the score.
+Normfinder and geNorm M are also ranked within the section (1 the steadiest),
+so the two measures can be compared rank against rank.
 The weights are a run parameter (``--stability_score_weights``) no table
 records, so they are recovered from the scores (see
 ``stable_expression.stability_weights``).
@@ -49,6 +51,8 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "stability_score": pl.Float64,
     "normfinder_stability": pl.Float64,
     "genorm_m": pl.Float64,
+    "normfinder_rank": pl.Int64,
+    "genorm_rank": pl.Int64,
     "cv": pl.Float64,
     "robust_cv": pl.Float64,
     "normfinder_norm": pl.Float64,

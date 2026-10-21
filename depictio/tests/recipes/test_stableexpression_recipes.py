@@ -236,6 +236,15 @@ def test_gene_stability_splits_the_score_into_parts(run_dir: Path) -> None:
     assert rows["ENSG05"]["overall_rank"] == 6
     assert rows["ENSG01"]["rank_weight"] == pytest.approx(1.0)
     assert rows["ENSG05"]["rank_weight"] == pytest.approx(1 / 6)
+    # Each measure is also ranked within its section, 1 the steadiest.
+    for _, section in out.group_by("section"):
+        for value, rank in (
+            ("normfinder_stability", "normfinder_rank"),
+            ("genorm_m", "genorm_rank"),
+        ):
+            ordered = section.sort(rank)
+            assert ordered[rank].to_list() == list(range(1, section.height + 1))
+            assert ordered[value].is_sorted()
 
 
 def test_gene_stability_reads_a_run_without_genorm(run_dir: Path) -> None:
@@ -247,6 +256,7 @@ def test_gene_stability_reads_a_run_without_genorm(run_dir: Path) -> None:
     out = execute_recipe("stableexpression/gene_stability.py", run_dir)
     assert out["genorm_m"].null_count() == out.height
     assert out["genorm_part"].to_list() == [0.0] * out.height
+    assert out["genorm_rank"].null_count() == out.height
 
 
 def test_score_components_add_up(run_dir: Path) -> None:

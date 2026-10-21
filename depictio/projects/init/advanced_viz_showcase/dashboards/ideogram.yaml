@@ -51,8 +51,10 @@ components:
       One bar per chromosome or scaffold, all from the same origin and drawn to its length, so
       the three assemblies compare by size first. Each tick is a BUSCO gene coloured by status:
       genome_C, the draft, is short of Complete genes and splits two chromosomes over four
-      scaffolds. Click a bar to filter the tab to that sequence, drag along it to filter a range;
-      switch marks and density, or rows and columns, from the controls. Input: BUSCO full tables
+      scaffolds. Click a bar to open that sequence and zoom along it (Ctrl or Cmd + scroll, the
+      buttons, or shift-drag), then filter the tab to it from the detail view; switch marks,
+      density or automatic level of detail from the toolbar, and hide a status from the legend.
+      Input: BUSCO full tables
       from nf-core/genomeqc; the density below reads binned VCF counts from nf-core/sarek.
     layout: { x: 0, y: 0, w: 8, h: 2 }
 

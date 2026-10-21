@@ -90,14 +90,20 @@ template:
         pick: "latest"
         group: "Software versions"
     groups:
-      - group: "Prediction"
-        key_patterns: ["tools", "binder_only", "use_ba_rank", "wide_format_output", "peptide_col_name", "accept_mixmhcpred_license", "peptides_split_*"]
-      - group: "Peptide lengths"
-        key_patterns: ["min_peptide_length_*", "max_peptide_length_*"]
-      - group: "Variant input"
-        key_patterns: ["ref_fasta", "vep_*", "mutation_flanking_aas", "wild_type", "proteome_reference", "germline_*", "proximal_*"]
+      # The pipeline's own parameter groups (nextflow_schema.json $defs at 3.2.0);
+      # institutional and generic options are folded into Run context.
+      - group: "Input/output"
+        key_patterns: ["input"]
+      - group: "Reference"
+        key_patterns: ["ref_fasta", "vep_cache", "vep_cache_version", "vep_species", "vep_genome", "vep_download_cache"]
+      - group: "Peptide prediction"
+        key_patterns: ["peptide_col_name", "min_peptide_length_classI", "max_peptide_length_classI", "min_peptide_length_classII", "max_peptide_length_classII", "tools", "wild_type", "proteome_reference", "mutation_flanking_aas", "wide_format_output", "binder_only", "use_ba_rank"]
+      - group: "Run optimisation"
+        key_patterns: ["peptides_split_maxchunks", "peptides_split_minchunksize"]
+      - group: "External software"
+        key_patterns: ["external_tools_meta", "netmhcpan_path", "netmhciipan_path", "accept_mixmhcpred_license"]
       - group: "Run context"
-        key_patterns: ["input", "outdir", "version", "publish_dir_mode", "monochrome_logs", "validate_params", "help*", "show_hidden", "pipelines_testdata_base_path", "trace_report_suffix", "config_profile_*", "custom_config_*", "multiqc_*", "max_multiqc_email_size", "plaintext_email"]
+        key_patterns: ["outdir", "email", "version", "publish_dir_mode", "email_on_fail", "plaintext_email", "max_multiqc_email_size", "monochrome_logs", "validate_params", "pipelines_testdata_base_path", "trace_report_suffix", "help", "help_full", "show_hidden", "genomes", "config_profile_*", "custom_config_*", "multiqc_*"]
     highlight:
       - "tools"
       - "min_peptide_length_classI"
@@ -522,4 +528,12 @@ links:
     target_type: "table"
     link_config: {resolver: "direct", target_field: "length_class"}
     description: "Carry a peptide-length pick to the variant peptides"
+    enabled: true
+  # A tool picked on the Predictors tab reaches that tool's predictions.
+  - source_dc_tag: "epitopeprediction_predictor_summary"
+    source_column: "predictor"
+    target_dc_tag: "epitopeprediction_predictions"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "predictor"}
+    description: "Carry a tool pick on the Predictors tab to the predictions"
     enabled: true

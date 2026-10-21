@@ -20,6 +20,7 @@ import {
   type SwitchProps,
 } from '@mantine/core';
 import { useFullscreenPortalTarget } from '../../chrome/useFullscreenPortalTarget';
+import { planGroup, rowControlWidth } from '../controlsDock';
 
 /**
  * One layout for every advanced-viz control, wherever it is drawn: the strip
@@ -63,14 +64,25 @@ export const VizControlCell: React.FC<{ children: React.ReactNode }> = ({ childr
 
 /**
  * Which container the controls are drawn in, published by `VizControlsGrid`.
- * Only the grid itself reads it today; the fields lay out the same way in
- * both, which is what keeps the strip and the popover looking alike.
+ * The fields lay out the same way in the strip and the column, which is what
+ * keeps the strip and the popover looking alike. `row` is the top dock's
+ * single line, where every field turns compact: a short label beside a
+ * narrower input, dropdowns included, and no group captions.
  */
-const VizControlsLayoutContext = createContext<'strip' | 'column'>('column');
+export type VizControlsLayout = 'strip' | 'column' | 'row';
 
-export function useVizControlsLayout(): 'strip' | 'column' {
+const VizControlsLayoutContext = createContext<VizControlsLayout>('column');
+
+export function useVizControlsLayout(): VizControlsLayout {
   return useContext(VizControlsLayoutContext);
 }
+
+/** Width of a dropdown on the top dock's line. */
+export const VIZ_ROW_DROPDOWN_PX = 120;
+/** Width of a multi-value dropdown on the top dock's line. */
+export const VIZ_ROW_MULTISELECT_PX = 160;
+/** Space between a label and its input on the top dock's line. */
+const ROW_LABEL_GAP = 6;
 
 /** Width of a compact inline control (number box, text or colour input). */
 export const VIZ_COMPACT_CONTROL_PX = 110;
@@ -91,8 +103,64 @@ export const VIZ_SLIDER_CONTROL_PX = 140;
 export const VizInlineField: React.FC<{
   label?: React.ReactNode;
   controlWidth?: number | 'auto' | 'fill';
+  /** The control's width on the top dock's line; derived from
+   *  `controlWidth` when not given (see `rowControlWidth`). */
+  rowWidth?: number | 'auto';
   children: React.ReactNode;
-}> = ({ label, controlWidth = VIZ_COMPACT_CONTROL_PX, children }) => (
+}> = ({ label, controlWidth = VIZ_COMPACT_CONTROL_PX, rowWidth, children }) => {
+  const layout = useVizControlsLayout();
+  const hasLabel = label !== undefined && label !== null && label !== '';
+  if (layout === 'row') {
+    // One line: a short dim label, never wrapped (its full text is the
+    // tooltip), right beside a narrower control.
+    const width = rowWidth ?? rowControlWidth(controlWidth);
+    return (
+      <Box
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: ROW_LABEL_GAP,
+          minHeight: VIZ_CONTROL_HEIGHT,
+          minWidth: 0,
+        }}
+      >
+        {hasLabel ? (
+          <Text
+            size="xs"
+            c="dimmed"
+            fw={500}
+            truncate
+            title={typeof label === 'string' ? label : undefined}
+            style={{ flex: '0 1 auto', minWidth: 0, maxWidth: 140 }}
+          >
+            {label}
+          </Text>
+        ) : null}
+        <Box
+          style={{
+            flex: width === 'auto' ? '0 1 auto' : `0 0 ${width}px`,
+            width: width === 'auto' ? undefined : width,
+            minWidth: 0,
+          }}
+        >
+          {children}
+        </Box>
+      </Box>
+    );
+  }
+  return (
+    <StackedInlineField label={hasLabel ? label : null} controlWidth={controlWidth}>
+      {children}
+    </StackedInlineField>
+  );
+};
+
+/** `VizInlineField` in the strip and the column. */
+const StackedInlineField: React.FC<{
+  label: React.ReactNode;
+  controlWidth: number | 'auto' | 'fill';
+  children: React.ReactNode;
+}> = ({ label, controlWidth, children }) => (
   <Box
     style={{
       display: 'flex',
@@ -255,23 +323,35 @@ export type VizSelectProps = Omit<SelectProps, 'size' | 'w'>;
  */
 const DROPDOWN_STYLES = { label: { marginBottom: 4 } } as const;
 
-/** A Select: the one kind of control that keeps its title above the input. */
+/**
+ * A Select: the one kind of control that keeps its title above the input,
+ * except on the top dock's line, where the title moves beside it (and stays
+ * the input's aria-label) so the line stays one line.
+ */
 export const VizSelect: React.FC<VizSelectProps> = ({ comboboxProps, ...rest }) => {
   // Portaled into the fullscreen element when there is one, or the options
   // would land on document.body and never paint over a fullscreen figure.
   const fsPortalTarget = useFullscreenPortalTarget();
-  return (
-    <Select
-      styles={DROPDOWN_STYLES}
-      {...rest}
-      size="xs"
-      comboboxProps={{
-        withinPortal: true,
-        ...comboboxProps,
-        portalProps: { target: fsPortalTarget, ...comboboxProps?.portalProps },
-      }}
-    />
-  );
+  const layout = useVizControlsLayout();
+  const combobox = {
+    withinPortal: true,
+    ...comboboxProps,
+    portalProps: { target: fsPortalTarget, ...comboboxProps?.portalProps },
+  };
+  if (layout === 'row') {
+    const { label, description: _description, 'aria-label': ariaLabel, ...input } = rest;
+    return (
+      <VizInlineField label={label} rowWidth={VIZ_ROW_DROPDOWN_PX}>
+        <Select
+          {...input}
+          size="xs"
+          aria-label={ariaFrom(label, ariaLabel)}
+          comboboxProps={{ width: 'max-content', position: 'bottom-start', ...combobox }}
+        />
+      </VizInlineField>
+    );
+  }
+  return <Select styles={DROPDOWN_STYLES} {...rest} size="xs" comboboxProps={combobox} />;
 };
 
 export type VizMultiSelectProps = Omit<MultiSelectProps, 'size' | 'w'>;
@@ -281,18 +361,26 @@ export const VizMultiSelect: React.FC<VizMultiSelectProps> = ({ comboboxProps, .
   // Portaled into the fullscreen element when there is one, or the options
   // would land on document.body and never paint over a fullscreen figure.
   const fsPortalTarget = useFullscreenPortalTarget();
-  return (
-    <MultiSelect
-      styles={DROPDOWN_STYLES}
-      {...rest}
-      size="xs"
-      comboboxProps={{
-        withinPortal: true,
-        ...comboboxProps,
-        portalProps: { target: fsPortalTarget, ...comboboxProps?.portalProps },
-      }}
-    />
-  );
+  const layout = useVizControlsLayout();
+  const combobox = {
+    withinPortal: true,
+    ...comboboxProps,
+    portalProps: { target: fsPortalTarget, ...comboboxProps?.portalProps },
+  };
+  if (layout === 'row') {
+    const { label, description: _description, 'aria-label': ariaLabel, ...input } = rest;
+    return (
+      <VizInlineField label={label} rowWidth={VIZ_ROW_MULTISELECT_PX}>
+        <MultiSelect
+          {...input}
+          size="xs"
+          aria-label={ariaFrom(label, ariaLabel)}
+          comboboxProps={{ width: 'max-content', position: 'bottom-start', ...combobox }}
+        />
+      </VizInlineField>
+    );
+  }
+  return <MultiSelect styles={DROPDOWN_STYLES} {...rest} size="xs" comboboxProps={combobox} />;
 };
 
 /** Space between two control rows: wider than a title-to-input gap. */
@@ -330,12 +418,14 @@ function flattenControls(children: React.ReactNode): React.ReactElement[] {
  * inputs on the bottom), and groups sit side by side while they fit; a narrow
  * tile wraps down to one control per line.
  */
-const StripFlow: React.FC<{ children: React.ReactNode; testId?: string }> = ({
-  children,
-  testId,
-}) => (
+const StripFlow: React.FC<{
+  children: React.ReactNode;
+  testId?: string;
+  groupBody?: boolean;
+}> = ({ children, testId, groupBody }) => (
   <Box
     data-testid={testId}
+    data-viz-group-body={groupBody ? '' : undefined}
     style={{
       display: 'flex',
       flexWrap: 'wrap',
@@ -368,24 +458,60 @@ const StripFlow: React.FC<{ children: React.ReactNode; testId?: string }> = ({
   </Box>
 );
 
+/** Space between two controls on the top dock's line, px (`fitInline`'s gap). */
+export const VIZ_ROW_GAP_PX = 12;
+
+/**
+ * The top dock's line: the controls side by side at their own compact widths,
+ * vertically centred. It wraps only when the first control alone is wider
+ * than the line; which controls are on it at all is the dock's pick
+ * (`fitInline`). No cells: each control is a flex item itself, so the line
+ * holds the same elements, in the same order, as the column the overflow
+ * popover draws, and the dock can match the two up by position.
+ */
+const RowFlow: React.FC<{
+  children: React.ReactNode;
+  testId?: string;
+  groupBody?: boolean;
+}> = ({ children, testId, groupBody }) => (
+  <Box
+    className="dpx-viz-row"
+    data-testid={testId}
+    data-viz-group-body={groupBody ? '' : undefined}
+    style={{
+      display: 'flex',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      columnGap: VIZ_ROW_GAP_PX,
+      rowGap: 4,
+      minWidth: 0,
+    }}
+  >
+    {children}
+  </Box>
+);
+
 /**
  * The container every surface lays controls out in.
  *
  * `strip` is the wrapping row drawn under a tile's title (`StripFlow`).
  * `column` is a stack for the rail, the popover and the inspector: one row
  * per control, rows spaced wider than a title is from its input.
+ * `row` is the top dock's single line (`RowFlow`).
  *
  * `framed` draws the block as its own bordered, tinted panel with a small
  * caption, so inside a tile it never blends into the title, badges or
  * figure. Surfaces that are already a controls panel (the popover, the
  * inspector tab) leave it off. `headerAction` sits at the right of that
- * caption (the placement picker).
+ * caption (the placement picker). `groupBody` marks the grid as the body of a
+ * `VizControlGroup`, which is how the dock finds a group's controls.
  */
 export const VizControlsGrid: React.FC<{
-  layout: 'strip' | 'column';
+  layout: VizControlsLayout;
   framed?: boolean;
   title?: string;
   headerAction?: React.ReactNode;
+  groupBody?: boolean;
   children: React.ReactNode;
   'data-testid'?: string;
 }> = ({
@@ -393,6 +519,7 @@ export const VizControlsGrid: React.FC<{
   framed = false,
   title = 'Controls',
   headerAction,
+  groupBody,
   children,
   'data-testid': testId,
 }) => {
@@ -400,9 +527,19 @@ export const VizControlsGrid: React.FC<{
   const body = (
     <VizControlsLayoutContext.Provider value={layout}>
       {layout === 'strip' ? (
-        <StripFlow testId={innerTestId}>{children}</StripFlow>
+        <StripFlow testId={innerTestId} groupBody={groupBody}>
+          {children}
+        </StripFlow>
+      ) : layout === 'row' ? (
+        <RowFlow testId={innerTestId} groupBody={groupBody}>
+          {children}
+        </RowFlow>
       ) : (
-        <Stack gap={ROW_GAP} data-testid={innerTestId}>
+        <Stack
+          gap={ROW_GAP}
+          data-testid={innerTestId}
+          data-viz-group-body={groupBody ? '' : undefined}
+        >
           {children}
         </Stack>
       )}
@@ -431,11 +568,35 @@ export const VizControlsGrid: React.FC<{
   );
 };
 
+/** A control's own text label, or null (no label, or not plain text). */
+function textLabelOf(el: React.ReactElement): string | null {
+  const label = (el.props as { label?: unknown }).label;
+  return typeof label === 'string' || typeof label === 'number' ? String(label) : null;
+}
+
+/** The wrappers that take a `label` prop: the only controls a group's title
+ *  can be handed to. */
+const LABELLED_CONTROLS = new Set<unknown>([
+  VizSwitch,
+  VizNumberInput,
+  VizSlider,
+  VizSegmented,
+  VizSelect,
+  VizMultiSelect,
+  VizInlineField,
+]);
+
 /**
  * A named group of related controls ("Labels", "Markers", "Colour"...): a
  * captioned divider over its own rows. In a column it spans the full width;
  * in the strip it is one segment of the row. Used where a renderer has more
  * than a handful of controls, so a reader can tell the groups apart.
+ *
+ * On the top dock's line the group dissolves: its controls join the line
+ * under their own labels, with no caption (see `planGroup`). Elsewhere a
+ * caption that would only repeat the label of the group's one control is
+ * dropped. `data-viz-group` / `data-viz-group-body` are how the dock finds a
+ * group's controls, whichever way it is drawn.
  */
 export function VizControlGroup({
   title,
@@ -445,11 +606,32 @@ export function VizControlGroup({
   children: React.ReactNode;
 }): React.ReactElement {
   const layout = useVizControlsLayout();
+  const items = flattenControls(children);
+  const plan = planGroup(title, items.map(textLabelOf), layout === 'row' ? 'row' : 'stack');
+  if (layout === 'row') {
+    const only = items[0];
+    const adopted =
+      plan.adoptTitle && only && LABELLED_CONTROLS.has(only.type)
+        ? React.cloneElement(only as React.ReactElement<{ label?: React.ReactNode }>, {
+            label: title,
+          })
+        : null;
+    // `display: contents`: the group's controls are items of the line itself.
+    return (
+      <div data-viz-group="" role="group" aria-label={title} style={{ display: 'contents' }}>
+        <div data-viz-group-body="" style={{ display: 'contents' }}>
+          {adopted ?? children}
+        </div>
+      </div>
+    );
+  }
   return (
-    <Box style={{ gridColumn: '1 / -1', minWidth: 0, height: '100%' }}>
+    <Box data-viz-group="" style={{ gridColumn: '1 / -1', minWidth: 0, height: '100%' }}>
       <Stack gap="xs" justify="space-between" h="100%">
-        <Divider label={title} labelPosition="left" />
-        <VizControlsGrid layout={layout}>{children}</VizControlsGrid>
+        {plan.caption != null ? <Divider label={plan.caption} labelPosition="left" /> : null}
+        <VizControlsGrid layout={layout} groupBody>
+          {children}
+        </VizControlsGrid>
       </Stack>
     </Box>
   );

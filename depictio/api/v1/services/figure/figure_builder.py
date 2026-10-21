@@ -452,6 +452,30 @@ def process_code_mode_figure(
     return True, fig, detected_visu_type
 
 
+def _value_axis_title_from_labels(fig: Any, visu_type: str, kwargs: dict[str, Any]) -> None:
+    """Title a histogram's value axis with the author's label, not px's formula.
+
+    ``px.histogram`` writes its aggregate into the value axis title: "sum of
+    Samples", "avg of Mean part of the score", "count (normalized as percent)".
+    An author who named that column in ``labels`` wrote the title the reader
+    should see, so it replaces px's. The counting form (no value column) takes
+    the label of ``count``.
+    """
+    labels = kwargs.get("labels")
+    if visu_type != "histogram" or not isinstance(labels, dict):
+        return
+    horizontal = kwargs.get("orientation") == "h"
+    value_col = kwargs.get("x" if horizontal else "y")
+    key = value_col if isinstance(value_col, str) else "count"
+    title = labels.get(key)
+    if not title:
+        return
+    if horizontal:
+        fig.update_xaxes(title_text=title)
+    else:
+        fig.update_yaxes(title_text=title)
+
+
 def create_figure_from_data(
     df: Any,
     visu_type: str,
@@ -718,6 +742,7 @@ def create_figure_from_data(
             )
 
         fig = plot_func(plot_df, **cleaned_kwargs)
+        _value_axis_title_from_labels(fig, visu_type, cleaned_kwargs)
 
         layout_updates: dict[str, Any] = {
             "paper_bgcolor": "rgba(0,0,0,0)",

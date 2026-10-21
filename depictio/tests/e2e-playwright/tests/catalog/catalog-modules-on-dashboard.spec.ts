@@ -237,8 +237,9 @@ const GENERAL_STATS_SELECTOR = "table, .js-plotly-plot";
 const KIND_CONTENT_SELECTOR: Record<string, string> = {
   genome_view: ".depictio-genome-view canvas",
   genome_chord: 'svg[role="img"]',
-  // Hand-drawn SVG too: a karyotype and a sample-by-locus genotype grid.
-  ideogram: 'svg[role="img"]',
+  // A karyotype paints one canvas (role="img", labelled with its counts).
+  ideogram: '.depictio-ideogram canvas[role="img"]',
+  // Hand-drawn SVG: a sample-by-locus genotype grid.
   allele_grid: 'svg[role="img"]',
   record_card: '.mantine-Card-root, [data-testid="advanced-viz-empty"]',
   group_compare: '.js-plotly-plot, [data-testid="group-compare-empty"]',

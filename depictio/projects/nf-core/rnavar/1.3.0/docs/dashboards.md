@@ -84,11 +84,12 @@ The import prunes what depends on an absent collection (RULES section 13):
 
 ## The tabs
 
-- **MultiQC**: STAR alignment scores and summary, Picard Mark Duplicates, samtools reads per contig
+- **MultiQC**: the general statistics first, then STAR alignment scores and summary, Picard Mark Duplicates, samtools reads per contig
   and XY counts. The megatest's report has no FastQC section.
 - **Alignment**: input reads, uniquely mapped, duplication and mismatch rate; the read fate per
-  sample; unique mapping against duplication with the record of the picked sample (alignment,
-  splicing, coverage and calls); the novel junctions per sample by intron motif. Tables collapsed.
+  sample (a stacked bar; its axis starts near the smallest unique share, a `//` marks the cut); unique mapping against duplication with the record of the picked sample (alignment,
+  splicing, coverage and calls); the junctions per sample by intron motif, novel first (the level switch shows the
+  annotated ones). Tables collapsed.
 - **Coverage**: covered bases at 10x, mapped reads, mitochondrial reads and reads on alt and
   unplaced contigs (on GRCh38, mostly the ribosomal DNA repeats); the depth histogram of every
   sample on log axes; mapped reads by contig class; mitochondrial against unplaced-contig reads,
@@ -99,7 +100,7 @@ The import prunes what depends on an absent collection (RULES section 13):
   signal); allele fraction against depth for every call, coloured by FILTER. A FILTER value picked
   on the left also narrows the calls.
 - **Annotation** (snpEff route): annotated calls by impact, genes hit by biotype, HIGH impact calls
-  and the coding allele fraction; impact classes per sample; the twelve commonest consequence terms;
+  and the coding allele fraction; impact classes per sample (stacked; the level switch shows snpEff's other breakdowns); the twelve commonest consequence terms;
   allele fraction against depth by impact. Gene and call tables collapsed; a gene picked in the gene
   table narrows the call table.
 - **Genome**: cards on the region in view (calls by type, distinct PASS variants, allele fraction,

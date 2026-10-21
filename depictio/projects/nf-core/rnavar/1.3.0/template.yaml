@@ -106,16 +106,26 @@ template:
         pick: "latest"
         group: "Software versions"
     groups:
+      # The pipeline's own parameter groups (nextflow_schema.json $defs at 1.3.0);
+      # institutional and generic options are folded into Run context.
+      - group: "Input/output"
+        key_patterns: ["input", "tools", "skip_tools", "save_merged_fastq", "skip_baserecalibration", "skip_exon_bed_check", "skip_intervallisttools", "skip_multiqc", "skip_variantfiltration", "extract_umi"]
+      - group: "UMI-tools preprocessing"
+        key_patterns: ["umitools_extract_method", "umitools_bc_pattern", "umitools_bc_pattern2", "umitools_umi_separator"]
       - group: "Alignment"
-        key_patterns: ["aligner", "star_*", "read_length", "seq_platform", "seq_center", "save_unaligned", "save_align_intermeds", "bam_csi_index", "remove_duplicates", "extract_umi", "umitools_*", "save_merged_fastq"]
+        key_patterns: ["aligner", "star_twopass", "star_ignore_sjdbgtf", "star_max_memory_bamsort", "star_bins_bamsort", "star_max_collapsed_junc", "star_max_intron_size", "seq_center", "seq_platform", "save_unaligned", "save_align_intermeds", "bam_csi_index"]
+      - group: "Postprocessing of alignment"
+        key_patterns: ["remove_duplicates"]
       - group: "Variant calling"
-        key_patterns: ["tools", "skip_tools", "skip_*", "gatk_*", "generate_gvcf", "no_intervals", "feature_type", "exon_bed", "dbsnp*", "known_indels*", "known_snps*"]
-      - group: "Annotation"
-        key_patterns: ["snpeff_*", "vep_*", "dbnsfp*", "spliceai_*", "bcftools_annotations*", "download_cache"]
+        key_patterns: ["gatk_hc_call_conf", "generate_gvcf", "gatk_interval_scatter_count", "no_intervals"]
+      - group: "Variant filtering"
+        key_patterns: ["gatk_vf_qd_filter", "gatk_vf_fs_filter", "gatk_vf_window_size", "gatk_vf_cluster_size"]
+      - group: "Variant annotation"
+        key_patterns: ["vep_cache", "vep_cache_preflight_check", "snpeff_cache", "vep_include_fasta", "vep_dbnsfp", "dbnsfp", "dbnsfp_tbi", "dbnsfp_consequence", "dbnsfp_fields", "vep_loftee", "vep_version", "vep_spliceai", "spliceai_snv", "spliceai_snv_tbi", "spliceai_indel", "spliceai_indel_tbi", "vep_spliceregion", "vep_custom_args", "outdir_cache", "vep_out_format", "bcftools_annotations", "bcftools_annotations_tbi", "bcftools_columns", "bcftools_header_lines"]
       - group: "Reference genome"
-        key_patterns: ["genome", "igenomes_*", "fasta*", "dict", "gtf", "gff", "star_index", "save_reference"]
+        key_patterns: ["igenomes_base", "igenomes_ignore", "save_reference", "download_cache", "genome", "fasta", "dict", "fasta_fai", "gtf", "gff", "star_index", "exon_bed", "read_length", "known_indels", "known_indels_tbi", "dbsnp", "dbsnp_tbi", "snpeff_db", "vep_genome", "vep_species", "vep_cache_version", "feature_type", "genomes"]
       - group: "Run context"
-        key_patterns: ["input", "outdir", "version", "publish_dir_mode", "monochrome_logs", "validate_params", "help*", "show_hidden", "config_profile_*", "custom_config_*", "multiqc_*", "max_multiqc_email_size", "plaintext_email", "modules_testdata_base_path", "pipelines_testdata_base_path", "trace_report_suffix"]
+        key_patterns: ["outdir", "version", "publish_dir_mode", "email", "email_on_fail", "plaintext_email", "max_multiqc_email_size", "monochrome_logs", "validate_params", "modules_testdata_base_path", "pipelines_testdata_base_path", "trace_report_suffix", "help", "help_full", "show_hidden", "config_profile_*", "custom_config_*", "multiqc_*"]
     highlight:
       - "genome"
       - "aligner"
@@ -975,4 +985,17 @@ links:
       resolver: "region"
       columns: {chrom: "chrom", pos: "pos"}
     description: "A region typed or brushed on the variant navigator narrows the call track and the region cards"
+    enabled: true
+
+  # ----------------------------------------------------------------
+  # Alignment tab. Its sliders (uniquely mapped, mismatch rate) sit on the
+  # STAR summary; this reverse link carries the samples they keep to the hub,
+  # which fans them out to the read fate, junction, duplication and hub tiles.
+  # ----------------------------------------------------------------
+  - source_dc_tag: "star_log_final"
+    source_column: "sample"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Carry the samples kept by the Alignment tab's STAR sliders to the hub and on to every per-sample tile"
     enabled: true

@@ -26,6 +26,12 @@ Output schema:
     overlapping_genes : Int64        genes overlapping any other
     overlapping_pct : Float64        overlapping genes, percent of all genes
     contained_same_strand_pct : Float64  same-strand nested genes, percent of all genes
+    not_overlapping_genes : Int64    genes overlapping no other
+    overlapping_not_nested : Int64   genes overlapping another without lying inside it
+
+The last two split the annotation with the nested genes into four parts that add up
+to ``total_genes``, the composition the Annotation tab stacks per assembly. A
+nested gene overlaps the gene it sits in, so it is one of the overlapping genes.
 """
 
 from __future__ import annotations
@@ -60,6 +66,8 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "overlapping_genes": pl.Int64,
     "overlapping_pct": pl.Float64,
     "contained_same_strand_pct": pl.Float64,
+    "not_overlapping_genes": pl.Int64,
+    "overlapping_not_nested": pl.Int64,
 }
 
 #: The step's row label -> output column.
@@ -105,6 +113,16 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         wide.with_columns(
             _share("overlapping_genes").alias("overlapping_pct"),
             _share("contained_same_strand").alias("contained_same_strand_pct"),
+            (pl.col("total_genes") - pl.col("overlapping_genes"))
+            .clip(lower_bound=0)
+            .alias("not_overlapping_genes"),
+            (
+                pl.col("overlapping_genes")
+                - pl.col("contained_same_strand")
+                - pl.col("contained_opposite_strand")
+            )
+            .clip(lower_bound=0)
+            .alias("overlapping_not_nested"),
         )
         .select([pl.col(c).cast(t) for c, t in OUTPUT_SCHEMA.items()])
         .sort("genome")

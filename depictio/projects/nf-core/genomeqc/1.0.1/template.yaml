@@ -101,24 +101,30 @@ template:
         pick: "latest"
         group: "Software versions"
     groups:
-      - group: "Assemblies"
-        key_patterns: ["input", "genome_only", "save_assembly", "save_sorted_seqs", "save_filtered_seqs", "kvalue"]
-      - group: "Completeness (BUSCO)"
-        key_patterns: ["busco_*", "skip_busco", "min_buscos"]
-      - group: "Telomeres (tidk)"
-        key_patterns: ["skip_tidk", "repeat"]
-      - group: "Annotation"
-        key_patterns: ["val_tool", "save_validated_annotation", "save_longest_isoform", "save_extracted_seqs", "groups"]
-      - group: "Orthology"
-        key_patterns: ["ortho_version", "save_orthofinder_results"]
+      # The pipeline's own parameter groups (nextflow_schema.json $defs at 1.0.1);
+      # institutional and generic options are folded into Run context.
+      - group: "Input/output"
+        key_patterns: ["input"]
+      - group: "Pipeline mode"
+        key_patterns: ["genome_only", "kvalue", "container_engine"]
+      - group: "BUSCO"
+        key_patterns: ["groups", "busco_lineage", "busco_lineages_path", "busco_config", "busco_clean", "min_buscos", "skip_busco"]
       - group: "Decontamination"
-        key_patterns: ["gxdb*", "ramdisk", "save_cleaned_*"]
-      - group: "Repeats"
-        key_patterns: ["te", "te_*", "is_plant", "curated_lib", "famdb_*", "RM_*", "run_repeatmodeler", "repeatmasker_speed"]
+        key_patterns: ["gxdb", "gxdb_manifest", "ramdisk", "save_cleaned_genome", "save_cleaned_adaptor"]
+      - group: "Annotation"
+        key_patterns: ["val_tool"]
+      - group: "Orthology"
+        key_patterns: ["ortho_version", "save_orthofinder_results", "save_longest_isoform"]
+      - group: "TIDK"
+        key_patterns: ["skip_tidk", "repeat"]
       - group: "Tree summary"
-        key_patterns: ["tree_*", "circular_rings", "quality_*", "show_ring_values", "skip_plots_*"]
+        key_patterns: ["tree_scale", "tree_margin", "tree_style", "circular_rings", "quality_preset", "quality_thresholds", "show_ring_values", "skip_plots_genome_anno", "skip_plots_genome_only"]
+      - group: "Save intermediate files"
+        key_patterns: ["save_sorted_seqs", "save_validated_annotation", "save_assembly", "save_extracted_seqs", "save_filtered_seqs"]
+      - group: "TE annotation"
+        key_patterns: ["te", "is_plant", "curated_lib", "famdb_library", "famdb_lineage", "run_repeatmodeler", "repeatmasker_speed", "RM_download_db", "RM_db", "te_clusterer", "te_cluster_identity", "te_cluster_coverage"]
       - group: "Run context"
-        key_patterns: ["outdir", "version", "publish_dir_mode", "monochrome_logs", "validate_params", "help*", "show_hidden", "container_engine", "config_profile_*", "custom_config_*", "multiqc_*", "max_multiqc_email_size", "plaintext_email", "pipelines_testdata_base_path", "trace_report_suffix"]
+        key_patterns: ["outdir", "email", "version", "publish_dir_mode", "email_on_fail", "plaintext_email", "max_multiqc_email_size", "monochrome_logs", "validate_params", "pipelines_testdata_base_path", "trace_report_suffix", "help", "help_full", "show_hidden", "genomes", "config_profile_*", "custom_config_*", "multiqc_*"]
     highlight:
       - "busco_lineage"
       - "val_tool"
@@ -475,6 +481,8 @@ workflows:
               "overlapping_genes": "Genes overlapping any other"
               "overlapping_pct": "Overlapping genes, percent"
               "contained_same_strand_pct": "Same-strand nested genes, percent"
+              "not_overlapping_genes": "Genes overlapping no other"
+              "overlapping_not_nested": "Genes overlapping another without lying inside it"
 
       # ----------------------------------------------------------------
       # Orthology: OrthoFinder's summary tables and genomeqc's ortho seq count.
@@ -503,6 +511,7 @@ workflows:
               "species_specific_orthogroups": "Orthogroups of this species alone"
               "genes_in_species_specific": "Genes in them"
               "genes_in_species_specific_pct": "Their share of the genes, percent"
+              "genes_in_shared_orthogroups": "Genes in orthogroups other species share"
 
       - data_collection_tag: "orthofinder_orthogroup_matrix"
         optional: true  # as orthofinder_species_stats
@@ -649,6 +658,26 @@ workflows:
               "class_snd_stage": "Organelle call (mitochondrion, plastid, unknown)"
               "tiara_class": "One class: mitochondrion or plastid for organelles, the first stage otherwise"
               "is_eukaryotic": "Eukarya, mitochondrion or plastid"
+
+      # Sequences per Tiara class: the per-sequence table counted, so the class
+      # composition of each assembly can be stacked. Declared after Tiara, which
+      # it reads through dc_ref.
+      - data_collection_tag: "tiara_class_counts"
+        optional: true  # as tiara_classifications
+        description: "Sequences per Tiara class and assembly, with the class's share"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/genomeqc/tiara_class_counts.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome": "Assembly name"
+              "tiara_class": "Tiara's class"
+              "sequences": "Sequences of 3 kb or more in the class"
+              "share_pct": "Share of the assembly's classified sequences, percent"
 
       # ----------------------------------------------------------------
       # Repeats: RepeatMasker (--te repeatmasker).
@@ -873,6 +902,13 @@ links:
     enabled: true
   - source_dc_tag: "genomes"
     source_column: "genome"
+    target_dc_tag: "tiara_class_counts"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Filter the Tiara class counts by the genomes picked in the left panel"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
     target_dc_tag: "repeatmasker_repeat_classes"
     target_type: "table"
     link_config: {resolver: "direct", target_field: "genome"}
@@ -884,4 +920,74 @@ links:
     target_type: "table"
     link_config: {resolver: "direct", target_field: "genome"}
     description: "Filter the masking summary by the genomes picked in the left panel"
+    enabled: true
+  # The hub also reaches the two tables genomeqc writes itself, which name the
+  # assembly in a `species` / `Species` column.
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "fcsgx_contamination"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "species"}
+    description: "Filter the foreign share by the genomes picked in the left panel"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "ortho_seq_count"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "Species"}
+    description: "Filter the orthologue-carrying sequences by the genomes picked in the left panel"
+    enabled: true
+
+  # ----------------------------------------------------------------
+  # Tab filters back to the hub. Each child tab filters one per-assembly
+  # collection; these reverse links carry the assemblies it keeps to the
+  # hub, which fans them out to the tab's other collections.
+  # ----------------------------------------------------------------
+  # Assembly tab: the N50 / sequence sliders on QUAST.
+  - source_dc_tag: "quast_assembly_report"
+    source_column: "assembly_id"
+    target_dc_tag: "genomes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "assembly_label"}
+    description: "Carry the assemblies kept by the Assembly tab's QUAST sliders to the hub and the length ladder"
+    enabled: true
+  # Contamination tab: the FCS-GX action and Tiara class picks.
+  - source_dc_tag: "fcsgx_actions"
+    source_column: "genome"
+    target_dc_tag: "genomes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Carry the genomes holding the picked FCS-GX action to the hub, the foreign share and the adaptor calls"
+    enabled: true
+  - source_dc_tag: "tiara_classifications"
+    source_column: "genome"
+    target_dc_tag: "genomes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Carry the genomes holding the picked Tiara class to the hub, the foreign share and the FCS calls"
+    enabled: true
+  - source_dc_tag: "tiara_classifications"
+    source_column: "tiara_class"
+    target_dc_tag: "tiara_class_counts"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "tiara_class"}
+    description: "Carry the Tiara class pick to the class counts"
+    enabled: true
+  # Completeness tab: the complete-BUSCO slider.
+  - source_dc_tag: "busco_batch_summary"
+    source_column: "assembly_id"
+    target_dc_tag: "genomes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Carry the assemblies kept by the Completeness tab's BUSCO slider to the hub and the BUSCO classes"
+    enabled: true
+
+  # Karyotype tab: the sequence-length slider on the BUSCO karyotype keeps
+  # sequences; tidk names the same sequence ids (RefSeq accessions).
+  - source_dc_tag: "busco_karyotype"
+    source_column: "sequence"
+    target_dc_tag: "tidk_search_windows"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sequence"}
+    description: "Carry the sequences kept by the Karyotype tab's length slider to the telomeric repeat windows"
     enabled: true

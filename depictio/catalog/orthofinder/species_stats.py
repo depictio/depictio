@@ -21,6 +21,10 @@ Output schema:
     species_specific_orthogroups : Int64       orthogroups of this species alone
     genes_in_species_specific : Int64          genes in them
     genes_in_species_specific_pct : Float64    their share of the genes, percent
+    genes_in_shared_orthogroups : Int64        genes in orthogroups other species share
+
+``genes_in_shared_orthogroups``, ``genes_in_species_specific`` and ``unassigned_genes``
+add up to ``genes``: the three parts a per-species composition stacks.
 """
 
 from __future__ import annotations
@@ -61,6 +65,7 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "species_specific_orthogroups": pl.Int64,
     "genes_in_species_specific": pl.Int64,
     "genes_in_species_specific_pct": pl.Float64,
+    "genes_in_shared_orthogroups": pl.Int64,
 }
 
 #: OrthoFinder's row label -> output column.
@@ -110,6 +115,10 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         for sp in species
     ]
     frame = pl.DataFrame(
-        rows, schema={c: (pl.Utf8 if c == "genome" else pl.Float64) for c in OUTPUT_SCHEMA}
+        rows, schema={"genome": pl.Utf8, **{c: pl.Float64 for c in ROWS.values()}}
+    ).with_columns(
+        (pl.col("genes_in_orthogroups") - pl.col("genes_in_species_specific").fill_null(0))
+        .clip(lower_bound=0)
+        .alias("genes_in_shared_orthogroups")
     )
     return frame.select([pl.col(c).cast(t) for c, t in OUTPUT_SCHEMA.items()]).sort("genome")

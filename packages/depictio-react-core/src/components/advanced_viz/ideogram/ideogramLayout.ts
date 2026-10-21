@@ -186,6 +186,9 @@ export interface ChromosomeSet {
   bars: ChromBar[];
   /** Bars the `max_chromosomes` guard removed. */
   dropped: number;
+  /** Those bars themselves, longest first: not drawn in the overview, but a
+   *  reader can still open one by name in the detail view. */
+  droppedBars: ChromBar[];
 }
 
 /** Chromosomes an assembly table contributes only when a feature lands on them:
@@ -260,14 +263,17 @@ export function chromosomeBars(
   }
 
   const cap = options.maxChromosomes ?? Number.POSITIVE_INFINITY;
-  if (ordered.length <= cap) return { bars: ordered, dropped: 0 };
+  if (ordered.length <= cap) return { bars: ordered, dropped: 0, droppedBars: [] };
   const keep = new Set(
     [...ordered]
       .sort((a, b) => b.length - a.length || compareChrom(a.name, b.name))
       .slice(0, Math.max(1, Math.floor(cap))),
   );
   const kept = ordered.filter((b) => keep.has(b));
-  return { bars: kept, dropped: ordered.length - kept.length };
+  const droppedBars = ordered
+    .filter((b) => !keep.has(b))
+    .sort((a, b) => b.length - a.length || compareChrom(a.name, b.name));
+  return { bars: kept, dropped: droppedBars.length, droppedBars };
 }
 
 // ---------------------------------------------------------------------------

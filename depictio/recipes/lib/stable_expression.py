@@ -371,7 +371,13 @@ def candidates_with_parts(summary: pl.DataFrame) -> pl.DataFrame:
     ).with_columns(
         # 1 / rank: the most stable gene in view outweighs any other, so a text
         # value's `top` aggregation (largest summed weight) names it.
-        (1.0 / pl.col("overall_rank")).alias("rank_weight")
+        (1.0 / pl.col("overall_rank")).alias("rank_weight"),
+        # Each measure's own rank within the section, 1 the steadiest: two
+        # measures that agree put a gene on the diagonal of one against the other.
+        *[
+            pl.col(raw).rank(method="ordinal").over("section").cast(pl.Int64).alias(f"{stem}_rank")
+            for raw, stem in (("normfinder_stability", "normfinder"), ("genorm_m", "genorm"))
+        ],
     )
 
 

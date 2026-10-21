@@ -1,5 +1,9 @@
 # nf-core/mcmicro 2.0.0: Depictio dashboards
 
+> **Status: early.** The template is kept as it is until Depictio's bioimage module lands. The
+> image tabs (Previews, and the image layer under Spatial) are a stand-in until then; the
+> cell-level tabs read the MCQUANT tables and will stay.
+
 One dashboard: an **Overview**, then child tabs in two groups, read as a funnel from the input
 images and their segmentation to the cells: where they sit, what they express and their shape.
 The template follows the family rules in `depictio/projects/nf-core/RULES.md` (ampliseq 2.18.0

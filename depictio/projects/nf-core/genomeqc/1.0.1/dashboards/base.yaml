@@ -371,8 +371,8 @@ main_dashboard:
   - component_type: highlight
     section: Findings
     source_tab: Orthology
-    source_component: orth-upset
-    caption: Orthogroups by the genomes they reach, largest intersection first; the bar of all genomes is the shared core.
+    source_component: orth-placement
+    caption: Each genome's genes in shared, genome-specific or no orthogroups; the axis starts near the smallest shared share, so the unplaced genes show.
     tag: gq-ov-hl-orthology
     index: ov-hl-orthology
     layout: {x: 4, y: 6, w: 4, h: 4}
@@ -460,7 +460,7 @@ tabs:
   - name: Assembly sections
     icon: mdi:chart-box-outline
     color: orange
-    description: QUAST's assembly statistics and contig counts, and the general statistics
+    description: The general statistics, then QUAST's assembly statistics and contig counts
   components:
   - component_type: text
     order: 1
@@ -474,13 +474,24 @@ tabs:
   - component_type: multiqc
     workflow_tag: genomeqc
     data_collection_tag: multiqc_data
+    use: multiqc/general_stats
+    selected_module: general_stats
+    selected_plot: general_stats
+    section: Assembly sections
+    tag: gq-mqc-general-stats
+    title: General statistics
+    description: The headline QUAST numbers of every assembly in one table.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: genomeqc
+    data_collection_tag: multiqc_data
     selected_module: quast
     selected_plot: Assembly Statistics
     section: Assembly sections
     tag: gq-mqc-quast-stats
     title: QUAST assembly statistics
     description: Length, N50, N90, L50, GC and sequences per assembly, as QUAST reports them.
-    layout: {x: 0, y: 0, w: 8, h: 4}
+    layout: {x: 0, y: 4, w: 8, h: 4}
   - component_type: multiqc
     workflow_tag: genomeqc
     data_collection_tag: multiqc_data
@@ -490,16 +501,6 @@ tabs:
     tag: gq-mqc-quast-contigs
     title: Sequences by length
     description: Sequences of each assembly in QUAST's length bins.
-    layout: {x: 0, y: 4, w: 8, h: 4}
-  - component_type: multiqc
-    workflow_tag: genomeqc
-    data_collection_tag: multiqc_data
-    selected_module: general_stats
-    selected_plot: general_stats
-    section: Assembly sections
-    tag: gq-mqc-general-stats
-    title: General statistics
-    description: The headline QUAST numbers of every assembly in one table.
     layout: {x: 0, y: 8, w: 8, h: 4}
   - component_type: interactive
     workflow_tag: genomeqc
@@ -895,40 +896,51 @@ tabs:
     title: Sequences classified
     description: Sequences of 3 kb or more Tiara classified. The bar splits them by class.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  - component_type: figure
+  - component_type: advanced_viz
     workflow_tag: genomeqc
     data_collection_tag: fcsgx_contamination
-    visu_type: bar
-    mode: code
-    code_content: |-
-      # One bar per genome: the share FCS-GX calls foreign.
-      d = df.sort('species')
-      fig = px.bar(d.to_pandas(), x='contaminant_pct', y='species', orientation='h', labels={'contaminant_pct': 'Called foreign (%)', 'species': ''})
-      fig.update_layout(margin=dict(t=10))
-      fig.update_yaxes(automargin=True)
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: species
+      value_cols: [non_contaminant_pct, contaminant_pct]
+      value_labels: {non_contaminant_pct: Not foreign, contaminant_pct: Called foreign}
+      taxon_palette: {Not foreign: '#adb5bd', Called foreign: '#e8590c'}
+      normalise_to_one: true
+      orientation: h
+      sample_sort: category
+      sort_category: Called foreign
+      y_zoom: auto
+      value_title: Share of the assembly
+      hidden_controls: [rank, top_n, group]
     section: Foreign sequence per genome
     tag: gq-con-fig-foreign
     index: con-foreign
     title: Share called foreign per genome
-    description: Bases FCS-GX assigns to another organism, in percent of the assembly.
+    description: Bases FCS-GX assigns to another organism, against the rest of the assembly. Every genome is over 99% clean, so the axis starts just below the cleanest share (the // marks the cut); switch Zoom off for the whole bar.
     layout: {x: 0, y: 0, w: 4, h: 4}
-  - component_type: figure
+  - component_type: advanced_viz
     workflow_tag: genomeqc
-    data_collection_tag: tiara_classifications
-    visu_type: bar
-    mode: code
-    code_content: |-
-      # Sequences per Tiara class, one stacked bar per genome.
-      colors = depictio_category_colors.get('tiara_class') or {}
-      d = df.group_by(['genome', 'tiara_class']).agg(pl.len().alias('sequences')).sort('genome')
-      fig = px.bar(d.to_pandas(), x='sequences', y='genome', color='tiara_class', orientation='h', color_discrete_map=colors, labels={'sequences': 'Sequences of 3 kb or more', 'genome': '', 'tiara_class': 'Tiara class'})
-      fig.update_layout(barmode='stack', margin=dict(t=10), legend_title_text='')
-      fig.update_yaxes(automargin=True)
+    data_collection_tag: tiara_class_counts
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: genome
+      taxon_col: tiara_class
+      rank_col: null
+      abundance_col: sequences
+      normalise_to_one: true
+      orientation: h
+      sample_sort: name
+      y_zoom: auto
+      top_n: 8
+      value_title: Share of the classified sequences
+      hidden_controls: [rank, top_n, group]
     section: Foreign sequence per genome
     tag: gq-con-fig-tiara
     index: con-tiara
     title: Tiara classes per genome
-    description: Each genome's classified sequences by the domain or organelle Tiara assigns them.
+    description: Each genome's sequences of 3 kb or more by the domain or organelle Tiara assigns them, as shares; Normalise off shows the counts. Sort by a class to rank the genomes on it.
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: table
     workflow_tag: genomeqc
@@ -1111,13 +1123,14 @@ tabs:
     config:
       default_rank: BUSCO class
       top_n: 4
-      normalise_to_one: false
+      normalise_to_one: true
       sample_sort: input
+      y_zoom: auto
     section: BUSCO classes
     tag: gq-cmp-av-classes
     index: cmp-classes
     title: BUSCO classes per assembly and mode
-    description: One bar per BUSCO run, the assembly then its proteins, split into the four classes.
+    description: One bar per BUSCO run, the assembly then its proteins, split into the four classes. Every run holds most of the set as complete, so the axis starts above the shared complete share (the // mark); Zoom off shows the whole bar.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: genomeqc
@@ -1311,7 +1324,7 @@ tabs:
     tag: gq-kar-av-busco
     index: kar-busco
     title: BUSCO density on each genome's sequences
-    description: One karyotype per genome, the 24 longest sequences that hold a BUSCO, shaded by complete BUSCOs per Mb. Click a bar to narrow the tab to it.
+    description: One karyotype per genome (pick one above the chart), the 24 longest sequences that hold a BUSCO, shaded by complete BUSCOs per Mb. Click a bar to zoom along it; filter the tab to it from there.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: genomeqc
@@ -1328,7 +1341,7 @@ tabs:
     tag: gq-kar-av-telomeres
     index: kar-telomeres
     title: Repeat units per 10 kb window
-    description: One karyotype per genome, its 24 longest sequences shaded by the copies of the searched unit per window.
+    description: One karyotype per genome, its 24 longest sequences shaded by the copies of the searched unit per window. Pick a genome above the chart; click a bar or Ctrl+wheel to zoom along it.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: genomeqc
@@ -1354,7 +1367,7 @@ tabs:
   - name: Repeat scope
     icon: mdi:filter-variant
     color: pink
-    description: The repeat classes the tiles keep
+    description: The repeat class narrows the class chart and table; the masking cards are per-genome totals
   grid_sections:
   - name: Repeats at a glance
     icon: mdi:counter
@@ -1521,7 +1534,7 @@ tabs:
   - name: Annotation scope
     icon: mdi:filter-variant
     color: indigo
-    description: The feature types and isoform view of the AGAT statistics table
+    description: Both picks narrow AGAT's statistics table only; the cards, gene models and overlaps count each annotation whole
   grid_sections:
   - name: Gene models at a glance
     icon: mdi:counter
@@ -1679,41 +1692,55 @@ tabs:
     title: Genes against exons per transcript
     description: One point per annotation and transcript type, sized by mean gene length. Protein-coding genes sit top right; the small RNAs bottom left.
     layout: {x: 0, y: 0, w: 8, h: 6}
-  - component_type: figure
+  - component_type: advanced_viz
     workflow_tag: genomeqc
     data_collection_tag: agat_gene_models
-    visu_type: bar
-    mode: code
-    code_content: |-
-      # Genes per transcript type, one stacked bar per genome.
-      colors = depictio_category_colors.get('feature_type') or {}
-      d = df.sort(['genome', 'genes'], descending=[False, True])
-      fig = px.bar(d.to_pandas(), x='genes', y='genome', color='feature_type', orientation='h', color_discrete_map=colors, labels={'genes': 'Genes', 'genome': '', 'feature_type': 'Transcript type'})
-      fig.update_layout(barmode='stack', margin=dict(t=10), legend_title_text='')
-      fig.update_yaxes(automargin=True)
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: genome
+      taxon_col: feature_type
+      rank_col: null
+      abundance_col: genes
+      normalise_to_one: true
+      orientation: h
+      sample_sort: name
+      y_zoom: auto
+      top_n: 8
+      value_title: Share of the genes
+      hidden_controls: [rank, top_n, group]
     section: Genes and overlaps
     tag: gq-ann-fig-types
     index: ann-gene-types
     title: Genes per transcript type
-    description: Each annotation's genes by the type of their transcripts, protein-coding first.
+    description: Each annotation's genes by the type of their transcripts, as shares; Normalise off shows the gene counts. Sort by a type to rank the annotations on it.
     layout: {x: 0, y: 0, w: 4, h: 4}
-  - component_type: figure
+  - component_type: advanced_viz
     workflow_tag: genomeqc
     data_collection_tag: gene_overlaps
-    visu_type: bar
-    mode: code
-    code_content: |-
-      # Nested genes per annotation, same strand against opposite strand.
-      d = df.select('genome', 'contained_same_strand', 'contained_opposite_strand').unpivot(index='genome', variable_name='nesting', value_name='genes')
-      d = d.with_columns(pl.col('nesting').replace({'contained_same_strand': 'Same strand', 'contained_opposite_strand': 'Opposite strand'}))
-      fig = px.bar(d.to_pandas(), x='genes', y='genome', color='nesting', orientation='h', barmode='group', labels={'genes': 'Genes inside another gene', 'genome': '', 'nesting': ''})
-      fig.update_layout(margin=dict(t=10), legend_title_text='')
-      fig.update_yaxes(automargin=True)
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: genome
+      value_cols: [not_overlapping_genes, overlapping_not_nested, contained_opposite_strand, contained_same_strand]
+      value_labels:
+        not_overlapping_genes: Overlapping none
+        overlapping_not_nested: Overlapping another
+        contained_opposite_strand: Nested, opposite strand
+        contained_same_strand: Nested, same strand
+      taxon_palette: {Overlapping none: '#adb5bd', Overlapping another: '#1c7ed6', 'Nested, opposite strand': '#0ca678', 'Nested, same strand': '#e8590c'}
+      normalise_to_one: true
+      orientation: h
+      sample_sort: category
+      sort_category: Nested, same strand
+      y_zoom: auto
+      value_title: Share of the genes
+      hidden_controls: [rank, top_n, group]
     section: Genes and overlaps
     tag: gq-ann-fig-nested
     index: ann-nested
-    title: Genes nested in another
-    description: Genes lying wholly inside another, on the same strand or the opposite one.
+    title: Genes by overlap with another gene
+    description: Each annotation's genes split four ways, overlapping no other gene, overlapping one, nested inside one on the opposite strand (often a gene in an intron) or on the same strand (often a split or duplicated model).
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: table
     workflow_tag: genomeqc
@@ -1750,12 +1777,16 @@ tabs:
   - name: Orthogroup scope
     icon: mdi:filter-variant
     color: cyan
-    description: Keep single-copy or multi-copy orthogroups
+    description: The copy class narrows the orthogroup UpSet and its cards; the per-genome stats have no orthogroup rows
   grid_sections:
   - name: Orthology at a glance
     icon: mdi:counter
     color: cyan
     description: Orthogroups, the shared core, genes placed and orthogroups of one genome
+  - name: Genes by orthogroup
+    icon: mdi:chart-bar
+    color: cyan
+    description: Each genome's genes in shared, genome-specific or no orthogroups
   - name: Shared orthogroups
     icon: mdi:set-merge
     color: cyan
@@ -1874,6 +1905,32 @@ tabs:
     title: Genome-specific orthogroups
     description: Orthogroups whose genes all come from a single genome.
     layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: genomeqc
+    data_collection_tag: orthofinder_species_stats
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: genome
+      value_cols: [genes_in_shared_orthogroups, genes_in_species_specific, unassigned_genes]
+      value_labels:
+        genes_in_shared_orthogroups: In shared orthogroups
+        genes_in_species_specific: In genome-specific orthogroups
+        unassigned_genes: In no orthogroup
+      taxon_palette: {In shared orthogroups: '#2f9e44', In genome-specific orthogroups: '#ae3ec9', In no orthogroup: '#adb5bd'}
+      normalise_to_one: true
+      orientation: h
+      sample_sort: category
+      sort_category: In no orthogroup
+      y_zoom: auto
+      value_title: Share of the genes
+      hidden_controls: [rank, top_n, group]
+    section: Genes by orthogroup
+    tag: gq-orth-av-placement
+    index: orth-placement
+    title: Genes by the orthogroups they fall in
+    description: Each genome's genes in orthogroups it shares with another genome, in orthogroups of its own, or in none. Shared genes fill most of every bar, so the axis starts near the smallest shared share (the // marks the cut).
+    layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: genomeqc
     data_collection_tag: orthofinder_orthogroup_matrix

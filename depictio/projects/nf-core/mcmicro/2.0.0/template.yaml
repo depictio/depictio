@@ -94,14 +94,16 @@ template:
         pick: "latest"
         group: "Software versions"
     groups:
+      # The pipeline's own parameter groups (nextflow_schema.json $defs at 2.0.0);
+      # institutional and generic options are folded into Run context.
       - group: "Inputs"
-        key_patterns: ["input_cycle", "input_sample", "marker_sheet"]
-      - group: "Image processing"
-        key_patterns: ["illumination", "backsub", "tma_dearray", "prelude"]
+        key_patterns: ["input_sample", "input_cycle", "marker_sheet"]
+      - group: "Processing steps"
+        key_patterns: ["illumination", "tma_dearray", "backsub", "prelude"]
       - group: "Segmentation"
         key_patterns: ["segmentation", "cellpose_model"]
       - group: "Run context"
-        key_patterns: ["outdir", "version", "publish_dir_mode", "monochrome_logs", "validate_params", "help*", "show_hidden", "pipelines_testdata_base_path", "modules_testdata_base_path", "trace_report_suffix", "config_profile_*", "custom_config_*", "multiqc_*", "max_multiqc_email_size", "plaintext_email"]
+        key_patterns: ["outdir", "email", "version", "publish_dir_mode", "email_on_fail", "plaintext_email", "max_multiqc_email_size", "monochrome_logs", "hook_url", "validate_params", "pipelines_testdata_base_path", "modules_testdata_base_path", "trace_report_suffix", "help", "help_full", "show_hidden", "genomes", "config_profile_*", "custom_config_*", "multiqc_*"]
     highlight:
       - "segmentation"
       - "illumination"
@@ -450,4 +452,52 @@ links:
     target_type: "table"
     link_config: {resolver: "direct", target_field: "marker"}
     description: "Carry a marker pick to the per-image marker summary"
+    enabled: true
+  # A segmenter picked on the cells (Overview, Segmentation tab) reaches the
+  # per-image summaries and the agreement between methods.
+  - source_dc_tag: "mcquant_cells"
+    source_column: "segmenter"
+    target_dc_tag: "mcquant_segmentation_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "segmenter"}
+    description: "Carry a segmenter pick to the per-image segmentation summary"
+    enabled: true
+  - source_dc_tag: "mcquant_cells"
+    source_column: "segmenter"
+    target_dc_tag: "mcquant_segmenter_agreement"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "segmenter"}
+    description: "Carry a segmenter pick to the agreement between methods"
+    enabled: true
+  # Markers tab: the marker, role and segmenter picks on the per-cell
+  # intensities reach the marker sheet (by marker), the correlation matrix
+  # (by marker and by segmenter) and the per-image summary (by segmenter;
+  # the marker route above already exists).
+  - source_dc_tag: "mcquant_cell_markers"
+    source_column: "marker"
+    target_dc_tag: "markers"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "marker_name"}
+    description: "Carry a marker or role pick to the marker sheet"
+    enabled: true
+  - source_dc_tag: "mcquant_cell_markers"
+    source_column: "marker"
+    target_dc_tag: "mcquant_marker_correlation"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "marker"}
+    description: "Carry a marker or role pick to the rows of the correlation matrix"
+    enabled: true
+  - source_dc_tag: "mcquant_cell_markers"
+    source_column: "segmenter"
+    target_dc_tag: "mcquant_marker_correlation"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "segmenter"}
+    description: "Carry a segmenter pick on the Markers tab to the correlation matrix"
+    enabled: true
+  - source_dc_tag: "mcquant_cell_markers"
+    source_column: "segmenter"
+    target_dc_tag: "mcquant_marker_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "segmenter"}
+    description: "Carry a segmenter pick on the Markers tab to the per-image marker summary"
     enabled: true

@@ -480,13 +480,24 @@ tabs:
   - component_type: multiqc
     workflow_tag: rnavar
     data_collection_tag: multiqc_data
+    use: multiqc/general_stats
+    selected_module: general_stats
+    selected_plot: general_stats
+    section: Alignment sections
+    tag: rv-mqc-general-stats
+    title: General statistics
+    description: One row per library, the headline columns of every tool in the report side by side.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: rnavar
+    data_collection_tag: multiqc_data
     selected_module: star
     selected_plot: Alignment Scores
     section: Alignment sections
     tag: rv-mqc-star-scores
     title: STAR alignment scores
     description: Uniquely mapped, multi-mapped and unmapped reads per sample, as STAR counts them.
-    layout: {x: 0, y: 0, w: 4, h: 4}
+    layout: {x: 0, y: 4, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: rnavar
     data_collection_tag: multiqc_data
@@ -496,7 +507,7 @@ tabs:
     tag: rv-mqc-picard-dups
     title: Mark Duplicates
     description: Unique and duplicate reads and pairs per sample, from Picard MarkDuplicates.
-    layout: {x: 4, y: 0, w: 4, h: 4}
+    layout: {x: 4, y: 4, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: rnavar
     data_collection_tag: multiqc_data
@@ -506,7 +517,7 @@ tabs:
     tag: rv-mqc-star-summary
     title: STAR summary statistics
     description: Input reads, mapped share, splices and mismatch rate per sample.
-    layout: {x: 0, y: 4, w: 8, h: 4}
+    layout: {x: 0, y: 8, w: 8, h: 4}
   - component_type: multiqc
     workflow_tag: rnavar
     data_collection_tag: multiqc_data
@@ -698,28 +709,29 @@ tabs:
     title: Mismatch rate
     description: Mismatches per aligned base, in percent. Variants, editing and sequencing errors all add to it.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  - component_type: figure
+  - component_type: advanced_viz
     workflow_tag: rnavar
     data_collection_tag: star_read_fate
-    use: star/read_fate_bars
-    visu_type: bar
-    mode: code
-    code_content: |-
-      # One 100% bar per sample: STAR's six read fates, mapped ones first.
-      colors = depictio_category_colors.get('fate') or {}
-      order = df.select('fate', 'fate_order').unique().sort('fate_order')['fate'].to_list()
-      d = df.sort(['sample', 'fate_order'])
-      fig = px.bar(d.to_pandas(), x='reads_pct', y='sample', color='fate', orientation='h', color_discrete_map=colors, category_orders={'fate': order}, labels={'reads_pct': 'Share of the input reads (%)', 'sample': '', 'fate': 'Read fate'})
-      fig.update_layout(barmode='stack', xaxis_range=[0, 100], margin=dict(t=10), legend_title_text='')
-      fig.update_yaxes(automargin=True)
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: sample
+      taxon_col: fate
+      rank_col: null
+      abundance_col: reads_pct
+      normalise_to_one: true
+      orientation: h
+      sample_sort: name
+      y_zoom: auto
+      top_n: 8
+      value_title: Share of the input reads
+      hidden_controls: [rank, top_n]
     section: Read fate
     tag: rv-aln-fig-fate
     index: aln-read-fate
     title: Read fate per sample
-    description: Each sample's input split into uniquely mapped, multi-mapped and the unmapped reasons.
+    description: Each sample's input split into uniquely mapped, multi-mapped and the unmapped reasons. Unique reads fill most of every bar, so the axis starts near the smallest unique share (the // marks the cut); sort by a fate to rank the samples on it.
     layout: {x: 0, y: 0, w: 8, h: 4}
-  # Bound to the sample hub, which carries the design group the points take
-  # their colour from and every per-sample number the record shows.
   - component_type: advanced_viz
     workflow_tag: rnavar
     data_collection_tag: samples
@@ -763,26 +775,29 @@ tabs:
     title: Picked sample
     description: The sample picked on the plot, from its reads to its calls.
     layout: {x: 5, y: 0, w: 3, h: 6}
-  - component_type: figure
+  - component_type: advanced_viz
     workflow_tag: rnavar
     data_collection_tag: star_junctions
-    use: star/junction_motif_bars
-    visu_type: bar
-    mode: code
-    code_content: |-
-      # Novel junctions only: the annotated ones are nearly all GT/AG and would
-      # flatten the bar. Non-canonical novel junctions are mostly alignment noise.
-      colors = depictio_category_colors.get('motif_class') or {}
-      d = df.filter(pl.col('annotation') == 'novel').sort(['sample', 'motif_order'])
-      order = df.select('motif_class', 'motif_order').unique().sort('motif_order')['motif_class'].to_list()
-      fig = px.bar(d.to_pandas(), x='junctions', y='sample', color='motif_class', orientation='h', color_discrete_map=colors, category_orders={'motif_class': order}, labels={'junctions': 'Novel junctions', 'sample': '', 'motif_class': 'Intron motif'})
-      fig.update_layout(barmode='stack', margin=dict(t=10), legend_title_text='')
-      fig.update_yaxes(automargin=True)
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: sample
+      taxon_col: motif_class
+      rank_col: annotation
+      default_rank: novel
+      abundance_col: junctions
+      normalise_to_one: true
+      orientation: h
+      sample_sort: name
+      y_zoom: auto
+      top_n: 8
+      value_title: Share of the junctions
+      hidden_controls: [top_n]
     section: Splice junctions
     tag: rv-aln-fig-junctions
     index: aln-novel-junctions
     title: Novel splice junctions per sample
-    description: Junctions the annotation does not hold, by intron motif. Canonical GT/AG ones can be real; non-canonical ones rarely are.
+    description: Junctions by intron motif, the novel ones first (the level switch shows the annotated ones, nearly all GT/AG). Canonical novel junctions can be real; non-canonical ones rarely are. Normalise off shows the counts.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: rnavar
@@ -822,7 +837,7 @@ tabs:
   - name: Coverage scope
     icon: mdi:filter-variant
     color: cyan
-    description: The contig classes the read shares are counted over
+    description: The contig class narrows the per-contig chart and table; the other tiles are whole-genome numbers per sample
   grid_sections:
   - name: Coverage at a glance
     icon: mdi:counter
@@ -963,28 +978,29 @@ tabs:
     title: Reference bases at each read depth
     description: One curve per sample. A curve that falls later covers more of its expressed genes deep enough to call.
     layout: {x: 0, y: 0, w: 8, h: 6}
-  - component_type: figure
+  - component_type: advanced_viz
     workflow_tag: rnavar
     data_collection_tag: samtools_idxstats
-    use: samtools/contig_class_bars
-    visu_type: bar
-    mode: code
-    code_content: |-
-      # One 100% bar per sample: its mapped reads by contig class.
-      colors = depictio_category_colors.get('contig_class') or {}
-      order = ['autosome', 'X', 'Y', 'mitochondrion', 'other']
-      d = df.group_by(['sample', 'contig_class']).agg(pl.col('mapped_pct').sum()).sort('sample')
-      fig = px.bar(d.to_pandas(), x='mapped_pct', y='sample', color='contig_class', orientation='h', color_discrete_map=colors, category_orders={'contig_class': order}, labels={'mapped_pct': 'Share of the mapped reads (%)', 'sample': '', 'contig_class': 'Contig class'})
-      fig.update_layout(barmode='stack', margin=dict(t=10), legend_title_text='')
-      fig.update_yaxes(automargin=True)
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: sample
+      taxon_col: contig_class
+      rank_col: null
+      abundance_col: mapped_reads
+      normalise_to_one: true
+      orientation: h
+      sample_sort: name
+      y_zoom: auto
+      top_n: 8
+      value_title: Share of the mapped reads
+      hidden_controls: [rank, top_n]
     section: Reads per contig class
     tag: rv-cov-fig-contigs
     index: cov-contig-classes
     title: Mapped reads by contig class per sample
-    description: Autosomes, X, Y, the mitochondrion and the alt and unplaced contigs, as shares of each sample's mapped reads.
+    description: Autosomes, X, Y, the mitochondrion and the alt and unplaced contigs, as shares of each sample's mapped reads. The autosomes fill most of every bar, so the axis starts near the smallest autosome share (the // marks the cut).
     layout: {x: 0, y: 0, w: 8, h: 4}
-  # On the sample hub, which carries the design group: the points take
-  # Analysis mode's groups when it has some, else the group column's colours.
   - component_type: figure
     workflow_tag: rnavar
     data_collection_tag: samples
@@ -1034,7 +1050,7 @@ tabs:
   - name: Callset scope
     icon: mdi:filter-variant
     color: teal
-    description: The FILTER values and variant types the calls are read over
+    description: These picks narrow the FILTER breakdown and the per-call plot; the callset summary, Ts/Tv and spectrum count every PASS call
   grid_sections:
   - name: Callset at a glance
     icon: mdi:counter
@@ -1277,7 +1293,7 @@ tabs:
   - name: Annotation scope
     icon: mdi:filter-variant
     color: grape
-    description: The impact classes and gene biotypes the tiles are read over
+    description: These picks narrow the annotated calls and the gene table; snpEff's own impact and consequence totals cannot be split
   grid_sections:
   - name: Annotation at a glance
     icon: mdi:counter
@@ -1421,25 +1437,29 @@ tabs:
     title: Coding allele fraction
     description: Allele fraction of the HIGH and MODERATE calls. Allele-specific expression spreads it away from 0.5.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  - component_type: figure
+  - component_type: advanced_viz
     workflow_tag: rnavar
     data_collection_tag: snpeff_csv_stats
-    use: snpeff/composition_bars
-    visu_type: bar
-    mode: code
-    code_content: |-
-      # One 100% bar per sample: snpEff's four impact classes.
-      colors = depictio_category_colors.get('impact') or {}
-      order = ['HIGH', 'MODERATE', 'LOW', 'MODIFIER']
-      d = df.filter(pl.col('section') == 'impact').sort('sample')
-      fig = px.bar(d.to_pandas(), x='percent', y='sample', color='category', orientation='h', color_discrete_map=colors, category_orders={'category': order}, labels={'percent': 'Share of the effects (%)', 'sample': '', 'category': 'Impact'})
-      fig.update_layout(barmode='stack', margin=dict(t=10), legend_title_text='')
-      fig.update_yaxes(automargin=True)
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: sample
+      taxon_col: category
+      rank_col: section
+      default_rank: impact
+      abundance_col: count
+      normalise_to_one: true
+      orientation: h
+      sample_sort: name
+      y_zoom: auto
+      top_n: 10
+      value_title: Share of the effects
+      hidden_controls: [top_n]
     section: Impact per sample
     tag: rv-ann-fig-impact
     index: ann-impact-bars
     title: Impact classes per sample
-    description: HIGH, MODERATE, LOW and MODIFIER effects as shares of each sample's effects.
+    description: HIGH, MODERATE, LOW and MODIFIER effects as shares of each sample's effects; the level switch shows snpEff's other breakdowns (effect, functional class, region). MODIFIER fills most of every bar, so the axis starts near its smallest share (the // marks the cut).
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: figure
     workflow_tag: rnavar
@@ -1520,7 +1540,7 @@ tabs:
   - name: Locus filters
     icon: mdi:filter-variant
     color: indigo
-    description: The variant types and FILTER values of the call track and cards
+    description: These picks narrow the call track and cards; the navigator, karyotype density and VCF lanes read every PASS call
   grid_sections:
   - name: Region at a glance
     icon: mdi:counter

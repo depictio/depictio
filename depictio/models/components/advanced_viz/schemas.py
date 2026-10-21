@@ -124,10 +124,11 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "pos": _INT,
         "score": _FLOAT,
     },
+    # `rank` is optional (see `_OPTIONAL_ROLES`): a single-level composition
+    # (BUSCO classes, CCS outcomes) has no rank to pick.
     "stacked_taxonomy": {
         "sample_id": _STRING,
         "taxon": _STRING,
-        "rank": _STRING,
         "abundance": _NUMERIC,
     },
     # Phylogenetic validates the *metadata* DC only: the tree DC is a
@@ -1037,7 +1038,9 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "sample": _STRING,
         "category": _STRING,
     },
-    "stacked_taxonomy": {},
+    # A level column turns the bars into a rank picker (Phylum / Genus, region
+    # class / feature); without one the composition is drawn as it comes.
+    "stacked_taxonomy": {"rank": _STRING},
     "phylogenetic": {
         "color": _NUMERIC | _STRING,
         "label": _STRING,
@@ -1290,6 +1293,8 @@ _HMM_LOGO_MSA_OPTIONAL: dict[str, frozenset[str]] = {
     "rank": _NUMERIC,
 }
 
+_STACKED_WIDE_REQUIRED: dict[str, frozenset[str]] = {"sample_id": _STRING}
+
 _RolesByMode = dict[str, tuple[dict[str, frozenset[str]], dict[str, frozenset[str]]]]
 
 # Kinds whose roles depend on a mode setting of their config:
@@ -1314,6 +1319,11 @@ def _roles_for(
     a second kind: ``hmm_logo`` reads a profile table by default and an
     alignment table with ``profile_source: msa``.
     """
+    # A wide stacked_taxonomy table (`value_cols`) has one numeric column per
+    # category, so only the sample id is a role; `validate_binding` checks the
+    # value columns themselves.
+    if kind == "stacked_taxonomy" and config is not None and getattr(config, "value_cols", None):
+        return _STACKED_WIDE_REQUIRED, {}
     mode = _MODE_ROLES.get(kind)
     if mode is not None and config is not None:
         field, by_value = mode
@@ -1501,6 +1511,18 @@ def validate_binding(config: VizConfig, dc_schema: dict[str, str]) -> list[Bindi
     shape_check = _SHAPE_CHECKS.get(kind)
     if shape_check is not None:
         errors.extend(shape_check(config))
+
+    # Wide stacked_taxonomy: every value column is an abundance column.
+    wide_cols = (getattr(config, "value_cols", None) or []) if kind == "stacked_taxonomy" else []
+    for col in wide_cols:
+        if col not in dc_schema:
+            errors.append(
+                BindingError(role="abundance", column=col, reason=f"column '{col}' not in DC")
+            )
+        elif dc_schema[col] not in _NUMERIC:
+            errors.append(
+                _dtype_binding_error("abundance", col, dc_schema[col], _NUMERIC, optional=False)
+            )
 
     return errors
 
@@ -2310,6 +2332,12 @@ _KIND_ROLE_DESCRIPTIONS: dict[AdvancedVizKind, dict[str, str]] = {
         "region_start": "Optional start of the neighbourhood band behind the arrows.",
         "region_end": "Optional end of the neighbourhood band behind the arrows.",
     },
+    "stacked_taxonomy": {
+        "rank": (
+            "Optional level column (e.g. Phylum, Genus): adds a rank picker. "
+            "Omit for a single-level composition."
+        ),
+    },
     "gsea_running_score": {
         "gene_set": "Gene set / pathway the running score belongs to.",
         "rank": "Position in the ranked gene list.",
@@ -2787,7 +2815,8 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         "label": "Ideogram",
         "description": (
             "A karyotype: one bar per chromosome scaled to its length, with a glyph "
-            "per feature or a heat band per bin. Click or drag a bar to filter a region."
+            "per feature or density bins. Click a chromosome to zoom along it, then "
+            "filter the dashboard to it or to the visible range."
         ),
         "icon": "tabler:align-left",
     },

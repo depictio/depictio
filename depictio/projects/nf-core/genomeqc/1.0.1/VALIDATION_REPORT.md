@@ -44,8 +44,8 @@ the general statistics)
 | busco_karyotype | 698 (19, 275 and 404 sequences holding a complete BUSCO) |
 | agat_statistics | 1,487 |
 | agat_gene_models | 22 (10, 8 and 4 transcript types) |
-| gene_overlaps | 3 |
-| orthofinder_species_stats | 3 |
+| gene_overlaps | 3 (with the not-overlapping and overlapping-not-nested genes, so the four overlap columns sum to the genes) |
+| orthofinder_species_stats | 3 (with `genes_in_shared_orthogroups`) |
 | orthofinder_orthogroup_matrix | 9,543 orthogroups |
 | orthofinder_orthologue_matrix | 3 x 3 |
 | ortho_seq_count | 3 |
@@ -53,6 +53,7 @@ the general statistics)
 | fcsgx_actions | 3 (1 EXCLUDE range, 2 clean assemblies as `none`) |
 | fcsadaptor_actions | 3 (1 TRIM range, 2 `none`) |
 | tiara_classifications | 3,120 (the raw assemblies; 174, 1,052 and 1,894 sequences of 3 kb or more) |
+| tiara_class_counts | 22 (genome and Tiara class pairs) |
 | repeatmasker_repeat_classes | 90 (30 lines per assembly) |
 | repeatmasker_masking_summary | 3 |
 | genomes | 3 (47 columns with the design) |

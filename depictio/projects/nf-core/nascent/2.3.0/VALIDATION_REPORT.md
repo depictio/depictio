@@ -49,13 +49,12 @@ vendored design table.
 | `samples` | 11 x 16 | 11 x 16 (signal columns of 9 libraries empty) |
 | `gene_dynamics` | 14,552 x 19 | same |
 | `gene_trajectories` | 160,072 x 10 | same |
-| `response_profiles` | 77 x 11 (7 classes x 11 time points) | same |
 | `top_gene_trajectories` | 110 x 9 | same |
 | `top_gene_heatmap` | 40 x 13 | same |
 | `sample_similarity` | 11 x 15 | same |
 | `sample_drift` | 21 x 6 | same |
 | `signal_window_dynamics` | 5,825 x 17 | 5,817 x 17 |
-| `signal_trends` | 33 x 10 | 6 x 10 |
+| `signal_window_series` | 64,075 x 9 (5,825 windows x 11 time points) | 11,634 x 9 |
 | `signal_window_heatmap` | 40 x 13 | 40 x 4 |
 | `chromosome_signal` | 264 x 9 | 48 x 9 |
 | `coverage_bigwigs` | 22 files (`indexed_file`, bigwig, 15 to 29 MB, under `max_file_size_mb: 64`) | same |

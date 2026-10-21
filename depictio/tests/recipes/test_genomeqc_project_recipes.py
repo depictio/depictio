@@ -1,4 +1,4 @@
-"""nf-core/genomeqc pipeline recipes: the karyotype, the gene overlaps and the genome hub.
+"""nf-core/genomeqc pipeline recipes: the karyotype, the gene overlaps, the Tiara counts and the hub.
 
 genomeqc publishes its BUSCO ideogram as complete BUSCOs per sequence with no
 sequence length, so the karyotype must take each length from tidk and leave a
@@ -87,6 +87,34 @@ def test_gene_overlaps_transpose_into_one_row_per_assembly(tmp_path: Path) -> No
     assert row["genome"] == "A" and row["total_genes"] == 200
     assert row["overlapping_pct"] == pytest.approx(25.0)
     assert row["contained_same_strand_pct"] == pytest.approx(5.0)
+    # The four parts the Annotation tab stacks add up to the genes.
+    assert (row["not_overlapping_genes"], row["overlapping_not_nested"]) == (150, 20)
+    parts = ("not_overlapping_genes", "overlapping_not_nested", "contained_opposite_strand")
+    assert sum(row[c] for c in parts) + row["contained_same_strand"] == row["total_genes"]
+
+
+def test_tiara_class_counts_count_sequences_per_assembly_and_class(tmp_path: Path) -> None:
+    classes = pl.DataFrame(
+        {
+            "genome": ["A", "A", "A", "A", "B", None],
+            "tiara_class": [
+                "eukarya",
+                "eukarya",
+                "bacteria",
+                "mitochondrion",
+                "eukarya",
+                "eukarya",
+            ],
+        }
+    )
+    df = execute_recipe(
+        "nf-core/genomeqc/tiara_class_counts.py", tmp_path, extra_sources={"classes": classes}
+    )
+    rows = {(r["genome"], r["tiara_class"]): r for r in df.iter_rows(named=True)}
+    assert len(rows) == 4  # the row without an assembly is left out
+    assert rows[("A", "eukarya")]["sequences"] == 2
+    assert rows[("A", "eukarya")]["share_pct"] == pytest.approx(50.0)
+    assert rows[("B", "eukarya")]["share_pct"] == pytest.approx(100.0)
 
 
 # ---------------------------------------------------------------------------

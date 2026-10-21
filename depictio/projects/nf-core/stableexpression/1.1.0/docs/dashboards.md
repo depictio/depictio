@@ -79,8 +79,8 @@ metadata, whose gene names `all_genes_summary.csv` already carries), `annotation
 - **Findings**: four rows under the filters: the most stable candidate in view and its score,
   the share of samples that measured the median section leader, the score part that weighs
   most (on the megatest, the missing-value penalty), and the share of datasets that reached
-  the merged matrix with the count that mapped no gene. Then the ranking, Normfinder against
-  geNorm M, the scores by section and the sample funnel. The bar filters by group and
+  the merged matrix with the count that mapped no gene. Then the ranking, Normfinder rank against
+  geNorm rank, the scores by section and the sample funnel. The bar filters by group and
   expression section.
 - **How to read this dashboard**: one tile per tab, by group, each showing its question.
 
@@ -94,13 +94,15 @@ They never move a stability score: a score is a statistic of the whole cohort.
 (attrition: downloaded, ID-mapped, after the zero filter, after the missing-value filter),
 datasets by outcome, and the median share of the matrix's genes a merged dataset's samples
 miss. Then the samples after each step stacked by platform, the datasets of each platform by
-outcome, and every dataset by samples kept against genes missing (a microarray covers part of
-the genome). Collapsed: the dataset table with its record card (accession linked to
+outcome, and the share of the genes each dataset misses, one strip per array design (an array
+measures a fixed set of probes, RNA-seq almost every gene). Collapsed: the dataset table with its record card (accession linked to
 Expression Atlas). Filters: outcome and samples kept.
 
 **ID mapping.** Strip: gene ids in by fate, the median share kept, genes per mapped dataset
-and the rare-gene ids by platform. Then the fate of the ids per platform (as shares) and the
-datasets by the share of each fate. Collapsed: one bar per dataset, and the table. Filters:
+and the rare-gene ids by platform. Then one stacked bar per dataset, open, grouped by platform and
+sorted by the share kept (sorting by name, total or another fate, regrouping and the axis zoom
+are the tile's controls); then the fate of the ids per platform (stacked, as shares) and the
+datasets by the share of each fate. Collapsed: the table. Filters:
 fate and dataset outcome. Every tile reads the ID mapping collection, so `NO_ID_MAPPING`
 removes the tab whole.
 
@@ -115,8 +117,9 @@ filters redraw (pick a platform to see whether a leader holds on it). Collapsed:
 box statistics. Filters: section, score and measured share.
 
 **Candidates.** Strip: candidates (by the platforms that measured them), the median score,
-the share of samples measured and geNorm M. Then each section's mean score split into its
-five parts, and Normfinder against geNorm M (one point per candidate, coloured by section).
+the share of samples measured and geNorm M. Then each section's score split into its five parts
+(a stacked bar, as shares of the score; Normalise off stacks the summed parts), and Normfinder rank against geNorm M rank within the section (one point per
+candidate, coloured by section, the diagonal where both measures agree).
 Collapsed: the candidate table with its record card (ranks, the parts of the score, the four
 measures, expression; the gene id linked to Ensembl). Filters: section, expression level and
 measured share.
@@ -132,7 +135,7 @@ platforms.
 | Route | What changes |
 |---|---|
 | `--skip_id_mapping` (`NO_ID_MAPPING`) | No mapping statistics: the ID mapping collection, the ID mapping tab and the gene id count of the map step go. Every dataset counts as mapped in the dataset collections. |
-| `--skip_genorm` | geNorm M is null for every candidate and its score part 0: the geNorm card prints "–" and the Normfinder against geNorm M scatter is empty. No variable; the collections keep their columns. |
+| `--skip_genorm` | geNorm M is null for every candidate and its score part 0: the geNorm card prints "–" and the Normfinder against geNorm rank scatter is empty. No variable; the collections keep their columns. |
 | One platform only | The group splits have one segment; nothing is pruned. |
 
 The Key figures read collections every route writes.
