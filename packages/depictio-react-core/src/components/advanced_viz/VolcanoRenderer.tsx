@@ -26,6 +26,7 @@ import {
   VizInlineField,
   VizNumberInput,
   VizSegmented,
+  VizSelect,
   VizSwitch,
 } from './controls/VizControls';
 import { usePersistedVizControl } from './usePersistedVizControl';
@@ -92,7 +93,16 @@ interface VolcanoConfig {
   reference?: string | null;
   contrast_prefix?: string | null;
   group_symbols?: Record<string, string> | null;
+  /** Columns the marker shape can be switched to (e.g. `Kingdom`), beside the
+   *  group / direction readings. Fetched with the tile, so the switch is instant. */
+  marker_cols?: string[] | null;
 }
+
+/** The marker shapes a categorical column cycles through, most frequent value first. */
+const MARKER_SHAPES = ['circle', 'square', 'diamond', 'triangle-up', 'cross', 'x', 'star', 'hexagon'];
+/** The shape-by choices that are not a column. */
+const MARKER_BY_DEFAULT = '__default__';
+const MARKER_BY_DIRECTION = '__direction__';
 
 const MA_TABLE_COLUMN_LIST = Object.values(MA_TABLE_COLUMNS);
 
@@ -113,6 +123,77 @@ const TIER_COLOURS: Record<DeTier, string> = {
   NS: 'rgba(160,160,160,0.55)',
 };
 
+interface MarkerPlan {
+  /** The shape of a point; undefined leaves the tier's own (triangles by direction). */
+  symbolFor?: (index: number, tier: DeTier) => string | undefined;
+  /** Name and shape of each class drawn, for the key. */
+  shapes: [string, string][];
+}
+
+/** The group sides of one contrast, as marker shapes. */
+function groupSides(contrast: string, config: VolcanoConfig) {
+  const sides = contrastSides(contrast, config, { positive: '', negative: '' });
+  const symbols = config.group_symbols ?? {};
+  return {
+    positiveName: sides.positiveName,
+    negativeName: sides.negativeName,
+    positive: symbols[sides.positiveName],
+    negative: sides.negativeName ? symbols[sides.negativeName] : undefined,
+  };
+}
+
+/**
+ * What the marker shape says, for the rows on screen. `__default__` is the
+ * group reading when the dashboard names its groups (a hit takes the shape of the
+ * group it leans toward: the contrast's own when UP, the reference when DN) and
+ * the tier's triangles otherwise; `__direction__` is those triangles; anything
+ * else is a column, whose values take the shapes in order of frequency and which
+ * shapes every point, the not significant ones included.
+ */
+function markerPlanOf(
+  source: Record<string, unknown[]> | null,
+  config: VolcanoConfig,
+  mode: string,
+): MarkerPlan {
+  if (!source) return { shapes: [] };
+  if (mode === MARKER_BY_DIRECTION) return { shapes: [] };
+  if (mode === MARKER_BY_DEFAULT) {
+    if (!config.group_symbols) return { shapes: [] };
+    const contrasts = config.category_col ? source[config.category_col] : undefined;
+    const names = contrasts ? Array.from(new Set(contrasts.map((v) => String(v ?? '')))).sort() : [''];
+    const shapes = new Map<string, string>();
+    for (const c of names) {
+      const sides = groupSides(c, config);
+      if (sides.negativeName && sides.negative) shapes.set(sides.negativeName, sides.negative);
+    }
+    for (const c of names) {
+      const sides = groupSides(c, config);
+      if (sides.positive) shapes.set(sides.positiveName, sides.positive);
+    }
+    return {
+      symbolFor: (index, tier) => {
+        if (tier === 'NS') return undefined;
+        const sides = groupSides(String(contrasts?.[index] ?? ''), config);
+        return tier === 'UP' ? sides.positive : sides.negative;
+      },
+      shapes: Array.from(shapes),
+    };
+  }
+  const values = source[mode] as unknown[] | undefined;
+  if (!values) return { shapes: [] };
+  const counts = new Map<string, number>();
+  for (const v of values) {
+    const k = String(v ?? '');
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  const ranked = Array.from(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const shapeOf = new Map(ranked.map(([k], i) => [k, MARKER_SHAPES[i] ?? 'circle']));
+  return {
+    symbolFor: (index) => shapeOf.get(String(values[index] ?? '')),
+    shapes: ranked.slice(0, MARKER_SHAPES.length).map(([k]) => [k || '(none)', shapeOf.get(k)!]),
+  };
+}
+
 /**
  * Marker scheme shared by the volcano and the MA view: colour is the tier (pink
  * up, blue down, grey not significant), a hit is outlined and larger than the
@@ -122,20 +203,15 @@ const TIER_COLOURS: Record<DeTier, string> = {
 function tierMarker(
   tiers: readonly DeTier[],
   isDark: boolean,
-  /** The shape of a hit, by row and tier, when the dashboard names its groups. */
-  hitSymbol?: (index: number, tier: 'UP' | 'DN') => string,
+  /** The shape of a point, by row and tier; undefined leaves the tier's own. */
+  symbolFor?: (index: number, tier: DeTier) => string | undefined,
 ) {
   const outline = isDark ? 'rgba(255,255,255,0.9)' : 'rgba(30,30,30,0.85)';
   return {
     color: tiers.map((t) => TIER_COLOURS[t]),
-    symbol: tiers.map((t, i) =>
-      t === 'NS'
-        ? 'circle'
-        : hitSymbol
-          ? hitSymbol(i, t)
-          : t === 'UP'
-            ? 'triangle-up'
-            : 'triangle-down',
+    symbol: tiers.map(
+      (t, i) =>
+        symbolFor?.(i, t) ?? (t === 'NS' ? 'circle' : t === 'UP' ? 'triangle-up' : 'triangle-down'),
     ),
     size: tiers.map((t) => (t === 'NS' ? 4 : 10)),
     opacity: 0.85,
@@ -191,6 +267,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
   const [showCi, setShowCi] = usePersistedVizControl(metadata, 'show_ci', true);
   const [showIdentity, setShowIdentity] = usePersistedVizControl(metadata, 'show_identity', true);
   const [pointSize, setPointSize] = usePersistedVizControl(metadata, 'point_size', 5);
+  const [markerBy, setMarkerBy] = usePersistedVizControl<string>(metadata, 'marker_by', MARKER_BY_DEFAULT);
 
   const offered = useMemo(() => offeredDeViews(config), [config]);
   // The author's pick, unless the bindings stopped supporting it (a column was
@@ -205,6 +282,17 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
   // The MA view's y is a log fold change, which for most tables is the same
   // column the volcano puts on x.
   const maYCol = config.log2_fold_change_col || config.effect_size_col;
+  // What the marker shape can say: the group (or the tier's triangles), the
+  // direction alone, or one of the columns the dashboard offers.
+  const markerChoices = useMemo(
+    () => [
+      { value: MARKER_BY_DEFAULT, label: config.group_symbols ? 'Locality' : 'Direction' },
+      ...(config.group_symbols ? [{ value: MARKER_BY_DIRECTION, label: 'Direction' }] : []),
+      ...(config.marker_cols ?? []).map((c) => ({ value: c, label: c })),
+    ],
+    [config.group_symbols, config.marker_cols],
+  );
+  const activeMarkerBy = markerChoices.some((c) => c.value === markerBy) ? markerBy : MARKER_BY_DEFAULT;
   // Or the MA view reads a table of its own, in the MA plot's canonical
   // columns, fetched only while that view is on screen.
   const maTable = useMemo(() => maTableOf(config), [config]);
@@ -226,6 +314,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
             config.avg_log_intensity_col,
             config.log2_fold_change_col,
             config.p_value_col,
+            ...(config.marker_cols ?? []),
           ].filter(Boolean) as string[],
         ),
       ),
@@ -342,8 +431,10 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
         ...MA_TABLE_COLUMN_LIST,
         ...(config.hover_col ? [config.hover_col] : []),
         ...(config.hover_category && config.category_col ? [config.category_col] : []),
+        ...(config.marker_cols ?? []),
+        ...(config.group_symbols && config.category_col ? [config.category_col] : []),
       ].filter((c, i, all) => all.indexOf(c) === i),
-    [config.hover_col, config.hover_category, config.category_col],
+    [config.hover_col, config.hover_category, config.category_col, config.marker_cols, config.group_symbols],
   );
   const [maRows, setMaRows] = useState<Record<string, unknown[]> | null>(null);
   const [maLoading, setMaLoading] = useState<boolean>(false);
@@ -397,22 +488,6 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       ? ((rows[config.label_col] || []) as (string | number)[])
       : ids;
     const hovers = hoverLines(rows, config);
-    // With the dashboard's groups named, a hit takes the shape of the group it
-    // leans toward: the contrast's own group when it is UP, the reference when
-    // DN. Which contrast a row belongs to is read per row, so a plot holding
-    // two of them still shapes each right.
-    const hitSymbolFor = (source: Record<string, unknown[]>) => {
-      if (!config.group_symbols) return undefined;
-      const contrasts = config.category_col ? source[config.category_col] : undefined;
-      return (index: number, tier: 'UP' | 'DN') => {
-        const sides = groupSides(String(contrasts?.[index] ?? ''), config);
-        return (
-          (tier === 'UP' ? sides.positive : sides.negative) ??
-          (tier === 'UP' ? 'triangle-up' : 'triangle-down')
-        );
-      };
-    };
-
     if (activeView === 'qq') {
       return buildQq({
         ps: (rows[pValueCol] || []) as number[],
@@ -450,7 +525,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
         ids: maIds,
         labels: (maRows[c.label] as (string | number)[] | undefined) ?? maIds,
         hovers: hoverLines(maRows, config),
-        hitSymbol: hitSymbolFor(maRows),
+        hitSymbol: markerPlanOf(maRows, config, activeMarkerBy).symbolFor,
         xTitle: 'Mean log abundance',
         yTitle: config.effect_label || 'Log fold change',
         sigTitle: c.significance,
@@ -474,7 +549,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
         ids,
         labels,
         hovers,
-        hitSymbol: hitSymbolFor(rows),
+        hitSymbol: markerPlanOf(rows, config, activeMarkerBy).symbolFor,
         xTitle: config.avg_log_intensity_col ?? '',
         yTitle: maYCol,
         sigTitle: config.significance_col,
@@ -496,7 +571,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       ids,
       labels,
       hovers,
-      hitSymbol: hitSymbolFor(rows),
+      hitSymbol: markerPlanOf(rows, config, activeMarkerBy).symbolFor,
       isNegLog10: Boolean(config.significance_is_neg_log10),
       effectTitle: config.effect_label || config.effect_size_col,
       sigTitle: config.significance_col,
@@ -521,6 +596,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
     sigThreshold,
     effectThreshold,
     fcThreshold,
+    activeMarkerBy,
     topN,
     search,
     showLabels,
@@ -593,6 +669,17 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
             ) : null}
           </VizControlGroup>
         ) : null}
+        {activeView !== 'qq' && markerChoices.length > 1 ? (
+          <VizControlGroup title="Markers">
+            <VizSelect
+              label="Shape by"
+              value={activeMarkerBy}
+              onChange={(v) => v && setMarkerBy(v)}
+              data={markerChoices}
+              allowDeselect={false}
+            />
+          </VizControlGroup>
+        ) : null}
         <VizControlGroup title="Labels">
           <VizNumberInput
             label="Top-N labels"
@@ -615,7 +702,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
         </VizControlGroup>
       </>
     ),
-    [viewControl, activeView, sigThreshold, effectThreshold, fcThreshold, topN, search],
+    [viewControl, activeView, sigThreshold, effectThreshold, fcThreshold, topN, search, markerChoices, activeMarkerBy],
   );
 
   // Cosmetic tier: how the same points are painted.
@@ -757,12 +844,11 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
 
   // The rows behind the figure on screen, for the frame's data view.
   const shownRows = maFromTable ? maRows : rows;
-  // The contrasts on screen, for the legend's group names.
-  const legendGroups = useMemo(() => {
-    const col = config.category_col;
-    const values = col && shownRows ? (shownRows[col] as unknown[] | undefined) : undefined;
-    return values ? Array.from(new Set(values.map((v) => String(v ?? '')))).sort() : [];
-  }, [shownRows, config.category_col]);
+  // What the marker shapes stand for on screen, for the key.
+  const legendShapes = useMemo(
+    () => markerPlanOf(shownRows, config, activeMarkerBy).shapes,
+    [shownRows, config, activeMarkerBy],
+  );
 
   return (
     <AdvancedVizFrame
@@ -797,14 +883,10 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
     >
       {groupedFigure ? (
         <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-          {config.group_symbols && legendGroups.length > 0 && (
-            <DeLegend
-              view={activeView}
-              groups={legendGroups}
-              config={config}
-              sigThreshold={sigThreshold}
-            />
-          )}
+          {(config.group_symbols || config.marker_cols?.length) &&
+            (activeView === 'qq' || legendShapes.length > 0) && (
+              <DeLegend view={activeView} shapes={legendShapes} sigThreshold={sigThreshold} />
+            )}
           <Plot
             data={annotations.data as any}
             layout={annotations.layout as any}
@@ -820,18 +902,6 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
   );
 };
 
-/** The marker shape of each side of one contrast: the group it tests, the reference. */
-function groupSides(contrast: string, config: VolcanoConfig) {
-  const sides = contrastSides(contrast, config, { positive: '', negative: '' });
-  const symbols = config.group_symbols ?? {};
-  return {
-    positiveName: sides.positiveName,
-    negativeName: sides.negativeName,
-    positive: symbols[sides.positiveName],
-    negative: sides.negativeName ? symbols[sides.negativeName] : undefined,
-  };
-}
-
 /**
  * The key to the markers, drawn over the plot's top edge: shape is the group a
  * hit leans toward, colour its direction. Outside the figure because the
@@ -840,10 +910,9 @@ function groupSides(contrast: string, config: VolcanoConfig) {
  */
 const DeLegend: React.FC<{
   view: DeView;
-  groups: string[];
-  config: VolcanoConfig;
+  shapes: [string, string][];
   sigThreshold: number;
-}> = ({ view, groups, config, sigThreshold }) => {
+}> = ({ view, shapes, sigThreshold }) => {
   const glyph = (symbol: string, colour: string) => {
     const mark = { fill: colour, stroke: 'currentColor', strokeWidth: 1 };
     return (
@@ -853,7 +922,10 @@ const DeLegend: React.FC<{
         {symbol === 'diamond' && <path d="M6 1 L11 6 L6 11 L1 6 Z" {...mark} />}
         {symbol === 'square' && <rect x="2" y="2" width="8" height="8" {...mark} />}
         {symbol === 'cross' && <path d="M5 1 H7 V5 H11 V7 H7 V11 H5 V7 H1 V5 H5 Z" {...mark} />}
-        {!['triangle-up', 'triangle-down', 'diamond', 'square', 'cross'].includes(symbol) && (
+        {symbol === 'x' && <path d="M2 2 L10 10 M10 2 L2 10" fill="none" stroke="currentColor" strokeWidth="1.6" />}
+        {symbol === 'star' && <path d="M6 1 L7.5 4.5 L11 4.8 L8.3 7.2 L9.1 10.8 L6 9 L2.9 10.8 L3.7 7.2 L1 4.8 L4.5 4.5 Z" {...mark} />}
+        {symbol === 'hexagon' && <path d="M6 1 L10.5 3.5 V8.5 L6 11 L1.5 8.5 V3.5 Z" {...mark} />}
+        {!['triangle-up', 'triangle-down', 'diamond', 'square', 'cross', 'x', 'star', 'hexagon'].includes(symbol) && (
           <circle cx="6" cy="6" r="3" {...mark} />
         )}
       </svg>
@@ -864,16 +936,6 @@ const DeLegend: React.FC<{
       {node}
     </span>
   );
-  // Each group once, the reference first, in the shape its hits are drawn in.
-  const shapes = new Map<string, string>();
-  for (const g of groups) {
-    const sides = groupSides(g, config);
-    if (sides.negativeName && sides.negative) shapes.set(sides.negativeName, sides.negative);
-  }
-  for (const g of groups) {
-    const sides = groupSides(g, config);
-    if (sides.positive) shapes.set(sides.positiveName, sides.positive);
-  }
   return (
     <div
       data-testid="de-legend"
@@ -881,7 +943,8 @@ const DeLegend: React.FC<{
         position: 'absolute',
         top: 2,
         left: 56,
-        right: 24,
+        // Clear of Plotly's mode bar, which sits in the top right corner.
+        right: 150,
         display: 'flex',
         flexWrap: 'wrap',
         gap: '0 14px',
@@ -897,9 +960,7 @@ const DeLegend: React.FC<{
         </>
       ) : (
         <>
-          {Array.from(shapes, ([name, symbol]) =>
-            item(`g-${name}`, <>{glyph(symbol, 'none')}{name}</>),
-          )}
+          {shapes.map(([name, symbol]) => item(`g-${name}`, <>{glyph(symbol, 'none')}{name}</>))}
           {item('up', <>{glyph('circle', TIER_COLOURS.UP)}up</>)}
           {item('dn', <>{glyph('circle', TIER_COLOURS.DN)}down</>)}
           {item('ns', <>{glyph('circle', TIER_COLOURS.NS)}not significant</>)}
@@ -936,7 +997,7 @@ function buildVolcano(input: {
   topN: number;
   search: string;
   showLabels: boolean;
-  hitSymbol?: (index: number, tier: 'UP' | 'DN') => string;
+  hitSymbol?: (index: number, tier: DeTier) => string | undefined;
   isDark: boolean;
   theme: ReturnType<typeof useMantineTheme>;
   glGranted: boolean;
@@ -1073,7 +1134,7 @@ function buildMa(input: {
   topN: number;
   search: string;
   showLabels: boolean;
-  hitSymbol?: (index: number, tier: 'UP' | 'DN') => string;
+  hitSymbol?: (index: number, tier: DeTier) => string | undefined;
   isDark: boolean;
   theme: ReturnType<typeof useMantineTheme>;
   glGranted: boolean;

@@ -128,6 +128,14 @@ class VolcanoConfig(_BaseVizConfig):
             "down: the reference); colour stays pink for up and blue for down."
         ),
     )
+    marker_cols: list[str] | None = Field(
+        default=None,
+        description=(
+            "Columns the marker shape can be switched to in the tile's 'Shape by' control "
+            "(e.g. ['Kingdom']), beside the group / direction readings. Each value of the "
+            "column takes a shape, most frequent first."
+        ),
+    )
 
     # Display defaults — editable from the viz UI as Tier-2 (intra-viz) controls.
     significance_is_neg_log10: bool = Field(
