@@ -62,6 +62,11 @@ describe('qqSeries', () => {
     expect(series.observed[0]).toBeCloseTo(2, 10);
   });
 
+  it('keeps the source row of each point, so a caller can look up its other columns', () => {
+    const series = qqSeries([0.5, 0.01, 0.9, 7], [0, 1, 2, 3], null);
+    expect(series.indices).toEqual([1, 0, 2]);
+  });
+
   it('drops values that are not p-values rather than plotting them at infinity', () => {
     expect(qqSeries([0, 1.5, null, 0.2], [0, 1, 2, 3], null).n).toBe(1);
   });

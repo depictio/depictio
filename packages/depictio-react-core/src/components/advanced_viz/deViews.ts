@@ -117,6 +117,8 @@ export interface QqSeries {
   ids: string[];
   /** The sorted p-values themselves, for the inflation factor. */
   ps: number[];
+  /** Source row index of each point, so a caller can look up the row's other columns. */
+  indices: number[];
   n: number;
 }
 
@@ -146,6 +148,7 @@ export function qqSeries(
     observed: sorted.map((entry) => -Math.log10(entry.p)),
     ids: sorted.map((entry) => (ids ? String(ids[entry.index] ?? '') : '')),
     ps: sorted.map((entry) => entry.p),
+    indices: sorted.map((entry) => entry.index),
     n,
   };
 }
@@ -258,4 +261,38 @@ export function maTableOf(config: {
 export function resolveDeView(view: DeView, offered: readonly DeView[]): DeView {
   if (offered.includes(view)) return view;
   return offered[0] ?? 'volcano';
+}
+
+/** The three config fields that name the groups a contrast compares. */
+export interface ContrastGroups {
+  /** The group on the negative side of every contrast (the baseline). */
+  reference?: string | null;
+  /** Stripped from a contrast value to name its positive side: prefix
+   *  `locality` turns `localityBarcelona` into `Barcelona`. */
+  contrast_prefix?: string | null;
+  /** Colour per group name. */
+  group_colors?: Record<string, string> | null;
+}
+
+/**
+ * The two sides of one contrast, named and coloured: the group it tests
+ * (positive effect) and the reference (negative effect). A group the palette
+ * does not name takes the matching fallback, so a partial palette still draws.
+ */
+export function contrastSides(
+  contrast: string,
+  groups: ContrastGroups,
+  fallback: { positive: string; negative: string },
+) {
+  const palette = groups.group_colors ?? {};
+  const prefix = groups.contrast_prefix ?? '';
+  const positiveName =
+    prefix && contrast.startsWith(prefix) ? contrast.slice(prefix.length) : contrast;
+  const negativeName = groups.reference ?? '';
+  return {
+    positiveName,
+    negativeName,
+    positive: palette[positiveName] ?? fallback.positive,
+    negative: (negativeName && palette[negativeName]) || fallback.negative,
+  };
 }

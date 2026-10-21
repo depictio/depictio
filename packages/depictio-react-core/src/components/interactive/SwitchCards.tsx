@@ -20,7 +20,8 @@ export interface SwitchCardOption {
  * The icons are bundled by scanning the source for `prefix:name` literals, so a
  * dashboard that names one needs it written somewhere in a scanned tree: the TREC
  * dashboard's cards use 'mdi:set-merge', 'mdi:bacteria-outline' and
- * 'mdi:jellyfish-outline'.
+ * 'mdi:jellyfish-outline'; the same dashboard's Platform filter and card use
+ * 'mdi:truck' (the mobile lab), which no other source names.
  *
  * A radio group, not tabs: it filters one data collection, it does not open a
  * panel.

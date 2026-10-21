@@ -106,6 +106,27 @@ class VolcanoConfig(_BaseVizConfig):
             "category_col's name."
         ),
     )
+    reference: str | None = Field(
+        default=None,
+        description=(
+            "Name of the group on the negative side of every contrast (the baseline, e.g. "
+            "'Athens'). With group_colors, down-regulated hits take its colour."
+        ),
+    )
+    contrast_prefix: str | None = Field(
+        default=None,
+        description=(
+            "Stripped from a category_col value to name the group on its positive side: "
+            "prefix 'locality' turns 'localityBarcelona' into 'Barcelona'."
+        ),
+    )
+    group_colors: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Colour per group name. A hit takes the colour of the group it leans toward "
+            "(up: its contrast's group, down: the reference); without it, pink and blue."
+        ),
+    )
 
     # Display defaults — editable from the viz UI as Tier-2 (intra-viz) controls.
     significance_is_neg_log10: bool = Field(
@@ -645,6 +666,28 @@ class DaBarplotConfig(_BaseVizConfig):
         description=(
             "'all' → faceted view (one panel per contrast); any specific contrast value → "
             "single-panel drill-in. Used as the initial active tab in the React renderer."
+        ),
+    )
+    reference: str | None = Field(
+        default=None,
+        description=(
+            "Name of the group on the negative side of every contrast (the model's baseline, "
+            "e.g. 'Athens'). Colours and names the bars that point left."
+        ),
+    )
+    contrast_prefix: str | None = Field(
+        default=None,
+        description=(
+            "Stripped from a contrast value to name the group on its positive side: prefix "
+            "'locality' turns 'localityBarcelona' into 'Barcelona'."
+        ),
+    )
+    group_colors: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Colour per group name. A bar takes the colour of the group it leans toward; "
+            "bars that miss the significance cutoff are hatched in the same colour. Without "
+            "it the bars are the up/down pink and blue of the volcano."
         ),
     )
 

@@ -35,6 +35,7 @@ import { useReportGroupColouring } from '../../groupReach';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import {
   classifyTiers,
+  contrastSides,
   genomicInflation,
   MA_TABLE_COLUMNS,
   maTableOf,
@@ -85,6 +86,11 @@ interface VolcanoConfig {
   /** Or an MA table of its own (`ma_dc_tag`), for a test with no abundance. */
   ma_wf_id?: string | null;
   ma_dc_id?: string | null;
+  /** Locality colours for the hits: a point leans toward the group its contrast
+   *  tests (UP) or toward the reference (DN), and takes that group's colour. */
+  reference?: string | null;
+  contrast_prefix?: string | null;
+  group_colors?: Record<string, string> | null;
 }
 
 const MA_TABLE_COLUMN_LIST = Object.values(MA_TABLE_COLUMNS);
@@ -105,6 +111,31 @@ const TIER_COLOURS: Record<DeTier, string> = {
   DN: '#1c7ed6',
   NS: 'rgba(160,160,160,0.55)',
 };
+
+/**
+ * Marker scheme shared by the volcano and the MA view: a hit is a triangle
+ * pointing the way its effect goes, outlined, against small faded NS circles.
+ * Colour alone does not carry significance for readers who cannot tell the
+ * pink and blue from the grey, and a shape survives a greyscale print.
+ */
+function tierMarker(
+  tiers: readonly DeTier[],
+  isDark: boolean,
+  /** The colour of a hit, by row and tier, when the dashboard names its groups. */
+  hitColour?: (index: number, tier: 'UP' | 'DN') => string,
+) {
+  const outline = isDark ? 'rgba(255,255,255,0.9)' : 'rgba(30,30,30,0.85)';
+  return {
+    color: tiers.map((t, i) => (t === 'NS' || !hitColour ? TIER_COLOURS[t] : hitColour(i, t))),
+    symbol: tiers.map((t) => (t === 'UP' ? 'triangle-up' : t === 'DN' ? 'triangle-down' : 'circle')),
+    size: tiers.map((t) => (t === 'NS' ? 4 : 10)),
+    opacity: 0.85,
+    line: {
+      color: tiers.map((t) => (t === 'NS' ? 'rgba(0,0,0,0)' : outline)),
+      width: tiers.map((t) => (t === 'NS' ? 0 : 1)),
+    },
+  };
+}
 
 const DOTTED_GUIDE = { dash: 'dot' as const, color: 'rgba(128,128,128,0.6)', width: 1 };
 
@@ -357,6 +388,21 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       ? ((rows[config.label_col] || []) as (string | number)[])
       : ids;
     const hovers = hoverLines(rows, config);
+    // With the dashboard's groups named, a hit takes the colour of the group it
+    // leans toward: the contrast's own group when it is UP, the reference when
+    // DN. Which contrast a row belongs to is read per row, so a plot holding
+    // two of them still colours each right.
+    const hitColourFor = (source: Record<string, unknown[]>) => {
+      if (!config.group_colors) return undefined;
+      const contrasts = config.category_col ? source[config.category_col] : undefined;
+      return (index: number, tier: 'UP' | 'DN') => {
+        const sides = contrastSides(String(contrasts?.[index] ?? ''), config, {
+          positive: TIER_COLOURS.UP,
+          negative: TIER_COLOURS.DN,
+        });
+        return tier === 'UP' ? sides.positive : sides.negative;
+      };
+    };
 
     if (activeView === 'qq') {
       return buildQq({
@@ -365,6 +411,15 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
         hoverCategory: Boolean(config.hover_category),
         cats: config.category_col ? ((rows[config.category_col] || []) as (string | number)[]) : null,
         catColours: categoryPinned,
+        // A QQ-only binding has no significance column, and the predicate over
+        // an absent one passes every row: it would draw every point as a hit.
+        isSignificant:
+          config.significance_col && rows[config.significance_col]?.length
+            ? significancePredicate(rows[config.significance_col] as number[], {
+                isNegLog10: Boolean(config.significance_is_neg_log10),
+                threshold: sigThreshold,
+              })
+            : undefined,
         showCi,
         showIdentity,
         pointSize,
@@ -386,6 +441,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
         ids: maIds,
         labels: (maRows[c.label] as (string | number)[] | undefined) ?? maIds,
         hovers: hoverLines(maRows, config),
+        hitColour: hitColourFor(maRows),
         xTitle: 'Mean log abundance',
         yTitle: config.effect_label || 'Log fold change',
         sigTitle: c.significance,
@@ -409,6 +465,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
         ids,
         labels,
         hovers,
+        hitColour: hitColourFor(rows),
         xTitle: config.avg_log_intensity_col ?? '',
         yTitle: maYCol,
         sigTitle: config.significance_col,
@@ -430,6 +487,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       ids,
       labels,
       hovers,
+      hitColour: hitColourFor(rows),
       isNegLog10: Boolean(config.significance_is_neg_log10),
       effectTitle: config.effect_label || config.effect_size_col,
       sigTitle: config.significance_col,
@@ -690,6 +748,12 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
 
   // The rows behind the figure on screen, for the frame's data view.
   const shownRows = maFromTable ? maRows : rows;
+  // The contrasts on screen, for the legend's group names.
+  const legendGroups = useMemo(() => {
+    const col = config.category_col;
+    const values = col && shownRows ? (shownRows[col] as unknown[] | undefined) : undefined;
+    return values ? Array.from(new Set(values.map((v) => String(v ?? '')))).sort() : [];
+  }, [shownRows, config.category_col]);
 
   return (
     <AdvancedVizFrame
@@ -723,7 +787,15 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       }
     >
       {groupedFigure ? (
-        <>
+        <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+          {config.group_colors && legendGroups.length > 0 && (
+            <DeLegend
+              view={activeView}
+              groups={legendGroups}
+              config={config}
+              sigThreshold={sigThreshold}
+            />
+          )}
           <Plot
             data={annotations.data as any}
             layout={annotations.layout as any}
@@ -733,9 +805,68 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
             {...annotations.plotProps()}
           />
           {annotations.toolbar}
-        </>
+        </div>
       ) : null}
     </AdvancedVizFrame>
+  );
+};
+
+/**
+ * The key to the markers, drawn over the plot's top edge: a hit is a triangle
+ * (diamond in the QQ view) in the colour of the group it leans toward, the rest
+ * small grey circles. Outside the figure because the markers are one trace.
+ * Shown only when the dashboard names its groups, otherwise the colours are the
+ * tile's own pink and blue and the tier badges already say which is which.
+ */
+const DeLegend: React.FC<{
+  view: DeView;
+  groups: string[];
+  config: VolcanoConfig;
+  sigThreshold: number;
+}> = ({ view, groups, config, sigThreshold }) => {
+  const glyph = (shape: 'up' | 'down' | 'diamond' | 'circle', colour: string) => (
+    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden style={{ marginRight: 4 }}>
+      {shape === 'up' && <path d="M6 1 L11 10 H1 Z" fill={colour} stroke="currentColor" strokeWidth="1" />}
+      {shape === 'down' && <path d="M6 11 L11 2 H1 Z" fill={colour} stroke="currentColor" strokeWidth="1" />}
+      {shape === 'diamond' && <path d="M6 1 L11 6 L6 11 L1 6 Z" fill={colour} stroke="currentColor" strokeWidth="1" />}
+      {shape === 'circle' && <circle cx="6" cy="6" r="2.5" fill={colour} />}
+    </svg>
+  );
+  const item = (key: string, node: React.ReactNode) => (
+    <span key={key} style={{ display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
+      {node}
+    </span>
+  );
+  const sides = groups.map((g) =>
+    contrastSides(g, config, { positive: TIER_COLOURS.UP, negative: TIER_COLOURS.DN }),
+  );
+  const positives = new Map(sides.map((x) => [x.positiveName, x.positive]));
+  const reference = sides[0];
+  const hitShape = (up: boolean) => (view === 'qq' ? 'diamond' : up ? 'up' : 'down');
+  return (
+    <div
+      data-testid="de-legend"
+      style={{
+        position: 'absolute',
+        top: 2,
+        left: 56,
+        right: 24,
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '0 14px',
+        fontSize: 12,
+        opacity: 0.85,
+        pointerEvents: 'none',
+      }}
+    >
+      {view !== 'qq' && Array.from(positives, ([name, colour]) =>
+        item(`up-${name}`, <>{glyph('up', colour)}more in {name}</>),
+      )}
+      {view !== 'qq' && reference?.negativeName &&
+        item('down', <>{glyph('down', reference.negative)}more in {reference.negativeName}</>)}
+      {view === 'qq' && item('hit', <>{glyph(hitShape(true), 'currentColor')}significant (≤ {sigThreshold})</>)}
+      {item('ns', <>{glyph('circle', TIER_COLOURS.NS)}not significant</>)}
+    </div>
   );
 };
 
@@ -766,6 +897,7 @@ function buildVolcano(input: {
   topN: number;
   search: string;
   showLabels: boolean;
+  hitColour?: (index: number, tier: 'UP' | 'DN') => string;
   isDark: boolean;
   theme: ReturnType<typeof useMantineTheme>;
   glGranted: boolean;
@@ -847,13 +979,7 @@ function buildVolcano(input: {
             `<br>${input.sigTitle}: %{customdata[1]:.2e}` +
             `<br>-log10(sig): %{y:.2f}` +
             `<extra></extra>`,
-          marker: {
-            color: tiers.map((t) => TIER_COLOURS[t]),
-            // Binary size scheme so significant hits visually pop out from the
-            // grey NS cloud without distracting magnitude variation.
-            size: tiers.map((t) => (t === 'NS' ? 5 : 7)),
-            opacity: 0.85,
-          },
+          marker: tierMarker(tiers, input.isDark, input.hitColour),
         },
         input.glGranted,
       ),
@@ -908,6 +1034,7 @@ function buildMa(input: {
   topN: number;
   search: string;
   showLabels: boolean;
+  hitColour?: (index: number, tier: 'UP' | 'DN') => string;
   isDark: boolean;
   theme: ReturnType<typeof useMantineTheme>;
   glGranted: boolean;
@@ -972,11 +1099,7 @@ function buildMa(input: {
             `<br>${input.yTitle}: %{y:.3f}` +
             (hasSig ? `<br>${input.sigTitle}: %{customdata[1]:.2e}` : '') +
             `<extra></extra>`,
-          marker: {
-            color: tiers.map((t) => TIER_COLOURS[t]),
-            size: tiers.map((t) => (t === 'NS' ? 5 : 7)),
-            opacity: 0.85,
-          },
+          marker: tierMarker(tiers, input.isDark, input.hitColour),
         },
         input.glGranted,
       ),
@@ -1048,6 +1171,9 @@ function buildQq(input: {
   /** Colours pinned for the categories (the dashboard's, see
    *  `columnCategoryColors`); the rest take the palette. */
   catColours?: Record<string, string> | null;
+  /** Whether the source row clears the tile's significance cutoff: those
+   *  points are drawn as outlined diamonds, as the hits are on the volcano. */
+  isSignificant?: (rowIndex: number) => boolean;
   showCi: boolean;
   showIdentity: boolean;
   pointSize: number;
@@ -1057,6 +1183,20 @@ function buildQq(input: {
   glGranted: boolean;
 }): BuiltFigure {
   const { ps, ids, cats } = input;
+  const qqMarker = (indices: number[], colour: string | undefined) => {
+    const hit = indices.map((i) => Boolean(input.isSignificant?.(i)));
+    const outline = input.isDark ? 'rgba(255,255,255,0.9)' : 'rgba(30,30,30,0.85)';
+    return {
+      color: colour,
+      symbol: hit.map((h) => (h ? 'diamond' : 'circle')),
+      size: hit.map((h) => (h ? input.pointSize + 4 : input.pointSize)),
+      opacity: 0.85,
+      line: {
+        color: hit.map((h) => (h ? outline : 'rgba(0,0,0,0)')),
+        width: hit.map((h) => (h ? 1 : 0)),
+      },
+    };
+  };
   const traces: any[] = [];
   let expectedMax = 0;
   let observedMax = 0;
@@ -1098,7 +1238,7 @@ function buildQq(input: {
             // no id column there is no identity to carry.
             ...(ids ? { customdata: series.ids.map((id) => [id]) } : {}),
             hovertemplate: hoverTemplate(Boolean(series.ids[0]), input.hoverCategory),
-            marker: { color: colours.get(name), size: input.pointSize, opacity: 0.85 },
+            marker: qqMarker(series.indices, colours.get(name)),
           },
           input.glGranted,
         ),
@@ -1124,7 +1264,7 @@ function buildQq(input: {
           text: series.ids,
           ...(ids ? { customdata: series.ids.map((id) => [id]) } : {}),
           hovertemplate: hoverTemplate(Boolean(series.ids[0])),
-          marker: { color: '#4C72B0', size: input.pointSize, opacity: 0.85 },
+          marker: qqMarker(series.indices, '#4C72B0'),
         },
         input.glGranted,
       ),
