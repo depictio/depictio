@@ -136,6 +136,14 @@ class VolcanoConfig(_BaseVizConfig):
             "column takes a shape, most frequent first."
         ),
     )
+    marker_by: str = Field(
+        default="__default__",
+        description=(
+            "What the marker shape says, as last picked in the 'Shape by' control: "
+            "'__default__' (the group reading when group_symbols is set, else the "
+            "direction's triangles), '__direction__', or one of marker_cols."
+        ),
+    )
 
     # Display defaults — editable from the viz UI as Tier-2 (intra-viz) controls.
     significance_is_neg_log10: bool = Field(
