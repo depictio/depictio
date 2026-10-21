@@ -86,11 +86,12 @@ interface VolcanoConfig {
   /** Or an MA table of its own (`ma_dc_tag`), for a test with no abundance. */
   ma_wf_id?: string | null;
   ma_dc_id?: string | null;
-  /** Locality colours for the hits: a point leans toward the group its contrast
-   *  tests (UP) or toward the reference (DN), and takes that group's colour. */
+  /** Marker shape per group for the hits: a point leans toward the group its
+   *  contrast tests (UP) or toward the reference (DN), and takes that group's
+   *  shape. Colour stays the tier's: pink up, blue down. */
   reference?: string | null;
   contrast_prefix?: string | null;
-  group_colors?: Record<string, string> | null;
+  group_symbols?: Record<string, string> | null;
 }
 
 const MA_TABLE_COLUMN_LIST = Object.values(MA_TABLE_COLUMNS);
@@ -113,21 +114,29 @@ const TIER_COLOURS: Record<DeTier, string> = {
 };
 
 /**
- * Marker scheme shared by the volcano and the MA view: a hit is a triangle
- * pointing the way its effect goes, outlined, against small faded NS circles.
- * Colour alone does not carry significance for readers who cannot tell the
- * pink and blue from the grey, and a shape survives a greyscale print.
+ * Marker scheme shared by the volcano and the MA view: colour is the tier (pink
+ * up, blue down, grey not significant), a hit is outlined and larger than the
+ * small faded NS circles, and its shape says which group it leans toward when
+ * the dashboard names them (otherwise a triangle pointing the way its effect goes).
  */
 function tierMarker(
   tiers: readonly DeTier[],
   isDark: boolean,
-  /** The colour of a hit, by row and tier, when the dashboard names its groups. */
-  hitColour?: (index: number, tier: 'UP' | 'DN') => string,
+  /** The shape of a hit, by row and tier, when the dashboard names its groups. */
+  hitSymbol?: (index: number, tier: 'UP' | 'DN') => string,
 ) {
   const outline = isDark ? 'rgba(255,255,255,0.9)' : 'rgba(30,30,30,0.85)';
   return {
-    color: tiers.map((t, i) => (t === 'NS' || !hitColour ? TIER_COLOURS[t] : hitColour(i, t))),
-    symbol: tiers.map((t) => (t === 'UP' ? 'triangle-up' : t === 'DN' ? 'triangle-down' : 'circle')),
+    color: tiers.map((t) => TIER_COLOURS[t]),
+    symbol: tiers.map((t, i) =>
+      t === 'NS'
+        ? 'circle'
+        : hitSymbol
+          ? hitSymbol(i, t)
+          : t === 'UP'
+            ? 'triangle-up'
+            : 'triangle-down',
+    ),
     size: tiers.map((t) => (t === 'NS' ? 4 : 10)),
     opacity: 0.85,
     line: {
@@ -388,19 +397,19 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       ? ((rows[config.label_col] || []) as (string | number)[])
       : ids;
     const hovers = hoverLines(rows, config);
-    // With the dashboard's groups named, a hit takes the colour of the group it
+    // With the dashboard's groups named, a hit takes the shape of the group it
     // leans toward: the contrast's own group when it is UP, the reference when
     // DN. Which contrast a row belongs to is read per row, so a plot holding
-    // two of them still colours each right.
-    const hitColourFor = (source: Record<string, unknown[]>) => {
-      if (!config.group_colors) return undefined;
+    // two of them still shapes each right.
+    const hitSymbolFor = (source: Record<string, unknown[]>) => {
+      if (!config.group_symbols) return undefined;
       const contrasts = config.category_col ? source[config.category_col] : undefined;
       return (index: number, tier: 'UP' | 'DN') => {
-        const sides = contrastSides(String(contrasts?.[index] ?? ''), config, {
-          positive: TIER_COLOURS.UP,
-          negative: TIER_COLOURS.DN,
-        });
-        return tier === 'UP' ? sides.positive : sides.negative;
+        const sides = groupSides(String(contrasts?.[index] ?? ''), config);
+        return (
+          (tier === 'UP' ? sides.positive : sides.negative) ??
+          (tier === 'UP' ? 'triangle-up' : 'triangle-down')
+        );
       };
     };
 
@@ -441,7 +450,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
         ids: maIds,
         labels: (maRows[c.label] as (string | number)[] | undefined) ?? maIds,
         hovers: hoverLines(maRows, config),
-        hitColour: hitColourFor(maRows),
+        hitSymbol: hitSymbolFor(maRows),
         xTitle: 'Mean log abundance',
         yTitle: config.effect_label || 'Log fold change',
         sigTitle: c.significance,
@@ -465,7 +474,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
         ids,
         labels,
         hovers,
-        hitColour: hitColourFor(rows),
+        hitSymbol: hitSymbolFor(rows),
         xTitle: config.avg_log_intensity_col ?? '',
         yTitle: maYCol,
         sigTitle: config.significance_col,
@@ -487,7 +496,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       ids,
       labels,
       hovers,
-      hitColour: hitColourFor(rows),
+      hitSymbol: hitSymbolFor(rows),
       isNegLog10: Boolean(config.significance_is_neg_log10),
       effectTitle: config.effect_label || config.effect_size_col,
       sigTitle: config.significance_col,
@@ -788,7 +797,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
     >
       {groupedFigure ? (
         <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-          {config.group_colors && legendGroups.length > 0 && (
+          {config.group_symbols && legendGroups.length > 0 && (
             <DeLegend
               view={activeView}
               groups={legendGroups}
@@ -811,12 +820,23 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
   );
 };
 
+/** The marker shape of each side of one contrast: the group it tests, the reference. */
+function groupSides(contrast: string, config: VolcanoConfig) {
+  const sides = contrastSides(contrast, config, { positive: '', negative: '' });
+  const symbols = config.group_symbols ?? {};
+  return {
+    positiveName: sides.positiveName,
+    negativeName: sides.negativeName,
+    positive: symbols[sides.positiveName],
+    negative: sides.negativeName ? symbols[sides.negativeName] : undefined,
+  };
+}
+
 /**
- * The key to the markers, drawn over the plot's top edge: a hit is a triangle
- * (diamond in the QQ view) in the colour of the group it leans toward, the rest
- * small grey circles. Outside the figure because the markers are one trace.
- * Shown only when the dashboard names its groups, otherwise the colours are the
- * tile's own pink and blue and the tier badges already say which is which.
+ * The key to the markers, drawn over the plot's top edge: shape is the group a
+ * hit leans toward, colour its direction. Outside the figure because the
+ * markers are one trace. Shown only when the dashboard names its groups; without
+ * them the tier badges already say which colour is which.
  */
 const DeLegend: React.FC<{
   view: DeView;
@@ -824,25 +844,36 @@ const DeLegend: React.FC<{
   config: VolcanoConfig;
   sigThreshold: number;
 }> = ({ view, groups, config, sigThreshold }) => {
-  const glyph = (shape: 'up' | 'down' | 'diamond' | 'circle', colour: string) => (
-    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden style={{ marginRight: 4 }}>
-      {shape === 'up' && <path d="M6 1 L11 10 H1 Z" fill={colour} stroke="currentColor" strokeWidth="1" />}
-      {shape === 'down' && <path d="M6 11 L11 2 H1 Z" fill={colour} stroke="currentColor" strokeWidth="1" />}
-      {shape === 'diamond' && <path d="M6 1 L11 6 L6 11 L1 6 Z" fill={colour} stroke="currentColor" strokeWidth="1" />}
-      {shape === 'circle' && <circle cx="6" cy="6" r="2.5" fill={colour} />}
-    </svg>
-  );
+  const glyph = (symbol: string, colour: string) => {
+    const mark = { fill: colour, stroke: 'currentColor', strokeWidth: 1 };
+    return (
+      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden style={{ marginRight: 4 }}>
+        {symbol === 'triangle-up' && <path d="M6 1 L11 10 H1 Z" {...mark} />}
+        {symbol === 'triangle-down' && <path d="M6 11 L11 2 H1 Z" {...mark} />}
+        {symbol === 'diamond' && <path d="M6 1 L11 6 L6 11 L1 6 Z" {...mark} />}
+        {symbol === 'square' && <rect x="2" y="2" width="8" height="8" {...mark} />}
+        {symbol === 'cross' && <path d="M5 1 H7 V5 H11 V7 H7 V11 H5 V7 H1 V5 H5 Z" {...mark} />}
+        {!['triangle-up', 'triangle-down', 'diamond', 'square', 'cross'].includes(symbol) && (
+          <circle cx="6" cy="6" r="3" {...mark} />
+        )}
+      </svg>
+    );
+  };
   const item = (key: string, node: React.ReactNode) => (
     <span key={key} style={{ display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
       {node}
     </span>
   );
-  const sides = groups.map((g) =>
-    contrastSides(g, config, { positive: TIER_COLOURS.UP, negative: TIER_COLOURS.DN }),
-  );
-  const positives = new Map(sides.map((x) => [x.positiveName, x.positive]));
-  const reference = sides[0];
-  const hitShape = (up: boolean) => (view === 'qq' ? 'diamond' : up ? 'up' : 'down');
+  // Each group once, the reference first, in the shape its hits are drawn in.
+  const shapes = new Map<string, string>();
+  for (const g of groups) {
+    const sides = groupSides(g, config);
+    if (sides.negativeName && sides.negative) shapes.set(sides.negativeName, sides.negative);
+  }
+  for (const g of groups) {
+    const sides = groupSides(g, config);
+    if (sides.positive) shapes.set(sides.positiveName, sides.positive);
+  }
   return (
     <div
       data-testid="de-legend"
@@ -859,13 +890,21 @@ const DeLegend: React.FC<{
         pointerEvents: 'none',
       }}
     >
-      {view !== 'qq' && Array.from(positives, ([name, colour]) =>
-        item(`up-${name}`, <>{glyph('up', colour)}more in {name}</>),
+      {view === 'qq' ? (
+        <>
+          {item('hit', <>{glyph('diamond', 'currentColor')}significant (≤ {sigThreshold})</>)}
+          {item('ns', <>{glyph('circle', TIER_COLOURS.NS)}not significant</>)}
+        </>
+      ) : (
+        <>
+          {Array.from(shapes, ([name, symbol]) =>
+            item(`g-${name}`, <>{glyph(symbol, 'none')}{name}</>),
+          )}
+          {item('up', <>{glyph('circle', TIER_COLOURS.UP)}up</>)}
+          {item('dn', <>{glyph('circle', TIER_COLOURS.DN)}down</>)}
+          {item('ns', <>{glyph('circle', TIER_COLOURS.NS)}not significant</>)}
+        </>
       )}
-      {view !== 'qq' && reference?.negativeName &&
-        item('down', <>{glyph('down', reference.negative)}more in {reference.negativeName}</>)}
-      {view === 'qq' && item('hit', <>{glyph(hitShape(true), 'currentColor')}significant (≤ {sigThreshold})</>)}
-      {item('ns', <>{glyph('circle', TIER_COLOURS.NS)}not significant</>)}
     </div>
   );
 };
@@ -897,7 +936,7 @@ function buildVolcano(input: {
   topN: number;
   search: string;
   showLabels: boolean;
-  hitColour?: (index: number, tier: 'UP' | 'DN') => string;
+  hitSymbol?: (index: number, tier: 'UP' | 'DN') => string;
   isDark: boolean;
   theme: ReturnType<typeof useMantineTheme>;
   glGranted: boolean;
@@ -979,7 +1018,7 @@ function buildVolcano(input: {
             `<br>${input.sigTitle}: %{customdata[1]:.2e}` +
             `<br>-log10(sig): %{y:.2f}` +
             `<extra></extra>`,
-          marker: tierMarker(tiers, input.isDark, input.hitColour),
+          marker: tierMarker(tiers, input.isDark, input.hitSymbol),
         },
         input.glGranted,
       ),
@@ -1034,7 +1073,7 @@ function buildMa(input: {
   topN: number;
   search: string;
   showLabels: boolean;
-  hitColour?: (index: number, tier: 'UP' | 'DN') => string;
+  hitSymbol?: (index: number, tier: 'UP' | 'DN') => string;
   isDark: boolean;
   theme: ReturnType<typeof useMantineTheme>;
   glGranted: boolean;
@@ -1099,7 +1138,7 @@ function buildMa(input: {
             `<br>${input.yTitle}: %{y:.3f}` +
             (hasSig ? `<br>${input.sigTitle}: %{customdata[1]:.2e}` : '') +
             `<extra></extra>`,
-          marker: tierMarker(tiers, input.isDark, input.hitColour),
+          marker: tierMarker(tiers, input.isDark, input.hitSymbol),
         },
         input.glGranted,
       ),

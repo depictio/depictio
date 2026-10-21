@@ -110,7 +110,7 @@ class VolcanoConfig(_BaseVizConfig):
         default=None,
         description=(
             "Name of the group on the negative side of every contrast (the baseline, e.g. "
-            "'Athens'). With group_colors, down-regulated hits take its colour."
+            "'Athens'). With group_symbols, down-regulated hits take its shape."
         ),
     )
     contrast_prefix: str | None = Field(
@@ -120,11 +120,12 @@ class VolcanoConfig(_BaseVizConfig):
             "prefix 'locality' turns 'localityBarcelona' into 'Barcelona'."
         ),
     )
-    group_colors: dict[str, str] | None = Field(
+    group_symbols: dict[str, str] | None = Field(
         default=None,
         description=(
-            "Colour per group name. A hit takes the colour of the group it leans toward "
-            "(up: its contrast's group, down: the reference); without it, pink and blue."
+            "Plotly marker symbol per group name ('square', 'triangle-up', 'diamond', ...). "
+            "A hit takes the shape of the group it leans toward (up: its contrast's group, "
+            "down: the reference); colour stays pink for up and blue for down."
         ),
     )
 
