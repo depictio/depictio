@@ -149,6 +149,7 @@ def test_shipped_stacked_taxonomy_configs_still_validate() -> None:
 
 
 def test_figure_builder_sorts_by_name_and_by_category_share() -> None:
+    pytest.importorskip("fastapi")
     from depictio.api.v1.services.advanced_viz.figure_registry import build
 
     rows = {
@@ -211,6 +212,7 @@ def test_wide_form_binds_the_sample_id_and_numeric_value_columns() -> None:
 
 
 def test_figure_builder_melts_a_wide_table() -> None:
+    pytest.importorskip("fastapi")
     from depictio.api.v1.services.advanced_viz.figure_registry import build, required_columns
 
     assert required_columns("stacked_taxonomy", _WIDE) == [
