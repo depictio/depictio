@@ -571,6 +571,8 @@ export interface StoredMetadata {
   strip_label?: string | null;
   /** SegmentedControl only: draw one card per option (label, icon, description),
    *  keyed by the option's value. See `OptionCard` in lite.py. */
+  /** SegmentedControl: drawn as cards. An `always_selected` Select: only the label
+   *  and description are used, by the scope banner and the active-filter list. */
   option_cards?: Record<string, { label?: string; icon?: string; description?: string }> | null;
   /** Filter bar only: whether the icon badge precedes the label. Unset = shown. */
   strip_icon?: boolean | null;

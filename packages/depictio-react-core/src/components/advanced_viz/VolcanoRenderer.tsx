@@ -36,6 +36,7 @@ import { useReportGroupColouring } from '../../groupReach';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import {
   classifyTiers,
+  contrastLabel,
   contrastSides,
   genomicInflation,
   MA_TABLE_COLUMNS,
@@ -1243,7 +1244,7 @@ function buildMa(input: {
  */
 function hoverLines(
   rows: Record<string, unknown[]>,
-  config: Pick<VolcanoConfig, 'hover_col' | 'hover_category' | 'category_col'>,
+  config: Pick<VolcanoConfig, 'hover_col' | 'hover_category' | 'category_col' | 'reference' | 'contrast_prefix'>,
 ): string[] | undefined {
   const extra = config.hover_col ? ((rows[config.hover_col] || []) as unknown[]) : null;
   const cats =
@@ -1255,7 +1256,7 @@ function hoverLines(
   return Array.from({ length: n }, (_, i) =>
     [
       extra ? String(extra[i] ?? '') : '',
-      cats ? `${config.category_col}: ${String(cats[i] ?? '')}` : '',
+      cats ? `${config.category_col}: ${contrastLabel(String(cats[i] ?? ''), config)}` : '',
     ]
       .filter(Boolean)
       .join('<br>'),

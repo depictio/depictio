@@ -56,9 +56,21 @@ def test_unset_card_fields_are_not_stored():
     assert "icon" not in meta["option_cards"]["pr2"]
 
 
-def test_only_a_segmented_control_takes_cards():
+def test_a_multiselect_takes_no_cards():
     with pytest.raises(ValidationError, match="option_cards"):
         _dashboard(_control(interactive_component_type="MultiSelect", option_cards=CARDS))
+
+
+def test_an_always_selected_select_takes_labels_for_its_scope_banner():
+    meta = _dashboard(
+        _control(interactive_component_type="Select", always_selected=True, option_cards=CARDS)
+    ).to_full()["stored_metadata"][0]
+    assert meta["option_cards"]["silva"]["label"] == "SILVA 138.2"
+
+
+def test_a_plain_select_takes_no_cards():
+    with pytest.raises(ValidationError, match="option_cards"):
+        _dashboard(_control(interactive_component_type="Select", option_cards=CARDS))
 
 
 def test_rejects_an_unknown_card_field():

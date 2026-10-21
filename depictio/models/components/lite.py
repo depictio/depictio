@@ -879,7 +879,7 @@ class InteractiveLiteComponent(BaseLiteComponent):
 
     option_cards: dict[str, OptionCard] | None = Field(
         default=None,
-        description="SegmentedControl only: draw the control as one card per option, "
+        description="SegmentedControl: draw the control as one card per option, "
         "keyed by the option's value, each with a label, an icon and a line of "
         "description, instead of a plain row of labels. A value with no entry keeps "
         "its own name as the title. For a choice that changes what the whole tab "
@@ -957,8 +957,13 @@ class InteractiveLiteComponent(BaseLiteComponent):
             raise ValueError(
                 f"A list default_value is only valid for Select / MultiSelect, not {kind}."
             )
-        if self.option_cards is not None and kind != "SegmentedControl":
-            raise ValueError(f"option_cards is only valid for a SegmentedControl, not {kind}.")
+        if self.option_cards is not None and not (
+            kind == "SegmentedControl" or (kind == "Select" and self.always_selected)
+        ):
+            raise ValueError(
+                "option_cards is only valid for a SegmentedControl, or for an always_selected "
+                f"Select (its scope banner reads the labels), not {kind}."
+            )
         if self.default_by is not None and not self.always_selected:
             raise ValueError(
                 "default_by ranks the options an always_selected Select starts on: set "

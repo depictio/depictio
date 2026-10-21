@@ -296,3 +296,16 @@ export function contrastSides(
     negative: (negativeName && palette[negativeName]) || fallback.negative,
   };
 }
+
+/**
+ * A contrast as the reader should see it: "Barcelona vs Athens" when the config
+ * names its groups, the contrast's own value otherwise.
+ */
+export function contrastLabel(contrast: string, groups: ContrastGroups): string {
+  if (!groups.reference) return contrast;
+  const { positiveName, negativeName } = contrastSides(contrast, groups, {
+    positive: '',
+    negative: '',
+  });
+  return `${positiveName} vs ${negativeName}`;
+}

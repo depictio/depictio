@@ -15,7 +15,7 @@ import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
 import { demandForItems } from './contentDemand';
-import { contrastSides } from './deViews';
+import { contrastLabel, contrastSides } from './deViews';
 
 /** Bar labels and axis text; the default 12 was small beside the tile's title. */
 const BAR_FONT_SIZE = 14;
@@ -335,7 +335,7 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
           hovertemplate:
             `<b>%{customdata[3]}</b>` +
             (config.hover_col ? `<br>%{customdata[2]}` : '') +
-            (config.hover_category ? `<br>${config.contrast_col}: ${contrastName}` : '') +
+            (config.hover_category ? `<br>${config.contrast_col}: ${contrastLabel(contrastName, config)}` : '') +
             `<br>${config.lfc_col}: %{x:.3f}` +
             (config.significance_col
               ? `<br>${config.significance_col}: %{customdata[1]:.2e}`
@@ -459,7 +459,7 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
         {drawnPanels.map(({ contrast: c, grouped: panel }) => {
           const layout = {
             ...panel.layout,
-            title: { text: c, font: { size: 12 } },
+            title: { text: contrastLabel(c, config), font: { size: 12 } },
             margin: { ...panel.layout.margin, t: 32 },
           };
           return (
@@ -533,7 +533,7 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
           <Tabs.List>
             {tabValues.map((v) => (
               <Tabs.Tab key={v} value={v}>
-                {v === ALL_TAB ? 'All' : v}
+                {v === ALL_TAB ? 'All' : contrastLabel(v, config)}
               </Tabs.Tab>
             ))}
           </Tabs.List>
