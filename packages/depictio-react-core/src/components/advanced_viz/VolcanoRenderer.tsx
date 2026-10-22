@@ -496,6 +496,8 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
         hoverCategory: Boolean(config.hover_category),
         cats: config.category_col ? ((rows[config.category_col] || []) as (string | number)[]) : null,
         catColours: categoryPinned,
+        // The contrast as it reads on the tile (`Barcelona vs Athens`), not its raw value.
+        catLabel: (c: string) => contrastLabel(c, config),
         // A QQ-only binding has no significance column, and the predicate over
         // an absent one passes every row: it would draw every point as a hit.
         isSignificant:
@@ -1272,6 +1274,8 @@ function buildQq(input: {
   /** Colours pinned for the categories (the dashboard's, see
    *  `columnCategoryColors`); the rest take the palette. */
   catColours?: Record<string, string> | null;
+  /** How a category reads in the legend, hover and λ list; the value when unset. */
+  catLabel?: (category: string) => string;
   /** Whether the source row clears the tile's significance cutoff: those
    *  points are drawn as outlined diamonds, as the hits are on the volcano. */
   isSignificant?: (rowIndex: number) => boolean;
@@ -1325,13 +1329,14 @@ function buildQq(input: {
       expectedMax = Math.max(expectedMax, series.expected[0]);
       observedMax = Math.max(observedMax, ...series.observed);
       allPs.push(...series.ps);
-      lambdaByCat.push({ cat: name, lambda: genomicInflation(series.ps) });
+      const label = input.catLabel ? input.catLabel(name) : name;
+      lambdaByCat.push({ cat: label, lambda: genomicInflation(series.ps) });
       traces.push(
         adaptGlTrace(
           {
             type: 'scattergl' as const,
             mode: 'markers' as const,
-            name,
+            name: label,
             x: series.expected,
             y: series.observed,
             text: series.ids,
