@@ -116,8 +116,8 @@ export function unitSteps(
 /**
  * How an option of a scope filter reads to the reader: the `label` its
  * `option_cards` entry gives it, else the value itself. The value stays what the
- * filter holds and the data is keyed on; only the banner and the active-filter
- * list draw the label.
+ * filter holds and the data is keyed on; the banner, the active-filter list and
+ * the panel's own picker draw the label.
  */
 export function optionLabel(
   metadata: Pick<StoredMetadata, 'option_cards'> | null | undefined,

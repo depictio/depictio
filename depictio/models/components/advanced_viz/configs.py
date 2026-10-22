@@ -660,6 +660,11 @@ class DaBarplotConfig(_BaseVizConfig):
         default="contrast", description="Contrast name (faceting + single-panel filter)"
     )
     lfc_col: str = Field(default="lfc", description="Log-fold-change (signed)")
+    effect_label: str | None = Field(
+        default=None,
+        max_length=40,
+        description="Axis title of the log-fold change, e.g. 'Log-fold change vs Athens'. Null shows lfc_col",
+    )
     significance_col: str | None = Field(
         default=None, description="FDR-adjusted p-value (for highlighting significant bars)"
     )

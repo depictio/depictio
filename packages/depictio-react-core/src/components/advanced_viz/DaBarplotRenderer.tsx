@@ -24,6 +24,8 @@ interface DaBarplotConfig {
   feature_id_col: string;
   contrast_col: string;
   lfc_col: string;
+  /** Axis title of the log-fold change; the column name when unset. */
+  effect_label?: string | null;
   significance_col?: string | null;
   label_col?: string | null;
   /** Second hover line (e.g. the Kingdom). */
@@ -350,7 +352,7 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
         margin: { l: 170, r: 170, t: 12, b: 36 },
         xaxis: {
           ...plotlyAxisOverrides(isDark, theme),
-          title: { text: config.lfc_col },
+          title: { text: config.effect_label || config.lfc_col },
           zeroline: true,
           // Room beyond the longest bar for its label, on whichever side it points.
           range: [
