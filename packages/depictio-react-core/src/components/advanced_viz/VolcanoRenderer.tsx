@@ -38,6 +38,7 @@ import {
   classifyTiers,
   contrastLabel,
   contrastSides,
+  resolveEffectLabel,
   genomicInflation,
   MA_TABLE_COLUMNS,
   maTableOf,
@@ -93,6 +94,7 @@ interface VolcanoConfig {
    *  shape. Colour stays the tier's: pink up, blue down. */
   reference?: string | null;
   contrast_prefix?: string | null;
+  contrast_separator?: string | null;
   group_symbols?: Record<string, string> | null;
   /** Columns the marker shape can be switched to (e.g. `Kingdom`), beside the
    *  group / direction readings. Fetched with the tile, so the switch is instant. */
@@ -530,7 +532,12 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
         hovers: hoverLines(maRows, config),
         hitSymbol: markerPlanOf(maRows, config, activeMarkerBy).symbolFor,
         xTitle: 'Mean log abundance',
-        yTitle: config.effect_label || 'Log fold change',
+        yTitle:
+          resolveEffectLabel(
+            config.effect_label,
+            config.category_col ? ((maRows[config.category_col] as (string | number)[]) ?? []) : [],
+            config,
+          ) || 'Log fold change',
         sigTitle: c.significance,
         isNegLog10: false,
         sigThreshold,
@@ -576,7 +583,12 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       hovers,
       hitSymbol: markerPlanOf(rows, config, activeMarkerBy).symbolFor,
       isNegLog10: Boolean(config.significance_is_neg_log10),
-      effectTitle: config.effect_label || config.effect_size_col,
+      effectTitle:
+        resolveEffectLabel(
+          config.effect_label,
+          config.category_col ? ((rows[config.category_col] as (string | number)[]) ?? []) : [],
+          config,
+        ) || config.effect_size_col,
       sigTitle: config.significance_col,
       sigAxisTitle: config.significance_label || undefined,
       sigThreshold,
@@ -1246,7 +1258,7 @@ function buildMa(input: {
  */
 function hoverLines(
   rows: Record<string, unknown[]>,
-  config: Pick<VolcanoConfig, 'hover_col' | 'hover_category' | 'category_col' | 'reference' | 'contrast_prefix'>,
+  config: Pick<VolcanoConfig, 'hover_col' | 'hover_category' | 'category_col' | 'reference' | 'contrast_prefix' | 'contrast_separator'>,
 ): string[] | undefined {
   const extra = config.hover_col ? ((rows[config.hover_col] || []) as unknown[]) : null;
   const cats =

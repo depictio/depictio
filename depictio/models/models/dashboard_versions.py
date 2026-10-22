@@ -119,6 +119,7 @@ class TabSnapshot(BaseModel):
     filter_panel_default: Literal["open", "collapsed"] = "open"
     content_width_default: Literal["full", "wide", "comfortable", "compact"] = "full"
     show_tab_header: bool = True
+    open_with_defaults: bool = False
     # Read from the main tab only, as the viewer does; a child tab's own copy
     # is never shown, so it is recorded at its default.
     show_guide: bool = True

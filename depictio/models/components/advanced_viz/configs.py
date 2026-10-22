@@ -120,6 +120,15 @@ class VolcanoConfig(_BaseVizConfig):
             "prefix 'locality' turns 'localityBarcelona' into 'Barcelona'."
         ),
     )
+    contrast_separator: str | None = Field(
+        default=None,
+        max_length=16,
+        description=(
+            "A category_col value that holds this separator names both of its sides, and "
+            "its own baseline replaces `reference`: separator '_vs_' turns "
+            "'localityNaples_vs_Barcelona' into Naples against Barcelona."
+        ),
+    )
     group_symbols: dict[str, str] | None = Field(
         default=None,
         description=(
@@ -159,7 +168,10 @@ class VolcanoConfig(_BaseVizConfig):
     effect_label: str | None = Field(
         default=None,
         max_length=40,
-        description="Volcano x-axis title, e.g. 'Log fold change'. Null shows effect_size_col",
+        description=(
+            "Volcano x-axis title, e.g. 'Log fold change vs {reference}' ({reference} is the "
+            "baseline of the contrast on show). Null shows effect_size_col"
+        ),
     )
     significance_label: str | None = Field(
         default=None,
@@ -663,7 +675,10 @@ class DaBarplotConfig(_BaseVizConfig):
     effect_label: str | None = Field(
         default=None,
         max_length=40,
-        description="Axis title of the log-fold change, e.g. 'Log-fold change vs Athens'. Null shows lfc_col",
+        description=(
+            "Axis title of the log-fold change, e.g. 'Log-fold change vs {reference}' "
+            "({reference} is the baseline of the contrast on show). Null shows lfc_col"
+        ),
     )
     significance_col: str | None = Field(
         default=None, description="FDR-adjusted p-value (for highlighting significant bars)"
@@ -702,6 +717,15 @@ class DaBarplotConfig(_BaseVizConfig):
         description=(
             "Stripped from a contrast value to name the group on its positive side: prefix "
             "'locality' turns 'localityBarcelona' into 'Barcelona'."
+        ),
+    )
+    contrast_separator: str | None = Field(
+        default=None,
+        max_length=16,
+        description=(
+            "A contrast value that holds this separator names both of its sides, and its own "
+            "baseline replaces `reference`: separator '_vs_' turns 'localityNaples_vs_Barcelona' "
+            "into Naples against Barcelona."
         ),
     )
     group_colors: dict[str, str] | None = Field(

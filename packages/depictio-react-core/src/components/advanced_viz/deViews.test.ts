@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   chi2InvCdf1df,
   classifyTiers,
+  contrastLabel,
+  contrastSides,
   genomicInflation,
   matchSearch,
   maTableOf,
@@ -11,6 +13,7 @@ import {
   qqSeries,
   rankTopN,
   resolveDeView,
+  resolveEffectLabel,
   significancePredicate,
   tierCounts,
 } from './deViews';
@@ -171,5 +174,55 @@ describe('significancePredicate', () => {
 
   it('lets every row through when there is no significance column', () => {
     expect(significancePredicate([], { isNegLog10: false, threshold: 0.05 })(3)).toBe(true);
+  });
+});
+
+describe('contrast sides', () => {
+  const groups = {
+    reference: 'Athens',
+    contrast_prefix: 'locality',
+    contrast_separator: '_vs_',
+    group_colors: { Athens: '#1a4f8f', Naples: '#00a550', Barcelona: '#f5a11b' },
+  };
+  const fallback = { positive: 'p', negative: 'n' };
+
+  it('tests the group the value names against the shared reference', () => {
+    const sides = contrastSides('localityBarcelona', groups, fallback);
+    expect([sides.positiveName, sides.negativeName]).toEqual(['Barcelona', 'Athens']);
+    expect(contrastLabel('localityBarcelona', groups)).toBe('Barcelona vs Athens');
+  });
+
+  it('lets a value that names both sides carry its own baseline and colours', () => {
+    const sides = contrastSides('localityNaples_vs_Barcelona', groups, fallback);
+    expect([sides.positiveName, sides.negativeName]).toEqual(['Naples', 'Barcelona']);
+    expect([sides.positive, sides.negative]).toEqual(['#00a550', '#f5a11b']);
+    expect(contrastLabel('localityNaples_vs_Barcelona', groups)).toBe('Naples vs Barcelona');
+  });
+
+  it('ignores the separator when none is configured', () => {
+    const { contrast_separator: _unused, ...plain } = groups;
+    expect(contrastSides('localityNaples_vs_Barcelona', plain, fallback).negativeName).toBe('Athens');
+  });
+});
+
+describe('resolveEffectLabel', () => {
+  const groups = { reference: 'Athens', contrast_prefix: 'locality', contrast_separator: '_vs_' };
+
+  it('names the baseline of the one contrast on show', () => {
+    const label = 'Log-fold change vs {reference}';
+    expect(resolveEffectLabel(label, ['localityNaples_vs_Barcelona', 'localityNaples_vs_Barcelona'], groups))
+      .toBe('Log-fold change vs Barcelona');
+    expect(resolveEffectLabel(label, ['localityNaples'], groups)).toBe('Log-fold change vs Athens');
+  });
+
+  it('falls back on the configured reference when several contrasts are drawn', () => {
+    expect(
+      resolveEffectLabel('vs {reference}', ['localityNaples', 'localityNaples_vs_Barcelona'], groups),
+    ).toBe('vs Athens');
+  });
+
+  it('leaves a label without the token, and an absent one, alone', () => {
+    expect(resolveEffectLabel('Log fold change', ['x'], groups)).toBe('Log fold change');
+    expect(resolveEffectLabel(null, ['x'], groups)).toBeUndefined();
   });
 });

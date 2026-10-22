@@ -15,7 +15,7 @@ import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
 import { demandForItems } from './contentDemand';
-import { contrastLabel, contrastSides } from './deViews';
+import { contrastLabel, contrastSides, resolveEffectLabel } from './deViews';
 
 /** Bar labels and axis text; the default 12 was small beside the tile's title. */
 const BAR_FONT_SIZE = 14;
@@ -40,6 +40,9 @@ interface DaBarplotConfig {
   /** Stripped from a contrast value to name the group on its positive side:
    *  prefix `locality` turns `localityBarcelona` into `Barcelona`. */
   contrast_prefix?: string | null;
+  /** A contrast value holding this separator names both its sides, and its own
+   *  baseline replaces `reference` (see `ContrastGroups`). */
+  contrast_separator?: string | null;
   /** Colour per group name. A bar takes the colour of the group it leans toward;
    *  without a palette the bars are the volcano's pink (up) and blue (down). */
   group_colors?: Record<string, string> | null;
@@ -352,7 +355,7 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
         margin: { l: 170, r: 170, t: 12, b: 36 },
         xaxis: {
           ...plotlyAxisOverrides(isDark, theme),
-          title: { text: config.effect_label || config.lfc_col },
+          title: { text: resolveEffectLabel(config.effect_label, [contrastName], config) || config.lfc_col },
           zeroline: true,
           // Room beyond the longest bar for its label, on whichever side it points.
           range: [

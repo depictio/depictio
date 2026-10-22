@@ -218,6 +218,7 @@ def build_tab_snapshots(family_docs: list[dict[str, Any]]) -> list[TabSnapshot]:
                 filter_panel_default=doc.get("filter_panel_default") or "open",
                 content_width_default=doc.get("content_width_default") or "full",
                 show_tab_header=doc.get("show_tab_header") is not False,
+                open_with_defaults=doc.get("open_with_defaults") is True,
                 # The viewer reads the Guide from the main tab for the whole
                 # family. A child's copy is never shown, so recording it would
                 # only let an invisible field move the hash.

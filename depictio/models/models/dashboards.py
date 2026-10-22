@@ -501,6 +501,16 @@ class DashboardDataLite(BaseModel):
         description="Show the tab's name (and subtitle) above its canvas. Off for a "
         "tab whose content opens on its own title.",
     )
+    # A landing tab that is meant to be read the same way every time (study
+    # overview, KPIs) should not inherit what the viewer did elsewhere: the
+    # sample filters they set on another tab, or the view they left it in.
+    open_with_defaults: bool = Field(
+        default=False,
+        description="Every visit to this tab starts from its declared filter "
+        "defaults: the viewer's remembered view, the filters carried over from "
+        "other tabs and the server copy are not applied (a #filters= share link "
+        "still is). What the viewer changes here is still carried to other tabs.",
+    )
     content_width_default: Literal["full", "wide", "comfortable", "compact"] = Field(
         default="full",
         description="Initial page width before the viewer has picked one: 'full', "
@@ -861,6 +871,7 @@ class DashboardDataLite(BaseModel):
         "filter_panel_default",
         "content_width_default",
         "show_tab_header",
+        "open_with_defaults",
         "show_guide",
         "guide_intro",
         "advanced_viz_controls",
@@ -919,6 +930,8 @@ class DashboardDataLite(BaseModel):
             data.pop("is_main_tab", None)
         if data.get("show_tab_header", True) is True:
             data.pop("show_tab_header", None)
+        if not data.get("open_with_defaults", False):
+            data.pop("open_with_defaults", None)
         if data.get("show_guide", True) is True:
             data.pop("show_guide", None)
         if data.get("tab_order", 0) == 0:
@@ -1801,6 +1814,7 @@ class DashboardDataLite(BaseModel):
             filter_panel_default=dashboard_data.get("filter_panel_default") or "open",
             content_width_default=dashboard_data.get("content_width_default") or "full",
             show_tab_header=dashboard_data.get("show_tab_header", True) is not False,
+            open_with_defaults=dashboard_data.get("open_with_defaults") is True,
             show_guide=dashboard_data.get("show_guide", True) is not False,
             guide_intro=dashboard_data.get("guide_intro") or "",
             advanced_viz_controls=dashboard_data.get("advanced_viz_controls") or "popover",
@@ -1938,6 +1952,7 @@ class DashboardDataLite(BaseModel):
             "filter_panel_default": self.filter_panel_default,
             "content_width_default": self.content_width_default,
             "show_tab_header": self.show_tab_header,
+            "open_with_defaults": self.open_with_defaults,
             "show_guide": self.show_guide,
             "guide_intro": self.guide_intro,
             "advanced_viz_controls": self.advanced_viz_controls,
@@ -2384,6 +2399,8 @@ class DashboardData(MongoModel):
     content_width_default: Literal["full", "wide", "comfortable", "compact"] = "full"
     # Whether the tab's name is drawn above its canvas.
     show_tab_header: bool = True
+    # Whether a visit starts from the declared filter defaults.
+    open_with_defaults: bool = False
     # The Guide page and its author note. Read from the main tab for the
     # whole family; a child tab's own copy is ignored.
     show_guide: bool = True

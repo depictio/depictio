@@ -689,6 +689,8 @@ export interface DashboardData {
   content_width_default?: 'full' | 'wide' | 'comfortable' | 'compact';
   /** False: no tab name above the canvas (a tab that opens on its own title). */
   show_tab_header?: boolean;
+  /** The tab starts from its declared filter defaults on every visit. */
+  open_with_defaults?: boolean;
   /** The Guide page: offered unless the main tab sets this to false. Only the
    *  main tab's value counts (see `resolveGuideSettings`). */
   show_guide?: boolean;
