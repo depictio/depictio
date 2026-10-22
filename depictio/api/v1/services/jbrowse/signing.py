@@ -35,10 +35,32 @@ def sign(scope: str, dc_id: str, item: str, role: str, uid: str, exp: int) -> st
     return digest.hexdigest()[:40]
 
 
-def signed_query(scope: str, dc_id: str, item: str, role: str, uid: str) -> str:
-    """Query string (without ``?``) granting ``role`` of ``item`` to ``uid``."""
+def pinned_item(item: str, version: int | None) -> str:
+    """``item`` as signed for a read of the manifest at Delta commit ``version``.
+
+    A track URL minted under a pinned data version names that commit (``v``),
+    and the commit is part of what is signed: a client cannot move a URL to
+    another version of the manifest, where the same key may name another row.
+    """
+    return item if version is None else f"{item}@{version}"
+
+
+def signed_query(
+    scope: str, dc_id: str, item: str, role: str, uid: str, version: int | None = None
+) -> str:
+    """Query string (without ``?``) granting ``role`` of ``item`` to ``uid``.
+
+    ``version`` pins the manifest commit the proxy reads the item from.
+    """
     exp = int(time.time()) + settings.jbrowse.url_ttl_s
-    return urlencode({"uid": uid, "exp": exp, "sig": sign(scope, dc_id, item, role, uid, exp)})
+    params: dict[str, str | int] = {
+        "uid": uid,
+        "exp": exp,
+        "sig": sign(scope, dc_id, pinned_item(item, version), role, uid, exp),
+    }
+    if version is not None:
+        params["v"] = version
+    return urlencode(params)
 
 
 def verify(

@@ -47,13 +47,13 @@ def _absolute(uri: str | None, props: Any) -> str | None:
     return uri
 
 
-def _url_factory(tdc: TracksDC, uid: str):
+def _url_factory(tdc: TracksDC, uid: str, delta_version: int | None = None):
     def track_url(track: TrackRow, role: str) -> str:
         target = _absolute(track.uri if role == "data" else track.index_uri, tdc.props)
         if tdc.props.direct_access and _is_https(target):
             assert target
             return target
-        query = signing.signed_query("track", tdc.dc_id, track.key, role, uid)
+        query = signing.signed_query("track", tdc.dc_id, track.key, role, uid, delta_version)
         return f"{API_PREFIX}/jbrowse/tracks/{tdc.dc_id}/{track.key}/{role}?{query}"
 
     def assembly_url(uri: str, role: str) -> str:
@@ -130,16 +130,19 @@ def build_jbrowse_payload(
     filtered_rows: list[TrackRow] | None,
     uid: str,
     locus: str | None = None,
+    delta_version: int | None = None,
 ) -> dict[str, Any]:
     """The render payload.
 
     ``filtered_rows`` is the manifest after dashboard filters, or None when no
     filter applies to the tracks (then the view starts with ``initial_tracks``).
+    ``delta_version`` is the manifest commit a pinned view reads; the track
+    URLs carry it, so the proxy serves the files of that same manifest.
     """
     props = tdc.props
-    all_tracks = list(tracks_by_key(tdc).values())
+    all_tracks = list(tracks_by_key(tdc, delta_version).values())
     selection_column = _selection_column(component, tdc)
-    track_url, assembly_url = _url_factory(tdc, uid)
+    track_url, assembly_url = _url_factory(tdc, uid, delta_version)
 
     max_tracks = int(component.get("max_tracks") or 20)
     default_ids = list(component.get("default_tracks") or [])
@@ -265,9 +268,12 @@ def build_jbrowse_payload(
 
 
 def filtered_track_rows(
-    tdc: TracksDC, filter_metadata: list[dict[str, Any]]
+    tdc: TracksDC, filter_metadata: list[dict[str, Any]], delta_version: int | None = None
 ) -> list[TrackRow] | None:
-    """Manifest rows left after the filters, or None when nothing narrows them."""
+    """Manifest rows left after the filters, or None when nothing narrows them.
+
+    ``delta_version`` reads the manifest as of that commit (a pinned view).
+    """
     if not filter_metadata:
         return None
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
@@ -284,9 +290,10 @@ def filtered_track_rows(
         data_collection_id=tdc.dc_id,
         metadata=filter_metadata,
         init_data=init_data,
+        delta_version=delta_version,
     )
     rows = manifest_rows(df, tdc.props)
-    if len(rows) == len(tracks_by_key(tdc)):
+    if len(rows) == len(tracks_by_key(tdc, delta_version)):
         # Filters that do not touch this manifest (no shared column, no link)
         # leave every row: treat that as "no filter" rather than showing a
         # truncated first page of everything.

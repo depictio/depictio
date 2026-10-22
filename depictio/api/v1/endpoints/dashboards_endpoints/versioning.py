@@ -129,7 +129,7 @@ _LOGO_CACHE_BUSTER = re.compile(r"\?v=\d+$")
 #: ``image`` is Delta-backed for its *manifest* of image paths; the image
 #: blobs themselves live at a user-supplied prefix with no content
 #: addressing, which is recorded as an explicit gap rather than glossed over.
-_DELTA_TYPES = frozenset({"table", "image"})
+_DELTA_TYPES = frozenset({"table", "image", "genomic_tracks"})
 _MANIFEST_TYPES = frozenset({"multiqc", "jbrowse2"})
 _ASSET_TYPES = frozenset({"geojson", "phylogeny"})
 
@@ -411,6 +411,10 @@ def build_dc_stamps(tabs: list[TabSnapshot]) -> list[DataCollectionStamp]:
         # live under a user-supplied prefix with no content addressing.
         if dc_type.lower() == "image":
             stamp.unversioned_parts = ["image_pixels"]
+        # Likewise a track manifest: its rows are versioned, the track files
+        # they name (read in place, or uploaded under the DC's prefix) are not.
+        elif dc_type.lower() == "genomic_tracks":
+            stamp.unversioned_parts = ["track_files"]
 
         try:
             dt_doc = deltatables_collection.find_one({"data_collection_id": ObjectId(dc_id)})

@@ -214,7 +214,9 @@ class DataCollectionStamp(BaseModel):
     #: Parts of this collection that are NOT covered by the stamp — e.g.
     #: ``["image_pixels"]`` for an image DC, whose manifest is versioned but
     #: whose underlying image blobs live at a user-supplied prefix with no
-    #: content addressing. Recorded so the UI can state partial coverage
+    #: content addressing, and ``["track_files"]`` for a ``genomic_tracks``
+    #: DC, whose manifest rows are versioned but not the track files they
+    #: name. Recorded so the UI can state partial coverage
     #: instead of implying the whole collection is reproducible.
     unversioned_parts: list[str] = Field(default_factory=list)
 

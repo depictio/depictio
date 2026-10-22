@@ -4999,9 +4999,16 @@ def _find_project_dc(project_id: Any, dc_tag: str) -> tuple[str, str] | None:
 
 
 def _jbrowse_locus(
-    component: dict, filters: list[dict], project_id: Any, access_token: str | None
+    component: dict,
+    filters: list[dict],
+    project_id: Any,
+    access_token: str | None,
+    pins: DataVersionPins,
 ) -> str | None:
-    """Locus of the filtered rows of ``locus_from`` when they narrow to a few rows."""
+    """Locus of the filtered rows of ``locus_from`` when they narrow to a few rows.
+
+    The ``locus_from`` collection is read at its pinned commit, like the tracks.
+    """
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
     from depictio.api.v1.services.jbrowse.render import locus_from_rows
 
@@ -5024,7 +5031,10 @@ def _jbrowse_locus(
         return None
     try:
         df = load_deltatable_lite(
-            workflow_id=ObjectId(wf_id), data_collection_id=dc_id, metadata=metadata
+            workflow_id=ObjectId(wf_id),
+            data_collection_id=dc_id,
+            metadata=metadata,
+            delta_version=pins.for_dc(dc_id),
         )
     except Exception as e:  # noqa: BLE001 - a missing locus must not fail the view
         logger.warning(f"render_jbrowse: locus lookup failed: {e}")
@@ -5045,9 +5055,13 @@ def render_jbrowse_endpoint(
     """JBrowse configuration of a ``jbrowse`` component under the dashboard filters.
 
     Request body: ``{"filters": [...]}`` (same payload as the other render
-    endpoints; the component strips its own ``jbrowse_selection`` entry).
+    endpoints; the component strips its own ``jbrowse_selection`` entry), plus
+    the optional time-travel keys (``as_of_version`` / ``data_versions``, see
+    ``_data_pins``; ``definition_version``, see ``_render_component``).
     Filters are extended over DC links, then applied to the component's
-    ``genomic_tracks`` manifest: the matching tracks are the ones shown.
+    ``genomic_tracks`` manifest: the matching tracks are the ones shown. A
+    pinned manifest is read at its commit, and so is the ``locus_from``
+    collection; the signed track URLs name the commit for the proxy.
 
     Returns the assembly and track configurations (file locations are signed
     proxy URLs), the track ids to show, the locus and view flags, plus a
@@ -5073,6 +5087,7 @@ def render_jbrowse_endpoint(
         raise HTTPException(status_code=403, detail="Permission denied.")
 
     component = _render_component(dashboard_data, component_id, "jbrowse", request, label="JBrowse")
+    pins = _data_pins(request or {}, dashboard_data)
 
     dc_id = component.get("dc_id")
     if not dc_id:
@@ -5092,14 +5107,16 @@ def render_jbrowse_endpoint(
         component_type="jbrowse",
     )
     try:
-        filtered = filtered_track_rows(tdc, _build_filter_metadata(merged_filters))
-        locus = _jbrowse_locus(component, filters, project_id, access_token)
+        delta_version = pins.for_dc(str(dc_id))
+        filtered = filtered_track_rows(tdc, _build_filter_metadata(merged_filters), delta_version)
+        locus = _jbrowse_locus(component, filters, project_id, access_token, pins)
         return build_jbrowse_payload(
             component,
             tdc,
             filtered,
             uid=str(getattr(current_user, "id", "")),
             locus=locus,
+            delta_version=delta_version,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

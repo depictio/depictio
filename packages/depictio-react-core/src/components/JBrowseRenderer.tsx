@@ -27,6 +27,8 @@ import {
   JBrowseTrackRow,
   StoredMetadata,
 } from '../api';
+import { useDataVersionRequest } from '../dataVersions';
+import { renderDefinitionKey } from '../renderKey';
 import { filtersExcludingOwn } from '../selection';
 import ComponentSkeleton from './ComponentSkeleton';
 import RefetchOverlay from './RefetchOverlay';
@@ -45,6 +47,7 @@ import {
 } from './jbrowse/forceLoad';
 import TrackMenu from './jbrowse/TrackMenu';
 import ViewMenu, { type ViewMenuItem } from './jbrowse/ViewMenu';
+import { wheelIntent, wheelPixels, zoomFactor } from './jbrowse/wheel';
 
 /** Hidden for now: JBrowse's own track selector (the toolbar burger) is the
  *  only track picker, so the two never disagree. Flip to re-enable the menu. */
@@ -64,6 +67,8 @@ interface LgvView {
   visibleLocStrings: string;
   showTrack: (trackId: string) => unknown;
   hideTrack: (trackId: string) => unknown;
+  /** Clamps to the view's zoom limits; `offset` (px) is the point held still. */
+  zoomTo: (bpPerPx: number, offset?: number) => unknown;
 }
 
 /** ``isAlive`` throws on anything that is not a state-tree node. */
@@ -91,6 +96,8 @@ export interface JBrowseToolbarState {
   clickFilters: boolean;
   /** Lift JBrowse's "region too large" limits on every open track. */
   forceLoad: boolean;
+  /** Let a plain vertical wheel scroll the tracks (off: it scrolls the page). */
+  scrollTracks: boolean;
 }
 
 interface JBrowseRendererProps {
@@ -181,6 +188,18 @@ function absolutize<T>(node: T): T {
 const portalContainer = (): HTMLElement =>
   (document.fullscreenElement as HTMLElement | null) ?? document.body;
 
+/** The nearest ancestor above ``el`` that scrolls vertically: the dashboard
+ *  canvas, or the document when the page itself scrolls. */
+function pageScroller(el: HTMLElement): Element {
+  for (let node = el.parentElement; node; node = node.parentElement) {
+    const { overflowY } = window.getComputedStyle(node);
+    if (/(auto|scroll|overlay)/.test(overflowY) && node.scrollHeight > node.clientHeight + 1) {
+      return node;
+    }
+  }
+  return document.scrollingElement ?? document.documentElement;
+}
+
 /**
  * The linear genome view without JBrowse's own title bar (hamburger, view
  * name, logo): Depictio's chrome already frames the tile. Mirrors
@@ -265,12 +284,30 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     createdAt: number;
     location: string | null;
     filtersKey: string;
+    versionKey: string;
   }>({
     assembly: '',
     createdAt: 0,
     location: null,
     filtersKey: '',
+    versionKey: '',
   });
+  // Data time travel: the version body goes into the request, its key into
+  // the fetch deps. The key of the request the current payload answered is
+  // kept apart: a payload of another data version carries other track URLs
+  // (they name the manifest commit) under the same track ids, so the view is
+  // rebuilt rather than diffed.
+  const {
+    body: versionBody,
+    key: versionKey,
+    definitionVersionId,
+  } = useDataVersionRequest();
+  const definitionKey = renderDefinitionKey(metadata, definitionVersionId);
+  const payloadVersionKey = useRef('');
+  // A past version (or a dataset pin) is read-only: it opens on its own
+  // tracks and locus, and never writes the viewer's remembered ones, or going
+  // back to the live dashboard would reopen what the preview showed.
+  const timeTravel = Object.keys(versionBody).length > 0;
   // Track ids this component manages (the manifest's): user-opened tracks
   // outside this set (annotation, UCSC, from the track selector or the track
   // menu) are never hidden by a filter change.
@@ -287,6 +324,7 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     showStatus: readToggle(`${storageKey}.status`, true),
     clickFilters: readToggle(`${storageKey}.clickFilters`, true),
     forceLoad: readToggle(`${storageKey}.forceLoad`, metadata.force_load === true),
+    scrollTracks: readToggle(`${storageKey}.scrollTracks`, false),
   }));
   const setToggle = useCallback(
     (key: keyof JBrowseToolbarState, suffix: string) => {
@@ -309,9 +347,11 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchJBrowseSession(dashboardId, metadata.index, fetchFilters)
+    fetchJBrowseSession(dashboardId, metadata.index, fetchFilters, versionBody)
       .then((res) => {
-        if (!cancelled) setPayload(res);
+        if (cancelled) return;
+        payloadVersionKey.current = versionKey;
+        setPayload(res);
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err?.message || String(err));
@@ -323,7 +363,7 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, filtersKey, refreshTick]);
+  }, [dashboardId, metadata.index, filtersKey, refreshTick, versionKey, definitionKey]);
 
   useReportLoadStatus(
     metadata.index,
@@ -364,10 +404,11 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     for (const id of manifestTrackIds(payload.track_rows)) managedIds.current.add(id);
 
     const stale = Date.now() - viewMeta.current.createdAt > VIEW_MAX_AGE_MS;
-    if (!viewState || viewMeta.current.assembly !== assemblyName || stale) {
+    const otherVersion = viewMeta.current.versionKey !== payloadVersionKey.current;
+    if (!viewState || viewMeta.current.assembly !== assemblyName || stale || otherVersion) {
       // The open tracks and their order as the user left them (per viewer),
       // restricted to tracks this payload still knows about.
-      const savedIds = readTrackIds(`${storageKey}.tracks`);
+      const savedIds = timeTravel ? [] : readTrackIds(`${storageKey}.tracks`);
       const known = new Set(payload.track_rows.map((r) => r.track_id));
       const openAtStart = savedIds.length
         ? savedIds.filter((id) => known.has(id))
@@ -390,7 +431,10 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
             hideHeaderOverview: !toolbar.showOverview,
             init: {
               assembly: assemblyName,
-              loc: readString(`${storageKey}.loc`) || payload.location || undefined,
+              loc:
+                (timeTravel ? null : readString(`${storageKey}.loc`)) ||
+                payload.location ||
+                undefined,
               tracks: openAtStart,
             },
           },
@@ -401,6 +445,7 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
         createdAt: Date.now(),
         location: payload.location,
         filtersKey,
+        versionKey: payloadVersionKey.current,
       };
       setViewState(state);
       return;
@@ -447,7 +492,7 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
 
   // Remember which tracks are open, in order: a refresh reopens the same set.
   useEffect(() => {
-    if (!viewState) return;
+    if (!viewState || timeTravel) return;
     const view = viewState.session.view as unknown as LgvView;
     let timer: number | undefined;
     const dispose = reaction(
@@ -463,12 +508,12 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
       window.clearTimeout(timer);
       dispose();
     };
-  }, [viewState, storageKey]);
+  }, [viewState, storageKey, timeTravel]);
 
   // Remember the locus the user is looking at, so a refresh (or a rebuilt view)
   // reopens there instead of at the YAML default. Debounced: panning fires a lot.
   useEffect(() => {
-    if (!viewState) return;
+    if (!viewState || timeTravel) return;
     const view = viewState.session.view as unknown as LgvView;
     let timer: number | undefined;
     const dispose = reaction(
@@ -485,7 +530,7 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
       window.clearTimeout(timer);
       dispose();
     };
-  }, [viewState, storageKey]);
+  }, [viewState, storageKey, timeTravel]);
 
   // Theme follows the Mantine colour scheme without rebuilding the view.
   useEffect(() => {
@@ -517,6 +562,46 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     document.addEventListener('fullscreenchange', onFs);
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
+
+  // ---- wheel: scroll the dashboard, zoom on Cmd/Ctrl + wheel -----------------
+  // Capture phase on the tile, so the decision is made before JBrowse's own
+  // listener (or a track's scroll box) sees the event. See `jbrowse/wheel.ts`.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const viewRef = useRef<LgvView | null>(null);
+  viewRef.current = viewState ? (viewState.session.view as unknown as LgvView) : null;
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    let zoomPx = 0;
+    let zoomAt = 0;
+    let frame = 0;
+    const onWheel = (event: WheelEvent) => {
+      // In fullscreen the tile is the page: nothing behind it to scroll.
+      const fullscreen = !!document.fullscreenElement?.contains(root);
+      const intent = wheelIntent(event, !toolbar.scrollTracks && !fullscreen);
+      if (intent === 'native') return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (intent === 'page') {
+        pageScroller(root).scrollBy({ top: wheelPixels(event, window.innerHeight) });
+        return;
+      }
+      zoomPx += wheelPixels(event, root.clientHeight);
+      zoomAt = event.clientX - root.getBoundingClientRect().left;
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        const view = viewRef.current;
+        if (view && aliveNode(view)) view.zoomTo(view.bpPerPx * zoomFactor(zoomPx), zoomAt);
+        zoomPx = 0;
+      });
+    };
+    root.addEventListener('wheel', onWheel, { capture: true, passive: false });
+    return () => {
+      root.removeEventListener('wheel', onWheel, { capture: true });
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [toolbar.scrollTracks]);
 
   // ---- open tracks (live) → track menu ---------------------------------------
   // Manual choices made in the menu hold until the next payload: the sync
@@ -747,34 +832,49 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     if (!onToolbarNode) return;
     const toggles: ViewMenuItem[] = [
       {
-        key: 'forceload',
-        label: 'Force load',
-        checked: toolbar.forceLoad,
-        onChange: () => setToggle('forceLoad', 'forceLoad'),
-      },
-      {
         key: 'header',
+        group: 'View',
         label: 'Navigation header',
         checked: toolbar.showHeader,
         onChange: () => setToggle('showHeader', 'header'),
       },
       {
         key: 'overview',
+        group: 'View',
         label: 'Overview ruler',
         checked: toolbar.showOverview,
         onChange: () => setToggle('showOverview', 'overview'),
       },
       {
         key: 'status',
+        group: 'View',
         label: 'Status bar',
         checked: toolbar.showStatus,
         onChange: () => setToggle('showStatus', 'status'),
+      },
+      {
+        key: 'forceload',
+        group: 'Loading',
+        label: 'Force load',
+        description: 'Load tracks past their download limit',
+        checked: toolbar.forceLoad,
+        onChange: () => setToggle('forceLoad', 'forceLoad'),
+      },
+      {
+        key: 'scrolltracks',
+        group: 'Interaction',
+        label: 'Wheel scrolls the tracks',
+        description: 'Off: the wheel scrolls the dashboard. Cmd/Ctrl + wheel zooms',
+        checked: toolbar.scrollTracks,
+        onChange: () => setToggle('scrollTracks', 'scrollTracks'),
       },
     ];
     if (selectionEnabled && selectionMode === 'feature_click') {
       toggles.push({
         key: 'click',
+        group: 'Interaction',
         label: 'Click filters the dashboard',
+        description: "A feature click picks its track's sample",
         checked: toolbar.clickFilters,
         onChange: () => setToggle('clickFilters', 'clickFilters'),
       });
@@ -794,7 +894,7 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
             onBackToFilters={onBackToFilters}
           />
         )}
-        <ViewMenu key="view" items={toggles} portalTarget={fullscreenEl} disabled={!viewState} />
+        <ViewMenu key="view" items={toggles} disabled={!viewState} />
       </React.Fragment>,
     );
   }, [
@@ -825,6 +925,7 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
 
   return (
     <Box
+      ref={rootRef}
       data-testid="jbrowse-component"
       data-jbrowse-ready={viewState ? 'true' : 'false'}
       style={{

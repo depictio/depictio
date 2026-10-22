@@ -63,18 +63,68 @@ LIST_TRACKS: dict[str, Any] = {
 }
 
 
+# A ``/list/tracks`` response without ``trackLeavesOnly``: subtracks nest in
+# their composite, which alone carries the group.
+TREE_TRACKS: dict[str, Any] = {
+    "hg19": {
+        "dbSnp153Composite": {
+            "shortLabel": "dbSNP 153",
+            "type": "bigDbSnp",
+            "group": "varRep",
+            "compositeTrack": "on",
+            "dbSnp153Common": {
+                "shortLabel": "Common dbSNP(153)",
+                "type": "bigDbSnp",
+                "bigDataUrl": "/gbdb/hg19/snp/dbSnp153Common.bb",
+                "parent": "dbSnp153Composite",
+            },
+            "dbSnp153ViewVariants": {
+                "shortLabel": "Variants",
+                "type": "bigDbSnp",
+                "dbSnp153": {
+                    "shortLabel": "All dbSNP(153)",
+                    "type": "bigDbSnp",
+                    "bigDataUrl": "/gbdb/hg19/snp/dbSnp153.bb",
+                },
+            },
+        },
+        "gc5Base": {
+            "shortLabel": "GC Percent",
+            "type": "bigWig 0 100",
+            "bigDataUrl": "/gbdb/hg19/bbi/gc5Base.bw",
+            "group": "map",
+        },
+    }
+}
+
+
 @pytest.fixture(autouse=True)
 def canned_catalog(monkeypatch):
     ucsc._cache.clear()
+    ucsc._failed_at.clear()
     calls: list[str] = []
+    shared: dict[str, Any] = {}
 
     def fetch(genome: str):
         calls.append(genome)
         return ucsc.parse_catalog(genome, LIST_TRACKS)
 
     monkeypatch.setattr(ucsc, "_fetch_catalog", fetch)
+    # The cross-worker copy, kept in a dict instead of Redis.
+    monkeypatch.setattr(ucsc, "_shared_get", lambda genome: shared.get(genome))
+    monkeypatch.setattr(
+        ucsc, "_shared_set", lambda genome, entry: shared.__setitem__(genome, entry)
+    )
+    monkeypatch.setattr(ucsc, "_claim_refresh", lambda genome: True)
+    monkeypatch.setattr(ucsc, "_release_refresh", lambda genome: None)
     yield calls
     ucsc._cache.clear()
+    ucsc._failed_at.clear()
+
+
+def _stale(genome: str) -> None:
+    """Age this process's copy past the TTL."""
+    ucsc._cache[genome].fetched_at -= settings.jbrowse.ucsc_catalog_ttl_s + 1
 
 
 class TestCatalog:
@@ -110,11 +160,66 @@ class TestCatalog:
         monkeypatch.setattr(ucsc, "_fetch_catalog", boom)
         assert ucsc.catalog("mm10") == {}
 
+    def test_a_stale_catalogue_is_refetched(self, canned_catalog):
+        ucsc.catalog("hg38")
+        _stale("hg38")
+        ucsc.catalog("hg38")
+        assert canned_catalog == ["hg38", "hg38"]
+
+    def test_an_outage_serves_the_stale_catalogue_and_backs_off(self, monkeypatch):
+        ucsc.catalog("hg38")
+        _stale("hg38")
+        attempts: list[str] = []
+
+        def boom(genome):
+            attempts.append(genome)
+            raise httpx.ConnectError("offline")
+
+        monkeypatch.setattr(ucsc, "_fetch_catalog", boom)
+        assert "clinvarMain" in ucsc.catalog("hg38")
+        assert "clinvarMain" in ucsc.catalog("hg38")
+        assert attempts == ["hg38"]
+
+    def test_another_workers_catalogue_is_reused(self, canned_catalog):
+        ucsc.catalog("hg38")
+        ucsc._cache.clear()  # a fresh worker: nothing in process, the shared copy is there
+        ucsc.catalog("hg38")
+        assert canned_catalog == ["hg38"]
+
+    def test_tree_keeps_group_and_collection(self):
+        tracks = ucsc.parse_catalog("hg19", TREE_TRACKS)
+        assert set(tracks) == {"dbSnp153Common", "dbSnp153", "gc5Base"}
+        assert tracks["dbSnp153"].group == "varRep"
+        assert tracks["dbSnp153"].collection == "dbSNP 153"
+        assert tracks["dbSnp153Common"].collection == "dbSNP 153"
+        assert (tracks["gc5Base"].group, tracks["gc5Base"].collection) == ("map", None)
+
     def test_search_matches_name_and_label(self):
-        names = [t["name"] for t in ucsc.search("hg38", "clin")]
+        names = [t["name"] for t in ucsc.search("hg38", "clin")["tracks"]]
         assert names == ["clinvarMain"]
-        assert [t["name"] for t in ucsc.search("hg38", "gencode")] == ["knownGene"]
-        assert len(ucsc.search("hg38", "", limit=2)) == 2
+        assert [t["name"] for t in ucsc.search("hg38", "gencode")["tracks"]] == ["knownGene"]
+        assert len(ucsc.search("hg38", "", limit=2)["tracks"]) == 2
+
+    def test_search_pages_and_counts(self):
+        first = ucsc.search("hg38", "", limit=3)
+        rest = ucsc.search("hg38", "", limit=3, offset=3)
+        assert first["total"] == rest["total"] == 4
+        names = [t["name"] for t in first["tracks"] + rest["tracks"]]
+        assert sorted(names) == ["clinvarMain", "gc5Base", "knownGene", "lrSv"]
+        assert first["fetched_at"] and "+" not in first["fetched_at"]
+
+    def test_group_facets_ignore_the_group_filter(self):
+        body = ucsc.search("hg38", "", group="genes")
+        assert [t["name"] for t in body["tracks"]] == ["knownGene"]
+        assert body["total"] == 1
+        counts = {g["id"]: (g["label"], g["count"]) for g in body["groups"]}
+        assert counts == {
+            "": ("Other", 2),
+            "genes": ("Genes and Gene Predictions", 1),
+            "phenDis": ("Phenotype and Literature", 1),
+        }
+        ungrouped = ucsc.search("hg38", "", group="")
+        assert {t["name"] for t in ungrouped["tracks"]} == {"gc5Base", "lrSv"}
 
 
 class TestGenome:
@@ -177,7 +282,9 @@ class TestPayload:
         track = TrackRow(
             key=track_key("a.bw"), track_id="a", name="a", uri="a.bw", index_uri=None, fmt="bigwig"
         )
-        monkeypatch.setattr(render, "tracks_by_key", lambda tdc: {track.key: track})
+        monkeypatch.setattr(
+            render, "tracks_by_key", lambda tdc, delta_version=None: {track.key: track}
+        )
         return TracksDC(
             dc_id="646b0f3c1e4a2d7f8e5b8ca9",
             wf_id="646b0f3c1e4a2d7f8e5b8c00",
@@ -239,7 +346,20 @@ class TestRoutes:
 
     def test_list_for_an_unknown_assembly(self, client):
         c, _ = client
-        assert c.get("/jbrowse/ucsc/whatever/tracks").json() == {"genome": None, "tracks": []}
+        assert c.get("/jbrowse/ucsc/whatever/tracks").json() == {
+            "genome": None,
+            "tracks": [],
+            "total": 0,
+            "groups": [],
+            "fetched_at": None,
+        }
+
+    def test_list_pages(self, client):
+        c, _ = client
+        body = c.get("/jbrowse/ucsc/hg38/tracks", params={"limit": 1, "offset": 1}).json()
+        assert body["total"] == 4
+        assert len(body["tracks"]) == 1
+        assert c.get("/jbrowse/ucsc/hg38/tracks", params={"limit": 0}).status_code == 422
 
     def test_proxy_reads_the_catalogued_file_only(self, client):
         c, reads = client

@@ -3,21 +3,24 @@
  *
  * The browser itself is configured server-side from the *saved* component
  * (POST /dashboards/render_jbrowse/{dashboard}/{component}), so an unsaved
- * draft can't be drawn. The preview therefore summarises what the draft will
- * show — the reference, the track limits, and the first manifest rows the
- * dashboard filters let through — and, when editing a saved component, offers
- * the live view of its last saved version next to that summary.
+ * draft can't be drawn. The draft summary answers what the browser will open
+ * and how it behaves: the reference and start position, the tracks it opens
+ * by source (always-shown, manifest, UCSC, gene annotation) with their names,
+ * then the interaction and loading settings. It mirrors the server's rule
+ * (`build_jbrowse_payload`): always-shown tracks first, then the manifest rows
+ * the dashboard filters let through (the first `initial_tracks` when none
+ * applies), `max_tracks` in all. When editing a saved component, the live view
+ * of its last saved version sits next to it.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Badge,
   Box,
+  Divider,
   Group,
-  ScrollArea,
   SegmentedControl,
   Stack,
-  Table,
   Text,
+  ThemeIcon,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { ComponentRenderer, fetchDataCollectionPreview } from 'depictio-react-core';
@@ -28,14 +31,89 @@ import PreviewPanel from '../shared/PreviewPanel';
 import type { JBrowseConfig } from './JBrowseBuilder';
 import type { GenomicTracksProps } from './jbrowseApi';
 
-const PREVIEW_ROWS = 50;
-const SHOWN_ROWS = 12;
+// Manifests are small (a track per file); this reads all of a typical one, so
+// the names and the format split cover every matching track.
+const PREVIEW_ROWS = 500;
+const SHOWN_NAMES = 6;
 
 interface Props {
   /** The bound DC's genomic_tracks properties; null while loading or for a
    *  legacy jbrowse2 collection. */
   dcProps: GenomicTracksProps | null;
 }
+
+const plural = (n: number, word: string) =>
+  `${n.toLocaleString('en-US')} ${word}${n === 1 ? '' : 's'}`;
+
+interface NamedTrack {
+  name: string;
+  /** Track format (bigWig, bed...), shown dimmed beside the name. */
+  note?: string | null;
+}
+
+/** The first tracks as a plain list, then "+N more". */
+const Names: React.FC<{ tracks: NamedTrack[] }> = ({ tracks }) =>
+  tracks.length === 0 ? null : (
+    <Stack gap={2} pl={2}>
+      {tracks.slice(0, SHOWN_NAMES).map((t, i) => (
+        <Group key={`${t.name}-${i}`} gap="xs" wrap="nowrap" justify="space-between">
+          <Text size="xs" truncate style={{ minWidth: 0 }}>
+            {t.name}
+          </Text>
+          {t.note && (
+            <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
+              {t.note}
+            </Text>
+          )}
+        </Group>
+      ))}
+      {tracks.length > SHOWN_NAMES && (
+        <Text size="xs" c="dimmed">
+          +{tracks.length - SHOWN_NAMES} more
+        </Text>
+      )}
+    </Stack>
+  );
+
+/** One source of tracks: icon, name, count, what decides it, and its tracks. */
+const Source: React.FC<{
+  icon: string;
+  title: string;
+  count: string;
+  detail: React.ReactNode;
+  tracks?: NamedTrack[];
+  muted?: boolean;
+}> = ({ icon, title, count, detail, tracks = [], muted }) => (
+  <Group gap="sm" align="flex-start" wrap="nowrap" opacity={muted ? 0.6 : 1}>
+    <ThemeIcon variant="light" size="md" radius="sm" color={muted ? 'gray' : undefined}>
+      <Icon icon={icon} width={16} />
+    </ThemeIcon>
+    <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+      <Group justify="space-between" wrap="nowrap" gap="xs">
+        <Text size="sm" fw={600}>
+          {title}
+        </Text>
+        <Text size="sm" fw={600} style={{ whiteSpace: 'nowrap' }}>
+          {count}
+        </Text>
+      </Group>
+      <Text size="xs" c="dimmed">
+        {detail}
+      </Text>
+      <Names tracks={tracks} />
+    </Stack>
+  </Group>
+);
+
+/** A setting and its value, in the two-column settings list. */
+const Setting: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
+  <>
+    <Text size="xs" c="dimmed">
+      {label}
+    </Text>
+    <Text size="xs">{children}</Text>
+  </>
+);
 
 const JBrowsePreview: React.FC<Props> = ({ dcProps }) => {
   const dcId = useBuilderStore((s) => s.dcId);
@@ -76,24 +154,50 @@ const JBrowsePreview: React.FC<Props> = ({ dcProps }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dcId, isLegacy, filterKey]);
 
-  // The manifest columns worth showing, in reading order; the rest of the
-  // manifest is in the columns description under the form.
-  const shownColumns = useMemo(() => {
-    if (!data?.columns?.length) return [];
-    const wanted = [
-      dcProps?.nameColumn,
-      dcProps?.trackIdColumn,
-      dcProps?.sampleColumn,
-      config.selection_column,
-      dcProps?.formatColumn,
-      dcProps?.uriColumn,
-    ];
-    const out: string[] = [];
-    for (const c of wanted) {
-      if (c && data.columns.includes(c) && !out.includes(c)) out.push(c);
+  const maxTracks = config.max_tracks ?? 20;
+  const initialTracks = config.initial_tracks ?? 5;
+  const filtered = Boolean(data?.filter_applied);
+  const matching = data?.total_rows ?? 0;
+
+  // The manifest side of the server's rule, on the rows read here.
+  const manifest = useMemo(() => {
+    const rows = data?.rows ?? [];
+    const idCol = dcProps?.trackIdColumn;
+    const nameCol = dcProps?.nameColumn || idCol;
+    const fmtCol = dcProps?.formatColumn;
+    const cell = (row: Record<string, unknown>, col?: string | null) =>
+      col && row[col] != null ? String(row[col]) : null;
+    const isFasta = (row: Record<string, unknown>) => cell(row, fmtCol)?.toLowerCase() === 'fasta';
+    const byId = new Map<string, Record<string, unknown>>();
+    for (const row of rows) {
+      const id = cell(row, idCol);
+      if (id) byId.set(id, row);
     }
-    return out.length ? out : data.columns.slice(0, 4);
-  }, [data, dcProps, config.selection_column]);
+    const pinnedIds = config.default_tracks ?? [];
+    const pinnedNames: NamedTrack[] = pinnedIds.map((id) => {
+      const row = byId.get(id);
+      return { name: (row && cell(row, nameCol)) || id, note: row ? cell(row, fmtCol) : null };
+    });
+    const candidates = (filtered ? rows : rows.slice(0, initialTracks)).filter(
+      (row) => !isFasta(row) && !pinnedIds.includes(cell(row, idCol) ?? ''),
+    );
+    const room = Math.max(0, maxTracks - pinnedIds.length);
+    const opening = candidates.slice(0, room);
+    const formats = new Map<string, number>();
+    for (const row of filtered ? rows : rows.filter((r) => !isFasta(r))) {
+      const f = cell(row, fmtCol);
+      if (f) formats.set(f, (formats.get(f) ?? 0) + 1);
+    }
+    return {
+      pinnedNames,
+      openingNames: opening.map(
+        (row): NamedTrack => ({ name: cell(row, nameCol) ?? '—', note: cell(row, fmtCol) }),
+      ),
+      clipped: candidates.length > room,
+      formats: [...formats].sort((a, b) => b[1] - a[1]),
+      complete: rows.length >= matching,
+    };
+  }, [data, dcProps, config.default_tracks, filtered, initialTracks, maxTracks, matching]);
 
   if (!dcId) {
     return (
@@ -105,72 +209,58 @@ const JBrowsePreview: React.FC<Props> = ({ dcProps }) => {
     );
   }
 
-  const maxTracks = config.max_tracks ?? 20;
-  const initialTracks = config.initial_tracks ?? 5;
-  const assembly = config.assembly || dcProps?.assembly;
-  const filtered = Boolean(data?.filter_applied);
-  const matching = data?.total_rows ?? 0;
-  const shownCount = filtered ? Math.min(matching, maxTracks) : Math.min(initialTracks, maxTracks);
-  const plural = (n: number, word: string) => `${n.toLocaleString('en-US')} ${word}${n === 1 ? '' : 's'}`;
-  const pinned = config.default_tracks?.length ?? 0;
-  const ucsc = config.ucsc_tracks?.length ?? 0;
-  const extras = [
-    pinned ? `${pinned} always-shown` : '',
-    ucsc ? plural(ucsc, 'UCSC track') : '',
-  ].filter(Boolean);
-  const countLine = [
-    filtered
-      ? `${plural(matching, 'manifest row')} ${matching === 1 ? 'matches' : 'match'} the dashboard filters`
-      : `No filter applies: the view opens with the first ${plural(initialTracks, 'track')}`,
-    `up to ${shownCount} shown (limit ${maxTracks})${extras.length ? `, plus ${extras.join(' and ')}` : ''}.`,
-  ].join('; ');
+  const ownAssembly = config.assembly || null;
+  const assembly = ownAssembly || dcProps?.assembly || null;
+  const ucsc = config.ucsc_tracks ?? [];
+  const annotation = config.show_annotation !== false;
+  const locusDc = config.locus_from?.data_collection_tag;
+  const selectionColumn = config.selection_column || dcProps?.sampleColumn || 'sample';
+  const opened =
+    manifest.pinnedNames.length + manifest.openingNames.length + ucsc.length;
+
+  const manifestDetail = !data
+    ? 'Reading the manifest…'
+    : filtered
+      ? `${plural(matching, 'manifest row')} ${matching === 1 ? 'matches' : 'match'} the dashboard filters${
+          manifest.clipped ? `; the first ${manifest.openingNames.length} open (limit ${maxTracks})` : ''
+        }.`
+      : `No dashboard filter narrows the tracks yet: the first ${plural(
+          initialTracks,
+          'track',
+        )} of ${matching.toLocaleString('en-US')} open. Filtering the dashboard opens the matching ones (up to ${maxTracks}).`;
+  const formatLine = manifest.formats.length
+    ? `${manifest.complete ? '' : `In the first ${PREVIEW_ROWS} rows: `}${manifest.formats
+        .map(([f, n]) => `${f} ${n}`)
+        .join(' · ')}`
+    : null;
+
+  const clickBehaviour = !config.selection_enabled
+    ? 'Does not filter the dashboard'
+    : config.selection_mode === 'visible_tracks'
+      ? `The open tracks filter the dashboard by ${selectionColumn}`
+      : `Clicking a feature filters the dashboard by its track's ${selectionColumn}`;
 
   const summary = (
-    <Stack gap="sm">
-      <Group gap="xs" wrap="nowrap">
-        <Icon icon="mdi:dna" width={20} color="var(--mantine-color-dimmed)" />
-        <Text fw={700} lineClamp={1}>
-          {config.title || 'Genome browser'}
+    <Stack gap="md">
+      <Stack gap={2}>
+        <Group gap="xs" wrap="nowrap">
+          <Icon icon="mdi:dna" width={20} />
+          <Text fw={700} lineClamp={1}>
+            {config.title || 'Genome browser'}
+          </Text>
+        </Group>
+        <Text size="xs" c="dimmed">
+          {assembly
+            ? `${assembly}${ownAssembly ? '' : " (the collection's assembly)"}`
+            : 'Assembly of the collection'}
+          {' · '}
+          {locusDc
+            ? `opens on the first ${locusDc} row the filters keep`
+            : config.location
+              ? `opens on ${config.location}`
+              : "opens on the assembly's default region"}
         </Text>
-      </Group>
-      <Group gap={6}>
-        <Badge variant="light" radius="sm">
-          {assembly ? `Assembly: ${assembly}` : "Collection's assembly"}
-        </Badge>
-        <Badge variant="light" radius="sm" color="gray">
-          {config.location || 'Default location'}
-        </Badge>
-        {config.preset && (
-          <Badge variant="light" radius="sm" color="gray">
-            Preset: {config.preset}
-          </Badge>
-        )}
-        {config.selection_enabled && (
-          <Badge variant="light" radius="sm" color="gray">
-            Cross-filters on {config.selection_column || dcProps?.sampleColumn || 'sample'}
-          </Badge>
-        )}
-        {ucsc > 0 && (
-          <Badge variant="light" radius="sm" color="gray">
-            UCSC: {ucsc}
-          </Badge>
-        )}
-        {config.force_load && (
-          <Badge variant="light" radius="sm" color="orange">
-            Force load
-          </Badge>
-        )}
-        {config.fetch_size_limit_mb != null && (
-          <Badge variant="light" radius="sm" color="gray">
-            Fetch limit: {config.fetch_size_limit_mb} MB
-          </Badge>
-        )}
-        {config.locus_from?.data_collection_tag && (
-          <Badge variant="light" radius="sm" color="gray">
-            Follows {config.locus_from.data_collection_tag}
-          </Badge>
-        )}
-      </Group>
+      </Stack>
 
       {isLegacy ? (
         <Text size="sm" c="dimmed">
@@ -178,47 +268,88 @@ const JBrowsePreview: React.FC<Props> = ({ dcProps }) => {
           manifest to preview.
         </Text>
       ) : (
-        data && (
-          <>
-            <Text size="xs" c="dimmed">
-              {countLine}
+        <Stack gap="sm">
+          <Group justify="space-between">
+            <Text size="xs" fw={700} tt="uppercase" c="dimmed">
+              Tracks at opening
             </Text>
-            {data.rows.length > 0 ? (
-              <ScrollArea.Autosize mah={320} type="auto">
-                <Table striped highlightOnHover withTableBorder fz="xs">
-                  <Table.Thead>
-                    <Table.Tr>
-                      {shownColumns.map((c) => (
-                        <Table.Th key={c}>{c}</Table.Th>
-                      ))}
-                    </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {data.rows.slice(0, SHOWN_ROWS).map((row, i) => (
-                      <Table.Tr key={i}>
-                        {shownColumns.map((c) => (
-                          <Table.Td key={c} maw={220}>
-                            <Text size="xs" truncate>
-                              {row?.[c] == null ? '—' : String(row[c])}
-                            </Text>
-                          </Table.Td>
-                        ))}
-                      </Table.Tr>
-                    ))}
-                  </Table.Tbody>
-                </Table>
-              </ScrollArea.Autosize>
-            ) : (
-              <Text size="sm" c="dimmed">
-                No track matches the current filters.
+            {data && (
+              <Text size="xs" c="dimmed">
+                {plural(opened, 'track')}
+                {annotation ? ' + gene annotation' : ''}
               </Text>
             )}
-          </>
-        )
+          </Group>
+          {manifest.pinnedNames.length > 0 && (
+            <Source
+              icon="mdi:pin-outline"
+              title="Always shown"
+              count={String(manifest.pinnedNames.length)}
+              detail="Open whatever the filters, counted in the track limit."
+              tracks={manifest.pinnedNames}
+            />
+          )}
+          <Source
+            icon="mdi:file-table-outline"
+            title="Manifest tracks"
+            count={data ? `${manifest.openingNames.length} of ${matching.toLocaleString('en-US')}` : '…'}
+            detail={
+              <>
+                {manifestDetail}
+                {formatLine && (
+                  <>
+                    <br />
+                    {formatLine}
+                  </>
+                )}
+              </>
+            }
+            tracks={manifest.openingNames}
+            muted={!!data && manifest.openingNames.length === 0}
+          />
+          {ucsc.length > 0 && (
+            <Source
+              icon="mdi:web"
+              title="UCSC tracks"
+              count={String(ucsc.length)}
+              detail="Read from UCSC's servers, not versioned with the dashboard."
+              tracks={ucsc.map((name) => ({ name }))}
+            />
+          )}
+          <Source
+            icon="mdi:format-list-bulleted-type"
+            title="Gene annotation"
+            count={annotation ? 'on' : 'off'}
+            detail={
+              annotation
+                ? "The assembly preset's gene track, when it ships one."
+                : 'Turned off in Display.'
+            }
+            muted={!annotation}
+          />
+        </Stack>
       )}
+
+      <Divider />
+      <Box style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 12px' }}>
+        <Setting label="Click">{clickBehaviour}</Setting>
+        <Setting label="Loading">
+          {config.force_load ? 'Force load on by default' : 'JBrowse size limits'}
+          {config.fetch_size_limit_mb != null
+            ? `, ${config.fetch_size_limit_mb} MB per track`
+            : ''}
+        </Setting>
+        <Setting label="Track selector">
+          {config.track_mode === 'all'
+            ? 'Every manifest track can be opened'
+            : 'Only the tracks matching the filters can be opened'}
+        </Setting>
+        {config.preset && <Setting label="Preset">{config.preset}</Setting>}
+      </Box>
+
       <Text size="xs" c="dimmed">
-        The genome view is built from the saved component — save to see this
-        configuration in the browser.
+        The genome view is built from the saved component: save to see this configuration in
+        the browser.
       </Text>
     </Stack>
   );

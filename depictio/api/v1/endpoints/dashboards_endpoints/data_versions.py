@@ -297,6 +297,8 @@ def collection_statuses(
             entry["delta_version"] = pins.for_dc(dc_id)
             if dc_type.lower() == "image":
                 entry["reason"] = "image_pixels_not_versioned"
+            elif dc_type.lower() == "genomic_tracks":
+                entry["reason"] = "track_files_not_versioned"
         elif dc_id in pins.kept_live:
             entry["reason"] = "kept_live"
         elif dc_id in pins.unresolved:

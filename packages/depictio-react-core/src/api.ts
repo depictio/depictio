@@ -2507,15 +2507,16 @@ export async function fetchJBrowseSession(
   dashboardId: string,
   componentId: string,
   filters: InteractiveFilter[],
+  dataVersions?: Record<string, unknown>,
 ): Promise<JBrowseSessionResponse> {
   const res = await authFetch(
     `${API_BASE}/dashboards/render_jbrowse/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters }),
+      body: JSON.stringify({ filters, ...(dataVersions ?? {}) }),
     },
   );
-  if (!res.ok) await throwHttpDetailError(res, 'Failed to render JBrowse');
+  if (!res.ok) await throwRenderError(res, 'Failed to render JBrowse', dataVersions);
   return res.json();
 }
 
@@ -2524,33 +2525,60 @@ export interface UcscTrackOption {
   name: string;
   label: string;
   type: string;
+  /** UCSC group id (`genes`, `varRep`...), null when UCSC sets none. */
   group: string | null;
+  /** Label of the composite or super track the track sits under. */
+  collection?: string | null;
 }
 
-/** `GET /jbrowse/ucsc/{assembly}/tracks` — `genome` is the UCSC genome the
- *  assembly (preset name or alias) maps to, null when it has none. */
+/** Matches per UCSC group; `id` is '' for the tracks without a group. */
+export interface UcscTrackGroup {
+  id: string;
+  label: string;
+  count: number;
+}
+
+/** `GET /jbrowse/ucsc/{assembly}/tracks`: one page of the matches. `genome`
+ *  is the UCSC genome the assembly (preset name or alias) maps to, null when
+ *  it has none; `total` counts every match; `fetched_at` (naive UTC) is when
+ *  the catalogue was read from UCSC. */
 export interface UcscTracksResponse {
   genome: string | null;
   tracks: UcscTrackOption[];
+  total: number;
+  groups: UcscTrackGroup[];
+  fetched_at: string | null;
+}
+
+export interface UcscTracksQuery {
+  q?: string;
+  limit?: number;
+  offset?: number;
+  /** A group id, '' for the ungrouped tracks; omitted for every group. */
+  group?: string | null;
 }
 
 export async function fetchUcscTracks(
   assembly: string,
-  q = '',
-  limit = 50,
+  { q = '', limit = 50, offset = 0, group = null }: UcscTracksQuery = {},
   signal?: AbortSignal,
 ): Promise<UcscTracksResponse> {
-  const params = new URLSearchParams({ limit: String(limit) });
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
   if (q) params.set('q', q);
+  if (group != null) params.set('group', group);
   const res = await authFetch(
     `${API_BASE}/jbrowse/ucsc/${encodeURIComponent(assembly)}/tracks?${params.toString()}`,
     { signal },
   );
   if (!res.ok) await throwHttpDetailError(res, 'Failed to list UCSC tracks');
   const body = (await res.json()) as Partial<UcscTracksResponse>;
+  const tracks = Array.isArray(body?.tracks) ? body.tracks : [];
   return {
     genome: body?.genome ?? null,
-    tracks: Array.isArray(body?.tracks) ? body.tracks : [],
+    tracks,
+    total: typeof body?.total === 'number' ? body.total : tracks.length,
+    groups: Array.isArray(body?.groups) ? body.groups : [],
+    fetched_at: body?.fetched_at ?? null,
   };
 }
 

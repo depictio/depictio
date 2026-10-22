@@ -420,13 +420,49 @@ def cells(monkeypatch) -> list[TrackRow]:
         _track(f"cells/c{i:02d}.bw", track_id=f"c{i:02d}", cell=f"C{i:02d}") for i in range(30)
     ]
     tracks.append(_track("genes.gtf", track_id="genes", cell=None))
-    monkeypatch.setattr(render, "tracks_by_key", lambda tdc: {t.key: t for t in tracks})
+    monkeypatch.setattr(
+        render, "tracks_by_key", lambda tdc, delta_version=None: {t.key: t for t in tracks}
+    )
     return tracks
 
 
 def _payload(component: dict[str, Any], filtered=None, tdc: TracksDC | None = None, **kw):
     component = {"show_annotation": False, **component}
     return render.build_jbrowse_payload(component, tdc or _tdc(), filtered, "user-1", **kw)
+
+
+def _proxy_urls(payload: dict[str, Any]) -> list[str]:
+    """The track-file URLs of a payload that go through the API proxy."""
+    return [
+        loc["uri"]
+        for loc in _all_locations(payload["tracks"])
+        if str(loc["uri"]).startswith(f"{render.API_PREFIX}/jbrowse/tracks/")
+    ]
+
+
+class TestPinnedPayload:
+    """Under a pinned data version the payload is built from that manifest."""
+
+    def test_tracks_and_urls_come_from_the_pinned_commit(self, monkeypatch):
+        live = [_track("cells/c00.bw", track_id="c00", cell="C00")]
+        old = [_track("cells/c09.bw", track_id="c09", cell="C09")]
+        seen: list[int | None] = []
+
+        def by_key(tdc, delta_version=None):
+            seen.append(delta_version)
+            return {t.key: t for t in (old if delta_version == 4 else live)}
+
+        monkeypatch.setattr(render, "tracks_by_key", by_key)
+        out = _payload({"initial_tracks": 5}, delta_version=4)
+        assert [t["trackId"] for t in out["tracks"]] == ["c09"]
+        assert set(seen) == {4}
+        locations = _proxy_urls(out)
+        assert locations and all("v=4" in uri for uri in locations)
+
+    def test_a_live_payload_names_no_commit(self, cells):
+        out = _payload({"initial_tracks": 2})
+        locations = _proxy_urls(out)
+        assert locations and not any("v=" in uri for uri in locations)
 
 
 class TestPayloadSelection:
@@ -549,7 +585,9 @@ class TestPayloadConfig:
 
     def test_direct_access_keeps_https(self, monkeypatch):
         remote = _track("https://tracks.example.org/a.bam", track_id="r")
-        monkeypatch.setattr(render, "tracks_by_key", lambda tdc: {remote.key: remote})
+        monkeypatch.setattr(
+            render, "tracks_by_key", lambda tdc, delta_version=None: {remote.key: remote}
+        )
         payload = _payload({}, tdc=_tdc(direct_access=True))
         adapter = payload["tracks"][0]["adapter"]
         assert adapter["bamLocation"]["uri"] == "https://tracks.example.org/a.bam"
@@ -628,7 +666,9 @@ class TestPayloadConfig:
     def test_unrenderable_tracks_are_skipped(self, monkeypatch):
         fasta = _track("ref.fa", track_id="ref")
         bw = _track("a.bw", track_id="a")
-        monkeypatch.setattr(render, "tracks_by_key", lambda tdc: {fasta.key: fasta, bw.key: bw})
+        monkeypatch.setattr(
+            render, "tracks_by_key", lambda tdc, delta_version=None: {fasta.key: fasta, bw.key: bw}
+        )
         payload = _payload({})
         assert [c["trackId"] for c in payload["tracks"]] == ["a"]
         assert payload["shown_track_ids"] == ["a"]

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
 
 from depictio.api.v1.configs.config import settings
@@ -176,8 +176,15 @@ def proxy_track_file(
     """Serve (a byte range of) one track's data or index file."""
     if role not in TRACK_ROLES:
         raise HTTPException(status_code=404, detail="Unknown track file role")
-    tdc = _authorize(request, "track", dc_id, track_key, role, user)
-    track = tracks_by_key(tdc).get(track_key)
+    # ``v``: the manifest commit a pinned view's URL was minted for. It is part
+    # of the signature, so the track is looked up in the manifest it came from.
+    pinned = request.query_params.get("v")
+    if pinned is not None and not pinned.isdigit():
+        raise HTTPException(status_code=400, detail="v must be a Delta commit number")
+    delta_version = int(pinned) if pinned is not None else None
+    item = signing.pinned_item(track_key, delta_version)
+    tdc = _authorize(request, "track", dc_id, item, role, user)
+    track = tracks_by_key(tdc, delta_version).get(track_key)
     if track is None:
         raise HTTPException(status_code=404, detail="Track not found")
     uri = track.uri if role == "data" else track.index_uri
@@ -291,16 +298,25 @@ def proxy_preset_file(name: str, role: str, request: Request) -> Response:
 
 
 @jbrowse_endpoints_router.get("/ucsc/{assembly}/tracks")
-def list_ucsc_tracks(assembly: str, q: str = "", limit: int = 50) -> dict:
+def list_ucsc_tracks(
+    assembly: str,
+    q: str = "",
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    group: str | None = None,
+) -> dict:
     """UCSC tracks a component can open by default (``ucsc_tracks``), for the builder.
 
     ``assembly`` is a preset name or alias (hg38, GRCh38, TAIR10, MN908947.3, ...)
     or a GenArk accession; ``genome`` is null when it has no UCSC counterpart.
+    One page of ``limit`` tracks from ``offset``, with the ``total`` match count,
+    per-group counts and when the catalogue was read from UCSC (naive UTC).
+    ``group`` narrows to one UCSC group id ("" for the tracks without one).
     """
     genome = ucsc.ucsc_genome(assembly)
     if genome is None or not settings.jbrowse.ucsc_tracks_enabled:
-        return {"genome": None, "tracks": []}
-    return {"genome": genome, "tracks": ucsc.search(genome, q, limit)}
+        return {"genome": None, "tracks": [], "total": 0, "groups": [], "fetched_at": None}
+    return {"genome": genome, **ucsc.search(genome, q, limit, offset, group)}
 
 
 @jbrowse_endpoints_router.api_route("/ucsc/{genome}/{track}/{role}", methods=["GET", "HEAD"])

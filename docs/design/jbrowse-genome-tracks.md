@@ -198,10 +198,21 @@ without restating the display.
 - `locus_from` jumps to the coordinates of the filtered rows of another DC
   (e.g. a picked variant).
 
-**Chrome:** the header toolbar carries toggles for the JBrowse header, the
-overview bar, the status line and click-to-filter (defaults from the YAML,
-remembered per viewer), plus reset, metadata and fullscreen. JBrowse menus and
-dialogs portal into the fullscreen element, so they keep working there.
+**Chrome:** the tile's settings action (the same icon and *Controls* popover
+as every other tile's viz settings) holds one switch per display option,
+grouped as *View* (JBrowse header, overview ruler, status bar), *Loading*
+(force load) and *Interaction* (click-to-filter). Defaults come from the YAML
+and each viewer's choices are remembered, next to reset, metadata and
+fullscreen. JBrowse menus and dialogs portal into the fullscreen element, so
+they keep working there.
+
+**Versions:** a version preview (`?version=`) or a dataset pin reads the
+manifest at its stamped Delta commit (the `genomic_tracks` manifest is stamped
+like a table; the track files it names are not versioned, reported as
+`track_files_not_versioned`), and so is the `locus_from` collection. The signed
+track URLs name that commit (`v=`, part of the signature), so the proxy serves
+the files of the same manifest. Under a version the browser opens on that
+version's tracks and locus and never writes the viewer's remembered ones.
 
 **Loading tracks:**
 

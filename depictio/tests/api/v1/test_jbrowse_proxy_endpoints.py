@@ -45,6 +45,11 @@ FOREIGN = TrackRow(
 )
 
 
+OLD = TrackRow(
+    key=track_key("old.bw"), track_id="old", name="old", uri="old.bw", index_uri=None, fmt="bigwig"
+)
+
+
 class FakeStore:
     """Byte store keyed by S3 key; records the sources that were read."""
 
@@ -69,6 +74,7 @@ def state(monkeypatch):
     store = FakeStore()
     prefix = f"genomic_tracks/{DC_ID}/"
     store.files[prefix + "c1.bw"] = CONTENT
+    store.files[prefix + "old.bw"] = CONTENT
     store.files[prefix + "r.bam"] = CONTENT * 3
     store.files[prefix + "r.bam.bai"] = b"idx"
     store.files[prefix + "ref.fa"] = b">chr1\nACGT\n"
@@ -86,7 +92,13 @@ def state(monkeypatch):
         )
 
     monkeypatch.setattr(routes, "find_tracks_dc", find)
-    monkeypatch.setattr(routes, "tracks_by_key", lambda tdc: {t.key: t for t in (BW, BAM, FOREIGN)})
+    # Commit 1 of the manifest held a track the current one no longer has.
+    manifests = {None: (BW, BAM, FOREIGN), 1: (BW, OLD)}
+    monkeypatch.setattr(
+        routes,
+        "tracks_by_key",
+        lambda tdc, delta_version=None: {t.key: t for t in manifests.get(delta_version, ())},
+    )
     monkeypatch.setattr(routes, "user_can_read_project", lambda pid, uid: access["allowed"])
     monkeypatch.setattr(remote_read, "source_size", store.size)
     monkeypatch.setattr(remote_read, "open_range", store.open)
@@ -115,6 +127,45 @@ def _signed(scope: str, item: str, role: str, uid: str = UID) -> dict[str, str]:
 
 def _track_url(track: TrackRow, role: str = "data") -> str:
     return f"/jbrowse/tracks/{DC_ID}/{track.key}/{role}"
+
+
+def _pinned(track: TrackRow, version: int, role: str = "data") -> dict[str, str]:
+    """The query of a URL minted under a pinned manifest commit."""
+    exp = int(time.time()) + 600
+    item = signing.pinned_item(track.key, version)
+    sig = signing.sign("track", DC_ID, item, role, UID, exp)
+    return {"uid": UID, "exp": str(exp), "sig": sig, "v": str(version)}
+
+
+class TestPinnedTrackProxy:
+    """A pinned view's URLs read the manifest at the commit they name."""
+
+    def test_a_track_only_the_pinned_manifest_holds_is_served(self, client):
+        resp = client.get(_track_url(OLD), params=_pinned(OLD, 1))
+        assert resp.status_code == 200
+        assert resp.content == CONTENT
+
+    def test_the_same_track_unpinned_is_404(self, client):
+        resp = client.get(_track_url(OLD), params=_signed("track", OLD.key, "data"))
+        assert resp.status_code == 404
+
+    def test_a_url_moved_to_another_commit_is_401(self, client):
+        params = {**_pinned(BW, 1), "v": "2"}
+        assert client.get(_track_url(BW), params=params).status_code == 401
+
+    def test_dropping_the_commit_from_a_pinned_url_is_401(self, client):
+        params = _pinned(BW, 1)
+        del params["v"]
+        assert client.get(_track_url(BW), params=params).status_code == 401
+
+    def test_a_malformed_commit_is_400(self, client):
+        params = {**_signed("track", BW.key, "data"), "v": "latest"}
+        assert client.get(_track_url(BW), params=params).status_code == 400
+
+    def test_signed_query_names_the_commit(self):
+        query = signing.signed_query("track", DC_ID, BW.key, "data", UID, 3)
+        assert "v=3" in query
+        assert "v=" not in signing.signed_query("track", DC_ID, BW.key, "data", UID)
 
 
 class TestTrackProxy:

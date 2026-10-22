@@ -178,16 +178,21 @@ def find_tracks_dc(dc_id: str) -> TracksDC | None:
     return None
 
 
-_manifest_cache: dict[str, tuple[float, dict[str, TrackRow]]] = {}
+_manifest_cache: dict[tuple[str, int | None], tuple[float, dict[str, TrackRow]]] = {}
 _manifest_lock = threading.Lock()
 _MANIFEST_TTL_S = 60.0
 
 
-def tracks_by_key(tdc: TracksDC) -> dict[str, TrackRow]:
-    """All tracks of a DC keyed by ``track_key`` (cached briefly for the proxy)."""
+def tracks_by_key(tdc: TracksDC, delta_version: int | None = None) -> dict[str, TrackRow]:
+    """All tracks of a DC keyed by ``track_key`` (cached briefly for the proxy).
+
+    ``delta_version`` reads the manifest as of that Delta commit (a pinned data
+    version), else the current one.
+    """
     now = time.monotonic()
+    cache_key = (tdc.dc_id, delta_version)
     with _manifest_lock:
-        cached = _manifest_cache.get(tdc.dc_id)
+        cached = _manifest_cache.get(cache_key)
         if cached and now - cached[0] < _MANIFEST_TTL_S:
             return cached[1]
 
@@ -201,11 +206,14 @@ def tracks_by_key(tdc: TracksDC) -> dict[str, TrackRow]:
             "size_bytes": 0,
         }
     df = load_deltatable_lite(
-        workflow_id=ObjectId(tdc.wf_id), data_collection_id=tdc.dc_id, init_data=init_data
+        workflow_id=ObjectId(tdc.wf_id),
+        data_collection_id=tdc.dc_id,
+        init_data=init_data,
+        delta_version=delta_version,
     )
     mapping = {t.key: t for t in manifest_rows(df, tdc.props)}
     with _manifest_lock:
-        _manifest_cache[tdc.dc_id] = (now, mapping)
+        _manifest_cache[cache_key] = (now, mapping)
     return mapping
 
 

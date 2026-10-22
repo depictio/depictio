@@ -7,7 +7,12 @@ through the UCSC REST API (``/list/tracks``), which gives each track's type and
 offered: bigWig, the bigBed family and tabix-indexed VCF.
 
 The catalogue of an assembly is one large JSON document (hg38: ~24k tracks,
-~18 MB), fetched once per process and kept for ``ucsc_catalog_ttl_s``.
+~18 MB). It is read as a tree, so each track keeps the UCSC group and the
+top-level collection (composite or super track) it sits under, which is what
+the builder browses by. One worker fetches it, the cache (Redis when it is up)
+shares it, and it is refetched after ``ucsc_catalog_ttl_s``: tracks UCSC adds
+show up then without a release, and the last catalogue keeps being served
+while UCSC is unreachable.
 
 Files are read from UCSC's download server (relative ``/gbdb/...`` paths), or
 from an absolute URL whose host is UCSC's or already allow-listed for remote
@@ -18,6 +23,7 @@ public, fixed-source proxy as the preset assembly files) unless
 
 from __future__ import annotations
 
+import datetime as dt
 import threading
 import time
 from collections.abc import Callable
@@ -60,13 +66,38 @@ class UcscTrack:
     kind: str  # UCSC type, first word
     url: str  # absolute file URL
     group: str | None
+    # shortLabel of the top-level composite / super track; None at the top.
+    collection: str | None = None
 
     @property
     def index_url(self) -> str | None:
         return f"{self.url}.tbi" if self.kind == "vcfTabix" else None
 
     def summary(self) -> dict[str, Any]:
-        return {"name": self.name, "label": self.label, "type": self.kind, "group": self.group}
+        return {
+            "name": self.name,
+            "label": self.label,
+            "type": self.kind,
+            "group": self.group,
+            "collection": self.collection,
+        }
+
+
+# Labels of UCSC's track groups (``group`` holds the id).
+GROUP_LABELS: dict[str, str] = {
+    "map": "Mapping and Sequencing",
+    "genes": "Genes and Gene Predictions",
+    "phenDis": "Phenotype and Literature",
+    "varRep": "Variation",
+    "rep": "Repeats",
+    "compGeno": "Comparative Genomics",
+    "regulation": "Regulation",
+    "expression": "Expression",
+    "rna": "mRNA and EST",
+    "singleCell": "Single Cell",
+    "hprc": "Human Pangenome",
+    "x": "Experimental",
+}
 
 
 def ucsc_genome(assembly: str | CustomAssembly | None) -> str | None:
@@ -111,41 +142,123 @@ def _file_url(big_data_url: str) -> str | None:
 
 
 def parse_catalog(genome: str, payload: dict[str, Any]) -> dict[str, UcscTrack]:
-    """The readable tracks of a ``/list/tracks`` response, by track name."""
+    """The readable tracks of a ``/list/tracks`` response, by track name.
+
+    The response is a tree (super track > composite > view > subtrack, each a
+    dict nested in its parent); a flat ``trackLeavesOnly`` one parses too. A
+    track inherits the nearest ``group`` above it, which UCSC only sets on the
+    container, and the label of its top-level container.
+    """
     raw = payload.get(genome)
     if not isinstance(raw, dict):
         return {}
     out: dict[str, UcscTrack] = {}
-    for name, info in raw.items():
-        if not isinstance(info, dict):
-            continue
+
+    def walk(name: str, info: dict[str, Any], group: str | None, collection: str | None):
+        own = info.get("group")
+        group = own if isinstance(own, str) and own else group
         kind = str(info.get("type") or "").split(" ")[0]
         big = info.get("bigDataUrl")
-        if kind not in _TRACK_TYPES or not isinstance(big, str) or not big:
-            continue
-        url = _file_url(big)
-        if url is None:
-            continue
-        out[name] = UcscTrack(
-            name=name,
-            label=str(info.get("shortLabel") or name),
-            long_label=str(info.get("longLabel") or ""),
-            kind=kind,
-            url=url,
-            group=info.get("group") if isinstance(info.get("group"), str) else None,
-        )
+        url = _file_url(big) if kind in _TRACK_TYPES and isinstance(big, str) and big else None
+        if url is not None and name not in out:
+            out[name] = UcscTrack(
+                name=name,
+                label=str(info.get("shortLabel") or name),
+                long_label=str(info.get("longLabel") or ""),
+                kind=kind,
+                url=url,
+                group=group,
+                collection=collection,
+            )
+        children = {k: v for k, v in info.items() if isinstance(v, dict)}
+        if children:
+            top = collection or str(info.get("shortLabel") or name)
+            for child, sub in children.items():
+                walk(child, sub, group, top)
+
+    for name, info in raw.items():
+        if isinstance(info, dict):
+            walk(name, info, None, None)
     return out
 
 
-_cache: dict[str, tuple[float, dict[str, UcscTrack]]] = {}
-_lock = threading.Lock()
+@dataclass
+class _Catalog:
+    tracks: dict[str, UcscTrack]
+    fetched_at: float  # epoch seconds, when UCSC answered
+    checked_at: float = 0.0  # monotonic, when this process last read the shared copy
+
+
+# This process's copy of the shared catalogues, re-read from the cache at most
+# every _RECHECK_S so a refresh by another worker reaches it.
+_cache: dict[str, _Catalog] = {}
+_failed_at: dict[str, float] = {}
+_locks: dict[str, threading.Lock] = {}
+_locks_guard = threading.Lock()
+_RECHECK_S = 60.0
+# After a failed fetch, wait this long before asking UCSC again.
+_RETRY_S = 60.0
+# The shared copy outlives its TTL so it can still be served stale.
+_KEEP_STALE_FACTOR = 7
+_REFRESH_LOCK_S = 120
+
+
+def _shared_key(genome: str) -> str:
+    return f"jbrowse:ucsc:catalog:{genome}"
+
+
+def _shared_get(genome: str) -> _Catalog | None:
+    try:
+        from depictio.api.cache import get_cache
+
+        hit = get_cache().get(_shared_key(genome))
+    except Exception as exc:  # cache unavailable: this process fetches its own
+        logger.debug(f"jbrowse: UCSC catalogue cache read failed: {exc}")
+        return None
+    if isinstance(hit, tuple) and len(hit) == 2 and isinstance(hit[1], dict):
+        return _Catalog(tracks=hit[1], fetched_at=float(hit[0]))
+    return None
+
+
+def _shared_set(genome: str, entry: _Catalog) -> None:
+    try:
+        from depictio.api.cache import get_cache
+
+        ttl = settings.jbrowse.ucsc_catalog_ttl_s * _KEEP_STALE_FACTOR
+        get_cache().set(_shared_key(genome), (entry.fetched_at, entry.tracks), ttl=ttl)
+    except Exception as exc:
+        logger.debug(f"jbrowse: UCSC catalogue cache write failed: {exc}")
+
+
+def _claim_refresh(genome: str) -> bool:
+    """One worker refreshes a catalogue at a time; True when it is this one."""
+    try:
+        from depictio.api.cache import get_cache
+
+        return get_cache().set_nx(f"jbrowse:ucsc:refresh:{genome}", 1, ttl=_REFRESH_LOCK_S)
+    except Exception:
+        return True
+
+
+def _release_refresh(genome: str) -> None:
+    try:
+        from depictio.api.cache import get_cache
+
+        get_cache().delete(f"jbrowse:ucsc:refresh:{genome}")
+    except Exception:
+        pass
+
+
+def _genome_lock(genome: str) -> threading.Lock:
+    with _locks_guard:
+        return _locks.setdefault(genome, threading.Lock())
 
 
 def _fetch_catalog(genome: str) -> dict[str, UcscTrack]:
     url = f"{settings.jbrowse.ucsc_api_url.rstrip('/')}/list/tracks"
     resp = httpx.get(
         url,
-        params={"genome": genome, "trackLeavesOnly": "1"},
+        params={"genome": genome},
         timeout=settings.jbrowse.remote_timeout_s * 4,
         follow_redirects=False,
     )
@@ -153,42 +266,131 @@ def _fetch_catalog(genome: str) -> dict[str, UcscTrack]:
     return parse_catalog(genome, resp.json())
 
 
-def catalog(genome: str) -> dict[str, UcscTrack]:
-    """Readable tracks of a UCSC genome, cached; empty when UCSC is unreachable."""
+def _current(genome: str) -> _Catalog | None:
+    """This process's copy, refreshed from the shared one when it is due."""
     now = time.monotonic()
-    hit = _cache.get(genome)
-    if hit and now - hit[0] < settings.jbrowse.ucsc_catalog_ttl_s:
-        return hit[1]
-    with _lock:
-        hit = _cache.get(genome)
-        if hit and now - hit[0] < settings.jbrowse.ucsc_catalog_ttl_s:
-            return hit[1]
+    entry = _cache.get(genome)
+    if entry is None or now - entry.checked_at > _RECHECK_S:
+        shared = _shared_get(genome)
+        if shared is not None and (entry is None or shared.fetched_at >= entry.fetched_at):
+            entry = shared
+        if entry is not None:
+            entry.checked_at = now
+            _cache[genome] = entry
+    return entry
+
+
+def _fresh(entry: _Catalog | None) -> bool:
+    return (
+        entry is not None and time.time() - entry.fetched_at < settings.jbrowse.ucsc_catalog_ttl_s
+    )
+
+
+def catalog_entry(genome: str) -> _Catalog | None:
+    """The catalogue of a UCSC genome, refetched when stale; None when UCSC has
+    never answered.
+
+    A stale catalogue is served as is while another thread or worker refreshes
+    it, and after a failed fetch for ``_RETRY_S``: a UCSC outage costs one slow
+    request per minute, not one per render.
+    """
+    entry = _current(genome)
+    if _fresh(entry):
+        return entry
+    if time.monotonic() - _failed_at.get(genome, float("-inf")) < _RETRY_S:
+        return entry
+    lock = _genome_lock(genome)
+    # With something to serve, never queue behind a refresh already running.
+    if not lock.acquire(blocking=entry is None):
+        return entry
+    try:
+        entry = _current(genome)
+        if _fresh(entry):
+            return entry
+        if entry is not None and not _claim_refresh(genome):
+            return entry
         try:
             tracks = _fetch_catalog(genome)
         except (httpx.HTTPError, ValueError) as exc:
             logger.warning(f"jbrowse: UCSC track list for {genome} unavailable: {exc}")
-            # Keep serving a stale catalogue rather than nothing.
-            return hit[1] if hit else {}
-        _cache[genome] = (now, tracks)
-        return tracks
+            _failed_at[genome] = time.monotonic()
+            return entry
+        finally:
+            _release_refresh(genome)
+        _failed_at.pop(genome, None)
+        entry = _Catalog(tracks=tracks, fetched_at=time.time(), checked_at=time.monotonic())
+        _cache[genome] = entry
+        _shared_set(genome, entry)
+        return entry
+    finally:
+        lock.release()
 
 
-def search(genome: str, query: str = "", limit: int = 50) -> list[dict[str, Any]]:
-    """Catalogue entries matching ``query`` (name or label), best matches first."""
+def catalog(genome: str) -> dict[str, UcscTrack]:
+    """Readable tracks of a UCSC genome; empty when UCSC has never answered."""
+    entry = catalog_entry(genome)
+    return entry.tracks if entry is not None else {}
+
+
+def _matches(track: UcscTrack, q: str) -> bool:
+    return (
+        q in track.name.lower()
+        or q in track.label.lower()
+        or q in track.long_label.lower()
+        or q in (track.collection or "").lower()
+    )
+
+
+def search(
+    genome: str,
+    query: str = "",
+    limit: int = 50,
+    offset: int = 0,
+    group: str | None = None,
+) -> dict[str, Any]:
+    """One page of the catalogue entries matching ``query`` and ``group``.
+
+    ``total`` counts every match, so the builder can say how much is left, and
+    ``groups`` counts the query's matches per UCSC group (before the group
+    filter), so picking a group never hides the others' counts. Without a
+    query, entries come grouped (group, then collection); with one, the best
+    matches come first.
+    """
     q = query.strip().lower()
-    entries = list(catalog(genome).values())
+    entry = catalog_entry(genome)
+    entries = list(entry.tracks.values()) if entry is not None else []
     if q:
-        entries = [
-            t
-            for t in entries
-            if q in t.name.lower() or q in t.label.lower() or q in t.long_label.lower()
-        ]
+        entries = [t for t in entries if _matches(t, q)]
+    counts: dict[str | None, int] = {}
+    for t in entries:
+        counts[t.group] = counts.get(t.group, 0) + 1
+    if group is not None:
+        wanted = group or None  # "" selects the tracks without a group
+        entries = [t for t in entries if t.group == wanted]
+    if q:
         entries.sort(
             key=lambda t: (not t.name.lower().startswith(q), q not in t.label.lower(), t.name)
         )
     else:
-        entries.sort(key=lambda t: (t.group is None, t.group or "", t.name))
-    return [t.summary() for t in entries[: max(1, min(limit, 500))]]
+        entries.sort(
+            key=lambda t: (t.group is None, t.group or "", t.collection or "", t.label.lower())
+        )
+    start = max(0, offset)
+    page = entries[start : start + max(1, min(limit, 500))]
+    fetched = (
+        dt.datetime.fromtimestamp(entry.fetched_at, dt.UTC).replace(tzinfo=None).isoformat()
+        if entry is not None
+        else None
+    )
+    return {
+        "tracks": [t.summary() for t in page],
+        "total": len(entries),
+        "groups": [
+            {"id": g or "", "label": GROUP_LABELS.get(g, g) if g else "Other", "count": n}
+            for g, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0] or ""))
+        ],
+        "fetched_at": fetched,
+    }
 
 
 UcscUrlFor = Callable[[str, UcscTrack, str], str]

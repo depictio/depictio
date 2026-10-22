@@ -984,6 +984,8 @@ export type {
   JBrowseSessionResponse,
   JBrowseTrackRow,
   UcscTrackOption,
+  UcscTrackGroup,
+  UcscTracksQuery,
   UcscTracksResponse,
   ServerStatusResponse,
   ServerInfo,
