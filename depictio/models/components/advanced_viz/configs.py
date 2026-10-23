@@ -87,8 +87,71 @@ class VolcanoConfig(_BaseVizConfig):
         default="significance", description="Column with p-value or padj/q-value"
     )
     label_col: str | None = Field(default=None, description="Optional column for hover labels")
+    hover_col: str | None = Field(
+        default=None,
+        description=(
+            "Optional column shown as a second line in the hover (e.g. the Kingdom of a "
+            "taxon, which the label alone does not say). In the MA view it is read from "
+            "the MA table, so that table needs a column of this name."
+        ),
+    )
     category_col: str | None = Field(
         default=None, description="Optional column for point colour/category"
+    )
+    hover_category: bool = Field(
+        default=False,
+        description=(
+            "Also name the point's category (category_col, e.g. the contrast) in the "
+            "hover, in every view. In the MA view the MA table needs a column of the "
+            "category_col's name."
+        ),
+    )
+    reference: str | None = Field(
+        default=None,
+        description=(
+            "Name of the group on the negative side of every contrast (the baseline, e.g. "
+            "'Athens'). With group_symbols, down-regulated hits take its shape."
+        ),
+    )
+    contrast_prefix: str | None = Field(
+        default=None,
+        description=(
+            "Stripped from a category_col value to name the group on its positive side: "
+            "prefix 'locality' turns 'localityBarcelona' into 'Barcelona'."
+        ),
+    )
+    contrast_separator: str | None = Field(
+        default=None,
+        max_length=16,
+        description=(
+            "A category_col value that holds this separator names both of its sides, and "
+            "its own baseline replaces `reference`: separator '_vs_' turns "
+            "'localityNaples_vs_Barcelona' into Naples against Barcelona."
+        ),
+    )
+    group_symbols: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Plotly marker symbol per group name ('square', 'triangle-up', 'diamond', ...). "
+            "A hit takes the shape of the group it leans toward (up: its contrast's group, "
+            "down: the reference); colour stays pink for up and blue for down."
+        ),
+    )
+    marker_cols: list[str] | None = Field(
+        default=None,
+        description=(
+            "Columns the marker shape can be switched to in the tile's 'Shape by' control "
+            "(e.g. ['Kingdom']), beside the group / direction readings. Each value of the "
+            "column takes a shape, most frequent first."
+        ),
+    )
+    marker_by: str = Field(
+        default="__default__",
+        description=(
+            "What the marker shape says, as last picked in the 'Shape by' control: "
+            "'__default__' (the group reading when group_symbols is set, else the "
+            "direction's triangles), '__direction__', or one of marker_cols."
+        ),
     )
 
     # Display defaults — editable from the viz UI as Tier-2 (intra-viz) controls.
@@ -105,7 +168,10 @@ class VolcanoConfig(_BaseVizConfig):
     effect_label: str | None = Field(
         default=None,
         max_length=40,
-        description="Volcano x-axis title, e.g. 'Log fold change'. Null shows effect_size_col",
+        description=(
+            "Volcano x-axis title, e.g. 'Log fold change vs {reference}' ({reference} is the "
+            "baseline of the contrast on show). Null shows effect_size_col"
+        ),
     )
     significance_label: str | None = Field(
         default=None,
@@ -606,10 +672,30 @@ class DaBarplotConfig(_BaseVizConfig):
         default="contrast", description="Contrast name (faceting + single-panel filter)"
     )
     lfc_col: str = Field(default="lfc", description="Log-fold-change (signed)")
+    effect_label: str | None = Field(
+        default=None,
+        max_length=40,
+        description=(
+            "Axis title of the log-fold change, e.g. 'Log-fold change vs {reference}' "
+            "({reference} is the baseline of the contrast on show). Null shows lfc_col"
+        ),
+    )
     significance_col: str | None = Field(
         default=None, description="FDR-adjusted p-value (for highlighting significant bars)"
     )
     label_col: str | None = Field(default=None, description="Optional display label")
+    hover_col: str | None = Field(
+        default=None,
+        description=(
+            "Optional column shown as a second line in the hover (e.g. the Kingdom of a "
+            "taxon, which the label alone does not say). In the MA view it is read from "
+            "the MA table, so that table needs a column of this name."
+        ),
+    )
+    hover_category: bool = Field(
+        default=False,
+        description="Also name the panel's contrast (contrast_col) in the hover.",
+    )
     significance_threshold: float = Field(default=0.05, ge=0.0, le=1.0)
     top_n: int = Field(default=15, ge=1, description="Top features (by |lfc|) shown per panel")
     contrast_view: str = Field(
@@ -617,6 +703,37 @@ class DaBarplotConfig(_BaseVizConfig):
         description=(
             "'all' → faceted view (one panel per contrast); any specific contrast value → "
             "single-panel drill-in. Used as the initial active tab in the React renderer."
+        ),
+    )
+    reference: str | None = Field(
+        default=None,
+        description=(
+            "Name of the group on the negative side of every contrast (the model's baseline, "
+            "e.g. 'Athens'). Colours and names the bars that point left."
+        ),
+    )
+    contrast_prefix: str | None = Field(
+        default=None,
+        description=(
+            "Stripped from a contrast value to name the group on its positive side: prefix "
+            "'locality' turns 'localityBarcelona' into 'Barcelona'."
+        ),
+    )
+    contrast_separator: str | None = Field(
+        default=None,
+        max_length=16,
+        description=(
+            "A contrast value that holds this separator names both of its sides, and its own "
+            "baseline replaces `reference`: separator '_vs_' turns 'localityNaples_vs_Barcelona' "
+            "into Naples against Barcelona."
+        ),
+    )
+    group_colors: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Colour per group name. A bar takes the colour of the group it leans toward; "
+            "bars that miss the significance cutoff are hatched in the same colour. Without "
+            "it the bars are the up/down pink and blue of the volcano."
         ),
     )
 

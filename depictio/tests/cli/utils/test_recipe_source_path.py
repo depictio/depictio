@@ -70,3 +70,16 @@ def test_source_path_refuses_to_shadow_a_real_column(tmp_path: Path) -> None:
     )
     with pytest.raises(RecipeError, match="already exists"):
         resolve_sources(module, tmp_path)
+
+
+def test_optional_glob_source_is_none_when_nothing_matches(tmp_path: Path) -> None:
+    module = SimpleNamespace(
+        SOURCES=[RecipeSource(ref="extra", glob_pattern="extra/*.csv", optional=True)]
+    )
+    assert resolve_sources(module, tmp_path)["extra"] is None
+
+
+def test_required_glob_source_still_fails_when_nothing_matches(tmp_path: Path) -> None:
+    module = SimpleNamespace(SOURCES=[RecipeSource(ref="extra", glob_pattern="extra/*.csv")])
+    with pytest.raises(RecipeError, match="no files matched"):
+        resolve_sources(module, tmp_path)

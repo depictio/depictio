@@ -96,6 +96,16 @@ def parent_rank(lineage: pl.Expr) -> pl.Expr:
     )
 
 
+def root_rank(lineage: pl.Expr) -> pl.Expr:
+    """The first named segment of the lineage: its Kingdom or Domain, whatever the depth.
+
+    `parent_rank` is the Kingdom only at Phylum depth, where the leaf's parent is
+    the root. A table collapsed deeper (PR2 at its Subdivision, ``Eukaryota;TSAR;
+    Alveolata;Dinoflagellata``) has the Supergroup there instead.
+    """
+    return _nonempty(_segments(lineage).list.first()).fill_null(UNCLASSIFIED)
+
+
 def kingdom_phylum(lineage: pl.Expr) -> list[pl.Expr]:
     """``[Kingdom, Phylum]`` expressions for a table collapsed at Phylum depth.
 

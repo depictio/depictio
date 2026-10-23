@@ -112,3 +112,24 @@ export function unitSteps(
     next: offered[i + 1] ?? null,
   };
 }
+
+/**
+ * How an option of a scope filter reads to the reader: the `label` its
+ * `option_cards` entry gives it, else the value itself. The value stays what the
+ * filter holds and the data is keyed on; the banner, the active-filter list and
+ * the panel's own picker draw the label.
+ */
+export function optionLabel(
+  metadata: Pick<StoredMetadata, 'option_cards'> | null | undefined,
+  value: string,
+): string {
+  return metadata?.option_cards?.[value]?.label || value;
+}
+
+/** The line `option_cards` gives an option, for the banner to say what it means. */
+export function optionDescription(
+  metadata: Pick<StoredMetadata, 'option_cards'> | null | undefined,
+  value: string | undefined,
+): string | undefined {
+  return value === undefined ? undefined : metadata?.option_cards?.[value]?.description || undefined;
+}

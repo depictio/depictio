@@ -569,6 +569,11 @@ export interface StoredMetadata {
   /** Filter bar only (a grid section with `display: 'strip'`): the short label
    *  shown instead of the title. */
   strip_label?: string | null;
+  /** SegmentedControl only: draw one card per option (label, icon, description),
+   *  keyed by the option's value. See `OptionCard` in lite.py. */
+  /** SegmentedControl: drawn as cards. An `always_selected` Select: only the label
+   *  and description are used, by the scope banner and the active-filter list. */
+  option_cards?: Record<string, { label?: string; icon?: string; description?: string }> | null;
   /** Filter bar only: whether the icon badge precedes the label. Unset = shown. */
   strip_icon?: boolean | null;
   /** RangeSlider only: draw the column's histogram above the slider. */
@@ -684,6 +689,8 @@ export interface DashboardData {
   content_width_default?: 'full' | 'wide' | 'comfortable' | 'compact';
   /** False: no tab name above the canvas (a tab that opens on its own title). */
   show_tab_header?: boolean;
+  /** The tab starts from its declared filter defaults on every visit. */
+  open_with_defaults?: boolean;
   /** The Guide page: offered unless the main tab sets this to false. Only the
    *  main tab's value counts (see `resolveGuideSettings`). */
   show_guide?: boolean;

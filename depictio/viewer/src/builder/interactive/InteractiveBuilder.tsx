@@ -145,7 +145,7 @@ const MARK_LABEL_VARIANTS = ['Slider', 'RangeSlider'];
 /** Variants whose renderers read `show_histogram`. */
 const HISTOGRAM_VARIANTS = ['RangeSlider'];
 /** Mirrors TOP_PANEL_INTERACTIVE_TYPES in depictio/models/components/constants.py. */
-const TOP_PLACEMENT_VARIANTS = ['Timeline'];
+const TOP_PLACEMENT_VARIANTS = ['Timeline', 'SegmentedControl'];
 
 /**
  * Live preview that mounts the SAME renderer the dashboard grid uses

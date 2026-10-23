@@ -136,7 +136,15 @@ const ActiveFilterSummary: React.FC<ActiveFilterSummaryProps> = ({
         <Stack gap={0} mt={2} mah={160} style={{ overflowY: 'auto' }}>
           {active.map((f) => {
             const label = filterDisplayLabel(f, components);
-            const value = formatFilterValue(f);
+            const ownMeta = components.find((c) => c.index === f.index);
+            // A value that has a label of its own (`option_cards`) is listed by it,
+            // one or several (a Select holds a list).
+            const cardLabels = ownMeta?.option_cards;
+            const held = Array.isArray(f.value) ? f.value : [f.value];
+            const value =
+              !f.source && cardLabels && held.every((v) => typeof v === 'string' && cardLabels[v]?.label)
+                ? held.map((v) => cardLabels[v as string].label!).join(', ')
+                : formatFilterValue(f);
             const fromSelection = f.source !== undefined;
             const meta = components.find((c) => c.index === f.index);
             // Same icon and same accent as the control this row stands for, so

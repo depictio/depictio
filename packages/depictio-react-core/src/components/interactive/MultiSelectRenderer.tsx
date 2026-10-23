@@ -13,6 +13,7 @@ import {
   InteractiveTitle,
   interactiveAccent,
 } from './frame';
+import { optionLabel } from './scope';
 import { useRankedValues, useUniqueValues } from './useInteractiveData';
 
 const MultiSelectRenderer: React.FC<{
@@ -50,10 +51,10 @@ const MultiSelectRenderer: React.FC<{
     () =>
       orderCategoricalOptions(options, availableSet).map((v) =>
         availableSet
-          ? { value: v, label: v, disabled: !availableSet.has(v) }
-          : { value: v, label: v },
+          ? { value: v, label: optionLabel(metadata, v), disabled: !availableSet.has(v) }
+          : { value: v, label: optionLabel(metadata, v) },
       ),
-    [options, availableSet],
+    [options, availableSet, metadata],
   );
 
   // Clearing the only value falls back on the best-ranked option (`default_by`).

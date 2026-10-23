@@ -83,7 +83,7 @@ INTERACTIVE_COMPATIBILITY: dict[str, list[str]] = {
 INTERACTIVE_PLACEMENTS: tuple[str, ...] = ("left", "top")
 
 # Interactive component types that may opt into the top panel.
-TOP_PANEL_INTERACTIVE_TYPES: tuple[str, ...] = ("Timeline",)
+TOP_PANEL_INTERACTIVE_TYPES: tuple[str, ...] = ("Timeline", "SegmentedControl")
 
 # Valid timescales for the Timeline interactive component.
 TIMELINE_TIMESCALES: tuple[str, ...] = ("year", "month", "day", "hour", "minute")

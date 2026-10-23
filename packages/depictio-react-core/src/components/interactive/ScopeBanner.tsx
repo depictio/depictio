@@ -41,7 +41,13 @@ import {
   interactiveIcon,
   interactiveTitle,
 } from './frame';
-import { bannerFactColumns, bannerFactItems, unitSteps } from './scope';
+import {
+  bannerFactColumns,
+  bannerFactItems,
+  optionDescription,
+  optionLabel,
+  unitSteps,
+} from './scope';
 import { useRowValues } from './useInteractiveData';
 import { useScopeOptions, type ScopeOption } from './useScopeOptions';
 
@@ -55,8 +61,10 @@ const UnitPicker: React.FC<{
   title: string;
   value: string | undefined;
   options: readonly ScopeOption[];
+  /** How a value reads (its `option_cards` label); the value itself when unset. */
+  labelOf?: (value: string) => string;
   onPick?: (value: string) => void;
-}> = ({ title, value, options, onPick }) => {
+}> = ({ title, value, options, labelOf = (v) => v, onPick }) => {
   const style = useChromeStyle();
   const [search, setSearch] = React.useState('');
   const combobox = useCombobox({
@@ -68,19 +76,27 @@ const UnitPicker: React.FC<{
   });
   const listed = React.useMemo(() => {
     const q = search.trim().toLowerCase();
-    const hits = q ? options.filter((o) => o.value.toLowerCase().includes(q)) : options;
+    const hits = q
+      ? options.filter(
+          (o) => o.value.toLowerCase().includes(q) || labelOf(o.value).toLowerCase().includes(q),
+        )
+      : options;
     return hits.slice(0, MAX_LISTED);
-  }, [options, search]);
+  }, [options, search, labelOf]);
 
   const name = (
     <Text
       component="span"
       className="depictio-scope-banner__name"
       fw={700}
-      style={{ '--scope-name-chars': Math.max((value ?? '').length, 1) } as React.CSSProperties}
+      style={
+        {
+          '--scope-name-chars': Math.max((value === undefined ? '' : labelOf(value)).length, 1),
+        } as React.CSSProperties
+      }
       data-testid="scope-banner-value"
     >
-      {value ?? '…'}
+      {value === undefined ? '…' : labelOf(value)}
     </Text>
   );
   if (!onPick) return name;
@@ -134,7 +150,7 @@ const UnitPicker: React.FC<{
                   fw={o.value === value ? 600 : undefined}
                   className="depictio-scope-banner__option"
                 >
-                  {o.value}
+                  {labelOf(o.value)}
                 </Text>
               </Combobox.Option>
             ))
@@ -166,6 +182,8 @@ const ScopeCard: React.FC<{
   const facts = bannerFactItems(metadata.banner_facts, row);
   const { options } = useScopeOptions(metadata);
   const steps = unitSteps(options, value);
+  const labelOf = React.useCallback((v: string) => optionLabel(metadata, v), [metadata]);
+  const hint = optionDescription(metadata, value);
   const pick = onFilterChange
     ? (v: string) => onFilterChange(filterEvent(metadata, [v]))
     : undefined;
@@ -174,7 +192,7 @@ const ScopeCard: React.FC<{
     const target = steps[dir];
     const label = dir === 'prev' ? `Previous ${title.toLowerCase()}` : `Next ${title.toLowerCase()}`;
     return (
-      <Tooltip label={target ? `${label}: ${target}` : label} withinPortal openDelay={300}>
+      <Tooltip label={target ? `${label}: ${labelOf(target)}` : label} withinPortal openDelay={300}>
         <ActionIcon
           variant="default"
           radius={style.radius}
@@ -211,7 +229,12 @@ const ScopeCard: React.FC<{
         <Text className="depictio-scope-banner__eyebrow" c="dimmed" fw={600}>
           {title}
         </Text>
-        <UnitPicker title={title} value={value} options={options} onPick={pick} />
+        <UnitPicker title={title} value={value} options={options} labelOf={labelOf} onPick={pick} />
+        {hint && (
+          <Text size="xs" c="dimmed" className="depictio-scope-banner__hint">
+            {hint}
+          </Text>
+        )}
       </div>
       {facts.length > 0 && (
         <div className="depictio-scope-banner__facts" role="list">

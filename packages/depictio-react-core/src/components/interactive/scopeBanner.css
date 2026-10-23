@@ -166,3 +166,11 @@
     gap: var(--mantine-spacing-xs) var(--mantine-spacing-lg);
   }
 }
+
+/* The line an option's `option_cards` entry gives it, under the name: what the
+ * choice means, for a reader who has just come from a tab that showed every
+ * city at once. */
+.depictio-scope-banner__hint {
+  margin-top: 2px;
+  line-height: 1.35;
+}
