@@ -1,0 +1,29 @@
+cell_key	sample	segmenter	CellID	marker	marker_order	marker_role	intensity	asinh_intensity
+TEST1|Cellpose|1	TEST1	Cellpose	1	DNA_6	1	Nuclear stain	14242.894	5.2466
+TEST1|Cellpose|1	TEST1	Cellpose	1	ELANE	2	Marker	5317.178	4.2614
+TEST1|Cellpose|1	TEST1	Cellpose	1	CD57	3	Marker	1401.894	2.9309
+TEST1|Cellpose|1	TEST1	Cellpose	1	CD45	4	Marker	2229.517	3.3932
+TEST1|Cellpose|1	TEST1	Cellpose	1	DNA_7	5	Nuclear stain	0.0	0.0
+TEST1|Cellpose|1	TEST1	Cellpose	1	CD577	6	Marker	47762.089	6.4565
+TEST1|Cellpose|1	TEST1	Cellpose	1	CD457	7	Marker	839.361	2.423
+TEST1|Mesmer|1	TEST1	Mesmer	1	DNA_6	1	Nuclear stain	25326.233	5.8221
+TEST1|Mesmer|1	TEST1	Mesmer	1	ELANE	2	Marker	3547.167	3.8569
+TEST1|Mesmer|1	TEST1	Mesmer	1	CD57	3	Marker	2697.5	3.5834
+TEST1|Mesmer|1	TEST1	Mesmer	1	CD45	4	Marker	7740.3	4.6368
+TEST1|Mesmer|1	TEST1	Mesmer	1	DNA_7	5	Nuclear stain	0.0	0.0
+TEST1|Mesmer|1	TEST1	Mesmer	1	CD577	6	Marker	0.0	0.0
+TEST1|Mesmer|1	TEST1	Mesmer	1	CD457	7	Marker	0.0	0.0
+TEST2|Cellpose|1	TEST2	Cellpose	1	DNA_6	1	Nuclear stain	15484.064	5.3301
+TEST2|Cellpose|1	TEST2	Cellpose	1	ELANE	2	Marker	6866.584	4.5171
+TEST2|Cellpose|1	TEST2	Cellpose	1	CD57	3	Marker	41502.36	6.316
+TEST2|Cellpose|1	TEST2	Cellpose	1	CD45	4	Marker	882.281	2.4722
+TEST2|Cellpose|1	TEST2	Cellpose	1	DNA_7	5	Nuclear stain	2393.262	3.4639
+TEST2|Cellpose|1	TEST2	Cellpose	1	CD577	6	Marker	1927.363	3.2479
+TEST2|Cellpose|1	TEST2	Cellpose	1	CD457	7	Marker	2711.963	3.5887
+TEST2|Mesmer|1	TEST2	Mesmer	1	DNA_6	1	Nuclear stain	13838.143	5.2177
+TEST2|Mesmer|1	TEST2	Mesmer	1	ELANE	2	Marker	6187.914	4.413
+TEST2|Mesmer|1	TEST2	Mesmer	1	CD57	3	Marker	5506.714	4.2964
+TEST2|Mesmer|1	TEST2	Mesmer	1	CD45	4	Marker	1109.743	2.6989
+TEST2|Mesmer|1	TEST2	Mesmer	1	DNA_7	5	Nuclear stain	2575.171	3.537
+TEST2|Mesmer|1	TEST2	Mesmer	1	CD577	6	Marker	3191.714	3.7514
+TEST2|Mesmer|1	TEST2	Mesmer	1	CD457	7	Marker	4347.114	4.0601

@@ -1,0 +1,20 @@
+# AGAT: the Another Gtf/Gff Analysis Toolkit. `agat_sp_statistics.pl` writes a
+# plain-text report on a GFF annotation, one block per feature type (mRNA,
+# lncRNA, tRNA...) with counts, means, medians and totals, and a second block
+# for every type with isoforms that keeps only the longest isoform per gene.
+# The report is read whole into a long table, and once more into one row per
+# assembly and feature type holding the gene-model numbers an annotation is
+# judged on (genes, transcripts per gene, exons per transcript, single-exon
+# genes, lengths).
+id: agat
+name: AGAT
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/agat/spstatistics
+homepage: https://github.com/NBISweden/AGAT
+biotools_url: https://bio.tools/agat
+description: >-
+  Another Gtf/Gff Analysis Toolkit: validates, fixes and summarises genome
+  annotations; sp_statistics reports the gene, transcript, exon and intron
+  numbers of a GFF per feature type.
+edam_topics:
+  - http://edamontology.org/topic_0219 # Data submission, annotation and curation
+stage: annotation

@@ -178,6 +178,10 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
       return named;
     case 'profile':
       return named ?? configColumn('series_col');
+    case 'spatial_cells':
+      // A lassoed cell is its id; the coordinates are numeric and the
+      // category is a grouping, so neither names the cells that were caught.
+      return named ?? configColumn('cell_id_col') ?? 'cell_id';
     case 'scatter_xy':
       // The label column, because that is what identifies a point: the axes are
       // numeric by definition and the colour column is a grouping, so filtering
@@ -210,6 +214,13 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
       // identifies it, as a chord's is for a link. `selection_column` names a
       // per-hit key when several hits share a label.
       return named ?? configColumn('label_col') ?? 'label';
+    case 'allele_grid':
+      // A click on a half picks the allele it holds: the allele column is what
+      // a peptide-by-allele prediction table (epitopeprediction) joins on. A
+      // click on a sample label picks the sample instead, on `sample_id_col`
+      // (the renderer names it): the same filter key, so the last gesture
+      // wins.
+      return named ?? configColumn('allele_col') ?? 'allele';
     case 'msa':
       // A row click picks one sequence of the alignment.
       return configColumn('seq_id_col') ?? 'seq_id';
@@ -218,13 +229,23 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
       // when one is bound; otherwise the pick is the position, whose feature
       // half travels in the `residue_selection` pair like the protein kinds.
       return named ?? configColumn('label_col') ?? configColumn('position_col') ?? 'position';
+    case 'ranked_distribution':
+      // A box and its lollipop are one feature, and its id is what the other
+      // tiles join on; the display label may repeat across features.
+      return named ?? configColumn('feature_id_col') ?? 'feature_id';
     default:
+      // `ideogram` lands here on purpose: a karyotype emits a region, not a
+      // value selection. A click on a chromosome or a drag along it publishes
+      // the `genome_selection` pair (`genomeRegionFilters` below), gated by
+      // its own `region_filter_enabled`; a single mark is too small to pick.
       return undefined;
   }
 }
 
 /** Kinds that read their drawn selection back out of the filter list. */
-const CHROME_RESET_KINDS = new Set(['upset_plot']);
+// The allele grid repaints its picked alleles from the filter list too, so a
+// Reset from the chrome clears the highlight with the filter.
+const CHROME_RESET_KINDS = new Set(['upset_plot', 'allele_grid']);
 
 /**
  * Whether the tile's chrome offers "Reset selection" for an advanced_viz.

@@ -27,12 +27,28 @@ import { withRanksInOrder } from './phylo/view';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import { demandForPx } from './contentDemand';
 import {
+  axisBreakShapes,
+  barSlots,
+  compositionColumns,
+  formatAxisFloor,
+  groupSamples,
   isDenseTaxonomyAxis,
+  isSpacerSlot,
+  meltWideRows,
+  percentTickFormat,
+  resolveSortCategory,
+  SAMPLE_SORT_OPTIONS,
+  sortSamples,
   taxonomyAxisTitle,
   taxonomyLegend,
   taxonomyLegendTopPx,
+  valueAxisTitle,
   visibleTaxonomyControls,
+  wideCategoryName,
+  zoomedValueRange,
   type TaxonomyLegendPos,
+  type TaxonomyOrientation,
+  type TaxonomySampleSort,
 } from './stackedTaxonomyOptions';
 
 /** The stacked bars run vertically: samples are the x axis, so the tile's
@@ -40,6 +56,12 @@ import {
  *  proportions stays readable in once the tilted sample labels and the axis
  *  title have taken their share. */
 const TAXONOMY_PLOT_PX = 300;
+/** One bar of a horizontal chart (`orientation: h`), where the bar count is
+ *  the tile's height problem. */
+const BAR_ROW_PX = 18;
+/** What a horizontal chart spends outside its rows: top margin, value axis
+ *  ticks and title. */
+const H_PLOT_CHROME_PX = 90;
 /** One entry of the legend, a column right of the plot at 10 px: under the
  *  plot it fought the tilted sample labels for the same band. */
 const LEGEND_ITEM_PX = 16;
@@ -56,8 +78,13 @@ const STRIP_GAP_PX = 8;
 /** What the figure spends outside the plot area: the top margin and, below,
  *  the tilted sample labels and the axis title. */
 const PLOT_CHROME_PX = 150;
+/** Across a horizontal chart: the sample labels on the left and the legend
+ *  column on the right. */
+const H_PLOT_CHROME_W_PX = 260;
 /** The frame's own header above the figure: title and row count. */
 const FRAME_HEADER_PX = 60;
+/** The band above a vertical chart that names its groups. */
+const GROUP_LABEL_PX = 18;
 
 /** Generic per-sample categorical annotation strip drawn above/below the
  *  stacked bars. Reusable across any viz with a sample axis when the DC
@@ -68,7 +95,8 @@ interface AnnotationStrip {
   column: string;
   /** Optional label shown to the left of the strip. Defaults to `column`. */
   label?: string;
-  /** Where to draw the strip relative to the chart. */
+  /** Where to draw the strip relative to the chart (right / left of
+   *  horizontal bars). */
   position?: 'top' | 'bottom';
   /** Per-category colour overrides; falls back to TAB10-style cycling. */
   palette?: Record<string, string> | null;
@@ -77,8 +105,14 @@ interface AnnotationStrip {
 interface StackedTaxonomyConfig {
   sample_id_col: string;
   taxon_col: string;
-  rank_col: string;
+  /** Null (or a column the table lacks) draws a single-level composition;
+   *  unset is the model default, `rank`. */
+  rank_col?: string | null;
   abundance_col: string;
+  /** Wide form: one numeric column per category, melted client-side. */
+  value_cols?: string[] | null;
+  /** Wide form: column -> category display name. */
+  value_labels?: Record<string, string> | null;
   default_rank?: string | null;
   top_n?: number;
   sort_by?: 'abundance' | 'alphabetical';
@@ -97,8 +131,15 @@ interface StackedTaxonomyConfig {
   rank_label?: string | null;
   /** Sample axis title: unset reads 'Sample', an empty string shows none. */
   x_title?: string | null;
+  /** Value axis title: unset reads 'Relative abundance' or the abundance
+   *  column, an empty string shows none. */
+  value_title?: string | null;
   /** The legend in a column right of the bars (default) or in rows under them. */
   legend_pos?: TaxonomyLegendPos;
+  /** Vertical bars (default) or one horizontal bar per sample. */
+  orientation?: TaxonomyOrientation;
+  /** Per-sample column grouping the bars; the sort applies inside groups. */
+  group_col?: string | null;
 }
 
 interface Props {
@@ -134,6 +175,9 @@ function textOn(fill: string | undefined): string {
   return lum < 0.4 ? '#ffffff' : '#212529';
 }
 
+/** Stand-in value of a spacer slot in a strip: breaks runs, never shown. */
+const SPACER_VALUE = '\u0000';
+
 const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
@@ -141,6 +185,16 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   const config = (metadata.config || {}) as StackedTaxonomyConfig;
   const palette = resolveCategoricalPalette(theme, PALETTE);
   const categorySource = useCategoryColorSource();
+  // A wide table (`value_cols`) is melted into the long form below; it has no
+  // taxon, abundance or rank column of its own.
+  const valueCols = useMemo(
+    () => (config.value_cols ?? []).filter(Boolean),
+    [config.value_cols],
+  );
+  const wide = valueCols.length > 0;
+  // Unset is the model default; null is "no rank column" (one level).
+  const rankCol = wide ? null : config.rank_col === undefined ? 'rank' : config.rank_col;
+  const horizontal = config.orientation === 'h';
 
   const [rank, setRank] = usePersistedVizControl<string | null>(metadata, 'default_rank', null);
   const [topN, setTopN] = usePersistedVizControl<number>(metadata, 'top_n', 20);
@@ -149,27 +203,55 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     'normalise_to_one',
     true,
   );
-  type SampleSort = 'input' | 'total_abundance' | 'first_taxon';
-  const [sampleSort, setSampleSort] = usePersistedVizControl<SampleSort>(metadata, 'sample_sort', 'input');
+  const [sampleSort, setSampleSort] = usePersistedVizControl<TaxonomySampleSort>(metadata, 'sample_sort', 'input');
+  const [sortCategory, setSortCategory] = usePersistedVizControl<string | null>(metadata, 'sort_category', null);
+  const [groupCol, setGroupCol] = usePersistedVizControl<string | null>(metadata, 'group_col', null);
+  const [yZoom, setYZoom] = usePersistedVizControl<'off' | 'auto'>(metadata, 'y_zoom', 'off');
   const [showLegend, setShowLegend] = usePersistedVizControl(metadata, 'show_legend', true);
   const [logY, setLogY] = usePersistedVizControl(metadata, 'log_y', false);
 
   // The strips are drawn as fractions of the plot area, so they are sized from
   // the box: a fixed share was a 13 px band in a short tile, too thin for its
-  // labels. Rounded so a sub-pixel reflow does not rebuild the figure.
-  const { ref: plotBoxRef, height: plotBoxPx } = useElementSize();
-  const plotAreaPx = Math.max(120, plotBoxPx - PLOT_CHROME_PX);
+  // labels. Rounded so a sub-pixel reflow does not rebuild the figure. A
+  // horizontal chart's strips are columns, sized from its width.
+  const { ref: plotBoxRef, height: plotBoxPx, width: plotBoxW } = useElementSize();
+  const plotAreaPx = horizontal
+    ? Math.max(120, plotBoxW - H_PLOT_CHROME_W_PX)
+    : Math.max(120, plotBoxPx - PLOT_CHROME_PX);
   const plotFraction = (px: number, cap: number) =>
     Math.round(Math.min(cap, px / plotAreaPx) * 1000) / 1000;
   const stripBand = plotFraction(STRIP_BAND_PX, 0.15);
   const stripGap = plotFraction(STRIP_GAP_PX, 0.05);
+  const groupLabelBand = horizontal
+    ? 0
+    : Math.round(Math.min(0.2, GROUP_LABEL_PX / Math.max(120, plotBoxPx - PLOT_CHROME_PX)) * 1000) /
+      1000;
+
+  // What the bars can be grouped by: the configured group column and every
+  // strip's column, all of which are fetched with the rows.
+  const groupOptions = useMemo(() => {
+    const out: { value: string; label: string }[] = [];
+    const add = (value: string | null | undefined, label?: string) => {
+      if (value && !out.some((o) => o.value === value)) out.push({ value, label: label || value });
+    };
+    add(config.group_col);
+    for (const s of config.annotation_strips ?? []) add(s?.column, s?.label);
+    return out;
+  }, [config.group_col, config.annotation_strips]);
+  const activeGroupCol =
+    groupCol && groupOptions.some((o) => o.value === groupCol) ? groupCol : null;
 
   // Stable taxon→colour universe so a habitat filter doesn't shuffle the
   // top-N taxon colours. Pulled from the DC's unique values for taxon_col;
   // falls back to the filtered ordering when the endpoint is slow/errors.
-  const [taxonUniverse, setTaxonUniverse] = useState<string[] | null>(null);
+  const [fetchedUniverse, setTaxonUniverse] = useState<string[] | null>(null);
+  // A wide table's categories are its value columns, known up front.
+  const taxonUniverse = useMemo(
+    () => (wide ? valueCols.map((c) => wideCategoryName(c, config.value_labels)) : fetchedUniverse),
+    [wide, valueCols, config.value_labels, fetchedUniverse],
+  );
   useEffect(() => {
-    if (!metadata.dc_id || !config.taxon_col) {
+    if (wide || !metadata.dc_id || !config.taxon_col) {
       setTaxonUniverse(null);
       return;
     }
@@ -184,24 +266,24 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     return () => {
       cancelled = true;
     };
-  }, [metadata.dc_id, config.taxon_col]);
+  }, [wide, metadata.dc_id, config.taxon_col]);
 
+  // The bindings (long form) or the sample id and value columns (wide form),
+  // then the columns any annotation strip needs, so the renderer looks up
+  // per-sample categorical values without a second fetch, then the group
+  // column: after the strips, so grouping by a strip's column (which persists
+  // `group_col`) leaves the column list, and the fetch, unchanged.
   const requiredCols = useMemo(
-    () => {
-      const base = [
-        config.sample_id_col,
-        config.taxon_col,
-        config.rank_col,
-        config.abundance_col,
-      ].filter(Boolean) as string[];
-      // Append columns required by any annotation strip so the renderer can
-      // look up per-sample categorical values without a second fetch.
-      for (const s of config.annotation_strips ?? []) {
-        if (s.column && !base.includes(s.column)) base.push(s.column);
-      }
-      return base;
-    },
-    [config],
+    () =>
+      compositionColumns({
+        sampleCol: config.sample_id_col,
+        taxonCol: config.taxon_col,
+        rankCol,
+        abundanceCol: config.abundance_col,
+        valueCols,
+        extra: [...(config.annotation_strips ?? []).map((s) => s?.column), config.group_col],
+      }),
+    [config, rankCol, valueCols],
   );
 
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
@@ -221,8 +303,11 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     setFullLoad(false);
   }, [filterSig]);
 
+  const bound = Boolean(
+    config.sample_id_col && (wide || (config.taxon_col && config.abundance_col)),
+  );
   useEffect(() => {
-    if (!metadata.wf_id || !metadata.dc_id || requiredCols.length < 4) {
+    if (!metadata.wf_id || !metadata.dc_id || !bound) {
       setError('Stacked taxonomy: missing data binding');
       setLoading(false);
       return;
@@ -263,26 +348,44 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
       cancelled = true;
       ctrl.abort();
     };
-  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(requiredCols), filterSig, refreshTick, fullLoad]);
+  }, [metadata.wf_id, metadata.dc_id, bound, JSON.stringify(requiredCols), filterSig, refreshTick, fullLoad]);
 
-  const { figure, allRanks, seriesCount, stripCount } = useMemo(() => {
-    if (!rows) return { figure: null, allRanks: [] as string[], seriesCount: 0, stripCount: 0 };
+  const { figure, allRanks, categories, seriesCount, stripCount, slotCount, canZoom } = useMemo(() => {
+    if (!rows)
+      return {
+        figure: null,
+        allRanks: [] as string[],
+        categories: [] as string[],
+        seriesCount: 0,
+        stripCount: 0,
+        slotCount: 0,
+        canZoom: false,
+      };
     const legendPos = config.legend_pos ?? 'right';
-    const samples = (rows[config.sample_id_col] || []).map((v) => String(v ?? '')) as string[];
+    const melted = wide
+      ? meltWideRows(rows, config.sample_id_col, valueCols, config.value_labels)
+      : null;
+    const samples =
+      melted?.samples ??
+      ((rows[config.sample_id_col] || []).map((v) => String(v ?? '')) as string[]);
     // A lineage that stops above the shown rank ("Eukaryota;") has a blank leaf.
     // Named, so it gets a legend entry a reader can identify rather than an
     // unlabelled swatch.
-    const taxa = (rows[config.taxon_col] || []).map(
-      (v) => String(v ?? '').trim() || 'Unclassified',
-    ) as string[];
-    const ranks = (rows[config.rank_col] || []).map((v) => String(v ?? '')) as string[];
-    const ab = (rows[config.abundance_col] || []) as number[];
+    const taxa =
+      melted?.taxa ??
+      ((rows[config.taxon_col] || []).map(
+        (v) => String(v ?? '').trim() || 'Unclassified',
+      ) as string[]);
+    // No rank column bound, or none in the table (the endpoint drops a column
+    // the DC lacks): one level, no filtering.
+    const ranks = ((rankCol && rows[rankCol]) || []).map((v) => String(v ?? '')) as string[];
+    const ab = melted?.abundances ?? ((rows[config.abundance_col] || []) as number[]);
 
     const seen = Array.from(new Set(ranks));
     // Root to leaf in the picker; unset, the rank stays the one the table
     // lists first, as before.
     const allRanks = withRanksInOrder(seen);
-    const activeRank = rank || seen[0] || null;
+    const activeRank = seen.length ? rank || seen[0] : null;
 
     // Filter to active rank, then aggregate (sample × taxon → abundance).
     const cellTotals = new Map<string, Map<string, number>>(); // sample -> taxon -> abundance
@@ -297,51 +400,94 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     }
 
     // Rank taxa by total abundance and keep top-N; lump others into "Other".
+    // Largest first, which is also the stacking order: the overall largest
+    // category sits at the bottom of every bar, which is what lets the zoom
+    // crop a shared base away.
     const taxonTotals = new Map<string, number>();
     for (const inner of cellTotals.values()) {
       for (const [t, v] of inner.entries()) {
         taxonTotals.set(t, (taxonTotals.get(t) || 0) + v);
       }
     }
-    const topTaxa = Array.from(taxonTotals.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, topN)
-      .map(([t]) => t);
-    const topSet = new Set(topTaxa);
-
-    // Sort samples by the user's choice. `input` preserves insertion order
-    // (Map preserves insertion order, so just spread the keys); `total_abundance`
-    // sorts descending by per-sample sum; `first_taxon` sorts descending by
-    // the most-abundant taxon's value per sample so the most-abundant cohort
-    // forms a clear left-to-right gradient.
     const topTaxaSorted = Array.from(taxonTotals.entries())
       .sort((a, b) => b[1] - a[1])
       .map(([t]) => t);
+    const topTaxa = topTaxaSorted.slice(0, topN);
+    const topSet = new Set(topTaxa);
     const firstTaxon = topTaxaSorted[0];
+
+    const totalOf = (s: string): number => {
+      let total = 0;
+      for (const v of (cellTotals.get(s) || new Map<string, number>()).values()) total += v;
+      return total;
+    };
+    // A category's plotted value in one bar: its share when normalised.
+    const shownValue = (s: string, category: string): number => {
+      const inner = cellTotals.get(s) || new Map<string, number>();
+      let v = 0;
+      if (category === 'Other') {
+        for (const [t, x] of inner.entries()) if (!topSet.has(t)) v += x;
+      } else v = inner.get(category) || 0;
+      const total = totalOf(s);
+      return normalise && total > 0 ? v / total : v;
+    };
+    const shownCategories = [
+      ...topTaxa.filter((t) => (taxonTotals.get(t) || 0) > 0),
+      ...(topTaxaSorted.slice(topN).some((t) => (taxonTotals.get(t) || 0) > 0) ? ['Other'] : []),
+    ];
+    const sortCat = resolveSortCategory(sortCategory, shownCategories);
+
+    // `input` keeps the table's order; `name` is natural; the value sorts are
+    // largest first: the raw total, the raw value of the overall largest
+    // category (`first_taxon`, as shipped), or the plotted value of the chosen
+    // category (`category`).
     const sampleKeys = Array.from(cellTotals.keys());
-    const orderedSamples = (() => {
-      if (sampleSort === 'input') return sampleKeys;
-      const score = (s: string): number => {
-        const inner = cellTotals.get(s) || new Map();
-        if (sampleSort === 'first_taxon' && firstTaxon) return inner.get(firstTaxon) || 0;
-        let total = 0;
-        for (const v of inner.values()) total += v;
-        return total;
-      };
-      return [...sampleKeys].sort((a, b) => score(b) - score(a));
+    const orderedSamples = sortSamples(sampleKeys, sampleSort, {
+      total: totalOf,
+      firstTaxon: (s) => (firstTaxon ? cellTotals.get(s)?.get(firstTaxon) || 0 : 0),
+      category: (s) => (sortCat ? shownValue(s, sortCat) : 0),
+    });
+
+    // Multi-level: bars grouped by a per-sample column, the sort applying
+    // inside each group, the groups set apart by a blank slot.
+    const firstValueBySample = (column: string): Map<string, string> => {
+      const out = new Map<string, string>();
+      const sampleCol = rows[config.sample_id_col] as unknown[] | undefined;
+      const valueCol = rows[column] as unknown[] | undefined;
+      if (sampleCol && valueCol) {
+        for (let i = 0; i < sampleCol.length; i++) {
+          const key = String(sampleCol[i] ?? '');
+          if (!out.has(key)) out.set(key, String(valueCol[i] ?? '—'));
+        }
+      }
+      return out;
+    };
+    const { slots, spans } = (() => {
+      if (!activeGroupCol) return { slots: orderedSamples, spans: [] as ReturnType<typeof barSlots>['spans'] };
+      const groupBy = firstValueBySample(activeGroupCol);
+      const groups = groupSamples(
+        orderedSamples,
+        sampleKeys,
+        (s) => groupBy.get(s) ?? '—',
+        sampleSort === 'name',
+      );
+      return barSlots(groups, horizontal);
     })();
+    const spacer = slots.map(isSpacerSlot);
 
-    const tracesByTaxon = new Map<string, number[]>();
-    for (const t of [...topTaxa, 'Other']) tracesByTaxon.set(t, orderedSamples.map(() => 0));
+    const tracesByTaxon = new Map<string, (number | null)[]>();
+    for (const t of [...topTaxa, 'Other'])
+      tracesByTaxon.set(t, slots.map((_, i) => (spacer[i] ? null : 0)));
 
-    orderedSamples.forEach((s, sIdx) => {
+    slots.forEach((s, sIdx) => {
+      if (spacer[sIdx]) return;
       const inner = cellTotals.get(s) || new Map();
       let total = 0;
       for (const v of inner.values()) total += v;
       for (const [t, v] of inner.entries()) {
         const bucket = topSet.has(t) ? t : 'Other';
         const arr = tracesByTaxon.get(bucket)!;
-        arr[sIdx] += normalise && total > 0 ? v / total : v;
+        arr[sIdx] = (arr[sIdx] ?? 0) + (normalise && total > 0 ? v / total : v);
       }
     });
 
@@ -357,18 +503,28 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
       ...(config.taxon_palette ?? {}),
     });
     const colourSource = stableColorMap(taxonUniverse ?? taxaForPalette, palette, taxonPinned);
-    const data = Array.from(tracesByTaxon.entries())
-      .filter(([, arr]) => arr.some((v) => v > 0))
-      .map(([t, arr]) => ({
-        type: 'bar' as const,
-        name: t,
-        x: orderedSamples,
-        y: arr,
-        marker: { color: t === 'Other' ? '#adb5bd' : colourSource.get(t) },
-      }));
+    const series = Array.from(tracesByTaxon.entries()).filter(([, arr]) =>
+      arr.some((v) => (v ?? 0) > 0),
+    );
+    const data = series.map(([t, arr]) => ({
+      type: 'bar' as const,
+      name: t,
+      ...(horizontal
+        ? { orientation: 'h' as const, x: arr, y: slots }
+        : { x: slots, y: arr }),
+      marker: { color: t === 'Other' ? '#adb5bd' : colourSource.get(t) },
+    }));
+
+    // Zoom: the value axis starts just under the smallest bottom segment.
+    // Never on a log axis, which is a crop of its own.
+    const totals = slots.map((_, i) => series.reduce((acc, [, arr]) => acc + (arr[i] ?? 0), 0));
+    const zoomCandidate =
+      !normalise && logY ? null : zoomedValueRange(series[0]?.[1] ?? [], totals, normalise);
+    const zoom = yZoom === 'auto' ? zoomCandidate : null;
 
     // Annotation strips — one row of per-sample coloured cells per configured
-    // strip, each a one-row heatmap on its own y-axis sharing the bars' x-axis.
+    // strip, each a one-row heatmap on its own y-axis sharing the bars' x-axis
+    // (a one-column heatmap on its own x-axis beside horizontal bars).
     // A heatmap rather than layout shapes: shapes take no hover and no legend,
     // so a strip told nothing about which category a colour stood for.
     const strips = (config.annotation_strips ?? []).filter((s) => s && s.column);
@@ -383,24 +539,18 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     const step = stripBand + stripGap;
     const nTop = strips.filter((s) => s.position === 'top').length;
     const nBottom = strips.length - nTop;
+    // Along y for vertical bars; along x (bottom = left) for horizontal ones.
     const barDomain: [number, number] = [nBottom * step, 1 - nTop * step];
+    const nSamples = slots.length - spacer.filter(Boolean).length;
     if (strips.length > 0) {
-      const sampleCol = rows[config.sample_id_col] as unknown[] | undefined;
       let topCursor = 1;
       let bottomCursor = 0;
       strips.forEach((strip, k) => {
-        const sampleToValue = new Map<string, string>();
-        const stripCol = rows[strip.column] as unknown[] | undefined;
-        if (sampleCol && stripCol) {
-          for (let i = 0; i < sampleCol.length; i++) {
-            const key = String(sampleCol[i] ?? '');
-            if (!sampleToValue.has(key)) sampleToValue.set(key, String(stripCol[i] ?? '—'));
-          }
-        }
-        const values = orderedSamples.map((s) => sampleToValue.get(s) ?? '—');
+        const sampleToValue = firstValueBySample(strip.column);
+        const values = slots.map((s, i) => (spacer[i] ? SPACER_VALUE : sampleToValue.get(s) ?? '—'));
         // Stable category→colour for THIS strip's categories: the dashboard's
         // colours for its column, the strip's own `palette` winning per value.
-        const categories = Array.from(new Set(values)).sort();
+        const categories = Array.from(new Set(values.filter((v) => v !== SPACER_VALUE))).sort();
         const stripPalette = stableColorMap(
           categories,
           palette,
@@ -421,34 +571,50 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
         if (isTop) topCursor -= step;
         else bottomCursor += step;
 
-        const axis = `y${k + 2}`;
+        const axisLetter = horizontal ? 'x' : 'y';
+        const axis = `${axisLetter}${k + 2}`;
         const label = strip.label || strip.column;
-        stripAxes[`yaxis${k + 2}`] = {
+        stripAxes[`${axisLetter}axis${k + 2}`] = {
           domain,
-          anchor: 'x',
+          anchor: horizontal ? 'y' : 'x',
           fixedrange: true,
           showgrid: false,
           zeroline: false,
           ticks: '',
           tickfont: { size: 10, color: isDark ? '#ced4da' : '#495057' },
+          ...(horizontal ? { tickangle: -90 } : {}),
           automargin: true,
         };
+        const z = values.map((v) => (v === SPACER_VALUE ? null : categories.indexOf(v)));
+        const shown = values.map((v) => (v === SPACER_VALUE ? '' : v));
         stripTraces.push({
           type: 'heatmap',
-          x: orderedSamples,
-          y: [label],
-          z: [values.map((v) => categories.indexOf(v))],
-          customdata: [values],
+          ...(horizontal
+            ? {
+                x: [label],
+                y: slots,
+                z: z.map((v) => [v]),
+                customdata: shown.map((v) => [v]),
+                xaxis: axis,
+                hovertemplate: `%{y}<br>${label}: %{customdata}<extra></extra>`,
+              }
+            : {
+                x: slots,
+                y: [label],
+                z: [z],
+                customdata: [shown],
+                yaxis: axis,
+                hovertemplate: `%{x}<br>${label}: %{customdata}<extra></extra>`,
+              }),
           zmin: -0.5,
           zmax: n - 0.5,
           colorscale,
           showscale: false,
           xgap: 0,
-          yaxis: axis,
-          hovertemplate: `%{x}<br>${label}: %{customdata}<extra></extra>`,
+          hoverongaps: false,
         });
-        const runs = categoryRuns(values);
-        const minRun = Math.max(2, Math.ceil(values.length * 0.12));
+        const runs = categoryRuns(values).filter((r) => r.value !== SPACER_VALUE);
+        const minRun = Math.max(2, Math.ceil(nSamples * 0.12));
         const longest = new Map<string, { start: number; end: number }>();
         for (const r of runs) {
           const best = longest.get(r.value);
@@ -461,12 +627,12 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
         if (labelled) {
           for (const c of categories) {
             const r = longest.get(c)!;
+            // A category axis places numbers by position: the run's middle.
+            const mid = (r.start + r.end) / 2;
             stripLabels.push({
-              xref: 'x',
-              yref: axis,
-              // A category axis places numbers by position: the run's middle.
-              x: (r.start + r.end) / 2,
-              y: 0,
+              ...(horizontal
+                ? { xref: axis, yref: 'y', x: 0, y: mid, textangle: -90 }
+                : { xref: 'x', yref: axis, x: mid, y: 0 }),
               text: c,
               showarrow: false,
               font: { size: 10, color: textOn(stripPalette.get(c)) },
@@ -492,16 +658,117 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
       });
     }
 
+    // Group names: a band above vertical bars, centred on each group with a
+    // rule under it; in the blank row heading each group of horizontal bars.
+    const axisColour = plotlyAxisOverrides(isDark, theme).color;
+    const groupLabels: Record<string, unknown>[] = [];
+    const groupRules: Record<string, unknown>[] = [];
+    for (const span of spans) {
+      if (horizontal) {
+        if (span.labelSlot == null) continue;
+        groupLabels.push({
+          xref: 'paper',
+          yref: 'y',
+          x: barDomain[0],
+          y: span.labelSlot,
+          xanchor: 'left',
+          yanchor: 'middle',
+          text: `<b>${span.name}</b>`,
+          showarrow: false,
+          font: { size: 10, color: axisColour },
+        });
+      } else {
+        groupLabels.push({
+          xref: 'x',
+          yref: 'paper',
+          x: (span.start + span.end) / 2,
+          y: 1,
+          yanchor: 'bottom',
+          text: `<b>${span.name}</b>`,
+          showarrow: false,
+          font: { size: 10, color: axisColour },
+        });
+        groupRules.push({
+          type: 'line',
+          xref: 'x',
+          yref: 'paper',
+          x0: span.start - 0.4,
+          x1: span.end + 0.4,
+          y0: 1,
+          y1: 1,
+          line: { color: axisColour, width: 1 },
+        });
+      }
+    }
+    const groupBandPx = !horizontal && spans.length > 0 ? GROUP_LABEL_PX : 0;
+
+    // The `//` at the base of a cropped value axis, drawn on its axis line.
+    const breakShapes = zoom
+      ? axisBreakShapes(
+          horizontal ? 'h' : 'v',
+          horizontal ? { x: barDomain[0], y: 0 } : { x: 0, y: barDomain[0] },
+          { line: axisColour, background: isDark ? theme.colors.dark[7] : theme.white },
+        )
+      : [];
+
     // Past 40 bars the tilted sample labels run into each other: they go (the
     // hover still names each bar), and a legend in rows moves above the bars.
-    const denseAxis = isDenseTaxonomyAxis(orderedSamples.length);
+    const denseAxis = isDenseTaxonomyAxis(nSamples);
     const legendTopPx = taxonomyLegendTopPx(legendPos, denseAxis, showLegend);
+
+    const categoryAxis = {
+      ...plotlyAxisOverrides(isDark, theme),
+      title: { text: taxonomyAxisTitle(config.x_title) },
+      ...(horizontal ? {} : { tickangle: -45 }),
+      showticklabels: !denseAxis,
+      automargin: true,
+      // Pinned to the edge of the plot area, past any strip on that side, and
+      // to the bars' sample order so the strips line up with them.
+      anchor: 'free' as const,
+      position: 0,
+      categoryorder: 'array' as const,
+      categoryarray: slots,
+      // The first sample on top, as a table reads.
+      ...(horizontal ? { autorange: 'reversed' as const } : {}),
+    };
+    // When normalise is ON we lock the value axis to [0, 1] and format ticks
+    // as percentages — this gives the toggle a visible effect even when the
+    // input data is already pre-normalised (the old behaviour: both toggle
+    // states rendered identically because each sample already summed to 1).
+    const croppedFrom = zoom ? formatAxisFloor(zoom, normalise) : null;
+    const valueAxis = {
+      ...plotlyAxisOverrides(isDark, theme),
+      domain: barDomain,
+      title: {
+        text: valueAxisTitle(
+          config.value_title,
+          normalise ? 'Relative abundance' : wide ? 'Value' : config.abundance_col,
+          croppedFrom,
+        ),
+      },
+      ...(normalise
+        ? {
+            range: zoom ? [zoom.floor, 1] : [0, 1],
+            tickformat: zoom ? percentTickFormat(zoom.step) : '.0%',
+          }
+        : {
+            // Log is only meaningful for raw counts — normalised data is
+            // bounded [0,1] and log would compress to noise.
+            ...(logY ? { type: 'log' as const } : {}),
+            ...(zoom ? { range: [zoom.floor, zoom.top] } : {}),
+          }),
+      // A cropped axis draws its line, so the break has a line to cut.
+      ...(zoom ? { showline: true } : {}),
+    };
 
     return {
       // The legend and the strips are what actually grows this tile, so the
       // figure reports them back rather than the renderer re-deriving them.
       seriesCount: data.length,
       stripCount: strips.length,
+      slotCount: slots.length,
+      categories: shownCategories,
+      canZoom: zoomCandidate != null,
       figure: {
         data: [...data, ...stripTraces],
         layout: {
@@ -509,55 +776,27 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
           barmode: 'stack' as const,
           // Automargins: the tilted sample ids, the strip names and the legend
           // take what they need instead of a guess that clipped them.
-          margin: { l: 60, r: 20, t: (stripKey ? 44 : 30) + legendTopPx, b: 30 },
-          annotations: stripLabels,
-          xaxis: {
-            ...plotlyAxisOverrides(isDark, theme),
-            title: { text: taxonomyAxisTitle(config.x_title) },
-            tickangle: -45,
-            showticklabels: !denseAxis,
-            automargin: true,
-            // Pinned to the bottom of the plot area, below any bottom strip,
-            // and to the bars' sample order so the strips line up with them.
-            anchor: 'free' as const,
-            position: 0,
-            categoryorder: 'array' as const,
-            categoryarray: orderedSamples,
-          },
+          margin: { l: 60, r: 20, t: (stripKey ? 44 : 30) + legendTopPx + groupBandPx, b: 30 },
+          annotations: [...stripLabels, ...groupLabels],
+          ...(breakShapes.length || groupRules.length
+            ? { shapes: [...groupRules, ...breakShapes] }
+            : {}),
+          ...(horizontal
+            ? { yaxis: categoryAxis, xaxis: valueAxis }
+            : { xaxis: categoryAxis, yaxis: valueAxis }),
           ...stripAxes,
-          // When normalise is ON we lock the y-axis to [0, 1] and format ticks
-          // as percentages — this gives the toggle a visible effect even when
-          // the input data is already pre-normalised (the old behaviour: both
-          // toggle states rendered identically because each sample already
-          // summed to 1).
-          yaxis: normalise
-            ? {
-                ...plotlyAxisOverrides(isDark, theme),
-                domain: barDomain,
-                title: { text: 'Relative abundance' },
-                range: [0, 1],
-                tickformat: '.0%',
-              }
-            : {
-                ...plotlyAxisOverrides(isDark, theme),
-                domain: barDomain,
-                title: { text: config.abundance_col },
-                // Log y is only meaningful for raw counts — normalised data
-                // is bounded [0,1] and log would compress to noise.
-                ...(logY ? { type: 'log' as const } : {}),
-              },
           showlegend: showLegend,
           // The taxa's key, titled with the rank they are, in a column right of
           // the plot by default: under it, it collided with the tilted sample
           // labels. `legend_pos: bottom` puts it in rows under the figure.
-          legend: taxonomyLegend(legendPos, denseAxis, activeRank ?? 'Taxon'),
+          legend: taxonomyLegend(legendPos, denseAxis, activeRank ?? (seen.length ? 'Taxon' : 'Category')),
           ...(stripKey
             ? {
                 legend2: {
                   orientation: 'h',
                   x: 1,
                   xanchor: 'right',
-                  y: 1,
+                  y: 1 + (groupBandPx ? groupLabelBand : 0),
                   yanchor: 'bottom',
                   font: { size: 10 },
                 },
@@ -568,23 +807,30 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
       },
       allRanks,
     };
-  }, [rows, config, rank, topN, normalise, sampleSort, showLegend, logY, isDark, theme, taxonUniverse, categorySource, stripBand, stripGap]);
+  }, [rows, config, rankCol, wide, valueCols, horizontal, rank, topN, normalise, sampleSort, sortCategory, activeGroupCol, yZoom, showLegend, logY, isDark, theme, taxonUniverse, categorySource, stripBand, stripGap, groupLabelBand]);
 
   // Memoised so AdvancedVizFrame's `extras` useMemo stays stable — an unmemoised
   // element re-fires the frame's publish effect and loops it against
   // ComponentRenderer's setState ("Maximum update depth exceeded").
-  // Encoding tier: rank, how many taxa survive the pooling, sample order, and
-  // whether the bars are read as proportions. Most used first: a docked panel
-  // shows the first few (DockedControls). Change one of those and it is a
-  // different figure; the legend and the log scale only change how it looks.
+  // Encoding tier: rank, how many taxa survive the pooling, sample order (and
+  // its grouping), and how the value axis reads (proportions, cropped). Most
+  // used first: a docked panel shows the first few (DockedControls). Change
+  // one of those and it is a different figure; the legend and the log scale
+  // only change how it looks.
   // A tile stacking something other than taxa (CCS outcomes per library)
   // hides the controls that mean nothing for it (`hidden_controls`); their
-  // config values still apply.
-  const shown = useMemo(
-    () => visibleTaxonomyControls(config.hidden_controls),
-    [config.hidden_controls],
-  );
+  // config values still apply. The rank picker also hides itself when the
+  // table has a single rank, or none.
+  const shown = useMemo(() => {
+    const visible = visibleTaxonomyControls(config.hidden_controls);
+    return {
+      ...visible,
+      rank: visible.rank && (allRanks.length > 1 || Boolean(rank)),
+      group: visible.group && groupOptions.length > 0,
+    };
+  }, [config.hidden_controls, allRanks.length, rank, groupOptions.length]);
   const rankLabel = config.rank_label || 'Rank';
+  const activeSortCategory = resolveSortCategory(sortCategory, categories);
   const primaryControls = useMemo(
     () =>
       Object.values(shown).some(Boolean) ? (
@@ -611,13 +857,29 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
             <VizSelect
               label="Sort samples"
               value={sampleSort}
-              onChange={(v) => v && setSampleSort(v as SampleSort)}
-              data={[
-                { value: 'input', label: 'Input order' },
-                { value: 'total_abundance', label: 'Total abundance' },
-                { value: 'first_taxon', label: 'Top taxon' },
-              ]}
+              onChange={(v) => v && setSampleSort(v as TaxonomySampleSort)}
+              data={SAMPLE_SORT_OPTIONS as { value: string; label: string }[]}
               allowDeselect={false}
+            />
+          ) : null}
+          {shown.sample_sort && sampleSort === 'category' && categories.length > 0 ? (
+            <VizSelect
+              label="Sort by share of"
+              value={activeSortCategory}
+              onChange={(v) => v && setSortCategory(v)}
+              data={categories}
+              allowDeselect={false}
+              searchable={categories.length > 8}
+            />
+          ) : null}
+          {shown.group ? (
+            <VizSelect
+              label="Group samples by"
+              value={activeGroupCol}
+              onChange={(v) => setGroupCol(v || null)}
+              data={groupOptions}
+              placeholder="None"
+              clearable
             />
           ) : null}
           {shown.normalise ? (
@@ -627,9 +889,36 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
               label="Normalise"
             />
           ) : null}
+          {shown.zoom ? (
+            <VizSwitch
+              checked={yZoom === 'auto'}
+              onChange={(e) => setYZoom(e.currentTarget.checked ? 'auto' : 'off')}
+              disabled={!canZoom && yZoom !== 'auto'}
+              label="Zoom"
+              title={
+                canZoom
+                  ? 'Crop the value axis to the part that varies between samples'
+                  : 'Nothing to crop: the bottom segment does not fill most of every bar'
+              }
+            />
+          ) : null}
         </>
       ) : undefined,
-    [rank, sampleSort, topN, normalise, allRanks, rankLabel, shown],
+    [
+      rank,
+      sampleSort,
+      topN,
+      normalise,
+      allRanks,
+      rankLabel,
+      shown,
+      categories,
+      activeSortCategory,
+      activeGroupCol,
+      groupOptions,
+      yZoom,
+      canZoom,
+    ],
   );
 
   const controls = useMemo(
@@ -657,31 +946,27 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   // taller (it only has the plot area's height), plus what the annotation
   // strips take off it.
   // A legend in rows (`legend_pos: bottom`) adds its rows to the plot area
-  // instead.
+  // instead. Horizontal bars turn the count into a height: one row per bar.
   const legendRows = config.legend_pos === 'bottom';
-  const contentDemand = useMemo(
-    () =>
-      figure
-        ? demandForPx(
-            (legendRows
-              ? TAXONOMY_PLOT_PX +
-                (showLegend
-                  ? LEGEND_CHROME_PX + Math.ceil(seriesCount / LEGEND_ROW_ITEMS) * LEGEND_ITEM_PX
-                  : 0)
-              : Math.max(
-                  TAXONOMY_PLOT_PX,
-                  showLegend
-                    ? FRAME_HEADER_PX +
-                        PLOT_CHROME_PX +
-                        LEGEND_CHROME_PX +
-                        seriesCount * LEGEND_ITEM_PX
-                    : 0,
-                )) +
-              stripCount * (STRIP_BAND_PX + STRIP_GAP_PX),
-          )
-        : undefined,
-    [figure, showLegend, seriesCount, stripCount, legendRows],
-  );
+  const contentDemand = useMemo(() => {
+    if (!figure) return undefined;
+    const plotPx = horizontal
+      ? Math.max(TAXONOMY_PLOT_PX, slotCount * BAR_ROW_PX + H_PLOT_CHROME_PX)
+      : TAXONOMY_PLOT_PX;
+    return demandForPx(
+      (legendRows
+        ? plotPx +
+          (showLegend
+            ? LEGEND_CHROME_PX + Math.ceil(seriesCount / LEGEND_ROW_ITEMS) * LEGEND_ITEM_PX
+            : 0)
+        : Math.max(
+            plotPx,
+            showLegend
+              ? FRAME_HEADER_PX + PLOT_CHROME_PX + LEGEND_CHROME_PX + seriesCount * LEGEND_ITEM_PX
+              : 0,
+          )) + (horizontal ? 0 : stripCount * (STRIP_BAND_PX + STRIP_GAP_PX)),
+    );
+  }, [figure, showLegend, seriesCount, stripCount, legendRows, horizontal, slotCount]);
 
   // Themed once per figure so the annotation layer can memoise on them.
   const plotData = useMemo(

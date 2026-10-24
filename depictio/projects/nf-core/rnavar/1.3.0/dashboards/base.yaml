@@ -1,0 +1,1765 @@
+version: 1
+# nf-core/rnavar 1.3.0, on the family rules of depictio/projects/nf-core/RULES.md
+# (ampliseq/2.18.0 is the reference implementation).
+#
+# Funnel: the MultiQC report, how the reads aligned and spliced (Alignment) and
+# how deep and where they cover the genome (Coverage), all in Data & QC -> how
+# many calls each sample yields and how clean they are (Callset) -> what the
+# calls change in the genes (Annotation, snpEff route only) -> where along the
+# genome they fall (Genome). The sample hub (`samples`, one row per sample) is
+# what every filter starts from: the template's links carry a pick on a sample
+# or a design group to every per-sample collection.
+#
+# Routes: the design table is optional (METADATA_FILE; without it the group
+# filter, group colours and group splits fall away); a run without --tools
+# snpeff has no snpeff_* collections, so the Annotation tab, its pipeline step
+# and its tile in the tab list are pruned at import; a run that skipped
+# VariantFiltration has no filtered VCFs, so the file track of the Genome tab
+# is pruned and the calls are read from the unfiltered VCFs.
+main_dashboard:
+  title: nf-core/rnavar
+  subtitle: Germline variant calling from RNA-seq, from the alignment to the annotated calls
+  project_tag: RNA-seq Germline Variant Calling
+  main_tab_name: Overview
+  tab_icon: mdi:compass-outline
+  tab_icon_color: brandPrimary
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_panel_default: collapsed
+  content_width_default: compact
+  show_tab_header: false
+  # Declared once here, read by every tab of the family.
+  category_colors:
+    '{GROUP_COL}': auto
+    fate:
+      Uniquely mapped: '#1c7ed6'
+      Multi-mapped: '#74c0fc'
+      Too many loci: '#f08c00'
+      'Unmapped: too short': '#e03131'
+      'Unmapped: other': '#adb5bd'
+      'Unmapped: too many mismatches': '#862e9c'
+    motif_class:
+      GT/AG: '#1c7ed6'
+      GC/AG: '#0ca678'
+      AT/AC: '#7048e8'
+      non-canonical: '#e03131'
+    contig_class:
+      autosome: '#1c7ed6'
+      X: '#7048e8'
+      Y: '#0ca678'
+      mitochondrion: '#f08c00'
+      other: '#adb5bd'
+    variant_type:
+      SNP: '#1c7ed6'
+      INDEL: '#7048e8'
+      MNP: '#0ca678'
+      SV: '#f08c00'
+    mutation_class:
+      transition: '#1c7ed6'
+      transversion: '#e8590c'
+    impact:
+      HIGH: '#e03131'
+      MODERATE: '#f08c00'
+      LOW: '#1c7ed6'
+      MODIFIER: '#adb5bd'
+    # VariantFiltration writes its own filter names, joined when a call fails
+    # several: PASS stays green, the rest take the palette.
+    filter_label:
+      '*': auto
+      PASS: '#2f9e44'
+    filter_status:
+      '*': auto
+      PASS: '#2f9e44'
+  # Persistent: drawn in every tab's filter panel, picks kept across tabs. Both
+  # are bound to the sample hub, the source of every sample link.
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab
+    persistent: true
+    pin: top
+  grid_sections:
+  - name: Key figures
+    icon: mdi:counter
+    color: gray
+    appearance: plain
+    card_variant: headline
+    filter_bar: true
+    visible_filters: 2
+    description: The run in four numbers. The filters here narrow these four only.
+  - name: Findings
+    icon: mdi:star-outline
+    color: gray
+    appearance: plain
+    figure_style: minimal
+    filter_bar: true
+    visible_filters: 2
+    description: What the data says, each with the tab that shows it, then the figures behind it.
+  - name: How to read this dashboard
+    icon: mdi:information-outline
+    color: gray
+    appearance: plain
+    description: The tabs by group, each with the question it answers.
+  # Declared on the main tab, which no route removes.
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: gray
+    description: One row per sample, narrowed by the sample filters
+    collapsed: true
+    persistent: true
+    pin: bottom
+    exclude_tabs:
+    - Overview
+  components:
+  # First in component order on purpose: the Guide demos the first categorical
+  # filter that shares a data collection with the first card (Samples, below).
+  - component_type: interactive
+    workflow_tag: rnavar
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Key figures
+    tag: rv-ov-kf-group
+    index: ov-kf-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: rnavar
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+      strip_label: Sample
+    section: Key figures
+    tag: rv-ov-kf-sample
+    index: ov-kf-sample
+    title: Sample
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # The pipeline's wordmark, read from its repository; where it cannot load (no
+  # internet), the title is drawn as text.
+  - component_type: text
+    title: nf-core/rnavar
+    logo: https://raw.githubusercontent.com/nf-core/rnavar/master/docs/images/nf-core-rnavar_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/rnavar/master/docs/images/nf-core-rnavar_logo_dark.png
+    order: 1
+    body: >
+      Germline variant calling from RNA-seq: how the reads aligned and spliced, how deep they
+      cover the transcribed genome, and which variants each sample carries. [Run parameters](params:)
+    tag: rv-ov-hero
+    index: ov-hero
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/rnavar aligns RNA-seq reads with STAR, marks duplicates, splits the spliced reads and calls germline variants with GATK HaplotypeCaller, then hard-filters them. Only expressed genes are covered, so a call set reads differently from an exome: depth follows expression, and RNA editing adds A to G changes no DNA carries. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
+    tag: rv-ov-about
+    index: ov-about
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash.
+  - component_type: text
+    surface: card
+    values:
+      n_samples: {dc: samples, column: sample, aggregation: nunique, format: integer}
+    body: |
+      ### The run
+      - ![](icon:mdi:test-tube) **Samples** {{n_samples}} on {{param:genome}}
+      - ![](icon:mdi:align-horizontal-left) **Aligner** {{param:aligner}}, two-pass {{param:star_twopass}}
+      - ![](icon:mdi:magnify-scan) **Calling** confidence {{param:gatk_hc_call_conf}}
+      - ![](icon:mdi:filter-outline) **Filters** FS above {{param:gatk_vf_fs_filter}}, QD below {{param:gatk_vf_qd_filter}}
+      - ![](icon:mdi:tag-outline) **Annotation** {{param:tools}}
+    tag: rv-ov-run
+    index: ov-run
+    layout: {x: 5, y: 1, w: 3, h: 3}
+  # The marks take the accent colour, not the theme's blue. The step that leads
+  # to the snpEff route's tab cites a value from that route's collection: the
+  # import removes the line with its data, so a run shows only the steps it took.
+  - component_type: text
+    surface: card
+    accent: teal
+    values:
+      n_reads: {dc: star_log_final, column: input_reads, aggregation: sum, format: si}
+      n_pass: {dc: vcf_callset_summary, column: pass_calls, aggregation: sum, format: si}
+      n_ann: {dc: snpeff_ann_variants, column: variant_key, aggregation: count, format: si}
+    body: |
+      ### Six steps from reads to annotated calls
+      Each step names its settings and the tab that shows its result.
+
+      ::: steps
+      1. ![](icon:mdi:align-horizontal-left) **Align** STAR maps {{n_reads}} reads in two passes over the splice junctions · [Settings](params:aligner) · [Alignment](tab:Alignment)
+      2. ![](icon:mdi:content-copy) **Mark** Picard flags duplicates and SplitNCigarReads cuts reads at the introns · [Settings](params:remove_duplicates) · [Coverage](tab:Coverage)
+      3. ![](icon:mdi:magnify-scan) **Call** HaplotypeCaller calls every sample on the exon intervals · [Settings](params:gatk_hc_call_conf) · [Callset](tab:Callset)
+      4. ![](icon:mdi:filter-outline) **Filter** VariantFiltration marks strand bias, low QD and SNP clusters, {{n_pass}} calls pass · [Settings](params:gatk_vf_fs_filter) · [Callset](tab:Callset)
+      5. ![](icon:mdi:tag-outline) **Annotate** snpEff predicts the effect of {{n_ann}} calls · [Settings](params:tools) · [Annotation](tab:Annotation)
+      6. ![](icon:mdi:file-document-outline) **Report** MultiQC gathers STAR, Picard and samtools · [Settings](params:skip_tools) · [MultiQC](tab:MultiQC)
+      :::
+    tag: rv-ov-steps
+    index: ov-steps
+    layout: {x: 0, y: 4, w: 8, h: 3}
+  # Key figures: one card per stage of the funnel, each opening the tab that
+  # explains it. All four read the sample hub, which every route writes.
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: samples
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: '{GROUP_COL}'
+    display:
+      icon_name: mdi:test-tube
+      icon_color: orange
+      caption: sequenced, by {GROUP_COL_DISPLAY}
+      link: tab:Alignment
+    section: Key figures
+    tag: rv-ov-kf-samples
+    index: ov-kf-samples
+    title: Samples
+    description: RNA-seq libraries called. The bar splits them by {GROUP_COL_DISPLAY}.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: samples
+    aggregation: median
+    column_name: uniquely_mapped_pct
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:align-horizontal-left
+      icon_color: blue
+      caption: median per sample, with the spread (%)
+      link: tab:Alignment
+      decimals: 1
+    section: Key figures
+    tag: rv-ov-kf-unique
+    index: ov-kf-unique
+    title: Uniquely mapped
+    description: Reads STAR placed at a single locus, in percent of its input. The box shows the spread across samples.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: samples
+    aggregation: median
+    column_name: pass_calls
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:magnify-scan
+      icon_color: teal
+      caption: median per sample, with the spread
+      link: tab:Callset
+      format: si
+    section: Key figures
+    tag: rv-ov-kf-pass
+    index: ov-kf-pass
+    title: PASS calls
+    description: Calls that failed none of the VariantFiltration filters. The box shows how much the samples differ.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: samples
+    aggregation: median
+    column_name: ts_tv
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:scale-balance
+      icon_color: violet
+      caption: median per sample, with the spread
+      link: tab:Callset
+      decimals: 2
+    section: Key figures
+    tag: rv-ov-kf-tstv
+    index: ov-kf-tstv
+    title: Transitions over transversions
+    description: Ts/Tv of the PASS SNVs. Transcribed sequence and RNA editing raise it above the genome-wide value of about 2.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Findings filter bar: the group, then the sample.
+  - component_type: interactive
+    workflow_tag: rnavar
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Findings
+    tag: rv-ov-findings-group
+    index: ov-findings-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: rnavar
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+      strip_label: Sample
+    section: Findings
+    tag: rv-ov-findings-sample
+    index: ov-findings-sample
+    title: Sample
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # One result row per finding, each citing collections every route writes.
+  - component_type: text
+    surface: card
+    values:
+      uniq: {dc: samples, column: uniquely_mapped_pct, aggregation: median, format: 'decimals:1'}
+      dup: {dc: samples, column: duplication_pct, aggregation: median, format: 'decimals:1'}
+      deep: {dc: samples, column: bases_10x_pct, aggregation: median, format: 'decimals:1'}
+      mito: {dc: samples, column: mito_reads_pct, aggregation: median, format: 'decimals:1'}
+      tstv: {dc: samples, column: ts_tv, aggregation: median, format: 'decimals:2'}
+      t_to_c: {dc: vcf_substitution_spectrum, column: fraction, aggregation: median, filter_expr: "col('substitution_class') == 'T to C'", format: percent}
+      top_chr: {dc: variant_windows, column: chrom, aggregation: top, weight: variants}
+      n_win: {dc: variant_windows, column: pos, aggregation: count, format: integer}
+    body: |
+      - **{{uniq}}%** of the reads map uniquely at the median – Picard flags {{dup}}% of them as duplicates [Alignment](tab:Alignment)
+      - **{{deep}}%** of the covered bases reach 10x at the median – {{mito}}% of the reads go to the mitochondrion [Coverage](tab:Coverage)
+      - **{{tstv}}** median Ts/Tv of the PASS SNVs – T to C, where A-to-I editing folds, takes {{t_to_c}} of them [Callset](tab:Callset)
+      - **{{n_win}}** windows of 1 Mb hold a PASS call – {{top_chr}} holds the most variants [Genome](tab:Genome)
+    section: Findings
+    tag: rv-ov-findings
+    index: ov-findings
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # One highlight per analysis tab every route keeps, in the order of the tabs.
+  # The tiles of a row share a stored height.
+  - component_type: highlight
+    section: Findings
+    source_tab: Alignment
+    source_component: aln-unique-vs-dup
+    caption: One point per sample, by its duplication rate and uniquely mapped share; colour is the design group.
+    hide_legend: true
+    tag: rv-ov-hl-alignment
+    index: ov-hl-alignment
+    layout: {x: 0, y: 2, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Coverage
+    source_component: cov-depth-profile
+    caption: Reference bases at each read depth, one curve per sample; a curve further right covers its genes deeper.
+    hide_legend: true
+    tag: rv-ov-hl-coverage
+    index: ov-hl-coverage
+    layout: {x: 4, y: 2, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Callset
+    source_component: cs-tstv-vs-hethom
+    caption: One point per sample, by its het/hom ratio and Ts/Tv; a cell line that lost heterozygosity sits left.
+    hide_legend: true
+    tag: rv-ov-hl-callset
+    index: ov-hl-callset
+    layout: {x: 0, y: 6, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Genome
+    source_component: gen-karyotype
+    caption: One sample's PASS variants per 1 Mb on each chromosome; the bands darken where genes are dense and expressed.
+    tag: rv-ov-hl-genome
+    index: ov-hl-genome
+    layout: {x: 4, y: 6, w: 4, h: 4}
+  # Link-only tab tiles: each tile prints its tab's subtitle, the question the
+  # tab answers. A tile whose tab a route pruned draws nothing.
+  - component_type: text
+    body: |
+      ### Data & QC
+      - [MultiQC](tab:MultiQC)
+      - [Alignment](tab:Alignment)
+      - [Coverage](tab:Coverage)
+
+      ### Variants
+      - [Callset](tab:Callset)
+      - [Annotation](tab:Annotation)
+      - [Genome](tab:Genome)
+    section: How to read this dashboard
+    tag: rv-ov-how-to-read
+    index: ov-how-to-read
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Persistent sample filters, the group first.
+  - component_type: interactive
+    workflow_tag: rnavar
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+    section: Sample filters
+    group: Sample scope
+    tag: rv-filter-group
+    index: sample-filters-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: rnavar
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+    section: Sample filters
+    group: Sample scope
+    tag: rv-filter-sample
+    index: sample-filters-sample
+    title: Sample
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  # Row selection feeds the Analysis panel.
+  - component_type: table
+    workflow_tag: rnavar
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Sample sheet
+    tag: rv-sample-sheet
+    index: sample-sheet
+    title: Samples
+    description: One row per sample, with its design columns, alignment, duplication, coverage and callset numbers.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+tabs:
+# ============================================================================
+# Data & QC
+# ============================================================================
+- title: MultiQC
+  subtitle: What does the MultiQC report say about the alignments?
+  tab_group: Data & QC
+  tab_order: 1
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Report scope
+    icon: mdi:tune
+    color: orange
+    description: Narrow the MultiQC panels to selected report rows
+  grid_sections:
+  - name: Alignment sections
+    icon: mdi:chart-box-outline
+    color: orange
+    description: STAR read fate and alignment scores, and the duplicates Picard flagged
+  - name: Contig sections
+    icon: mdi:chart-bar
+    color: orange
+    description: Reads per contig and on the sex chromosomes, from samtools idxstats
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      The [MultiQC](https://multiqc.info) report of the run carries STAR's alignment summary,
+      Picard's duplication rate and samtools' reads per contig for every sample. MultiQC names a
+      sample twice, as aligned and as duplicate-marked (`.md`), and the sample filters reach both.
+      A sample that stands out here is worth a look on the Alignment and Coverage tabs.
+    tag: rv-mqc-intro
+    index: mqc-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    workflow_tag: rnavar
+    data_collection_tag: multiqc_data
+    use: multiqc/general_stats
+    selected_module: general_stats
+    selected_plot: general_stats
+    section: Alignment sections
+    tag: rv-mqc-general-stats
+    title: General statistics
+    description: One row per library, the headline columns of every tool in the report side by side.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: rnavar
+    data_collection_tag: multiqc_data
+    selected_module: star
+    selected_plot: Alignment Scores
+    section: Alignment sections
+    tag: rv-mqc-star-scores
+    title: STAR alignment scores
+    description: Uniquely mapped, multi-mapped and unmapped reads per sample, as STAR counts them.
+    layout: {x: 0, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: rnavar
+    data_collection_tag: multiqc_data
+    selected_module: picard
+    selected_plot: Mark Duplicates
+    section: Alignment sections
+    tag: rv-mqc-picard-dups
+    title: Mark Duplicates
+    description: Unique and duplicate reads and pairs per sample, from Picard MarkDuplicates.
+    layout: {x: 4, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: rnavar
+    data_collection_tag: multiqc_data
+    selected_module: star
+    selected_plot: Summary Statistics
+    section: Alignment sections
+    tag: rv-mqc-star-summary
+    title: STAR summary statistics
+    description: Input reads, mapped share, splices and mismatch rate per sample.
+    layout: {x: 0, y: 8, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: rnavar
+    data_collection_tag: multiqc_data
+    selected_module: samtools
+    selected_plot: Mapped reads per contig
+    section: Contig sections
+    tag: rv-mqc-idxstats
+    title: Mapped reads per contig
+    description: Reads on each contig, normalised per sample, from samtools idxstats.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: rnavar
+    data_collection_tag: multiqc_data
+    selected_module: samtools
+    selected_plot: XY counts
+    section: Contig sections
+    tag: rv-mqc-xy
+    title: Reads on chrX and chrY
+    description: Share of the mapped reads on each sex chromosome, per sample.
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: interactive
+    workflow_tag: rnavar
+    data_collection_tag: multiqc_data
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:file-document-outline
+      custom_color: orange
+    section: Report scope
+    group: Report scope
+    tag: rv-mqc-filter-report-row
+    index: rv-mqc-report-row-filter
+    title: Report row
+    layout: {x: 0, y: 0, w: 1, h: 3}
+- title: Alignment
+  subtitle: How well did the reads align, splice and deduplicate?
+  tab_group: Data & QC
+  tab_order: 2
+  tab_icon: mdi:align-horizontal-left
+  tab_icon_color: blue
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Alignment scope
+    icon: mdi:filter-variant
+    color: blue
+    description: Keep samples inside a uniquely mapped or mismatch-rate band
+  grid_sections:
+  - name: Alignment at a glance
+    icon: mdi:counter
+    color: blue
+    description: Input reads, unique mapping, duplication and mismatch rate across the samples
+  - name: Read fate
+    icon: mdi:chart-bar
+    color: blue
+    description: Where each sample's reads went, from uniquely mapped to unmapped
+  - name: Mapping and duplication
+    icon: mdi:chart-scatter-plot
+    color: blue
+    description: Every sample by duplication and unique mapping, with the record of the picked one
+  - name: Splice junctions
+    icon: mdi:relation-many-to-many
+    color: blue
+    description: The novel junctions STAR found per sample, by intron motif
+  - name: Alignment tables
+    icon: mdi:table
+    color: gray
+    description: STAR's summary and Picard's duplication metrics per sample
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [STAR](https://github.com/alexdobin/STAR) aligns the reads in two passes, the second one
+      across the junctions the first one found, and Picard marks the duplicates. Duplication runs
+      high on RNA-seq because a highly expressed gene yields many identical fragments, so read it
+      beside the unique mapping rather than alone. Click a point to open the record of its sample.
+    tag: rv-aln-intro
+    index: aln-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: rnavar
+    data_collection_tag: star_log_final
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: uniquely_mapped_pct
+    column_type: float64
+    display:
+      icon_name: mdi:align-horizontal-left
+      custom_color: blue
+    section: Alignment scope
+    group: Alignment
+    tag: rv-aln-filter-unique
+    index: aln-unique-range
+    title: Uniquely mapped (%)
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: rnavar
+    data_collection_tag: star_log_final
+    interactive_component_type: RangeSlider
+    column_name: mismatch_rate_pct
+    column_type: float64
+    display:
+      icon_name: mdi:alert-outline
+      custom_color: grape
+    section: Alignment scope
+    group: Alignment
+    tag: rv-aln-filter-mismatch
+    index: aln-mismatch-range
+    title: Mismatch rate (%)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: star_log_final
+    use: star/input_reads
+    aggregation: sum
+    column_name: input_reads
+    column_type: int64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:counter
+      icon_color: orange
+      caption: reads per sample, how they spread
+      format: si
+    section: Alignment at a glance
+    tag: rv-aln-card-reads
+    index: aln-card-reads
+    title: Input reads
+    description: Reads given to STAR, summed over the samples in scope.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: star_log_final
+    use: star/unique_mapped
+    aggregation: median
+    column_name: uniquely_mapped_pct
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:align-horizontal-left
+      icon_color: blue
+      caption: median per sample, with the spread (%)
+      decimals: 1
+    section: Alignment at a glance
+    tag: rv-aln-card-unique
+    index: aln-card-unique
+    title: Uniquely mapped
+    description: Reads placed at a single locus, in percent of the input.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: picard_markduplicates_metrics
+    aggregation: median
+    column_name: percent_duplication
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:content-copy
+      icon_color: pink
+      caption: median per sample, with the spread
+      format: percent
+    section: Alignment at a glance
+    tag: rv-aln-card-dup
+    index: aln-card-dup
+    title: Duplication
+    description: Share of the examined reads Picard MarkDuplicates flagged as duplicates.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: star_log_final
+    use: star/mismatch_rate
+    aggregation: median
+    column_name: mismatch_rate_pct
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:alert-outline
+      icon_color: grape
+      caption: median per sample, with the spread (%)
+      decimals: 2
+    section: Alignment at a glance
+    tag: rv-aln-card-mismatch
+    index: aln-card-mismatch
+    title: Mismatch rate
+    description: Mismatches per aligned base, in percent. Variants, editing and sequencing errors all add to it.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: rnavar
+    data_collection_tag: star_read_fate
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: sample
+      taxon_col: fate
+      rank_col: null
+      abundance_col: reads_pct
+      normalise_to_one: true
+      orientation: h
+      sample_sort: name
+      y_zoom: auto
+      top_n: 8
+      value_title: Share of the input reads
+      hidden_controls: [rank, top_n]
+    section: Read fate
+    tag: rv-aln-fig-fate
+    index: aln-read-fate
+    title: Read fate per sample
+    description: Each sample's input split into uniquely mapped, multi-mapped and the unmapped reasons. Unique reads fill most of every bar, so the axis starts near the smallest unique share (the // marks the cut); sort by a fate to rank the samples on it.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: advanced_viz
+    workflow_tag: rnavar
+    data_collection_tag: samples
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: duplication_pct
+      y_col: uniquely_mapped_pct
+      label_col: sample
+      color_col: '{GROUP_COL}'
+      size_col: input_reads
+      x_title: Duplicate reads (%)
+      y_title: Uniquely mapped reads (%)
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: sample
+    section: Mapping and duplication
+    tag: rv-aln-av-unique-vs-dup
+    index: aln-unique-vs-dup
+    title: Unique mapping against duplication per sample
+    description: One point per sample, sized by its input reads. Replicates of one group should sit together; one apart is worth its record.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: rnavar
+    data_collection_tag: samples
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: aln-unique-vs-dup
+      id_col: sample
+      title_col: sample
+      selection_source: scatter_selection
+      sections:
+        Alignment: [input_reads, uniquely_mapped_pct, multimapped_pct, unmapped_pct, mismatch_rate_pct]
+        Splicing: [splices_annotated_pct, novel_junction_pct]
+        Coverage: [duplication_pct, bases_10x_pct, mito_reads_pct, other_contig_reads_pct]
+        Calls: [pass_calls, snvs, indels, ts_tv, het_hom_ratio, median_dp]
+    section: Mapping and duplication
+    tag: rv-aln-av-sample-record
+    index: aln-sample-record
+    title: Picked sample
+    description: The sample picked on the plot, from its reads to its calls.
+    layout: {x: 5, y: 0, w: 3, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: rnavar
+    data_collection_tag: star_junctions
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: sample
+      taxon_col: motif_class
+      rank_col: annotation
+      default_rank: novel
+      abundance_col: junctions
+      normalise_to_one: true
+      orientation: h
+      sample_sort: name
+      y_zoom: auto
+      top_n: 8
+      value_title: Share of the junctions
+      hidden_controls: [top_n]
+    section: Splice junctions
+    tag: rv-aln-fig-junctions
+    index: aln-novel-junctions
+    title: Novel splice junctions per sample
+    description: Junctions by intron motif, the novel ones first (the level switch shows the annotated ones, nearly all GT/AG). Canonical novel junctions can be real; non-canonical ones rarely are. Normalise off shows the counts.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: table
+    workflow_tag: rnavar
+    data_collection_tag: star_log_final
+    use: star/log_final
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Alignment tables
+    tag: rv-aln-table-star
+    index: aln-table-star
+    title: STAR alignment summary per sample
+    description: Input reads, read fate, splices and the mismatch, deletion and insertion rates.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: rnavar
+    data_collection_tag: picard_markduplicates_metrics
+    use: picard/markduplicates_metrics
+    columns: [sample, read_pairs_examined, unpaired_reads_examined, duplicate_reads, read_pair_optical_duplicates, percent_duplication, estimated_library_size]
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Alignment tables
+    tag: rv-aln-table-dups
+    index: aln-table-dups
+    title: Duplication metrics per sample
+    description: Pairs and reads examined, duplicates flagged, optical duplicates and Picard's library-size estimate.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+- title: Coverage
+  subtitle: How deep do the reads cover the genome, and where?
+  tab_group: Data & QC
+  tab_order: 3
+  tab_icon: mdi:layers-outline
+  tab_icon_color: cyan
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Coverage scope
+    icon: mdi:filter-variant
+    color: cyan
+    description: The contig class narrows the per-contig chart and table; the other tiles are whole-genome numbers per sample
+  grid_sections:
+  - name: Coverage at a glance
+    icon: mdi:counter
+    color: cyan
+    description: Callable depth, mapped reads and the mitochondrial and unplaced shares
+  - name: Depth distribution
+    icon: mdi:chart-line
+    color: cyan
+    description: Reference bases at each read depth, one curve per sample
+  - name: Reads per contig class
+    icon: mdi:chart-bar
+    color: cyan
+    description: Where each sample's mapped reads land, autosomes to unplaced contigs
+  - name: Mitochondrial and ribosomal reads
+    icon: mdi:chart-scatter-plot
+    color: cyan
+    description: Every sample by its mitochondrial and unplaced-contig shares, by group
+  - name: Contig tables
+    icon: mdi:table
+    color: gray
+    description: Mapped reads per contig and sample
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [samtools](https://www.htslib.org) stats and idxstats read the duplicate-marked alignment
+      the calls are made on. RNA-seq covers only what is expressed, so most of the genome sits at
+      zero depth and the depth curve follows expression rather than capture. On GRCh38 the
+      ribosomal DNA repeats sit on unplaced contigs, so a large unplaced share points at ribosomal
+      RNA the library kept.
+    tag: rv-cov-intro
+    index: cov-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: rnavar
+    data_collection_tag: samtools_idxstats
+    interactive_component_type: MultiSelect
+    column_name: contig_class
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: cyan
+    section: Coverage scope
+    group: Contigs
+    tag: rv-cov-filter-class
+    index: cov-class-filter
+    title: Contig class
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: samples
+    aggregation: median
+    column_name: bases_10x_pct
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:layers-outline
+      icon_color: cyan
+      caption: median per sample, with the spread (%)
+      decimals: 1
+    section: Coverage at a glance
+    tag: rv-cov-card-10x
+    index: cov-card-10x
+    title: Covered bases at 10x
+    description: Covered bases with ten reads or more, in percent of the covered bases; the part deep enough to call on.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: samtools_stats_sections
+    aggregation: sum
+    column_name: reads_mapped
+    column_type: float64
+    secondary_layout: histogram
+    filter_expr: "col('section') == 'SN'"
+    display:
+      icon_name: mdi:counter
+      icon_color: orange
+      caption: reads per sample, how they spread
+      format: si
+    section: Coverage at a glance
+    tag: rv-cov-card-mapped
+    index: cov-card-mapped
+    title: Mapped reads
+    description: Reads samtools counts as mapped in the duplicate-marked alignment, summed over the samples.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: samples
+    aggregation: median
+    column_name: mito_reads_pct
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:waves
+      icon_color: yellow
+      caption: share per sample, how it spreads (%)
+      decimals: 1
+    section: Coverage at a glance
+    tag: rv-cov-card-mito
+    index: cov-card-mito
+    title: Mitochondrial reads
+    description: Mapped reads on the mitochondrial genome, in percent. A stressed or dying culture sends more there.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: samples
+    aggregation: median
+    column_name: other_contig_reads_pct
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:help-circle-outline
+      icon_color: gray
+      caption: median per sample, with the spread (%)
+      decimals: 1
+    section: Coverage at a glance
+    tag: rv-cov-card-other
+    index: cov-card-other
+    title: Unplaced and alt contigs
+    description: Mapped reads on alt, unplaced and decoy contigs, in percent; on GRCh38 mostly the ribosomal DNA repeats.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: rnavar
+    data_collection_tag: samtools_stats_sections
+    use: samtools/coverage_distribution
+    config:
+      log_x: true
+      log_y: true
+      x_title: Read depth (log)
+      y_title: Reference bases (log)
+      legend_pos: bottom
+    section: Depth distribution
+    tag: rv-cov-av-depth
+    index: cov-depth-profile
+    title: Reference bases at each read depth
+    description: One curve per sample. A curve that falls later covers more of its expressed genes deep enough to call.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: rnavar
+    data_collection_tag: samtools_idxstats
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: sample
+      taxon_col: contig_class
+      rank_col: null
+      abundance_col: mapped_reads
+      normalise_to_one: true
+      orientation: h
+      sample_sort: name
+      y_zoom: auto
+      top_n: 8
+      value_title: Share of the mapped reads
+      hidden_controls: [rank, top_n]
+    section: Reads per contig class
+    tag: rv-cov-fig-contigs
+    index: cov-contig-classes
+    title: Mapped reads by contig class per sample
+    description: Autosomes, X, Y, the mitochondrion and the alt and unplaced contigs, as shares of each sample's mapped reads. The autosomes fill most of every bar, so the axis starts near the smallest autosome share (the // marks the cut).
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: figure
+    workflow_tag: rnavar
+    data_collection_tag: samples
+    visu_type: scatter
+    mode: code
+    code_content: |-
+      # One point per sample: two shares a failing library inflates, by group.
+      grp = depictio_group_by[0] if depictio_group_by else '{GROUP_COL}'
+      colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('{GROUP_COL}') or {}
+      d = df if grp in df.columns else df.with_columns(pl.lit('All samples').alias(grp))
+      d = d.filter(pl.col('mito_reads_pct').is_not_null() & pl.col('other_contig_reads_pct').is_not_null())
+      fig = px.scatter(d.to_pandas(), x='mito_reads_pct', y='other_contig_reads_pct', color=grp, color_discrete_map=colors, category_orders=depictio_group_kwargs.get('category_orders') or {}, hover_name='sample', labels={grp: '', 'mito_reads_pct': 'Mitochondrial reads (%)', 'other_contig_reads_pct': 'Reads on alt and unplaced contigs (%)'})
+      fig.update_traces(marker=dict(size=11))
+      fig.update_layout(margin=dict(t=10), legend_title_text='')
+    section: Mitochondrial and ribosomal reads
+    tag: rv-cov-fig-mito-rdna
+    index: cov-mito-vs-rdna
+    title: Mitochondrial against unplaced-contig reads per sample
+    description: One point per sample. Replicates sit together; a sample high on both lost mRNA to organellar and ribosomal RNA.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: table
+    workflow_tag: rnavar
+    data_collection_tag: samtools_idxstats
+    use: samtools/idxstats
+    columns: [sample, contig, contig_class, length, mapped_reads, mapped_pct, reads_per_mb]
+    row_selection_enabled: true
+    row_selection_column: contig
+    section: Contig tables
+    tag: rv-cov-table-idxstats
+    index: cov-table-idxstats
+    title: Mapped reads per contig
+    description: Contig length, mapped reads, their share of the sample and reads per megabase.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+# ============================================================================
+# Variants
+# ============================================================================
+- title: Callset
+  subtitle: How many calls does each sample yield, and how clean are they?
+  tab_group: Variants
+  tab_order: 4
+  tab_icon: mdi:magnify-scan
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Callset scope
+    icon: mdi:filter-variant
+    color: teal
+    description: These picks narrow the FILTER breakdown and the per-call plot; the callset summary, Ts/Tv and spectrum count every PASS call
+  grid_sections:
+  - name: Callset at a glance
+    icon: mdi:counter
+    color: teal
+    description: PASS calls, Ts/Tv, het/hom ratio and what VariantFiltration removed
+  - name: Callset quality
+    icon: mdi:chart-scatter-plot
+    color: teal
+    description: Every sample by its het/hom ratio and Ts/Tv
+  - name: Substitution spectrum
+    icon: mdi:chart-bar
+    color: teal
+    description: The PASS SNVs of each sample folded onto six substitution classes
+  - name: Depth and allele fraction
+    icon: mdi:chart-bell-curve
+    color: teal
+    description: Every call by its read depth and allele fraction, coloured by FILTER
+  - name: Callset tables
+    icon: mdi:table
+    color: gray
+    description: The callset summary and the FILTER breakdown per sample
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [GATK HaplotypeCaller](https://gatk.broadinstitute.org) calls every sample on the exon
+      intervals, and VariantFiltration marks strand bias (FS), low quality by depth (QD) and SNP
+      clusters instead of removing them. T to C here folds A to G and T to C together, the change
+      A-to-I RNA editing leaves, so an RNA callset carries more of it than a DNA one. Pick a FILTER
+      value on the left to see what it removed.
+    tag: rv-cs-intro
+    index: cs-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: rnavar
+    data_collection_tag: vcf_filter_breakdown
+    interactive_component_type: MultiSelect
+    column_name: filter_label
+    column_type: object
+    display:
+      icon_name: mdi:filter-outline
+      custom_color: teal
+    section: Callset scope
+    group: Calls
+    tag: rv-cs-filter-filter
+    index: cs-filter-filter
+    title: FILTER value
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: rnavar
+    data_collection_tag: vcf_variants
+    interactive_component_type: MultiSelect
+    column_name: variant_type
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: indigo
+    section: Callset scope
+    group: Calls
+    tag: rv-cs-filter-type
+    index: cs-type-filter
+    title: Variant type
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: vcf_callset_summary
+    use: vcf/pass_calls
+    aggregation: median
+    column_name: pass_calls
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:magnify-scan
+      icon_color: teal
+      caption: median per sample, with the spread
+      format: si
+    section: Callset at a glance
+    tag: rv-cs-card-pass
+    index: cs-card-pass
+    title: PASS calls
+    description: Calls that failed none of the hard filters, per sample.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: vcf_callset_summary
+    use: vcf/ts_tv
+    aggregation: median
+    column_name: ts_tv
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:scale-balance
+      icon_color: violet
+      caption: median per sample, with the spread
+      decimals: 2
+    section: Callset at a glance
+    tag: rv-cs-card-tstv
+    index: cs-card-tstv
+    title: Transitions over transversions
+    description: Ts/Tv of the PASS SNVs, first ALT allele.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: vcf_callset_summary
+    use: vcf/het_hom
+    aggregation: median
+    column_name: het_hom_ratio
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:set-merge
+      icon_color: blue
+      caption: median per sample, with the spread
+      decimals: 2
+    section: Callset at a glance
+    tag: rv-cs-card-hethom
+    index: cs-card-hethom
+    title: Het over hom-alt
+    description: Heterozygous over homozygous-alternate PASS calls. A sample that lost heterozygosity reads lower.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: vcf_filter_breakdown
+    use: vcf/calls_by_filter
+    aggregation: sum
+    column_name: calls
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: filter_label
+    top_n_count: 4
+    display:
+      icon_name: mdi:filter-outline
+      icon_color: green
+      caption: calls by FILTER value, the largest four
+      format: si
+    section: Callset at a glance
+    tag: rv-cs-card-filters
+    index: cs-card-filters
+    title: Calls by FILTER
+    description: Every call of the samples in scope, PASS and each set of failed filters.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: rnavar
+    data_collection_tag: samples
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: het_hom_ratio
+      y_col: ts_tv
+      label_col: sample
+      color_col: '{GROUP_COL}'
+      size_col: pass_calls
+      x_title: Heterozygous over homozygous-alternate calls
+      y_title: Transitions over transversions
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: sample
+    section: Callset quality
+    tag: rv-cs-av-tstv-hethom
+    index: cs-tstv-vs-hethom
+    title: Ts/Tv against het/hom ratio per sample
+    description: One point per sample, sized by its PASS calls. Replicates of one sample sit together; a group apart differs in genotype, not in quality.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: figure
+    workflow_tag: rnavar
+    data_collection_tag: vcf_substitution_spectrum
+    use: vcf/spectrum_bars
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Share of each sample's PASS SNVs per folded class, transitions first.
+      order = ['C to T', 'T to C', 'C to A', 'C to G', 'T to A', 'T to G']
+      d = df.with_columns((pl.col('fraction') * 100).alias('share')).sort(['sample', 'substitution_class'])
+      fig = px.bar(d.to_pandas(), x='substitution_class', y='share', color='sample', barmode='group', category_orders={'substitution_class': order}, labels={'substitution_class': '', 'share': 'Share of the PASS SNVs (%)', 'sample': 'Sample'})
+      fig.update_layout(margin=dict(t=10), legend_title_text='')
+    section: Substitution spectrum
+    tag: rv-cs-fig-spectrum
+    index: cs-spectrum
+    title: Substitution spectrum per sample
+    description: The six pyrimidine-folded classes as shares of each sample's PASS SNVs; T to C carries the editing signal.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: advanced_viz
+    workflow_tag: rnavar
+    data_collection_tag: vcf_variants
+    use: vcf/vaf_against_depth
+    config:
+      color_col: filter_status
+      log_x: true
+      x_title: Read depth at the call (log)
+      y_title: Variant allele fraction
+      legend_pos: bottom
+    section: Depth and allele fraction
+    tag: rv-cs-av-vaf-dp
+    index: cs-vaf-vs-depth
+    title: Allele fraction against depth per call
+    description: Heterozygous calls band at 0.5 and homozygous ones at 1; filtered calls gather at low depth.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: rnavar
+    data_collection_tag: vcf_callset_summary
+    use: vcf/callset_summary
+    columns: [sample, calls, pass_calls, pass_pct, snvs, indels, multiallelic, ts_tv, het, hom_alt, het_hom_ratio, median_qual, median_dp, median_het_vaf]
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Callset tables
+    tag: rv-cs-table-summary
+    index: cs-table-summary
+    title: Callset summary per sample
+    description: Calls, PASS share, SNVs, indels, Ts/Tv, zygosity and the median quality, depth and allele fraction.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: rnavar
+    data_collection_tag: vcf_filter_breakdown
+    use: vcf/filter_breakdown
+    columns: [sample, filter_label, failed_filters, calls, calls_pct, snvs, indels]
+    row_selection_enabled: true
+    row_selection_column: filter_label
+    section: Callset tables
+    tag: rv-cs-table-filters
+    index: cs-table-filters
+    title: FILTER breakdown per sample
+    description: Each FILTER value with its calls, their share of the sample's callset and the SNVs and indels among them.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+# Every component below reads a snpeff_* collection, all optional: a run
+# without --tools snpeff has none of them, and the import drops the tab.
+- title: Annotation
+  subtitle: What do the calls change in the genes they hit?
+  tab_group: Variants
+  tab_order: 5
+  tab_icon: mdi:tag-outline
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Annotation scope
+    icon: mdi:filter-variant
+    color: grape
+    description: These picks narrow the annotated calls and the gene table; snpEff's own impact and consequence totals cannot be split
+  grid_sections:
+  - name: Annotation at a glance
+    icon: mdi:counter
+    color: grape
+    description: Annotated calls, genes hit, HIGH impact calls and coding allele fractions
+  - name: Impact per sample
+    icon: mdi:chart-bar
+    color: grape
+    description: snpEff impact classes as shares of each sample's effects
+  - name: Consequences
+    icon: mdi:chart-box-outline
+    color: grape
+    description: The commonest consequence terms over the samples in scope
+  - name: Coding calls
+    icon: mdi:chart-scatter-plot
+    color: grape
+    description: Every annotated call by depth and allele fraction, coloured by impact
+  - name: Gene tables
+    icon: mdi:table
+    color: gray
+    description: Variants per gene by impact class, and the annotated calls behind them
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [snpEff](https://pcingola.github.io/SnpEff/) predicts what each call does to the transcripts
+      it overlaps and keeps the most severe effect: HIGH (a lost stop or a frameshift), MODERATE (a
+      missense change), LOW (a synonymous change) or MODIFIER (non-coding). This tab needs a run
+      started with `--tools snpeff`. Pick a gene in the table to open its calls.
+    tag: rv-ann-intro
+    index: ann-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: rnavar
+    data_collection_tag: snpeff_ann_variants
+    interactive_component_type: MultiSelect
+    column_name: impact
+    column_type: object
+    display:
+      icon_name: mdi:alert-outline
+      custom_color: grape
+    section: Annotation scope
+    group: Annotation
+    tag: rv-ann-filter-impact
+    index: ann-impact-filter
+    title: Impact
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: rnavar
+    data_collection_tag: snpeff_genes
+    interactive_component_type: MultiSelect
+    column_name: biotype
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: pink
+    section: Annotation scope
+    group: Annotation
+    tag: rv-ann-filter-biotype
+    index: ann-biotype-filter
+    title: Gene biotype
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: snpeff_ann_variants
+    use: snpeff/impact_composition
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: impact
+    display:
+      icon_name: mdi:tag-outline
+      icon_color: grape
+      caption: annotated calls, by impact
+      format: si
+    section: Annotation at a glance
+    tag: rv-ann-card-calls
+    index: ann-card-calls
+    title: Annotated calls
+    description: Calls snpEff annotated, one per sample carrying them. The ring splits them by impact class.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: snpeff_genes
+    aggregation: nunique
+    column_name: gene_name
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: biotype
+    top_n_count: 3
+    display:
+      icon_name: mdi:dna
+      icon_color: pink
+      caption: genes, by the biotype snpEff assigned
+      format: si
+    section: Annotation at a glance
+    tag: rv-ann-card-genes
+    index: ann-card-genes
+    title: Genes hit
+    description: Distinct genes with at least one annotated call, ranked by biotype.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: snpeff_ann_variants
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: variant_type
+    filter_expr: "col('impact') == 'HIGH'"
+    display:
+      icon_name: mdi:alert-outline
+      icon_color: red
+      caption: HIGH impact calls, by variant type
+      format: si
+    section: Annotation at a glance
+    tag: rv-ann-card-high
+    index: ann-card-high
+    title: HIGH impact calls
+    description: Calls snpEff classes HIGH, a lost or gained stop, a frameshift or a splice-site change.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: snpeff_ann_variants
+    aggregation: median
+    column_name: vaf
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: "col('impact').is_in(['HIGH', 'MODERATE'])"
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: cyan
+      caption: median per coding call, with the spread
+      decimals: 2
+    section: Annotation at a glance
+    tag: rv-ann-card-vaf
+    index: ann-card-vaf
+    title: Coding allele fraction
+    description: Allele fraction of the HIGH and MODERATE calls. Allele-specific expression spreads it away from 0.5.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: rnavar
+    data_collection_tag: snpeff_csv_stats
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: sample
+      taxon_col: category
+      rank_col: section
+      default_rank: impact
+      abundance_col: count
+      normalise_to_one: true
+      orientation: h
+      sample_sort: name
+      y_zoom: auto
+      top_n: 10
+      value_title: Share of the effects
+      hidden_controls: [top_n]
+    section: Impact per sample
+    tag: rv-ann-fig-impact
+    index: ann-impact-bars
+    title: Impact classes per sample
+    description: HIGH, MODERATE, LOW and MODIFIER effects as shares of each sample's effects; the level switch shows snpEff's other breakdowns (effect, functional class, region). MODIFIER fills most of every bar, so the axis starts near its smallest share (the // marks the cut).
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: figure
+    workflow_tag: rnavar
+    data_collection_tag: snpeff_csv_stats
+    use: snpeff/composition_bars
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # The twelve commonest consequence terms over the samples in view.
+      d = df.filter(pl.col('section') == 'effect').group_by('category').agg(pl.col('count').sum()).sort('count', descending=True).head(12)
+      d = d.with_columns(pl.col('category').str.replace_all('_', ' '))
+      fig = px.bar(d.to_pandas(), x='count', y='category', orientation='h', labels={'count': 'Effects', 'category': ''})
+      fig.update_layout(margin=dict(t=10), yaxis={'categoryorder': 'total ascending'})
+      fig.update_yaxes(automargin=True)
+    section: Consequences
+    tag: rv-ann-fig-effects
+    index: ann-consequences
+    title: Commonest consequence terms
+    description: The twelve consequence terms snpEff assigned most often, summed over the samples.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: rnavar
+    data_collection_tag: snpeff_ann_variants
+    use: snpeff/annotated_vaf_against_depth
+    config:
+      log_x: true
+      x_title: Read depth at the call (log)
+      y_title: Variant allele fraction
+      legend_pos: bottom
+    section: Coding calls
+    tag: rv-ann-av-vaf-dp
+    index: ann-vaf-vs-depth
+    title: Allele fraction against depth per annotated call
+    description: Every annotated call, coloured by impact; hover a point for its protein change.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: rnavar
+    data_collection_tag: snpeff_genes
+    use: snpeff/genes
+    columns: [sample, gene_name, biotype, n_high, n_moderate, n_low, n_modifier, n_variants, n_coding]
+    row_selection_enabled: true
+    row_selection_column: gene_name
+    section: Gene tables
+    tag: rv-ann-table-genes
+    index: ann-table-genes
+    title: Variants per gene and impact class
+    description: One row per gene and sample with its HIGH, MODERATE, LOW and MODIFIER counts.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: rnavar
+    data_collection_tag: snpeff_ann_variants
+    use: snpeff/ann_variants
+    columns: [sample, chrom, pos, ref, alt, gene, impact, consequence, hgvs_p, gt, dp, vaf, filter_status]
+    row_selection_enabled: true
+    row_selection_column: variant_key
+    section: Gene tables
+    tag: rv-ann-table-calls
+    index: ann-table-calls
+    title: Annotated calls
+    description: Locus, alleles, gene, impact, consequence and protein change of each call, with its genotype and depth.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+# The navigator (a genome_view on variant_windows) drives the call track
+# through the region link in template.yaml and the file track through
+# follow_region_filter. The cards opt in to the region with
+# follow_region_filter, so they recount what the region holds. Above them, the
+# karyotype reads the per-sample density (vcf_variant_density, catalog
+# vcf/variant_density) and shows one sample at a time.
+- title: Genome
+  subtitle: Where along the genome do the calls fall?
+  tab_group: Variants
+  tab_order: 6
+  tab_icon: mdi:map-marker-outline
+  tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Locus filters
+    icon: mdi:filter-variant
+    color: indigo
+    description: These picks narrow the call track and cards; the navigator, karyotype density and VCF lanes read every PASS call
+  grid_sections:
+  - name: Region at a glance
+    icon: mdi:counter
+    color: indigo
+    description: What the region in view holds, recounted on every brush or locus entry
+  - name: Calls along the genome
+    icon: mdi:chart-timeline-variant
+    color: indigo
+    description: One sample's distinct PASS variants per 1 Mb window, on the karyotype
+  - name: One region, three tracks
+    icon: mdi:dna
+    color: indigo
+    description: The variant navigator and the tracks that follow its region
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      The karyotype bands one sample's PASS variants per 1 Mb; the navigator draws the cohort's in
+      the same windows, and the calls and filtered VCFs follow its region. Type a locus or a gene in
+      its header, or brush its axis, and the tracks and cards follow. The VCF lanes are range-read
+      from the files for the region in view.
+    tag: rv-gen-intro
+    index: gen-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: rnavar
+    data_collection_tag: vcf_variants
+    interactive_component_type: MultiSelect
+    column_name: variant_type
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: indigo
+    section: Locus filters
+    group: Locus
+    tag: rv-gen-filter-type
+    index: gen-type-filter
+    title: Variant type
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: rnavar
+    data_collection_tag: vcf_variants
+    interactive_component_type: MultiSelect
+    column_name: filter_status
+    column_type: object
+    display:
+      icon_name: mdi:filter-outline
+      custom_color: teal
+    section: Locus filters
+    group: Locus
+    tag: rv-gen-filter-status
+    index: gen-status-filter
+    title: FILTER value
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: vcf_variants
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: variant_type
+    follow_region_filter: true
+    display:
+      icon_name: mdi:counter
+      icon_color: indigo
+      caption: calls in the region, by variant type
+      format: si
+    section: Region at a glance
+    tag: rv-gen-card-calls
+    index: gen-card-calls
+    title: Calls
+    description: Calls inside the region in view, one per sample carrying them.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: variant_windows
+    aggregation: sum
+    column_name: variants
+    column_type: int64
+    secondary_layout: histogram
+    follow_region_filter: true
+    display:
+      icon_name: mdi:chart-timeline-variant
+      icon_color: blue
+      caption: distinct variants, per 1 Mb window
+      format: si
+    section: Region at a glance
+    tag: rv-gen-card-variants
+    index: gen-card-variants
+    title: Distinct PASS variants
+    description: PASS variants of the cohort in the windows of the region, each counted once.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: vcf_variants
+    aggregation: median
+    column_name: vaf
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    follow_region_filter: true
+    display:
+      icon_name: mdi:chart-box-outline
+      icon_color: cyan
+      caption: median per call, with its spread
+      decimals: 2
+    section: Region at a glance
+    tag: rv-gen-card-vaf
+    index: gen-card-vaf
+    title: Allele fraction
+    description: Median allele fraction of the calls inside the region in view.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: rnavar
+    data_collection_tag: vcf_variants
+    aggregation: median
+    column_name: dp
+    column_type: int64
+    secondary_layout: histogram
+    follow_region_filter: true
+    display:
+      icon_name: mdi:layers-outline
+      icon_color: grape
+      caption: median per call, with its distribution
+      decimals: 0
+    section: Region at a glance
+    tag: rv-gen-card-dp
+    index: gen-card-dp
+    title: Depth at the call
+    description: Median read depth HaplotypeCaller reported at the calls inside the region.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # One karyotype per sample would be eight side by side, past the six facets
+  # a tile draws: the tile shows one sample, picked in its controls (the first
+  # until then), and the left panel's sample filter narrows the list.
+  - component_type: advanced_viz
+    workflow_tag: rnavar
+    data_collection_tag: vcf_variant_density
+    use: vcf/density_karyotype
+    config:
+      assembly: '{GENOME}'
+      mode: density
+      orientation: vertical
+      facet_by_sample: false
+      colour_scale: Viridis
+    section: Calls along the genome
+    tag: rv-gen-av-karyotype
+    index: gen-karyotype
+    title: PASS variants per 1 Mb on the karyotype
+    description: Each chromosome drawn to its length, banded by one sample's distinct PASS variants per 1 Mb; the dark bands are gene-dense, expressed regions.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: rnavar
+    data_collection_tag: variant_windows
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      chr_col: chrom
+      pos_col: pos
+      end_col: end
+      score_col: variants
+      mark: rect
+      assembly: '{GENOME}'
+      score_title: PASS variants
+      opacity: 0.8
+      default_region: first
+      region_filter_enabled: true
+    section: One region, three tracks
+    tag: rv-gen-av-navigator
+    index: gen-navigator
+    title: Variant navigator, 1 Mb windows
+    description: Distinct PASS variants per megabase window. A locus or gene in the header, or a brush, moves every track.
+    layout: {x: 0, y: 0, w: 8, h: 3}
+  - component_type: advanced_viz
+    workflow_tag: rnavar
+    data_collection_tag: vcf_variants
+    use: vcf/variant_genome_view
+    config:
+      sample_col: sample
+      category_col: filter_status
+      mark: point
+      assembly: '{GENOME}'
+      annotation: '{GENOME}'
+      score_title: VAF
+      point_size: 5
+      facet_by_sample: true
+      max_facets: 8
+      region_filter_enabled: false
+      follow_region_filter: true
+    section: One region, three tracks
+    tag: rv-gen-av-calls
+    index: gen-call-track
+    title: Calls over the genes, one lane per sample
+    description: Every call in the region at its variant allele fraction, coloured by FILTER, over the gene lane.
+    layout: {x: 0, y: 3, w: 8, h: 5}
+  # TODO(jbrowse): swap indexed_file+genome_view for a JBrowse2 DC once jbrowse.py is rebuilt
+  - component_type: advanced_viz
+    workflow_tag: rnavar
+    data_collection_tag: vcf_files
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      source: file
+      chr_col: chrom
+      pos_col: pos
+      assembly: '{GENOME}'
+      point_size: 6
+      file_max_lanes: 8
+      # 250 Mb, not the 1 Mb default: a lazy file lane reads nothing until the
+      # view is under its window, and the tab opens on a whole contig
+      # (default_region: first). An RNA callset's VCF is 1 to 3 MB whole, so a
+      # whole-contig range read costs little; 250 Mb covers the longest human
+      # contig.
+      file_window_size: 250000000
+      region_filter_enabled: false
+      follow_region_filter: true
+    section: One region, three tracks
+    tag: rv-gen-av-vcf
+    index: gen-vcf-files
+    title: The filtered VCFs, read from the files
+    description: Each sample's filtered VCF, range-read through its index for the region in view, one lane per sample.
+    layout: {x: 0, y: 8, w: 8, h: 4}

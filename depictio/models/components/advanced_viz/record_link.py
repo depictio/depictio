@@ -31,6 +31,8 @@ SELECTION_EMITTING_KINDS: dict[str, tuple[str, ...]] = {
     "profile": ("selection_column", "series_col"),
     "scatter_xy": ("selection_column", "label_col"),
     "genome_chord": ("selection_column", "label_col"),
+    # A feature (its box or its lollipop): its id, which the other tiles join on.
+    "ranked_distribution": ("selection_column", "feature_id_col", "=feature_id"),
     # Protein kinds (lot 3). A picked residue is a position (the entity half
     # travels in the `residue_selection` filter pair); an MSA row is a sequence.
     # The trailing literal is the model default, used when the field is unset.
@@ -51,6 +53,11 @@ SELECTION_EMITTING_KINDS: dict[str, tuple[str, ...]] = {
     "domain_architecture": ("selection_column", "label_col", "=label"),
     "pae_matrix": ("position_col", "=position"),
     "ramachandran": ("position_col", "=position"),
+    # A lassoed cell is its id. Opt-in, like the other scatter kinds.
+    "spatial_cells": ("selection_column", "cell_id_col", "=cell_id"),
+    # An allele half picks the allele (a sample label picks the sample, on the
+    # same filter key). Opt-in, like the other non-protein kinds.
+    "allele_grid": ("selection_column", "allele_col", "=allele"),
 }
 
 # Kinds whose pick reaches a record card as a `residue_selection` pair (an

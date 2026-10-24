@@ -224,6 +224,20 @@ class TestComponentFormats:
             assert "format=html" in reason
             assert ExportFormat.HTML in formats_for("advanced_viz", kind)
 
+    def test_ideogram_is_drawn_in_the_browser_and_embeds_as_html(self) -> None:
+        """A hand-drawn SVG reading its own rows: no JSON spec, but the offline
+        bundle carries the rows, so the HTML export renders it."""
+        from depictio.api.v1.services.export.capabilities import (
+            HTML_UNAVAILABLE_KINDS,
+            component_formats,
+        )
+
+        assert AV_JSON_SOURCE["ideogram"] == "client_only"
+        assert "ideogram" not in HTML_UNAVAILABLE_KINDS
+        assert ExportFormat.JSON not in formats_for("advanced_viz", "ideogram")
+        assert ExportFormat.HTML in formats_for("advanced_viz", "ideogram")
+        assert ExportFormat.HTML in component_formats(_av_component("ideogram", mode="density"))
+
     def test_only_the_protein_kinds_that_fetch_a_file_lack_html(self) -> None:
         from depictio.api.v1.services.export.capabilities import HTML_UNAVAILABLE_KINDS
 
@@ -244,6 +258,16 @@ class TestComponentFormats:
         }
         for kind in ("pae_matrix", "ramachandran"):
             assert "Open the dashboard instead" in HTML_UNAVAILABLE_KINDS[kind]
+
+    def test_ranked_distribution_is_html_only(self) -> None:
+        """Its two Plotly panels are built in TypeScript and fetch nothing of their own."""
+        from depictio.api.v1.services.export.capabilities import HTML_UNAVAILABLE_KINDS
+
+        assert AV_JSON_SOURCE["ranked_distribution"] == "client_only"
+        assert advanced_viz_json_source("ranked_distribution") == "client_only"
+        assert "ranked_distribution" not in HTML_UNAVAILABLE_KINDS
+        assert formats_for("advanced_viz", "ranked_distribution") == frozenset({ExportFormat.HTML})
+        assert "format=html" in (unsupported_reason("advanced_viz", "ranked_distribution") or "")
 
     def test_a_genomespy_view_has_no_html_but_the_plotly_view_does(self) -> None:
         from depictio.api.v1.services.export.capabilities import (
@@ -266,3 +290,30 @@ class TestComponentFormats:
         highlight = {"component_type": "highlight", "source_component": "fig-1"}
         assert component_formats(highlight) == frozenset()
         assert "source" in (component_html_unavailable_reason(highlight) or "")
+
+
+def test_spatial_cells_is_drawn_in_the_browser_and_exports_as_html() -> None:
+    """A browser-built scattergl: no JSON spec, but the offline bundle renders it."""
+    from depictio.api.v1.services.export.capabilities import HTML_UNAVAILABLE_KINDS
+
+    assert AV_JSON_SOURCE["spatial_cells"] == "client_only"
+    assert advanced_viz_json_source("spatial_cells") == "client_only"
+    assert ExportFormat.JSON not in formats_for("advanced_viz", "spatial_cells")
+    assert ExportFormat.HTML in formats_for("advanced_viz", "spatial_cells")
+    assert "spatial_cells" not in HTML_UNAVAILABLE_KINDS
+    assert "format=html" in (unsupported_reason("advanced_viz", "spatial_cells") or "")
+
+
+def test_allele_grid_is_drawn_in_the_browser_and_exports_as_html() -> None:
+    """A hand-drawn SVG grid: no server-side figure, but the offline bundle draws it.
+
+    It reads nothing but its own rows (no file, no GenomeSpy), so the HTML export
+    serves it through the real renderer and only JSON is refused.
+    """
+    from depictio.api.v1.services.export.capabilities import HTML_UNAVAILABLE_KINDS
+
+    assert AV_JSON_SOURCE["allele_grid"] == "client_only"
+    assert advanced_viz_json_source("allele_grid") == "client_only"
+    assert "allele_grid" not in HTML_UNAVAILABLE_KINDS
+    assert formats_for("advanced_viz", "allele_grid") == frozenset({ExportFormat.HTML})
+    assert "format=html" in (unsupported_reason("advanced_viz", "allele_grid") or "")

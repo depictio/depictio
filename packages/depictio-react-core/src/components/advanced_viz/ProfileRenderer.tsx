@@ -44,6 +44,7 @@ import {
   plotlyThemeFragment,
 } from './plotlyTheme';
 import { logLogSlope } from './logLogSlope';
+import { medianIqrByX, type ProfileAggregate } from './profileAggregate';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { useGestureGuardedSelection, useSelectionRevision } from './selectionGesture';
 import { splitFigureByGroups } from './groupSplit';
@@ -66,6 +67,7 @@ interface ProfileConfig {
   y_col: string;
   lower_col?: string | null;
   upper_col?: string | null;
+  aggregate?: ProfileAggregate | null;
   reference_x?: number | null;
   reference_label?: string | null;
   shaded_bands?: ShadedBand[] | null;
@@ -341,7 +343,10 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
     const ys = (rows[config.y_col] || []) as unknown[];
     const los = bandCols ? ((rows[bandCols.lower] || []) as unknown[]) : null;
     const his = bandCols ? ((rows[bandCols.upper] || []) as unknown[]) : null;
-    const hasBand = Boolean(los && his && los.length && his.length);
+    // Long rows (one per feature, series and x) are summarised here, so the
+    // curves follow the filters; the band is then the interquartile range.
+    const aggregating = config.aggregate === 'median_iqr';
+    const hasBand = aggregating || Boolean(los && his && los.length && his.length);
 
     // A DC that carries a single curve need not spend a column saying so; the
     // y axis name is a better legend entry than an empty string.
@@ -373,6 +378,10 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
         lo: hasBand && los ? num(los[i]) : null,
         hi: hasBand && his ? num(his[i]) : null,
       });
+    }
+
+    if (aggregating) {
+      for (const [key, pts] of bySeries) bySeries.set(key, medianIqrByX(pts));
     }
 
     const names = Array.from(bySeries.keys()).sort((a, b) =>

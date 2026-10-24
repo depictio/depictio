@@ -1,0 +1,1990 @@
+version: 1
+# nf-core/genomeqc 1.0.1, on the family rules of depictio/projects/nf-core/RULES.md
+# (ampliseq/2.18.0 is the reference implementation).
+#
+# Funnel: the MultiQC report, how contiguous each assembly is (Assembly) and
+# whether any of it is foreign (Contamination), all in Data & QC -> how much of
+# the conserved gene set each assembly and its annotation hold (Completeness),
+# where those genes and the telomeric repeats sit on the sequences (Karyotype),
+# how much of each genome is repeats (Repeats), how the gene models are built
+# (Annotation) and which orthogroups the genomes share (Orthology). The genome
+# hub (`genomes`, one row per assembly) is what every filter starts from: the
+# template's links carry a pick on a genome to every per-genome collection.
+#
+# Routes: the design table is optional (METADATA_FILE; without it the group
+# filter, group colours and group splits fall away). Every tool collection but
+# QUAST is optional, so a genome-only run loses the Annotation and Orthology
+# tabs, --skip_tidk the Karyotype tab, a run without an FCS-GX database the
+# Contamination tab and a run without --te repeatmasker the Repeats tab; each
+# takes its pipeline step, its findings row and its highlight with it.
+main_dashboard:
+  title: nf-core/genomeqc
+  subtitle: Genome assembly and annotation quality, from contiguity to the orthogroups the genomes share
+  project_tag: Genome Assembly and Annotation QC
+  main_tab_name: Overview
+  tab_icon: mdi:compass-outline
+  tab_icon_color: brandPrimary
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_panel_default: collapsed
+  content_width_default: compact
+  show_tab_header: false
+  # Declared once here, read by every tab of the family.
+  category_colors:
+    '{GROUP_COL}': auto
+    busco_class:
+      Complete single-copy: '#1c7ed6'
+      Complete duplicated: '#74c0fc'
+      Fragmented: '#f08c00'
+      Missing: '#e03131'
+    busco_mode:
+      genome: '#1c7ed6'
+      proteins: '#0ca678'
+    copy_class:
+      single-copy: '#1c7ed6'
+      multi-copy: '#f08c00'
+    tiara_class:
+      eukarya: '#2f9e44'
+      mitochondrion: '#1098ad'
+      plastid: '#66a80f'
+      organelle: '#3bc9db'
+      bacteria: '#e03131'
+      archaea: '#ae3ec9'
+      prokarya: '#f08c00'
+      unknown: '#adb5bd'
+    action:
+      '*': auto
+      none: '#adb5bd'
+    # RepeatMasker's classes take the palette, largest share first.
+    repeat_class:
+      '*': 'auto:genome_pct'
+      Unclassified: '#adb5bd'
+    feature_type:
+      '*': auto
+      mrna: '#1c7ed6'
+  # Persistent: drawn in every tab's filter panel, picks kept across tabs. Both
+  # are bound to the genome hub, the source of every genome link.
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab
+    persistent: true
+    pin: top
+  grid_sections:
+  - name: Key figures
+    icon: mdi:counter
+    color: gray
+    appearance: plain
+    card_variant: headline
+    filter_bar: true
+    visible_filters: 2
+    description: The run in four numbers. The filters here narrow these four only.
+  - name: Findings
+    icon: mdi:star-outline
+    color: gray
+    appearance: plain
+    figure_style: minimal
+    filter_bar: true
+    visible_filters: 2
+    description: What the data says, each with the tab that shows it, then the figures behind it.
+  - name: How to read this dashboard
+    icon: mdi:information-outline
+    color: gray
+    appearance: plain
+    description: The tabs by group, each with the question it answers.
+  # Declared on the main tab, which no route removes.
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: gray
+    description: One row per assembly, narrowed by the sample filters
+    collapsed: true
+    persistent: true
+    pin: bottom
+    exclude_tabs:
+    - Overview
+  components:
+  # First in component order on purpose: the Guide demos the first categorical
+  # filter that shares a data collection with the first card (Genomes, below).
+  - component_type: interactive
+    workflow_tag: genomeqc
+    data_collection_tag: genomes
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Key figures
+    tag: gq-ov-kf-group
+    index: ov-kf-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: genomeqc
+    data_collection_tag: genomes
+    interactive_component_type: MultiSelect
+    column_name: genome
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: teal
+      strip_label: Genome
+    section: Key figures
+    tag: gq-ov-kf-genome
+    index: ov-kf-genome
+    title: Genome
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # The pipeline's wordmark, read from its repository; where it cannot load (no
+  # internet), the title is drawn as text.
+  - component_type: text
+    title: nf-core/genomeqc
+    logo: https://raw.githubusercontent.com/nf-core/genomeqc/master/docs/images/nf-core-genomeqc_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/genomeqc/master/docs/images/nf-core-genomeqc_logo_dark.png
+    order: 1
+    body: >
+      Genome assembly and annotation quality: how contiguous and complete each assembly is,
+      where its genes sit and which orthogroups the genomes share. [Run parameters](params:)
+    tag: gq-ov-hero
+    index: ov-hero
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/genomeqc compares several genome assemblies, and their annotations when it has them: contiguity with QUAST, foreign sequence with FCS-GX and Tiara, repeats with RepeatMasker, conserved genes with BUSCO, gene models with AGAT and shared genes with OrthoFinder. Each assembly is one row of every table, so the genomes compare side by side. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The sample filters in the left panel apply to every tab: narrow the genomes once and the whole dashboard follows. A bar above a section narrows that section only.
+    tag: gq-ov-about
+    index: ov-about
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash.
+  - component_type: text
+    surface: card
+    values:
+      n_genomes: {dc: genomes, column: genome, aggregation: nunique, format: integer}
+    body: |
+      ### The run
+      - ![](icon:mdi:dna) **Genomes** {{n_genomes}} assemblies compared
+      - ![](icon:mdi:check-decagram-outline) **BUSCO** lineage {{param:busco_lineage}}
+      - ![](icon:mdi:file-tree-outline) **Annotation** validated with {{param:val_tool}}
+      - ![](icon:mdi:family-tree) **OrthoFinder** version {{param:ortho_version}}
+      - ![](icon:mdi:repeat) **Repeats** {{param:te}}
+    tag: gq-ov-run
+    index: ov-run
+    layout: {x: 5, y: 1, w: 3, h: 3}
+  # The marks take the accent colour, not the theme's blue. The steps that lead
+  # to an optional route's tab cite a value from that route's collection: the
+  # import removes the line with its data, so a run shows only the steps it took.
+  - component_type: text
+    surface: card
+    accent: teal
+    values:
+      n_seq: {dc: quast_assembly_report, column: n_contigs, aggregation: sum, format: si}
+      n_screen: {dc: tiara_classifications, column: sequence, aggregation: count, format: si}
+      n_masked: {dc: repeatmasker_masking_summary, column: masked_bp, aggregation: sum, format: si}
+      n_busco: {dc: busco_batch_summary, column: assembly_id, aggregation: count, format: integer}
+      n_genes: {dc: agat_gene_models, column: genes, aggregation: sum, filter_expr: "col('feature_type') == 'mrna'", format: si}
+      n_og: {dc: orthofinder_orthogroup_matrix, column: orthogroup, aggregation: count, format: si}
+    body: |
+      ### Six steps from assemblies to shared genes
+      Each step names its settings and the tab that shows its result.
+
+      ::: steps
+      1. ![](icon:mdi:ruler) **Measure** QUAST counts {{n_seq}} sequences and their contiguity · [Settings](params:input) · [Assembly](tab:Assembly)
+      2. ![](icon:mdi:shield-search) **Screen** FCS-GX, FCS-adaptor and Tiara check {{n_screen}} sequences for foreign DNA · [Settings](params:gxdb_manifest) · [Contamination](tab:Contamination)
+      3. ![](icon:mdi:repeat) **Mask** RepeatMasker masks {{n_masked}} repeat bases · [Settings](params:te) · [Repeats](tab:Repeats)
+      4. ![](icon:mdi:check-decagram-outline) **Complete** BUSCO scores {{n_busco}} gene sets, each assembly and its proteins · [Settings](params:busco_lineage) · [Completeness](tab:Completeness)
+      5. ![](icon:mdi:file-tree-outline) **Annotate** AGAT describes {{n_genes}} protein-coding genes · [Settings](params:val_tool) · [Annotation](tab:Annotation)
+      6. ![](icon:mdi:family-tree) **Compare** OrthoFinder groups the genes into {{n_og}} orthogroups · [Settings](params:ortho_version) · [Orthology](tab:Orthology)
+      :::
+    tag: gq-ov-steps
+    index: ov-steps
+    layout: {x: 0, y: 4, w: 8, h: 3}
+  # Key figures: one card per stage of the funnel, each opening the tab that
+  # explains it. All four read the genome hub, which every route writes.
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: genomes
+    aggregation: nunique
+    column_name: genome
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: '{GROUP_COL}'
+    display:
+      icon_name: mdi:dna
+      icon_color: orange
+      caption: compared, by {GROUP_COL_DISPLAY}
+      link: tab:Assembly
+    section: Key figures
+    tag: gq-ov-kf-genomes
+    index: ov-kf-genomes
+    title: Genomes
+    description: Assemblies the run compared. The bar splits them by {GROUP_COL_DISPLAY}.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: genomes
+    aggregation: median
+    column_name: n50
+    column_type: int64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:ruler
+      icon_color: blue
+      caption: per assembly, how they spread
+      link: tab:Assembly
+      format: si
+    section: Key figures
+    tag: gq-ov-kf-n50
+    index: ov-kf-n50
+    title: N50
+    description: Length of the sequence at which half of an assembly is reached, longest first. The histogram shows how the assemblies spread.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: genomes
+    aggregation: median
+    column_name: busco_complete_pct
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 95
+    threshold_direction: min
+    threshold_warn: 90
+    display:
+      icon_name: mdi:check-decagram-outline
+      icon_color: teal
+      caption: assemblies at 95% or more, below 90% failing
+      link: tab:Completeness
+      decimals: 1
+    section: Key figures
+    tag: gq-ov-kf-busco
+    index: ov-kf-busco
+    title: Complete BUSCOs
+    description: Conserved single-copy genes of the lineage found whole in an assembly, in percent, at the median.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: genomes
+    aggregation: median
+    column_name: ns_per_100_kbp
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:texture-box
+      icon_color: grape
+      caption: per assembly, with the spread
+      link: tab:Assembly
+      decimals: 0
+    section: Key figures
+    tag: gq-ov-kf-gaps
+    index: ov-kf-gaps
+    title: N bases per 100 kb
+    description: Gap bases left by scaffolding, per 100 kb of assembly. The box shows how much the assemblies differ.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Findings filter bar: the group, then the genome.
+  - component_type: interactive
+    workflow_tag: genomeqc
+    data_collection_tag: genomes
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Findings
+    tag: gq-ov-findings-group
+    index: ov-findings-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: genomeqc
+    data_collection_tag: genomes
+    interactive_component_type: MultiSelect
+    column_name: genome
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: teal
+      strip_label: Genome
+    section: Findings
+    tag: gq-ov-findings-genome
+    index: ov-findings-genome
+    title: Genome
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # One result row per finding, each citing one collection, so a route that
+  # lacks it loses that row alone.
+  - component_type: text
+    surface: card
+    values:
+      n50: {dc: quast_assembly_report, column: n50, aggregation: median, format: si}
+      l50: {dc: quast_assembly_report, column: l50, aggregation: median, format: integer}
+      busco: {dc: busco_batch_summary, column: complete_pct, aggregation: median, filter_expr: "col('busco_mode') == 'genome'", format: 'decimals:1'}
+      prot: {dc: busco_batch_summary, column: complete_pct, aggregation: median, filter_expr: "col('busco_mode') == 'proteins'", format: 'decimals:1'}
+      seqs: {dc: busco_karyotype, column: sequence, aggregation: count, format: integer}
+      share: {dc: busco_karyotype, column: busco_share_pct, aggregation: max, format: 'decimals:1'}
+      og_all: {dc: orthofinder_orthogroup_matrix, column: orthogroup, aggregation: count, filter_expr: "col('sharing') == 'core'", format: si}
+      og_one: {dc: orthofinder_species_stats, column: species_specific_orthogroups, aggregation: sum, format: integer}
+    body: |
+      - **{{n50}}** median N50 of the assemblies – half of an assembly sits in {{l50}} sequences at the median [Assembly](tab:Assembly)
+      - **{{busco}}%** complete BUSCOs in the assemblies at the median – their annotated proteins keep {{prot}}% [Completeness](tab:Completeness)
+      - **{{seqs}}** sequences carry the complete BUSCOs – the busiest holds {{share}}% of its genome's [Karyotype](tab:Karyotype)
+      - **{{og_all}}** orthogroups every genome shares – {{og_one}} belong to a single genome [Orthology](tab:Orthology)
+    section: Findings
+    tag: gq-ov-findings
+    index: ov-findings
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # One highlight per analysis tab, in the order of the tabs. The tiles of a row
+  # share a stored height.
+  - component_type: highlight
+    section: Findings
+    source_tab: Assembly
+    source_component: asm-contiguity
+    caption: One point per assembly, by its sequences and N50 on log axes; chromosome-level assemblies sit top left.
+    hide_legend: true
+    tag: gq-ov-hl-assembly
+    index: ov-hl-assembly
+    layout: {x: 0, y: 2, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Completeness
+    source_component: cmp-classes
+    caption: The four BUSCO classes per assembly, the genome and its proteins side by side; red is missing.
+    hide_legend: true
+    tag: gq-ov-hl-completeness
+    index: ov-hl-completeness
+    layout: {x: 4, y: 2, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Annotation
+    source_component: ann-gene-models
+    caption: One point per assembly and transcript type, by genes and exons per transcript; protein-coding genes sit top right.
+    hide_legend: true
+    tag: gq-ov-hl-annotation
+    index: ov-hl-annotation
+    layout: {x: 0, y: 6, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Orthology
+    source_component: orth-placement
+    caption: Each genome's genes in shared, genome-specific or no orthogroups; the axis starts near the smallest shared share, so the unplaced genes show.
+    tag: gq-ov-hl-orthology
+    index: ov-hl-orthology
+    layout: {x: 4, y: 6, w: 4, h: 4}
+  # Link-only tab tiles: each tile prints its tab's subtitle, the question the
+  # tab answers. A tile whose tab a route pruned draws nothing.
+  - component_type: text
+    body: |
+      ### Data & QC
+      - [MultiQC](tab:MultiQC)
+      - [Assembly](tab:Assembly)
+      - [Contamination](tab:Contamination)
+
+      ### Genomes
+      - [Completeness](tab:Completeness)
+      - [Karyotype](tab:Karyotype)
+      - [Repeats](tab:Repeats)
+      - [Annotation](tab:Annotation)
+      - [Orthology](tab:Orthology)
+    section: How to read this dashboard
+    tag: gq-ov-how-to-read
+    index: ov-how-to-read
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Persistent sample filters, the group first.
+  - component_type: interactive
+    workflow_tag: genomeqc
+    data_collection_tag: genomes
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+    section: Sample filters
+    group: Genome scope
+    tag: gq-filter-group
+    index: sample-filters-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: genomeqc
+    data_collection_tag: genomes
+    interactive_component_type: MultiSelect
+    column_name: genome
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: teal
+    section: Sample filters
+    group: Genome scope
+    tag: gq-filter-genome
+    index: sample-filters-genome
+    title: Genome
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  # Row selection feeds the Analysis panel.
+  - component_type: table
+    workflow_tag: genomeqc
+    data_collection_tag: genomes
+    row_selection_enabled: true
+    row_selection_column: genome
+    section: Sample sheet
+    tag: gq-sample-sheet
+    index: sample-sheet
+    title: Genomes
+    description: One row per assembly, with its design columns, contiguity, completeness, gene models, orthology, contamination and repeats.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+tabs:
+# ============================================================================
+# Data & QC
+# ============================================================================
+- title: MultiQC
+  subtitle: What does the MultiQC report say about the assemblies?
+  tab_group: Data & QC
+  tab_order: 1
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Report scope
+    icon: mdi:tune
+    color: orange
+    description: Narrow the MultiQC panels to selected report rows
+  grid_sections:
+  - name: Assembly sections
+    icon: mdi:chart-box-outline
+    color: orange
+    description: The general statistics, then QUAST's assembly statistics and contig counts
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      The [MultiQC](https://multiqc.info) report of the run carries QUAST's statistics for every
+      assembly, each row named after the assembly's FASTA file. The other tools of the run write
+      their own tables, read on the tabs behind this one.
+    tag: gq-mqc-intro
+    index: mqc-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    workflow_tag: genomeqc
+    data_collection_tag: multiqc_data
+    use: multiqc/general_stats
+    selected_module: general_stats
+    selected_plot: general_stats
+    section: Assembly sections
+    tag: gq-mqc-general-stats
+    title: General statistics
+    description: The headline QUAST numbers of every assembly in one table.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: genomeqc
+    data_collection_tag: multiqc_data
+    selected_module: quast
+    selected_plot: Assembly Statistics
+    section: Assembly sections
+    tag: gq-mqc-quast-stats
+    title: QUAST assembly statistics
+    description: Length, N50, N90, L50, GC and sequences per assembly, as QUAST reports them.
+    layout: {x: 0, y: 4, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: genomeqc
+    data_collection_tag: multiqc_data
+    selected_module: quast
+    selected_plot: Number of Contigs
+    section: Assembly sections
+    tag: gq-mqc-quast-contigs
+    title: Sequences by length
+    description: Sequences of each assembly in QUAST's length bins.
+    layout: {x: 0, y: 8, w: 8, h: 4}
+  - component_type: interactive
+    workflow_tag: genomeqc
+    data_collection_tag: multiqc_data
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:file-document-outline
+      custom_color: orange
+    section: Report scope
+    group: Report scope
+    tag: gq-mqc-filter-report-row
+    index: gq-mqc-report-row-filter
+    title: Report row
+    layout: {x: 0, y: 0, w: 1, h: 3}
+- title: Assembly
+  subtitle: How contiguous is each assembly?
+  tab_group: Data & QC
+  tab_order: 2
+  tab_icon: mdi:puzzle-outline
+  tab_icon_color: blue
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Assembly scope
+    icon: mdi:filter-variant
+    color: blue
+    description: Keep assemblies inside an N50 or sequence-count band
+  grid_sections:
+  - name: Assemblies at a glance
+    icon: mdi:counter
+    color: blue
+    description: Contiguity, size and composition across the assemblies
+  - name: Contiguity
+    icon: mdi:chart-scatter-plot
+    color: blue
+    description: Sequences against N50 of each assembly, with the record of the picked one
+  - name: Length ladder
+    icon: mdi:chart-line
+    color: blue
+    description: How much of each assembly sits in sequences above each length
+  - name: Assembly tables
+    icon: mdi:table
+    color: gray
+    description: QUAST statistics and the length ladder per assembly
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [QUAST](https://github.com/ablab/quast) measures each assembly without a reference: how many
+      sequences, how long, and how much of it sits in long ones. A chromosome-level assembly holds
+      half its length in a few sequences; a draft spreads it over hundreds. Click a point to open
+      the record of its genome.
+    tag: gq-asm-intro
+    index: asm-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: genomeqc
+    data_collection_tag: quast_assembly_report
+    interactive_component_type: RangeSlider
+    column_name: n50
+    column_type: int64
+    display:
+      icon_name: mdi:ruler
+      custom_color: blue
+    section: Assembly scope
+    group: Assemblies
+    tag: gq-asm-filter-n50
+    index: asm-n50-range
+    title: N50 (bp)
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: genomeqc
+    data_collection_tag: quast_assembly_report
+    interactive_component_type: RangeSlider
+    column_name: n_contigs
+    column_type: int64
+    display:
+      icon_name: mdi:puzzle-outline
+      custom_color: pink
+    section: Assembly scope
+    group: Assemblies
+    tag: gq-asm-filter-contigs
+    index: asm-contigs-range
+    title: Sequences
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: quast_assembly_report
+    aggregation: median
+    column_name: n50
+    column_type: int64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:ruler
+      icon_color: blue
+      caption: per assembly, how they spread
+      format: si
+    section: Assemblies at a glance
+    tag: gq-asm-card-n50
+    index: asm-card-n50
+    title: N50
+    description: Length of the sequence at which half of the assembly is reached, longest first.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: quast_assembly_report
+    aggregation: median
+    column_name: l50
+    column_type: int64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:puzzle-outline
+      icon_color: orange
+      caption: sequences holding half an assembly
+      decimals: 0
+    section: Assemblies at a glance
+    tag: gq-asm-card-l50
+    index: asm-card-l50
+    title: L50
+    description: How many of the longest sequences it takes to reach half of the assembly. Close to the chromosome number on a chromosome-level assembly.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: quast_assembly_report
+    aggregation: median
+    column_name: total_length
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:dna
+      icon_color: teal
+      caption: median per assembly, with the spread
+      format: si
+    section: Assemblies at a glance
+    tag: gq-asm-card-length
+    index: asm-card-length
+    title: Assembly length
+    description: Total length of an assembly in base pairs, runs of N included.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: quast_assembly_report
+    aggregation: median
+    column_name: gc_percent
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:percent-outline
+      icon_color: grape
+      caption: median per assembly, with the spread
+      decimals: 1
+    section: Assemblies at a glance
+    tag: gq-asm-card-gc
+    index: asm-card-gc
+    title: GC content
+    description: Share of G and C bases in the assembly, in percent.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Bound to the genome hub, which carries the design group the points take
+  # their colour from and every per-genome number the record shows.
+  - component_type: advanced_viz
+    workflow_tag: genomeqc
+    data_collection_tag: genomes
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: n_contigs
+      y_col: n50
+      label_col: genome
+      color_col: '{GROUP_COL}'
+      size_col: total_length
+      x_title: Sequences in the assembly (log)
+      y_title: N50 in bp (log)
+      log_x: true
+      log_y: true
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: genome
+    section: Contiguity
+    tag: gq-asm-av-contiguity
+    index: asm-contiguity
+    title: Sequences against N50 per assembly
+    description: One point per assembly, sized by its length. Lasso a group to narrow every tab.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: genomeqc
+    data_collection_tag: genomes
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: asm-contiguity
+      id_col: genome
+      title_col: genome
+      selection_source: scatter_selection
+      sections:
+        Assembly: [total_length, n_contigs, largest_contig, n50, n90, l50, l90, gc_percent, ns_per_100_kbp]
+        Completeness: [busco_complete_pct, busco_duplicated_pct, busco_missing_pct, protein_complete_pct, sequences_with_busco]
+        Annotation: [genes, exons_per_transcript, single_exon_gene_pct, genes_in_orthogroups_pct]
+        Screening: [contaminant_pct, gx_flagged_ranges, adaptor_ranges, masked_pct]
+    section: Contiguity
+    tag: gq-asm-av-record
+    index: asm-genome-record
+    title: Picked genome
+    description: The genome picked on the plot, from its contiguity to its repeats.
+    layout: {x: 5, y: 0, w: 3, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: genomeqc
+    data_collection_tag: quast_length_ladder
+    use: quast/retained_fraction
+    config:
+      x_title: Minimum sequence length (bp)
+      y_title: Share of the assembly kept
+      legend_pos: bottom
+    section: Length ladder
+    tag: gq-asm-av-ladder
+    index: asm-ladder
+    title: Assembly kept above each sequence length
+    description: One curve per assembly, named after its FASTA. A curve that holds near 1 to the right keeps its length in long sequences.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: genomeqc
+    data_collection_tag: quast_assembly_report
+    use: quast/assembly_report
+    columns: [assembly_id, n_contigs, total_length, largest_contig, n50, l50, gc_percent, ns_per_100_kbp, contigs_over_1kb, length_over_1kb]
+    row_selection_enabled: true
+    row_selection_column: assembly_id
+    section: Assembly tables
+    tag: gq-asm-table-quast
+    index: asm-table-quast
+    title: QUAST statistics per assembly
+    description: Sequences, length, longest sequence, N50, L50, GC and N bases of every assembly, named after its FASTA.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: genomeqc
+    data_collection_tag: quast_length_ladder
+    use: quast/length_ladder
+    section: Assembly tables
+    tag: gq-asm-table-ladder
+    index: asm-table-ladder
+    title: Length ladder per assembly
+    description: Sequences and bases at or above each of QUAST's minimum lengths.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+- title: Contamination
+  subtitle: Does any assembly carry foreign or adaptor sequence?
+  tab_group: Data & QC
+  tab_order: 3
+  tab_icon: mdi:shield-search
+  tab_icon_color: red
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Screening scope
+    icon: mdi:filter-variant
+    color: red
+    description: The Tiara classes and the FCS-GX actions the tiles keep
+  grid_sections:
+  - name: Screening at a glance
+    icon: mdi:counter
+    color: red
+    description: Foreign share, flagged ranges, adaptors and prokaryotic sequences
+  - name: Foreign sequence per genome
+    icon: mdi:chart-bar
+    color: red
+    description: The share FCS-GX calls foreign, and the class Tiara gives each sequence
+  - name: Flagged ranges
+    icon: mdi:table
+    color: gray
+    description: Every range FCS-GX and FCS-adaptor flag, and Tiara's class per sequence
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [FCS-GX](https://github.com/ncbi/fcs) aligns every sequence to a database of genomes and
+      flags what belongs to another organism; FCS-adaptor looks for adaptors and vectors, and
+      [Tiara](https://ibe-uw.github.io/tiara/) classes each sequence of 3 kb or more by domain. A
+      Tiara call alone is a lead, not a verdict: short repetitive scaffolds often read as
+      prokaryotic or unknown.
+    tag: gq-con-intro
+    index: con-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: genomeqc
+    data_collection_tag: tiara_classifications
+    interactive_component_type: MultiSelect
+    column_name: tiara_class
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: red
+    section: Screening scope
+    group: Screening
+    tag: gq-con-filter-class
+    index: con-class-filter
+    title: Tiara class
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: genomeqc
+    data_collection_tag: fcsgx_actions
+    interactive_component_type: MultiSelect
+    column_name: action
+    column_type: object
+    display:
+      icon_name: mdi:content-cut
+      custom_color: orange
+    section: Screening scope
+    group: Screening
+    tag: gq-con-filter-action
+    index: con-action-filter
+    title: FCS-GX action
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: fcsgx_contamination
+    aggregation: max
+    column_name: contaminant_pct
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 0.5
+    threshold_direction: max
+    threshold_warn: 2
+    display:
+      icon_name: mdi:biohazard
+      icon_color: red
+      caption: assemblies at 0.5% or less, above 2% failing
+      decimals: 2
+    section: Screening at a glance
+    tag: gq-con-card-foreign
+    index: con-card-foreign
+    title: Foreign share
+    description: Share of an assembly FCS-GX calls foreign, at its highest. genomeqc rates 0.5% or less good and more than 2% poor.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: fcsgx_actions
+    aggregation: sum
+    column_name: flagged_bp
+    column_type: int64
+    secondary_layout: composition
+    breakdown_col: action
+    display:
+      icon_name: mdi:content-cut
+      icon_color: orange
+      caption: bases to remove, by action
+      format: si
+    section: Screening at a glance
+    tag: gq-con-card-gx
+    index: con-card-gx
+    title: Bases flagged
+    description: Bases in the ranges FCS-GX would exclude, trim or fix. An assembly with nothing flagged counts 0.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: fcsadaptor_actions
+    aggregation: sum
+    column_name: flagged_bp
+    column_type: int64
+    secondary_layout: composition
+    breakdown_col: action
+    display:
+      icon_name: mdi:link-variant
+      icon_color: grape
+      caption: adaptor bases, by action
+      format: si
+    section: Screening at a glance
+    tag: gq-con-card-adaptor
+    index: con-card-adaptor
+    title: Adaptor bases
+    description: Bases FCS-adaptor matches to an adaptor or vector, to trim or exclude.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: tiara_classifications
+    aggregation: count
+    column_name: sequence
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: tiara_class
+    display:
+      icon_name: mdi:shape-outline
+      icon_color: teal
+      caption: classified sequences, by Tiara class
+      format: si
+    section: Screening at a glance
+    tag: gq-con-card-tiara
+    index: con-card-tiara
+    title: Sequences classified
+    description: Sequences of 3 kb or more Tiara classified. The bar splits them by class.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: genomeqc
+    data_collection_tag: fcsgx_contamination
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: species
+      value_cols: [non_contaminant_pct, contaminant_pct]
+      value_labels: {non_contaminant_pct: Not foreign, contaminant_pct: Called foreign}
+      taxon_palette: {Not foreign: '#adb5bd', Called foreign: '#e8590c'}
+      normalise_to_one: true
+      orientation: h
+      sample_sort: category
+      sort_category: Called foreign
+      y_zoom: auto
+      value_title: Share of the assembly
+      hidden_controls: [rank, top_n, group]
+    section: Foreign sequence per genome
+    tag: gq-con-fig-foreign
+    index: con-foreign
+    title: Share called foreign per genome
+    description: Bases FCS-GX assigns to another organism, against the rest of the assembly. Every genome is over 99% clean, so the axis starts just below the cleanest share (the // marks the cut); switch Zoom off for the whole bar.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: advanced_viz
+    workflow_tag: genomeqc
+    data_collection_tag: tiara_class_counts
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: genome
+      taxon_col: tiara_class
+      rank_col: null
+      abundance_col: sequences
+      normalise_to_one: true
+      orientation: h
+      sample_sort: name
+      y_zoom: auto
+      top_n: 8
+      value_title: Share of the classified sequences
+      hidden_controls: [rank, top_n, group]
+    section: Foreign sequence per genome
+    tag: gq-con-fig-tiara
+    index: con-tiara
+    title: Tiara classes per genome
+    description: Each genome's sequences of 3 kb or more by the domain or organelle Tiara assigns them, as shares; Normalise off shows the counts. Sort by a class to rank the genomes on it.
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: table
+    workflow_tag: genomeqc
+    data_collection_tag: fcsgx_actions
+    use: fcsgx/actions
+    row_selection_enabled: true
+    row_selection_column: genome
+    section: Flagged ranges
+    tag: gq-con-table-gx
+    index: con-table-gx
+    title: FCS-GX calls
+    description: Each range FCS-GX flags, with its action, division and top taxon; a clean genome reads none.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: genomeqc
+    data_collection_tag: fcsadaptor_actions
+    use: fcsadaptor/actions
+    section: Flagged ranges
+    tag: gq-con-table-adaptor
+    index: con-table-adaptor
+    title: FCS-adaptor calls
+    description: Each range matched to an adaptor or vector, with its action; a clean genome reads none.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: genomeqc
+    data_collection_tag: tiara_classifications
+    use: tiara/classifications
+    section: Flagged ranges
+    tag: gq-con-table-tiara
+    index: con-table-tiara
+    title: Tiara class per sequence
+    description: Every classified sequence with Tiara's first-stage class and its organelle call.
+    layout: {x: 0, y: 12, w: 8, h: 6}
+# ============================================================================
+# Genomes
+# ============================================================================
+- title: Completeness
+  subtitle: How much of the conserved gene set does each genome hold?
+  tab_group: Genomes
+  tab_order: 4
+  tab_icon: mdi:check-decagram-outline
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Completeness scope
+    icon: mdi:filter-variant
+    color: teal
+    description: Keep the BUSCO runs inside a completeness band
+  grid_sections:
+  - name: Completeness at a glance
+    icon: mdi:counter
+    color: teal
+    description: Complete, duplicated and missing BUSCOs of the assemblies and their proteins
+  - name: BUSCO classes
+    icon: mdi:chart-bar
+    color: teal
+    description: The four BUSCO classes of every run, the genome and its proteins side by side
+  - name: Genome against annotation
+    icon: mdi:chart-scatter-plot
+    color: teal
+    description: Complete BUSCOs in the assembly against those its proteins keep
+  - name: BUSCO tables
+    icon: mdi:table
+    color: gray
+    description: BUSCO scores per assembly and mode
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [BUSCO](https://busco.ezlab.org) looks for the genes nearly every genome of the lineage holds
+      once. It runs on each assembly and, with an annotation, on its predicted proteins: genes
+      found in the assembly but missing from the proteins were not annotated. Duplicated BUSCOs
+      point at retained haplotypes, fragmented ones at broken gene models.
+    tag: gq-cmp-intro
+    index: cmp-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: genomeqc
+    data_collection_tag: busco_batch_summary
+    interactive_component_type: RangeSlider
+    column_name: complete_pct
+    column_type: float64
+    display:
+      icon_name: mdi:check-decagram-outline
+      custom_color: teal
+    section: Completeness scope
+    group: Completeness
+    tag: gq-cmp-filter-complete
+    index: cmp-complete-range
+    title: Complete BUSCOs (%)
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: busco_batch_summary
+    aggregation: median
+    column_name: complete_pct
+    column_type: float64
+    filter_expr: "col('busco_mode') == 'genome'"
+    secondary_layout: threshold
+    threshold_value: 95
+    threshold_direction: min
+    threshold_warn: 90
+    display:
+      icon_name: mdi:check-decagram-outline
+      icon_color: teal
+      caption: assemblies at 95% or more, below 90% failing
+      decimals: 1
+    section: Completeness at a glance
+    tag: gq-cmp-card-genome
+    index: cmp-card-genome
+    title: Complete in the assembly
+    description: BUSCOs found whole in the assembly, in percent of the lineage set, at the median.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: busco_batch_summary
+    aggregation: median
+    column_name: complete_pct
+    column_type: float64
+    filter_expr: "col('busco_mode') == 'proteins'"
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:file-tree-outline
+      icon_color: green
+      caption: median per annotation, with the spread
+      decimals: 1
+    section: Completeness at a glance
+    tag: gq-cmp-card-proteins
+    index: cmp-card-proteins
+    title: Complete in the proteins
+    description: BUSCOs found whole among the annotated proteins. Below the assembly's score, the annotation missed genes the assembly holds.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: busco_batch_summary
+    aggregation: median
+    column_name: duplicated_pct
+    column_type: float64
+    filter_expr: "col('busco_mode') == 'genome'"
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:content-copy
+      icon_color: cyan
+      caption: per assembly, how they spread
+      decimals: 1
+    section: Completeness at a glance
+    tag: gq-cmp-card-duplicated
+    index: cmp-card-duplicated
+    title: Duplicated
+    description: BUSCOs found twice or more in the assembly, in percent. A high share on a haploid assembly points at retained haplotypes.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: busco_composition
+    aggregation: sum
+    column_name: percent
+    column_type: float64
+    filter_expr: "col('busco_mode') == 'genome'"
+    secondary_layout: composition
+    breakdown_col: busco_class
+    display:
+      icon_name: mdi:chart-donut
+      icon_color: orange
+      caption: the four classes, summed over the assemblies
+      decimals: 0
+    section: Completeness at a glance
+    tag: gq-cmp-card-classes
+    index: cmp-card-classes
+    title: BUSCO classes
+    description: The lineage set split into complete single-copy, duplicated, fragmented and missing, over every assembly.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: genomeqc
+    data_collection_tag: busco_composition
+    use: busco/class_composition_by_run
+    config:
+      default_rank: BUSCO class
+      top_n: 4
+      normalise_to_one: true
+      sample_sort: input
+      y_zoom: auto
+    section: BUSCO classes
+    tag: gq-cmp-av-classes
+    index: cmp-classes
+    title: BUSCO classes per assembly and mode
+    description: One bar per BUSCO run, the assembly then its proteins, split into the four classes. Every run holds most of the set as complete, so the axis starts above the shared complete share (the // mark); Zoom off shows the whole bar.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: genomeqc
+    data_collection_tag: genomes
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: busco_complete_pct
+      y_col: protein_complete_pct
+      label_col: genome
+      color_col: '{GROUP_COL}'
+      size_col: genes
+      x_title: Complete BUSCOs in the assembly (%)
+      y_title: Complete BUSCOs in the proteins (%)
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: genome
+    section: Genome against annotation
+    tag: gq-cmp-av-genome-vs-proteins
+    index: cmp-genome-vs-proteins
+    title: Assembly against annotation completeness
+    description: One point per genome, sized by its protein-coding genes. A point well below its assembly score lost genes in the annotation.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: genomeqc
+    data_collection_tag: busco_batch_summary
+    use: busco/batch_summary
+    columns: [assembly_id, busco_mode, lineage, complete_pct, single_pct, duplicated_pct, fragmented_pct, missing_pct, n_markers, stop_codon_pct, scaffold_n50, contig_n50]
+    row_selection_enabled: true
+    row_selection_column: assembly_id
+    section: BUSCO tables
+    tag: gq-cmp-table-busco
+    index: cmp-table-busco
+    title: BUSCO scores per run
+    description: Complete, single-copy, duplicated, fragmented and missing BUSCOs of every assembly and its proteins.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Karyotype
+  subtitle: Where do the conserved genes and telomeric repeats sit?
+  tab_group: Genomes
+  tab_order: 5
+  tab_icon: mdi:format-align-left
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Sequence scope
+    icon: mdi:filter-variant
+    color: grape
+    description: Keep the sequences inside a length band
+  grid_sections:
+  - name: Sequences at a glance
+    icon: mdi:counter
+    color: grape
+    description: Sequences carrying BUSCO genes, their density, and the windows with the repeat
+  - name: BUSCO genes per sequence
+    icon: mdi:dna
+    color: grape
+    description: Every sequence holding a complete BUSCO, drawn to its length and shaded by density
+  - name: Telomeric repeats
+    icon: mdi:chart-timeline-variant
+    color: grape
+    description: The repeat unit tidk searched, counted per 10 kb window along every sequence
+  - name: Karyotype tables
+    icon: mdi:table
+    color: gray
+    description: Complete BUSCOs per sequence
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      Each genome is drawn as a karyotype: one bar per sequence, the longest first, drawn to its
+      length. The first view shades each sequence by its complete BUSCOs per megabase; the second
+      counts the repeat unit [tidk](https://github.com/tolkit/telomeric-identifier) searched, so a
+      telomere-capped chromosome lights up at both ends. Check the unit first: one tidk picks
+      itself can be a simple repeat rather than the telomere.
+    tag: gq-kar-intro
+    index: kar-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: genomeqc
+    data_collection_tag: busco_karyotype
+    interactive_component_type: RangeSlider
+    column_name: sequence_length
+    column_type: int64
+    display:
+      icon_name: mdi:ruler
+      custom_color: grape
+    section: Sequence scope
+    group: Sequences
+    tag: gq-kar-filter-length
+    index: kar-length-range
+    title: Sequence length (bp)
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: busco_karyotype
+    aggregation: count
+    column_name: sequence
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: genome
+    display:
+      icon_name: mdi:format-align-left
+      icon_color: grape
+      caption: sequences holding a BUSCO, by genome
+      format: integer
+    section: Sequences at a glance
+    tag: gq-kar-card-sequences
+    index: kar-card-sequences
+    title: Sequences with a BUSCO
+    description: Sequences carrying at least one complete BUSCO. Close to the chromosome number on a chromosome-level assembly.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: busco_karyotype
+    aggregation: sum
+    column_name: complete_buscos
+    column_type: int64
+    secondary_layout: donut
+    breakdown_col: genome
+    display:
+      icon_name: mdi:check-decagram-outline
+      icon_color: teal
+      caption: BUSCOs placed, by genome
+      format: si
+    section: Sequences at a glance
+    tag: gq-kar-card-placed
+    index: kar-card-placed
+    title: BUSCOs placed
+    description: Complete BUSCOs placed on a sequence, over every genome.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: busco_karyotype
+    aggregation: median
+    column_name: buscos_per_mb
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: blue
+      caption: per sequence, how it spreads
+      decimals: 1
+    section: Sequences at a glance
+    tag: gq-kar-card-density
+    index: kar-card-density
+    title: BUSCOs per Mb
+    description: Complete BUSCOs per megabase of the sequences that carry one, at the median.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: tidk_search_windows
+    aggregation: count
+    column_name: sequence
+    column_type: object
+    filter_expr: "col('repeats') > 0"
+    secondary_layout: composition
+    breakdown_col: genome
+    display:
+      icon_name: mdi:repeat
+      icon_color: pink
+      caption: 10 kb windows with the repeat, by genome
+      format: si
+    section: Sequences at a glance
+    tag: gq-kar-card-windows
+    index: kar-card-windows
+    title: Windows with the repeat
+    description: Windows of 10 kb holding at least one copy of the unit tidk searched.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: genomeqc
+    data_collection_tag: busco_karyotype
+    viz_kind: ideogram
+    config:
+      viz_kind: ideogram
+      chrom_col: sequence
+      start_col: start
+      end_col: end
+      value_col: buscos_per_mb
+      sample_col: genome
+      chrom_length_col: sequence_length
+      mode: density
+      orientation: horizontal
+      facet_by_sample: true
+      max_facets: 6
+      max_chromosomes: 24
+      colour_scale: Viridis
+    section: BUSCO genes per sequence
+    tag: gq-kar-av-busco
+    index: kar-busco
+    title: BUSCO density on each genome's sequences
+    description: One karyotype per genome (pick one above the chart), the 24 longest sequences that hold a BUSCO, shaded by complete BUSCOs per Mb. Click a bar to zoom along it; filter the tab to it from there.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: genomeqc
+    data_collection_tag: tidk_search_windows
+    use: tidk/telomere_karyotype
+    config:
+      mode: density
+      orientation: horizontal
+      facet_by_sample: true
+      max_facets: 6
+      max_chromosomes: 24
+      colour_scale: Viridis
+    section: Telomeric repeats
+    tag: gq-kar-av-telomeres
+    index: kar-telomeres
+    title: Repeat units per 10 kb window
+    description: One karyotype per genome, its 24 longest sequences shaded by the copies of the searched unit per window. Pick a genome above the chart; click a bar or Ctrl+wheel to zoom along it.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: genomeqc
+    data_collection_tag: busco_karyotype
+    row_selection_enabled: true
+    row_selection_column: sequence
+    section: Karyotype tables
+    tag: gq-kar-table-busco
+    index: kar-table-busco
+    title: Complete BUSCOs per sequence
+    description: Every sequence holding a complete BUSCO, with its length, its BUSCOs, their density and their share of the genome's.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Repeats
+  subtitle: How much of each genome is repeats, and of which kinds?
+  tab_group: Genomes
+  tab_order: 6
+  tab_icon: mdi:repeat
+  tab_icon_color: pink
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Repeat scope
+    icon: mdi:filter-variant
+    color: pink
+    description: The repeat class narrows the class chart and table; the masking cards are per-genome totals
+  grid_sections:
+  - name: Repeats at a glance
+    icon: mdi:counter
+    color: pink
+    description: Masked, interspersed and simple repeats, and the elements found
+  - name: Repeat classes
+    icon: mdi:chart-bar
+    color: pink
+    description: The share of each genome every repeat class takes
+  - name: Repeat tables
+    icon: mdi:table
+    color: gray
+    description: Repeat classes and families, and the masking summary per genome
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [RepeatMasker](https://www.repeatmasker.org) masks the transposable elements, simple repeats
+      and low-complexity sequence of each assembly against its repeat library. The bars open on
+      the classes; switch the rank to read the families inside them. Unclassified repeats are the
+      ones the library could not name, and they grow with a de novo library.
+    tag: gq-rep-intro
+    index: rep-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: genomeqc
+    data_collection_tag: repeatmasker_repeat_classes
+    interactive_component_type: MultiSelect
+    column_name: repeat_class
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: pink
+    section: Repeat scope
+    group: Repeats
+    tag: gq-rep-filter-class
+    index: rep-class-filter
+    title: Repeat class
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: repeatmasker_masking_summary
+    aggregation: median
+    column_name: masked_pct
+    column_type: float64
+    secondary_layout: gauge
+    coverage_max: 100
+    display:
+      icon_name: mdi:texture-box
+      icon_color: pink
+      caption: median share of the genome masked (%)
+      decimals: 1
+    section: Repeats at a glance
+    tag: gq-rep-card-masked
+    index: rep-card-masked
+    title: Masked
+    description: Bases RepeatMasker masked, in percent of the assembly, at the median.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: repeatmasker_masking_summary
+    aggregation: median
+    column_name: interspersed_pct
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:dna
+      icon_color: violet
+      caption: median per genome, with the spread (%)
+      decimals: 1
+    section: Repeats at a glance
+    tag: gq-rep-card-interspersed
+    index: rep-card-interspersed
+    title: Interspersed repeats
+    description: Transposable elements and unclassified interspersed repeats, in percent of the assembly.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: repeatmasker_masking_summary
+    aggregation: median
+    column_name: simple_repeats_pct
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:format-list-numbered
+      icon_color: orange
+      caption: per genome, how it spreads (%)
+      decimals: 2
+    section: Repeats at a glance
+    tag: gq-rep-card-simple
+    index: rep-card-simple
+    title: Simple repeats
+    description: Microsatellites and other short tandem repeats, in percent of the assembly.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: repeatmasker_repeat_classes
+    aggregation: sum
+    column_name: elements
+    column_type: int64
+    filter_expr: "col('rank') == 'Class'"
+    secondary_layout: composition
+    breakdown_col: repeat_class
+    display:
+      icon_name: mdi:shape-plus
+      icon_color: teal
+      caption: elements, by repeat class
+      format: si
+    section: Repeats at a glance
+    tag: gq-rep-card-elements
+    index: rep-card-elements
+    title: Repeat elements
+    description: Elements RepeatMasker masked over every genome, split by class.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: genomeqc
+    data_collection_tag: repeatmasker_repeat_classes
+    use: repeatmasker/class_composition
+    config:
+      default_rank: Class
+      top_n: 8
+      normalise_to_one: false
+      sample_sort: input
+    section: Repeat classes
+    tag: gq-rep-av-classes
+    index: rep-classes
+    title: Repeat classes per genome
+    description: Share of each assembly every repeat class takes, the 8 largest and the rest as Other.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    workflow_tag: genomeqc
+    data_collection_tag: repeatmasker_masking_summary
+    use: repeatmasker/masking_summary
+    row_selection_enabled: true
+    row_selection_column: genome
+    section: Repeat tables
+    tag: gq-rep-table-summary
+    index: rep-table-summary
+    title: Masking summary per genome
+    description: Sequences, length, GC and masked bases of each assembly, with the share of the main classes.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: genomeqc
+    data_collection_tag: repeatmasker_repeat_classes
+    use: repeatmasker/repeat_classes
+    section: Repeat tables
+    tag: gq-rep-table-classes
+    index: rep-table-classes
+    title: Repeat classes and families
+    description: Every class and family line of RepeatMasker's summary, with its elements, bases and share of the assembly.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+- title: Annotation
+  subtitle: How many genes does each annotation hold, and how are they built?
+  tab_group: Genomes
+  tab_order: 7
+  tab_icon: mdi:file-tree-outline
+  tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Annotation scope
+    icon: mdi:filter-variant
+    color: indigo
+    description: Both picks narrow AGAT's statistics table only; the cards, gene models and overlaps count each annotation whole
+  grid_sections:
+  - name: Gene models at a glance
+    icon: mdi:counter
+    color: indigo
+    description: Protein-coding genes, exons per transcript, single-exon and overlapping genes
+  - name: Gene models by type
+    icon: mdi:chart-scatter-plot
+    color: indigo
+    description: Every transcript type of every annotation, by genes and exons per transcript
+  - name: Genes and overlaps
+    icon: mdi:chart-bar
+    color: indigo
+    description: Genes per transcript type, and the genes nested in another
+  - name: Annotation tables
+    icon: mdi:table
+    color: gray
+    description: Gene models per type and every AGAT statistic
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [AGAT](https://github.com/NBISweden/AGAT) summarises each annotation per transcript type;
+      exons per transcript and lengths are read on the longest isoform of each gene, so
+      annotations with more isoforms still compare. A fragmented annotation shows as short genes
+      with few exons and many single-exon models.
+    tag: gq-ann-intro
+    index: ann-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: genomeqc
+    data_collection_tag: agat_statistics
+    interactive_component_type: MultiSelect
+    column_name: feature_type
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: indigo
+    section: Annotation scope
+    group: Annotation
+    tag: gq-ann-filter-type
+    index: ann-type-filter
+    title: Feature type
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: genomeqc
+    data_collection_tag: agat_statistics
+    interactive_component_type: MultiSelect
+    column_name: isoforms
+    column_type: object
+    display:
+      icon_name: mdi:source-branch
+      custom_color: cyan
+    section: Annotation scope
+    group: Annotation
+    tag: gq-ann-filter-isoforms
+    index: ann-isoform-filter
+    title: Isoform view
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: agat_gene_models
+    use: agat/gene_count
+    aggregation: sum
+    column_name: genes
+    column_type: int64
+    filter_expr: "col('feature_type') == 'mrna'"
+    secondary_layout: composition
+    breakdown_col: genome
+    display:
+      icon_name: mdi:file-tree-outline
+      icon_color: indigo
+      caption: protein-coding genes, by genome
+      format: si
+    section: Gene models at a glance
+    tag: gq-ann-card-genes
+    index: ann-card-genes
+    title: Protein-coding genes
+    description: Genes with an mRNA, over every annotation.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: agat_gene_models
+    use: agat/exons_per_transcript
+    aggregation: median
+    column_name: exons_per_transcript
+    column_type: float64
+    filter_expr: "col('feature_type') == 'mrna'"
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:view-sequential
+      icon_color: blue
+      caption: median per annotation, with the spread
+      decimals: 1
+    section: Gene models at a glance
+    tag: gq-ann-card-exons
+    index: ann-card-exons
+    title: Exons per mRNA
+    description: Mean exons of the longest mRNA of each protein-coding gene, at the median over the annotations.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: agat_gene_models
+    use: agat/single_exon_share
+    aggregation: median
+    column_name: single_exon_gene_pct
+    column_type: float64
+    filter_expr: "col('feature_type') == 'mrna'"
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:minus-box-outline
+      icon_color: orange
+      caption: per annotation, how it spreads (%)
+      decimals: 1
+    section: Gene models at a glance
+    tag: gq-ann-card-single
+    index: ann-card-single
+    title: Single-exon genes
+    description: Protein-coding genes whose mRNA has one exon, in percent. A surplus points at fragmented gene models.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: gene_overlaps
+    aggregation: median
+    column_name: overlapping_pct
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:set-center
+      icon_color: grape
+      caption: median per annotation, with the spread (%)
+      decimals: 1
+    section: Gene models at a glance
+    tag: gq-ann-card-overlaps
+    index: ann-card-overlaps
+    title: Overlapping genes
+    description: Genes overlapping another gene, in percent of all genes. Same-strand nested genes are the suspicious ones.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: genomeqc
+    data_collection_tag: agat_gene_models
+    use: agat/genes_vs_exons
+    config:
+      x_title: Genes of the type (log)
+      y_title: Exons per transcript
+      log_x: true
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: genome
+    section: Gene models by type
+    tag: gq-ann-av-gene-models
+    index: ann-gene-models
+    title: Genes against exons per transcript
+    description: One point per annotation and transcript type, sized by mean gene length. Protein-coding genes sit top right; the small RNAs bottom left.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: genomeqc
+    data_collection_tag: agat_gene_models
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: genome
+      taxon_col: feature_type
+      rank_col: null
+      abundance_col: genes
+      normalise_to_one: true
+      orientation: h
+      sample_sort: name
+      y_zoom: auto
+      top_n: 8
+      value_title: Share of the genes
+      hidden_controls: [rank, top_n, group]
+    section: Genes and overlaps
+    tag: gq-ann-fig-types
+    index: ann-gene-types
+    title: Genes per transcript type
+    description: Each annotation's genes by the type of their transcripts, as shares; Normalise off shows the gene counts. Sort by a type to rank the annotations on it.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: advanced_viz
+    workflow_tag: genomeqc
+    data_collection_tag: gene_overlaps
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: genome
+      value_cols: [not_overlapping_genes, overlapping_not_nested, contained_opposite_strand, contained_same_strand]
+      value_labels:
+        not_overlapping_genes: Overlapping none
+        overlapping_not_nested: Overlapping another
+        contained_opposite_strand: Nested, opposite strand
+        contained_same_strand: Nested, same strand
+      taxon_palette: {Overlapping none: '#adb5bd', Overlapping another: '#1c7ed6', 'Nested, opposite strand': '#0ca678', 'Nested, same strand': '#e8590c'}
+      normalise_to_one: true
+      orientation: h
+      sample_sort: category
+      sort_category: Nested, same strand
+      y_zoom: auto
+      value_title: Share of the genes
+      hidden_controls: [rank, top_n, group]
+    section: Genes and overlaps
+    tag: gq-ann-fig-nested
+    index: ann-nested
+    title: Genes by overlap with another gene
+    description: Each annotation's genes split four ways, overlapping no other gene, overlapping one, nested inside one on the opposite strand (often a gene in an intron) or on the same strand (often a split or duplicated model).
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: table
+    workflow_tag: genomeqc
+    data_collection_tag: agat_gene_models
+    use: agat/gene_models
+    row_selection_enabled: true
+    row_selection_column: genome
+    section: Annotation tables
+    tag: gq-ann-table-models
+    index: ann-table-models
+    title: Gene models per type
+    description: Genes, transcripts, exons, single-exon and overlapping genes and lengths per annotation and transcript type.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: genomeqc
+    data_collection_tag: agat_statistics
+    use: agat/statistics
+    section: Annotation tables
+    tag: gq-ann-table-stats
+    index: ann-table-stats
+    title: Every AGAT statistic
+    description: Each metric of AGAT's report per annotation, feature type and isoform view.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+- title: Orthology
+  subtitle: Which orthogroups do the genomes share?
+  tab_group: Genomes
+  tab_order: 8
+  tab_icon: mdi:family-tree
+  tab_icon_color: cyan
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Orthogroup scope
+    icon: mdi:filter-variant
+    color: cyan
+    description: The copy class narrows the orthogroup UpSet and its cards; the per-genome stats have no orthogroup rows
+  grid_sections:
+  - name: Orthology at a glance
+    icon: mdi:counter
+    color: cyan
+    description: Orthogroups, the shared core, genes placed and orthogroups of one genome
+  - name: Genes by orthogroup
+    icon: mdi:chart-bar
+    color: cyan
+    description: Each genome's genes in shared, genome-specific or no orthogroups
+  - name: Shared orthogroups
+    icon: mdi:set-merge
+    color: cyan
+    description: Orthogroups by the set of genomes they reach
+  - name: One-to-one orthologues
+    icon: mdi:relation-many-to-many
+    color: cyan
+    description: Orthologues found once in each of two genomes, for every pair
+  - name: Orthology tables
+    icon: mdi:table
+    color: gray
+    description: Orthogroup assignment per genome and the sequences carrying orthologues
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [OrthoFinder](https://github.com/davidemms/OrthoFinder) groups the longest protein of every
+      gene of every genome into orthogroups, the genes descended from one ancestral gene. The core
+      every genome shares should dominate; a genome with many orthogroups of its own, or many
+      genes in none, carries spurious or fragmented gene models.
+    tag: gq-orth-intro
+    index: orth-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: genomeqc
+    data_collection_tag: orthofinder_orthogroup_matrix
+    interactive_component_type: MultiSelect
+    column_name: copy_class
+    column_type: object
+    display:
+      icon_name: mdi:content-copy
+      custom_color: cyan
+    section: Orthogroup scope
+    group: Orthogroups
+    tag: gq-orth-filter-copy
+    index: orth-copy-filter
+    title: Copy class
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: orthofinder_orthogroup_matrix
+    use: orthofinder/orthogroups_total
+    aggregation: count
+    column_name: orthogroup
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: copy_class
+    display:
+      icon_name: mdi:family-tree
+      icon_color: cyan
+      caption: orthogroups, by copy class
+      format: si
+    section: Orthology at a glance
+    tag: gq-orth-card-orthogroups
+    index: orth-card-orthogroups
+    title: Orthogroups
+    description: Groups of genes descended from one ancestral gene, over every genome.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: orthofinder_orthogroup_matrix
+    aggregation: count
+    column_name: orthogroup
+    column_type: object
+    filter_expr: "col('sharing') == 'core'"
+    secondary_layout: donut
+    breakdown_col: copy_class
+    display:
+      icon_name: mdi:set-all
+      icon_color: blue
+      caption: the shared core, by copy class
+      format: si
+    section: Orthology at a glance
+    tag: gq-orth-card-core
+    index: orth-card-core
+    title: Shared by every genome
+    description: Orthogroups holding a gene of every genome of the run.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: orthofinder_species_stats
+    use: orthofinder/assigned_share
+    aggregation: min
+    column_name: genes_in_orthogroups_pct
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:check-all
+      icon_color: teal
+      caption: lowest genome, with the spread (%)
+      decimals: 1
+    section: Orthology at a glance
+    tag: gq-orth-card-assigned
+    index: orth-card-assigned
+    title: Genes in orthogroups
+    description: Share of a genome's genes OrthoFinder placed in an orthogroup, for the genome with the fewest.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: genomeqc
+    data_collection_tag: orthofinder_species_stats
+    aggregation: sum
+    column_name: species_specific_orthogroups
+    column_type: int64
+    secondary_layout: composition
+    breakdown_col: genome
+    display:
+      icon_name: mdi:account-outline
+      icon_color: orange
+      caption: orthogroups of one genome, by genome
+      format: integer
+    section: Orthology at a glance
+    tag: gq-orth-card-specific
+    index: orth-card-specific
+    title: Genome-specific orthogroups
+    description: Orthogroups whose genes all come from a single genome.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: genomeqc
+    data_collection_tag: orthofinder_species_stats
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: genome
+      value_cols: [genes_in_shared_orthogroups, genes_in_species_specific, unassigned_genes]
+      value_labels:
+        genes_in_shared_orthogroups: In shared orthogroups
+        genes_in_species_specific: In genome-specific orthogroups
+        unassigned_genes: In no orthogroup
+      taxon_palette: {In shared orthogroups: '#2f9e44', In genome-specific orthogroups: '#ae3ec9', In no orthogroup: '#adb5bd'}
+      normalise_to_one: true
+      orientation: h
+      sample_sort: category
+      sort_category: In no orthogroup
+      y_zoom: auto
+      value_title: Share of the genes
+      hidden_controls: [rank, top_n, group]
+    section: Genes by orthogroup
+    tag: gq-orth-av-placement
+    index: orth-placement
+    title: Genes by the orthogroups they fall in
+    description: Each genome's genes in orthogroups it shares with another genome, in orthogroups of its own, or in none. Shared genes fill most of every bar, so the axis starts near the smallest shared share (the // marks the cut).
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: advanced_viz
+    workflow_tag: genomeqc
+    data_collection_tag: orthofinder_orthogroup_matrix
+    use: orthofinder/orthogroup_upset
+    config:
+      color_intersections_by: degree
+      show_set_sizes: true
+      show_values: true
+      sort_by: cardinality
+      sort_order: descending
+      min_size: 1
+      # The species columns, whatever the run named them; n_genomes is the
+      # only other integer column and could read 0/1 on a two-genome run.
+      set_columns_pattern: '^(?!n_genomes$|total_genes$)'
+      selection_enabled: true
+      selection_column: orthogroup
+    section: Shared orthogroups
+    tag: gq-orth-av-upset
+    index: orth-upset
+    title: Orthogroups shared between genomes
+    description: Intersections of the genomes each orthogroup reaches, largest first. Click a bar to keep its orthogroups.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: genomeqc
+    data_collection_tag: orthofinder_orthologue_matrix
+    use: orthofinder/one_to_one_heatmap
+    config:
+      cluster_rows: false
+      cluster_cols: false
+      colorscale: Blues
+    section: One-to-one orthologues
+    tag: gq-orth-av-pairs
+    index: orth-pairs
+    title: One-to-one orthologues between genomes
+    description: Orthologues present once in each of two genomes, for every pair; the closest, best-annotated pairs share the most.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    workflow_tag: genomeqc
+    data_collection_tag: orthofinder_species_stats
+    use: orthofinder/species_stats
+    row_selection_enabled: true
+    row_selection_column: genome
+    section: Orthology tables
+    tag: gq-orth-table-species
+    index: orth-table-species
+    title: Orthogroup assignment per genome
+    description: Genes, genes placed and unplaced, orthogroups reached and orthogroups of the genome alone.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: genomeqc
+    data_collection_tag: ortho_seq_count
+    section: Orthology tables
+    tag: gq-orth-table-seqcount
+    index: orth-table-seqcount
+    title: Sequences carrying orthologues
+    description: Sequences of each genome holding orthologues of another genome; close to the chromosome number on a chromosome-level assembly.
+    layout: {x: 0, y: 6, w: 8, h: 6}

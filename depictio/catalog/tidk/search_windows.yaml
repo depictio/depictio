@@ -1,0 +1,25 @@
+id: tidk_search_windows
+name: Telomeric repeats per window
+mode: search/windows
+description: >-
+  One row per assembly, sequence and window of `tidk search`: the repeat unit
+  counted forward and reverse, their sum, and the length of the sequence (the
+  end of its last window). A sequence capped by telomeres lights up at both
+  ends; one lit at a single end was broken there, and repeats in the middle of a
+  sequence are an interstitial array or a unit that is not the telomere at all.
+find:
+  path_glob: "**/search/*/*.tsv"
+  path_glob_alt:
+    - "**/search/*/*/*.tsv"
+    - "**/*_telomeric_repeat_windows.tsv"
+recipe: tidk/search_windows.py
+fixture: search_windows.tsv
+renders_as:
+  - { id: telomere_karyotype, component: advanced_viz, kind: ideogram,
+      roles: {chrom: sequence, start: start, end: end, value: repeats, sample: genome,
+              chrom_length: sequence_length} }
+  - { id: repeats_along_sequences, component: advanced_viz, kind: coverage_track,
+      roles: {chromosome: sequence, position: start, end: end, value: repeats, sample: genome} }
+  - { component: card, column: repeats, aggregation: sum,
+      secondary_layout: composition, breakdown_col: genome }
+  - { component: table }

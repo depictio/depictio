@@ -1,0 +1,23 @@
+id: epitopeprediction_allele_summary
+name: Binding per allele
+mode: epitope/alleles
+description: >-
+  One row per sample and allele: distinct peptides scored, peptides at least one
+  tool calls a binder, their share, and the median and best IC50 of the
+  peptides. The allele is normalised to HLA-A*02:01 and carries its locus and
+  MHC class, so it filters and joins like the alleles an HLA typing tool writes.
+find:
+  path_glob: "**/predictions/*.tsv"
+recipe: epitopeprediction/allele_summary.py
+fixture: allele_summary.tsv
+renders_as:
+  # Allele by sample: colour is the median affinity score, size the binder share.
+  - id: allele_dot_plot
+    component: advanced_viz
+    kind: dot_plot
+    roles: { cluster: sample, gene: allele, mean_expression: median_affinity_score, frac_expressing: binder_rate }
+  - { id: allele_binders, component: card, column: binders, aggregation: sum, secondary_layout: top_n, breakdown_col: hla_locus, top_n_count: 4 }
+  - { id: allele_binder_rate, component: card, column: binder_rate, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: figure, visu_type: bar, dict_kwargs: { x: allele, y: binders, color: sample } }
+  - { component: interactive, interactive_type: MultiSelect, column_name: hla_locus }
+  - { component: table, row_selection_enabled: true, row_selection_column: allele_key }

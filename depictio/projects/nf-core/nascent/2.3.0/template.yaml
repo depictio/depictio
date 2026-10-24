@@ -1,0 +1,761 @@
+# nf-core/nascent Template v2.3.0 - nascent transcription (GRO-seq, PRO-seq)
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/nascent/2.3.0 --data-root /path/to/results \
+#     [--var METADATA_FILE=/path/to/design.tsv] [--var TIME_COL=time_h] [--var GENOME=hg38]
+#
+# Tested against the nf-core/nascent AWS megatest results:
+#   s3://nf-core-awsmegatests/nascent/results-7d4fe61975015f652c271886e661764b05cfd3bf/
+# `megatest.yaml` next to this file lists the exact subset and fetches it
+# (`bash download_test_data.sh [DIR]`); that directory is DATA_ROOT.
+#
+# What a run publishes, and so what this template reads:
+#   - quantification/gene/<group>.featureCounts.txt: reads counted over every
+#     gene body, one column per library (catalog subread/*). Every time-course
+#     panel of genes reads it.
+#   - coverage_graphs/<sample>.plus.bedGraph and .minus.bedGraph: the strand
+#     coverage bedtools genomecov writes, 4 to 10 million intervals each on a
+#     human genome; streamed into 250 kb windows and per-library totals
+#     (catalog bedtools/*), never ingested whole. The <sample>.dreg.bedGraph
+#     beside them (dREG input) is not read.
+#   - coverage_graphs/<sample>.plus.bigWig and .minus.bigWig: the same coverage
+#     from deepTools bamCoverage, uploaded as files and range-read by the
+#     browser (an indexed_file collection) for the strand lanes of one region.
+#
+# Not read: the BAMs; the transcript identification outputs (groHMM, PINTS,
+# HOMER under transcript_identification/, and the counts over identified
+# transcripts under quantification/nascent/), which the megatest run never
+# published (its PINTS caller failed, aborting groHMM and HOMER); and the QC
+# reports (FastQC, fastp, preseq, RSeQC, BBMap pileup), which it did not publish
+# either. The run wrote no MultiQC report, so the template declares no MultiQC
+# collection and the dashboard has no MultiQC tab.
+#
+# Design. The pipeline samplesheet carries only sample and FASTQ paths. The time
+# course is an optional design table (METADATA_FILE): library id in a column
+# named `sample` (or the first column), hours in TIME_COL (default `time_h`),
+# a `time_point` label, and any factor (GROUP_COL defaults to its first factor
+# column). Without it, a library id ending in a duration (`<name>_30min`,
+# `<name>_2h`) still gives each library its time point; nothing else is parsed
+# out of library names.
+#
+# Routes (RULES.md section 13):
+#   - no design table: the metadata collection is pruned, with the group filter
+#     and colours; every tile keeps working on the time points the library ids
+#     carry;
+#   - a run fetched or published without the strand bedGraphs has no binned
+#     signal: the bedGraph collections are optional and their tabs (Genome
+#     signal, Signal dynamics) and Findings rows are pruned with them; the same
+#     for the bigWig collection and its lanes.
+# ============================================================================
+template:
+  template_id: "nf-core/nascent/2.3.0"
+  description: "nf-core/nascent template for nascent transcription time courses (GRO-seq, PRO-seq): per-gene transcription trajectories and response classes, library similarity over time, and the strand-specific coverage along the genome, binned genome-wide and range-read from the bigWigs."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory of one nascent run (quantification/, coverage_graphs/, pipeline_info/)."
+      required: true
+    - name: "METADATA_FILE"
+      description: "Optional design table (TSV): library id in a column named sample (or the first column), the hours of each library in TIME_COL, a time_point label, and any factor. Enables the group filter and colours."
+      required: false
+    - name: "METADATA_ID_COL"
+      description: "Design table library-id column. Auto-detected as the first column; defaults to 'sample'."
+      required: false
+    - name: "GROUP_COL"
+      description: "Design column the dashboards group, colour and filter libraries by. Auto-detected as the first factor column of METADATA_FILE."
+      required: false
+    - name: "GROUP_COL_DISPLAY"
+      description: "Auto-populated: title-cased GROUP_COL for titles."
+      required: false
+    - name: "ANNOTATION_COLS"
+      description: "Auto-populated: comma-separated factor columns of METADATA_FILE."
+      required: false
+    - name: "TIME_COL"
+      description: "Design column holding each library's time in hours. Without it (or without a design table) the time is read off a library id ending in a duration (30min, 2h, 1d)."
+      required: false
+      default: "time_h"
+    - name: "GENOME"
+      description: "UCSC name of the assembly the run aligned to (--genome; hg38, mm10): the axis and gene lane of the genome tracks."
+      required: false
+      default: "hg38"
+  # Variables for the BUNDLED reference dataset: the megatest run with its
+  # design table vendored in input/ (see megatest.yaml).
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/design.tsv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "stage"
+      GROUP_COL_DISPLAY: "Stage"
+      TIME_COL: "time_h"
+      GENOME: "hg38"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "hook_url"
+          - "email*"
+          - "genomes"            # the whole iGenomes map, not a run setting
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      # The pipeline's own parameter groups (nextflow_schema.json $defs at 2.3.0);
+      # institutional and generic options are folded into Run context.
+      - group: "Input/output"
+        key_patterns: ["input"]
+      - group: "Alignment"
+        key_patterns: ["aligner", "skip_alignment", "skip_trimming"]
+      - group: "UMI"
+        key_patterns: ["with_umi", "umitools_dedup_stats"]
+      - group: "Transcript identification"
+        key_patterns: ["assay_type", "use_homer_uniqmap", "skip_grohmm", "grohmm_min_uts", "grohmm_max_uts", "grohmm_min_ltprobb", "grohmm_max_ltprobb", "filter_bed", "intersect_bed"]
+      - group: "Reference genome"
+        key_patterns: ["genome", "fasta", "gtf", "gff", "gene_bed", "bwa_index", "bwamem2_index", "dragmap", "bowtie2_index", "hisat2_index", "star_index", "homer_uniqmap", "save_reference", "igenomes_ignore", "igenomes_base", "human_pangenomics_base", "genomes"]
+      - group: "Run context"
+        key_patterns: ["outdir", "email", "version", "publish_dir_mode", "email_on_fail", "plaintext_email", "max_multiqc_email_size", "monochrome_logs", "hook_url", "validate_params", "pipelines_testdata_base_path", "trace_report_suffix", "help", "help_full", "show_hidden", "config_profile_*", "custom_config_*", "multiqc_*"]
+    highlight:
+      - "assay_type"
+      - "genome"
+      - "aligner"
+      - "with_umi"
+      - "skip_grohmm"
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    - if_var_absent: "METADATA_FILE"
+      remove_dc_tags: ["metadata"]
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Nascent Transcription Time Course"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "nascent"
+    version: "2.3.0"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/nascent"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Design table (optional), read by the sample hub below
+      # ----------------------------------------------------------------
+      - data_collection_tag: "metadata"
+        optional: true
+        description: "Time-course design table (optional, --var METADATA_FILE=...): one row per library, its hours, time point label and factors"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "sample": "Library id, as named in the pipeline samplesheet. The hours column (TIME_COL), time_point and every other column are passed through."
+
+      # ----------------------------------------------------------------
+      # Gene counts (catalog subread/*): the featureCounts matrix over gene
+      # bodies, parsed once into a long table the others read through dc_ref.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "subread_gene_counts"
+        description: "Reads counted over every gene body, one row per gene per library, with counts per million"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "subread/gene_counts.py"
+            # The gene-level matrix only: a run that identified transcripts also
+            # writes quantification/nascent/*.featureCounts.txt, counted over
+            # them, which is another feature set.
+            source_overrides:
+              matrix: {glob_pattern: "**/gene/*.featureCounts.txt"}
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "gene_id": "Gene id of the annotation featureCounts counted over"
+              "chromosome": "Contig of the gene"
+              "start": "First exon start of the gene (1-based)"
+              "end": "Last exon end of the gene"
+              "strand": "Strand of the gene"
+              "length": "Gene length featureCounts reports, the union of its exons"
+              "sample": "Library (samplesheet sample)"
+              "counts": "Reads counted over the gene body"
+              "cpm": "Counts per million counted reads of the library"
+              "log2_cpm": "log2(cpm + 1)"
+
+      - data_collection_tag: "subread_library_summary"
+        description: "Per-library depth and complexity read off the gene counts: reads counted, genes detected, share of the top 100 genes"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "subread/library_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library (samplesheet sample)"
+              "assigned_reads": "Reads counted over any gene"
+              "genes_detected": "Genes with at least 10 reads"
+              "genes_detected_pct": "Genes detected, in percent of every gene with a read in any library"
+              "top100_share_pct": "Reads on the library's 100 most counted genes, in percent of its counted reads"
+              "median_log2_cpm": "Median log2(cpm + 1) over the detected genes"
+
+      - data_collection_tag: "subread_correlation"
+        description: "Spearman correlation of log2 CPM between every pair of libraries, over the genes detected in half of them"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "subread/correlation.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library the row belongs to; every other column is a library and holds its correlation with this one"
+
+      # ----------------------------------------------------------------
+      # Strand coverage bedGraphs (catalog bedtools/*). The index reads one
+      # row per file only, to carry its path: the recipes below stream the
+      # files themselves (depictio/recipes/lib/strand_coverage.py) rather than
+      # ingesting 100 million intervals. Optional: a run fetched without its
+      # bedGraphs keeps every gene tab.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "bedgraph_strand_index"
+        optional: true
+        description: "One row per strand coverage bedGraph, carrying its path; the binned collections below stream the files themselves"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.(?:plus|minus)\\.bedGraph$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              has_header: false
+              n_rows: 1
+              new_columns: ["chrom", "start", "end", "depth"]
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "chrom": "Contig of the file's first interval, read only to fix the column count"
+              "start": "Start of the file's first interval"
+              "end": "End of the file's first interval"
+              "depth": "Depth of the file's first interval"
+              "source_path": "The bedGraph this row indexes; the library, the strand and every window are derived from it"
+
+      - data_collection_tag: "bedtools_strand_bins"
+        optional: true
+        description: "Strand coverage in 250 kb windows, one row per library per window, in parts per million of the library's signal"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bedtools/strand_bins.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library (samplesheet sample)"
+              "chromosome": "Chromosome of the window"
+              "start": "Window start, 0-based, a multiple of 250 kb"
+              "end": "Window end, exclusive"
+              "position": "Window centre, where the genome tracks draw it"
+              "plus_rpm": "Plus-strand read bases in the window, per million of the library's read bases"
+              "minus_rpm": "Minus-strand read bases in the window, per million of the library's read bases"
+              "signal_rpm": "Both strands, per million of the library's read bases"
+              "log2_signal": "log2(signal_rpm + 1)"
+              "plus_share_pct": "Plus strand's share of the window's signal, in percent (empty without signal)"
+
+      - data_collection_tag: "bedtools_strand_summary"
+        optional: true
+        description: "Per-library totals of the strand coverage: strand balance, mitochondrial and off-chromosome shares, hotspot concentration"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "bedtools/strand_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library (samplesheet sample)"
+              "plus_read_bases": "Plus-strand depth summed over the genome (read bases)"
+              "minus_read_bases": "Minus-strand read bases"
+              "total_read_bases": "Both strands"
+              "covered_mb": "Bases with any coverage, both strands summed, in Mb"
+              "max_depth": "Deepest base of either strand"
+              "plus_share_pct": "Plus strand, in percent of both"
+              "mito_pct": "Signal on the mitochondrial contig, in percent"
+              "off_main_pct": "Signal outside the chromosomes (scaffolds, mitochondrion, episomes), in percent"
+              "hotspot_share_pct": "Share of the chromosome signal in the top 1% of 250 kb windows, in percent"
+
+      # ----------------------------------------------------------------
+      # Sample hub. Declared after every collection it reads through dc_ref.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "Sample hub: one row per library with its time point, the design columns, and its depth, complexity and strand QC"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nascent/samples.py"
+            params:
+              time_col: "{TIME_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library (samplesheet sample), the key every per-library collection joins on"
+              "time_point": "Time point label, from the design table or written from the hours"
+              "time_h": "Hours since the first time point"
+              "time_order": "Rank of the time point, 1 the earliest (the baseline)"
+              "time_axis": "log2(1 + hours), the axis the trajectories are drawn on"
+              "phase": "Baseline, then Early, Mid or Late: the tertile of the time point among the later ones"
+              "assigned_reads": "Reads counted over any gene"
+              "genes_detected": "Genes with at least 10 reads"
+              "genes_detected_pct": "Genes detected, in percent of every gene with a read in any library"
+              "top100_share_pct": "Reads on the 100 most counted genes, in percent"
+              "total_read_bases": "Strand coverage summed over the genome, both strands (read bases)"
+              "plus_share_pct": "Plus strand's share of the coverage, in percent"
+              "mito_pct": "Coverage on the mitochondrial contig, in percent"
+              "off_main_pct": "Coverage outside the chromosomes, in percent"
+              "hotspot_share_pct": "Share of the chromosome coverage in the top 1% of 250 kb windows, in percent"
+
+      # ----------------------------------------------------------------
+      # Gene time course (project recipes, depictio/recipes/lib/time_course.py)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "gene_dynamics"
+        description: "Per expressed gene: its peak change in transcription against the baseline, when it peaks, and its response class"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nascent/gene_dynamics.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "gene_id": "Gene id"
+              "chromosome": "Contig of the gene"
+              "start": "Gene start"
+              "end": "Gene end"
+              "strand": "Strand of the gene"
+              "length": "Gene length"
+              "baseline_log2_cpm": "log2(cpm + 1) at the baseline time point"
+              "mean_log2_cpm": "Mean log2(cpm + 1) over the time points"
+              "dynamic_range": "Highest minus lowest log2(cpm + 1) over the time points"
+              "peak_log2fc": "log2 fold change against the baseline at the time point where it is largest in absolute value"
+              "abs_peak_log2fc": "Absolute value of peak_log2fc"
+              "last_log2fc": "log2 fold change at the last time point"
+              "peak_time_point": "Time point of the peak change"
+              "peak_time_h": "Hours of the peak change"
+              "peak_phase": "Early, Mid or Late: the tertile of the peak time point among the later ones"
+              "n_changed": "Time points changed by a log2 fold change of 1 in the peak's direction"
+              "direction": "Induced or Repressed (a log2 fold change of 1 at two time points or more), else Stable"
+              "response": "Direction and phase of the peak (Induced early ... Repressed late), or Stable"
+              "rank": "Rank of the gene by absolute peak change, 1 the largest"
+
+      - data_collection_tag: "gene_trajectories"
+        description: "Per expressed gene and time point: mean log2 CPM and its log2 fold change against the baseline, with the gene's response class"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nascent/gene_trajectories.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "gene_id": "Gene id"
+              "time_point": "Time point label"
+              "time_h": "Hours"
+              "time_order": "Rank of the time point, 1 the baseline"
+              "time_axis": "log2(1 + hours)"
+              "phase": "Baseline, Early, Mid or Late"
+              "log2_cpm": "Mean log2(cpm + 1) of the libraries of the time point"
+              "log2fc": "log2 fold change against the baseline"
+              "direction": "Induced, Repressed or Stable (from gene_dynamics)"
+              "response": "Response class of the gene (from gene_dynamics)"
+
+      - data_collection_tag: "top_gene_trajectories"
+        description: "The ten responsive genes with the largest peak change, one trajectory each"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nascent/top_gene_trajectories.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "gene_id": "Gene id"
+              "time_point": "Time point label"
+              "time_h": "Hours"
+              "time_order": "Rank of the time point"
+              "time_axis": "log2(1 + hours)"
+              "log2_cpm": "Mean log2(cpm + 1)"
+              "log2fc": "log2 fold change against the baseline"
+              "response": "Response class of the gene"
+              "rank": "Rank among the top genes, 1 the largest change"
+
+      - data_collection_tag: "top_gene_heatmap"
+        description: "The forty most dynamic genes as a gene x time point matrix of log2 CPM, for a heatmap"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nascent/top_gene_heatmap.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "gene_id": "Gene id; every column after response is a time point holding the gene's mean log2(cpm + 1)"
+              "response": "Response class of the gene"
+
+      - data_collection_tag: "sample_similarity"
+        description: "Per library: PCA coordinates over the 2,000 most variable genes, and its correlation with the baseline and with the previous time point"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nascent/sample_similarity.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library (samplesheet sample); the design columns follow it"
+              "time_point": "Time point label"
+              "time_h": "Hours"
+              "time_order": "Rank of the time point"
+              "time_axis": "log2(1 + hours)"
+              "phase": "Baseline, Early, Mid or Late"
+              "pc1": "First principal component"
+              "pc2": "Second principal component"
+              "pc3": "Third principal component"
+              "pc1_variance": "Variance on the first component, in percent"
+              "pc2_variance": "Variance on the second component, in percent"
+              "pc3_variance": "Variance on the third component, in percent"
+              "corr_to_baseline": "Spearman correlation with the mean baseline library"
+              "corr_to_previous": "Spearman correlation with the mean library of the previous time point"
+
+      - data_collection_tag: "sample_drift"
+        description: "Correlation of each time point with the baseline and with the previous time point, as two curves over time"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nascent/sample_drift.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "comparison": "Against the baseline, or against the previous time point"
+              "time_point": "Time point label"
+              "time_h": "Hours"
+              "time_order": "Rank of the time point"
+              "time_axis": "log2(1 + hours)"
+              "correlation": "Spearman correlation"
+
+      # ----------------------------------------------------------------
+      # Window time course (project recipes), from the binned strand coverage
+      # ----------------------------------------------------------------
+      - data_collection_tag: "signal_window_dynamics"
+        optional: true
+        description: "Per 250 kb window: its peak change in nascent signal against the baseline, when it peaks, and its trend"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nascent/signal_window_dynamics.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "window_id": "Window, as chromosome:start-end"
+              "chromosome": "Chromosome"
+              "start": "Window start"
+              "end": "Window end"
+              "position": "Window centre"
+              "mean_rpm": "Mean signal over the libraries, per million of each library's signal"
+              "baseline_log2_signal": "log2(rpm + 1) at the baseline"
+              "dynamic_range": "Highest minus lowest log2(rpm + 1) over the time points"
+              "peak_log2fc": "log2 fold change against the baseline where it is largest in absolute value"
+              "abs_peak_log2fc": "Absolute value of peak_log2fc"
+              "last_log2fc": "log2 fold change at the last time point"
+              "peak_time_point": "Time point of the peak change"
+              "peak_time_h": "Hours of the peak change"
+              "peak_phase": "Early, Mid or Late"
+              "n_changed": "Time points changed by a log2 fold change of 1 in the peak's direction"
+              "trend": "Rising or Falling (a log2 fold change of 1 at two time points or more), else Stable"
+              "rank": "Rank of the window by absolute peak change"
+
+      - data_collection_tag: "signal_window_series"
+        optional: true
+        description: "Per compared window and time point: the log2 fold change of the window signal against the baseline, with the window's chromosome and trend"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nascent/signal_window_series.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "window_id": "Window, as chromosome:start-end"
+              "chromosome": "Chromosome"
+              "trend": "Rising, Falling or Stable (from signal_window_dynamics)"
+              "time_point": "Time point label"
+              "time_h": "Hours"
+              "time_order": "Rank of the time point, 1 the baseline"
+              "time_axis": "log2(1 + hours)"
+              "phase": "Baseline, Early, Mid or Late"
+              "log2fc": "log2 fold change of the window signal against the baseline"
+
+      - data_collection_tag: "signal_window_heatmap"
+        optional: true
+        description: "The forty windows that change most, as a window x time point matrix of log2 signal, for a heatmap"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nascent/signal_window_heatmap.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "window_id": "Window, as chromosome:start-end; every column after trend is a time point holding the window's mean log2(rpm + 1)"
+              "trend": "Rising or Falling"
+
+      - data_collection_tag: "chromosome_signal"
+        optional: true
+        description: "Each chromosome's share of the nascent signal per time point, and its plus-strand share"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nascent/chromosome_signal.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "chromosome": "Chromosome"
+              "time_point": "Time point label"
+              "time_h": "Hours"
+              "time_order": "Rank of the time point"
+              "time_axis": "log2(1 + hours)"
+              "phase": "Baseline, Early, Mid or Late"
+              "share_pct": "Share of the signal on the chromosomes, in percent"
+              "plus_share_pct": "Plus strand's share of the chromosome's signal, in percent"
+              "contig_order": "Chromosome rank in karyotype order"
+
+      # ----------------------------------------------------------------
+      # The strand bigWigs as files, not rows: uploaded with their built-in
+      # index and range-read by the browser for the region in view, one lane
+      # per library and strand (<sample>.plus / <sample>.minus). 15 to 30 MB
+      # each on the megatest. Optional, for a run fetched without them.
+      # TODO(jbrowse): swap indexed_file+genome_view for a JBrowse2 DC once jbrowse.py is rebuilt
+      # ----------------------------------------------------------------
+      - data_collection_tag: "coverage_bigwigs"
+        optional: true
+        description: "Strand coverage bigWig per library and strand (deepTools bamCoverage), read by the browser for the region in view"
+        config:
+          type: "indexed_file"
+          metatype: "Metadata"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: ".*\\.(?:plus|minus)\\.bigWig$"
+          dc_specific_properties:
+            format: "bigwig"
+            assembly: "{GENOME}"
+            sample_regex: "(?P<sample>[^/]+\\.(?:plus|minus))\\.bigWig$"
+            max_file_size_mb: 64
+
+# ============================================================================
+# LINKS: the sample hub filters every per-library and per-time-point collection
+# ============================================================================
+links:
+  # By library.
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "subread_gene_counts"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the gene counts by the libraries picked in the left panel"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "subread_library_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the library summary by the libraries picked in the left panel"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "subread_correlation"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the rows of the library correlation matrix by the libraries picked"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "bedtools_strand_bins"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the binned strand coverage by the libraries picked"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "bedtools_strand_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the strand coverage totals by the libraries picked"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "sample_similarity"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the library PCA and correlations by the libraries picked"
+    enabled: true
+  # By time point: the time-course collections hold one row per time point,
+  # libraries of a time point averaged, so the libraries picked reach them
+  # through the time points they belong to.
+  - source_dc_tag: "samples"
+    source_column: "time_point"
+    target_dc_tag: "gene_trajectories"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "time_point"}
+    description: "Filter the gene trajectories to the time points of the libraries picked"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "time_point"
+    target_dc_tag: "top_gene_trajectories"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "time_point"}
+    description: "Filter the top gene curves to the time points of the libraries picked"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "time_point"
+    target_dc_tag: "sample_drift"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "time_point"}
+    description: "Filter the correlation curves to the time points of the libraries picked"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "time_point"
+    target_dc_tag: "signal_window_series"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "time_point"}
+    description: "Filter the window trend curves to the time points of the libraries picked"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "time_point"
+    target_dc_tag: "chromosome_signal"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "time_point"}
+    description: "Filter the chromosome shares to the time points of the libraries picked"
+    enabled: true
+  # By peak time point: a per-gene or per-window call is narrowed to those
+  # peaking at the time points of the libraries picked.
+  - source_dc_tag: "samples"
+    source_column: "time_point"
+    target_dc_tag: "gene_dynamics"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "peak_time_point"}
+    description: "Narrow the gene calls to the genes peaking at the time points of the libraries picked"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "time_point"
+    target_dc_tag: "signal_window_dynamics"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "peak_time_point"}
+    description: "Narrow the window calls to the windows peaking at the time points of the libraries picked"
+    enabled: true
+  # A tab's own filters reach the tiles of the tab drawn from other collections:
+  # the gene and window calls carry the filtered columns (response, size of the
+  # change, chromosome), the long and top-N collections follow by id.
+  - source_dc_tag: "gene_dynamics"
+    source_column: "gene_id"
+    target_dc_tag: "gene_trajectories"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_id"}
+    description: "Narrow the gene trajectories, and the response curves drawn from them, to the genes in scope"
+    enabled: true
+  - source_dc_tag: "gene_dynamics"
+    source_column: "gene_id"
+    target_dc_tag: "top_gene_trajectories"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_id"}
+    description: "Keep the top genes that are in scope"
+    enabled: true
+  - source_dc_tag: "gene_dynamics"
+    source_column: "gene_id"
+    target_dc_tag: "top_gene_heatmap"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_id"}
+    description: "Keep the heatmap rows of the genes in scope"
+    enabled: true
+  - source_dc_tag: "signal_window_dynamics"
+    source_column: "window_id"
+    target_dc_tag: "signal_window_series"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "window_id"}
+    description: "Narrow the window trend curves to the windows in scope"
+    enabled: true
+  - source_dc_tag: "signal_window_dynamics"
+    source_column: "window_id"
+    target_dc_tag: "signal_window_heatmap"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "window_id"}
+    description: "Keep the heatmap rows of the windows in scope"
+    enabled: true
+  - source_dc_tag: "bedtools_strand_bins"
+    source_column: "chromosome"
+    target_dc_tag: "chromosome_signal"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "chromosome"}
+    description: "Narrow the per-chromosome shares to the chromosomes picked"
+    enabled: true
+  # Reverse links: a selection made on a tab's own scatter or table narrows the
+  # hub, and through it every other tab.
+  - source_dc_tag: "sample_similarity"
+    source_column: "sample"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Narrow the sample hub to the libraries selected on the embedding"
+    enabled: true
+  - source_dc_tag: "subread_library_summary"
+    source_column: "sample"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Narrow the sample hub to the libraries selected on the library summary"
+    enabled: true

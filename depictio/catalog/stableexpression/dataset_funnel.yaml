@@ -1,0 +1,20 @@
+id: stableexpression_dataset_funnel
+name: Samples through the filters
+mode: expression/sample-funnel
+description: >-
+  The samples of every downloaded dataset at each step, one row per dataset and
+  step: downloaded, after the gene ID mapping, after the zero filter and after
+  the missing-value filter (the samples of the merged matrix), with the samples
+  lost at the step. A step a dataset never reached holds 0, so a step sums to
+  the run's funnel.
+find:
+  path_glob: "**/statistics/zero_values_filter_stats.csv"
+recipe: stableexpression/dataset_funnel.py
+fixture: dataset_funnel.tsv
+renders_as:
+  - { id: sample_funnel, component: figure, visu_type: histogram,
+      dict_kwargs: { x: step, y: samples, color: platform, histfunc: sum } }
+  - { id: samples_lost, component: figure, visu_type: histogram,
+      dict_kwargs: { x: step, y: samples_lost, color: outcome, histfunc: sum } }
+  - { component: interactive, interactive_type: MultiSelect, column_name: step }
+  - { component: table }

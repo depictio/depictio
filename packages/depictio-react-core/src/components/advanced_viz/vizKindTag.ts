@@ -237,10 +237,30 @@ const VIZ_KIND: Readonly<Record<string, VizKindLabel>> = {
     'tabler:circle-dotted',
     'Links between genomic loci, drawn as chords on a chromosome ring',
   ),
+  ideogram: label(
+    'Karyotype',
+    'tabler:align-left',
+    'One bar per chromosome scaled to its length, with the features on it',
+  ),
   parallel_coordinates: label(
     'Parallel',
     'tabler:chart-line',
     'One line per sample across several metric axes, each one brushable',
+  ),
+  ranked_distribution: label(
+    'Ranked',
+    'tabler:chart-candle',
+    'Top features ranked by a score, each with its distribution across samples',
+  ),
+  spatial_cells: label(
+    'Cells',
+    'tabler:microscope',
+    'Segmented cells where they sit in the image, coloured by a marker or a cell type',
+  ),
+  allele_grid: label(
+    'Alleles',
+    'tabler:layout-columns',
+    'Genotype per sample and locus, one half per haplotype, coloured by allele group',
   ),
   // `record_card` is a card of fields, not a figure: no label.
 };

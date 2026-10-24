@@ -1,0 +1,17 @@
+id: fcsadaptor_actions
+name: Adaptor and vector calls
+mode: fcsadaptor/report
+description: >-
+  One row per range FCS-adaptor flags as adaptor or vector sequence, with the
+  action (trim the range, exclude the sequence), the matching adaptor and the
+  bases involved. An assembly screened with nothing flagged keeps one row with
+  action `none`.
+find:
+  path_glob: "**/*.fcs_adaptor_report.txt"
+recipe: fcsadaptor/actions.py
+fixture: actions.tsv
+renders_as:
+  - { id: adaptor_ranges, component: card, column: seq_id, aggregation: count,
+      secondary_layout: composition, breakdown_col: action,
+      filter_expr: "col('action') != 'none'" }
+  - { component: table }

@@ -1,0 +1,20 @@
+# STAR: splice-aware RNA-seq read alignment. The outputs here are the aligner's
+# own per-sample summaries that every STAR-based nf-core pipeline publishes next
+# to the BAM (rnaseq, rnavar, rnafusion, rnasplice, ...): `Log.final.out`, the
+# read fate with the splice and error rates, and `SJ.out.tab`, one row per
+# collapsed splice junction. MultiQC parses the first into a few percentages
+# (catalog multiqc/star.yaml) and never reads the second. The parsing lives in
+# depictio/recipes/lib/star_logs.py.
+id: star
+name: STAR
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/star/align
+homepage: https://github.com/alexdobin/STAR
+biotools_url: https://bio.tools/star
+description: >-
+  Spliced Transcripts Alignment to a Reference: aligns RNA-seq reads across
+  splice junctions, reports where each read went (uniquely mapped, multi-mapped
+  or unmapped and why) and collapses the junctions it crossed.
+edam_topics:
+  - http://edamontology.org/topic_3170 # RNA-Seq
+  - http://edamontology.org/topic_0102 # Mapping
+stage: alignment

@@ -3880,3 +3880,671 @@ def generate_protein_family_demo() -> None:
 
 
 generate_protein_family_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Ideogram: BUSCO genes on three assemblies, and binned variant density.
+# ideogram_busco_demo.tsv   columns: genome, sequence, gene_start, gene_end,
+#                                    busco_id, status, sequence_length
+# ideogram_density_demo.tsv columns: sample, chrom, start, end, variant_count
+# ---------------------------------------------------------------------------
+# The BUSCO table is what nf-core/genomeqc's BUSCO ideogram reads: one row per
+# BUSCO gene found in an assembly, with the columns BUSCO's `full_table.tsv`
+# writes, plus the sequence length from the assembly's FASTA index (these are
+# non-model genomes, so no assembly table can size the bars). The three
+# assemblies descend from one ancestral karyotype of 12 linkage groups, so a
+# BUSCO sits on the "same" chromosome in each and the marks line up across the
+# karyotypes. genome_B fused groups 11 and 12 on its chromosome 11 and keeps
+# the tail of group 12 on a short X; genome_C is a draft whose scaffolds split
+# two groups. A Duplicated BUSCO has two rows, at two loci; a Missing one none.
+_IDEO_GROUPS = 12
+_IDEO_N_BUSCO = 255  # eukaryota_odb10
+_IDEO_GENOMES = {
+    # genome: status weights, Complete / Duplicated / Fragmented / Missing
+    "genome_A": (0.93, 0.04, 0.02, 0.01),
+    "genome_B": (0.88, 0.07, 0.03, 0.02),
+    "genome_C": (0.76, 0.05, 0.11, 0.08),
+}
+
+# (sequence, length, [(group, group_from, group_to, seq_from, seq_to)]): the
+# part of an ancestral group a sequence holds, and where along it.
+_IdeoSpan = tuple[int, float, float, float, float]
+
+
+def _ideo_karyotypes(rng: random.Random) -> dict[str, list[tuple[str, int, list[_IdeoSpan]]]]:
+    base = sorted((rng.randint(28, 96) * 1_000_000 for _ in range(_IDEO_GROUPS)), reverse=True)
+    genome_a = [(f"chr{g + 1}", base[g], [(g, 0.0, 1.0, 0.0, 1.0)]) for g in range(_IDEO_GROUPS)]
+    genome_b: list[tuple[str, int, list[_IdeoSpan]]] = [
+        (str(g + 1), int(base[g] * rng.uniform(0.9, 1.15)), [(g, 0.0, 1.0, 0.0, 1.0)])
+        for g in range(10)
+    ]
+    fused = int((base[10] + base[11] * 0.85) * rng.uniform(0.97, 1.05))
+    share = base[10] / (base[10] + base[11] * 0.85)
+    genome_b.append(("11", fused, [(10, 0.0, 1.0, 0.0, share), (11, 0.0, 0.85, share, 1.0)]))
+    genome_b.append(("X", int(base[11] * 0.4), [(11, 0.85, 1.0, 0.1, 0.9)]))
+    genome_c: list[tuple[str, int, list[_IdeoSpan]]] = []
+    k = 1
+    for g in range(_IDEO_GROUPS):
+        length = int(base[g] * rng.uniform(0.85, 1.05))
+        if g in (2, 7):
+            cut = rng.uniform(0.35, 0.65)
+            genome_c.append((f"scaffold_{k}", int(length * cut), [(g, 0.0, cut, 0.0, 1.0)]))
+            genome_c.append(
+                (f"scaffold_{k + 1}", int(length * (1 - cut)), [(g, cut, 1.0, 0.0, 1.0)])
+            )
+            k += 2
+        else:
+            genome_c.append((f"scaffold_{k}", length, [(g, 0.0, 1.0, 0.0, 1.0)]))
+            k += 1
+    return {"genome_A": genome_a, "genome_B": genome_b, "genome_C": genome_c}
+
+
+def generate_ideogram_busco_demo() -> None:
+    """Write ideogram_busco_demo.tsv: 255 BUSCOs placed on 3 assemblies."""
+    header = [
+        "genome",
+        "sequence",
+        "gene_start",
+        "gene_end",
+        "busco_id",
+        "status",
+        "sequence_length",
+    ]
+    rng = random.Random(20261019)
+    karyotypes = _ideo_karyotypes(rng)
+    # Each BUSCO's ancestral home: a linkage group and a relative position.
+    buscos = [
+        (f"{1000 + i * 37}at2759", rng.randrange(_IDEO_GROUPS), rng.uniform(0.02, 0.98))
+        for i in range(_IDEO_N_BUSCO)
+    ]
+
+    def place(genome: str, group: int, frac: float) -> tuple[str, int, int]:
+        for name, length, spans in karyotypes[genome]:
+            for g, gf, gt, sf, st in spans:
+                if g == group and gf <= frac < gt:
+                    rel = sf + (frac - gf) / (gt - gf) * (st - sf)
+                    return name, min(max(int(length * rel), 1_000), length - 20_000), length
+        raise AssertionError(f"group {group} at {frac:.2f} has no home in {genome}")
+
+    rows: list[list] = []
+    statuses = ("Complete", "Duplicated", "Fragmented", "Missing")
+    for genome, weights in _IDEO_GENOMES.items():
+        for busco_id, group, frac in buscos:
+            status = rng.choices(statuses, weights=weights)[0]
+            if status == "Missing":
+                continue
+            # The duplicate copy may land anywhere in the genome.
+            loci = [(group, frac)]
+            if status == "Duplicated":
+                loci.append((rng.randrange(_IDEO_GROUPS), rng.uniform(0.02, 0.98)))
+            for g, f in loci:
+                name, start, length = place(genome, g, f)
+                size = (
+                    rng.randint(800, 4000) if status == "Fragmented" else rng.randint(1500, 15000)
+                )
+                rows.append([genome, name, start, start + size, busco_id, status, length])
+    rows.sort(key=lambda r: (r[0], r[1], r[2]))
+    write_tsv(OUT / "ideogram_busco_demo.tsv", header, rows)
+
+
+generate_ideogram_busco_demo()
+
+
+_IDEO_DENSITY_BIN = 2_000_000
+_IDEO_DENSITY_SAMPLES = ("sample_01", "sample_02")
+# Relative gene density: chr17, chr19 and chr22 are the gene-rich chromosomes
+# a variant density lights up, chr13, chr18 and chrY the poor ones.
+_IDEO_RICHNESS = {"chr17": 1.8, "chr19": 2.4, "chr22": 1.6, "chr13": 0.6, "chr18": 0.7, "chrY": 0.2}
+_IDEO_ACROCENTRIC = {"chr13", "chr14", "chr15", "chr21", "chr22"}
+
+
+def generate_ideogram_density_demo() -> None:
+    """Write ideogram_density_demo.tsv: variant counts in 2 Mb bins on GRCh38, 2 samples."""
+    header = ["sample", "chrom", "start", "end", "variant_count"]
+    rng = random.Random(20261020)
+    rows: list[list] = []
+    for s, sample in enumerate(_IDEO_DENSITY_SAMPLES):
+        for chrom, size in _CHORD_CHROM_SIZES.items():
+            if chrom == "chrY" and s == 1:
+                continue  # an XX sample calls nothing on chrY
+            centromere = 0.08 if chrom in _IDEO_ACROCENTRIC else 0.4
+            level = 1.0
+            for start in range(0, size, _IDEO_DENSITY_BIN):
+                end = min(size, start + _IDEO_DENSITY_BIN)
+                mid = (start + end) / 2 / size
+                # A smooth walk, so neighbouring bins look like a genome, not noise.
+                level = max(0.15, min(3.0, level * math.exp(rng.gauss(0, 0.18))))
+                if abs(mid - centromere) < 0.025 or mid < 0.004 or mid > 0.996:
+                    count = 0  # centromere and telomeres: no mappable sequence
+                else:
+                    lam = 140 * _IDEO_RICHNESS.get(chrom, 1.0) * level * (1.15 if s == 0 else 1.0)
+                    count = max(0, int(round(rng.gauss(lam, math.sqrt(lam)))))
+                rows.append([sample, chrom, start, end, count])
+    write_tsv(OUT / "ideogram_density_demo.tsv", header, rows)
+
+
+generate_ideogram_density_demo()
+# NN. Ranked distribution: gene stability, nf-core/stableexpression shape.
+# columns: ranked_distribution_demo         gene_id, gene_name, rank,
+#                                           stability_score, section, q1,
+#                                           median, q3, lower, upper, mean,
+#                                           n_samples
+#          ranked_distribution_values_demo  gene_id, gene_name, sample,
+#                                           stability_score, section, value
+# ---------------------------------------------------------------------------
+# stableexpression scores every gene's stability across a public cohort
+# (lower is more stable) and publishes it beside the gene's normalised counts.
+# The cohort is thousands of samples, far too many to ship raw, so the first
+# table is what a recipe makes of it: one row per gene with the box statistics
+# of its counts over 4332 simulated samples. The second keeps the raw values of
+# the 40 most stable genes over 60 samples, the long form the renderer
+# aggregates itself (and the only shape a violin can be drawn from). Both use
+# the same `gene_id` values, so a gene picked on one tile is marked on the other.
+#
+# Three expression sections, as stableexpression bins its genes by mean
+# expression: a stable gene can sit in any of them, which is why the section
+# colours the boxes rather than ordering them.
+_RD_SECTIONS = (
+    # name, n genes, log median count (centre, spread)
+    ("high", 60, 9.0, 0.6),
+    ("medium", 80, 6.5, 0.6),
+    ("low", 60, 4.0, 0.6),
+)
+# Real housekeeping symbols for the genes the picture is about; the rest are
+# numbered. Synthetic counts all the same: no symbol here carries its real data.
+_RD_HOUSEKEEPING = (
+    "ACTB",
+    "GAPDH",
+    "RPLP0",
+    "B2M",
+    "PPIA",
+    "TBP",
+    "HPRT1",
+    "UBC",
+    "YWHAZ",
+    "SDHA",
+    "GUSB",
+    "HMBS",
+    "PGK1",
+    "TFRC",
+    "RPL13A",
+    "POLR2A",
+    "EEF1A1",
+    "PSMB2",
+    "VCP",
+    "REEP5",
+)
+_RD_COHORT = 4332
+_RD_LONG_GENES = 40
+_RD_LONG_SAMPLES = 60
+
+
+def _rd_tukey(values: np.ndarray) -> tuple[float, float, float, float, float]:
+    """q1, median, q3 and the Tukey whisker ends of `values`."""
+    q1, median, q3 = (float(v) for v in np.percentile(values, [25, 50, 75]))
+    iqr = q3 - q1
+    inside = values[(values >= q1 - 1.5 * iqr) & (values <= q3 + 1.5 * iqr)]
+    return q1, median, q3, float(inside.min()), float(inside.max())
+
+
+def generate_ranked_distribution_demo() -> None:
+    """Write the gene-stability pair: 200 genes pre-aggregated, 40 x 60 long form."""
+    rng = np.random.default_rng(20261019)
+    genes: list[dict] = []
+    index = 0
+    for section, count, centre, spread in _RD_SECTIONS:
+        for _ in range(count):
+            index += 1
+            # The stability score is a robust CV-like number: a gamma skewed
+            # towards stable genes, with a long unstable tail.
+            score = float(rng.gamma(2.2, 0.09)) + 0.02
+            genes.append(
+                {
+                    "gene_id": f"ENSG{900000 + index:011d}",
+                    "section": section,
+                    "log_median": float(rng.normal(centre, spread)),
+                    "score": round(score, 4),
+                }
+            )
+    genes.sort(key=lambda g: (g["score"], g["gene_id"]))
+    for rank, gene in enumerate(genes, start=1):
+        gene["rank"] = rank
+        gene["gene_name"] = (
+            _RD_HOUSEKEEPING[rank - 1] if rank <= len(_RD_HOUSEKEEPING) else f"GENE{rank:03d}"
+        )
+
+    def counts(gene: dict, n: int) -> np.ndarray:
+        # Log-normal counts whose spread grows with the score, so the boxes of
+        # the most stable genes are visibly the tightest.
+        sigma = 0.08 + 1.6 * gene["score"]
+        return np.exp(rng.normal(gene["log_median"], sigma, n))
+
+    header = [
+        "gene_id",
+        "gene_name",
+        "rank",
+        "stability_score",
+        "section",
+        "q1",
+        "median",
+        "q3",
+        "lower",
+        "upper",
+        "mean",
+        "n_samples",
+    ]
+    rows: list[list] = []
+    for gene in genes:
+        values = counts(gene, _RD_COHORT)
+        q1, median, q3, lower, upper = _rd_tukey(values)
+        rows.append(
+            [
+                gene["gene_id"],
+                gene["gene_name"],
+                gene["rank"],
+                gene["score"],
+                gene["section"],
+                round(q1, 2),
+                round(median, 2),
+                round(q3, 2),
+                round(lower, 2),
+                round(upper, 2),
+                round(float(values.mean()), 2),
+                _RD_COHORT,
+            ]
+        )
+    # Shipped in id order, not rank order: the tile ranks, the table does not
+    # have to arrive sorted.
+    rows.sort(key=lambda r: r[0])
+    write_tsv(OUT / "ranked_distribution_demo.tsv", header, rows)
+
+    long_header = ["gene_id", "gene_name", "sample", "stability_score", "section", "value"]
+    long_rows: list[list] = []
+    for gene in genes[:_RD_LONG_GENES]:
+        values = counts(gene, _RD_LONG_SAMPLES)
+        for s, value in enumerate(values, start=1):
+            long_rows.append(
+                [
+                    gene["gene_id"],
+                    gene["gene_name"],
+                    f"SRR{7000000 + s}",
+                    gene["score"],
+                    gene["section"],
+                    round(float(value), 2),
+                ]
+            )
+    write_tsv(OUT / "ranked_distribution_values_demo.tsv", long_header, long_rows)
+
+
+generate_ranked_distribution_demo()
+# NN. Spatial cells: an mcquant single-cell table of two tonsil images.
+# columns: spatial_cells_demo  CellID, DNA_1, CD3, CD20, CD45, PanCK, Ki67,
+#                              CD68, aSMA, X_centroid, Y_centroid, Area,
+#                              MajorAxisLength, MinorAxisLength, Eccentricity,
+#                              Solidity, Extent, Orientation, sample, cell_id,
+#                              cell_type
+# ---------------------------------------------------------------------------
+#
+# The column set of nf-core/mcmicro's mcquant output (one mean intensity per
+# channel, then the centroid and the regionprops morphology), for two images
+# of a tonsil section, plus three columns a depictio recipe adds: the sample,
+# a sample-qualified cell id (mcquant's CellID restarts at 1 per image) and a
+# cell type called from the markers. Centroids are in pixels of each image,
+# origin top-left, y down.
+#
+# The tissue is laid out the way a tonsil reads: an epithelial band
+# (PanCK) along a wavy top edge, B-cell follicles (CD20) with a proliferating
+# germinal centre (Ki67) in their middle, a T-cell zone (CD3) around and
+# between them, a few vessels lined with smooth muscle (aSMA) and macrophages
+# (CD68) scattered through. Cells sit on a jittered grid, so they never stack,
+# and are larger in the epithelium. The second image is dimmer overall (a
+# weaker stain), which is what the per-image percentile clip is for.
+
+_SPATIAL_MARKERS = ("DNA_1", "CD3", "CD20", "CD45", "PanCK", "Ki67", "CD68", "aSMA")
+# Mean intensity per marker for each cell type (16-bit means, as mcquant reports).
+_SPATIAL_PROFILES = {
+    "B cell": (9000, 600, 7000, 5200, 300, 500, 400, 300),
+    "Germinal centre B": (11000, 500, 6200, 5000, 300, 6500, 500, 300),
+    "T cell": (8500, 6800, 500, 5600, 300, 600, 400, 300),
+    "Epithelial": (7000, 300, 300, 600, 8200, 900, 300, 400),
+    "Macrophage": (7600, 500, 500, 4200, 400, 400, 6000, 400),
+    "Stromal": (6500, 300, 300, 500, 400, 300, 400, 5200),
+}
+# Mean area in px^2 per cell type: lymphocytes are small, epithelium large.
+_SPATIAL_AREA = {
+    "B cell": 95.0,
+    "Germinal centre B": 120.0,
+    "T cell": 90.0,
+    "Epithelial": 210.0,
+    "Macrophage": 175.0,
+    "Stromal": 150.0,
+}
+_SPATIAL_SAMPLES = (
+    # name, width, height, follicles (cx, cy, r), vessels (x0, y0, x1, y1), stain
+    (
+        "tonsil_1",
+        1000,
+        800,
+        ((300, 420, 140), (640, 380, 125), (820, 640, 95)),
+        ((80, 700, 480, 760), (560, 160, 980, 260)),
+        1.0,
+    ),
+    (
+        "tonsil_2",
+        900,
+        900,
+        ((330, 520, 150), (660, 600, 130)),
+        ((100, 300, 800, 330), (480, 860, 880, 720)),
+        0.75,
+    ),
+)
+
+
+def _segment_distance(px: float, py: float, seg: tuple[float, float, float, float]) -> float:
+    x0, y0, x1, y1 = seg
+    dx, dy = x1 - x0, y1 - y0
+    t = max(0.0, min(1.0, ((px - x0) * dx + (py - y0) * dy) / (dx * dx + dy * dy)))
+    return math.hypot(px - (x0 + t * dx), py - (y0 + t * dy))
+
+
+def generate_spatial_cells_demo() -> None:
+    """Write spatial_cells_demo.tsv: two tonsil images, about 4,000 cells each."""
+    rng = np.random.default_rng(20261019)
+    header = [
+        "CellID",
+        *_SPATIAL_MARKERS,
+        "X_centroid",
+        "Y_centroid",
+        "Area",
+        "MajorAxisLength",
+        "MinorAxisLength",
+        "Eccentricity",
+        "Solidity",
+        "Extent",
+        "Orientation",
+        "sample",
+        "cell_id",
+        "cell_type",
+    ]
+    rows: list[list] = []
+    spacing = 12.5
+    for sample, width, height, follicles, vessels, stain in _SPATIAL_SAMPLES:
+        cell_id = 0
+        cy = spacing / 2
+        while cy < height:
+            cx = spacing / 2
+            while cx < width:
+                x = cx + rng.uniform(-0.38, 0.38) * spacing
+                y = cy + rng.uniform(-0.38, 0.38) * spacing
+                cx += spacing
+                # Tissue edge: a ragged ellipse a little inside the image, so
+                # the image underlay has background around the section.
+                ex = (x - width / 2) / (width * 0.49)
+                ey = (y - height / 2) / (height * 0.49)
+                ragged = 1.0 + 0.05 * math.sin(7 * math.atan2(ey, ex)) + rng.normal(0, 0.01)
+                if ex * ex + ey * ey > ragged:
+                    continue
+                epithelium_edge = 0.16 * height + 0.05 * height * math.sin(x / 90.0)
+                follicle = min(
+                    (math.hypot(x - fx, y - fy) / fr for fx, fy, fr in follicles), default=9.0
+                )
+                vessel = min((_segment_distance(x, y, v) for v in vessels), default=1e9)
+                roll = rng.random()
+                if y < epithelium_edge:
+                    cell_type = "Epithelial" if roll < 0.9 else "Macrophage"
+                elif vessel < 14:
+                    cell_type = "Stromal" if roll < 0.75 else "T cell"
+                elif follicle < 0.5:
+                    cell_type = "Germinal centre B" if roll < 0.7 else "B cell"
+                elif follicle < 1.0:
+                    cell_type = (
+                        "B cell" if roll < 0.82 else ("T cell" if roll < 0.95 else "Macrophage")
+                    )
+                elif follicle < 1.45:
+                    cell_type = (
+                        "T cell" if roll < 0.8 else ("B cell" if roll < 0.9 else "Macrophage")
+                    )
+                else:
+                    cell_type = (
+                        "T cell" if roll < 0.55 else ("Stromal" if roll < 0.8 else "Macrophage")
+                    )
+                cell_id += 1
+                profile = _SPATIAL_PROFILES[cell_type]
+                # A soft gradient across the section (uneven illumination), the
+                # stain of the image, and per-cell log-normal noise.
+                shading = 0.85 + 0.3 * (x / width)
+                intensities = [
+                    round(
+                        float(
+                            mean * stain * shading * rng.lognormal(0.0, 0.28) + rng.uniform(80, 220)
+                        ),
+                        1,
+                    )
+                    for mean in profile
+                ]
+                # Ki67 is in the nucleus of a germinal centre B cell only while
+                # it cycles: a third of them are dim.
+                if cell_type == "Germinal centre B" and rng.random() < 0.33:
+                    intensities[5] = round(intensities[5] * 0.15, 1)
+                area = max(30, int(rng.lognormal(math.log(_SPATIAL_AREA[cell_type]), 0.22)))
+                eccentricity = float(
+                    np.clip(
+                        rng.beta(2.2, 3.0)
+                        + (0.25 if cell_type in ("Stromal", "Epithelial") else 0.0),
+                        0.05,
+                        0.97,
+                    )
+                )
+                major = 2 * math.sqrt(area / math.pi) / (1 - eccentricity**2) ** 0.25
+                minor = major * math.sqrt(1 - eccentricity**2)
+                rows.append(
+                    [
+                        cell_id,
+                        *intensities,
+                        round(x, 1),
+                        round(y, 1),
+                        area,
+                        round(major, 2),
+                        round(minor, 2),
+                        round(eccentricity, 3),
+                        round(float(rng.uniform(0.86, 0.99)), 3),
+                        round(float(rng.uniform(0.6, 0.85)), 3),
+                        round(float(rng.uniform(-math.pi / 2, math.pi / 2)), 3),
+                        sample,
+                        f"{sample}:{cell_id}",
+                        cell_type,
+                    ]
+                )
+            cy += spacing
+    write_tsv(OUT / "spatial_cells_demo.tsv", header, rows)
+
+
+generate_spatial_cells_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Allele grid: HLA class I and II genotypes, one row per allele call.
+# columns (allele_grid_demo): sample_id, locus, allele, haplotype, hla_class,
+#          objective, reads
+# columns (epitope_predictions_demo): peptide, protein, length, allele,
+#          affinity_nm, percentile_rank, binder
+# ---------------------------------------------------------------------------
+# The shape nf-core/hlatyping's OptiType result takes once its A1 ... C2
+# columns are melted long, plus the two class II loci an HLA-HD or arcasHLA
+# run adds. Allele frequencies are rounded European ones (Allele Frequency Net
+# Database orders of magnitude), so A*02:01 is the commonest A allele, the
+# 8.1 ancestral haplotype (A*01:01-B*08:01-C*07:01-DRB1*03:01-DQB1*02:01)
+# recurs, and a few donors are homozygous at a locus by chance or by design.
+# The epitope table is epitopeprediction's per-peptide per-allele output for
+# the class I alleles the cohort carries, with the same allele spelling, so a
+# pick on the grid narrows it through a direct project link.
+_HLA_FREQUENCIES: dict[str, dict[str, float]] = {
+    "HLA-A": {
+        "A*02:01": 0.28,
+        "A*01:01": 0.15,
+        "A*03:01": 0.14,
+        "A*24:02": 0.10,
+        "A*11:01": 0.06,
+        "A*26:01": 0.04,
+        "A*32:01": 0.04,
+        "A*68:01": 0.04,
+        "A*31:01": 0.03,
+        "A*29:02": 0.03,
+        "A*23:01": 0.02,
+        "A*02:05": 0.02,
+        "A*30:01": 0.02,
+        "A*25:01": 0.02,
+        "A*02:06": 0.01,
+    },
+    "HLA-B": {
+        "B*07:02": 0.13,
+        "B*08:01": 0.11,
+        "B*44:02": 0.08,
+        "B*35:01": 0.06,
+        "B*15:01": 0.06,
+        "B*40:01": 0.06,
+        "B*44:03": 0.05,
+        "B*51:01": 0.05,
+        "B*18:01": 0.05,
+        "B*57:01": 0.04,
+        "B*27:05": 0.04,
+        "B*14:02": 0.03,
+        "B*13:02": 0.03,
+        "B*38:01": 0.02,
+        "B*35:03": 0.02,
+    },
+    "HLA-C": {
+        "C*07:01": 0.15,
+        "C*07:02": 0.14,
+        "C*04:01": 0.11,
+        "C*06:02": 0.09,
+        "C*05:01": 0.08,
+        "C*03:04": 0.07,
+        "C*12:03": 0.05,
+        "C*02:02": 0.05,
+        "C*03:03": 0.05,
+        "C*08:02": 0.04,
+        "C*16:01": 0.04,
+        "C*01:02": 0.04,
+        "C*15:02": 0.03,
+    },
+    "HLA-DRB1": {
+        "DRB1*15:01": 0.14,
+        "DRB1*03:01": 0.12,
+        "DRB1*07:01": 0.12,
+        "DRB1*04:01": 0.09,
+        "DRB1*01:01": 0.09,
+        "DRB1*13:01": 0.07,
+        "DRB1*11:01": 0.06,
+        "DRB1*13:02": 0.05,
+        "DRB1*04:04": 0.04,
+        "DRB1*11:04": 0.03,
+        "DRB1*08:01": 0.03,
+        "DRB1*12:01": 0.02,
+        "DRB1*14:01": 0.02,
+        "DRB1*16:01": 0.02,
+        "DRB1*01:02": 0.02,
+    },
+    "HLA-DQB1": {
+        "DQB1*03:01": 0.17,
+        "DQB1*06:02": 0.13,
+        "DQB1*02:01": 0.12,
+        "DQB1*05:01": 0.12,
+        "DQB1*03:02": 0.09,
+        "DQB1*02:02": 0.08,
+        "DQB1*06:03": 0.06,
+        "DQB1*03:03": 0.04,
+        "DQB1*04:02": 0.03,
+        "DQB1*06:04": 0.03,
+        "DQB1*05:03": 0.02,
+    },
+}
+_HLA_CLASS = {"HLA-A": "Class I", "HLA-B": "Class I", "HLA-C": "Class I"}
+_HLA_ANCESTRAL_81 = {
+    "HLA-A": "A*01:01",
+    "HLA-B": "B*08:01",
+    "HLA-C": "C*07:01",
+    "HLA-DRB1": "DRB1*03:01",
+    "HLA-DQB1": "DQB1*02:01",
+}
+# Donors given a designed genotype on top of the random draw: two 8.1
+# homozygotes (every locus homozygous), one 8.1 carrier (first haplotype only),
+# and an A*02:01 homozygote.
+_HLA_DESIGNED: dict[int, dict[str, tuple[str, str]]] = {
+    4: {locus: (a, a) for locus, a in _HLA_ANCESTRAL_81.items()},
+    15: {locus: (a, a) for locus, a in _HLA_ANCESTRAL_81.items()},
+    9: {locus: (a, "") for locus, a in _HLA_ANCESTRAL_81.items()},
+    20: {"HLA-A": ("A*02:01", "A*02:01")},
+}
+_EPITOPE_PROTEINS = ("SARS2_S", "SARS2_N", "EBV_EBNA1", "CMV_pp65")
+_EPITOPE_AA = "ACDEFGHIKLMNPQRSTVWY"
+
+
+def _hla_draw(rng: random.Random, locus: str) -> str:
+    alleles = list(_HLA_FREQUENCIES[locus])
+    weights = list(_HLA_FREQUENCIES[locus].values())
+    return rng.choices(alleles, weights=weights, k=1)[0]
+
+
+def generate_allele_grid_demo() -> None:
+    """Write allele_grid_demo.tsv (24 donors x 5 loci x 2) and its epitope table."""
+    rng = random.Random(20261019)
+    header = ["sample_id", "locus", "allele", "haplotype", "hla_class", "objective", "reads"]
+    rows: list[list] = []
+    for donor in range(1, 25):
+        sample = f"DONOR_{donor:02d}"
+        reads = int(rng.lognormvariate(math.log(5200), 0.45))
+        # OptiType's objective grows with the read support it explains; a
+        # low-coverage donor scores visibly lower on the side bar.
+        objective = round(reads * rng.uniform(0.17, 0.21), 2)
+        designed = _HLA_DESIGNED.get(donor, {})
+        for locus in _HLA_FREQUENCIES:
+            pair = designed.get(locus, ("", ""))
+            first = pair[0] or _hla_draw(rng, locus)
+            second = pair[1] or _hla_draw(rng, locus)
+            for haplotype, allele in ((1, first), (2, second)):
+                rows.append(
+                    [
+                        sample,
+                        locus,
+                        allele,
+                        haplotype,
+                        _HLA_CLASS.get(locus, "Class II"),
+                        objective,
+                        reads,
+                    ]
+                )
+    write_tsv(OUT / "allele_grid_demo.tsv", header, rows)
+
+    copies: dict[str, int] = {}
+    for r in rows:
+        if r[4] == "Class I":
+            copies[r[2]] = copies.get(r[2], 0) + 1
+    carried = sorted(copies, key=lambda a: (-copies[a], a))[:12]
+    peptides: list[tuple[str, str]] = []
+    for i in range(40):
+        length = 9 if i % 4 else 10
+        peptide = "".join(rng.choice(_EPITOPE_AA) for _ in range(length))
+        peptides.append((peptide, _EPITOPE_PROTEINS[i % 4]))
+    epitope_header = [
+        "peptide",
+        "protein",
+        "length",
+        "allele",
+        "affinity_nm",
+        "percentile_rank",
+        "binder",
+    ]
+    epitope_rows: list[list] = []
+    for peptide, protein in peptides:
+        for allele in carried:
+            # Log-normal affinities: most pairs do not bind, a few per allele
+            # fall under the 50 nM strong-binder line.
+            affinity = round(min(50000.0, rng.lognormvariate(math.log(3000), 1.8)), 1)
+            rank = round(min(100.0, max(0.01, affinity / 500.0 * rng.uniform(0.6, 1.4))), 2)
+            binder = "strong" if affinity < 50 else "weak" if affinity < 500 else "none"
+            epitope_rows.append([peptide, protein, len(peptide), allele, affinity, rank, binder])
+    write_tsv(OUT / "epitope_predictions_demo.tsv", epitope_header, epitope_rows)
+
+
+generate_allele_grid_demo()

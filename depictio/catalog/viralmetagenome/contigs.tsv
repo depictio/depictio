@@ -1,0 +1,15 @@
+sample	assembler	contig	length_bp	length_class	mapped_reads	read_share_pct	reads_per_kb	classification	taxid	cluster	cluster_role
+SRR11140744	megahit	megahit_scaffold1|size23354	23354	over 10 kb	15679	76.48	671.36	Classified	2697049	cl0	Member
+SRR11140744	megahit	megahit_scaffold2|size6647	6647	5 to 10 kb	4810	23.46	723.63	Classified	2697049	cl0	Member
+SRR11140744	megahit	megahit_scaffold3|size476	476	under 500 bp	13	0.06	27.31	Classified	2697049	cl0	Member
+SRR11140746	megahit	megahit_scaffold1|size29682	29682	over 10 kb	14803	100.0	498.72	Classified	2697049	cl0	Member
+SRR11140748	megahit	megahit_scaffold1|size29849	29849	over 10 kb	17429	100.0	583.91	Classified	2697049	cl0	Member
+SRR11140750	megahit	megahit_scaffold1|size3563	3563	1 to 5 kb	123	16.83	34.52	Classified	2697049	cl0	Member
+SRR11140750	megahit	megahit_scaffold2|size3486	3486	1 to 5 kb	134	18.33	38.44	Classified	2697049	cl0	Member
+SRR11140750	megahit	megahit_scaffold3|size2321	2321	1 to 5 kb	80	10.94	34.47	Classified	2697049	cl0	Member
+SRR11140750	megahit	megahit_scaffold4|size2114	2114	1 to 5 kb	157	21.48	74.27	Classified	2697049	cl0	Member
+SRR11140750	megahit	megahit_scaffold5|size1642	1642	1 to 5 kb	62	8.48	37.76	Classified	2697049	cl0	Member
+SRR11140750	megahit	megahit_scaffold6|size1156	1156	1 to 5 kb	18	2.46	15.57	Classified	2697049	cl0	Member
+SRR11140750	megahit	megahit_scaffold7|size1131	1131	1 to 5 kb	20	2.74	17.68	Classified	2697049	cl0	Member
+SRR11140750	megahit	megahit_scaffold8|size737	737	500 bp to 1 kb	11	1.5	14.93	Classified	2697049	cl0	Member
+SRR11140750	megahit	megahit_scaffold9|size697	697	500 bp to 1 kb	18	2.46	25.82	Classified	2697049	cl0	Member

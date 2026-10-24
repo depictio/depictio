@@ -1,0 +1,22 @@
+# nf-core/epitopeprediction's merged prediction tables. The per-tool runs
+# (MHCflurry, MHCnuggets, NetMHCpan, MixMHCpred ...) are converted by the
+# pipeline-local MERGE_PREDICTIONS step to one table per sample
+# (predictions/<sample>.tsv, long or --wide_format_output), and the variant
+# route writes its candidate peptides (variant_peptides/) with pVACseq. Both
+# come from pipeline-local processes, so there is no nf-core module behind
+# them; every output here reads one of those two tables.
+id: epitopeprediction
+name: nf-core/epitopeprediction
+description: >-
+  MHC binding predictions of nf-core/epitopeprediction: every peptide of every
+  sample scored against its alleles by each prediction tool (affinity, IC50,
+  percentile rank and the pipeline's binder call), summarised per peptide, per
+  allele and per tool, the agreement between tools, mutant peptides against their
+  wild type, and the candidate peptides cut from the variants.
+homepage: https://nf-co.re/epitopeprediction
+biotools_url: null  # no bio.tools entry for this pipeline's own tables
+source_url: https://github.com/nf-core/epitopeprediction/tree/3.2.0/modules/local
+edam_topics:
+  - http://edamontology.org/topic_2830 # Immunoproteins, genes and antigens
+  - http://edamontology.org/topic_0804 # Immunology
+stage: immune

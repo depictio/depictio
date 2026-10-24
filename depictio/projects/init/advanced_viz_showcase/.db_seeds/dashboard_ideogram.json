@@ -1,0 +1,421 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8da6"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8da6"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "ideo-text",
+      "component_type": "text",
+      "title": "Karyotypes",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "Genome completeness",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "One bar per chromosome or scaffold, all from the same origin and drawn to its length, so the three assemblies compare by size first. Each tick is a BUSCO gene coloured by status: genome_C, the draft, is short of Complete genes and splits two chromosomes over four scaffolds. Click a bar to open that sequence and zoom along it (Ctrl or Cmd + scroll, the buttons, or shift-drag), then filter the tab to it from the detail view; switch marks, density or automatic level of detail from the toolbar, and hide a status from the legend. Input: BUSCO full tables from nf-core/genomeqc; the density below reads binned VCF counts from nf-core/sarek.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null,
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ideo-busco",
+      "component_type": "advanced_viz",
+      "title": "BUSCO genes per assembly",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ideogram_busco_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8da7"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "BUSCO genes (eukaryota_odb10) located on three synthetic assemblies: 770 hits on 12 to 14 sequences each, coloured by status",
+        "data_collection_tag": "ideogram_busco_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8da7"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "770 BUSCO hits (eukaryota_odb10) on three assemblies, one karyotype each, coloured by status.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Genome completeness",
+      "viz_kind": "ideogram",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "ideogram",
+        "chrom_col": "sequence",
+        "start_col": "gene_start",
+        "end_col": "gene_end",
+        "value_col": null,
+        "category_col": "status",
+        "sample_col": "genome",
+        "label_col": "busco_id",
+        "chrom_length_col": "sequence_length",
+        "assembly": null,
+        "mode": "marks",
+        "bin_size": null,
+        "orientation": "horizontal",
+        "chromosomes": null,
+        "colour_scale": "Viridis",
+        "facet_by_sample": true,
+        "sample": null,
+        "max_facets": 6,
+        "max_chromosomes": 60,
+        "max_features": 20000,
+        "region_filter_enabled": true
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ideo-density",
+      "component_type": "advanced_viz",
+      "title": "Variant density",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ideogram_density_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8da8"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Small-variant density in 2 Mb bins over the 24 GRCh38 chromosomes, for two samples",
+        "data_collection_tag": "ideogram_density_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8da8"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Variants per 2 Mb bin on the 24 GRCh38 chromosomes; pick the sample in the controls.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Variant density",
+      "viz_kind": "ideogram",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "ideogram",
+        "chrom_col": "chrom",
+        "start_col": "start",
+        "end_col": "end",
+        "value_col": "variant_count",
+        "category_col": null,
+        "sample_col": "sample",
+        "label_col": null,
+        "chrom_length_col": null,
+        "assembly": "hg38",
+        "mode": "density",
+        "bin_size": null,
+        "orientation": "vertical",
+        "chromosomes": null,
+        "colour_scale": "Viridis",
+        "facet_by_sample": false,
+        "sample": null,
+        "max_facets": 6,
+        "max_chromosomes": 60,
+        "max_features": 20000,
+        "region_filter_enabled": true
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ideo-f-genome",
+      "component_type": "interactive",
+      "title": "Assembly",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ideogram_busco_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8da7"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "BUSCO genes (eukaryota_odb10) located on three synthetic assemblies: 770 hits on 12 to 14 sequences each, coloured by status",
+        "data_collection_tag": "ideogram_busco_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8da7"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "BUSCO scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "genome",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "BUSCO filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "icon_name": "mdi:dna",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "ideo-f-status",
+      "component_type": "interactive",
+      "title": "BUSCO status",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ideogram_busco_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8da7"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "BUSCO genes (eukaryota_odb10) located on three synthetic assemblies: 770 hits on 12 to 14 sequences each, coloured by status",
+        "data_collection_tag": "ideogram_busco_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8da7"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "BUSCO scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "status",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "BUSCO filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "icon_name": "mdi:check-decagram-outline",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-ideo-f-genome",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-ideo-f-status",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-ideo-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ideo-busco",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ideo-density",
+      "x": 0,
+      "y": 7,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Karyotypes",
+  "subtitle": "Whole genomes as bars: BUSCO genes on three assemblies coloured by status, and the small-variant density of a GRCh38 sample in 2 Mb heat bands.",
+  "icon": "mdi:format-align-left",
+  "icon_color": "grape",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 44,
+  "main_tab_name": null,
+  "tab_icon": "mdi:format-align-left",
+  "tab_icon_color": "grape",
+  "tab_group": null,
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "BUSCO scope",
+      "icon": "mdi:filter-variant",
+      "color": "grape",
+      "description": "Restricts which assemblies and which BUSCO statuses the karyotypes carry",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Genome completeness",
+      "icon": "mdi:dna",
+      "color": "grape",
+      "description": "Where the conserved single-copy genes of each assembly sit, and which are duplicated or fragmented",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Variant density",
+      "icon": "mdi:chart-bar",
+      "color": "grape",
+      "description": "Variants called per 2 Mb bin along the reference genome",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "category_colors": null,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

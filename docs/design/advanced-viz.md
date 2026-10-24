@@ -803,6 +803,79 @@ storage origin must be in the CSP `connect-src` (see `docs/indexed-files.md`). T
 including the opt-in structure resolver and its privacy trade-off, is in
 `docs/design/protein-structure.md`.
 
+### Wave 4 kinds (2026-10)
+
+Four kinds came with the wave 4 nf-core templates, each guided by a template that had no
+honest way to draw its main table. `ideogram` and `ranked_distribution` are bound by catalog
+outputs; `allele_grid` and `spatial_cells` are bound too but stay in `INCUBATING` until the
+section 8 review against the nearest existing kind (`oncoplot`, `embedding`) is decided. Their
+showcase tabs draw both from one table for that comparison.
+
+**`ideogram`.** A karyotype: one bar per chromosome, all from a common origin and drawn to the
+chromosome's length on one scale shared by every facet, so genomes compare by size first.
+Required roles `chrom`, `start`, `end`; optional `value`, `category`, `sample` (one karyotype per
+value, `facet_by_sample`, capped by `max_facets`, else a sample picker), `label` and
+`chrom_length`. Bar length comes from `chrom_length_col` (a FASTA index), else the `assembly`
+table the genome chord ring uses (hg38 / hg19 / mm10), else the furthest feature; bars follow
+natural order (1..22, X, Y, M, then contigs by numeric-aware name), or the `chromosomes` list
+when given, and `max_chromosomes` keeps the longest. `mode: marks` draws a glyph per row,
+coloured by category or on a sequential scale by value; a feature narrower than 2 px becomes a
+tick that overhangs the bar. `mode: density` draws heat bands: rows already binned with a value
+are drawn as they are, otherwise rows fall in `bin_size` bins as a mean value or a count. The
+server never samples (`none`); above `max_features` the tile draws density instead of marks and
+says so in the echo, never a subset. Like `genome_chord` it is hand-drawn SVG with every number
+in `ideogram/ideogramLayout.ts`, tested without a DOM. A click on a bar, or a drag along it,
+emits the `genome_selection` pair a `genome_view` brush emits (`region_filter_enabled`, on by
+default); a region from another tile is shaded on the matching bar through `genomicAxis.ts`.
+Producers: tidk windows and per-sequence BUSCO counts (nf-core/genomeqc), binned VCF densities
+(`vcf/variant_density`, nf-core/rnavar).
+
+**`ranked_distribution`.** Puts the top N features of a score on one ordered category axis
+shared by two linked Plotly panels: each feature's distribution across samples as a box or a
+violin, and a lollipop of the score that ranked it, rank 1 first. In long form (`value_col`,
+one row per feature and sample) the renderer takes quartiles and Tukey whiskers itself.
+Pre-aggregated (`q1_col`, `median_col`, `q3_col`, optional `lower_col`, `upper_col`,
+`mean_col`, one row per feature) is how nf-core/stableexpression's cohort of thousands of
+samples ships. The model refuses half a shape and a violin of statistics. A bound `rank_col`
+keeps the pipeline's own order; otherwise the score ranks, `ascending` by default since a lower
+stability score is more stable. The server never samples it; `max_features` caps `top_n`. A
+click emits a `scatter_selection` on `selection_column`, else `feature_id_col`, which a record
+card can follow, and picks from any tile are marked rather than filtering the tile. It is a new
+set of marks, not a preset: a box figure cannot order its categories by a column it does not
+draw, nor hold that column beside the boxes.
+
+**`allele_grid`.** A sample by locus grid of diploid genotypes: the HLA typing of
+nf-core/hlatyping (OptiType's A1 to C2 melted long), later LILAC in oncoanalyser. Required
+roles `sample_id`, `locus`, `allele`; optional `haplotype` (1/2, else the order of a sample's
+rows at the locus), `category` (HLA class, a header band over the columns), `value` / `reads`
+(per-sample side bars, or `reads_as_opacity`). Each cell is split into its two haplotypes. The
+allele group (first field) picks a hue family and the full allele a shade inside it, so every
+A*02 reads as one family; a locus whose two calls agree at the display `resolution` (1 to 4
+fields, default 2) is one merged cell with a dot, and a missing call is a dashed half.
+Nomenclature parsing (HLA-A*02:01:01:01, A*02:01, A02:01, pre-2010 A*0201, N/G suffixes),
+pairing, ordering and the `max_samples` / `max_loci` guards live in
+`allele_grid/alleleGridLayout.ts`. The server never samples: a sampled genotype loses a
+haplotype. A click on an allele half emits a `scatter_selection` carrying every raw value that
+truncates to the picked label. Alleles are spelled as epitopeprediction spells them
+(`HLA-A*02:01`), but the two runs are separate projects and links join collections within one
+project only, so the pick does not reach the peptide tables yet. The case for a kind: an oncoplot cell holds one value, so a heterozygous locus shows
+one of its two alleles.
+
+**`spatial_cells`.** Segmented cells drawn where they sit in the image. One row per cell
+(`cell_id`, `x`, `y` required; `value`, `category`, `sample`, `area` optional) is the table
+nf-core/mcmicro's MCQUANT writes; Xenium `cells.csv` and molkart bind the same way. scattergl in
+the frame of the image: origin top-left, y down (`y_axis: image`, or `cartesian`), equal aspect
+always, the frame being the image and not the data's bounding box, each marker drawn at the
+diameter its area implies at the current zoom. In a wide table the colouring marker is picked
+in the tile from `value_columns` (or the numeric columns `value_columns_pattern` matches),
+through `asinh(x / cofactor)` or `log1p`, clipped to `clip_low_pct`-`clip_high_pct` of the
+image shown. A sample is one image (`sample_display: select` or `facet`). An optional underlay
+comes from an Image collection (one preview per sample, `background_dc_tag`) or
+`background_url`, placed at pixel (0, 0) and scaled by `background_image_scale`. A lasso emits a
+`scatter_selection` on `cell_id` (MCQUANT's CellID restarts per image: bind a sample-qualified
+id). Sampling is `hash`, as for `embedding`. The case for a kind is the underlay and the
+per-image frame; without them it would be `embedding` with a spatial view.
+
 ---
 
 ## Appendix A — React viewer audit (current state)

@@ -1,0 +1,169 @@
+# Megatest manifest for nf-core/viralmetagenome 1.2.0 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline viralmetagenome --version 1.2.0 --max-file-mb 20 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing, plus the vendored input/ tables
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root; `*` crosses
+# `/`) and are mirrored 1:1 below the destination, which becomes DATA_ROOT.
+#
+# test_full profile: four paired-end metagenomic libraries of one virus,
+# preprocessed (fastp, prinseq, Kraken2 host removal), assembled with MEGAHIT,
+# clustered against the reference pool (CD-HIT-EST), refined for one iteration
+# and called with iVar, then mapped once more against each mapping constraint
+# of the run's constraint sheet (two named references and one pool-selected
+# one). The run is 320 MB in 994 objects; BAM, BAI, FASTQ, mpileup, bwa-mem2
+# indices, Mash sketches and Picard PDFs are left out, so the subset is about
+# 20 MB.
+#
+# Every published file name carries the run's global prefix
+# (`--global_prefix`, `<prefix>_<date>_<version>_<run name>-`), so every
+# template glob matches on the suffix. The pipeline takes its sample metadata
+# through --metadata and merges it into the samples overview table but does not
+# publish the file itself: the test_full metadata is vendored under
+# input/metadata.tsv (the nf-core/test-datasets metadata_testfull.tsv with one
+# added design column, `specimen`), and download_test_data.sh copies it to
+# {dest}/input/. The mapping-constraint sheet is vendored next to it for
+# reference only; no recipe reads it.
+#
+# The run wrote a MultiQC report without a parquet (multiqc_data/*.txt and
+# multiqc_data.json only), so the manifest fetches the raw MultiQC inputs and
+# the parquet Depictio reads is produced afterwards by
+#
+#   python -m depictio.dev_scripts.multiqc_reprocess --src <dest> --dest <dest> --exclude '*_mqc.tsv'
+#
+# which writes <dest>/multiqc/multiqc_data/multiqc.parquet + REPROCESSED.json.
+# The per-sample cluster summaries (`*.summary_mqc.tsv`) are left out: re-read
+# alone they become one custom-content section per sample, named after the run
+# prefix. The pipeline's other custom-content sections (contig completeness,
+# contig taxonomy, failed contig quality) are built in the work directory and
+# not published, so the reprocessed report holds the tool modules only
+# (fastqc, fastp, kraken, samtools, picard, mosdepth, bcftools, prokka).
+pipeline: viralmetagenome
+version: "1.2.0"
+# s3://nf-core-awsmegatests/viralmetagenome/results-<results_sha>/ == the 1.2.0 release tag_sha.
+results_sha: "74064a43f4b00c163c22bcfc9cf1d84a2a69e988"
+run_root: ""
+multiqc:
+  version: "1.27"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: true
+keys:
+  - pipeline_info/params_*.json
+  - pipeline_info/*software*versions*.yml
+  - pipeline_info/execution_trace_*.txt
+  # The four overview tables the pipeline writes (samples, final contigs,
+  # contigs at every refinement step, constraint mappings).
+  - overview-tables/*.tsv
+  # Provenance of the original MultiQC report (version banner, module list).
+  # The reprocess tool skips every multiqc*/ directory when it re-parses inputs.
+  - multiqc/*multiqc_data/multiqc_data.json
+  - multiqc/*multiqc_data/*.txt
+  # --- raw MultiQC inputs (re-parsed by MultiQC 1.35) and recipe inputs ---
+  # Preprocessing: fastp JSON reports and logs, FastQC on raw, trimmed and
+  # host-removed reads, prinseq logs, the Kraken2 host-removal reports.
+  - preprocessing/fastp/report/*.json
+  - preprocessing/fastp/log/*.log
+  - preprocessing/fastqc/*_fastqc.zip
+  - preprocessing/prinseq/log/*
+  - preprocessing/hostremoval-kraken2/*.report.txt
+  # De novo assembly: QUAST and idxstats per assembler, SSPACE logs, contigs.
+  - assembly/assemblers/*/quast/*.tsv
+  - assembly/assemblers/*/idxstats/*.idxstats
+  - assembly/assemblers/*/sspace_basic/log/*.txt
+  - assembly/assemblers/*/contigs/*.fa.gz
+  # Polishing: BLAST of the contigs against the reference pool, the
+  # classification and clustering of the contigs, the cluster summaries.
+  - assembly/polishing/blast/*.tsv
+  - assembly/polishing/cdhitest/*.clusters.tsv
+  - assembly/polishing/intermediate/blast/hits/*.txt
+  - assembly/polishing/intermediate/cluster/*.tsv
+  - assembly/polishing/intermediate/cluster/*.json
+  - assembly/polishing/intermediate/precluster/*.tsv
+  - assembly/polishing/intermediate/precluster/*.txt
+  # Iterative refinement: mapping metrics, iVar calls, dedup logs.
+  - assembly/polishing/iterations/*/metrics/*_metrics
+  - assembly/polishing/iterations/*/metrics/*.flagstat
+  - assembly/polishing/iterations/*/metrics/*.idxstats
+  - assembly/polishing/iterations/*/metrics/*.stats
+  - assembly/polishing/iterations/*/metrics/*.txt
+  - assembly/polishing/iterations/*/custom-vcf/*.tsv
+  - assembly/polishing/iterations/*/deduplicate/log/*.txt
+  - assembly/polishing/iterations/*/variants/ivar/*.tsv
+  - assembly/polishing/iterations/*/variants/ivar/*.bcftools_stats.txt
+  - assembly/polishing/iterations/*/variants/ivar/*.variant_counts.log
+  # Consensus QC: CheckV, QUAST, Prokka, BLAST and MMseqs2 annotation, the
+  # consensus sequences and their masks.
+  - consensus/quality_control/checkv/*.tsv
+  - consensus/quality_control/quast/*.tsv
+  - consensus/quality_control/prokka/*.tsv
+  - consensus/quality_control/prokka/*.txt
+  - consensus/quality_control/prokka/*.gff
+  - consensus/quality_control/blast/*.txt
+  - consensus/quality_control/mmseqs-search/*.tsv
+  - consensus/seq/*.fasta
+  - consensus/mask/*.bed
+  - consensus/mask/*.qual.txt
+  # Final variant calling against each mapping constraint.
+  - variants/ivar/*.tsv
+  - variants/ivar/*.bcftools_stats.txt
+  - variants/ivar/*.variant_counts.log
+  - variants/ivar/*.vcf
+  - variants/ivar/*.vcf.gz
+  - variants/ivar/*.tbi
+  - variants/mapping-info/metrics/*_metrics
+  - variants/mapping-info/metrics/*.flagstat
+  - variants/mapping-info/metrics/*.idxstats
+  - variants/mapping-info/metrics/*.stats
+  - variants/mapping-info/metrics/*.txt
+  - variants/mapping-info/metrics/*.bed.gz
+  - variants/mapping-info/metrics/*.csi
+  - variants/mapping-info/mash/screen/*
+  - variants/mapping-info/mash/select-ref/*
+  - variants/mapping-info/custom-vcf/*.tsv
+  - variants/mapping-info/deduplicate/log/*.txt
+# Megatest facts that must never reach a dashboard text (lint rule e in
+# depictio/tests/models/test_template_conventions.py): the run accessions, the
+# virus and its references, the cell lines and specimens, the run name.
+forbidden_terms:
+  - SRR11140744
+  - SRR11140746
+  - SRR11140748
+  - SRR11140750
+  - SRR111407
+  - PRJNA607948
+  - SARS-CoV-2
+  - SARS-COV-2
+  - coronavirus
+  - covid19
+  - MN908947
+  - NC_045512
+  - Wuhan
+  - BA2
+  - BA24
+  - vero
+  - Vero
+  - swab
+  - stoic_hodgkin
+prefix_keys: []
+renames: {}
+post_fetch_help: |
+  === Copy the vendored metadata (the pipeline does not publish it) ===
+
+  mkdir -p {dest}/input && cp depictio/projects/nf-core/viralmetagenome/1.2.0/input/*.tsv {dest}/input/
+
+  === Reprocess MultiQC (the run wrote no parquet, Depictio reads >= 1.31 parquet) ===
+
+  python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest} --exclude '*_mqc.tsv' --dry-run
+  python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest} --exclude '*_mqc.tsv'
+  # -> {dest}/multiqc/multiqc_data/multiqc.parquet + REPROCESSED.json
+
+  === Quick test commands ===
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli ingest --template nf-core/viralmetagenome/1.2.0 --data-root {dest} --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli ingest --template nf-core/viralmetagenome/1.2.0 --data-root {dest}

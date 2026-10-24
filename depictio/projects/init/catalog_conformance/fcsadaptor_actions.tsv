@@ -1,0 +1,4 @@
+genome	seq_id	seq_len	action	start	end	flagged_bp	adaptor	source_type
+Apis_mellifera	NC_037639.1	16089512	TRIM	15586906	15586930	25	Pacific Biosciences Blunt Adapter	ADAPTOR
+Bombus_impatiens			none			0		
+Polistes_canadensis			none			0		

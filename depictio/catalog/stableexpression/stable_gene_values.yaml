@@ -1,0 +1,21 @@
+id: stableexpression_stable_gene_values
+name: Most stable genes, sample values
+mode: expression/stability-values
+description: >-
+  The normalised expression of the very top candidates of each expression
+  section (2 per section by default), one row per gene and sample that measured
+  it, with the sample's dataset. The long form lets a dashboard recompute each
+  gene's box (or violin) from the samples in view, a platform or a dataset at a
+  time, which the pre-aggregated box statistics cannot.
+find:
+  path_glob: "**/merged_data/all_counts.parquet"
+recipe: stableexpression/stable_gene_values.py
+fixture: stable_gene_values.tsv
+renders_as:
+  - id: stability_violins
+    component: advanced_viz
+    kind: ranked_distribution
+    roles: { feature_id: gene_id, score: stability_score, rank: section_rank, label: gene_name, group: section, value: value }
+  - { id: value_box, component: figure, visu_type: box, dict_kwargs: { x: gene_name, y: value, color: section } }
+  - { component: card, column: sample, aggregation: nunique, secondary_layout: top_n, breakdown_col: dataset, top_n_count: 3 }
+  - { component: interactive, interactive_type: MultiSelect, column_name: dataset }
