@@ -14,6 +14,8 @@ Options:
     --source PATH   The logo PNG (default docs/images/favicon.png).
     --output DIR    Where to write the emojis (default docs/images/slack-emojis).
     --size PX       Emoji side in pixels (default 128, Slack's recommended size).
+    --parrot SRC    The party parrot GIF to remix for :depictio-parrot:, a path or URL
+                    (default: downloaded from cultofthepartyparrot.com).
 
 How it works:
     1. Every opaque source pixel is given to the nearest of the logo's eight flat
@@ -30,8 +32,10 @@ from __future__ import annotations
 
 import argparse
 import colorsys
+import io
 import math
 import random
+import urllib.request
 from pathlib import Path
 
 import numpy as np
@@ -54,6 +58,8 @@ HUB = (470, 470)
 # Canvas half-width around the hub: the farthest petal tip is ~470 px out.
 RADIUS = 480
 SUPERSAMPLE = 4
+# The standard party parrot, remixed for :depictio-parrot: (not vendored in the repo).
+PARROT_URL = "https://cultofthepartyparrot.com/parrots/hd/parrot.gif"
 FRAME_MS = 40
 
 
@@ -249,6 +255,62 @@ def bloom(layers, size, n=28):
     return frames
 
 
+def fetch_parrot(source: str) -> Image.Image:
+    """The standard party parrot: a local file, or downloaded from the Cult of the Party Parrot."""
+    if source.startswith(("http://", "https://")):
+        # The site turns away urllib's default user agent.
+        req = urllib.request.Request(source, headers={"User-Agent": "curl/8"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return Image.open(io.BytesIO(resp.read()))
+    return Image.open(source)
+
+
+def parrot(layers, size, sprite: Image.Image):
+    """The party parrot in depictio colours, a spinning rosette for a hat.
+
+    Each frame's flat body colour is swapped for a colour walked along the petal palette
+    (outline and beak untouched), and the hat follows the top of the head.
+    """
+    frames = [f.convert("RGBA") for f in ImageSequence.Iterator(sprite)]
+    durations = [f.info.get("duration", FRAME_MS) for f in ImageSequence.Iterator(sprite)]
+    # The petals in hue order make a rainbow that loops, like the original parrot's.
+    hls = sorted(colorsys.rgb_to_hls(*(c / 255 for c in rgb)) for rgb in PETALS.values())
+    hat = round(size * 0.34)
+    out = []
+    for k, frame in enumerate(frames):
+        frame = frame.resize((size, size), Image.Resampling.NEAREST)
+        arr = np.asarray(frame).astype(float)
+        opaque = arr[..., 3] > 0
+        rgb = arr[..., :3]
+        bright = opaque & (rgb.sum(-1) > 300)
+        colors, counts = np.unique(rgb[bright].astype(int), axis=0, return_counts=True)
+        body = colors[counts.argmax()].astype(float)
+
+        pos = k * len(hls) / len(frames)
+        (h0, l0, s0), (h1, l1, s1) = hls[int(pos)], hls[(int(pos) + 1) % len(hls)]
+        frac = pos - int(pos)
+        dh = (h1 - h0 + 0.5) % 1 - 0.5  # the short way round the hue circle
+        target = np.array(
+            colorsys.hls_to_rgb((h0 + dh * frac) % 1, l0 + (l1 - l0) * frac, s0 + (s1 - s0) * frac)
+        )
+        target *= 255
+        near = opaque & (np.abs(rgb - body).sum(-1) < 90)
+        rgb[near] = np.clip(rgb[near] - body + target, 0, 255)
+        frame = Image.fromarray(arr.astype(np.uint8), "RGBA")
+
+        rows = np.nonzero(opaque.any(1))[0]
+        top = rows[0]
+        head_x = np.nonzero(opaque[top : top + 4].any(0))[0].mean()
+        rosette = compose(layers, hat, angle=360 * k / len(frames), scale=0.98)
+        canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        canvas.alpha_composite(frame)
+        x = int(np.clip(round(head_x - hat / 2), 0, size - hat))
+        y = int(max(0, top - hat * 0.75))
+        canvas.alpha_composite(rosette, (x, y))
+        out.append(canvas)
+    return out, durations
+
+
 def rose_colors() -> list[tuple[int, int, int]]:
     # Every petal in the pink petal's hue, keeping each petal's own lightness so they stay distinct.
     ph, _, ps = colorsys.rgb_to_hls(*(c / 255 for c in PETALS["pink"]))
@@ -290,6 +352,7 @@ def main() -> None:
     parser.add_argument("--source", type=Path, default=root / "docs/images/favicon.png")
     parser.add_argument("--output", type=Path, default=root / "docs/images/slack-emojis")
     parser.add_argument("--size", type=int, default=128)
+    parser.add_argument("--parrot", default=PARROT_URL)
     args = parser.parse_args()
 
     out: Path = args.output
@@ -320,6 +383,7 @@ def main() -> None:
     gif("depictio-loading", *loading(layers, size))
     gif("depictio-pulse", *pulse(layers, size))
     gif("depictio-bloom", bloom(layers, size))
+    gif("depictio-parrot", *parrot(layers, size, fetch_parrot(args.parrot)))
     gif(
         "depictio-rose-spin",
         [compose(layers, size, angle=360 * k / 32, scale=0.98, recolor=rose) for k in range(32)],

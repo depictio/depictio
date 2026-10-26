@@ -17,6 +17,7 @@ Nextflow Slack (`:nextflow-party:`, `:nf-core-spin:`, ...).
 | ![](depictio-loading.gif) | `:depictio-loading:` | petals light up one by one, clockwise |
 | ![](depictio-pulse.gif) | `:depictio-pulse:` | heartbeat |
 | ![](depictio-bloom.gif) | `:depictio-bloom:` | petals drift out from the hub and back |
+| ![](depictio-parrot.gif) | `:depictio-parrot:` | the party parrot in depictio colours, rosette hat |
 | ![](depictio-rose-spin.gif) | `:depictio-rose-spin:` | the pink rosette, spinning |
 
 All are 128x128 with a transparent background and under Slack's 128 KB limit.
@@ -33,5 +34,10 @@ The emojis are generated from `docs/images/favicon.png`, never edited by hand:
 ```bash
 uvx --with pillow --with numpy python scripts/generate_slack_emojis.py
 ```
+
+`:depictio-parrot:` remixes the standard party parrot from the
+[Cult of the Party Parrot](https://cultofthepartyparrot.com/), which the script downloads
+at generation time (`--parrot PATH` to use a local copy); the sprite itself is not kept
+in this repo.
 
 See the script's docstring for options (`--size`, `--source`, `--output`).
