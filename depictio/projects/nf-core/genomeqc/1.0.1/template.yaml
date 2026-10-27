@@ -1,0 +1,993 @@
+# nf-core/genomeqc Template v1.0.1 - genome assembly and annotation quality
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/genomeqc/1.0.1 --data-root /path/to/results \
+#     [--var METADATA_FILE=/path/to/genome_design.tsv]
+#
+# Validated against the nf-core/genomeqc AWS megatest results of the 1.0.1 release
+#   s3://nf-core-awsmegatests/genomeqc/results-bce44e5b558e21b38d4dd2b6521302246b4dae6d/
+# (`test_full`: three Hymenoptera RefSeq assemblies with their annotations, the
+# hymenoptera_odb10 BUSCO lineage, FCS-GX on its test-only database,
+# RepeatMasker with RepeatModeler). megatest.yaml lists the fetched subset.
+# Nothing below is specific to that run.
+#
+# What the run publishes, and so what this template reads (paths under DATA_ROOT):
+#   quast/<a>/<a>.quast/transposed_report.tsv      QUAST contiguity (catalog quast/*)
+#   busco/{genome,protein}/<a>/stats/*-busco.batch_summary.txt
+#                                                  BUSCO on the assembly and on its
+#                                                  proteins (catalog busco/*)
+#   busco/<mode>/<a>/ideogram/<a>.csv              complete BUSCOs per sequence
+#                                                  (this template's busco_karyotype.py)
+#   tidk/<a>/search/<kind>/<a>.tsv                 telomeric repeats per 10 kb window,
+#                                                  and every sequence's length (catalog tidk/*)
+#   agat/<a>/stats/<a>.stats.txt                   AGAT sp_statistics (catalog agat/*)
+#   gene_overlaps/<a>.counts.tsv                   overlapping genes (gene_overlaps.py)
+#   orthofinder/<v>/input/OrthoFinder/Results_*/   OrthoFinder summary tables only
+#                                                  (catalog orthofinder/*); its tens of
+#                                                  thousands of per-orthogroup files are not read
+#   ortho_seq_count/species_ortho_seq_count.tsv    sequences carrying orthologues
+#   fcsgx/fcs_table.tsv, decontamination/fcs-gx/<a>.fcs_gx_report.txt,
+#   decontamination/fcs-adaptor/<a>.fcs_adaptor_report.txt,
+#   decontamination/tiara/raw/<a>.txt              contamination (catalog fcsgx, fcsadaptor, tiara)
+#   repeatmasker/<a>/<a>.tbl                       RepeatMasker summary (catalog repeatmasker/*)
+#   multiqc/multiqc_data/multiqc.parquet           MultiQC 1.35, QUAST only
+# Not read: the masked FASTAs and RepeatMasker .out tables (50 to 250 MB each),
+# the tidk and BUSCO plots, the tree summary plot and the HTML / Excel reports.
+#
+# Design. The samplesheet (assembly, ncbi, taxid) is not published and carries
+# no design column, so the design is an optional table declared through
+# METADATA_FILE (assembly name in a column named `sample`, or in the first
+# column; every other column a factor such as a family), the ampliseq
+# convention. The genome hub joins it; GROUP_COL is its first factor column by
+# default. Without it the hub carries one constant group.
+#
+# Routes (RULES.md section 13). Every tool collection but QUAST is optional,
+# and the import prunes the tiles of a collection a run did not write:
+#   - a genome-only run (no annotation): no AGAT, gene overlaps, OrthoFinder or
+#     protein BUSCO, so the Annotation and Orthology tabs are dropped; the
+#     karyotype reads busco/genome/<a>/ideogram/ instead;
+#   - --skip_tidk: no tidk, so no sequence lengths and no karyotype either
+#     (the Karyotype tab is dropped with it);
+#   - no FCS-GX database (--gxdb / --gxdb_manifest unset): no decontamination
+#     and no Contamination tab;
+#   - --te unset: no RepeatMasker and no Repeats tab; `--te hite` writes HiTE
+#     output, which no recipe reads, so it also has no Repeats tab;
+#   - --skip_busco: no BUSCO, so no Completeness tab and no karyotype;
+#   - the design table (METADATA_FILE): the group filter, colours and splits.
+# ============================================================================
+template:
+  template_id: "nf-core/genomeqc/1.0.1"
+  description: "nf-core/genomeqc template for genome assembly and annotation quality: QUAST contiguity, BUSCO completeness of the assembly and its proteins, a karyotype of the BUSCO genes and telomeric repeats, AGAT gene models, OrthoFinder orthogroups shared between genomes, FCS-GX and Tiara contamination, and RepeatMasker repeat content."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory of one genomeqc run (quast/, busco/, tidk/, agat/, orthofinder/, decontamination/, multiqc/, pipeline_info/)."
+      required: true
+    - name: "METADATA_FILE"
+      description: "Optional design table (TSV): assembly name in a column named sample (or in the first column), one column per factor such as a family or a clade. Joined into the genome hub: enables the design filters, the group colours and the group splits."
+      required: false
+    - name: "METADATA_ID_COL"
+      description: "Design table assembly-name column. Auto-detected as the first column; defaults to 'sample'."
+      required: false
+    - name: "GROUP_COL"
+      description: "Design column the dashboards group and filter genomes by. Auto-detected as the first factor column of METADATA_FILE."
+      required: false
+    - name: "GROUP_COL_DISPLAY"
+      description: "Auto-populated: title-cased GROUP_COL for titles."
+      required: false
+    - name: "ANNOTATION_COLS"
+      description: "Auto-populated: comma-separated factor columns of METADATA_FILE."
+      required: false
+  # Variables for the BUNDLED reference dataset: the megatest run with the
+  # design table vendored in input/ (download_test_data.sh copies it there).
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/genome_metadata.tsv"
+      METADATA_ID_COL: "sample"
+      GROUP_COL: "family"
+      GROUP_COL_DISPLAY: "Family"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "hook_url"
+          - "email*"
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      # The pipeline's own parameter groups (nextflow_schema.json $defs at 1.0.1);
+      # institutional and generic options are folded into Run context.
+      - group: "Input/output"
+        key_patterns: ["input"]
+      - group: "Pipeline mode"
+        key_patterns: ["genome_only", "kvalue", "container_engine"]
+      - group: "BUSCO"
+        key_patterns: ["groups", "busco_lineage", "busco_lineages_path", "busco_config", "busco_clean", "min_buscos", "skip_busco"]
+      - group: "Decontamination"
+        key_patterns: ["gxdb", "gxdb_manifest", "ramdisk", "save_cleaned_genome", "save_cleaned_adaptor"]
+      - group: "Annotation"
+        key_patterns: ["val_tool"]
+      - group: "Orthology"
+        key_patterns: ["ortho_version", "save_orthofinder_results", "save_longest_isoform"]
+      - group: "TIDK"
+        key_patterns: ["skip_tidk", "repeat"]
+      - group: "Tree summary"
+        key_patterns: ["tree_scale", "tree_margin", "tree_style", "circular_rings", "quality_preset", "quality_thresholds", "show_ring_values", "skip_plots_genome_anno", "skip_plots_genome_only"]
+      - group: "Save intermediate files"
+        key_patterns: ["save_sorted_seqs", "save_validated_annotation", "save_assembly", "save_extracted_seqs", "save_filtered_seqs"]
+      - group: "TE annotation"
+        key_patterns: ["te", "is_plant", "curated_lib", "famdb_library", "famdb_lineage", "run_repeatmodeler", "repeatmasker_speed", "RM_download_db", "RM_db", "te_clusterer", "te_cluster_identity", "te_cluster_coverage"]
+      - group: "Run context"
+        key_patterns: ["outdir", "email", "version", "publish_dir_mode", "email_on_fail", "plaintext_email", "max_multiqc_email_size", "monochrome_logs", "validate_params", "pipelines_testdata_base_path", "trace_report_suffix", "help", "help_full", "show_hidden", "genomes", "config_profile_*", "custom_config_*", "multiqc_*"]
+    highlight:
+      - "busco_lineage"
+      - "val_tool"
+      - "ortho_version"
+      - "te"
+      - "run_repeatmodeler"
+      - "gxdb_manifest"
+      - "skip_tidk"
+      - "genome_only"
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    - if_var_absent: "METADATA_FILE"
+      remove_dc_tags: ["metadata"]
+      dashboards: ["dashboards/base.yaml"]
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Genome Assembly and Annotation QC"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "genomeqc"
+    version: "1.0.1"
+    engine:
+      name: "nextflow"
+      version: "26.04.6"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/genomeqc"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Design table (optional), read by the genome hub at the end
+      # ----------------------------------------------------------------
+      - data_collection_tag: "metadata"
+        optional: true
+        description: "Genome design table (optional, --var METADATA_FILE=...): one row per assembly, one column per factor"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "sample": "Assembly name, as genomeqc names its output directories. Every other column is a design factor and is passed through."
+
+      # ----------------------------------------------------------------
+      # MultiQC. Native 1.35 parquet (not reprocessed). The report holds
+      # QUAST only (multiqc.list_plots(): Assembly Statistics, Number of
+      # Contigs) and names each row after the assembly FASTA.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "Native MultiQC report: QUAST assembly statistics and contig counts per assembly"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
+          dc_specific_properties:
+            s3_location: null
+            modules:
+              - "quast"
+            plots:
+              quast:
+                - "Assembly Statistics"
+                - "Number of Contigs"
+
+      # ----------------------------------------------------------------
+      # QUAST, one transposed report per assembly (catalog quast/*). QUAST
+      # labels the row after the FASTA (the RefSeq file name); the genome
+      # hub maps that label to the assembly name from the report's path.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "quast_assembly_raw"
+        description: "Raw QUAST transposed reports, one row per assembly, with the file path (input of quast_assembly_report and of the genome hub)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "^transposed_report\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+            columns_description:
+              "Assembly": "Assembly label QUAST printed (the FASTA name)"
+              "source_path": "Report path; the assembly name is its directory"
+
+      - data_collection_tag: "quast_assembly_report"
+        description: "QUAST reference-free statistics, one row per assembly: sequences, length, N50, L50, GC and Ns"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "quast/assembly_report.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "assembly_id": "Assembly label QUAST printed (the FASTA name); the genome hub's assembly_label"
+              "assembler": "Assembler part of an `<assembler>-<sample>` label (null here)"
+              "sample": "Sample part of such a label (null here)"
+              "n_contigs": "Sequences past QUAST's minimum length"
+              "total_length": "Assembled bases"
+              "largest_contig": "Longest sequence"
+              "n50": "N50"
+              "n75": "N75 (null when QUAST did not report it)"
+              "l50": "L50"
+              "l75": "L75 (null when QUAST did not report it)"
+              "gc_percent": "GC percent"
+              "ns_per_100_kbp": "N bases per 100 kbp"
+              "predicted_rrna_genes": "Predicted rRNA genes, as QUAST printed them"
+              "contigs_over_1kb": "Sequences at least 1 kbp long"
+              "length_over_1kb": "Bases in those sequences"
+
+      - data_collection_tag: "quast_length_ladder"
+        description: "QUAST length ladder, one row per assembly and minimum sequence length: sequences and bases at or above it"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "quast/length_ladder.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "assembly_id": "Assembly label QUAST printed (the FASTA name)"
+              "assembler": "Assembler part of the label (null here)"
+              "sample": "Sample part of the label (null here)"
+              "min_contig_length": "Length threshold, bp"
+              "n_contigs": "Sequences at least that long"
+              "total_length": "Bases in those sequences"
+              "length_fraction": "Those bases over the assembly's length"
+
+      # ----------------------------------------------------------------
+      # BUSCO, on the assembly (genome mode) and on its annotated proteins
+      # (proteins mode, only with an annotation). One raw scan over every
+      # batch summary; the tidy summary keeps the mode the run name carries.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "busco_batch_raw"
+        optional: true  # --skip_busco
+        description: "Raw BUSCO batch summaries, genome and protein mode (input of busco_batch_summary)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "^.+-busco\\.batch_summary\\.txt$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+              include_file_paths: "source_path"
+              infer_schema_length: 0
+              # A proteins-mode summary has 8 header fields and 13 on its row
+              # (the genome-only columns, empty).
+              truncate_ragged_lines: true
+            columns_description:
+              "Input_file": "FASTA BUSCO read"
+              "source_path": "Summary path; the assembly, lineage and mode are in its name"
+
+      - data_collection_tag: "busco_batch_summary"
+        optional: true  # as its raw scan
+        description: "BUSCO scores per assembly and mode: complete, single-copy, duplicated, fragmented and missing against the lineage"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "busco/batch_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "assembly_id": "Assembly name"
+              "input_file": "FASTA BUSCO read (the genome, or the longest-isoform proteins)"
+              "lineage": "BUSCO lineage dataset"
+              "busco_mode": "genome (the assembly) or proteins (its annotated proteins)"
+              "complete_pct": "Complete BUSCOs, percent of the lineage set"
+              "single_pct": "Complete and single-copy, percent"
+              "duplicated_pct": "Complete and duplicated, percent"
+              "fragmented_pct": "Fragmented, percent"
+              "missing_pct": "Missing, percent"
+              "n_markers": "BUSCO groups in the lineage"
+              "stop_codon_pct": "Complete BUSCOs with an internal stop codon, percent"
+              "scaffold_n50": "Scaffold N50 BUSCO measured (genome mode)"
+              "contig_n50": "Contig N50 BUSCO measured (genome mode)"
+              "percent_gaps": "N bases, percent of the assembly (genome mode)"
+              "n_scaffolds": "Sequences in the assembly (genome mode)"
+
+      - data_collection_tag: "busco_composition"
+        optional: true  # as busco_batch_summary
+        description: "BUSCO classes per assembly and mode, unpivoted for a stacked bar"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "busco/composition.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "assembly_id": "Assembly name"
+              "lineage": "BUSCO lineage dataset"
+              "busco_mode": "genome or proteins"
+              "run_id": "Assembly and mode, one label per bar"
+              "busco_class": "Complete single-copy, complete duplicated, fragmented or missing"
+              "rank": "Constant: BUSCO class"
+              "class_order": "1 to 4, single-copy first"
+              "percent": "Class share of the lineage set"
+
+      # ----------------------------------------------------------------
+      # tidk: telomeric repeats per 10 kb window and every sequence's length
+      # (catalog tidk/search_windows). Optional: --skip_tidk.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "tidk_search_windows"
+        optional: true  # --skip_tidk
+        description: "Telomeric repeat units per 10 kb window along every sequence, with the sequence length"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "tidk/search_windows.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome": "Assembly name"
+              "sequence": "Sequence id"
+              "start": "Window start, 0-based"
+              "end": "Window end"
+              "forward_repeats": "Repeat units on the forward strand"
+              "reverse_repeats": "Repeat units on the reverse strand"
+              "repeats": "Both strands"
+              "repeat_unit": "The unit counted: the one tidk explore picked (a posteriori) or the one the run gave (a priori)"
+              "search": "aposteriori or apriori"
+              "sequence_length": "Sequence length, bp"
+
+      # The karyotype: complete BUSCOs per sequence (genomeqc's IDEOGRAM CSVs),
+      # each sequence drawn to its tidk length. Declared after tidk, which it
+      # reads through dc_ref.
+      - data_collection_tag: "busco_karyotype"
+        optional: true  # needs BUSCO and tidk
+        description: "Complete BUSCOs on every sequence holding one, with the sequence length and the BUSCO density"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/genomeqc/busco_karyotype.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome": "Assembly name"
+              "busco_mode": "proteins (annotation mode) or genome (genome-only mode)"
+              "sequence": "Sequence id"
+              "start": "0"
+              "end": "Sequence length"
+              "sequence_length": "Sequence length, bp"
+              "complete_buscos": "Complete BUSCOs on the sequence"
+              "buscos_per_mb": "Complete BUSCOs per megabase"
+              "busco_share_pct": "Share of the assembly's placed BUSCOs on the sequence, percent"
+              "sequence_rank": "1 for the sequence holding the most BUSCOs"
+
+      # ----------------------------------------------------------------
+      # Annotation: AGAT sp_statistics and gene overlaps. Absent on a
+      # genome-only run.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "agat_statistics"
+        optional: true  # genome-only runs have no annotation
+        description: "Every number of AGAT's sp_statistics report, per assembly, feature type, isoform view and metric"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "agat/statistics.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome": "Assembly name"
+              "feature_type": "AGAT block: mrna, lnc_rna, trna, region..."
+              "isoforms": "all, or longest (one transcript per gene)"
+              "metric": "AGAT's wording of the metric"
+              "value": "Its value"
+              "metric_order": "Rank of the metric in its block"
+
+      - data_collection_tag: "agat_gene_models"
+        optional: true  # as agat_statistics
+        description: "Gene models per assembly and transcript type: genes, transcripts, exons, single-exon genes and lengths"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "agat/gene_models.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome": "Assembly name"
+              "feature_type": "Transcript type: mrna (protein-coding), lnc_rna, trna..."
+              "genes": "Genes with a transcript of the type"
+              "transcripts": "Transcripts of the type"
+              "transcripts_per_gene": "Mean transcripts per gene"
+              "exons": "Exons of those transcripts"
+              "exons_per_transcript": "Mean exons per transcript, longest isoform"
+              "single_exon_genes": "Genes with a one-exon transcript"
+              "single_exon_gene_pct": "Of the genes, percent"
+              "overlapping_genes": "Genes overlapping another of the type"
+              "mean_gene_length": "Mean gene length, bp"
+              "median_gene_length": "Median gene length, bp"
+              "mean_transcript_length": "Mean transcript length, introns included, bp (longest isoform)"
+              "mean_exon_length": "Mean exon length, bp"
+              "mean_intron_length": "Mean intron length, bp"
+              "mean_cds_length": "Mean spliced coding length, bp (longest isoform)"
+              "total_gene_length": "Bases covered by the genes"
+
+      - data_collection_tag: "gene_overlaps"
+        optional: true  # as agat_statistics
+        description: "Overlapping and nested genes per annotation, from genomeqc's gene overlap step"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/genomeqc/gene_overlaps.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome": "Assembly name"
+              "total_genes": "Genes in the annotation"
+              "unresolved_strand_genes": "Genes without a strand"
+              "contained_same_strand": "Genes inside another on the same strand"
+              "contained_opposite_strand": "Genes inside another on the opposite strand"
+              "overlapping_genes": "Genes overlapping any other"
+              "overlapping_pct": "Overlapping genes, percent"
+              "contained_same_strand_pct": "Same-strand nested genes, percent"
+              "not_overlapping_genes": "Genes overlapping no other"
+              "overlapping_not_nested": "Genes overlapping another without lying inside it"
+
+      # ----------------------------------------------------------------
+      # Orthology: OrthoFinder's summary tables and genomeqc's ortho seq count.
+      # Absent on a genome-only run.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "orthofinder_species_stats"
+        optional: true  # genome-only runs run no OrthoFinder
+        description: "Genes placed in orthogroups and species-specific orthogroups, per species"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "orthofinder/species_stats.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome": "Species, as OrthoFinder names it (the assembly name)"
+              "genes": "Genes in the proteome"
+              "genes_in_orthogroups": "Genes placed in an orthogroup"
+              "unassigned_genes": "Genes placed in none"
+              "genes_in_orthogroups_pct": "Placed share, percent"
+              "unassigned_genes_pct": "Unplaced share, percent"
+              "orthogroups": "Orthogroups holding the species"
+              "orthogroups_pct": "Their share of all orthogroups, percent"
+              "species_specific_orthogroups": "Orthogroups of this species alone"
+              "genes_in_species_specific": "Genes in them"
+              "genes_in_species_specific_pct": "Their share of the genes, percent"
+              "genes_in_shared_orthogroups": "Genes in orthogroups other species share"
+
+      - data_collection_tag: "orthofinder_orthogroup_matrix"
+        optional: true  # as orthofinder_species_stats
+        description: "One row per orthogroup with a 0/1 column per species: the input of the shared-orthogroup UpSet"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "orthofinder/orthogroup_matrix.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "orthogroup": "OrthoFinder orthogroup id"
+              "n_genomes": "Species it reaches"
+              "total_genes": "Genes in it"
+              "copy_class": "single-copy (one gene per species it reaches) or multi-copy"
+              "sharing": "core (every species), shared (several) or unique (one species)"
+
+      - data_collection_tag: "orthofinder_orthologue_matrix"
+        optional: true  # as orthofinder_species_stats
+        description: "One-to-one orthologues between every pair of species, one column per species"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "orthofinder/orthologue_matrix.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome": "Row species; each other column is a species and holds the one-to-one orthologues with it"
+
+      - data_collection_tag: "ortho_seq_count"
+        optional: true  # as orthofinder_species_stats
+        description: "Sequences of each assembly carrying orthologues shared with another assembly (genomeqc ortho seq count)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "^species_ortho_seq_count\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "Species": "Assembly name"
+              "Syntenic_Chromosomes": "Sequences carrying orthologues of another assembly; close to the chromosome number on a chromosome-level assembly"
+
+      # ----------------------------------------------------------------
+      # Decontamination (FCS-GX, FCS-adaptor, Tiara). Absent without an
+      # FCS-GX database.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "fcsgx_contamination"
+        optional: true  # no --gxdb / --gxdb_manifest
+        description: "Share of each assembly FCS-GX calls foreign, from genomeqc's contamination table"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "^fcs_table\\.tsv$"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              "species": "Assembly name"
+              "contaminant_pct": "Bases called foreign, percent"
+              "non_contaminant_pct": "Bases not called foreign, percent"
+
+      - data_collection_tag: "fcsgx_actions"
+        optional: true  # as fcsgx_contamination
+        description: "Ranges FCS-GX flags as foreign, with the action, division and top taxon; one 'none' row per clean assembly"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "fcsgx/actions.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome": "Assembly name"
+              "seq_id": "Flagged sequence"
+              "start": "Range start, 1-based"
+              "end": "Range end"
+              "seq_len": "Sequence length"
+              "action": "EXCLUDE, TRIM, FIX, REVIEW... or none"
+              "division": "Contaminant division"
+              "division_group": "Kingdom code of the division (prok, fung, anml...)"
+              "contaminant_cov": "Aggregate contaminant coverage of the range, percent"
+              "top_taxon": "Best-matching contaminant taxon"
+              "flagged_bp": "Bases in the range"
+
+      - data_collection_tag: "fcsadaptor_actions"
+        optional: true  # as fcsgx_contamination
+        description: "Ranges FCS-adaptor flags as adaptor or vector, with the action and the adaptor; one 'none' row per clean assembly"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "fcsadaptor/actions.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome": "Assembly name"
+              "seq_id": "Flagged sequence"
+              "seq_len": "Sequence length"
+              "action": "TRIM, EXCLUDE... or none"
+              "start": "Span start, 1-based"
+              "end": "Span end"
+              "flagged_bp": "Bases in the span"
+              "adaptor": "Adaptor or vector matched"
+              "source_type": "ADAPTOR or VECTOR"
+
+      # Tiara on the assembly as given (tiara/raw/); genomeqc runs it again on
+      # the cleaned assembly (tiara/cleaned/), which this template leaves out.
+      - data_collection_tag: "tiara_classifications"
+        optional: true  # as fcsgx_contamination
+        description: "Tiara's class for every sequence of at least 3 kb: eukarya, bacteria, archaea, organelle or unknown"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "tiara/classifications.py"
+            source_overrides:
+              tables:
+                glob_pattern: "**/tiara/raw/*.txt"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome": "Assembly name"
+              "stage": "raw (the assembly as given)"
+              "sequence": "Sequence id"
+              "class_fst_stage": "Tiara's first-stage class"
+              "class_snd_stage": "Organelle call (mitochondrion, plastid, unknown)"
+              "tiara_class": "One class: mitochondrion or plastid for organelles, the first stage otherwise"
+              "is_eukaryotic": "Eukarya, mitochondrion or plastid"
+
+      # Sequences per Tiara class: the per-sequence table counted, so the class
+      # composition of each assembly can be stacked. Declared after Tiara, which
+      # it reads through dc_ref.
+      - data_collection_tag: "tiara_class_counts"
+        optional: true  # as tiara_classifications
+        description: "Sequences per Tiara class and assembly, with the class's share"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/genomeqc/tiara_class_counts.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome": "Assembly name"
+              "tiara_class": "Tiara's class"
+              "sequences": "Sequences of 3 kb or more in the class"
+              "share_pct": "Share of the assembly's classified sequences, percent"
+
+      # ----------------------------------------------------------------
+      # Repeats: RepeatMasker (--te repeatmasker).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "repeatmasker_repeat_classes"
+        optional: true  # --te unset, or --te hite
+        description: "RepeatMasker repeat classes and families per assembly: elements, bases and share of the assembly"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "repeatmasker/repeat_classes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome": "Assembly name"
+              "repeat_class": "Class or family"
+              "parent_class": "The line it sits under"
+              "rank": "Class (partitions the masked bases), Family, or Summary (adds classes up)"
+              "class_order": "Rank of the line in the table"
+              "elements": "Elements masked"
+              "length_bp": "Bases they occupy"
+              "genome_pct": "Their share of the assembly, percent"
+
+      - data_collection_tag: "repeatmasker_masking_summary"
+        optional: true  # as repeatmasker_repeat_classes
+        description: "How much of each assembly RepeatMasker masked, with the interspersed and main class shares"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "repeatmasker/masking_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome": "Assembly name"
+              "sequences": "Sequences in the masked FASTA"
+              "total_length": "Bases, runs of N included"
+              "length_excl_n": "Bases outside runs of N"
+              "gc_pct": "GC level, percent"
+              "masked_bp": "Bases masked"
+              "masked_pct": "Their share, percent"
+              "interspersed_pct": "Interspersed repeats, percent of the assembly"
+              "retroelements_pct": "Retroelements, percent"
+              "dna_transposons_pct": "DNA transposons, percent"
+              "unclassified_pct": "Unclassified repeats, percent"
+              "simple_repeats_pct": "Simple repeats, percent"
+
+      # ----------------------------------------------------------------
+      # Hub: one row per assembly, every per-genome number and the design,
+      # declared last because it reads every collection above (see
+      # recipes/genomes.py). QUAST is its only required source.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "genomes"
+        description: "Genome hub: one row per assembly with its contiguity, completeness, gene models, orthology, contamination and repeat summary, and the design columns"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/genomeqc/genomes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "genome": "Assembly name, the key every other collection is linked on"
+              "assembly_label": "The FASTA name QUAST and MultiQC label the assembly with"
+              "total_length": "Assembled bases (QUAST)"
+              "n_contigs": "Sequences (QUAST)"
+              "largest_contig": "Longest sequence, bp"
+              "n50": "N50, bp"
+              "n90": "N90, bp"
+              "l50": "L50: sequences holding half the assembly"
+              "l90": "L90"
+              "gc_percent": "GC, percent"
+              "ns_per_100_kbp": "N bases per 100 kbp"
+              "busco_lineage": "BUSCO lineage"
+              "busco_complete_pct": "Complete BUSCOs in the assembly, percent"
+              "busco_single_pct": "Complete single-copy, percent"
+              "busco_duplicated_pct": "Complete duplicated, percent"
+              "busco_fragmented_pct": "Fragmented, percent"
+              "busco_missing_pct": "Missing, percent"
+              "protein_complete_pct": "Complete BUSCOs in the annotated proteins, percent"
+              "protein_duplicated_pct": "Duplicated in the proteins, percent"
+              "protein_missing_pct": "Missing from the proteins, percent"
+              "sequences_with_busco": "Sequences holding a complete BUSCO"
+              "repeat_unit": "Repeat unit tidk searched"
+              "genes": "Protein-coding genes (AGAT mrna block)"
+              "transcripts": "mRNAs"
+              "transcripts_per_gene": "Mean mRNAs per gene"
+              "exons_per_transcript": "Mean exons per mRNA, longest isoform"
+              "single_exon_gene_pct": "Single-exon protein-coding genes, percent"
+              "mean_gene_length": "Mean protein-coding gene length, bp"
+              "mean_cds_length": "Mean CDS length, bp (longest isoform)"
+              "overlapping_pct": "Genes overlapping another, percent"
+              "contained_same_strand": "Genes nested in another on the same strand"
+              "genes_in_orthogroups_pct": "Genes placed in orthogroups, percent"
+              "unassigned_genes": "Genes in no orthogroup"
+              "species_specific_orthogroups": "Orthogroups of this assembly alone"
+              "syntenic_sequences": "Sequences carrying orthologues of another assembly"
+              "contaminant_pct": "Bases called foreign by FCS-GX, percent"
+              "gx_flagged_ranges": "Ranges FCS-GX flags"
+              "gx_flagged_bp": "Bases in them"
+              "adaptor_ranges": "Ranges FCS-adaptor flags"
+              "tiara_sequences": "Sequences Tiara classified"
+              "prokaryotic_sequences": "Of which Tiara calls bacterial, archaeal or prokaryotic"
+              "unknown_sequences": "Of which Tiara leaves unknown"
+              "masked_pct": "Bases RepeatMasker masked, percent"
+              "interspersed_pct": "Interspersed repeats, percent"
+
+# ============================================================================
+# LINKS: the genome hub filters every per-genome collection
+# ============================================================================
+links:
+  # MultiQC and the QUAST tables name an assembly after its FASTA, which the
+  # hub keeps as assembly_label.
+  - source_dc_tag: "genomes"
+    source_column: "assembly_label"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config: {resolver: "sample_mapping", target_field: "sample_name"}
+    description: "Filter the MultiQC panels by the genomes picked in the left panel"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "assembly_label"
+    target_dc_tag: "quast_assembly_report"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "assembly_id"}
+    description: "Filter the QUAST statistics by the genomes picked in the left panel"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "assembly_label"
+    target_dc_tag: "quast_length_ladder"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "assembly_id"}
+    description: "Filter the length ladder by the genomes picked in the left panel"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "busco_batch_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "assembly_id"}
+    description: "Filter the BUSCO scores by the genomes picked in the left panel"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "busco_composition"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "assembly_id"}
+    description: "Filter the BUSCO classes by the genomes picked in the left panel"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "busco_karyotype"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Filter the BUSCO karyotype by the genomes picked in the left panel"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "tidk_search_windows"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Filter the telomeric repeat windows by the genomes picked in the left panel"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "agat_statistics"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Filter the AGAT statistics by the genomes picked in the left panel"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "agat_gene_models"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Filter the gene models by the genomes picked in the left panel"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "gene_overlaps"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Filter the gene overlaps by the genomes picked in the left panel"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "orthofinder_species_stats"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Filter the orthogroup assignment by the genomes picked in the left panel"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "orthofinder_orthologue_matrix"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Keep the rows of the orthologue matrix of the genomes picked in the left panel"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "fcsgx_actions"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Filter the FCS-GX calls by the genomes picked in the left panel"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "fcsadaptor_actions"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Filter the FCS-adaptor calls by the genomes picked in the left panel"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "tiara_classifications"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Filter the Tiara classes by the genomes picked in the left panel"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "tiara_class_counts"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Filter the Tiara class counts by the genomes picked in the left panel"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "repeatmasker_repeat_classes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Filter the repeat classes by the genomes picked in the left panel"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "repeatmasker_masking_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Filter the masking summary by the genomes picked in the left panel"
+    enabled: true
+  # The hub also reaches the two tables genomeqc writes itself, which name the
+  # assembly in a `species` / `Species` column.
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "fcsgx_contamination"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "species"}
+    description: "Filter the foreign share by the genomes picked in the left panel"
+    enabled: true
+  - source_dc_tag: "genomes"
+    source_column: "genome"
+    target_dc_tag: "ortho_seq_count"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "Species"}
+    description: "Filter the orthologue-carrying sequences by the genomes picked in the left panel"
+    enabled: true
+
+  # ----------------------------------------------------------------
+  # Tab filters back to the hub. Each child tab filters one per-assembly
+  # collection; these reverse links carry the assemblies it keeps to the
+  # hub, which fans them out to the tab's other collections.
+  # ----------------------------------------------------------------
+  # Assembly tab: the N50 / sequence sliders on QUAST.
+  - source_dc_tag: "quast_assembly_report"
+    source_column: "assembly_id"
+    target_dc_tag: "genomes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "assembly_label"}
+    description: "Carry the assemblies kept by the Assembly tab's QUAST sliders to the hub and the length ladder"
+    enabled: true
+  # Contamination tab: the FCS-GX action and Tiara class picks.
+  - source_dc_tag: "fcsgx_actions"
+    source_column: "genome"
+    target_dc_tag: "genomes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Carry the genomes holding the picked FCS-GX action to the hub, the foreign share and the adaptor calls"
+    enabled: true
+  - source_dc_tag: "tiara_classifications"
+    source_column: "genome"
+    target_dc_tag: "genomes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Carry the genomes holding the picked Tiara class to the hub, the foreign share and the FCS calls"
+    enabled: true
+  - source_dc_tag: "tiara_classifications"
+    source_column: "tiara_class"
+    target_dc_tag: "tiara_class_counts"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "tiara_class"}
+    description: "Carry the Tiara class pick to the class counts"
+    enabled: true
+  # Completeness tab: the complete-BUSCO slider.
+  - source_dc_tag: "busco_batch_summary"
+    source_column: "assembly_id"
+    target_dc_tag: "genomes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "genome"}
+    description: "Carry the assemblies kept by the Completeness tab's BUSCO slider to the hub and the BUSCO classes"
+    enabled: true
+
+  # Karyotype tab: the sequence-length slider on the BUSCO karyotype keeps
+  # sequences; tidk names the same sequence ids (RefSeq accessions).
+  - source_dc_tag: "busco_karyotype"
+    source_column: "sequence"
+    target_dc_tag: "tidk_search_windows"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sequence"}
+    description: "Carry the sequences kept by the Karyotype tab's length slider to the telomeric repeat windows"
+    enabled: true

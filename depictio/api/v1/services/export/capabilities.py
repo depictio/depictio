@@ -183,6 +183,8 @@ AV_JSON_SOURCE: dict[str, AvJsonSource] = {
     "transcript_structure": "client_only",
     "cnv_profile": "client_only",
     "genome_chord": "client_only",
+    # Hand-drawn SVG, like the chord ring: no Plotly figure exists to serialise.
+    "ideogram": "client_only",
     "record_card": "client_only",
     "parallel_coordinates": "client_only",
     # Protein kinds. molecule_3d draws with 3Dmol.js, msa and sequence_track on
@@ -198,6 +200,14 @@ AV_JSON_SOURCE: dict[str, AvJsonSource] = {
     "domain_architecture": "client_only",
     "pae_matrix": "client_only",
     "ramachandran": "client_only",
+    # Plotly box (or violin) and lollipop subplots built in TypeScript
+    # (`ranked_distribution/rankedLayout.ts`); HTML runs the real renderer.
+    "ranked_distribution": "client_only",
+    # A Plotly scattergl whose marker sizes follow the zoom and whose colour
+    # range is clipped in the browser; no Python builder stands for it.
+    "spatial_cells": "client_only",
+    # Hand-drawn SVG (two halves per genotype cell): no Plotly figure exists.
+    "allele_grid": "client_only",
 }
 
 

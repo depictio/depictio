@@ -1,0 +1,21 @@
+id: vcf_filter_breakdown
+name: FILTER breakdown
+mode: per-callset/filters
+description: >-
+  How the caller's own FILTER column partitions each callset: one row per
+  callset and FILTER value (PASS, or the semicolon-joined hard filters a call
+  failed), with its calls, their share of the callset and how many of them are
+  SNVs and indels.
+find:
+  path_glob: "**/variant_calling/**/*.vcf.gz"
+  path_glob_alt:
+    - "**/variant_calling/*/*/*.vcf.gz"
+    - "**/*.filtered.vcf.gz"
+recipe: vcf/filter_breakdown.py
+fixture: filter_breakdown.tsv
+renders_as:
+  - { id: filter_bars, component: figure, visu_type: bar,
+      dict_kwargs: {x: sample, y: calls_pct, color: filter_label} }
+  - { id: calls_by_filter, component: card, column: calls, aggregation: sum,
+      secondary_layout: top_n, breakdown_col: filter_label, top_n_count: 4 }
+  - { component: table }

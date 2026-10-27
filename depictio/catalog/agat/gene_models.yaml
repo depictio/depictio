@@ -1,0 +1,31 @@
+id: agat_gene_models
+name: Gene models per annotation
+mode: sp-statistics/gene-models
+description: >-
+  One row per assembly and transcript type from AGAT's sp_statistics: genes,
+  transcripts per gene, exons per transcript, single-exon genes, overlapping
+  genes and the gene, transcript, exon, intron and CDS lengths. Counts read the
+  whole annotation, the per-transcript shape its longest isoforms, so a
+  fragmented annotation shows as short genes with few exons and a surplus of
+  single-exon models, whatever the isoform count.
+find:
+  path_glob: "**/*.stats.txt"
+  path_glob_alt:
+    - "**/stats/*.stats.txt"
+recipe: agat/gene_models.py
+fixture: gene_models.tsv
+renders_as:
+  - { id: genes_vs_exons, component: advanced_viz, kind: scatter_xy,
+      roles: {x: genes, y: exons_per_transcript, label: genome, color: feature_type, size: mean_gene_length} }
+  - { component: figure, visu_type: bar,
+      dict_kwargs: {x: genome, y: genes, color: feature_type, barmode: stack, title: Genes per annotation by type} }
+  - { id: gene_count, component: card, column: genes, aggregation: sum,
+      secondary_layout: composition, breakdown_col: feature_type,
+      filter_expr: "col('feature_type') == 'mrna'" }
+  - { id: exons_per_transcript, component: card, column: exons_per_transcript, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot,
+      filter_expr: "col('feature_type') == 'mrna'" }
+  - { id: single_exon_share, component: card, column: single_exon_gene_pct, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot,
+      filter_expr: "col('feature_type') == 'mrna'" }
+  - { component: table }

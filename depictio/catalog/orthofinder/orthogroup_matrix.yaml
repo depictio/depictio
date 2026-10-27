@@ -1,0 +1,21 @@
+id: orthofinder_orthogroup_matrix
+name: Orthogroups shared between species
+mode: orthogroups/membership
+description: >-
+  One row per orthogroup with a 0/1 column per species, the species it
+  reaches, its genes and whether it is single-copy. Read as an UpSet, it
+  splits the orthogroups into the core every species shares, the ones a clade
+  shares, and the ones a single genome holds alone.
+find:
+  path_glob: "**/Orthogroups/Orthogroups.GeneCount.tsv"
+recipe: orthofinder/orthogroup_matrix.py
+fixture: orthogroup_matrix.tsv
+renders_as:
+  # The renderer enumerates the binary species columns itself.
+  - { id: orthogroup_upset, component: advanced_viz, kind: upset_plot }
+  - { id: orthogroups_total, component: card, column: orthogroup, aggregation: count,
+      secondary_layout: composition, breakdown_col: copy_class }
+  - { component: card, column: n_genomes, aggregation: average,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: interactive, interactive_type: MultiSelect, column_name: copy_class }
+  - { component: table }

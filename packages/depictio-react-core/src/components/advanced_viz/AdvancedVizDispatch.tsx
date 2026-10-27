@@ -35,6 +35,7 @@ import GeneArrowTrackRenderer from './GeneArrowTrackRenderer';
 import GseaRunningScoreRenderer from './GseaRunningScoreRenderer';
 import SashimiRenderer from './SashimiRenderer';
 import ScatterXyRenderer from './ScatterXyRenderer';
+import SpatialCellsRenderer from './SpatialCellsRenderer';
 import ContactMapRenderer from './ContactMapRenderer';
 import KneePlotRenderer from './KneePlotRenderer';
 import DamageProfileRenderer from './DamageProfileRenderer';
@@ -43,8 +44,11 @@ import GroupCompareRenderer from './GroupCompareRenderer';
 import TranscriptStructureRenderer from './TranscriptStructureRenderer';
 import CnvProfileRenderer from './CnvProfileRenderer';
 import GenomeChordRenderer from './GenomeChordRenderer';
+import IdeogramRenderer from './IdeogramRenderer';
+import AlleleGridRenderer from './AlleleGridRenderer';
 import RecordCardRenderer from './RecordCardRenderer';
 import ParallelCoordinatesRenderer from './ParallelCoordinatesRenderer';
+import RankedDistributionRenderer from './RankedDistributionRenderer';
 import MsaRenderer from './MsaRenderer';
 import SequenceTrackRenderer from './SequenceTrackRenderer';
 import {
@@ -255,8 +259,10 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   transcript_structure: TranscriptStructureRenderer,
   cnv_profile: CnvProfileRenderer,
   genome_chord: GenomeChordRenderer,
+  ideogram: IdeogramRenderer,
   record_card: RecordCardRenderer,
   parallel_coordinates: ParallelCoordinatesRenderer,
+  ranked_distribution: RankedDistributionRenderer,
   molecule_3d: Molecule3DRenderer,
   msa: MsaRenderer,
   sequence_track: SequenceTrackRenderer,
@@ -265,6 +271,8 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   domain_architecture: DomainArchitectureRenderer,
   pae_matrix: PaeMatrixRenderer,
   ramachandran: RamachandranRenderer,
+  spatial_cells: SpatialCellsRenderer,
+  allele_grid: AlleleGridRenderer,
 };
 
 /**

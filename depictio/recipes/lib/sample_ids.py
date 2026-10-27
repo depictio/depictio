@@ -59,8 +59,15 @@ STAGE_TOKENS: frozenset[str] = frozenset(
     }
 )
 
+#: Alignment stages rnavar and sarek write into their samtools report names
+#: (`GM12878_REP1.aligned.stats`, `GM12878_REP1.md.stats`). Kept out of
+#: ``STAGE_TOKENS`` because that list also drives the CLI's MultiQC sample
+#: mapping, where `S1_2.md` must stay `S1_2` and not lose its read number:
+#: only the samtools recipes that read these reports pass them as ``extra``.
+ALIGNMENT_STAGE_TOKENS: frozenset[str] = frozenset({"aligned", "md"})
 
-def strip_stage_suffixes(name: str) -> str:
+
+def strip_stage_suffixes(name: str, extra: frozenset[str] = frozenset()) -> str:
     """The sample id inside a published file or BAM name.
 
     Never returns an empty string: a name made entirely of stage tokens is
@@ -68,6 +75,6 @@ def strip_stage_suffixes(name: str) -> str:
     """
     stem = str(name).replace("\\", "/").rsplit("/", 1)[-1]
     tokens = stem.split(".")
-    while len(tokens) > 1 and tokens[-1].lower() in STAGE_TOKENS:
+    while len(tokens) > 1 and (tokens[-1].lower() in STAGE_TOKENS or tokens[-1].lower() in extra):
         tokens.pop()
     return ".".join(tokens)

@@ -230,6 +230,9 @@ STATIC_IDS = {
             "group_compare_demo": "646b0f3c1e4a2d7f8e5b8d8b",
             "cnv_profile_demo": "646b0f3c1e4a2d7f8e5b8d8d",
             "genome_chord_demo": "646b0f3c1e4a2d7f8e5b8d8e",
+            # The ideogram's two collections, in the 8dax block from 8da6 (the tab).
+            "ideogram_busco_demo": "646b0f3c1e4a2d7f8e5b8da7",
+            "ideogram_density_demo": "646b0f3c1e4a2d7f8e5b8da8",
             "transcript_structure_demo": "646b0f3c1e4a2d7f8e5b8d9c",
             # The two portal-shaped kinds sit in their own 8dbx block, as the
             # showcase project.yaml explains: several kind agents reserve ids
@@ -255,6 +258,16 @@ STATIC_IDS = {
             "protein_family_hits_demo": "646b0f3c1e4a2d7f8e5b8de2",
             "protein_pae_demo": "646b0f3c1e4a2d7f8e5b8de3",
             "protein_ss_demo": "646b0f3c1e4a2d7f8e5b8de4",
+            # Ranked distribution tab (the 8f5x block): pre-aggregated gene
+            # stability stats and a long-form values table.
+            "ranked_distribution_demo": "646b0f3c1e4a2d7f8e5b8f51",
+            "ranked_distribution_values_demo": "646b0f3c1e4a2d7f8e5b8f52",
+            # Spatial cells tab (the 8e7x block): the mcquant cell table.
+            "spatial_cells_demo": "646b0f3c1e4a2d7f8e5b8e71",
+            # Allele grid tab (the 8dax block): the HLA genotypes and the
+            # epitope predictions an allele pick narrows. 8da0 is the dashboard.
+            "allele_grid_demo": "646b0f3c1e4a2d7f8e5b8da1",
+            "epitope_predictions_demo": "646b0f3c1e4a2d7f8e5b8da2",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
@@ -298,6 +311,7 @@ STATIC_IDS = {
             "advanced_viz_transcript_structure": "646b0f3c1e4a2d7f8e5b8d7c",
             "advanced_viz_cnv_profile": "646b0f3c1e4a2d7f8e5b8d7d",
             "advanced_viz_genome_chord": "646b0f3c1e4a2d7f8e5b8d7e",
+            "advanced_viz_ideogram": "646b0f3c1e4a2d7f8e5b8da6",
             "advanced_viz_record_card": "646b0f3c1e4a2d7f8e5b8d7f",
             # 8d80 is already the profile_demo collection, so the parallel
             # coordinates tab takes the next free id in the 8dbx block.
@@ -313,6 +327,11 @@ STATIC_IDS = {
             # collections.
             "advanced_viz_protein_families": "646b0f3c1e4a2d7f8e5b8de0",
             "advanced_viz_protein_quality": "646b0f3c1e4a2d7f8e5b8de5",
+            # Opens the 8f5x block; 8f51 and 8f52 are its collections.
+            "advanced_viz_ranked_distribution": "646b0f3c1e4a2d7f8e5b8f50",
+            # The spatial cells tab opens the 8e7x block; 8e71 is its collection.
+            "advanced_viz_spatial_cells": "646b0f3c1e4a2d7f8e5b8e70",
+            "advanced_viz_allele_grid": "646b0f3c1e4a2d7f8e5b8da0",
             "advanced_viz_benchmark_pr": "646b0f3c1e4a2d7f8e5b8d62",
             "advanced_viz_benchmark_confusion": "646b0f3c1e4a2d7f8e5b8d63",
             "advanced_viz_benchmark_ci": "646b0f3c1e4a2d7f8e5b8d64",

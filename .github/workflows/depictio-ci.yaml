@@ -2868,11 +2868,13 @@ jobs:
     runs-on: ubuntu-22.04
     # No job in this workflow had one, so the only backstop was GitHub's 6h
     # default — and a leg of this job has run for 3h. Sized for the full catalog
-    # walk (main, nightly, ci:full-catalog), ~60min a leg with ~550 renders each;
-    # a PR's representative walk finishes a leg in ~10. Sized so Playwright
-    # always reaches its own end-of-run summary: a job the runner kills here
-    # skips every `if: always()` step, report included.
-    timeout-minutes: 120
+    # walk (main, nightly, ci:full-catalog), ~770 renders a leg: about 70min on
+    # a fast runner, but 115min and more on the slower image GitHub also hands
+    # out, where 120 cut legs off a run short of their last chunk. A PR's
+    # representative walk finishes a leg in ~10. Sized so Playwright always
+    # reaches its own end-of-run summary: a job the runner kills here skips
+    # every `if: always()` step, report included.
+    timeout-minutes: 150
     permissions:
       contents: read
       packages: read

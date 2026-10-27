@@ -77,6 +77,7 @@ import {
   type TooltipLine,
 } from './molecule/Overlays';
 import { SplitView, splitOrientation } from './molecule/SplitView';
+import { NO_STRUCTURE_BOUND } from './ramachandran/useStructureSource';
 import SequenceText from './molecule/SequenceText';
 import { type FollowBounds, useStructureZoomFollow } from './molecule/zoomFollow';
 import { textKey, type TextResidue } from './molecule/sequenceLines';
@@ -1136,6 +1137,8 @@ const Molecule3DRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   let error: string | null = null;
   if (previewOnly || viewerError === PREVIEW_UNAVAILABLE) {
     emptyMessage = PREVIEW_UNAVAILABLE;
+  } else if (fileMode && !config.structure_dc_id) {
+    emptyMessage = NO_STRUCTURE_BOUND;
   } else if (rowsError) {
     error = rowsError;
   } else if (fileMode && manifest.error) {

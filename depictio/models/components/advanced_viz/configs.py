@@ -534,15 +534,52 @@ class ManhattanConfig(_BaseVizConfig):
 
 
 class StackedTaxonomyConfig(_BaseVizConfig):
-    """Stacked composition bar (per-sample relative abundance by taxon)."""
+    """Stacked composition bar: one bar per sample, one segment per category.
+
+    Built for taxa, but stacks any per-sample composition (CCS outcomes per
+    library, BUSCO classes per assembly, score parts per section). Categories
+    stack largest-overall at the bottom, which is what lets ``y_zoom`` crop a
+    near-identical base away.
+    """
 
     viz_kind: Literal["stacked_taxonomy"] = "stacked_taxonomy"
 
     sample_id_col: str = Field(default="sample_id", description="Column with the sample identifier")
     taxon_col: str = Field(default="taxon", description="Column with taxon name")
-    rank_col: str = Field(default="rank", description="Column with taxonomic rank label")
+    rank_col: str | None = Field(
+        default="rank",
+        description=(
+            "Column with the taxonomic rank (or any level) label. Null, or a column "
+            "the table does not carry, draws a single-level composition with no "
+            "rank picker."
+        ),
+    )
     abundance_col: str = Field(
         default="abundance", description="Column with relative or absolute abundance"
+    )
+
+    # Wide tables: one row per sample, one numeric column per category
+    # (orthofinder species stats, FCS-GX actions, AGAT feature counts). The
+    # renderer melts them into the long form, so every option below applies.
+    value_cols: list[str] | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Wide form: the numeric columns to stack, one category each (the "
+            "column is the category, its value the abundance). When set, "
+            "taxon_col, abundance_col and rank_col are not read; only "
+            "sample_id_col and these columns are fetched. Null (default) reads "
+            "the long form."
+        ),
+    )
+    value_labels: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Wide form: column -> display name of its category, e.g. "
+            "{unassigned_genes: Unassigned}. Unlisted columns show their name. "
+            "Colours (`taxon_palette`, `sort_category`) are keyed by the "
+            "display name."
+        ),
     )
 
     default_rank: str | None = Field(
@@ -575,8 +612,58 @@ class StackedTaxonomyConfig(_BaseVizConfig):
             "default cycle, which repeats past twelve taxa."
         ),
     )
-    sample_sort: Literal["input", "total_abundance", "first_taxon"] = Field(
-        default="input", description="Order of samples along the x axis"
+    sample_sort: Literal["input", "name", "total_abundance", "first_taxon", "category"] = Field(
+        default="input",
+        description=(
+            "Order of the bars. ``input``: as the table lists them. ``name``: "
+            "natural alphabetical order (S2 before S10). ``total_abundance``: "
+            "largest raw total first. ``first_taxon``: largest raw value of the "
+            "overall most abundant category first. ``category``: largest plotted "
+            "value (the share, when normalised) of ``sort_category`` first."
+        ),
+    )
+    sort_category: str | None = Field(
+        default=None,
+        description=(
+            "Category whose value orders the bars under ``sample_sort: category``. "
+            "Null, or a category not shown, uses the most abundant one."
+        ),
+    )
+    group_col: str | None = Field(
+        default=None,
+        description=(
+            "Per-sample column that groups the bars (multi-level sort): bars are "
+            "grouped by its value, each group labelled and set apart by a gap, "
+            "and ``sample_sort`` orders the bars within each group. Groups follow "
+            "their first appearance in the table, or natural name order under "
+            "``sample_sort: name``. The viewer can also group by any "
+            "``annotation_strips`` column."
+        ),
+    )
+    y_zoom: Literal["off", "auto"] = Field(
+        default="off",
+        description=(
+            "``auto`` crops the value axis to start just below the smallest "
+            "bottom segment, so a composition that is near-identical across "
+            "bars (every bar 95 % one class) shows the part that varies. The "
+            "cropped axis carries a // break marker and says where it starts. "
+            "No effect when the crop would gain little, or on a log axis."
+        ),
+    )
+    orientation: Literal["v", "h"] = Field(
+        default="v",
+        description=(
+            "``v`` (default): vertical bars, samples along x. ``h``: horizontal "
+            "bars, one row per sample, which reads better for a few samples "
+            "with long names."
+        ),
+    )
+    value_title: str | None = Field(
+        default=None,
+        description=(
+            "Value axis title. Unset shows 'Relative abundance' when normalised, "
+            "else the abundance column; an empty string shows none."
+        ),
     )
     show_legend: bool = Field(default=True, description="Show the taxon colour legend")
     log_y: bool = Field(default=False, description="Log-scale the abundance axis")
@@ -587,12 +674,16 @@ class StackedTaxonomyConfig(_BaseVizConfig):
     # it. All optional, so every taxonomy tile keeps its look. Colours stay with
     # `category_colors` (keyed by `taxon_col`, or by the rank shown), then
     # `taxon_palette`.
-    hidden_controls: list[Literal["rank", "sample_sort", "top_n", "normalise"]] | None = Field(
+    hidden_controls: (
+        list[Literal["rank", "sample_sort", "top_n", "normalise", "group", "zoom"]] | None
+    ) = Field(
         default=None,
         description=(
             "Controls the tile does not offer. The config value still applies: "
             "hide `rank` when rank_col is constant, `top_n` when the categories "
-            "are few and fixed, `sample_sort` when the input order is the point."
+            "are few and fixed, `sample_sort` when the input order is the point, "
+            "`group` when the grouping is fixed, `zoom` when the full axis is the "
+            "point. The rank picker also hides itself when there is one rank."
         ),
     )
     rank_label: str | None = Field(
@@ -1946,6 +2037,13 @@ class ScatterXyConfig(_BaseVizConfig):
     reference_value: float | None = Field(
         default=None, description="Where a horizontal or vertical reference line sits"
     )
+    reference_label: str | None = Field(
+        default=None,
+        description=(
+            "Text naming the reference line on the plot (it has no legend entry); null "
+            "writes ``x = y`` or the line's equation"
+        ),
+    )
     reference_highlight: Literal["none", "above", "below"] = Field(
         default="none",
         description=(
@@ -1966,7 +2064,19 @@ class ScatterXyConfig(_BaseVizConfig):
         default=True, description="Draw a thin outline so overlapping points stay separable"
     )
     top_n_labels: int = Field(
-        default=0, ge=0, description="Label this many points, the largest by size or by |y|"
+        default=0,
+        ge=0,
+        description=(
+            "Label this many points: the smallest by ``label_order_col`` when bound, "
+            "else the largest by size or by |y|"
+        ),
+    )
+    label_order_col: str | None = Field(
+        default=None,
+        description=(
+            "Optional numeric column ranking the labelled points, smallest first (a rank, "
+            "a p-value): the top-N labels go to the points it puts first"
+        ),
     )
     color_scale: str = Field(
         default="Viridis", description="Colourscale used when the colour column is numeric"
@@ -2050,6 +2160,15 @@ class ProfileConfig(_BaseVizConfig):
     )
     upper_col: str | None = Field(
         default=None, description="Optional upper edge of a confidence band"
+    )
+    aggregate: Literal["none", "median_iqr"] = Field(
+        default="none",
+        description=(
+            "``none``: one row per series and x, drawn as is. ``median_iqr``: one row per "
+            "feature, series and x; the tile draws each series' median with its "
+            "interquartile band, computed from the rows the filters leave, so the curves "
+            "follow them (a summary written by a recipe cannot)"
+        ),
     )
 
     reference_x: float | None = Field(
@@ -3075,6 +3194,171 @@ class GenomeChordConfig(_BaseVizConfig):
     )
 
 
+class IdeogramConfig(_BaseVizConfig):
+    """A karyotype browser: one bar per chromosome, glyphs or density bins on each.
+
+    The overview draws every bar from the same origin to its chromosome's
+    length, so the reader compares chromosomes, and genomes, by length first.
+    On the bars go the features: in ``marks`` mode one glyph per row (a BUSCO
+    gene coloured by its status), in ``density`` mode one bin per window (the
+    rows' own ``value`` when bound, else a count of rows coloured by their
+    dominant category or on the colour scale), and in ``auto`` mode marks while
+    at most ``lod_threshold`` features are in view and bins above it.
+
+    Clicking a chromosome opens it in a horizontal detail view with its own
+    finer bins, a bp axis, zoom and pan; that is local to the tile. Narrowing
+    the rest of the dashboard to the chromosome or the visible range is an
+    explicit action of the detail view (see ``region_filter_enabled``).
+
+    Chromosome lengths come from ``chrom_length_col`` when bound, else from the
+    ``assembly`` table the genome chord ring uses, else from the furthest
+    feature on each chromosome.
+    """
+
+    viz_kind: Literal["ideogram"] = "ideogram"
+
+    chrom_col: str = Field(default="chrom", description="Chromosome the feature sits on")
+    start_col: str = Field(default="start", description="Feature start (bp)")
+    end_col: str = Field(default="end", description="Feature end (bp)")
+    value_col: str | None = Field(
+        default=None,
+        description="Optional numeric value (a density, a count), drawn on a sequential colour scale",
+    )
+    category_col: str | None = Field(
+        default=None,
+        description="Optional feature class (BUSCO status, variant type), drawn in categorical colours",
+    )
+    sample_col: str | None = Field(
+        default=None,
+        description="Optional sample or genome column: one karyotype per value",
+    )
+    label_col: str | None = Field(
+        default=None, description="Optional feature name, shown in the hover"
+    )
+    chrom_length_col: str | None = Field(
+        default=None,
+        description="Optional per-row chromosome length (bp); wins over the assembly table",
+    )
+
+    assembly: str | None = Field(
+        default=None,
+        description=(
+            "Chromosome sizes to scale the bars on (hg38, hg19, mm10); null uses "
+            "``chrom_length_col``, else the furthest feature on each chromosome"
+        ),
+    )
+    mode: Literal["marks", "density", "auto"] = Field(
+        default="marks",
+        description=(
+            "``marks``: one glyph per feature (density past ``max_features``). "
+            "``density``: one bin per window, the mean ``value`` when bound, else "
+            "the number of features per bin in their dominant category or on the "
+            "colour scale. ``auto``: marks while at most ``lod_threshold`` features "
+            "are in view, bins above it, so zooming in brings the marks back"
+        ),
+    )
+    bin_size: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Density bin width in bp. Null keeps the rows as their own bins when "
+            "``value_col`` is bound, else picks a width giving about 100 bins on the "
+            "longest chromosome"
+        ),
+    )
+    orientation: Literal["horizontal", "vertical"] = Field(
+        default="horizontal", description="Bars along x (one row each) or along y"
+    )
+    chromosomes: list[str] | None = Field(
+        default=None,
+        description=(
+            "Chromosomes to draw, in this order (``chr`` prefix and case ignored); "
+            "null draws every chromosome in natural order"
+        ),
+    )
+    colour_scale: ColourScale = Field(
+        default="Viridis", description="Sequential colour scale for ``value`` and density bands"
+    )
+    facet_by_sample: bool = Field(
+        default=True,
+        description="One karyotype per sample (small multiples); off shows the selected sample only",
+    )
+    sample: str | None = Field(
+        default=None, description="Sample shown when not faceting; null picks the first"
+    )
+    max_facets: int = Field(
+        default=6, ge=1, le=24, description="Guard on the number of karyotypes drawn side by side"
+    )
+    max_chromosomes: int = Field(
+        default=60,
+        ge=1,
+        le=500,
+        description="Guard on the bars per karyotype; the longest are kept and the rest reported",
+    )
+    max_features: int = Field(
+        default=20000,
+        ge=1,
+        le=500000,
+        description=(
+            "Guard on the glyphs drawn in ``marks`` mode. Above it the tile draws "
+            "the density bands instead and says so, never a subset of the marks"
+        ),
+    )
+    lod_threshold: int = Field(
+        default=2000,
+        ge=1,
+        le=500000,
+        description=(
+            "Level of detail for ``auto`` mode: features in view above which the "
+            "overview or the detail view draws density bins rather than marks"
+        ),
+    )
+    feature_opacity: float = Field(
+        default=0.85,
+        ge=0.05,
+        le=1.0,
+        description="Opacity of the marks and bins drawn over the chromosomes",
+    )
+    hidden_categories: list[str] | None = Field(
+        default=None,
+        description=(
+            "Values of ``category_col`` hidden from the karyotype (toggled from the "
+            "legend); null shows every category"
+        ),
+    )
+
+    # --- Region as a cross-filter ------------------------------------------
+    # On by default, as for genome_view's brush: a chromosome and a range are
+    # never ambiguous. Emitting is an explicit action of the detail view, not a
+    # side effect of opening a chromosome.
+    region_filter_enabled: bool = Field(
+        default=True,
+        description=(
+            'Offer a "Filter dashboard" action in the detail view, which emits a '
+            "chromosome multi-select (plus the visible position range, when zoomed) "
+            "on this tile's own collection: the ``genome_selection`` pair a "
+            "genome_view brush emits"
+        ),
+    )
+
+    @field_validator("chromosomes")
+    @classmethod
+    def _drop_blank_chromosomes(cls, value: list[str] | None) -> list[str] | None:
+        """An empty list or blank entries mean "no restriction", not "draw nothing"."""
+        if value is None:
+            return None
+        cleaned = [c.strip() for c in value if isinstance(c, str) and c.strip()]
+        return cleaned or None
+
+    @field_validator("hidden_categories")
+    @classmethod
+    def _empty_hidden_is_none(cls, value: list[str] | None) -> list[str] | None:
+        """Nothing hidden is stored as null; the values are kept exactly as the data spells them."""
+        if value is None:
+            return None
+        return list(dict.fromkeys(value)) or None
+
+
 class RecordCardConfig(_BaseVizConfig):
     """One row of a collection, read as labelled fields rather than as a mark.
 
@@ -3213,6 +3497,163 @@ class ParallelCoordinatesConfig(_BaseVizConfig):
         default="Viridis", description="Continuous colour scale when the colour column is numeric"
     )
     line_opacity: float = Field(default=0.6, ge=0.05, le=1.0)
+
+
+#: The pre-aggregated box statistics `ranked_distribution` reads, by role. The
+#: three quartiles are what make a box; the fences and the mean are optional.
+RANKED_DISTRIBUTION_STAT_ROLES: tuple[str, ...] = ("q1", "median", "q3", "lower", "upper", "mean")
+RANKED_DISTRIBUTION_QUARTILE_ROLES: tuple[str, ...] = ("q1", "median", "q3")
+
+
+class RankedDistributionConfig(_BaseVizConfig):
+    """Top-N features ranked by a score, each with its distribution across samples.
+
+    Two panels share ONE ordered category axis: a box (or violin) per feature of
+    its values across samples, and a lollipop of the score that put it there.
+    The driving case is nf-core/stableexpression (a stability score per gene and
+    the gene's normalised counts across thousands of samples), and the same
+    picture serves housekeeping-gene panels, NanoString normalisers or any "rank
+    features by a metric" view.
+
+    The distribution comes in one of two shapes, told apart by which columns are
+    bound (``validate_binding`` reports a config that binds neither):
+
+    * long form, ``value_col``: one row per feature and sample; the renderer
+      ranks the features and aggregates each one's values itself. The only shape
+      a violin can be drawn from.
+    * pre-aggregated, ``q1_col`` / ``median_col`` / ``q3_col`` (plus optional
+      ``lower_col`` / ``upper_col`` fences and ``mean_col``): one row per
+      feature, the statistics a recipe computed. What a cohort of thousands of
+      samples ships as, since its raw values are far too large to send.
+    """
+
+    viz_kind: Literal["ranked_distribution"] = "ranked_distribution"
+
+    feature_id_col: str = Field(
+        default="feature_id", description="Column identifying each feature (gene id)"
+    )
+    score_col: str = Field(
+        default="score", description="Score the features are ranked by (stability, variance)"
+    )
+    rank_col: str | None = Field(
+        default=None,
+        description=(
+            "Optional precomputed rank (1 = best). Unset ranks by ``score_col`` "
+            "in the direction ``ascending`` gives."
+        ),
+    )
+    label_col: str | None = Field(
+        default=None, description="Optional display name (gene symbol) for the category axis"
+    )
+    group_col: str | None = Field(
+        default=None,
+        description="Optional categorical column colouring each feature (a section, a gene class)",
+    )
+    value_col: str | None = Field(
+        default=None,
+        description="Long form: one value per feature and sample, aggregated by the renderer",
+    )
+    q1_col: str | None = Field(default=None, description="Pre-aggregated: first quartile")
+    median_col: str | None = Field(default=None, description="Pre-aggregated: median")
+    q3_col: str | None = Field(default=None, description="Pre-aggregated: third quartile")
+    lower_col: str | None = Field(
+        default=None,
+        description="Pre-aggregated: lower whisker end; unset draws the whisker from Q1 - 1.5 IQR",
+    )
+    upper_col: str | None = Field(
+        default=None,
+        description="Pre-aggregated: upper whisker end; unset draws the whisker to Q3 + 1.5 IQR",
+    )
+    mean_col: str | None = Field(default=None, description="Pre-aggregated: optional mean")
+
+    top_n: int = Field(
+        default=25, ge=1, description="How many of the best-ranked features are drawn"
+    )
+    ascending: bool = Field(
+        default=True,
+        description=(
+            "Rank the lowest score first. True suits a stability score or a "
+            "coefficient of variation, where lower is more stable; false suits "
+            "a variance or an expression level. Ignored when ``rank_col`` is bound."
+        ),
+    )
+    distribution: Literal["box", "violin"] = Field(
+        default="box",
+        description="How each feature's values are drawn; ``violin`` needs the long form",
+    )
+    orientation: Literal["horizontal", "vertical"] = Field(
+        default="horizontal",
+        description=(
+            "``horizontal``: features down the y axis, distribution on the left "
+            "and score on the right. ``vertical``: features along the x axis, "
+            "distribution above the score"
+        ),
+    )
+    score_label: str | None = Field(
+        default=None, description="Score axis title; null uses the score column's name"
+    )
+    value_label: str | None = Field(
+        default=None, description="Distribution axis title; null says 'Value'"
+    )
+    log_value: bool = Field(
+        default=False,
+        description="Draw the distribution on log10(value + 1), for counts spanning decades",
+    )
+    max_features: int = Field(
+        default=200,
+        ge=1,
+        le=2000,
+        description=(
+            "Guard on the features a tile may draw: ``top_n`` and its control "
+            "are capped here, so a reader cannot ask for a category axis of "
+            "ten thousand genes"
+        ),
+    )
+
+    # --- Selection as a cross-filter ---------------------------------------
+    # Off by default, same reasoning as EmbeddingConfig above.
+    selection_enabled: bool = Field(
+        default=False,
+        description=(
+            "Let a click on a feature (its box or its lollipop) emit a dashboard "
+            "filter on ``selection_column``, else on ``feature_id_col``"
+        ),
+    )
+    selection_column: str | None = Field(
+        default=None,
+        description=(
+            "Column the emitted selection values belong to. Null uses "
+            "``feature_id_col``: a feature is what the reader picks, and its id "
+            "is what the other tiles of the dashboard join on"
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _one_coherent_shape(self) -> RankedDistributionConfig:
+        """Refuse half a pre-aggregated shape, both shapes at once, and a violin of stats.
+
+        A config binding neither shape is left to ``validate_binding``: the
+        builder saves configs before every role is bound, and a stored
+        component must stay loadable while it is being edited.
+        """
+        bound = [r for r in RANKED_DISTRIBUTION_QUARTILE_ROLES if getattr(self, f"{r}_col")]
+        if bound and len(bound) < len(RANKED_DISTRIBUTION_QUARTILE_ROLES):
+            missing = [f"{r}_col" for r in RANKED_DISTRIBUTION_QUARTILE_ROLES if r not in bound]
+            raise ValueError(
+                f"ranked_distribution: a pre-aggregated box needs q1_col, median_col and "
+                f"q3_col together (missing {', '.join(missing)})"
+            )
+        if bound and self.value_col:
+            raise ValueError(
+                "ranked_distribution: bind either value_col (long form) or "
+                "q1_col / median_col / q3_col (pre-aggregated), not both"
+            )
+        if self.distribution == "violin" and bound:
+            raise ValueError(
+                "ranked_distribution: a violin needs the raw values (value_col); "
+                "pre-aggregated statistics can only draw a box"
+            )
+        return self
 
 
 # ---------------------------------------------------------------------------
@@ -4269,6 +4710,383 @@ class RamachandranConfig(_BaseVizConfig):
         return self
 
 
+class SpatialCellsConfig(_BaseVizConfig):
+    """Segmented cells drawn where they sit in the image.
+
+    One marker per cell at its centroid, in the coordinate frame of the image
+    the cells were segmented from: origin top-left, y growing downwards
+    (``y_axis: image``, the default), equal aspect always, marker area taken
+    from the cell's own area so the picture reads as tissue rather than as a
+    scatter. The driving table is a single-cell quantification such as
+    nf-core/mcmicro's mcquant output (``CellID``, ``X_centroid``,
+    ``Y_centroid``, ``Area`` and one mean-intensity column per marker), which
+    is WIDE: the colouring marker is switched from a control over
+    ``value_columns`` (or the numeric columns matching
+    ``value_columns_pattern``), never by rebinding.
+
+    A sample is one image, so two samples are never drawn in one frame:
+    ``sample_display: select`` shows one at a time behind a picker,
+    ``facet`` puts up to ``max_facets`` of them side by side, each in its own
+    frame. Cells of different segmenters on the same image share its frame
+    and are told apart by ``category_col``.
+    """
+
+    viz_kind: Literal["spatial_cells"] = "spatial_cells"
+
+    cell_id_col: str = Field(
+        default="cell_id",
+        description=(
+            "Column identifying each cell. A selection emits its values, so it "
+            "should be unique across samples (mcquant's CellID restarts at 1 "
+            "per image: bind a sample-qualified id when several images share "
+            "the table)"
+        ),
+    )
+    x_col: str = Field(default="x", description="Centroid x, in image pixels (or microns)")
+    y_col: str = Field(default="y", description="Centroid y, in image pixels (or microns)")
+    value_col: str | None = Field(
+        default=None,
+        description=(
+            "Numeric column the cells are coloured by first (one marker's "
+            "intensity). The marker picker writes it back"
+        ),
+    )
+    category_col: str | None = Field(
+        default=None,
+        description=(
+            "Categorical column (cell type, phenotype, segmenter) for the "
+            "categorical colouring; takes the dashboard's `category_colors`"
+        ),
+    )
+    sample_col: str | None = Field(
+        default=None,
+        description="Column naming the image (sample, ROI, core) a cell belongs to",
+    )
+    area_col: str | None = Field(
+        default=None,
+        description="Cell area in squared coordinate units, which sizes the markers",
+    )
+    value_columns: list[str] | None = Field(
+        default=None,
+        description=(
+            "Marker columns the colour picker offers. Null offers `value_col` "
+            "alone, or the columns `value_columns_pattern` matches"
+        ),
+    )
+    value_columns_pattern: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Regular expression naming the marker columns, for a table whose "
+            "markers are only known at ingest (one column per channel of the "
+            "panel). Matched with a search against the numeric columns, less "
+            "the bound coordinate, id and area columns, in table order. "
+            "Mutually exclusive with `value_columns`"
+        ),
+    )
+    color_by: Literal["value", "category"] | None = Field(
+        default=None,
+        description=(
+            "Colour the cells by the marker (continuous) or by `category_col`. "
+            "Null takes the marker when one is bound, else the category"
+        ),
+    )
+    sample_display: Literal["select", "facet"] = Field(
+        default="select",
+        description=(
+            "One image at a time behind a picker (`select`), or up to "
+            "`max_facets` images side by side, each in its own frame (`facet`)"
+        ),
+    )
+    default_sample: str | None = Field(
+        default=None, description="Sample shown first in `select` mode; null takes the first"
+    )
+    max_facets: int = Field(default=4, ge=1, le=12, description="Images drawn in `facet` mode")
+    y_axis: Literal["image", "cartesian"] = Field(
+        default="image",
+        description=(
+            "`image`: origin top-left, y downwards, as the pixels of the image "
+            "(mcquant, Xenium, MERFISH). `cartesian`: y upwards"
+        ),
+    )
+    colour_scale: ColourScale = Field(
+        default="Viridis", description="Continuous colour scale of the marker colouring"
+    )
+    reverse_scale: bool = Field(default=False, description="Reverse the continuous colour scale")
+    transform: Literal["none", "asinh", "log1p"] = Field(
+        default="none",
+        description=(
+            "Transform applied to the marker before colouring: `asinh` is "
+            "asinh(x / cofactor), the cytometry convention; `log1p` is log(1 + x)"
+        ),
+    )
+    asinh_cofactor: float = Field(
+        default=150.0,
+        gt=0.0,
+        description="Cofactor of the asinh transform (5 for mass cytometry, about 150 for flow)",
+    )
+    clip_low_pct: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=50.0,
+        description="Lower percentile of the colour range; cells under it take the lowest colour",
+    )
+    clip_high_pct: float = Field(
+        default=99.0,
+        ge=50.0,
+        le=100.0,
+        description="Upper percentile of the colour range; cells over it take the highest colour",
+    )
+    size_by_area: bool = Field(
+        default=True,
+        description=(
+            "Draw each cell at the diameter its area implies at the current "
+            "zoom, so cells look like cells; off draws every cell at `point_size`"
+        ),
+    )
+    point_size: float = Field(
+        default=4.0,
+        gt=0.0,
+        le=40.0,
+        description="Marker diameter in px without an area, and the floor with one",
+    )
+    max_point_size: float = Field(
+        default=40.0, gt=0.0, le=200.0, description="Ceiling of an area-sized marker, in px"
+    )
+    opacity: float = Field(default=0.9, ge=0.05, le=1.0, description="Marker opacity")
+    legend_pos: Literal["right", "bottom", "none"] = Field(
+        default="right", description="Where the category legend sits"
+    )
+    hover_cols: list[str] = Field(
+        default_factory=list, description="Extra columns shown in the hover tooltip"
+    )
+    max_cells: int = Field(
+        default=100_000,
+        ge=1_000,
+        le=1_000_000,
+        description=(
+            "Most cells drawn per tile. The server already samples a large "
+            "table to the figure point budget; past this, a full load is "
+            "thinned evenly in the browser and the badge says so"
+        ),
+    )
+
+    # --- Image underlay ------------------------------------------------------
+    # An image of the same sample under the cells, placed on the coordinate
+    # frame with Plotly's `layout.images`: pixel (0, 0) at the origin, the
+    # image `width x height` pixels wide times `background_image_scale`.
+    background_wf_id: str | None = Field(
+        default=None, description="Workflow id of the Image DC holding the underlay previews"
+    )
+    background_dc_id: str | None = Field(
+        default=None, description="Data-collection id of the Image DC holding the underlay previews"
+    )
+    background_dc_tag: str | None = Field(
+        default=None, description="Data-collection tag of the Image DC (resolved to ids at import)"
+    )
+    background_image_col: str | None = Field(
+        default=None,
+        description="Column of the Image DC naming each preview; null takes its `image_column`",
+    )
+    background_sample_col: str = Field(
+        default="sample",
+        description="Column of the Image DC matching `sample_col`, one preview per sample",
+    )
+    background_width_col: str = Field(
+        default="width", description="Column of the Image DC with the preview's width in pixels"
+    )
+    background_height_col: str = Field(
+        default="height", description="Column of the Image DC with the preview's height in pixels"
+    )
+    background_url: str | None = Field(
+        default=None,
+        description=(
+            "Direct URL of the underlay instead of an Image DC; `{sample}` is "
+            "replaced by the sample shown. Needs `background_width` and "
+            "`background_height`"
+        ),
+    )
+    background_width: int | None = Field(
+        default=None, ge=1, description="Width in pixels of the image at `background_url`"
+    )
+    background_height: int | None = Field(
+        default=None, ge=1, description="Height in pixels of the image at `background_url`"
+    )
+    background_image_scale: float = Field(
+        default=1.0,
+        gt=0.0,
+        description=(
+            "Coordinate units per image pixel: 1 when the centroids are in "
+            "pixels of that image, the downscale factor of a preview, or the "
+            "pixel size in microns for micron coordinates"
+        ),
+    )
+    background_opacity: float = Field(
+        default=0.7, ge=0.0, le=1.0, description="Opacity of the image underlay"
+    )
+    show_background: bool = Field(
+        default=True, description="Draw the underlay when one is configured"
+    )
+
+    # --- Selection as a cross-filter ---------------------------------------
+    selection_enabled: bool = Field(
+        default=False,
+        description=(
+            "Let a lasso / box / click on cells emit a dashboard filter on the "
+            "selection column. Off by default, like every scatter kind"
+        ),
+    )
+    selection_column: str | None = Field(
+        default=None, description="Column the selection values belong to; null uses `cell_id_col`"
+    )
+
+    @field_validator("value_columns_pattern")
+    @classmethod
+    def _value_columns_pattern_compiles(cls, v: str | None) -> str | None:
+        return _pattern_compiles("value_columns_pattern", v)
+
+    @model_validator(mode="after")
+    def _check_spatial_cells(self) -> SpatialCellsConfig:
+        # An empty list is what the builder writes when the picker is cleared,
+        # and it lists nothing, so it does not compete with a pattern.
+        if self.value_columns and self.value_columns_pattern is not None:
+            raise ValueError(
+                "value_columns and value_columns_pattern are mutually exclusive: list the "
+                "markers or name them by pattern, not both"
+            )
+        if self.clip_low_pct >= self.clip_high_pct:
+            raise ValueError("clip_low_pct must be below clip_high_pct")
+        if self.background_url and not (self.background_width and self.background_height):
+            raise ValueError(
+                "background_url needs background_width and background_height: the "
+                "underlay is placed on the coordinate frame by its pixel size"
+            )
+        if self.color_by == "category" and not self.category_col:
+            raise ValueError("color_by: category needs category_col")
+        return self
+
+
+# ---------------------------------------------------------------------------
+# Immunogenetics
+# ---------------------------------------------------------------------------
+
+#: How many nomenclature fields an allele keeps on screen: 1 is the allele
+#: group ("A*02"), 2 the protein ("A*02:01", OptiType's resolution), 3 the
+#: synonymous coding change, 4 the non-coding one.
+AlleleResolution = Literal[1, 2, 3, 4]
+
+#: The per-sample bars an allele grid can draw beside it.
+AlleleSideBar = Literal["value", "reads"]
+
+
+def _default_allele_side_bars() -> list[AlleleSideBar]:
+    """Both bars; the renderer draws only those whose column is bound."""
+    return ["value", "reads"]
+
+
+class AlleleGridConfig(_BaseVizConfig):
+    """Sample x locus grid of diploid genotypes (HLA typing).
+
+    One row per allele call: OptiType's A1 / A2 / B1 / ... columns melted long,
+    or LILAC and arcasHLA as they are written. Each cell is split in two
+    halves, one per haplotype, coloured by allele: the allele group (first
+    field) picks a hue family and the full allele a shade inside it, so every
+    A*02 reads as one family across the cohort. A homozygous locus draws as
+    one merged cell with a marker. The colours are the dashboard's
+    ``category_colors`` for the allele column first.
+    """
+
+    viz_kind: Literal["allele_grid"] = "allele_grid"
+
+    sample_id_col: str = Field(default="sample_id", description="Sample column (one grid row each)")
+    locus_col: str = Field(default="locus", description="Locus column (one grid column each)")
+    allele_col: str = Field(default="allele", description="Allele call, in HLA nomenclature")
+    haplotype_col: str | None = Field(
+        default=None,
+        description="Optional haplotype (1 / 2) of the call; null pairs a locus's rows in table order",
+    )
+    category_col: str | None = Field(
+        default=None,
+        description="Optional locus class (HLA class I / II), grouping the columns under a header",
+    )
+    value_col: str | None = Field(
+        default=None,
+        description="Optional per-sample score (OptiType objective), drawn as a side bar",
+    )
+    reads_col: str | None = Field(
+        default=None,
+        description="Optional per-sample read support, drawn as a side bar or as cell opacity",
+    )
+
+    resolution: AlleleResolution = Field(
+        default=2,
+        description=(
+            "Nomenclature fields kept on screen: 1 (A*02), 2 (A*02:01), 3 or 4. "
+            "Two calls that agree at this resolution are drawn as homozygous."
+        ),
+    )
+    locus_order: list[str] | None = Field(
+        default=None,
+        description=(
+            "Loci in column order, with or without the HLA- prefix. Unlisted "
+            "loci follow, in the conventional order (A, B, C, then class II)."
+        ),
+    )
+    sample_order: Literal["alphabetical", "value", "allele"] = Field(
+        default="alphabetical",
+        description=(
+            "Row order: sample name, the value column (highest first), or the "
+            "alleles at `order_locus`, which lines carriers of one allele up"
+        ),
+    )
+    order_locus: str | None = Field(
+        default=None,
+        description="Locus whose alleles order the rows when `sample_order` is `allele`; null uses the first column",
+    )
+    show_labels: bool = Field(
+        default=True, description="Write the allele in each half when it fits"
+    )
+    side_bars: list[AlleleSideBar] = Field(
+        default_factory=_default_allele_side_bars,
+        description="Per-sample bars drawn beside the grid, among the bound value and reads columns",
+    )
+    reads_as_opacity: bool = Field(
+        default=False,
+        description="Fade a sample's cells by its read support instead of (or as well as) a bar",
+    )
+    value_label: str | None = Field(
+        default=None, description="Header of the value bar; null uses the column name"
+    )
+    reads_label: str | None = Field(
+        default=None, description="Header of the reads bar; null uses the column name"
+    )
+    max_samples: int = Field(
+        default=200,
+        ge=1,
+        le=2000,
+        description="Guard on the grid rows drawn; the rest are counted, never sampled",
+    )
+    max_loci: int = Field(default=24, ge=1, le=60, description="Guard on the grid columns drawn")
+
+    # --- Selection as a cross-filter ---------------------------------------
+    # Off by default, as for the other non-protein kinds.
+    selection_enabled: bool = Field(
+        default=False,
+        description=(
+            "Let a click on an allele filter the dashboard to the rows carrying "
+            "it, and a click on a sample label to that sample"
+        ),
+    )
+    selection_column: str | None = Field(
+        default=None,
+        description=(
+            "Column an allele click selects on. Null uses ``allele_col``, which "
+            "is what a peptide-by-allele prediction table (epitopeprediction) "
+            "joins on. A sample-label click always selects on ``sample_id_col``."
+        ),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Retired kinds, kept alive as views of the kind that survived
 # ---------------------------------------------------------------------------
@@ -4428,8 +5246,10 @@ _VizConfigUnion = Annotated[
     | TranscriptStructureConfig
     | CnvProfileConfig
     | GenomeChordConfig
+    | IdeogramConfig
     | RecordCardConfig
     | ParallelCoordinatesConfig
+    | RankedDistributionConfig
     | Molecule3DConfig
     | MsaConfig
     | SequenceTrackConfig
@@ -4437,7 +5257,9 @@ _VizConfigUnion = Annotated[
     | SecondaryStructureConfig
     | DomainArchitectureConfig
     | PaeMatrixConfig
-    | RamachandranConfig,
+    | RamachandranConfig
+    | SpatialCellsConfig
+    | AlleleGridConfig,
     Field(discriminator="viz_kind"),
 ]
 

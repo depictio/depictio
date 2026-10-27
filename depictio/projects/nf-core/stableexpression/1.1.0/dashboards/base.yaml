@@ -1,0 +1,1674 @@
+version: 1
+# nf-core/stableexpression 1.1.0, on the family rules of depictio/projects/nf-core/RULES.md
+# (ampliseq/2.18.0 is the reference implementation).
+#
+# Funnel: which public datasets reached the merged matrix, and with how many
+# samples (Datasets) and gene ids (ID mapping), under Data & QC -> which genes
+# are the most stable at each expression level (Ranking) -> what makes a
+# candidate stable, measure by measure (Candidates) -> how stability changes
+# with expression level (Sections), under Stability.
+#
+# The pipeline publishes no MultiQC report on the pinned run (its MULTIQC task
+# failed; a 1.1.0 report holds custom content only), so there is no MultiQC tab.
+# Its Dash app (reporting/dash_app/, not published either) is the design
+# reference: the expression of the best gene of each section as horizontal
+# boxes, with the score table beside it. The Ranking tab opens on that view.
+#
+# Two axes. The samples hub (`samples`) is what the sample filters start from:
+# its links carry a pick to the dataset collections by dataset and to the
+# per-sample values of the Ranking tab by sample. The gene collections have no
+# sample axis (a stability score is a statistic of the whole cohort), so their
+# tabs filter from their own gene filters; their links carry a section or gene
+# pick between them by gene id.
+#
+# Routes: NO_ID_MAPPING (--skip_id_mapping) prunes the ID mapping collection,
+# with the ID mapping tab, one pipeline step value and nothing else.
+main_dashboard:
+  title: nf-core/stableexpression
+  subtitle: The most stable genes across public expression datasets, section by section
+  project_tag: stableexpression Gene Stability
+  main_tab_name: Overview
+  tab_icon: mdi:compass-outline
+  tab_icon_color: brandPrimary
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_panel_default: collapsed
+  content_width_default: compact
+  show_tab_header: false
+  # Declared once here, read by every tab of the family.
+  category_colors:
+    '{GROUP_COL}': auto
+    # Ten sections by default (--nb_sections), most expressed first: a
+    # colour-blind-safe sequential ramp, so neighbouring sections look alike.
+    section:
+      Section 01: '#440154'
+      Section 02: '#482878'
+      Section 03: '#3e4989'
+      Section 04: '#31688e'
+      Section 05: '#26828e'
+      Section 06: '#1f9e89'
+      Section 07: '#35b779'
+      Section 08: '#6ece58'
+      Section 09: '#b5de2b'
+      Section 10: '#fde725'
+      '*': auto
+    expression_level:
+      Very high expression: '#5f3dc4'
+      High expression: '#1c7ed6'
+      Medium range: '#0ca678'
+      Low expression: '#f59f00'
+      Very low expression: '#e8590c'
+    candidate:
+      Candidate: '#2f9e44'
+      Not a candidate: '#adb5bd'
+    outcome:
+      Merged: '#2f9e44'
+      No gene mapped: '#e8590c'
+      Only rare genes: '#f59f00'
+      All samples filtered out: '#c92a2a'
+    fate:
+      Kept: '#2f9e44'
+      Collapsed: '#1c7ed6'
+      Rare gene: '#f59f00'
+      Unmapped: '#adb5bd'
+    component:
+      Normfinder: '#1c7ed6'
+      geNorm M: '#ae3ec9'
+      Coefficient of variation: '#0ca678'
+      Robust CV: '#74b816'
+      Missing values: '#adb5bd'
+    status:
+      Analysed: '#2f9e44'
+      Filtered out: '#adb5bd'
+    platforms: auto
+    step: auto
+  # Persistent: drawn in every tab's filter panel, picks kept across tabs. All
+  # three are bound to the samples hub, the source of every sample link.
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Narrows the dataset tabs and the per-sample values
+    persistent: true
+    pin: top
+  grid_sections:
+  - name: Key figures
+    icon: mdi:counter
+    color: gray
+    appearance: plain
+    card_variant: headline
+    filter_bar: true
+    visible_filters: 2
+    description: The run in four numbers. The filters here narrow the dataset and sample counts only.
+  - name: Findings
+    icon: mdi:star-outline
+    color: gray
+    appearance: plain
+    figure_style: minimal
+    filter_bar: true
+    visible_filters: 2
+    description: What the data says, each with the tab that shows it, then the figures behind it.
+  - name: How to read this dashboard
+    icon: mdi:information-outline
+    color: gray
+    appearance: plain
+    description: The tabs by group, each with the question it answers.
+  # Declared on the main tab, which no route removes.
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: gray
+    description: The public samples behind every tab, narrowed by the sample filters
+    collapsed: true
+    persistent: true
+    pin: bottom
+    exclude_tabs:
+    - Overview
+  components:
+  # First in component order on purpose: the Guide demos the first categorical
+  # filter that shares a data collection with a card (Samples, below).
+  - component_type: interactive
+    workflow_tag: stableexpression
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Key figures
+    tag: se-ov-kf-group
+    index: ov-kf-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: stableexpression
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: dataset
+    column_type: object
+    display:
+      icon_name: mdi:database-outline
+      custom_color: blue
+      strip_label: Dataset
+    section: Key figures
+    tag: se-ov-kf-dataset
+    index: ov-kf-dataset
+    title: Dataset
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # The pipeline's wordmark, read from its repository; where it cannot load (no
+  # internet), the title is drawn as text.
+  - component_type: text
+    title: nf-core/stableexpression
+    logo: https://raw.githubusercontent.com/nf-core/stableexpression/master/docs/images/nf-core-stableexpression_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/stableexpression/master/docs/images/nf-core-stableexpression_logo_dark.png
+    order: 1
+    body: >
+      Every public expression dataset of one species, merged into one matrix, and the genes
+      whose expression holds steadiest across all of their samples, at each expression level:
+      the reference genes a qPCR assay can trust. [Run parameters](params:)
+    tag: se-ov-hero
+    index: ov-hero
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/stableexpression downloads the public RNA-seq and microarray datasets of a species, maps their gene ids to Ensembl, filters and normalises every dataset, merges them and scores the steadiest genes of each expression section. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The sample filters in the left panel narrow the dataset tabs and the per-sample values. Scores are statistics of the whole cohort, so the gene tabs filter by section, level and score instead.
+    tag: se-ov-about
+    index: ov-about
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash.
+  - component_type: text
+    surface: card
+    values:
+      datasets: {dc: samples, column: dataset, aggregation: nunique, format: integer}
+      samples: {dc: samples, column: sample, aggregation: count, filter_expr: "col('status') == 'Analysed'", format: si}
+      genes: {dc: stableexpression_gene_statistics, column: gene_id, aggregation: count, format: si}
+    body: |
+      ### The run
+      - ![](icon:mdi:earth) **Species** {{param:species}}
+      - ![](icon:mdi:database-outline) **Datasets** {{datasets}} merged
+      - ![](icon:mdi:flask-outline) **Samples** {{samples}}
+      - ![](icon:mdi:dna) **Genes** {{genes}} in the matrix
+      - ![](icon:mdi:layers-outline) **Sections** {{param:nb_sections}}, {{param:nb_candidates_per_section}} candidates each
+    tag: se-ov-run
+    index: ov-run
+    layout: {x: 5, y: 1, w: 3, h: 3}
+  # The marks take the family's colour (the header's), not the theme's blue.
+  # The Map step cites the ID mapping collection, so a --skip_id_mapping run
+  # (NO_ID_MAPPING) drops it with its data.
+  - component_type: text
+    surface: card
+    accent: green
+    values:
+      n_ids: {dc: stableexpression_id_mapping, column: gene_ids, aggregation: sum, format: si}
+      n_cand: {dc: stableexpression_gene_stability, column: gene_id, aggregation: count, format: si}
+    body: |
+      ### Five steps from public datasets to reference genes
+      Each step names its settings and the tab that shows its result.
+
+      ::: steps
+      1. ![](icon:mdi:import) **Download** Expression Atlas datasets of the species · [Settings](params:species) · [Datasets](tab:Datasets)
+      2. ![](icon:mdi:tag-outline) **Map** {{n_ids}} gene ids to Ensembl with g:Profiler · [Settings](params:gprofiler_target_db) · [ID mapping](tab:ID mapping)
+      3. ![](icon:mdi:filter-remove-outline) **Filter** Samples with too many zeros or gaps, then normalise · [Settings](params:max_zero_ratio) · [Datasets](tab:Datasets)
+      4. ![](icon:mdi:scale-balance) **Score** {{n_cand}} candidates with Normfinder, geNorm and two CVs · [Settings](params:stability_score_weights) · [Candidates](tab:Candidates)
+      5. ![](icon:mdi:trophy-outline) **Rank** The steadiest genes of each expression section · [Settings](params:nb_sections) · [Ranking](tab:Ranking)
+      :::
+    tag: se-ov-steps
+    index: ov-steps
+    layout: {x: 0, y: 4, w: 8, h: 3}
+  # Key figures: one card per stage of the funnel, each opening the tab that
+  # explains it. All four read collections every route writes.
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_dataset_summary
+    use: stableexpression/dataset_attrition
+    aggregation: sum
+    column_name: downloaded
+    column_type: int64
+    secondary_layout: attrition
+    attrition_cols: [id_mapped, merged]
+    display:
+      icon_name: mdi:database-outline
+      icon_color: blue
+      caption: downloaded, then ID-mapped and merged
+      link: tab:Datasets
+    section: Key figures
+    tag: se-ov-kf-datasets
+    index: ov-kf-datasets
+    title: Datasets
+    description: Public datasets the run downloaded. The strip follows them through the gene ID mapping to the merged matrix.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: samples
+    aggregation: count
+    column_name: sample
+    column_type: object
+    filter_expr: col('status') == 'Analysed'
+    secondary_layout: composition
+    breakdown_col: '{GROUP_COL}'
+    display:
+      icon_name: mdi:flask-outline
+      icon_color: teal
+      caption: in the merged matrix, by {GROUP_COL_DISPLAY}
+      link: tab:Datasets
+      format: si
+    section: Key figures
+    tag: se-ov-kf-samples
+    index: ov-kf-samples
+    title: Samples
+    description: Public samples that passed every filter into the merged matrix. The bar splits them by {GROUP_COL_DISPLAY}.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_statistics
+    use: stableexpression/gene_count
+    aggregation: count
+    column_name: gene_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: candidate
+    display:
+      icon_name: mdi:dna
+      icon_color: violet
+      caption: genes measured, the candidates scored
+      link: tab:Sections
+      format: si
+    section: Key figures
+    tag: se-ov-kf-genes
+    index: ov-kf-genes
+    title: Genes
+    description: Genes of the merged matrix. The ring shows the share each expression section put forward as candidates and scored.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_stability
+    use: stableexpression/best_score
+    aggregation: min
+    column_name: stability_score
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:trophy-outline
+      icon_color: green
+      caption: the lowest, with the spread of all candidates
+      link: tab:Ranking
+      decimals: 3
+    section: Key figures
+    tag: se-ov-kf-best
+    index: ov-kf-best
+    title: Best stability score
+    description: Stability score of the most stable candidate, lower is steadier. The box spreads the scores of every candidate.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Findings filter bar: the group, then the expression section.
+  - component_type: interactive
+    workflow_tag: stableexpression
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Findings
+    tag: se-ov-findings-group
+    index: ov-findings-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_stability
+    interactive_component_type: MultiSelect
+    column_name: section
+    column_type: object
+    display:
+      icon_name: mdi:layers-outline
+      custom_color: grape
+      strip_label: Section
+    section: Findings
+    tag: se-ov-findings-section
+    index: ov-findings-section
+    title: Expression section
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # One result row per finding, each citing one data collection, so the import
+  # removes a row with its data.
+  - component_type: text
+    surface: card
+    values:
+      top_gene: {dc: stableexpression_gene_stability, column: gene_name, aggregation: top, weight: rank_weight}
+      top_score: {dc: stableexpression_gene_stability, column: stability_score, aggregation: min, format: 'decimals:3'}
+      top_part: {dc: stableexpression_score_components, column: component, aggregation: top, weight: contribution}
+      part_share: {dc: stableexpression_score_components, column: component, aggregation: top_share, weight: contribution, format: percent}
+      lead_seen: {dc: stableexpression_stable_gene_distribution, column: measured_share, aggregation: median, filter_expr: "col('section_rank') == 1", format: percent}
+      merged_pct: {dc: stableexpression_dataset_summary, column: merged, aggregation: average, format: percent}
+      n_unmapped: {dc: stableexpression_dataset_summary, column: dataset, aggregation: count, filter_expr: "col('id_mapped') == 0", format: integer}
+    body: |
+      - **{{top_gene}}** is the most stable candidate in view – a stability score of {{top_score}} [Ranking](tab:Ranking)
+      - **{{lead_seen}}** of the samples measured the median section leader – a box is drawn from those alone [Ranking](tab:Ranking)
+      - **{{top_part}}** weighs most in the scores – {{part_share}} of all the candidates' score [Candidates](tab:Candidates)
+      - **{{merged_pct}}** of the downloaded datasets reached the merged matrix – {{n_unmapped}} mapped no gene id [Datasets](tab:Datasets)
+    section: Findings
+    tag: se-ov-findings
+    index: ov-findings
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # One highlight per analysis tab, and the sample funnel of the Datasets tab.
+  # The tiles of a row share a stored height.
+  - component_type: highlight
+    section: Findings
+    source_tab: Ranking
+    source_component: rank-distribution
+    caption: The best gene of each section, its expression across the cohort beside its score; colour is the section.
+    hide_legend: true
+    tag: se-ov-hl-ranking
+    index: ov-hl-ranking
+    layout: {x: 0, y: 2, w: 4, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Candidates
+    source_component: cand-measures
+    caption: Normfinder rank against geNorm rank per candidate; bottom left on the diagonal is steady by both measures.
+    hide_legend: true
+    tag: se-ov-hl-measures
+    index: ov-hl-measures
+    layout: {x: 4, y: 2, w: 4, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Sections
+    source_component: sec-score-box
+    caption: Stability scores of the candidates, one box per expression section, most expressed first.
+    hide_legend: true
+    tag: se-ov-hl-sections
+    index: ov-hl-sections
+    layout: {x: 0, y: 7, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Datasets
+    source_component: ds-funnel
+    caption: Samples still in after each step of the datasets, stacked by platform.
+    tag: se-ov-hl-funnel
+    index: ov-hl-funnel
+    layout: {x: 4, y: 7, w: 4, h: 4}
+  # Link-only tab tiles: each tile prints its tab's subtitle, the question the
+  # tab answers.
+  - component_type: text
+    body: |
+      ### Data & QC
+      - [Datasets](tab:Datasets)
+      - [ID mapping](tab:ID mapping)
+
+      ### Stability
+      - [Ranking](tab:Ranking)
+      - [Candidates](tab:Candidates)
+      - [Sections](tab:Sections)
+    section: How to read this dashboard
+    tag: se-ov-how-to-read
+    index: ov-how-to-read
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Persistent sample filters, the group first.
+  - component_type: interactive
+    workflow_tag: stableexpression
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+    section: Sample filters
+    group: Sample scope
+    tag: se-filter-group
+    index: sample-filters-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: stableexpression
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: dataset
+    column_type: object
+    display:
+      icon_name: mdi:database-outline
+      custom_color: blue
+    section: Sample filters
+    group: Sample scope
+    tag: se-filter-dataset
+    index: sample-filters-dataset
+    title: Dataset
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: stableexpression
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: teal
+    section: Sample filters
+    group: Sample scope
+    tag: se-filter-sample
+    index: sample-filters-sample
+    title: Sample
+    layout: {x: 0, y: 5, w: 1, h: 3}
+  # Row selection feeds the Analysis panel.
+  - component_type: table
+    workflow_tag: stableexpression
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Sample sheet
+    tag: se-sample-sheet
+    index: sample-sheet
+    title: Public samples
+    description: One row per sample, with its dataset, accession, platform, normalisation, condition and status.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+tabs:
+# ============================================================================
+# Data & QC
+# ============================================================================
+- title: Datasets
+  subtitle: Which datasets reached the merged matrix, and with how many samples?
+  tab_group: Data & QC
+  tab_order: 1
+  tab_icon: mdi:database-outline
+  tab_icon_color: blue
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Dataset filters
+    icon: mdi:filter-variant
+    color: blue
+    description: Narrow by outcome or by the samples a dataset kept
+  grid_sections:
+  - name: Datasets at a glance
+    icon: mdi:counter
+    color: blue
+    description: Datasets and samples through the steps, outcomes and missing genes
+  - name: Samples through the filters
+    icon: mdi:chart-bar
+    color: blue
+    description: The samples still in after each step, and why datasets dropped out
+  - name: Dataset profile
+    icon: mdi:chart-scatter-plot
+    color: blue
+    description: Each dataset by the samples it kept and the genes its platform misses
+  - name: Dataset table
+    icon: mdi:table
+    color: gray
+    description: Every downloaded dataset with its mapping, filters and outcome
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      stableexpression downloads every [Expression Atlas](https://www.ebi.ac.uk/gxa/home)
+      dataset of the species, maps its gene ids, removes the samples with too many zeros or
+      missing values and normalises what is left (TPM or CPM, then a quantile normalisation).
+      Read the steps left to right: a dataset whose ids map to no Ensembl gene loses all its
+      samples at once. A microarray covers only part of the genome, so its samples miss more of
+      the merged matrix's genes.
+    tag: se-ds-intro
+    index: ds-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_dataset_summary
+    interactive_component_type: MultiSelect
+    column_name: outcome
+    column_type: object
+    display:
+      icon_name: mdi:check-decagram-outline
+      custom_color: green
+    section: Dataset filters
+    group: Datasets
+    tag: se-ds-filter-outcome
+    index: ds-outcome-filter
+    title: Outcome
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_dataset_summary
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: samples_kept
+    column_type: int64
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: teal
+    section: Dataset filters
+    group: Datasets
+    tag: se-ds-filter-kept
+    index: ds-kept-range
+    title: Samples kept
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_dataset_summary
+    use: stableexpression/dataset_attrition
+    aggregation: sum
+    column_name: downloaded
+    column_type: int64
+    secondary_layout: attrition
+    attrition_cols: [id_mapped, merged]
+    display:
+      icon_name: mdi:database-outline
+      icon_color: blue
+      caption: downloaded, then ID-mapped and merged
+    section: Datasets at a glance
+    tag: se-ds-card-datasets
+    index: ds-card-datasets
+    title: Datasets
+    description: Datasets downloaded, then those whose ids mapped and those that reached the merged matrix.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_dataset_summary
+    use: stableexpression/sample_attrition
+    aggregation: sum
+    column_name: samples_downloaded
+    column_type: int64
+    secondary_layout: attrition
+    attrition_cols: [samples_id_mapped, samples_after_zero_filter, samples_kept]
+    display:
+      icon_name: mdi:flask-outline
+      icon_color: teal
+      caption: downloaded, then after each filter
+      format: si
+    section: Datasets at a glance
+    tag: se-ds-card-samples
+    index: ds-card-samples
+    title: Samples
+    description: Samples downloaded, then still in after the gene ID mapping, the zero filter and the missing-value filter.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_dataset_summary
+    use: stableexpression/dataset_outcomes
+    aggregation: count
+    column_name: dataset
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: outcome
+    display:
+      icon_name: mdi:check-decagram-outline
+      icon_color: green
+      caption: datasets, by outcome
+    section: Datasets at a glance
+    tag: se-ds-card-outcomes
+    index: ds-card-outcomes
+    title: Outcomes
+    description: 'What became of each dataset: merged, no gene mapped, only rare genes, or every sample filtered out.'
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_dataset_summary
+    aggregation: median
+    column_name: missing_share
+    column_type: float64
+    filter_expr: col('merged') == 1
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:grid
+      icon_color: orange
+      caption: median per merged dataset, with its spread
+      format: percent
+    section: Datasets at a glance
+    tag: se-ds-card-missing
+    index: ds-card-missing
+    title: Genes missing
+    description: Share of the merged matrix's genes a sample of the dataset did not measure, the median over its samples.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_dataset_funnel
+    use: stableexpression/sample_funnel
+    visu_type: histogram
+    dict_kwargs:
+      x: step
+      y: samples
+      color: platform
+      histfunc: sum
+      category_orders: {step: [Downloaded, Gene IDs mapped, Zero filter, Missing-value filter]}
+      labels: {step: '', samples: Samples, platform: ''}
+    section: Samples through the filters
+    tag: se-ds-fig-funnel
+    index: ds-funnel
+    title: Samples after each step
+    description: Samples still in after each step, summed over the datasets and stacked by platform.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: figure
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_dataset_summary
+    visu_type: histogram
+    dict_kwargs:
+      x: platform
+      color: outcome
+      barmode: stack
+      labels: {platform: '', outcome: '', count: Datasets}
+    section: Samples through the filters
+    tag: se-ds-fig-outcomes
+    index: ds-outcome-bars
+    title: Datasets by outcome
+    description: Datasets per platform, stacked by what became of them.
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: figure
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_dataset_summary
+    use: stableexpression/missing_by_design
+    visu_type: strip
+    dict_kwargs:
+      x: design
+      y: missing_share
+      color: platform
+      hover_data: [accession, samples_kept]
+      labels: {design: Array design, missing_share: Share of the genes not measured, platform: '', accession: Accession, samples_kept: Samples kept}
+    section: Dataset profile
+    tag: se-ds-fig-missing
+    index: ds-plane
+    title: Genes missing, by array design
+    description: >-
+      One point per dataset. An array measures a fixed set of probes, so the datasets of one
+      design line up at one share; RNA-seq measures almost every gene.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: table
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_dataset_summary
+    use: stableexpression/dataset_table
+    row_selection_enabled: true
+    row_selection_column: dataset
+    section: Dataset table
+    tag: se-ds-table
+    index: ds-table
+    title: Downloaded datasets
+    description: Every dataset with its platform, samples, ID mapping, filters and outcome. Select a row to open its record.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_dataset_summary
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: se-ds-table
+      id_col: dataset
+      title_col: accession
+      selection_source: table_selection
+      sections:
+        Dataset: [accession, dataset, platform, normalisation, array_design, conditions, outcome]
+        Samples: [samples_downloaded, samples_rejected_zeros, samples_rejected_missing, samples_kept, kept_share]
+        Gene ids: [gene_ids_in, genes_kept, ids_collapsed, genes_rare, ids_unmapped, mapped_share, failure_reason]
+        Values: [zero_share, missing_share, skewness]
+      link_templates:
+        accession: https://www.ebi.ac.uk/gxa/experiments/{value}
+    section: Dataset table
+    tag: se-ds-av-record
+    index: ds-record
+    title: Dataset record
+    description: The selected dataset, with its samples through the filters and its gene ids.
+    layout: {x: 5, y: 0, w: 3, h: 6}
+- title: ID mapping
+  subtitle: How many gene ids of each dataset map to an Ensembl gene?
+  tab_group: Data & QC
+  tab_order: 2
+  tab_icon: mdi:tag-outline
+  tab_icon_color: cyan
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Mapping filters
+    icon: mdi:filter-variant
+    color: cyan
+    description: Narrow by what became of the ids or of the dataset
+  grid_sections:
+  - name: Mapping at a glance
+    icon: mdi:counter
+    color: cyan
+    description: Gene ids in, the share kept, genes per dataset and rare genes dropped
+  - name: Fate per dataset
+    icon: mdi:chart-bar
+    color: cyan
+    description: Each dataset's ids by fate, as shares of what it came with
+  - name: Fate of the gene ids
+    icon: mdi:chart-bar
+    color: cyan
+    description: Ids kept, collapsed, rare or unmapped, by platform and by share
+  - name: Mapping table
+    icon: mdi:table
+    color: gray
+    description: The ids of every dataset by fate
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      Each dataset names its genes its own way: probe sets for a microarray, Ensembl ids of
+      some release for RNA-seq. [g:Profiler](https://biit.cs.ut.ee/gprofiler/convert) maps them
+      to Ensembl genes; ids of the same gene collapse into one, and genes seen in too few
+      datasets are dropped as rare. A dataset whose ids map to nothing (an array design
+      g:Profiler does not know) leaves the run here.
+    tag: se-id-intro
+    index: id-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_id_mapping
+    interactive_component_type: MultiSelect
+    column_name: fate
+    column_type: object
+    display:
+      icon_name: mdi:tag-outline
+      custom_color: cyan
+    section: Mapping filters
+    group: Gene ids
+    tag: se-id-filter-fate
+    index: id-fate-filter
+    title: Fate of the ids
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_id_mapping
+    interactive_component_type: MultiSelect
+    column_name: outcome
+    column_type: object
+    display:
+      icon_name: mdi:check-decagram-outline
+      custom_color: green
+    section: Mapping filters
+    group: Gene ids
+    tag: se-id-filter-outcome
+    index: id-outcome-filter
+    title: Dataset outcome
+    layout: {x: 0, y: 2, w: 1, h: 2}
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_id_mapping
+    use: stableexpression/id_fates
+    aggregation: sum
+    column_name: gene_ids
+    column_type: int64
+    secondary_layout: composition
+    breakdown_col: fate
+    display:
+      icon_name: mdi:tag-outline
+      icon_color: cyan
+      caption: ids in, by fate
+      format: si
+    section: Mapping at a glance
+    tag: se-id-card-ids
+    index: id-card-ids
+    title: Gene ids
+    description: Ids the datasets came with, summed over the datasets, split by what became of them.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_id_mapping
+    aggregation: median
+    column_name: share
+    column_type: float64
+    filter_expr: col('fate') == 'Kept'
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:percent-outline
+      icon_color: blue
+      caption: median per dataset, with its spread
+      format: percent
+    section: Mapping at a glance
+    tag: se-id-card-share
+    index: id-card-share
+    title: Ids kept
+    description: Share of a dataset's ids kept as genes of the merged matrix, the median over the datasets.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_id_mapping
+    aggregation: median
+    column_name: gene_ids
+    column_type: int64
+    filter_expr: (col('fate') == 'Kept') & (col('gene_ids') > 0)
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:dna
+      icon_color: green
+      caption: median per mapped dataset, with its spread
+      format: si
+    section: Mapping at a glance
+    tag: se-id-card-genes
+    index: id-card-genes
+    title: Genes per dataset
+    description: Genes a mapped dataset contributes to the merged matrix, after collapsing and rare genes.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_id_mapping
+    aggregation: sum
+    column_name: gene_ids
+    column_type: int64
+    filter_expr: col('fate') == 'Rare gene'
+    secondary_layout: top_n
+    breakdown_col: platform
+    top_n_count: 2
+    display:
+      icon_name: mdi:filter-remove-outline
+      icon_color: orange
+      caption: rare-gene ids, by platform
+      format: si
+    section: Mapping at a glance
+    tag: se-id-card-rare
+    index: id-card-rare
+    title: Rare genes
+    description: Ids of genes seen in too few datasets, which the pipeline drops before merging.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_id_mapping
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: platform
+      taxon_col: fate
+      rank_col: null
+      abundance_col: gene_ids
+      normalise_to_one: true
+      sample_sort: category
+      sort_category: Kept
+      y_zoom: auto
+      top_n: 4
+      value_title: Share of the ids
+      hidden_controls: [rank, top_n, group]
+    section: Fate of the gene ids
+    tag: se-id-fig-platform
+    index: id-platform-bars
+    title: Fate of the ids by platform
+    description: Every dataset of a platform pooled, its ids split by fate. Kept fills most of each bar, so the axis starts near the smallest kept share (the // marks the cut); switch Zoom off for the whole bar.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: figure
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_id_mapping
+    visu_type: histogram
+    dict_kwargs:
+      x: share
+      color: fate
+      nbins: 20
+      barmode: overlay
+      category_orders: {fate: [Kept, Collapsed, Rare gene, Unmapped]}
+      labels: {share: Share of the dataset's ids, fate: ''}
+    section: Fate of the gene ids
+    tag: se-id-fig-share
+    index: id-share-histogram
+    title: Shares per dataset, by fate
+    description: Datasets by the share of their ids in each fate; kept near 1 is a clean mapping.
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: advanced_viz
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_id_mapping
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: dataset
+      taxon_col: fate
+      rank_col: null
+      abundance_col: gene_ids
+      normalise_to_one: true
+      sample_sort: category
+      sort_category: Kept
+      group_col: platform
+      y_zoom: auto
+      top_n: 4
+      value_title: Share of the dataset's ids
+      hidden_controls: [rank, top_n]
+    section: Fate per dataset
+    tag: se-id-fig-datasets
+    index: id-dataset-bars
+    title: Fate of the ids, dataset by dataset
+    description: One bar per dataset, its ids split by fate, grouped by platform and sorted by the share kept. Sort by name, total or another fate, or regroup, from the controls; Normalise off shows the id counts.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_id_mapping
+    row_selection_enabled: true
+    row_selection_column: fate_key
+    section: Mapping table
+    tag: se-id-table
+    index: id-table
+    title: Gene ids by dataset and fate
+    description: One row per dataset and fate, with the ids and their share of the dataset's ids.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+# ============================================================================
+# Stability
+# ============================================================================
+- title: Ranking
+  subtitle: Which genes are the most stable at each expression level?
+  tab_group: Stability
+  tab_order: 3
+  tab_icon: mdi:trophy-outline
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Gene filters
+    icon: mdi:filter-variant
+    color: grape
+    description: Narrow the ranking by section or by score
+  grid_sections:
+  - name: Ranking at a glance
+    icon: mdi:counter
+    color: grape
+    description: Genes ranked, the best score, and how many samples measured them
+  - name: Most stable genes
+    icon: mdi:chart-box-outline
+    color: grape
+    description: The best genes of each section, their spread across the cohort beside their score
+  - name: Per-sample values
+    icon: mdi:chart-bell-curve
+    color: grape
+    description: The top two genes of each section, redrawn from the samples in view
+  - name: Ranked genes table
+    icon: mdi:table
+    color: gray
+    description: The box statistics of every ranked gene
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      Genes are split into sections by mean expression, Section 01 the most expressed, and the
+      candidates of each section are scored for stability (lower is steadier). The ranking
+      opens on the best gene of each section, the qPCR reference panel the pipeline's own app
+      shows; raise Top N in the controls for the next ones. Each box spans the normalised
+      expression (0 to 1) of the samples that measured the gene, so a gene measured by few
+      samples draws a narrow box from little data.
+    tag: se-rank-intro
+    index: rank-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_stable_gene_distribution
+    interactive_component_type: MultiSelect
+    column_name: section
+    column_type: object
+    display:
+      icon_name: mdi:layers-outline
+      custom_color: grape
+    section: Gene filters
+    group: Genes
+    tag: se-rank-filter-section
+    index: rank-section-filter
+    title: Expression section
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_stable_gene_distribution
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: stability_score
+    column_type: float64
+    display:
+      icon_name: mdi:scale-balance
+      custom_color: green
+    section: Gene filters
+    group: Genes
+    tag: se-rank-filter-score
+    index: rank-score-range
+    title: Stability score
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_stable_gene_distribution
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: measured_share
+    column_type: float64
+    display:
+      icon_name: mdi:percent-outline
+      custom_color: teal
+    section: Gene filters
+    group: Genes
+    tag: se-rank-filter-measured
+    index: rank-measured-range
+    title: Share of samples measured
+    layout: {x: 0, y: 5, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_stable_gene_distribution
+    aggregation: count
+    column_name: gene_id
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: expression_level
+    display:
+      icon_name: mdi:sort-numeric-ascending
+      icon_color: grape
+      caption: by the pipeline's expression level
+    section: Ranking at a glance
+    tag: se-rank-card-genes
+    index: rank-card-genes
+    title: Genes ranked
+    description: The best-ranked candidates of each section kept for the ranking, split by expression level.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_stable_gene_distribution
+    aggregation: min
+    column_name: stability_score
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:trophy-outline
+      icon_color: green
+      caption: the lowest, with the spread of the ranked genes
+      decimals: 3
+    section: Ranking at a glance
+    tag: se-rank-card-best
+    index: rank-card-best
+    title: Best score
+    description: Stability score of the steadiest ranked gene; the box spreads the scores of every gene in view.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_stable_gene_distribution
+    use: stableexpression/ranked_measured_share
+    aggregation: median
+    column_name: measured_share
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:percent-outline
+      icon_color: teal
+      caption: median per gene, with its spread
+      format: percent
+    section: Ranking at a glance
+    tag: se-rank-card-measured
+    index: rank-card-measured
+    title: Samples measured
+    description: Share of the cohort's samples that measured a ranked gene; the pipeline imputes the rest.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_stable_gene_distribution
+    aggregation: median
+    column_name: sd
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: blue
+      caption: median standard deviation per gene
+      decimals: 3
+    section: Ranking at a glance
+    tag: se-rank-card-sd
+    index: rank-card-sd
+    title: Spread
+    description: Standard deviation of a ranked gene's normalised expression over the samples that measured it.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_stable_gene_distribution
+    use: stableexpression/stability_ranking
+    viz_kind: ranked_distribution
+    config:
+      viz_kind: ranked_distribution
+      feature_id_col: gene_id
+      score_col: stability_score
+      rank_col: section_rank
+      label_col: gene_name
+      group_col: section
+      q1_col: q1
+      median_col: median
+      q3_col: q3
+      lower_col: lower
+      upper_col: upper
+      mean_col: mean
+      top_n: 10
+      ascending: true
+      distribution: box
+      orientation: horizontal
+      score_label: Stability score (lower is steadier)
+      value_label: Normalised expression (0 to 1)
+      log_value: false
+      max_features: 500
+      selection_enabled: true
+    section: Most stable genes
+    tag: se-rank-av-distribution
+    index: rank-distribution
+    title: The best genes of each section
+    description: >-
+      Ten genes, the best of each section, then the second best as Top N grows; colour is the
+      section. Boxes over every sample, from statistics the recipe computed (the matrix is too large
+      to ship); the violins are below, drawn from each sample's value.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_stable_gene_values
+    use: stableexpression/stability_violins
+    viz_kind: ranked_distribution
+    config:
+      viz_kind: ranked_distribution
+      feature_id_col: gene_id
+      score_col: stability_score
+      rank_col: section_rank
+      label_col: gene_name
+      group_col: section
+      value_col: value
+      top_n: 10
+      ascending: true
+      distribution: violin
+      orientation: horizontal
+      score_label: Stability score (lower is steadier)
+      value_label: Normalised expression (0 to 1)
+      log_value: false
+      max_features: 100
+      selection_enabled: true
+    section: Per-sample values
+    tag: se-rank-av-values
+    index: rank-values
+    title: The section leaders, sample by sample
+    description: The same leaders from each sample's own value; pick a platform or a dataset on the left to redraw them.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_stable_gene_distribution
+    row_selection_enabled: true
+    row_selection_column: gene_id
+    section: Ranked genes table
+    tag: se-rank-table
+    index: rank-table
+    title: Ranked genes
+    description: Each ranked gene with its score, ranks, box statistics and the samples that measured it.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Candidates
+  subtitle: What makes a candidate stable, measure by measure?
+  tab_group: Stability
+  tab_order: 4
+  tab_icon: mdi:scale-balance
+  tab_icon_color: violet
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Candidate filters
+    icon: mdi:filter-variant
+    color: violet
+    description: Narrow by section, expression level or measured share
+  grid_sections:
+  - name: Candidates at a glance
+    icon: mdi:counter
+    color: violet
+    description: Candidates, their typical score, measured share and geNorm M
+  - name: Score parts
+    icon: mdi:chart-bar
+    color: violet
+    description: What each measure and the missing values add to the score, by section
+  - name: Measure agreement
+    icon: mdi:chart-scatter-plot
+    color: violet
+    description: Normfinder rank against geNorm M rank, one point per candidate
+  - name: Candidate detail
+    icon: mdi:table
+    color: gray
+    description: Every candidate with its measures, score parts and ranks
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      Each candidate is scored by four measures, each rescaled to 0-1 over the candidates and
+      weighted ([Normfinder](https://www.moma.dk/software/normfinder), geNorm M and two
+      coefficients of variation), plus a penalty for the samples that never measured it. The
+      bars split each section's mean score into those parts. Pick a candidate in the table to
+      open its record.
+    tag: se-cand-intro
+    index: cand-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_stability
+    interactive_component_type: MultiSelect
+    column_name: section
+    column_type: object
+    display:
+      icon_name: mdi:layers-outline
+      custom_color: grape
+    section: Candidate filters
+    group: Candidates
+    tag: se-cand-filter-section
+    index: cand-section-filter
+    title: Expression section
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_stability
+    interactive_component_type: MultiSelect
+    column_name: expression_level
+    column_type: object
+    display:
+      icon_name: mdi:chart-bell-curve
+      custom_color: indigo
+    section: Candidate filters
+    group: Candidates
+    tag: se-cand-filter-level
+    index: cand-level-filter
+    title: Expression level
+    layout: {x: 0, y: 2, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_stability
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: measured_share
+    column_type: float64
+    display:
+      icon_name: mdi:percent-outline
+      custom_color: teal
+    section: Candidate filters
+    group: Candidates
+    tag: se-cand-filter-measured
+    index: cand-measured-range
+    title: Share of samples measured
+    layout: {x: 0, y: 4, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_stability
+    aggregation: count
+    column_name: gene_id
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: platforms
+    display:
+      icon_name: mdi:dna
+      icon_color: violet
+      caption: by the platforms that measured them
+    section: Candidates at a glance
+    tag: se-cand-card-count
+    index: cand-card-count
+    title: Candidates
+    description: Candidate genes scored for stability, split by the platforms that measured them.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_stability
+    aggregation: median
+    column_name: stability_score
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:scale-balance
+      icon_color: green
+      caption: median, with the spread of the scores
+      decimals: 3
+    section: Candidates at a glance
+    tag: se-cand-card-score
+    index: cand-card-score
+    title: Stability score
+    description: Median stability score of the candidates in view, lower is steadier.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_stability
+    use: stableexpression/candidate_measured
+    aggregation: median
+    column_name: measured_share
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:percent-outline
+      icon_color: teal
+      caption: median per candidate, with its spread
+      format: percent
+    section: Candidates at a glance
+    tag: se-cand-card-measured
+    index: cand-card-measured
+    title: Samples measured
+    description: Share of the cohort's samples that measured a candidate; the missing ones add to its score.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_stability
+    aggregation: median
+    column_name: genorm_m
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: grape
+      caption: median M, with its spread
+      decimals: 2
+    section: Candidates at a glance
+    tag: se-cand-card-genorm
+    index: cand-card-genorm
+    title: geNorm M
+    description: geNorm's M measure, the mean variation of a gene's ratio to every other candidate; lower is steadier.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_score_components
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: section
+      taxon_col: component
+      rank_col: null
+      abundance_col: contribution
+      normalise_to_one: true
+      sample_sort: name
+      top_n: 5
+      value_title: Share of the score
+      hidden_controls: [rank, top_n, group]
+    section: Score parts
+    tag: se-cand-fig-parts
+    index: cand-parts
+    title: The score of each section, part by part
+    description: What each measure adds to the score of a section's candidates, as a share of it; sort by a part to see where it weighs most. Normalise off stacks the summed parts, so the bar's height is the section's total score.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: advanced_viz
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_stability
+    use: stableexpression/measure_agreement
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: normfinder_rank
+      y_col: genorm_rank
+      label_col: gene_name
+      label_order_col: section_rank
+      color_col: section
+      x_title: Normfinder rank in the section (1 = steadiest)
+      y_title: geNorm M rank in the section
+      log_x: true
+      log_y: true
+      reference_line: diagonal
+      top_n_labels: 10
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: gene_id
+    section: Measure agreement
+    tag: se-cand-av-measures
+    index: cand-measures
+    title: Do Normfinder and geNorm agree?
+    description: >-
+      Each candidate's rank by Normfinder against its rank by geNorm M, within its section (log
+      axes, so the best ranks spread out). Near the dashed diagonal both measures agree; bottom
+      left is steady by both, the candidate to trust. A gene far off the diagonal is good by one
+      measure only. Labels name each section's leader.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_stability
+    use: stableexpression/candidate_table
+    row_selection_enabled: true
+    row_selection_column: gene_id
+    section: Candidate detail
+    tag: se-cand-table
+    index: cand-table
+    title: Candidate genes
+    description: Every candidate with its ranks, score, measures and score parts. Select a row to open its record.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_stability
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: se-cand-table
+      id_col: gene_id
+      title_col: gene_name
+      selection_source: table_selection
+      sections:
+        Gene: [gene_name, gene_id, description, section, expression_level, platforms, source_ids]
+        Rank: [stability_score, section_rank, overall_rank]
+        Score parts: [normfinder_part, genorm_part, cv_part, robust_cv_part, missing_penalty]
+        Measures: [normfinder_stability, genorm_m, cv, robust_cv, rnaseq_cv, microarray_cv]
+        Expression: [mean, median, measured_share, zero_share]
+      link_templates:
+        gene_id: https://www.ensembl.org/id/{value}
+    section: Candidate detail
+    tag: se-cand-av-record
+    index: cand-record
+    title: Candidate record
+    description: The selected candidate, with its ranks, the parts of its score and its expression.
+    layout: {x: 5, y: 0, w: 3, h: 6}
+- title: Sections
+  subtitle: How does stability change with expression level?
+  tab_group: Stability
+  tab_order: 5
+  tab_icon: mdi:layers-outline
+  tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Gene scope
+    icon: mdi:filter-variant
+    color: indigo
+    description: Narrow by expression level, candidacy or platforms
+  grid_sections:
+  - name: Genes at a glance
+    icon: mdi:counter
+    color: indigo
+    description: Genes of the matrix, their spread, measured share and levels
+  - name: Stability by section
+    icon: mdi:chart-box-outline
+    color: indigo
+    description: Candidate scores and every gene's spread, one box per section
+  - name: Expression and spread
+    icon: mdi:chart-scatter-plot
+    color: indigo
+    description: Every gene by mean expression and coefficient of variation
+  - name: Gene table
+    icon: mdi:table
+    color: gray
+    description: Every gene of the matrix with its statistics
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      The pipeline cuts the genes into sections of equal size by mean expression and ranks
+      candidates within each one, because a lowly expressed gene varies more by nature and a
+      single ranking would favour one end of the range. Compare the boxes left to right: the
+      scores rise or fall with expression level, the coefficient of variation of every gene
+      rises as expression falls.
+    tag: se-sec-intro
+    index: sec-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_statistics
+    interactive_component_type: MultiSelect
+    column_name: expression_level
+    column_type: object
+    display:
+      icon_name: mdi:chart-bell-curve
+      custom_color: indigo
+    section: Gene scope
+    group: Genes
+    tag: se-sec-filter-level
+    index: sec-level-filter
+    title: Expression level
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_statistics
+    interactive_component_type: MultiSelect
+    column_name: candidate
+    column_type: object
+    display:
+      icon_name: mdi:check-decagram-outline
+      custom_color: green
+    section: Gene scope
+    group: Genes
+    tag: se-sec-filter-candidate
+    index: sec-candidate-filter
+    title: Candidacy
+    layout: {x: 0, y: 2, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_statistics
+    interactive_component_type: MultiSelect
+    column_name: platforms
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+    section: Gene scope
+    group: Genes
+    tag: se-sec-filter-platforms
+    index: sec-platforms-filter
+    title: Measured by
+    layout: {x: 0, y: 4, w: 1, h: 2}
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_statistics
+    use: stableexpression/gene_count
+    aggregation: count
+    column_name: gene_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: candidate
+    display:
+      icon_name: mdi:dna
+      icon_color: indigo
+      caption: genes, the candidates scored
+      format: si
+    section: Genes at a glance
+    tag: se-sec-card-genes
+    index: sec-card-genes
+    title: Genes
+    description: Genes of the merged matrix in view; the ring shows the share put forward as candidates.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_statistics
+    aggregation: median
+    column_name: cv
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: blue
+      caption: median per gene, with its spread
+      decimals: 2
+    section: Genes at a glance
+    tag: se-sec-card-cv
+    index: sec-card-cv
+    title: Coefficient of variation
+    description: Standard deviation over mean of a gene's normalised expression, the median over the genes in view.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_statistics
+    use: stableexpression/gene_measured_share
+    aggregation: median
+    column_name: measured_share
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:percent-outline
+      icon_color: teal
+      caption: median per gene, with its spread
+      format: percent
+    section: Genes at a glance
+    tag: se-sec-card-measured
+    index: sec-card-measured
+    title: Samples measured
+    description: Share of the cohort's samples that measured a gene, the median over the genes in view.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_statistics
+    use: stableexpression/level_composition
+    aggregation: count
+    column_name: gene_id
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: expression_level
+    display:
+      icon_name: mdi:layers-outline
+      icon_color: orange
+      caption: genes, by the pipeline's expression level
+      format: si
+    section: Genes at a glance
+    tag: se-sec-card-levels
+    index: sec-card-levels
+    title: Expression levels
+    description: Genes split by the pipeline's five expression levels, from very high to very low.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_stability
+    use: stableexpression/score_by_section
+    visu_type: box
+    dict_kwargs:
+      x: section
+      y: stability_score
+      color: section
+      labels: {section: '', stability_score: Stability score}
+    section: Stability by section
+    tag: se-sec-fig-score
+    index: sec-score-box
+    title: Candidate scores by section
+    description: The stability scores of each section's candidates, most expressed section first.
+    layout: {x: 0, y: 0, w: 4, h: 4, fit: auto}
+  - component_type: figure
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_statistics
+    use: stableexpression/cv_by_section
+    visu_type: box
+    dict_kwargs:
+      x: section
+      y: cv
+      color: candidate
+      log_y: true
+      labels: {section: '', cv: Coefficient of variation (log scale), candidate: ''}
+    section: Stability by section
+    tag: se-sec-fig-cv
+    index: sec-cv-box
+    title: Spread of every gene by section
+    description: Coefficient of variation of each section's genes, candidates beside the rest.
+    layout: {x: 4, y: 0, w: 4, h: 4, fit: auto}
+  - component_type: advanced_viz
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_statistics
+    use: stableexpression/expression_plane
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: mean
+      y_col: cv
+      label_col: gene_name
+      color_col: candidate
+      log_y: true
+      x_title: Mean normalised expression (0 to 1)
+      y_title: Coefficient of variation (log scale)
+      top_n_labels: 0
+      selection_enabled: true
+      selection_column: gene_id
+    section: Expression and spread
+    tag: se-sec-av-plane
+    index: sec-plane
+    title: Mean expression against spread
+    description: One point per gene; the candidates sit on the lower edge of each section's band.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: stableexpression
+    data_collection_tag: stableexpression_gene_statistics
+    row_selection_enabled: true
+    row_selection_column: gene_id
+    section: Gene table
+    tag: se-sec-table
+    index: sec-table
+    title: Genes of the merged matrix
+    description: Every gene with its section, level, spread, measured share and platforms.
+    layout: {x: 0, y: 0, w: 8, h: 6}

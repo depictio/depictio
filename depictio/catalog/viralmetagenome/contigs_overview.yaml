@@ -1,0 +1,25 @@
+id: viralmetagenome_contigs_overview
+name: Final de novo consensus genomes
+mode: per-genome/consensus
+description: >-
+  One row per final de novo consensus genome, a sample and contig cluster
+  refined to the end: its closest reference in the annotation database and
+  the identity to it, the best BLAST hit in the reference pool, the ambiguous
+  bases, the CheckV call, the mapping and depth of the sample's reads on it
+  and the variant counts of the last round, keyed <sample>_<cluster>.
+find:
+  path_glob: "**/overview-tables/*contigs_overview.tsv"
+recipe: viralmetagenome/contigs_overview.py
+fixture: contigs_overview.tsv
+renders_as:
+  - { id: denovo_genomes, component: card, column: genome_id, aggregation: nunique,
+      secondary_layout: composition, breakdown_col: virus, headline: true }
+  - { id: denovo_ambiguous, component: card, column: n_pct, aggregation: median,
+      secondary_layout: threshold, threshold_value: 5, threshold_direction: max, threshold_warn: 20 }
+  # Ambiguous bases against identity to the closest reference: the genomes
+  # worth trusting sit top left.
+  - id: denovo_identity_vs_n
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: n_pct, y: annotation_identity_pct, label: genome_id, color: virus, size: mean_depth }
+  - { component: table, row_selection_enabled: true, row_selection_column: genome_id }

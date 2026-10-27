@@ -1,0 +1,1748 @@
+version: 1
+# nf-core/viralmetagenome 1.2.0, on the family rules of depictio/projects/nf-core/RULES.md
+# (ampliseq/2.18.0 is the reference implementation).
+#
+# Funnel: the MultiQC report and the reads of every sample (Data & QC) -> the
+# de novo contigs, their taxonomic call and their clusters (Contigs) -> the
+# consensus genomes, how close to a reference and how complete (Consensus) ->
+# how deep and how evenly the reads cover them (Mapping) -> the variants each
+# genome carries (Variants). Two hubs: the sample hub (`samples`) carries the
+# persistent sample filters and the design columns, the genome hub (`genomes`,
+# one row per sample and reference) carries a pick on a genome to the variant,
+# coverage and refinement collections.
+#
+# Routes: a run takes the de novo route, the constraint route or both. Every
+# collection a route may not write is optional, and the import prunes the
+# tiles, the steps and the findings lines that read a missing one: no Contigs
+# tab after --skip_assembly, no variant tiles after --skip_variant_calling. The
+# design table is optional (METADATA_FILE); without it the group filter, group
+# colours and group splits read one constant group.
+#
+# Genome browser: viralmetagenome publishes its filtered VCFs without the
+# matching tabix index (the .tbi it writes belongs to the sorted VCF before
+# filtering, which is not published), and its references are viral genomes no
+# bundled assembly covers. The Variants tab therefore draws the iVar calls
+# from the table collection on a genome_view whose axis comes from the rows,
+# and leaves the file-backed track out.
+# TODO(jbrowse): swap the table genome_view for a JBrowse2 DC (consensus FASTA
+# as the reference, the filtered VCFs and per-base depth as tracks) once
+# jbrowse.py is rebuilt and the pipeline publishes an index for its VCFs.
+main_dashboard:
+  title: nf-core/viralmetagenome
+  subtitle: Viral genomes from metagenomic reads, from host removal to consensus and variants
+  project_tag: Viral Metagenome Genomes
+  main_tab_name: Overview
+  tab_icon: mdi:compass-outline
+  tab_icon_color: brandPrimary
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_panel_default: collapsed
+  content_width_default: compact
+  show_tab_header: false
+  # Declared once here, read by every tab of the family.
+  category_colors:
+    '{GROUP_COL}': auto
+    # The two routes to a consensus genome.
+    route:
+      de novo: '#7048e8'
+      constraint: '#1098ad'
+    # What a genome resolves to: the palette by genome count, unnamed grey.
+    virus:
+      '*': auto
+      Unclassified: '#adb5bd'
+    # iVar's verdict, and the allele frequency band of a call.
+    filter:
+      PASS: '#2f9e44'
+      Filtered: '#adb5bd'
+    frequency_class:
+      Fixed: '#c2255c'
+      Major: '#f76707'
+      Minor: '#74c0fc'
+    variant_type:
+      SNV: '#1c7ed6'
+      Insertion: '#0ca678'
+      Deletion: '#f59f00'
+    # The merged Kraken2 and Kaiju call of a contig, and its cluster.
+    classification:
+      Classified: '#0ca678'
+      Unclassified: '#f59f00'
+      Not classified: '#adb5bd'
+    cluster_role:
+      Centroid: '#7048e8'
+      Member: '#9775fa'
+      Not clustered: '#adb5bd'
+    status:
+      Refined: '#2f9e44'
+      Filtered out: '#adb5bd'
+    stage:
+      Raw: '#adb5bd'
+      Trimmed: '#74c0fc'
+      Host removed: '#1c7ed6'
+    checkv_quality:
+      Complete: '#2b8a3e'
+      High-quality: '#2f9e44'
+      Medium-quality: '#94d82d'
+      Low-quality: '#f59f00'
+      Not-determined: '#adb5bd'
+  # Persistent: drawn in every tab's filter panel, picks kept across tabs. Both
+  # are bound to the sample hub, the source of every sample link.
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab
+    persistent: true
+    pin: top
+  grid_sections:
+  - name: Key figures
+    icon: mdi:counter
+    color: gray
+    appearance: plain
+    card_variant: headline
+    filter_bar: true
+    visible_filters: 2
+    description: The run in four numbers. The filters here narrow these four only.
+  - name: Findings
+    icon: mdi:star-outline
+    color: gray
+    appearance: plain
+    figure_style: minimal
+    filter_bar: true
+    visible_filters: 2
+    description: What the data says, each with the tab that shows it, then the figures behind it.
+  - name: How to read this dashboard
+    icon: mdi:information-outline
+    color: gray
+    appearance: plain
+    description: The tabs by group, each with the question it answers.
+  # Declared on the main tab, which no route removes.
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: gray
+    description: One row per sample, narrowed by the sample filters
+    collapsed: true
+    persistent: true
+    pin: bottom
+    exclude_tabs:
+    - Overview
+  components:
+  # First in component order on purpose: the Guide demos the first categorical
+  # filter that shares a data collection with the first card (Samples, below).
+  - component_type: interactive
+    workflow_tag: viralmetagenome
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Key figures
+    tag: vm-ov-kf-group
+    index: ov-kf-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: viralmetagenome
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+      strip_label: Sample
+    section: Key figures
+    tag: vm-ov-kf-sample
+    index: ov-kf-sample
+    title: Sample
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # The pipeline's wordmark, read from its repository; where it cannot load (no
+  # internet), the title is drawn as text.
+  - component_type: text
+    title: nf-core/viralmetagenome
+    logo: https://raw.githubusercontent.com/nf-core/viralmetagenome/master/docs/images/nf-core-viralmetagenome_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/viralmetagenome/master/docs/images/nf-core-viralmetagenome_logo_dark.png
+    order: 1
+    body: >
+      Viral genomes rebuilt from metagenomic reads, de novo and against known references, with the
+      variants each one carries. [Run parameters](params:)
+    tag: vm-ov-hero
+    index: ov-hero
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/viralmetagenome cleans the reads of each sample, removes the host, assembles the rest and clusters the contigs into the genomes it can rebuild. Each cluster is refined into a consensus by mapping the reads back, and the reads are also mapped to the references of the constraint sheet. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
+    tag: vm-ov-about
+    index: ov-about
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash.
+  - component_type: text
+    surface: card
+    values:
+      n_samples: {dc: samples, column: sample, aggregation: nunique, format: integer}
+    body: |
+      ### The run
+      - ![](icon:mdi:test-tube) **Samples** {{n_samples}}, host removed with {{param:host_k2_db}}
+      - ![](icon:mdi:content-cut) **Trimming** {{param:trim_tool}}
+      - ![](icon:mdi:puzzle-outline) **Assemblers** {{param:assemblers}}
+      - ![](icon:mdi:set-merge) **Clustering** {{param:cluster_method}} at {{param:identity_threshold}} identity
+      - ![](icon:mdi:sync) **Refinement** {{param:iterative_refinement_cycles}} cycles, consensus by {{param:consensus_caller}}
+      - ![](icon:mdi:dna) **Variants** {{param:variant_caller}}
+    tag: vm-ov-run
+    index: ov-run
+    layout: {x: 5, y: 1, w: 3, h: 3}
+  # The marks take the accent colour, not the theme's blue. The steps that lead
+  # to a route's tab cite a value from that route's collection: the import
+  # removes the line with its data, so a run shows only the steps it took.
+  - component_type: text
+    surface: card
+    accent: violet
+    values:
+      n_kept: {dc: samples, column: host_filtered_read_pairs, aggregation: sum, format: si}
+      n_contigs: {dc: vmg_contigs, column: contig, aggregation: count, format: integer}
+      n_denovo: {dc: vmg_contigs_overview, column: genome_id, aggregation: nunique, format: integer}
+      n_genomes: {dc: genomes, column: genome_id, aggregation: nunique, format: integer}
+      n_maps: {dc: coverage_cumulative, column: genome_id, aggregation: nunique, format: integer}
+      n_calls: {dc: ivar_variants, column: variant_key, aggregation: count, format: si}
+    body: |
+      ### Six steps from reads to viral genomes
+      Each step names its settings and the tab that shows its result.
+
+      ::: steps
+      1. ![](icon:mdi:filter-variant) **Clean** trimming and host removal leave {{n_kept}} read pairs · [Settings](params:trim_tool) · [Samples](tab:Samples)
+      2. ![](icon:mdi:puzzle-outline) **Assemble** the assemblers build {{n_contigs}} contigs, classified and clustered · [Settings](params:assemblers) · [Contigs](tab:Contigs)
+      3. ![](icon:mdi:sync) **Refine** {{n_denovo}} kept clusters are mapped and called into a consensus · [Settings](params:iterative_refinement_cycles) · [Consensus](tab:Consensus)
+      4. ![](icon:mdi:check-decagram) **Assess** {{n_genomes}} consensus genomes are compared with references and scored by CheckV · [Settings](params:skip_checkv) · [Consensus](tab:Consensus)
+      5. ![](icon:mdi:chart-line) **Map** {{n_maps}} mappings give the depth and breadth of every genome · [Settings](params:mapping_constraints) · [Mapping](tab:Mapping)
+      6. ![](icon:mdi:dna) **Call** iVar reports {{n_calls}} variant calls, minor ones included · [Settings](params:variant_caller) · [Variants](tab:Variants)
+      :::
+    tag: vm-ov-steps
+    index: ov-steps
+    layout: {x: 0, y: 4, w: 8, h: 3}
+  # Key figures: one card per stage of the funnel, each opening the tab that
+  # explains it. All four read collections every route writes.
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: samples
+    aggregation: count
+    column_name: sample
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: '{GROUP_COL}'
+    display:
+      icon_name: mdi:test-tube
+      icon_color: orange
+      caption: sequenced, by {GROUP_COL_DISPLAY}
+      link: tab:Samples
+    section: Key figures
+    tag: vm-ov-kf-samples
+    index: ov-kf-samples
+    title: Samples
+    description: Samples of the run. The bar splits them by {GROUP_COL_DISPLAY}.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: samples
+    aggregation: median
+    column_name: host_filtered_read_pairs
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:filter-variant
+      icon_color: teal
+      caption: per sample, with the spread
+      link: tab:Samples
+      format: si
+    section: Key figures
+    tag: vm-ov-kf-reads
+    index: ov-kf-reads
+    title: Clean read pairs
+    description: Read pairs left after trimming and host removal, the reads assembly and mapping start from.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: genomes
+    aggregation: count
+    column_name: genome_id
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: route
+    display:
+      icon_name: mdi:virus
+      icon_color: violet
+      caption: de novo or against a constraint reference
+      link: tab:Consensus
+    section: Key figures
+    tag: vm-ov-kf-genomes
+    index: ov-kf-genomes
+    title: Consensus genomes
+    description: Consensus genomes the run built, one per sample and reference. The bar splits them by route.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: genomes
+    aggregation: median
+    column_name: cov_10x_pct
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 90
+    threshold_direction: min
+    threshold_warn: 50
+    display:
+      icon_name: mdi:chart-line
+      icon_color: blue
+      caption: genomes at 90% breadth or more, 50% warns
+      link: tab:Mapping
+      decimals: 1
+    section: Key figures
+    tag: vm-ov-kf-breadth
+    index: ov-kf-breadth
+    title: Breadth at 10X
+    description: Share of a genome covered by ten reads or more, in percent; the median genome, and how many pass 90%.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Findings filter bar: the group, then the sample.
+  - component_type: interactive
+    workflow_tag: viralmetagenome
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Findings
+    tag: vm-ov-findings-group
+    index: ov-findings-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: viralmetagenome
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+      strip_label: Sample
+    section: Findings
+    tag: vm-ov-findings-sample
+    index: ov-findings-sample
+    title: Sample
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # One result row per finding, each citing one collection, so a route that
+  # lacks it loses that row alone.
+  - component_type: text
+    surface: card
+    values:
+      ctg_bp: {dc: vmg_contigs, column: length_bp, aggregation: sum, format: si}
+      ctg_n: {dc: vmg_contigs, column: contig, aggregation: count, format: integer}
+      top_virus: {dc: genomes, column: virus, aggregation: top}
+      ident: {dc: genomes, column: annotation_identity_pct, aggregation: median, format: 'decimals:1'}
+      breadth: {dc: genomes, column: cov_10x_pct, aggregation: median, format: 'decimals:1'}
+      depth: {dc: genomes, column: mean_depth, aggregation: median, format: 'decimals:1'}
+      n_pass: {dc: ivar_variants, column: variant_key, aggregation: count, filter_expr: "col('filter') == 'PASS'", format: integer}
+      n_minor: {dc: ivar_variants, column: variant_key, aggregation: count, filter_expr: "col('frequency_class') == 'Minor'", format: integer}
+    body: |
+      - **{{ctg_bp}}** bases assembled in {{ctg_n}} de novo contigs – the clusters keep those a genome is rebuilt from [Contigs](tab:Contigs)
+      - **{{top_virus}}** is what most consensus genomes resolve to – at {{ident}}% median identity to the closest reference [Consensus](tab:Consensus)
+      - **{{breadth}}%** median breadth at 10X across the consensus genomes – at {{depth}}X median depth [Mapping](tab:Mapping)
+      - **{{n_pass}}** variant calls pass iVar's filters – {{n_minor}} calls sit under half frequency, minor variants or noise [Variants](tab:Variants)
+    section: Findings
+    tag: vm-ov-findings
+    index: ov-findings
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # One highlight per analysis tab, in the order of the tabs. The tiles of a
+  # row share a stored height.
+  - component_type: highlight
+    section: Findings
+    source_tab: Contigs
+    source_component: ctg-length-reads
+    caption: One point per contig, by length and reads mapped back on log axes; colour is its taxonomic call.
+    hide_legend: true
+    tag: vm-ov-hl-contigs
+    index: ov-hl-contigs
+    layout: {x: 0, y: 2, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Consensus
+    source_component: cns-identity-ambiguity
+    caption: One point per consensus genome, by its ambiguous bases and its identity to the closest reference; colour is the route.
+    hide_legend: true
+    tag: vm-ov-hl-consensus
+    index: ov-hl-consensus
+    layout: {x: 4, y: 2, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Mapping
+    source_component: map-cumulative
+    caption: One curve per genome, the share of it covered at least at each depth; a curve that falls early is shallow.
+    hide_legend: true
+    tag: vm-ov-hl-mapping
+    index: ov-hl-mapping
+    layout: {x: 0, y: 6, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Variants
+    source_component: var-af-depth
+    caption: One point per variant call, by read depth and allele frequency; colour is the frequency band.
+    hide_legend: true
+    tag: vm-ov-hl-variants
+    index: ov-hl-variants
+    layout: {x: 4, y: 6, w: 4, h: 4}
+  # Link-only tab tiles: each tile prints its tab's subtitle, the question the
+  # tab answers. A tile whose tab a route pruned draws nothing.
+  - component_type: text
+    body: |
+      ### Data & QC
+      - [MultiQC](tab:MultiQC)
+      - [Samples](tab:Samples)
+
+      ### Assembly
+      - [Contigs](tab:Contigs)
+      - [Consensus](tab:Consensus)
+      - [Mapping](tab:Mapping)
+
+      ### Variants
+      - [Variants](tab:Variants)
+    section: How to read this dashboard
+    tag: vm-ov-how-to-read
+    index: ov-how-to-read
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Persistent sample filters, the group first.
+  - component_type: interactive
+    workflow_tag: viralmetagenome
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+    section: Sample filters
+    group: Sample scope
+    tag: vm-filter-group
+    index: sample-filters-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: viralmetagenome
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+    section: Sample filters
+    group: Sample scope
+    tag: vm-filter-sample
+    index: sample-filters-sample
+    title: Sample
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  # Row selection feeds the Analysis panel.
+  - component_type: table
+    workflow_tag: viralmetagenome
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Sample sheet
+    tag: vm-sample-sheet
+    index: sample-sheet
+    title: Samples
+    description: One row per sample, with its design columns, its reads at each stage, its host share and its de novo assembly.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+tabs:
+# ============================================================================
+# Data & QC
+# ============================================================================
+- title: MultiQC
+  subtitle: What does the MultiQC report say about reads and mappings?
+  tab_group: Data & QC
+  tab_order: 1
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Report scope
+    icon: mdi:tune
+    color: orange
+    description: Narrow the MultiQC panels to selected report rows
+  grid_sections:
+  - name: Read QC
+    icon: mdi:chart-bar
+    color: orange
+    description: Reads per sample, what fastp kept, base quality and the host share
+  - name: Mapping and calls
+    icon: mdi:chart-box-outline
+    color: orange
+    description: Reads mapped, duplicates, cumulative coverage and substitution types
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [MultiQC](https://seqera.io/multiqc/) gathers FastQC, fastp, Kraken2 host removal, samtools,
+      Picard, mosdepth and bcftools, rebuilt with MultiQC 1.35 from the run's tool outputs. FastQC
+      runs three times per sample (raw, trimmed, host removed) and every mapping is a row of its own,
+      named after its sample and reference, so the sample filters narrow every panel.
+    tag: vm-mqc-intro
+    index: mqc-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    workflow_tag: viralmetagenome
+    data_collection_tag: multiqc_data
+    use: multiqc/general_stats
+    selected_module: general_stats
+    selected_plot: general_stats
+    section: Read QC
+    tag: vm-mqc-general-stats
+    title: General statistics
+    description: One row per sample, the headline columns of every tool in the report side by side.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: viralmetagenome
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Sequence Counts
+    section: Read QC
+    tag: vm-mqc-fastqc-counts
+    index: mqc-fastqc-counts
+    title: Reads per FastQC run
+    description: Unique and duplicate reads of every FastQC run, raw, trimmed and host removed.
+    layout: {x: 0, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: viralmetagenome
+    data_collection_tag: multiqc_data
+    use: multiqc/fastp
+    selected_module: fastp
+    selected_plot: Filtered Reads
+    section: Read QC
+    tag: vm-mqc-fastp-filtered
+    index: mqc-fastp-filtered
+    title: Reads fastp kept and removed
+    description: Reads passing fastp, and the ones removed for low quality, too many N or short length.
+    layout: {x: 4, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: viralmetagenome
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Sequence Quality Histograms
+    section: Read QC
+    tag: vm-mqc-fastqc-quality
+    index: mqc-fastqc-quality
+    title: Base quality along the read
+    description: Mean Phred score at each read position, per FastQC run.
+    layout: {x: 0, y: 8, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: viralmetagenome
+    data_collection_tag: multiqc_data
+    use: multiqc/kraken
+    selected_module: kraken
+    selected_plot: Top taxa
+    section: Read QC
+    tag: vm-mqc-kraken
+    index: mqc-kraken
+    title: Host removal, the taxa Kraken2 found
+    description: Reads the host database classified, by taxon; everything unclassified goes on to assembly.
+    layout: {x: 4, y: 8, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: viralmetagenome
+    data_collection_tag: multiqc_data
+    use: multiqc/samtools
+    selected_module: samtools
+    selected_plot: Percent mapped
+    section: Mapping and calls
+    tag: vm-mqc-samtools
+    index: mqc-samtools
+    title: Reads mapped per mapping
+    description: Share of the reads samtools reports mapped, one row per sample and reference.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: viralmetagenome
+    data_collection_tag: multiqc_data
+    use: multiqc/picard
+    selected_module: picard
+    selected_plot: Mark Duplicates
+    section: Mapping and calls
+    tag: vm-mqc-picard
+    index: mqc-picard
+    title: Duplicates per mapping
+    description: Unique and duplicate read pairs Picard MarkDuplicates counted.
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: viralmetagenome
+    data_collection_tag: multiqc_data
+    use: multiqc/mosdepth
+    selected_module: mosdepth
+    selected_plot: Cumulative coverage distribution
+    section: Mapping and calls
+    tag: vm-mqc-mosdepth
+    index: mqc-mosdepth
+    title: Cumulative coverage
+    description: Share of each reference covered at least at each depth, per mapping.
+    layout: {x: 0, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: viralmetagenome
+    data_collection_tag: multiqc_data
+    use: multiqc/bcftools
+    selected_module: bcftools
+    selected_plot: Variant Substitution Types
+    section: Mapping and calls
+    tag: vm-mqc-bcftools
+    index: mqc-bcftools
+    title: Substitution types
+    description: Counts of the twelve substitution types in the calls of every mapping.
+    layout: {x: 4, y: 4, w: 4, h: 4}
+  - component_type: interactive
+    workflow_tag: viralmetagenome
+    data_collection_tag: multiqc_data
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:file-document-outline
+      custom_color: orange
+    section: Report scope
+    group: Report scope
+    tag: vm-mqc-filter-report-row
+    index: mqc-report-row-filter
+    title: Report row
+    layout: {x: 0, y: 0, w: 1, h: 3}
+- title: Samples
+  subtitle: How many reads of each sample reach assembly?
+  tab_group: Data & QC
+  tab_order: 2
+  tab_icon: mdi:test-tube
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Read scope
+    icon: mdi:filter-variant
+    color: teal
+    description: Keep samples inside a host share or retained read band
+  grid_sections:
+  - name: Reads at a glance
+    icon: mdi:counter
+    color: teal
+    description: Read pairs kept, host share, base quality and duplication across the samples
+  - name: Read funnel
+    icon: mdi:chart-bar
+    color: teal
+    description: Read pairs of each sample before trimming, after trimming and after host removal
+  - name: Depth and loss
+    icon: mdi:chart-scatter-plot
+    color: teal
+    description: Raw read pairs against the share left after preprocessing, one point per sample
+  - name: Read tables
+    icon: mdi:table
+    color: gray
+    description: Read pairs per sample and preprocessing stage
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [fastp](https://github.com/OpenGene/fastp) trims the reads, prinseq removes low-complexity
+      ones and [Kraken2](https://ccb.jhu.edu/software/kraken2/) against a host database removes the
+      host, and what is left goes on to assembly and mapping. A sample that loses most of its reads
+      here has little left to rebuild a genome from, whatever the later tabs show.
+    tag: vm-smp-intro
+    index: smp-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: viralmetagenome
+    data_collection_tag: samples
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: host_pct
+    column_type: float64
+    display:
+      icon_name: mdi:account-filter-outline
+      custom_color: pink
+    section: Read scope
+    group: Reads
+    tag: vm-smp-filter-host
+    index: smp-host-range
+    title: Host reads (%)
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: viralmetagenome
+    data_collection_tag: samples
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: retained_pct
+    column_type: float64
+    display:
+      icon_name: mdi:filter-variant
+      custom_color: teal
+    section: Read scope
+    group: Reads
+    tag: vm-smp-filter-retained
+    index: smp-retained-range
+    title: Read pairs retained (%)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: samples
+    use: viralmetagenome/read_attrition
+    aggregation: sum
+    column_name: raw_read_pairs
+    column_type: int64
+    secondary_layout: attrition
+    attrition_cols: [trimmed_read_pairs, host_filtered_read_pairs]
+    display:
+      icon_name: mdi:filter-variant
+      icon_color: teal
+      caption: kept after trimming, then after host removal
+      format: si
+    section: Reads at a glance
+    tag: vm-smp-card-attrition
+    index: smp-card-attrition
+    title: Raw read pairs
+    description: Read pairs sequenced across the samples, and how many trimming and host removal leave.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: samples
+    aggregation: median
+    column_name: host_pct
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:account-filter-outline
+      icon_color: pink
+      caption: host share, per sample (%)
+      decimals: 2
+    section: Reads at a glance
+    tag: vm-smp-card-host
+    index: smp-card-host
+    title: Host reads
+    description: Read pairs Kraken2 classified against the host database, in percent of the trimmed pairs.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: samples
+    aggregation: median
+    column_name: q30_pct
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 80
+    threshold_direction: min
+    threshold_warn: 70
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: green
+      caption: samples at 80% Q30 or more, 70% warns
+      decimals: 1
+    section: Reads at a glance
+    tag: vm-smp-card-q30
+    index: smp-card-q30
+    title: Q30 bases
+    description: Bases at Phred 30 or better after fastp, in percent; Illumina's usual floor is 80%.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: samples
+    aggregation: median
+    column_name: raw_dup_pct
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:content-copy
+      icon_color: orange
+      caption: median per sample, with the spread
+      decimals: 1
+    section: Reads at a glance
+    tag: vm-smp-card-dup
+    index: smp-card-dup
+    title: Duplicate reads
+    description: FastQC's duplicate share of the raw reads, in percent; a small viral genome sequenced deep duplicates by chance.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: viralmetagenome
+    data_collection_tag: read_funnel
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: read_pairs
+      color: stage
+      barmode: group
+      category_orders: {stage: [Raw, Trimmed, Host removed]}
+      labels: {sample: Sample, read_pairs: Read pairs, stage: Stage}
+    section: Read funnel
+    tag: vm-smp-fig-funnel
+    index: smp-funnel
+    title: Read pairs at each preprocessing stage
+    description: A bar that drops between two stages is where the sample lost its reads.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: advanced_viz
+    workflow_tag: viralmetagenome
+    data_collection_tag: samples
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: raw_read_pairs
+      y_col: retained_pct
+      label_col: sample
+      color_col: '{GROUP_COL}'
+      size_col: host_filtered_read_pairs
+      log_x: true
+      x_title: Raw read pairs (log)
+      y_title: Read pairs retained after preprocessing (%)
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: sample
+    section: Depth and loss
+    tag: vm-smp-av-depth-loss
+    index: smp-depth-loss
+    title: Raw read pairs against the share retained
+    description: One point per sample, sized by its clean read pairs. Lasso a group to narrow every tab.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: viralmetagenome
+    data_collection_tag: read_funnel
+    columns: [sample, stage, read_pairs, pct_of_raw]
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Read tables
+    tag: vm-smp-table-funnel
+    index: smp-table-funnel
+    title: Read pairs per stage
+    description: Read pairs of each sample at each preprocessing stage and their share of the raw pairs.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+# ============================================================================
+# Assembly
+# ============================================================================
+- title: Contigs
+  subtitle: Which contigs did the assembly build, and what are they?
+  tab_group: Assembly
+  tab_order: 3
+  tab_icon: mdi:puzzle-outline
+  tab_icon_color: violet
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Contig scope
+    icon: mdi:filter-variant
+    color: violet
+    description: Keep contigs by taxonomic call, cluster role or length
+  grid_sections:
+  - name: Contigs at a glance
+    icon: mdi:counter
+    color: violet
+    description: Contigs, assembled bases, reads on them and the clusters they form
+  - name: Length and support
+    icon: mdi:chart-scatter-plot
+    color: violet
+    description: Every contig by its length and the reads that map back to it
+  - name: Clusters
+    icon: mdi:set-merge
+    color: violet
+    description: The read depth share of each cluster, refined or filtered out
+  - name: Contig tables
+    icon: mdi:table
+    color: gray
+    description: Every contig and every cluster, with their calls and members
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      The assemblers build contigs from the clean reads; Kraken2 and Kaiju classify each one, and
+      CD-HIT-EST groups them with the reference pool into clusters, one per genome to rebuild. A
+      cluster with too small a share of the reads is filtered out, and the others go on to the
+      [Consensus](tab:Consensus) tab.
+    tag: vm-ctg-intro
+    index: ctg-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: viralmetagenome
+    data_collection_tag: vmg_contigs
+    interactive_component_type: MultiSelect
+    column_name: classification
+    column_type: object
+    display:
+      icon_name: mdi:bacteria-outline
+      custom_color: grape
+    section: Contig scope
+    group: Contigs
+    tag: vm-ctg-filter-class
+    index: ctg-class-filter
+    title: Taxonomic call
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: viralmetagenome
+    data_collection_tag: vmg_contigs
+    interactive_component_type: MultiSelect
+    column_name: cluster_role
+    column_type: object
+    display:
+      icon_name: mdi:set-merge
+      custom_color: violet
+    section: Contig scope
+    group: Contigs
+    tag: vm-ctg-filter-role
+    index: ctg-role-filter
+    title: Cluster role
+    layout: {x: 0, y: 2, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: viralmetagenome
+    data_collection_tag: vmg_contigs
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: length_bp
+    column_type: int64
+    display:
+      icon_name: mdi:ruler
+      custom_color: blue
+    section: Contig scope
+    group: Contigs
+    tag: vm-ctg-filter-length
+    index: ctg-length-range
+    title: Contig length (bp)
+    layout: {x: 0, y: 4, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: vmg_contigs
+    use: viralmetagenome/contigs_by_class
+    aggregation: count
+    column_name: contig
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: classification
+    display:
+      icon_name: mdi:puzzle-outline
+      icon_color: violet
+      caption: contigs, by taxonomic call
+    section: Contigs at a glance
+    tag: vm-ctg-card-contigs
+    index: ctg-card-contigs
+    title: Contigs
+    description: De novo contigs across the samples and assemblers, split by the merged Kraken2 and Kaiju call.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: vmg_contigs
+    use: viralmetagenome/assembled_bp
+    aggregation: sum
+    column_name: length_bp
+    column_type: int64
+    secondary_layout: composition
+    breakdown_col: length_class
+    top_n_count: 5
+    display:
+      icon_name: mdi:ruler
+      icon_color: blue
+      caption: bases, by contig length band
+      format: si
+    section: Contigs at a glance
+    tag: vm-ctg-card-bases
+    index: ctg-card-bases
+    title: Assembled bases
+    description: Bases in the de novo contigs; long contigs holding most of them make an easy genome to rebuild.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: vmg_contigs
+    use: viralmetagenome/reads_on_contigs
+    aggregation: sum
+    column_name: mapped_reads
+    column_type: int64
+    secondary_layout: donut
+    breakdown_col: cluster_role
+    display:
+      icon_name: mdi:relation-many-to-many
+      icon_color: teal
+      caption: reads, by the contig's cluster role
+      format: si
+    section: Contigs at a glance
+    tag: vm-ctg-card-reads
+    index: ctg-card-reads
+    title: Reads on contigs
+    description: Reads that map back to the contigs; the ring shows how many land on clustered contigs.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: vmg_clusters
+    use: viralmetagenome/clusters_by_status
+    aggregation: count
+    column_name: cluster
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: status
+    display:
+      icon_name: mdi:set-merge
+      icon_color: grape
+      caption: clusters, refined or filtered out
+    section: Contigs at a glance
+    tag: vm-ctg-card-clusters
+    index: ctg-card-clusters
+    title: Contig clusters
+    description: Clusters across the samples; a filtered cluster held too small a share of the reads to refine.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: viralmetagenome
+    data_collection_tag: vmg_contigs
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: length_bp
+      y_col: mapped_reads
+      label_col: contig
+      color_col: classification
+      size_col: read_share_pct
+      log_x: true
+      log_y: true
+      x_title: Contig length in bp (log)
+      y_title: Reads mapped back (log)
+      legend_pos: bottom
+      top_n_labels: 0
+      selection_enabled: true
+      selection_column: sample
+    section: Length and support
+    tag: vm-ctg-av-length-reads
+    index: ctg-length-reads
+    title: Contig length against the reads it holds
+    description: One point per contig, sized by its share of the sample's reads. Lasso contigs to narrow every tab to their samples.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: viralmetagenome
+    data_collection_tag: vmg_clusters
+    viz_kind: stacked_taxonomy
+    config:
+      viz_kind: stacked_taxonomy
+      sample_id_col: sample
+      taxon_col: status
+      rank_col: null
+      abundance_col: read_depth_pct
+      normalise_to_one: true
+      sample_sort: category
+      sort_category: Filtered out
+      y_zoom: auto
+      top_n: 4
+      value_title: Share of the contig read depth
+      hidden_controls: [rank, top_n, group]
+    section: Clusters
+    tag: vm-ctg-fig-clusters
+    index: ctg-clusters
+    title: Read depth share of the clusters per sample
+    description: The refined clusters should hold most of a sample's contig reads; a large filtered share is a genome left behind. Sort by Filtered out to put those samples first.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: table
+    workflow_tag: viralmetagenome
+    data_collection_tag: vmg_contigs
+    use: viralmetagenome/contigs
+    columns: [sample, assembler, contig, length_bp, mapped_reads, read_share_pct, classification, taxid, cluster, cluster_role]
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Contig tables
+    tag: vm-ctg-table-contigs
+    index: ctg-table-contigs
+    title: De novo contigs
+    description: Every contig with its length, reads, taxonomic call and cluster.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: viralmetagenome
+    data_collection_tag: vmg_clusters
+    use: viralmetagenome/clusters
+    columns: [sample, cluster, status, cluster_type, taxid, centroid, members, member_bp, read_depth_pct]
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Contig tables
+    tag: vm-ctg-table-clusters
+    index: ctg-table-clusters
+    title: Contig clusters
+    description: Every cluster with its centroid, members, read depth share and fate.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+- title: Consensus
+  subtitle: How close to a reference and how complete is each genome?
+  tab_group: Assembly
+  tab_order: 4
+  tab_icon: mdi:virus
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Genome scope
+    icon: mdi:filter-variant
+    color: grape
+    description: Keep consensus genomes by route or by what they resolve to
+  grid_sections:
+  - name: Genomes at a glance
+    icon: mdi:counter
+    color: grape
+    description: Genomes per route, ambiguous bases, identity to a reference and CheckV tier
+  - name: Identity and ambiguity
+    icon: mdi:chart-scatter-plot
+    color: grape
+    description: Every genome by its ambiguous bases and identity, with the record of the picked one
+  - name: Refinement
+    icon: mdi:chart-line
+    color: grape
+    description: Ambiguous bases of each de novo consensus at every refinement step
+  - name: Genome tables
+    icon: mdi:table
+    color: gray
+    description: Every consensus genome and every CheckV call
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      Each consensus is compared with the annotation database and the reference pool by BLAST and
+      scored by [CheckV](https://bitbucket.org/berkeleylab/checkv); QUAST counts its ambiguous
+      bases, the positions too shallow to call. A genome high on identity and low on N is ready to
+      use; click a point to open its record, and read the de novo ones down their refinement.
+    tag: vm-cns-intro
+    index: cns-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: viralmetagenome
+    data_collection_tag: genomes
+    interactive_component_type: MultiSelect
+    column_name: route
+    column_type: object
+    display:
+      icon_name: mdi:source-branch
+      custom_color: indigo
+    section: Genome scope
+    group: Genomes
+    tag: vm-cns-filter-route
+    index: cns-route-filter
+    title: Route
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: viralmetagenome
+    data_collection_tag: genomes
+    interactive_component_type: MultiSelect
+    column_name: virus
+    column_type: object
+    display:
+      icon_name: mdi:virus
+      custom_color: grape
+    section: Genome scope
+    group: Genomes
+    tag: vm-cns-filter-virus
+    index: cns-virus-filter
+    title: Virus
+    layout: {x: 0, y: 2, w: 1, h: 2}
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: genomes
+    aggregation: count
+    column_name: genome_id
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: route
+    display:
+      icon_name: mdi:virus
+      icon_color: grape
+      caption: genomes, de novo or constraint
+    section: Genomes at a glance
+    tag: vm-cns-card-genomes
+    index: cns-card-genomes
+    title: Consensus genomes
+    description: Consensus genomes, one per sample and reference, split by the route that built them.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: genomes
+    aggregation: median
+    column_name: n_pct
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 5
+    threshold_direction: max
+    threshold_warn: 20
+    display:
+      icon_name: mdi:alert-outline
+      icon_color: orange
+      caption: genomes at 5% N or less, 20% warns
+      decimals: 2
+    section: Genomes at a glance
+    tag: vm-cns-card-ambiguous
+    index: cns-card-ambiguous
+    title: Ambiguous bases
+    description: Share of a consensus written as N, in percent; the positions too shallow for the consensus caller.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: genomes
+    aggregation: median
+    column_name: annotation_identity_pct
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: teal
+      caption: median per genome, with the spread
+      decimals: 1
+    section: Genomes at a glance
+    tag: vm-cns-card-identity
+    index: cns-card-identity
+    title: Identity to reference
+    description: Identity of a consensus to its closest reference in the annotation database, in percent.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: genomes
+    aggregation: count
+    column_name: genome_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: checkv_quality
+    display:
+      icon_name: mdi:shield-check-outline
+      icon_color: green
+      caption: genomes, by CheckV quality tier
+    section: Genomes at a glance
+    tag: vm-cns-card-checkv
+    index: cns-card-checkv
+    title: CheckV quality
+    description: CheckV's tier for each genome; Not-determined means its database holds no close enough genome.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: viralmetagenome
+    data_collection_tag: genomes
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: n_pct
+      y_col: annotation_identity_pct
+      label_col: genome_id
+      color_col: route
+      size_col: mean_depth
+      x_title: Ambiguous bases (% N)
+      y_title: Identity to the closest reference (%)
+      legend_pos: bottom
+      top_n_labels: 0
+      selection_enabled: true
+      selection_column: genome_id
+    section: Identity and ambiguity
+    tag: vm-cns-av-identity-ambiguity
+    index: cns-identity-ambiguity
+    title: Ambiguous bases against identity per genome
+    description: One point per genome, sized by its mean depth. The ones to trust sit top left.
+    layout: {x: 0, y: 0, w: 5, h: 7}
+  - component_type: advanced_viz
+    workflow_tag: viralmetagenome
+    data_collection_tag: genomes
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: cns-identity-ambiguity
+      id_col: genome_id
+      title_col: genome_id
+      selection_source: scatter_selection
+      sections:
+        Genome: [sample, reference, route, step, virus, consensus_length]
+        Reference: [annotation_name, annotation_identity_pct, annotation_aligned_pct, blast_hit, blast_identity_pct]
+        Quality: [n_pct, checkv_quality, checkv_completeness, checkv_contamination, checkv_genes]
+        Reads: [mapped_reads, mean_depth, cov_10x_pct, snps, indels]
+    section: Identity and ambiguity
+    tag: vm-cns-av-record
+    index: cns-genome-record
+    title: Picked genome
+    description: The genome picked on the plot, with its reference, quality and reads.
+    layout: {x: 5, y: 0, w: 3, h: 7}
+  - component_type: advanced_viz
+    workflow_tag: viralmetagenome
+    data_collection_tag: vmg_contig_iterations
+    viz_kind: profile
+    config:
+      viz_kind: profile
+      series_col: genome_id
+      x_col: step_order
+      y_col: n_pct
+      x_title: Refinement step (0 is the scaffold, the last the variant-calling round)
+      y_title: Ambiguous bases (% N)
+      legend_pos: bottom
+    section: Refinement
+    tag: vm-cns-av-refinement
+    index: cns-refinement
+    title: Ambiguous bases along the refinement
+    description: One line per de novo genome; the variant-calling round masks the positions too shallow to call.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: viralmetagenome
+    data_collection_tag: genomes
+    columns: [genome_id, sample, reference, route, step, virus, consensus_length, n_pct, annotation_name, annotation_identity_pct, blast_hit, blast_identity_pct, checkv_quality, checkv_completeness, checkv_contamination]
+    row_selection_enabled: true
+    row_selection_column: genome_id
+    section: Genome tables
+    tag: vm-cns-table-genomes
+    index: cns-table-genomes
+    title: Consensus genomes
+    description: Every consensus with its closest reference, ambiguous bases and CheckV call.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: viralmetagenome
+    data_collection_tag: checkv_quality
+    use: checkv/quality_summary
+    columns: [sample, checkv_run, contig_id, contig_length, gene_count, viral_genes, host_genes, checkv_quality, miuvig_quality, completeness, completeness_method, contamination, warnings]
+    section: Genome tables
+    tag: vm-cns-table-checkv
+    index: cns-table-checkv
+    title: CheckV calls
+    description: CheckV on every consensus sequence, the refinement steps of the de novo ones included.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+- title: Mapping
+  subtitle: How deep and how evenly do the reads cover each genome?
+  tab_group: Assembly
+  tab_order: 5
+  tab_icon: mdi:chart-line
+  tab_icon_color: blue
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Mapping scope
+    icon: mdi:filter-variant
+    color: blue
+    description: Keep mappings by genome or route
+  grid_sections:
+  - name: Mapping at a glance
+    icon: mdi:counter
+    color: blue
+    description: Reads mapped, depth, breadth and duplicates across the genomes
+  - name: Depth along the genome
+    icon: mdi:chart-line
+    color: blue
+    description: Mean depth in bins along each genome, from its first base
+  - name: Depth and breadth
+    icon: mdi:chart-scatter-plot
+    color: blue
+    description: Depth against breadth per genome, and the cumulative coverage curves
+  - name: Mapping tables
+    icon: mdi:table
+    color: gray
+    description: Reads mapped, duplicates, depth and breadth per genome
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      The clean reads of each sample are mapped with bwa-mem2 to each of its consensus genomes and
+      constraint references, deduplicated with Picard and measured with
+      [mosdepth](https://github.com/brentp/mosdepth). Breadth at 10X is the share of a genome
+      deep enough to call; a dip in a depth profile is where the consensus writes N.
+    tag: vm-map-intro
+    index: map-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: viralmetagenome
+    data_collection_tag: genomes
+    interactive_component_type: MultiSelect
+    column_name: genome_id
+    column_type: object
+    display:
+      icon_name: mdi:virus
+      custom_color: cyan
+    section: Mapping scope
+    group: Mappings
+    tag: vm-map-filter-genome
+    index: map-genome-filter
+    title: Genome
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: viralmetagenome
+    data_collection_tag: genomes
+    interactive_component_type: MultiSelect
+    column_name: route
+    column_type: object
+    display:
+      icon_name: mdi:source-branch
+      custom_color: indigo
+    section: Mapping scope
+    group: Mappings
+    tag: vm-map-filter-route
+    index: map-route-filter
+    title: Route
+    layout: {x: 0, y: 3, w: 1, h: 2}
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: genomes
+    aggregation: median
+    column_name: mapped_reads
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:relation-many-to-many
+      icon_color: teal
+      caption: median per genome, with the spread
+      format: si
+    section: Mapping at a glance
+    tag: vm-map-card-mapped
+    index: map-card-mapped
+    title: Reads mapped
+    description: Reads (both mates) mapped to a genome before deduplication.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: genomes
+    aggregation: median
+    column_name: mean_depth
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:layers-outline
+      icon_color: blue
+      caption: median per genome, with the spread
+      decimals: 1
+    section: Mapping at a glance
+    tag: vm-map-card-depth
+    index: map-card-depth
+    title: Mean depth
+    description: Mean read depth over a genome, from mosdepth.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: genomes
+    aggregation: median
+    column_name: cov_10x_pct
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 90
+    threshold_direction: min
+    threshold_warn: 50
+    display:
+      icon_name: mdi:chart-line
+      icon_color: indigo
+      caption: genomes at 90% breadth or more, 50% warns
+      decimals: 1
+    section: Mapping at a glance
+    tag: vm-map-card-breadth
+    index: map-card-breadth
+    title: Breadth at 10X
+    description: Share of a genome covered by ten reads or more, in percent.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: genomes
+    aggregation: median
+    column_name: dup_pct
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:content-copy
+      icon_color: orange
+      caption: median per genome, with the spread
+      decimals: 2
+    section: Mapping at a glance
+    tag: vm-map-card-dup
+    index: map-card-dup
+    title: Duplicate pairs
+    description: Read pairs Picard marked as duplicates and removed, in percent of the pairs it examined.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: viralmetagenome
+    data_collection_tag: coverage_bins
+    viz_kind: profile
+    config:
+      viz_kind: profile
+      series_col: genome_id
+      x_col: position
+      y_col: mean_depth
+      log_y: true
+      line_width: 1.5
+      x_title: Position on the genome (bp)
+      y_title: Mean depth in the bin (log)
+      legend_pos: bottom
+    section: Depth along the genome
+    tag: vm-map-av-depth-profile
+    index: map-depth-profile
+    title: Depth along each genome
+    description: One line per genome, the mean depth of each bin; a line that drops to the floor is a stretch written as N.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: viralmetagenome
+    data_collection_tag: genomes
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: mean_depth
+      y_col: cov_10x_pct
+      label_col: genome_id
+      color_col: route
+      size_col: mapped_reads
+      log_x: true
+      x_title: Mean depth (log)
+      y_title: Breadth at 10X (%)
+      legend_pos: bottom
+      top_n_labels: 0
+      selection_enabled: true
+      selection_column: genome_id
+    section: Depth and breadth
+    tag: vm-map-av-depth-breadth
+    index: map-depth-breadth
+    title: Depth against breadth per genome
+    description: One point per genome, sized by its reads mapped. Deep but narrow is a partial genome.
+    layout: {x: 0, y: 0, w: 4, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: viralmetagenome
+    data_collection_tag: coverage_cumulative
+    viz_kind: profile
+    config:
+      viz_kind: profile
+      series_col: genome_id
+      x_col: depth
+      y_col: bases_pct
+      log_x: true
+      reference_x: 10
+      reference_label: 10X
+      x_title: Depth (log)
+      y_title: Bases covered at least this deep (%)
+      legend_pos: bottom
+    section: Depth and breadth
+    tag: vm-map-av-cumulative
+    index: map-cumulative
+    title: Cumulative coverage per genome
+    description: One curve per genome; where it crosses the 10X line is its breadth at 10X.
+    layout: {x: 4, y: 0, w: 4, h: 6}
+  - component_type: table
+    workflow_tag: viralmetagenome
+    data_collection_tag: genomes
+    columns: [genome_id, sample, reference, route, mapped_reads, mapped_pct, properly_paired_pct, dup_pct, dedup_mapped_reads, mean_depth, median_depth, cov_1x_pct, cov_10x_pct, cov_50x_pct, cov_100x_pct, mash_reference, mash_identity]
+    row_selection_enabled: true
+    row_selection_column: genome_id
+    section: Mapping tables
+    tag: vm-map-table
+    index: map-table
+    title: Mapping per genome
+    description: Reads mapped, duplicates, depth and breadth per genome, with the reference Mash picked from a pool.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+# ============================================================================
+# Variants
+# ============================================================================
+- title: Variants
+  subtitle: Which variants does each genome carry, and how fixed are they?
+  tab_group: Variants
+  tab_order: 6
+  tab_icon: mdi:dna
+  tab_icon_color: red
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Call scope
+    icon: mdi:filter-variant
+    color: red
+    description: Keep calls by variant type or by the route of their genome
+  grid_sections:
+  - name: Calls at a glance
+    icon: mdi:counter
+    color: red
+    description: Passing calls, minor calls, call depth and the genomes that carry calls
+  - name: Along the genome
+    icon: mdi:dna
+    color: red
+    description: Every call at its position and allele frequency, one lane per genome
+  - name: Frequency and depth
+    icon: mdi:chart-scatter-plot
+    color: red
+    description: Allele frequency against read depth, one point per call
+  - name: Variant table
+    icon: mdi:table
+    color: gray
+    description: Every iVar call with its depths, frequency, p-value and verdict
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [iVar](https://andersen-lab.github.io/ivar/html/) calls variants on the reads of each sample
+      against each of its references, and keeps the calls under the consensus threshold too:
+      fixed calls make the consensus, minor ones are intra-host diversity or noise. The lanes open
+      on the first reference; filter the call type in the left panel.
+    tag: vm-var-intro
+    index: var-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: viralmetagenome
+    data_collection_tag: ivar_variants
+    interactive_component_type: MultiSelect
+    column_name: variant_type
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: red
+    section: Call scope
+    group: Calls
+    tag: vm-var-filter-type
+    index: var-type-filter
+    title: Variant type
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: viralmetagenome
+    data_collection_tag: ivar_variants
+    interactive_component_type: MultiSelect
+    column_name: route
+    column_type: object
+    display:
+      icon_name: mdi:source-branch
+      custom_color: indigo
+    section: Call scope
+    group: Calls
+    tag: vm-var-filter-route
+    index: var-route-filter
+    title: Route
+    layout: {x: 0, y: 2, w: 1, h: 2}
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: ivar_variants
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    filter_expr: "col('filter') == 'PASS'"
+    secondary_layout: composition
+    breakdown_col: frequency_class
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: green
+      caption: passing calls, by allele frequency band
+    section: Calls at a glance
+    tag: vm-var-card-pass
+    index: var-card-pass
+    title: Passing calls
+    description: Calls iVar kept (PASS) across the genomes, split into fixed, major and minor frequency bands.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: ivar_variants
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    filter_expr: "col('frequency_class') == 'Minor'"
+    secondary_layout: donut
+    breakdown_col: filter
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: cyan
+      caption: minor calls, kept or filtered by iVar
+    section: Calls at a glance
+    tag: vm-var-card-minor
+    index: var-card-minor
+    title: Minor calls
+    description: Calls under half frequency; the few iVar keeps are intra-host variants, the rest noise.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: ivar_variants
+    aggregation: median
+    column_name: total_dp
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:layers-outline
+      icon_color: blue
+      caption: reads at the call, with the spread
+    section: Calls at a glance
+    tag: vm-var-card-depth
+    index: var-card-depth
+    title: Call depth
+    description: Reads covering the position of a call; a frequency read off few reads means little.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: viralmetagenome
+    data_collection_tag: ivar_variants
+    aggregation: nunique
+    column_name: genome_id
+    column_type: object
+    filter_expr: "col('filter') == 'PASS'"
+    secondary_layout: top_n
+    breakdown_col: route
+    top_n_count: 2
+    display:
+      icon_name: mdi:virus
+      icon_color: grape
+      caption: genomes with a passing call, ranked by route
+    section: Calls at a glance
+    tag: vm-var-card-genomes
+    index: var-card-genomes
+    title: Genomes with calls
+    description: Consensus genomes carrying at least one call iVar kept, split by the route that built them.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: viralmetagenome
+    data_collection_tag: ivar_variants
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      chr_col: chrom
+      pos_col: pos
+      score_col: af
+      feature_col: variant_key
+      sample_col: genome_id
+      category_col: frequency_class
+      mark: point
+      facet_by_sample: true
+      max_facets: 6
+      score_title: Allele frequency
+      point_size: 5
+      default_region: first
+    section: Along the genome
+    tag: vm-var-av-genome
+    index: var-genome-view
+    title: Calls along the reference, one lane per genome
+    description: Every call at its allele frequency, coloured by frequency band; the axis lists the references the calls are on.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: viralmetagenome
+    data_collection_tag: ivar_variants
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: total_dp
+      y_col: af
+      label_col: variant_key
+      color_col: frequency_class
+      log_x: true
+      x_title: Reads at the position (log)
+      y_title: Allele frequency
+      legend_pos: bottom
+      top_n_labels: 0
+      selection_enabled: true
+      selection_column: genome_id
+    section: Frequency and depth
+    tag: vm-var-av-af-depth
+    index: var-af-depth
+    title: Allele frequency against depth per call
+    description: One point per call. Lasso calls to narrow every tab to their genomes.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: viralmetagenome
+    data_collection_tag: ivar_variants
+    use: ivar/variants_tsv
+    columns: [genome_id, sample, reference, chrom, pos, ref, alt, variant_type, af, frequency_class, total_dp, alt_dp, pval, filter, gff_feature, aa_change]
+    row_selection_enabled: true
+    row_selection_column: genome_id
+    section: Variant table
+    tag: vm-var-table
+    index: var-table
+    title: iVar calls
+    description: Every call with its depths, allele frequency, p-value and iVar's verdict.
+    layout: {x: 0, y: 0, w: 8, h: 6}

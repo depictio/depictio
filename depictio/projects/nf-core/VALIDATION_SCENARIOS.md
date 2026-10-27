@@ -999,6 +999,206 @@ MultiQC parquet, and the reason is recorded in its report.
 
 ---
 
+## rnavar 1.3.0
+
+**Megatest:** `s3://nf-core-awsmegatests/rnavar/results-5e72bcb5520e00422750c978d4153b38f1fd7312/`
+(not a release tag sha: 1.3.0dev, two weeks before the truncated release run; run_root `.`,
+manifest megatest.yaml)
+
+**MultiQC:** run wrote 1.35 -> used as-is
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| RV1 | **test_full megatest (validated offline)** | `test_full`, pinned `5e72bcb5` | none | 19 of 25 collections populate: 383,508 `vcf_variants`, 8 callsets, 2,543 navigator windows, 17,441 karyotype windows; the 6 snpEff collections are absent and the Annotation tab is pruned. |
+| RV2 | **snpEff annotation** | `--tools snpeff` | `annotation/<s>/*_snpEff.ann.vcf.gz`, `reports/snpeff/<s>/` appear | The Annotation tab and the Annotate step appear; recipes validated on the same subworkflow's sarek output (RV-D3); the rnavar file layout itself is unseen. |
+| RV3 | **VEP only / merge** | `--tools vep` or `merge` | `_VEP.ann.vcf.gz` / `_snpEff_VEP.ann.vcf.gz` | VEP's CSQ is not parsed by any catalog recipe: VEP-only has no Annotation tab; with `merge`, the `_snpEff_VEP` file does not match the snpEff regex (it ends in `_VEP.ann`), so only a `snpeff` entry in `--tools` feeds the tab. |
+| RV4 | **no VariantFiltration** | `--skip_tools variantfiltration` | only `<s>.haplotypecaller.vcf.gz` | `variants.py` falls back to the unfiltered VCF; `vcf_files` pruned with the file track; FILTER tiles show one value. |
+| RV5 | **BAM / CRAM / VCF start** | samplesheet with `bam`, `cram` or `vcf` columns | no STAR, no MarkDuplicates (VCF: no alignment reports at all); mosdepth runs on CRAM | `star_*` / `picard_*` (and from VCF `samtools_*`) are optional and pruned; the hub keys on the callset; mosdepth output is not read. |
+| RV6 | **no design table** | any, without `METADATA_FILE` | no factors | `metadata` pruned, one constant group. |
+| RV7 | **GRCh37 Ensembl** | `--genome GRCh37` | contigs `1`, `2`, ... | Pass `--var GENOME=none`: the Genome tab loses its assembly axis and gene lane; the contig classes and primary-contig filters already accept unprefixed names. |
+
+**Ranking by template stress:** RV1 > RV2 > RV5 > RV4 > RV3 > RV7 > RV6
+
+Source: `depictio/projects/nf-core/rnavar/1.3.0/VALIDATION_REPORT.md`.
+
+---
+
+## nascent 2.3.0
+
+**Megatest:** `s3://nf-core-awsmegatests/nascent/results-7d4fe61975015f652c271886e661764b05cfd3bf/`
+(tag 2.3.0, run_root `.`, manifest megatest.yaml)
+
+**MultiQC:** none published (and nothing MultiQC can parse) -> no MultiQC collection
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| NA1 | **GRO-seq time course, design table (validated)** | `test_full` + `--var METADATA_FILE={DATA_ROOT}/input/design.tsv` | none | All 20 collections populate (129,437 binned windows, 14,552 genes); 6 tabs. |
+| NA2 | **no design table** | omit `METADATA_FILE` | `metadata` pruned | Time points come off the library ids (`_<n>h`, `_<n>min`); `__no_group__` carries the phase; every tab renders. A run whose ids carry no duration and no design has no time course: the time-course recipes stop with "no sample has a time point". |
+| NA3 | **completed run with transcript identification** | a run where PINTS, groHMM and HOMER finish | `transcript_identification/{grohmm,pints,homer}/` and `quantification/nascent/*.featureCounts.txt` published | Not read. The gene matrix glob is anchored on `gene/`, so the transcript-level matrix does not leak into the gene counts. A Transcripts tab needs such a run. |
+| NA4 | **replicated time course** | two or more libraries per time point | several libraries share a time point | Every time-course collection averages the libraries of a time point; the correlation, PCA and QC stay per library. Not exercised on the megatest (no replicates). |
+| NA5 | **PRO-seq / `--assay_type PROseq`, UMIs** | `--assay_type PROseq --with_umi` | strand orientation and the `umi_dedup` BAM names | The featureCounts library names strip `umi_dedup`; the plus/minus bedGraphs keep their names, so the recipes read them unchanged. Strand balance reads the same. |
+| NA6 | **no bedGraphs or bigWigs fetched** | a tables-only fetch | the coverage collections are absent | See "Routes": Signal dynamics goes, Genome signal keeps what is left. |
+| NA7 | **other assembly** | `--genome mm10` + `--var GENOME=mm10` | the axis and gene lane of the genome tracks | The navigator and the bigWig lanes take `GENOME`; an assembly GenomeSpy does not ship draws no gene lane. |
+
+**Ranking by template stress:** NA1 > NA2 > NA4 > NA6 > NA3 > NA5 > NA7
+
+Source: `depictio/projects/nf-core/nascent/2.3.0/VALIDATION_REPORT.md`.
+
+---
+
+## epitopeprediction 3.2.0
+
+**Megatest:** `s3://nf-core-awsmegatests/epitopeprediction/results-e637bc7c49e6e05a09f5207501a142ec68d8570b/`
+(tag 3.2.0, run_root `.`, manifest megatest.yaml, `test_full` profile)
+
+**MultiQC:** run wrote 1.35 -> used as-is (binding-prediction custom content plus bcftools)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| EP1 | **test_full megatest (validated offline)** | none | none | Every recipe runs on the real files, both input routes and both MHC classes; CLI dry run resolves 9 of 9 collections. |
+| EP2 | **long output** | default (`--wide_format_output false`) | `predictions/` in long shape | Same collections; the long reader is covered by the recipe tests only, not by a real run. Highest-risk: no megatest writes it. |
+| EP3 | **no wild type** | `--wild_type false` plus `--var NO_WILD_TYPE=1` | no WT rows | The pairs collection is pruned with its section and findings row. |
+| EP4 | **peptides or proteins only** | a sheet without VCF plus `--var NO_VARIANT_INPUT=1` | no `variant_peptides/`, no bcftools | Variant peptides and pairs pruned; MultiQC bcftools panels pruned. |
+| EP5 | **one tool per class** | `--tools mhcflurry` plus `--var SINGLE_PREDICTOR=1` | no pair of tools | Agreement section, row and highlight pruned. |
+| EP6 | **NetMHCpan / MixMHCpred** | `--tools netmhcpan,mixmhcpred` (licensed, external) | other rank scales, MixMHCpred without IC50 | IC50 null for MixMHCpred (its predictions read `No IC50`); the agreement pairs need an IC50 on both sides to draw. |
+| EP7 | **a real cohort with typed alleles** | an hlatyping run feeding `alleles` | several alleles per sample | The dot plot and allele filters gain depth; the hlatyping genotype table's `alleles` column is this sheet's `alleles` cell, spelled the same way. No live link: the two runs are separate projects (docs/dashboards.md). |
+
+**Ranking by template stress:** EP2 > EP6 > EP4 > EP5 > EP3 > EP7 > EP1
+
+Source: `depictio/projects/nf-core/epitopeprediction/3.2.0/VALIDATION_REPORT.md`.
+
+---
+
+## viralmetagenome 1.2.0
+
+**Megatest:** `s3://nf-core-awsmegatests/viralmetagenome/results-74064a43f4b00c163c22bcfc9cf1d84a2a69e988/`
+(tag 1.2.0, run_root `.`, manifest megatest.yaml; tables-only fetch, 42 MB of 320 MB)
+
+**MultiQC:** run wrote 1.27 -> reprocessed with 1.35 (`--exclude '*_mqc.tsv'`)
+
+**Template requirements:**
+- Always: the samples overview (`vmg_samples_overview`, `samples`, `read_funnel`), the genome hub
+  (`genomes`, from either overview) and `multiqc_data`
+- Optional: `metadata` (`--var METADATA_FILE`, the `--metadata` table, vendored as
+  `input/metadata.tsv`); `GROUP_COL` is its first factor column (`specimen` on the reference)
+- Every route-dependent collection (contigs, clusters, classification, both genome overviews,
+  CheckV, iVar, mosdepth) is `optional: true`; no route flag is needed
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| VM1 | **test_full megatest (validated offline)** | `--var METADATA_FILE=<data root>/input/metadata.tsv` | none | Every recipe runs on the real files; dry-run preview 16/16 collections. |
+| VM2 | **no metadata table** | omit `METADATA_FILE` | `metadata` pruned | The hub carries `__no_group__` and the overview's factor columns; every tile renders with one group. |
+| VM3 | **constraint route only** | `--skip_assembly` | no contigs, clusters or de novo consensus | Contigs tab, refinement profile, contigs highlight and their Overview lines pruned (simulated). |
+| VM4 | **de novo route only** | no `--mapping_constraints` | no `mapping_overview.tsv`, no Mash screen | The genome hub holds de novo genomes only; the Mash columns of the mapping table are empty. |
+| VM5 | **several assemblers** | `--assemblers spades,megahit,trinity` | one idxstats and one QUAST block per assembler | `assembler` gains values; the samples overview reads the longest assembly. Not seen on data. |
+| VM6 | **several viruses or segments** | a metagenome with more than one virus, or a segmented one | several clusters refined per sample, several annotations | `virus` gains values (the colours, the Virus filter); the genome view lists more references. Not seen on data. |
+| VM7 | **bcftools caller** | `--variant_caller bcftools` | no raw iVar tables | `ivar_variants` is empty and the Variants tab is pruned; the bcftools VCFs are not read yet. |
+| VM8 | **no global prefix** | `--prefix` unset | file names without the run prefix | The globs match on the suffix and the prefix strip is a no-op; not seen on data. |
+| VM9 | **full CheckV database** | `--checkv_db` the full release | completeness estimated | The CheckV tier and completeness fill in; validated on a fixture only. |
+
+**Ranking by template stress:** VM6 > VM7 > VM3 > VM5 > VM9 > VM4 > VM2 > VM8 > VM1
+
+Source: `depictio/projects/nf-core/viralmetagenome/1.2.0/VALIDATION_REPORT.md`.
+
+---
+
+## mcmicro 2.0.0
+
+**Megatest:** `s3://nf-core-awsmegatests/mcmicro/results-f4400001578642e370a72668966c6602fe172ef6/`
+(tag 2.0.0, run_root `.`, manifest megatest.yaml, `Full test profile`)
+
+**MultiQC:** run wrote 1.32 -> used as-is (custom content only: the prelude's input check matrix)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| MC1 | **Full test megatest (validated offline)** | `-profile test_full` | none | Every recipe runs on the real files, both methods; CLI dry run resolves 10 of 10 collections, previews included. |
+| MC2 | **default segmentation** | `--segmentation mesmer` plus `--var SINGLE_SEGMENTER=1` | one MCQUANT table per image | Agreement section and findings row pruned; every strip still breaks down by image, role or a distribution. |
+| MC3 | **TMA dearray** | `--tma_dearray` (Coreograph) | one image per core, cores as MCQUANT inputs | Core-level file names (`<sample>_<core>`) become `sample` values the hub does not list, so the sample filters miss them; the cell map frames each core. Highest-risk: untested. |
+| MC4 | **sample-format sheet** | `--input_sample` (one row per sample, a tile directory) | no `cycle_number` | The hub reads it (recipe tests only): `cycle_count` 1, `cycles` `1 cycle`. |
+| MC5 | **no background subtraction** | `--backsub false` | Cellpose on the registered image; `remove` channels quantified | MCQUANT names `<sample>.csv` for both methods; the marker panel still says `Removed` for a `remove` channel the run kept. |
+| MC6 | **no previews** | fetch without tifffile / Pillow | no `previews/` | Image collection pruned: Previews tab dropped, no underlay. |
+| MC7 | **whole-slide cohort** | real CyCIF / CODEX slides, 30 to 60 markers | 10^5 to 10^6 cells per image, images far over 1024 px | Previews downscaled (underlay on the full frame); `mcquant_cell_markers` grows to cells x markers rows; the cell map samples, Load-All lifts it; the correlation heatmap grows to markers x methods rows. |
+
+**Ranking by template stress:** MC3 > MC7 > MC4 > MC5 > MC2 > MC6 > MC1
+
+Source: `depictio/projects/nf-core/mcmicro/2.0.0/VALIDATION_REPORT.md`.
+
+---
+
+## stableexpression 1.1.0
+
+**Megatest:** `s3://nf-core-awsmegatests/stableexpression/results-d6b1654c4784332cbad71f1d928cc8b75a77272f/`
+(not a release tag: development build `v1.0.0-gd6b1654`, written 2026-07-16; run_root `.`,
+manifest megatest.yaml, `test_full` profile, `homo_sapiens`)
+
+**MultiQC:** none published (the run's `MULTIQC` task failed); the template reads none
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| SE1 | **test_full megatest (validated offline)** | none | development build, no MultiQC report, no Dash app | Every recipe runs on the real files; CLI dry run resolves 9 of 9 collections. |
+| SE2 | **a 1.1.0 release run** | `-profile test_full` on 1.1.0 | MultiQC report and Dash app published, possibly other candidate selection | Nothing read changes; a MultiQC custom-content collection could be added. Highest-value re-run: the bucket has none. |
+| SE3 | **skip ID mapping** | `--skip_id_mapping` plus `--var NO_ID_MAPPING=1` | no `statistics/id_mapping_stats.csv`, original ids kept | ID mapping tab and Map step pruned; tested on the recipes only. |
+| SE4 | **skip geNorm** | `--skip_genorm` | no geNorm column | geNorm card and the Normfinder against geNorm scatter empty; tested on the recipes only. |
+| SE5 | **user datasets** | `--datasets <csv>`, `--skip_fetch_eatlas_accessions` | datasets named by the user, possibly without the `datasets/` directory layout | accessions are the dataset ids; a missing directory falls back to the platform guessed from the id (tested). |
+| SE6 | **one platform** | a species with RNA-seq only | one `platform` value | every group split has one segment; nothing pruned. |
+| SE7 | **other section settings** | `--nb_sections 5 --nb_candidates_per_section 100` | fewer sections | the section ramp colours the first five; `TOP_PER_SECTION` caps at the candidates. |
+| SE8 | **a smaller species** | `-profile test` (Prunus persica) or `test_dataset_eatlas` (Mus musculus, user datasets) | a few datasets | quick end-to-end ingest on a laptop. |
+
+**Ranking by template stress:** SE2 > SE5 > SE3 > SE4 > SE7 > SE6 > SE8 > SE1
+
+Source: `depictio/projects/nf-core/stableexpression/1.1.0/VALIDATION_REPORT.md`.
+
+---
+
+## genomeqc 1.0.1
+
+**Megatest:** `s3://nf-core-awsmegatests/genomeqc/results-bce44e5b558e21b38d4dd2b6521302246b4dae6d/`
+(tag 1.0.1, run_root `.`, manifest megatest.yaml)
+
+**MultiQC:** run wrote 1.35 -> used as-is (QUAST only)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| GQ1 | **test_full megatest (validated offline)** | `test_full`, release run `bce44e5b` | none | 24 of 24 collections populate: 3 genomes, 698 karyotype sequences, 75,704 tidk windows, 9,543 orthogroups; CLI dry run 24/24. |
+| GQ2 | **genome-only** | a samplesheet without GFF | no AGAT, overlaps, OrthoFinder, protein BUSCO; ideogram under `busco/genome/` | Annotation and Orthology tabs pruned (simulated); the proteins tiles of Completeness show a dash (GQ-D6). The `<a>_<lineage>.csv` ideogram name is inferred from the docs, unseen on a real run. |
+| GQ3 | **skip tidk** | `--skip_tidk` | no tidk | No sequence lengths: the Karyotype tab is pruned with tidk (simulated). |
+| GQ4 | **known telomere** | `--repeat TTAGG` | `tidk/<a>/search/apriori/<repeat>/` | The a priori search wins over the a posteriori one (unit-tested); the repeat ideogram then reads as a telomere map. Unseen on a real run. |
+| GQ5 | **no decontamination** | `--gxdb` and `--gxdb_manifest` unset | no `decontamination/`, `fcsgx/` | Contamination tab pruned (simulated). |
+| GQ6 | **HiTE instead of RepeatMasker** | `--te hite` | `hite/<a>/` instead of `repeatmasker/` | No recipe reads HiTE: the Repeats tab is pruned. |
+| GQ7 | **OrthoFinder v2** | `--ortho_version v2` | `orthofinder/v2/...`, no hierarchical orthogroups | The three summary tables keep their names; the recipes' globs do not name the version. Unseen. |
+| GQ8 | **real FCS-GX database** | `--gxdb` on the full GX database | real contamination calls | The flagged-range tiles and the foreign-share threshold read real calls for the first time. |
+| GQ9 | **no design table** | omit `METADATA_FILE` | none | `metadata` pruned, one constant group. |
+
+**Ranking by template stress:** GQ2 > GQ8 > GQ4 > GQ7 > GQ3 > GQ5 > GQ6 > GQ1 > GQ9
+
+Source: `depictio/projects/nf-core/genomeqc/1.0.1/VALIDATION_REPORT.md`.
+
+---
+
+## hlatyping 2.2.0
+
+**Megatest:** `s3://nf-core-awsmegatests/hlatyping/results-3237d20e7e611d8bbf8c37e637202dfe8a23e996/`
+(tag 2.2.0, run_root `.`, manifest megatest.yaml; the last of three launches, samplesheet
+test-datasets `2adcc84`)
+
+**MultiQC:** run wrote 1.32 -> used as-is (FastQC and OptiType sections, general statistics)
+
+| # | Label | Profile / Flags | What differs | Template impact |
+|---|-------|-----------------|--------------|-----------------|
+| HT1 | **test_full megatest (validated offline)** | none | none | Every recipe runs on the real files, FASTQ, concatenated FASTQ and BAM routes, DNA and RNA; CLI dry run resolves 5 of 5 collections. |
+| HT2 | **a real cohort** | a sheet of many individuals | many alleles per locus | The allele frequency axis and the allele filters grow with the alleles; the grid caps at 200 samples (`max_samples`). Highest-value check: no megatest has more than two individuals. |
+| HT3 | **several solutions** | `--enumerations 3` | three rows per result table | The optimum is kept, `solutions` and `runner_up_gap` fill in; tested on synthetic tables only. |
+| HT4 | **single-end reads** | a sheet with `fastq_1` only | FastQC names the file `<sample>` | `read_qc` reads it as `Single-end`; the typing share divides by the one file. Synthetic test only. |
+| HT5 | **HLA-HD** | `--tools optitype,hlahd` (licensed, local install) | `hlahd/` class I and II tables | Not read: no class II tile, no HLA-HD collection. A catalog `hlahd` module would add DRB1, DQB1 and DPB1 to the grid. |
+| HT6 | **no samplesheet given** | another run's DATA_ROOT without `input/` | `samples` from `optitype/` only | Every sample enters with `seq_type` `Not stated`; one group, every tile still draws. |
+| HT7 | **with epitopeprediction** | the `alleles` column fed into an epitopeprediction sheet | two projects | Same allele strings; no live cross-project link (see docs/dashboards.md). |
+
+**Ranking by template stress:** HT2 > HT5 > HT3 > HT4 > HT6 > HT1 > HT7
+
+Source: `depictio/projects/nf-core/hlatyping/2.2.0/VALIDATION_REPORT.md`.
+
+---
+
 ## Priority additions to `generate_validation_runs.sh`
 
 In order of value-per-effort:

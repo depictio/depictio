@@ -1,0 +1,21 @@
+id: epitopeprediction_wildtype_pairs
+name: Mutant against wild type
+mode: epitope/agretopicity
+description: >-
+  Missense mutant peptides beside their wild-type peptide (--wild_type), one row
+  per sample, mutant peptide, allele and tool: both IC50s, both binder calls,
+  the agretopicity (mutant over wild-type IC50) and the outcome, a mutant binder
+  whose wild type does not bind being the classic neoepitope candidate.
+find:
+  path_glob: "**/predictions/*.tsv"
+recipe: epitopeprediction/wildtype_pairs.py
+fixture: wildtype_pairs.tsv
+renders_as:
+  - id: wildtype_scatter
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: wt_ic50_nm, y: ic50_nm, label: sequence, color: pair_call }
+  - { id: pair_outcomes, component: card, column: pair_key, aggregation: count, secondary_layout: composition, breakdown_col: pair_call }
+  - { id: agretopicity_median, component: card, column: log10_agretopicity, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: interactive, interactive_type: MultiSelect, column_name: pair_call }
+  - { component: table, row_selection_enabled: true, row_selection_column: pair_key }

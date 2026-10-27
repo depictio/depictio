@@ -1,0 +1,31 @@
+id: viralmetagenome_samples_overview
+name: Reads, host removal and assembly per sample
+mode: per-sample/summary
+description: >-
+  One row per sample from the pipeline's samples overview table: read pairs
+  before trimming, after trimming and after host removal, the host share,
+  fastp's Q30 and duplication, the de novo assembly length and N50, the
+  contig clusters kept and removed and the de novo consensus count. The share
+  of raw read pairs left after preprocessing is derived alongside.
+find:
+  path_glob: "**/overview-tables/*samples_overview.tsv"
+recipe: viralmetagenome/samples_overview.py
+fixture: samples_overview.tsv
+renders_as:
+  - { id: read_attrition, component: card, column: raw_read_pairs, aggregation: sum,
+      secondary_layout: attrition, attrition_cols: [trimmed_read_pairs, host_filtered_read_pairs], headline: true }
+  - { id: retained_share, component: card, column: retained_pct, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { id: host_share, component: card, column: host_pct, aggregation: median,
+      secondary_layout: threshold, threshold_value: 50, threshold_direction: max }
+  - { id: assembly_n50, component: card, column: assembly_n50, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  # Reads left against the host share: a sample low on both lost its reads to
+  # the host database, one low on reads alone was sequenced shallow.
+  - id: retained_vs_host
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: host_pct, y: retained_pct, label: sample, size: raw_read_pairs }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: host_filtered_read_pairs, title: Read pairs after host removal} }
+  - { component: interactive, interactive_type: RangeSlider, column_name: host_pct }
+  - { component: table, row_selection_enabled: true, row_selection_column: sample }

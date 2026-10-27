@@ -1,0 +1,1417 @@
+version: 1
+# nf-core/mcmicro 2.0.0, on the family rules of depictio/projects/nf-core/RULES.md
+# (ampliseq/2.18.0 is the reference implementation).
+#
+# Funnel: the input image checks (MultiQC), the images themselves (Previews)
+# and how the segmentation methods cut them into cells (Segmentation), then the
+# cells: where they sit (Spatial), what they express (Markers) and their size and
+# shape (Morphology). A sample is one tissue image. The samplesheet (`samples`)
+# is what every sample filter starts from; the marker sheet (`markers`) is the
+# panel.
+#
+# The marker columns of the cell table follow the run's panel and are only
+# known at ingest: the cell map names them by pattern (every numeric column
+# that is not an id or a regionprops measure), never by name.
+#
+# Images: depictio has no OME-TIFF / zarr / pyramid viewer yet, so the
+# registered images and the mask outlines reach the dashboard as PNG previews
+# written at fetch time (scripts/make_previews.py), the optional
+# `mcmicro_previews` Image collection: the Previews gallery, and the underlay of
+# the cell map. A run without them loses the Previews tab and the underlay only.
+#
+# Routes: SINGLE_SEGMENTER (one method in --segmentation, the pipeline's
+# default) prunes the segmenter agreement: the Agreement section of
+# Segmentation and one findings row.
+main_dashboard:
+  title: nf-core/mcmicro
+  subtitle: Multiplexed tissue imaging, from registered images to the cells and their markers
+  project_tag: mcmicro Multiplexed Imaging
+  main_tab_name: Overview
+  tab_icon: mdi:compass-outline
+  tab_icon_color: brandPrimary
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_panel_default: collapsed
+  content_width_default: compact
+  show_tab_header: false
+  # Declared once here, read by every tab of the family.
+  category_colors:
+    '{GROUP_COL}': auto
+    segmenter:
+      Mesmer: '#1c7ed6'
+      Cellpose: '#e8590c'
+      MCCellpose: '#2f9e44'
+      '*': auto
+    marker_role:
+      Nuclear stain: '#4263eb'
+      Marker: '#ae3ec9'
+    status:
+      Quantified: '#2f9e44'
+      Removed: '#adb5bd'
+    stage:
+      Registered: '#1c7ed6'
+      Segmentation: '#f59f00'
+    pair: auto
+  # Persistent: drawn in every tab's filter panel, picks kept across tabs. Both
+  # are bound to the samplesheet, the source of every sample link.
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab
+    persistent: true
+    pin: top
+  grid_sections:
+  - name: Key figures
+    icon: mdi:counter
+    color: gray
+    appearance: plain
+    card_variant: headline
+    filter_bar: true
+    visible_filters: 2
+    description: The run in four numbers. The filters here narrow these four only.
+  - name: Findings
+    icon: mdi:star-outline
+    color: gray
+    appearance: plain
+    figure_style: minimal
+    filter_bar: true
+    visible_filters: 2
+    description: What the data says, each with the tab that shows it, then the figures behind it.
+  - name: How to read this dashboard
+    icon: mdi:information-outline
+    color: gray
+    appearance: plain
+    description: The tabs by group, each with the question it answers.
+  # Declared on the main tab, which no route removes.
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: gray
+    description: The samplesheet behind every tab, narrowed by the sample filters
+    collapsed: true
+    persistent: true
+    pin: bottom
+    exclude_tabs:
+    - Overview
+  components:
+  # First in component order on purpose: the Guide demos the first categorical
+  # filter that shares a data collection with the first card (Images, below).
+  - component_type: interactive
+    workflow_tag: mcmicro
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Key figures
+    tag: mm-ov-kf-group
+    index: ov-kf-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: mcmicro
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:image-outline
+      custom_color: teal
+      strip_label: Image
+    section: Key figures
+    tag: mm-ov-kf-sample
+    index: ov-kf-sample
+    title: Image
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # The pipeline's wordmark, read from its repository; where it cannot load (no
+  # internet), the title is drawn as text.
+  - component_type: text
+    title: nf-core/mcmicro
+    logo: https://raw.githubusercontent.com/nf-core/mcmicro/master/docs/images/nf-core-mcmicro_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/mcmicro/master/docs/images/nf-core-mcmicro_logo_dark.png
+    order: 1
+    body: >
+      Multiplexed tissue images registered, segmented into cells and quantified: where the
+      cells sit, what they express and how the segmentation methods compare.
+      [Run parameters](params:)
+    tag: mm-ov-hero
+    index: ov-hero
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/mcmicro stitches and registers the cycles of each tissue image, segments the cells and measures every cell in every channel of the marker panel. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The sample filters in the left panel apply to every tab: narrow the images once and the whole dashboard follows. A bar above a section narrows that section only.
+    tag: mm-ov-about
+    index: ov-about
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash.
+  - component_type: text
+    surface: card
+    values:
+      images: {dc: samples, column: sample, aggregation: nunique, format: integer}
+      channels: {dc: markers, column: marker_name, aggregation: count, filter_expr: col('quantified') == 1, format: integer}
+    body: |
+      ### The run
+      - ![](icon:mdi:image-multiple-outline) **Images** {{images}}
+      - ![](icon:mdi:palette-outline) **Channels** {{channels}} quantified
+      - ![](icon:mdi:shape-outline) **Segmentation** {{param:segmentation}}
+      - ![](icon:mdi:lightbulb-on-outline) **Illumination** {{param:illumination}}
+      - ![](icon:mdi:layers-minus) **Background subtraction** {{param:backsub}}
+    tag: mm-ov-run
+    index: ov-run
+    layout: {x: 5, y: 1, w: 3, h: 3}
+  # The marks take the family's colour (the header's), not the theme's blue.
+  - component_type: text
+    surface: card
+    accent: green
+    values:
+      n_cells: {dc: mcquant_cells, column: cell_key, aggregation: count, format: si}
+    body: |
+      ### Five steps from tiles to cells
+      Each step names its settings and the tab that shows its result.
+
+      ::: steps
+      1. ![](icon:mdi:clipboard-check-outline) **Check** Tile metadata checked before any processing · [Settings](params:prelude) · [MultiQC](tab:MultiQC)
+      2. ![](icon:mdi:image-multiple-outline) **Register** Tiles flat-fielded, stitched and aligned across cycles · [Settings](params:illumination) · [Spatial](tab:Spatial)
+      3. ![](icon:mdi:layers-minus) **Subtract** Autofluorescence removed channel by channel · [Settings](params:backsub) · [Markers](tab:Markers)
+      4. ![](icon:mdi:shape-outline) **Segment** {{param:segmentation}} cut the image into cells · [Settings](params:segmentation) · [Segmentation](tab:Segmentation)
+      5. ![](icon:mdi:chart-scatter-plot) **Quantify** {{n_cells}} cells measured in every channel · [Settings](params:marker_sheet) · [Markers](tab:Markers)
+      :::
+    tag: mm-ov-steps
+    index: ov-steps
+    layout: {x: 0, y: 4, w: 8, h: 3}
+  # Key figures: one card per stage of the funnel, each opening the tab that
+  # explains it. All four read collections every route writes.
+  - component_type: card
+    workflow_tag: mcmicro
+    data_collection_tag: samples
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: '{GROUP_COL}'
+    display:
+      icon_name: mdi:image-multiple-outline
+      icon_color: teal
+      caption: in the samplesheet, by {GROUP_COL_DISPLAY}
+      link: tab:Spatial
+    section: Key figures
+    tag: mm-ov-kf-images
+    index: ov-kf-images
+    title: Images
+    description: Tissue images in the samplesheet, each registered from its cycles. The bar splits them by {GROUP_COL_DISPLAY}.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_segmentation_summary
+    aggregation: sum
+    column_name: n_cells
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:hexagon-multiple-outline
+      icon_color: blue
+      caption: in all, with the cells per image and method
+      link: tab:Segmentation
+      format: si
+    section: Key figures
+    tag: mm-ov-kf-cells
+    index: ov-kf-cells
+    title: Cells
+    description: Cells segmented over the images in view, every method counted. The strip shows the spread of cells per image and method.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mcmicro
+    data_collection_tag: markers
+    aggregation: count
+    column_name: marker_name
+    column_type: object
+    filter_expr: col('quantified') == 1
+    secondary_layout: composition
+    breakdown_col: marker_role
+    display:
+      icon_name: mdi:palette-outline
+      icon_color: grape
+      caption: quantified, nuclear stains and markers
+      link: tab:Markers
+    section: Key figures
+    tag: mm-ov-kf-markers
+    index: ov-kf-markers
+    title: Channels
+    description: Channels of the marker sheet measured in every cell, removed ones left out. The bar splits nuclear stains from markers.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cells
+    aggregation: median
+    column_name: Area
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:circle-outline
+      icon_color: orange
+      caption: median pixels, with the distribution
+      link: tab:Morphology
+      decimals: 0
+    section: Key figures
+    tag: mm-ov-kf-area
+    index: ov-kf-area
+    title: Median cell area
+    description: Median area of the cells in pixels of the registered image, with the distribution of every cell's area.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Findings filter bar: the group, then the segmenter.
+  - component_type: interactive
+    workflow_tag: mcmicro
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Findings
+    tag: mm-ov-findings-group
+    index: ov-findings-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cells
+    interactive_component_type: MultiSelect
+    column_name: segmenter
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: blue
+      strip_label: Segmenter
+    section: Findings
+    tag: mm-ov-findings-segmenter
+    index: ov-findings-segmenter
+    title: Segmenter
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # One result row per finding, each citing one data collection, so the import
+  # removes a row with its data.
+  - component_type: text
+    surface: card
+    values:
+      top_seg: {dc: mcquant_cells, column: segmenter, aggregation: top}
+      seg_share: {dc: mcquant_cells, column: segmenter, aggregation: top_share, format: percent}
+      bright: {dc: mcquant_marker_summary, column: marker, aggregation: top, weight: median_intensity, filter_expr: "col('marker_role') == 'Marker'"}
+      held: {dc: mcquant_segmenter_agreement, column: matched_share, aggregation: max, format: percent}
+      ecc: {dc: mcquant_cells, column: Eccentricity, aggregation: median, format: decimals:2}
+    body: |
+      - **{{top_seg}}** finds the most cells – {{seg_share}} of every cell segmented on these images [Segmentation](tab:Segmentation)
+      - **{{bright}}** is the brightest marker by median intensity, nuclear stains left out [Markers](tab:Markers)
+      - **{{held}}** of one method's cells hold a cell of the other, in the closer direction [Segmentation](tab:Segmentation)
+      - **{{ecc}}** is the median eccentricity of the cells – 0 is a circle, near 1 a line [Morphology](tab:Morphology)
+    section: Findings
+    tag: mm-ov-findings
+    index: ov-findings
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # One highlight per analysis tab, Segmentation for Data & QC. The tiles of a
+  # row share a stored height.
+  - component_type: highlight
+    section: Findings
+    source_tab: Spatial
+    source_component: sp-cell-map
+    caption: The cells of one image where they sit, coloured by the first channel of the panel.
+    hide_legend: true
+    tag: mm-ov-hl-map
+    index: ov-hl-map
+    layout: {x: 0, y: 2, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Segmentation
+    source_component: seg-cells-per-image
+    caption: Cells per image, one bar per segmentation method.
+    hide_legend: true
+    tag: mm-ov-hl-cells
+    index: ov-hl-cells
+    layout: {x: 4, y: 2, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Markers
+    source_component: mk-intensity-box
+    caption: Each marker's intensity over the cells, on the asinh scale; colour is the segmenter.
+    hide_legend: true
+    tag: mm-ov-hl-markers
+    index: ov-hl-markers
+    layout: {x: 0, y: 6, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Morphology
+    source_component: mo-size-shape
+    caption: One point per cell, area against eccentricity; colour is the segmenter.
+    hide_legend: true
+    tag: mm-ov-hl-shape
+    index: ov-hl-shape
+    layout: {x: 4, y: 6, w: 4, h: 4}
+  # Link-only tab tiles: each tile prints its tab's subtitle, the question the
+  # tab answers.
+  - component_type: text
+    body: |
+      ### Data & QC
+      - [MultiQC](tab:MultiQC)
+      - [Previews](tab:Previews)
+      - [Segmentation](tab:Segmentation)
+
+      ### Cells
+      - [Spatial](tab:Spatial)
+      - [Markers](tab:Markers)
+      - [Morphology](tab:Morphology)
+    section: How to read this dashboard
+    tag: mm-ov-how-to-read
+    index: ov-how-to-read
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Persistent sample filters, the group first.
+  - component_type: interactive
+    workflow_tag: mcmicro
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+    section: Sample filters
+    group: Sample scope
+    tag: mm-filter-group
+    index: sample-filters-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: mcmicro
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:image-outline
+      custom_color: teal
+    section: Sample filters
+    group: Sample scope
+    tag: mm-filter-sample
+    index: sample-filters-sample
+    title: Image
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  # Row selection feeds the Analysis panel.
+  - component_type: table
+    workflow_tag: mcmicro
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Sample sheet
+    tag: mm-sample-sheet
+    index: sample-sheet
+    title: Samplesheet
+    description: One row per sample (one tissue image), with its cycle count and tile files.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+tabs:
+# ============================================================================
+# Data & QC
+# ============================================================================
+- title: MultiQC
+  subtitle: Do the input tiles carry consistent image metadata?
+  tab_group: Data & QC
+  tab_order: 1
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  grid_sections:
+  - name: Input image checks
+    icon: mdi:shield-check-outline
+    color: orange
+    description: Tile size, pixel size, channels, data type and exposure, checked per image
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      Before any processing, the pipeline's prelude reads the metadata of every tile of every
+      cycle and writes one [MultiQC](https://multiqc.info) matrix: a row per check, a column
+      per image, a pass or a warning in each cell. A warning on exposure is common in test
+      data; a failure on tile or pixel size would break the registration.
+    tag: mm-mqc-intro
+    index: mqc-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: multiqc
+    workflow_tag: mcmicro
+    data_collection_tag: multiqc_data
+    selected_module: matrix_summary
+    selected_plot: matrix_summary-section
+    section: Input image checks
+    tag: mm-mqc-matrix
+    title: Input image checks
+    description: One row per check, one column per image, pass or warning.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+- title: Previews
+  subtitle: What do the registered images and their masks look like?
+  tab_group: Data & QC
+  tab_order: 2
+  tab_icon: mdi:image-multiple-outline
+  tab_icon_color: cyan
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Preview filters
+    icon: mdi:filter-variant
+    color: cyan
+    description: Narrow by processing stage or channel
+  grid_sections:
+  - name: Previews at a glance
+    icon: mdi:counter
+    color: cyan
+    description: Previews by stage, and the channels they show
+  - name: Gallery
+    icon: mdi:view-dashboard-outline
+    color: cyan
+    description: Each channel of the registered image, a composite and the mask outlines
+  - name: Preview table
+    icon: mdi:table
+    color: gray
+    description: Every preview with its size and its scale to the full-resolution image
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      PNG previews of each registered image, written when the run was fetched: one grey image
+      per channel, a composite (nuclear stain in blue, two markers in green and red) and the
+      outlines of each segmentation mask over the nuclear stain. They are downscaled to at most
+      1024 pixels; pick a stage or a channel on the left.
+    tag: mm-prev-intro
+    index: prev-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: mcmicro
+    data_collection_tag: mcmicro_previews
+    interactive_component_type: MultiSelect
+    column_name: stage
+    column_type: object
+    display:
+      icon_name: mdi:layers-outline
+      custom_color: cyan
+    section: Preview filters
+    group: Previews
+    tag: mm-prev-filter-stage
+    index: prev-stage-filter
+    title: Stage
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: mcmicro
+    data_collection_tag: mcmicro_previews
+    interactive_component_type: MultiSelect
+    column_name: channel
+    column_type: object
+    display:
+      icon_name: mdi:palette-outline
+      custom_color: grape
+    section: Preview filters
+    group: Previews
+    tag: mm-prev-filter-channel
+    index: prev-channel-filter
+    title: Channel
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: mcmicro
+    data_collection_tag: mcmicro_previews
+    aggregation: count
+    column_name: preview_id
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: stage
+    display:
+      icon_name: mdi:image-multiple-outline
+      icon_color: cyan
+      caption: PNG previews, by stage
+    section: Previews at a glance
+    tag: mm-prev-card-previews
+    index: prev-card-previews
+    title: Previews
+    description: Previews of the images in view, split into registered channels and mask outlines.
+    layout: {x: 0, y: 0, w: 4, h: 2}
+  - component_type: card
+    workflow_tag: mcmicro
+    data_collection_tag: mcmicro_previews
+    aggregation: nunique
+    column_name: channel
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: stage
+    top_n_count: 2
+    display:
+      icon_name: mdi:palette-outline
+      icon_color: grape
+      caption: channels, composites and outlines, by stage
+    section: Previews at a glance
+    tag: mm-prev-card-channels
+    index: prev-card-channels
+    title: Channels shown
+    description: Distinct channels, composites and outline sets among the previews.
+    layout: {x: 4, y: 0, w: 4, h: 2}
+  # TODO(bioimage): replace the PNG previews with an OME-TIFF/zarr pyramid viewer (viv/deck.gl) once bioimage lands
+  - component_type: image
+    workflow_tag: mcmicro
+    data_collection_tag: mcmicro_previews
+    image_column: image_path
+    thumbnail_size: 200
+    columns: 4
+    max_images: 24
+    section: Gallery
+    tag: mm-prev-gallery
+    index: prev-gallery
+    title: Image previews
+    description: One tile per preview; open one to see it at full preview size.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: mcmicro
+    data_collection_tag: mcmicro_previews
+    row_selection_enabled: true
+    row_selection_column: preview_id
+    section: Preview table
+    tag: mm-prev-table
+    index: prev-table
+    title: Previews
+    description: Sample, stage, channel, file, size and scale of every preview.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Segmentation
+  subtitle: How many cells does each method find, and do they agree?
+  tab_group: Data & QC
+  tab_order: 3
+  tab_icon: mdi:shape-outline
+  tab_icon_color: blue
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Segmentation filters
+    icon: mdi:filter-variant
+    color: blue
+    description: Narrow by segmentation method
+  grid_sections:
+  - name: Segmentation at a glance
+    icon: mdi:counter
+    color: blue
+    description: Cells, cells per image, their size and their regularity
+  - name: Cells and sizes
+    icon: mdi:chart-bar
+    color: blue
+    description: Cells per image and the spread of their areas, by method
+  - name: Agreement between methods
+    icon: mdi:scale-balance
+    color: blue
+    description: How often a cell of one method holds a cell of the other
+  - name: Segmentation table
+    icon: mdi:table
+    color: gray
+    description: Cells, area quartiles and median shape per image and method
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      Each method of the segmentation parameter cuts the registered image into cells:
+      [Mesmer](https://github.com/vanvalenlab/deepcell-tf) on the nuclear stain,
+      [Cellpose](https://www.cellpose.org) on the background-subtracted image. Two methods give
+      two cell tables of one image; a cell of one holds a cell of the other when the other's
+      centroid falls within its area.
+    tag: mm-seg-intro
+    index: seg-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cells
+    interactive_component_type: MultiSelect
+    column_name: segmenter
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: blue
+    section: Segmentation filters
+    group: Segmentation
+    tag: mm-seg-filter-segmenter
+    index: seg-segmenter-filter
+    title: Segmenter
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: card
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cells
+    use: mcquant/cell_count
+    aggregation: count
+    column_name: cell_key
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: sample
+    display:
+      icon_name: mdi:hexagon-multiple-outline
+      icon_color: blue
+      caption: cells, by image
+      format: si
+    section: Segmentation at a glance
+    tag: mm-seg-card-cells
+    index: seg-card-cells
+    title: Cells
+    description: Cells segmented over the images in view, every method counted, split by image.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_segmentation_summary
+    aggregation: median
+    column_name: n_cells
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:image-filter-center-focus
+      icon_color: teal
+      caption: median per image and method, with its spread
+      format: si
+    section: Segmentation at a glance
+    tag: mm-seg-card-per-image
+    index: seg-card-per-image
+    title: Cells per image
+    description: Cells per image and method; two methods on one image are two values.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cells
+    aggregation: median
+    column_name: Area
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:circle-outline
+      icon_color: orange
+      caption: median pixels, with its spread
+      decimals: 0
+    section: Segmentation at a glance
+    tag: mm-seg-card-area
+    index: seg-card-area
+    title: Median cell area
+    description: Median cell area in pixels; a whole-cell method draws larger cells than a nuclear one.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cells
+    aggregation: median
+    column_name: Solidity
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:shape-polygon-plus
+      icon_color: green
+      caption: median, with its distribution
+      decimals: 3
+    section: Segmentation at a glance
+    tag: mm-seg-card-solidity
+    index: seg-card-solidity
+    title: Solidity
+    description: Cell area over the area of its convex hull; low values flag merged or ragged cells.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_segmentation_summary
+    use: mcquant/cells_per_image
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: n_cells
+      color: segmenter
+      barmode: group
+      log_y: true
+      labels: {sample: '', n_cells: Cells (log scale), segmenter: ''}
+    section: Cells and sizes
+    tag: mm-seg-fig-cells
+    index: seg-cells-per-image
+    title: Cells per image
+    description: One bar per image and method, log scale.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: figure
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cells
+    use: mcquant/area_box
+    visu_type: box
+    dict_kwargs:
+      x: segmenter
+      y: Area
+      color: segmenter
+      log_y: true
+      labels: {segmenter: '', Area: Cell area (pixels, log scale)}
+    section: Cells and sizes
+    tag: mm-seg-fig-area
+    index: seg-area-box
+    title: Cell area by method
+    description: Cell areas of each method, log scale.
+    layout: {x: 4, y: 0, w: 4, h: 4, fit: auto}
+  - component_type: figure
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_segmenter_agreement
+    use: mcquant/agreement_bar
+    visu_type: bar
+    dict_kwargs:
+      x: sample
+      y: matched_share
+      color: pair
+      barmode: group
+      labels: {sample: '', matched_share: Share of the cells, pair: ''}
+    section: Agreement between methods
+    tag: mm-seg-fig-agreement
+    index: seg-agreement
+    title: Cells holding a cell of the other method
+    description: Per image, the share of one method's cells whose area holds the other's centroid.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: table
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_segmentation_summary
+    row_selection_enabled: true
+    row_selection_column: summary_key
+    section: Segmentation table
+    tag: mm-seg-table
+    index: seg-table
+    title: Segmentation per image and method
+    description: Cells, area quartiles, mean and total area and median shape measures.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+# ============================================================================
+# Cells
+# ============================================================================
+- title: Spatial
+  subtitle: Where do the cells sit, and what do they express?
+  tab_group: Cells
+  tab_order: 4
+  tab_icon: mdi:map-marker-radius-outline
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Cell filters
+    icon: mdi:filter-variant
+    color: grape
+    description: Narrow by segmentation method or cell area
+  grid_sections:
+  - name: Cells at a glance
+    icon: mdi:counter
+    color: grape
+    description: The cells drawn and their size
+  - name: Cells in the image
+    icon: mdi:microscope
+    color: grape
+    description: Each cell at its centroid in its image, sized by its area
+  - name: Selected cells
+    icon: mdi:chart-box-outline
+    color: grape
+    description: Lasso cells on the map to compare their marker intensities
+  - name: Cell table
+    icon: mdi:table
+    color: gray
+    description: Every cell with its marker intensities, centroid and morphology
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      One point per cell at its centroid in the registered image, origin top-left as in the
+      image, one image at a time. Pick a marker in the tile: its intensity is drawn through
+      asinh(x / 150) and clipped to the 1st and 99th percentiles of the image shown. Draw a
+      lasso to compare the selected cells below; the nuclear stain sits under the cells when
+      the run has previews.
+    tag: mm-sp-intro
+    index: sp-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cells
+    interactive_component_type: MultiSelect
+    column_name: segmenter
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: blue
+    section: Cell filters
+    group: Cells
+    tag: mm-sp-filter-segmenter
+    index: sp-segmenter-filter
+    title: Segmenter
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cells
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: Area
+    column_type: float64
+    display:
+      icon_name: mdi:circle-outline
+      custom_color: orange
+    section: Cell filters
+    group: Cells
+    tag: mm-sp-filter-area
+    index: sp-area-range
+    title: Cell area (pixels)
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cells
+    use: mcquant/cell_count
+    aggregation: count
+    column_name: cell_key
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: sample
+    display:
+      icon_name: mdi:hexagon-multiple-outline
+      icon_color: grape
+      caption: cells in view, by image
+      format: si
+    section: Cells at a glance
+    tag: mm-sp-card-cells
+    index: sp-card-cells
+    title: Cells
+    description: Cells in view, narrowed by the filters and by a lasso on the map.
+    layout: {x: 0, y: 0, w: 4, h: 2}
+  - component_type: card
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cells
+    aggregation: median
+    column_name: Area
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:circle-outline
+      icon_color: orange
+      caption: median pixels, with the distribution
+      decimals: 0
+    section: Cells at a glance
+    tag: mm-sp-card-area
+    index: sp-card-area
+    title: Cell area
+    description: Median area of the cells in view, in pixels of the registered image.
+    layout: {x: 4, y: 0, w: 4, h: 2}
+  # The marker columns follow the run's panel, so they are named by pattern:
+  # every numeric column but MCQUANT's regionprops and the derived ratio (the
+  # bound id, centroid, area and sample columns are left out by the tile).
+  # TODO(bioimage): replace the PNG previews with an OME-TIFF/zarr pyramid viewer (viv/deck.gl) once bioimage lands
+  - component_type: advanced_viz
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cells
+    use: mcquant/spatial_cells
+    config:
+      viz_kind: spatial_cells
+      cell_id_col: cell_key
+      x_col: X_centroid
+      y_col: Y_centroid
+      category_col: segmenter
+      sample_col: sample
+      area_col: Area
+      value_columns_pattern: ^(?!(CellID|MajorAxisLength|MinorAxisLength|Eccentricity|Solidity|Extent|Orientation|aspect_ratio)$)
+      color_by: value
+      transform: asinh
+      asinh_cofactor: 150
+      clip_low_pct: 1
+      clip_high_pct: 99
+      sample_display: select
+      y_axis: image
+      colour_scale: Viridis
+      legend_pos: bottom
+      hover_cols: [segmenter, CellID, Area, Eccentricity]
+      # Underlay: the nuclear stain preview of the image, placed on the
+      # full-resolution frame of the centroids whatever the preview's size.
+      background_dc_tag: mcmicro_previews
+      background_image_col: image_path
+      background_sample_col: underlay_sample
+      background_width_col: full_width
+      background_height_col: full_height
+      background_image_scale: 1
+      background_opacity: 0.7
+      selection_enabled: true
+      selection_column: cell_key
+    section: Cells in the image
+    tag: mm-sp-av-map
+    index: sp-cell-map
+    title: Cells in the image
+    description: Each cell at its centroid, sized by its area, coloured by the marker picked or the segmenter.
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: figure
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cell_markers
+    use: mcquant/marker_box
+    visu_type: box
+    dict_kwargs:
+      x: marker
+      y: asinh_intensity
+      color: segmenter
+      labels: {marker: '', asinh_intensity: Intensity (asinh), segmenter: ''}
+    section: Selected cells
+    tag: mm-sp-fig-selected
+    index: sp-selected-markers
+    title: Marker intensity of the cells in view
+    description: One box per marker over the cells in view or lassoed on the map, asinh scale.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: table
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cells
+    row_selection_enabled: true
+    row_selection_column: cell_key
+    section: Cell table
+    tag: mm-sp-table
+    index: sp-table
+    title: Cells
+    description: One row per cell, with its marker intensities, centroid and morphology.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Markers
+  subtitle: How bright is each marker, and which markers go together?
+  tab_group: Cells
+  tab_order: 5
+  tab_icon: mdi:palette-outline
+  tab_icon_color: violet
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Marker filters
+    icon: mdi:filter-variant
+    color: violet
+    description: Narrow by marker, marker role or segmentation method
+  grid_sections:
+  - name: Markers at a glance
+    icon: mdi:counter
+    color: violet
+    description: Channels quantified, measurements, the brightest markers and their spread
+  - name: Intensity by marker
+    icon: mdi:chart-box-outline
+    color: violet
+    description: Each marker's intensity over the cells, on the asinh scale
+  - name: Marker correlation
+    icon: mdi:relation-many-to-many
+    color: violet
+    description: How the markers co-vary over the cells of each method
+  - name: Marker table
+    icon: mdi:table
+    color: gray
+    description: Intensity quartiles, asinh median and spread per image, method and marker
+    collapsed: true
+  - name: Marker panel
+    icon: mdi:table
+    color: gray
+    description: The marker sheet, one row per channel
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      MCQUANT measures each cell's mean intensity in every channel of the panel. Intensities are
+      read on the asinh scale, asinh(x / 150), so a dim marker and a bright nuclear stain share
+      one axis. The correlation is taken over every cell of a method: markers the same cells
+      express correlate, and two nuclear stains of different cycles should too.
+    tag: mm-mk-intro
+    index: mk-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cell_markers
+    interactive_component_type: MultiSelect
+    column_name: marker
+    column_type: object
+    display:
+      icon_name: mdi:palette-outline
+      custom_color: violet
+    section: Marker filters
+    group: Markers
+    tag: mm-mk-filter-marker
+    index: mk-marker-filter
+    title: Marker
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cell_markers
+    interactive_component_type: MultiSelect
+    column_name: marker_role
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: indigo
+    section: Marker filters
+    group: Markers
+    tag: mm-mk-filter-role
+    index: mk-role-filter
+    title: Marker role
+    layout: {x: 0, y: 3, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cell_markers
+    interactive_component_type: MultiSelect
+    column_name: segmenter
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: blue
+    section: Marker filters
+    group: Markers
+    tag: mm-mk-filter-segmenter
+    index: mk-segmenter-filter
+    title: Segmenter
+    layout: {x: 0, y: 5, w: 1, h: 2}
+  - component_type: card
+    workflow_tag: mcmicro
+    data_collection_tag: markers
+    aggregation: count
+    column_name: marker_name
+    column_type: object
+    filter_expr: col('quantified') == 1
+    secondary_layout: composition
+    breakdown_col: marker_role
+    display:
+      icon_name: mdi:palette-outline
+      icon_color: violet
+      caption: quantified, nuclear stains and markers
+    section: Markers at a glance
+    tag: mm-mk-card-channels
+    index: mk-card-channels
+    title: Channels
+    description: Channels of the marker sheet measured in every cell; a removed channel serves as background only.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cell_markers
+    use: mcquant/measurement_count
+    aggregation: count
+    column_name: cell_key
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: sample
+    display:
+      icon_name: mdi:chart-scatter-plot
+      icon_color: blue
+      caption: cell and channel values, by image
+      format: si
+    section: Markers at a glance
+    tag: mm-mk-card-measurements
+    index: mk-card-measurements
+    title: Measurements
+    description: One per cell and channel quantified, split by image.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_marker_summary
+    use: mcquant/brightest_markers
+    aggregation: median
+    column_name: median_intensity
+    column_type: float64
+    secondary_layout: top_n
+    breakdown_col: marker
+    top_n_count: 3
+    display:
+      icon_name: mdi:brightness-6
+      icon_color: yellow
+      caption: median per image, the brightest markers
+      format: si
+    section: Markers at a glance
+    tag: mm-mk-card-brightest
+    index: mk-card-brightest
+    title: Marker intensity
+    description: Median of the per-image median intensities; the bars rank the brightest markers.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_marker_summary
+    use: mcquant/marker_spread
+    aggregation: median
+    column_name: cv
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: orange
+      caption: median per image and marker, with its spread
+      decimals: 2
+    section: Markers at a glance
+    tag: mm-mk-card-spread
+    index: mk-card-spread
+    title: Coefficient of variation
+    description: Spread of a marker over the cells of an image; a high value is a marker some cells carry and others lack.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cell_markers
+    use: mcquant/marker_box
+    visu_type: box
+    dict_kwargs:
+      x: marker
+      y: asinh_intensity
+      color: segmenter
+      labels: {marker: '', asinh_intensity: Intensity (asinh), segmenter: ''}
+    section: Intensity by marker
+    tag: mm-mk-fig-box
+    index: mk-intensity-box
+    title: Intensity by marker
+    description: One box per marker and method over the cells, asinh scale, in panel order.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: advanced_viz
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_marker_correlation
+    use: mcquant/correlation_heatmap
+    config:
+      viz_kind: complex_heatmap
+      index_column: marker_row
+      row_annotation_cols: [segmenter, marker_role]
+      cluster_rows: true
+      cluster_cols: true
+      cluster_method: average
+      normalize: none
+      colorscale: RdBu
+    section: Marker correlation
+    tag: mm-mk-av-correlation
+    index: mk-correlation
+    title: Marker correlation
+    description: Pearson correlation of the asinh intensities over the cells, one row per marker and method.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_marker_summary
+    row_selection_enabled: true
+    row_selection_column: summary_key
+    section: Marker table
+    tag: mm-mk-table-summary
+    index: mk-table-summary
+    title: Marker intensity per image
+    description: Cells measured, intensity quartiles, asinh median and coefficient of variation.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: mcmicro
+    data_collection_tag: markers
+    row_selection_enabled: true
+    row_selection_column: marker_name
+    section: Marker panel
+    tag: mm-mk-table-panel
+    index: mk-table-panel
+    title: Marker sheet
+    description: Channel, cycle, marker, role, status, background channel and exposure.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Morphology
+  subtitle: What size and shape are the cells?
+  tab_group: Cells
+  tab_order: 6
+  tab_icon: mdi:shape-plus-outline
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Shape filters
+    icon: mdi:filter-variant
+    color: orange
+    description: Narrow by segmentation method, area or eccentricity
+  grid_sections:
+  - name: Shape at a glance
+    icon: mdi:counter
+    color: orange
+    description: Median area, eccentricity, solidity and aspect ratio
+  - name: Size against shape
+    icon: mdi:chart-scatter-plot
+    color: orange
+    description: Every cell by its area and eccentricity
+  - name: Distributions
+    icon: mdi:chart-bell-curve
+    color: orange
+    description: Areas and solidity of each method
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      The regionprops of each cell, in pixels of the registered image: area, the axes of its
+      ellipse, eccentricity (0 a circle, near 1 a line), solidity (its area over its convex
+      hull) and aspect ratio. Merged cells read large and irregular, fragments small; lasso
+      them on the scatter and the cards above follow.
+    tag: mm-mo-intro
+    index: mo-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cells
+    interactive_component_type: MultiSelect
+    column_name: segmenter
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: blue
+    section: Shape filters
+    group: Shape
+    tag: mm-mo-filter-segmenter
+    index: mo-segmenter-filter
+    title: Segmenter
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cells
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: Area
+    column_type: float64
+    display:
+      icon_name: mdi:circle-outline
+      custom_color: orange
+    section: Shape filters
+    group: Shape
+    tag: mm-mo-filter-area
+    index: mo-area-range
+    title: Cell area (pixels)
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cells
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: Eccentricity
+    column_type: float64
+    display:
+      icon_name: mdi:ellipse-outline
+      custom_color: grape
+    section: Shape filters
+    group: Shape
+    tag: mm-mo-filter-eccentricity
+    index: mo-eccentricity-range
+    title: Eccentricity
+    layout: {x: 0, y: 5, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cells
+    aggregation: median
+    column_name: Area
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:circle-outline
+      icon_color: orange
+      caption: median pixels, with the distribution
+      decimals: 0
+    section: Shape at a glance
+    tag: mm-mo-card-area
+    index: mo-card-area
+    title: Median cell area
+    description: Median cell area in pixels of the registered image.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cells
+    aggregation: median
+    column_name: Eccentricity
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:ellipse-outline
+      icon_color: grape
+      caption: median, with its spread
+      decimals: 3
+    section: Shape at a glance
+    tag: mm-mo-card-eccentricity
+    index: mo-card-eccentricity
+    title: Eccentricity
+    description: Eccentricity of the cells' ellipses; 0 is a circle, near 1 a line.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cells
+    aggregation: median
+    column_name: Solidity
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:shape-polygon-plus
+      icon_color: green
+      caption: median, with its distribution
+      decimals: 3
+    section: Shape at a glance
+    tag: mm-mo-card-solidity
+    index: mo-card-solidity
+    title: Solidity
+    description: Cell area over its convex hull; ragged or merged cells sit low.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cells
+    aggregation: median
+    column_name: aspect_ratio
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:arrow-expand-horizontal
+      icon_color: cyan
+      caption: median major over minor axis, with its spread
+      decimals: 2
+    section: Shape at a glance
+    tag: mm-mo-card-aspect
+    index: mo-card-aspect
+    title: Aspect ratio
+    description: Major over minor axis of the cells' ellipses; 1 is round.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cells
+    use: mcquant/shape_scatter
+    config:
+      viz_kind: scatter_xy
+      x_col: Area
+      y_col: Eccentricity
+      label_col: cell_key
+      color_col: segmenter
+      x_title: Cell area (pixels)
+      y_title: Eccentricity
+      log_x: true
+      opacity: 0.6
+      marker_size: 4
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: cell_key
+    section: Size against shape
+    tag: mm-mo-av-shape
+    index: mo-size-shape
+    title: Area against eccentricity
+    description: One point per cell, log area; merged cells sit right, fragments left.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: figure
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cells
+    visu_type: histogram
+    dict_kwargs:
+      x: Area
+      color: segmenter
+      barmode: overlay
+      opacity: 0.7
+      labels: {Area: Cell area (pixels), segmenter: ''}
+    section: Distributions
+    tag: mm-mo-fig-area
+    index: mo-area-histogram
+    title: Cell area
+    description: Cells by area, one colour per method.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: figure
+    workflow_tag: mcmicro
+    data_collection_tag: mcquant_cells
+    visu_type: box
+    dict_kwargs:
+      x: segmenter
+      y: Solidity
+      color: segmenter
+      labels: {segmenter: '', Solidity: Solidity}
+    section: Distributions
+    tag: mm-mo-fig-solidity
+    index: mo-solidity-box
+    title: Solidity by method
+    description: Solidity of each method's cells; below about 0.9 a cell is irregular.
+    layout: {x: 4, y: 0, w: 4, h: 4, fit: auto}

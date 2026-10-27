@@ -37,7 +37,6 @@ import {
   useControlsPlacement,
   useRegionEcho,
 } from './AdvancedVizInlineControls';
-import { VizControlsGrid } from './controls/VizControls';
 import { frameTiers } from './frameTiers';
 import type { OpenLocusReader } from '../jbrowse/locusForAction';
 import { usePlotSlotResize } from './plotSlotResize';
@@ -361,14 +360,15 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   // Docking is what `popover` placement does on a tile with room for it: a
   // tile pinned to its strip or rail already draws its controls in place.
   // Both tiers dock, the encoding one first; the view switch heads the panel
-  // and is never folded under "More options".
+  // and is never folded under "More options". The panel lays them out itself:
+  // a column beside the plot, one compact line above it.
   const docking = useMemo(
     () =>
       primaryControls || controls ? (
-        <VizControlsGrid layout="column">
+        <>
           {primaryControls}
           {controls}
-        </VizControlsGrid>
+        </>
       ) : null,
     [primaryControls, controls],
   );

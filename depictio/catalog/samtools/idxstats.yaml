@@ -1,0 +1,23 @@
+id: samtools_idxstats
+name: Reads per contig
+mode: alignment/contigs
+description: >-
+  Mapped reads per reference contig and sample from samtools idxstats, with
+  each contig classed as autosome, X, Y, mitochondrion or other (alt, unplaced,
+  decoy) and its share of the sample's mapped reads. The cheapest read on the
+  mitochondrial fraction, the sex chromosomes and the reads lost to alt contigs.
+  When a pipeline publishes idxstats before and after MarkDuplicates, one stage
+  per sample is kept.
+find:
+  path_glob: "**/*.idxstats"
+recipe: samtools/idxstats.py
+fixture: idxstats.tsv
+renders_as:
+  - { id: reads_by_contig_class, component: card, column: mapped_reads, aggregation: sum,
+      secondary_layout: composition, breakdown_col: contig_class }
+  - { id: mito_share, component: card, column: mapped_pct, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot,
+      filter_expr: "col('contig_class') == 'mitochondrion'" }
+  - { id: contig_class_bars, component: figure, visu_type: bar,
+      dict_kwargs: {x: sample, y: mapped_pct, color: contig_class} }
+  - { component: table }

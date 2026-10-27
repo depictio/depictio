@@ -1672,6 +1672,7 @@ export type AdvancedVizKind =
   | 'transcript_structure'
   | 'cnv_profile'
   | 'genome_chord'
+  | 'ideogram'
   | 'record_card'
   | 'parallel_coordinates'
   | 'molecule_3d'
@@ -1681,7 +1682,10 @@ export type AdvancedVizKind =
   | 'secondary_structure'
   | 'domain_architecture'
   | 'pae_matrix'
-  | 'ramachandran';
+  | 'ramachandran'
+  | 'ranked_distribution'
+  | 'spatial_cells'
+  | 'allele_grid';
 
 /** Accepted dtypes for one role, plus whether the role is required. Sourced
  *  from the backend canonical schema so the builder never duplicates the

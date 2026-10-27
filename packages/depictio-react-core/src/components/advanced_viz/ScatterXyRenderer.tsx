@@ -58,6 +58,8 @@ interface ScatterXyConfig {
   x_col: string;
   y_col: string;
   label_col?: string | null;
+  label_order_col?: string | null;
+  reference_label?: string | null;
   color_col?: string | null;
   size_col?: string | null;
   log_x?: boolean;
@@ -130,6 +132,10 @@ const COLOUR_SCALES = ['Viridis', 'Cividis', 'RdBu', 'Blackbody'] as const;
 // 0: the tile never leaves the point view on its own. An author who wants the
 // automatic switch names the row count (`density_threshold`).
 const DEFAULT_DENSITY_THRESHOLD = 0;
+// Below this many points a marker cloud never overplots into a blob, so the
+// Points/Density switch is noise: it is offered only above it, or when the
+// author opted into density.
+const DENSITY_OFFER_MIN_POINTS = 2000;
 const DEFAULT_DENSITY_BINS = 60;
 // Opacity kept by the points on the side of the guide not being looked at.
 const DIMMED_OPACITY = 0.2;
@@ -246,11 +252,25 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
 
   const requiredCols = useMemo(() => {
     const cols = [config.x_col, config.y_col].filter(Boolean) as string[];
-    for (const c of [config.label_col, config.color_col, config.size_col, selectionColumn]) {
+    for (const c of [
+      config.label_col,
+      config.label_order_col,
+      config.color_col,
+      config.size_col,
+      selectionColumn,
+    ]) {
       if (c && !cols.includes(c)) cols.push(c);
     }
     return cols;
-  }, [config.x_col, config.y_col, config.label_col, config.color_col, config.size_col, selectionColumn]);
+  }, [
+    config.x_col,
+    config.y_col,
+    config.label_col,
+    config.label_order_col,
+    config.color_col,
+    config.size_col,
+    selectionColumn,
+  ]);
 
   // Crossfilter rule: this component is narrowed neither by its own selection
   // (a box select would redraw the cloud as only the points it caught, and the
@@ -334,6 +354,9 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     const colours = config.color_col ? ((rows[config.color_col] || []) as unknown[]) : null;
     const sizes = config.size_col ? ((rows[config.size_col] || []) as unknown[]) : null;
     const keys = selectionColumn ? ((rows[selectionColumn] || []) as unknown[]) : null;
+    const orders = config.label_order_col
+      ? ((rows[config.label_order_col] || []) as unknown[])
+      : null;
 
     const out: {
       x: number;
@@ -341,6 +364,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
       label: string;
       colour: unknown;
       size: number | null;
+      order: number | null;
       key: string;
     }[] = [];
     const n = Math.min(xs.length, ys.length);
@@ -355,11 +379,21 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
         label,
         colour: colours ? colours[i] : null,
         size: sizes ? num(sizes[i]) : null,
+        order: orders ? num(orders[i]) : null,
         key: keys ? String(keys[i] ?? '') : label,
       });
     }
     return out;
-  }, [rows, config.x_col, config.y_col, config.label_col, config.color_col, config.size_col, selectionColumn]);
+  }, [
+    rows,
+    config.x_col,
+    config.y_col,
+    config.label_col,
+    config.label_order_col,
+    config.color_col,
+    config.size_col,
+    selectionColumn,
+  ]);
 
   const numericColour = useMemo(
     () => Boolean(config.color_col && points && looksContinuous(points.map((p) => p.colour))),
@@ -375,6 +409,8 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
   // `Plotly.react` would then report an empty selection and clear whatever the
   // reader had filtered on. Selection is a point-view capability.
   const selectionActive = selectionEnabled && !densityView;
+  const densityOffered =
+    densityView || density || densityThreshold > 0 || (points?.length ?? 0) >= DENSITY_OFFER_MIN_POINTS;
 
   const figure = useMemo(() => {
     if (!points) return null;
@@ -544,15 +580,20 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
       !log ? v : v > 0 ? Math.log10(v) : null;
     const shapeCoord = (v: number, log: boolean): number | null => (!log || v > 0 ? v : null);
 
-    // Labels for the most notable points. Ranked by the size column when one is
-    // bound, because that is what the reader is being asked to look at;
-    // otherwise by distance from the y origin, which is the volcano convention.
+    // Labels for the most notable points. Ranked by the label-order column when
+    // one is bound (a rank: smallest first), else by the size column, because
+    // that is what the reader is being asked to look at; otherwise by distance
+    // from the y origin, which is the volcano convention.
     // With a highlighted side, only that side is ranked, so the labels sit on
     // the points that kept their colour.
     const annotations: Record<string, unknown>[] = [];
     if (topN > 0 && config.label_col && !densityView) {
       const ranked = (highlighted ? points.filter(highlighted) : [...points]).sort((a, b) =>
-        sizeMax > 0 ? (b.size ?? 0) - (a.size ?? 0) : Math.abs(b.y) - Math.abs(a.y),
+        config.label_order_col
+          ? (a.order ?? Infinity) - (b.order ?? Infinity)
+          : sizeMax > 0
+            ? (b.size ?? 0) - (a.size ?? 0)
+            : Math.abs(b.y) - Math.abs(a.y),
       );
       for (const p of ranked.slice(0, topN)) {
         if (!p.label) continue;
@@ -574,6 +615,12 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     // the shared range of both axes, so it stays the identity line under zoom.
     const shapes: Record<string, unknown>[] = [];
     const guide = { color: themeColors.zeroLineColor, width: 1, dash: 'dash' as const };
+    // A guide line is named on the plot itself: it has no legend entry, and an
+    // unnamed dashed line reads as data.
+    const guideLabel = {
+      showarrow: false,
+      font: { size: 10, color: themeColors.zeroLineColor },
+    };
     if (refLine === 'diagonal') {
       // One shared range drives both ends, so under either log axis the line
       // can only span the points whose coordinates are both drawable.
@@ -589,16 +636,48 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
           y1: shapeCoord(hi, logY),
           line: guide,
         });
+        const ax = axisCoord(hi, logX);
+        const ay = axisCoord(hi, logY);
+        if (ax !== null && ay !== null) {
+          annotations.push({
+            ...guideLabel,
+            x: ax,
+            y: ay,
+            text: config.reference_label || 'x = y',
+            xanchor: 'right',
+            yanchor: 'bottom',
+          });
+        }
       }
     } else if (refLine === 'horizontal' && refValue != null) {
       const v = shapeCoord(refValue, logY);
-      if (v !== null) {
+      const a = axisCoord(refValue, logY);
+      if (v !== null && a !== null) {
         shapes.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: v, y1: v, line: guide });
+        annotations.push({
+          ...guideLabel,
+          xref: 'paper',
+          x: 1,
+          y: a,
+          text: config.reference_label || `y = ${refValue}`,
+          xanchor: 'right',
+          yanchor: 'bottom',
+        });
       }
     } else if (refLine === 'vertical' && refValue != null) {
       const v = shapeCoord(refValue, logX);
-      if (v !== null) {
+      const a = axisCoord(refValue, logX);
+      if (v !== null && a !== null) {
         shapes.push({ type: 'line', yref: 'paper', y0: 0, y1: 1, x0: v, x1: v, line: guide });
+        annotations.push({
+          ...guideLabel,
+          yref: 'paper',
+          x: a,
+          y: 1,
+          text: config.reference_label || `x = ${refValue}`,
+          xanchor: 'left',
+          yanchor: 'top',
+        });
       }
     }
 
@@ -677,8 +756,10 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     config.x_col,
     config.y_col,
     config.label_col,
+    config.label_order_col,
     config.color_col,
     config.x_title,
+    config.reference_label,
     config.y_title,
     refValue,
     config.quadrants,
@@ -754,19 +835,21 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
   const primaryControls = (
     <>
       <VizControlGroup title="Display">
-        <VizSegmented
-          aria-label="Cloud"
-          value={densityView ? 'density' : 'points'}
-          onChange={(v) => {
-            const next = v === 'density';
-            setDensityOverride(next);
-            setDensity(next);
-          }}
-          data={[
-            { value: 'points', label: 'Points' },
-            { value: 'density', label: 'Density' },
-          ]}
-        />
+        {densityOffered ? (
+          <VizSegmented
+            aria-label="Cloud"
+            value={densityView ? 'density' : 'points'}
+            onChange={(v) => {
+              const next = v === 'density';
+              setDensityOverride(next);
+              setDensity(next);
+            }}
+            data={[
+              { value: 'points', label: 'Points' },
+              { value: 'density', label: 'Density' },
+            ]}
+          />
+        ) : null}
         <VizSwitch
           checked={logX}
           onChange={(e) => setLogX(e.currentTarget.checked)}

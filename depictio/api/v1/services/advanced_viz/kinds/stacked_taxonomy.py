@@ -23,6 +23,7 @@ renders them correctly; see the module note in ``figure_registry``.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from depictio.api.v1.services.advanced_viz.figure_registry import register
@@ -34,11 +35,23 @@ _OTHER_LABEL = "Other"
 
 
 def _columns(config: dict[str, Any]) -> list[str | None]:
+    value_cols = [c for c in (config.get("value_cols") or []) if c]
+    if value_cols:
+        return [config.get("sample_id_col"), *value_cols]
     return [
         config.get("sample_id_col"),
         config.get("taxon_col"),
         config.get("rank_col"),
         config.get("abundance_col"),
+    ]
+
+
+def _natural_key(value: str) -> list[tuple[int, int | str]]:
+    """Natural, case-insensitive order: ``S2`` before ``S10``."""
+    return [
+        (0, int(part)) if part.isdigit() else (1, part.lower())
+        for part in re.split(r"(\d+)", value)
+        if part
     ]
 
 
@@ -59,7 +72,8 @@ def build(
 ) -> dict[str, Any]:
     sample_col = config.get("sample_id_col") or "sample_id"
     taxon_col = config.get("taxon_col") or "taxon"
-    rank_col = config.get("rank_col") or "rank"
+    # Unset is the model default; an explicit null is a single-level composition.
+    rank_col = config.get("rank_col", "rank")
     abundance_col = config.get("abundance_col") or "abundance"
 
     top_n = int(controls.get("top_n", config.get("top_n", 20)))
@@ -67,10 +81,23 @@ def build(
     sample_sort = str(controls.get("sample_sort", config.get("sample_sort", "input")))
     show_legend = bool(controls.get("show_legend", config.get("show_legend", True)))
 
-    samples = [str(v if v is not None else "") for v in (rows.get(sample_col) or [])]
-    taxa = [str(v if v is not None else "") for v in (rows.get(taxon_col) or [])]
-    ranks = [str(v if v is not None else "") for v in (rows.get(rank_col) or [])]
-    abundances = [_as_float(v) for v in (rows.get(abundance_col) or [])]
+    value_cols = [c for c in (config.get("value_cols") or []) if c]
+    if value_cols:
+        # Wide form: one numeric column per category, melted row by row (the
+        # renderer's `meltWideRows`), with no rank.
+        labels = config.get("value_labels") or {}
+        present = [c for c in value_cols if c in rows]
+        samples, taxa, abundances, ranks = [], [], [], []
+        for i, sample in enumerate(rows.get(sample_col) or []):
+            for col in present:
+                samples.append(str(sample if sample is not None else ""))
+                taxa.append(str(labels.get(col) or col))
+                abundances.append(_as_float(rows[col][i]))
+    else:
+        samples = [str(v if v is not None else "") for v in (rows.get(sample_col) or [])]
+        taxa = [str(v if v is not None else "") for v in (rows.get(taxon_col) or [])]
+        ranks = [str(v if v is not None else "") for v in ((rank_col and rows.get(rank_col)) or [])]
+        abundances = [_as_float(v) for v in (rows.get(abundance_col) or [])]
 
     all_ranks: list[str] = list(dict.fromkeys(ranks))
     active_rank = (
@@ -97,13 +124,26 @@ def build(
     top_set = set(top_taxa)
 
     ordered_samples = list(cells)
-    if sample_sort != "input":
+    if sample_sort == "name":
+        ordered_samples.sort(key=_natural_key)
+    elif sample_sort in ("total_abundance", "first_taxon", "category"):
         first_taxon = ranked[0] if ranked else None
+        wanted = controls.get("sort_category", config.get("sort_category"))
+        shown = [*top_taxa, *([_OTHER_LABEL] if len(ranked) > top_n else [])]
+        sort_category = wanted if wanted in shown else (shown[0] if shown else None)
 
         def score(sample: str) -> float:
             bucket = cells.get(sample, {})
             if sample_sort == "first_taxon" and first_taxon:
                 return bucket.get(first_taxon, 0.0)
+            if sample_sort == "category" and sort_category:
+                # The plotted value: the share when normalised.
+                if sort_category == _OTHER_LABEL:
+                    value = sum(v for t, v in bucket.items() if t not in top_set)
+                else:
+                    value = bucket.get(sort_category, 0.0)
+                total = sum(bucket.values())
+                return value / total if normalise and total > 0 else value
             return sum(bucket.values())
 
         ordered_samples.sort(key=score, reverse=True)

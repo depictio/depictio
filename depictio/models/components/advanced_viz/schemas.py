@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import difflib
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -123,10 +124,11 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "pos": _INT,
         "score": _FLOAT,
     },
+    # `rank` is optional (see `_OPTIONAL_ROLES`): a single-level composition
+    # (BUSCO classes, CCS outcomes) has no rank to pick.
     "stacked_taxonomy": {
         "sample_id": _STRING,
         "taxon": _STRING,
-        "rank": _STRING,
         "abundance": _NUMERIC,
     },
     # Phylogenetic validates the *metadata* DC only: the tree DC is a
@@ -285,6 +287,13 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "chrom_b": _STRING,
         "pos_b": _NUMERIC,
     },
+    # Karyotype: one row per feature (a gene, a variant, a bin) on a
+    # chromosome; the bars come from the chromosomes the rows name.
+    "ideogram": {
+        "chrom": _STRING,
+        "start": _NUMERIC,
+        "end": _NUMERIC,
+    },
     # One row read as text. Only the identifier is a role: every other column
     # of the collection is a field the card can show, so listing them here
     # would be a second copy of the schema that goes stale on the next
@@ -348,6 +357,33 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     # bound residue table only colours the points.
     "ramachandran": {
         "position": _NUMERIC,
+    },
+    # Top-N features ranked by a score, each with its distribution across
+    # samples. Only the feature and its score are required: the distribution
+    # comes either long form (`value`, one row per feature and sample) or
+    # pre-aggregated (`q1` / `median` / `q3`), both optional roles here, and
+    # `validate_binding` reports a binding that gives neither.
+    "ranked_distribution": {
+        "feature_id": _STRING,
+        "score": _NUMERIC,
+    },
+    # One row per segmented cell: its id and its centroid in the frame of the
+    # image it was segmented from (mcquant's CellID / X_centroid / Y_centroid).
+    # The id is a string or an integer, because mcquant writes an integer
+    # label and a multi-image table a sample-qualified string.
+    "spatial_cells": {
+        "cell_id": _STRING | _INT,
+        "x": _NUMERIC,
+        "y": _NUMERIC,
+    },
+    # One row per allele call: a sample, a locus and the allele called there,
+    # two rows per diploid locus (OptiType's A1/A2 melted long, LILAC as it is).
+    # The allele is a nomenclature string ("HLA-A*02:01:01"), parsed and
+    # truncated to the display resolution by the renderer.
+    "allele_grid": {
+        "sample_id": _STRING,
+        "locus": _STRING,
+        "allele": _STRING,
     },
 }
 
@@ -749,6 +785,24 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
             {"pos_b", "pos2", "start2", "breakpoint2", "right_pos", "pos_right", "start_b"}
         ),
     },
+    # BUSCO's full_table writes `Sequence`, `Gene Start`, `Gene End`; a binned
+    # VCF density table writes `bin_start` / `bin_end`.
+    "ideogram": {
+        "chrom": frozenset(
+            {"chrom", "chr", "chromosome", "contig", "seqid", "seqname", "sequence", "scaffold"}
+        ),
+        "start": frozenset({"start", "begin", "gene_start", "bin_start", "from"}),
+        "end": frozenset({"end", "stop", "gene_end", "bin_end", "to"}),
+        "value": frozenset(
+            {"value", "density", "count", "variant_count", "n_variants", "score", "depth"}
+        ),
+        "category": frozenset({"category", "status", "busco_status", "class", "type"}),
+        "sample": frozenset({"sample", "sample_id", "genome", "assembly", "library", "id"}),
+        "label": frozenset({"label", "name", "busco_id", "gene", "gene_name", "feature"}),
+        "chrom_length": frozenset(
+            {"chrom_length", "chrom_len", "length", "sequence_length", "seq_length", "size"}
+        ),
+    },
     "record_card": {
         "id": frozenset({"id", "sample", "sample_id", "run_id", "library", "name", "feature_id"}),
         "title": frozenset({"title", "name", "label", "description", "sample_name"}),
@@ -872,6 +926,88 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "gene": frozenset({"gene", "gene_name", "symbol", "gene_symbol"}),
         "sequence": frozenset({"sequence", "protein_sequence", "aa_sequence", "seq"}),
     },
+    # nf-core/stableexpression's `all_genes_summary.csv` names, plus the
+    # generic ones a housekeeping or NanoString normaliser table carries. The
+    # score aliases are deliberately specific: a bare `score` column is far
+    # too common to make every table a ranked distribution.
+    "ranked_distribution": {
+        "feature_id": frozenset({"feature_id", "gene_id", "ensembl_gene_id", "gene", "probe_id"}),
+        "score": frozenset(
+            {
+                "stability_score",
+                "stability",
+                "stability_value",
+                "normfinder_stability",
+                "genorm_m",
+                "m_value",
+                "coefficient_of_variation",
+                "cv",
+                "robust_cv",
+            }
+        ),
+        "rank": frozenset({"rank", "stability_rank", "gene_rank"}),
+        "label": frozenset({"label", "gene_name", "symbol", "gene_symbol", "name"}),
+        "group": frozenset({"section", "group", "category", "expression_level", "class"}),
+        "value": frozenset({"value", "normalised_count", "normalized_count", "expression", "tpm"}),
+        "q1": frozenset({"q1", "quartile_1", "q25", "p25", "first_quartile"}),
+        "median": frozenset({"median", "q2", "q50", "p50"}),
+        "q3": frozenset({"q3", "quartile_3", "q75", "p75", "third_quartile"}),
+        "lower": frozenset({"lower", "lower_fence", "whisker_low", "min", "p5"}),
+        "upper": frozenset({"upper", "upper_fence", "whisker_high", "max", "p95"}),
+        "mean": frozenset({"mean", "average", "avg"}),
+    },
+    # mcquant (nf-core/mcmicro), Xenium `cells.csv`, molkart and SpatialData
+    # tables. Names are matched after snake_casing, so `X_centroid` is
+    # `x_centroid` here.
+    "spatial_cells": {
+        "cell_id": frozenset(
+            {"cell_id", "cellid", "cell", "cell_uid", "object_id", "objectnumber", "cell_label"}
+        ),
+        "x": frozenset(
+            {
+                "x_centroid",
+                "centroid_x",
+                "x_location",
+                "x_position",
+                "center_x",
+                "cell_x",
+                "x_coord",
+                "spatial_x",
+                "x",
+            }
+        ),
+        "y": frozenset(
+            {
+                "y_centroid",
+                "centroid_y",
+                "y_location",
+                "y_position",
+                "center_y",
+                "cell_y",
+                "y_coord",
+                "spatial_y",
+                "y",
+            }
+        ),
+        "value": frozenset({"value", "intensity", "mean_intensity", "expression"}),
+        "category": frozenset(
+            {"category", "cell_type", "celltype", "phenotype", "cluster", "annotation"}
+        ),
+        "sample": frozenset({"sample", "sample_id", "image", "roi", "fov", "core"}),
+        "area": frozenset({"area", "cell_area", "nucleus_area", "size"}),
+    },
+    # The names OptiType (melted), LILAC, arcasHLA and HLA-HD write. `gene` is
+    # LILAC's locus column ("HLA-A"), which is why it is an alias of the locus
+    # rather than of anything gene-like.
+    "allele_grid": {
+        "sample_id": frozenset({"sample_id", "sample", "sample_name", "subject", "donor"}),
+        "locus": frozenset({"locus", "hla_locus", "gene", "hla_gene", "hla"}),
+        "allele": frozenset({"allele", "hla_allele", "genotype", "allele_name", "call"}),
+        "haplotype": frozenset({"haplotype", "hap", "allele_index", "copy", "chromosome_copy"}),
+        "category": frozenset({"category", "hla_class", "class", "mhc_class", "locus_class"}),
+        "value": frozenset({"value", "objective", "score", "quality", "confidence"}),
+        "reads": frozenset({"reads", "read_count", "n_reads", "fragments", "ref_fragments"}),
+    },
 }
 
 
@@ -902,7 +1038,9 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "sample": _STRING,
         "category": _STRING,
     },
-    "stacked_taxonomy": {},
+    # A level column turns the bars into a rank picker (Phylum / Genus, region
+    # class / feature); without one the composition is drawn as it comes.
+    "stacked_taxonomy": {"rank": _STRING},
     "phylogenetic": {
         "color": _NUMERIC | _STRING,
         "label": _STRING,
@@ -1023,6 +1161,13 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "category": _STRING,
         "sample": _STRING,
     },
+    "ideogram": {
+        "value": _NUMERIC,
+        "category": _STRING,
+        "sample": _STRING,
+        "label": _STRING,
+        "chrom_length": _NUMERIC,
+    },
     "record_card": {
         "title": _STRING,
     },
@@ -1101,6 +1246,38 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "gene": _STRING,
         "sequence": _STRING,
     },
+    # The two distribution shapes are both optional here; `_SHAPE_CHECKS`
+    # below is what requires one of them.
+    "ranked_distribution": {
+        "rank": _NUMERIC,
+        "label": _STRING,
+        "group": _STRING,
+        "value": _NUMERIC,
+        "q1": _NUMERIC,
+        "median": _NUMERIC,
+        "q3": _NUMERIC,
+        "lower": _NUMERIC,
+        "upper": _NUMERIC,
+        "mean": _NUMERIC,
+    },
+    # `value` is the first marker shown (the picker offers `value_columns`, a
+    # list field rather than a role), `area` sizes the markers, `sample` keeps
+    # each image in its own frame.
+    "spatial_cells": {
+        "value": _NUMERIC,
+        "category": _STRING,
+        "sample": _STRING,
+        "area": _NUMERIC,
+    },
+    # `haplotype` is 1 / 2 (or a string ending in one: "A1", "hap2"); without it
+    # the order of a sample's rows at a locus decides. `value` and `reads` are
+    # per-sample numbers repeated on every row of the long table.
+    "allele_grid": {
+        "haplotype": _NUMERIC | _STRING,
+        "category": _STRING,
+        "value": _NUMERIC,
+        "reads": _NUMERIC,
+    },
 }
 
 # `hmm_logo` with `profile_source: msa` derives the logo from an alignment table
@@ -1115,6 +1292,8 @@ _HMM_LOGO_MSA_REQUIRED: dict[str, frozenset[str]] = {
 _HMM_LOGO_MSA_OPTIONAL: dict[str, frozenset[str]] = {
     "rank": _NUMERIC,
 }
+
+_STACKED_WIDE_REQUIRED: dict[str, frozenset[str]] = {"sample_id": _STRING}
 
 _RolesByMode = dict[str, tuple[dict[str, frozenset[str]], dict[str, frozenset[str]]]]
 
@@ -1140,6 +1319,11 @@ def _roles_for(
     a second kind: ``hmm_logo`` reads a profile table by default and an
     alignment table with ``profile_source: msa``.
     """
+    # A wide stacked_taxonomy table (`value_cols`) has one numeric column per
+    # category, so only the sample id is a role; `validate_binding` checks the
+    # value columns themselves.
+    if kind == "stacked_taxonomy" and config is not None and getattr(config, "value_cols", None):
+        return _STACKED_WIDE_REQUIRED, {}
     mode = _MODE_ROLES.get(kind)
     if mode is not None and config is not None:
         field, by_value = mode
@@ -1324,7 +1508,55 @@ def validate_binding(config: VizConfig, dc_schema: dict[str, str]) -> list[Bindi
         if actual not in accepted_dtypes:
             errors.append(_dtype_binding_error(role, col, actual, accepted_dtypes, optional=True))
 
+    shape_check = _SHAPE_CHECKS.get(kind)
+    if shape_check is not None:
+        errors.extend(shape_check(config))
+
+    # Wide stacked_taxonomy: every value column is an abundance column.
+    wide_cols = (getattr(config, "value_cols", None) or []) if kind == "stacked_taxonomy" else []
+    for col in wide_cols:
+        if col not in dc_schema:
+            errors.append(
+                BindingError(role="abundance", column=col, reason=f"column '{col}' not in DC")
+            )
+        elif dc_schema[col] not in _NUMERIC:
+            errors.append(
+                _dtype_binding_error("abundance", col, dc_schema[col], _NUMERIC, optional=False)
+            )
+
     return errors
+
+
+def _ranked_distribution_shape(config: VizConfig) -> list[BindingError]:
+    """A ranked distribution draws a box per feature, so it needs values or stats.
+
+    Both shapes are optional roles (one row per feature and sample, or one row
+    per feature with its quartiles), which leaves the role loop above happy with
+    a binding that gives neither. The model refuses half a shape; this is the
+    check that refuses no shape at all, at binding time rather than at save
+    time, because the builder stores configs before every role is bound.
+    """
+    if getattr(config, "value_col", None):
+        return []
+    if all(getattr(config, f"{role}_col", None) for role in ("q1", "median", "q3")):
+        return []
+    return [
+        BindingError(
+            role="value",
+            column=None,
+            reason=(
+                "bind either value (one row per feature and sample) or q1, median "
+                "and q3 (one row per feature)"
+            ),
+        )
+    ]
+
+
+# Kinds whose valid bindings are not "every required role bound": a check run
+# after the role loop of `validate_binding`, adding its own errors.
+_SHAPE_CHECKS: dict[str, Callable[[VizConfig], list[BindingError]]] = {
+    "ranked_distribution": _ranked_distribution_shape,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -1681,6 +1913,24 @@ _PROTEIN_EVIDENCE_RE = re.compile(
 _DOMAIN_EVIDENCE = frozenset({"hmm_from", "protein_length", "i_evalue", "evalue", "accession"})
 
 
+# spatial_cells binds an id and an x / y pair, which every scatter table has.
+# What makes a table segmented cells is a centroid column or a morphology
+# column of the segmentation (regionprops: area, eccentricity, solidity...).
+_SPATIAL_EVIDENCE_RE = re.compile(
+    r"centroid|^(area|cell_area|nucleus_area|eccentricity|solidity|extent|orientation|"
+    r"perimeter|major_axis_length|minor_axis_length|majoraxislength|minoraxislength)$"
+)
+
+
+def _shape_spatial_cells(dc_schema: dict[str, str], draft: _Draft) -> None:
+    """spatial_cells: an x / y pair is only a cell table with a centroid or a morphology column."""
+    if any(_SPATIAL_EVIDENCE_RE.search(_normalize_name(c)) for c in dc_schema):
+        return
+    draft.score = min(draft.score, _STRUCTURAL_ONLY_SCORE)
+    draft.match = "weak"
+    draft.reasons = ["no centroid or cell morphology column (X_centroid, Area, Eccentricity)"]
+
+
 def _shape_protein(dc_schema: dict[str, str], draft: _Draft) -> None:
     """Residue-keyed protein kinds: a position alone does not make a protein table."""
     if any(_PROTEIN_EVIDENCE_RE.match(_normalize_name(c)) for c in dc_schema):
@@ -1903,6 +2153,8 @@ def _score_kind(
         _shape_domain_architecture(dc_schema, draft)
     elif kind == "hmm_logo":
         _shape_hmm_logo(dc_schema, draft)
+    elif kind == "spatial_cells":
+        _shape_spatial_cells(dc_schema, draft)
     elif kind == "sunburst" and not any(
         _is_string(d) and _RANK_NAME_RE.match(_normalize_name(c)) for c, d in dc_schema.items()
     ):
@@ -2080,6 +2332,12 @@ _KIND_ROLE_DESCRIPTIONS: dict[AdvancedVizKind, dict[str, str]] = {
         "region_start": "Optional start of the neighbourhood band behind the arrows.",
         "region_end": "Optional end of the neighbourhood band behind the arrows.",
     },
+    "stacked_taxonomy": {
+        "rank": (
+            "Optional level column (e.g. Phylum, Genus): adds a rank picker. "
+            "Omit for a single-level composition."
+        ),
+    },
     "gsea_running_score": {
         "gene_set": "Gene set / pathway the running score belongs to.",
         "rank": "Position in the ranked gene list.",
@@ -2103,6 +2361,16 @@ _KIND_ROLE_DESCRIPTIONS: dict[AdvancedVizKind, dict[str, str]] = {
         "category": "Stem and head colour: consequence, direction, class.",
         "effect": "Optional magnitude, drawn as the stem height and the head size.",
         "label": "Optional name for each stem, used in the hover and the top-N labels.",
+    },
+    "ideogram": {
+        "chrom": "Chromosome the feature sits on: one bar per distinct value.",
+        "start": "Feature start along its chromosome, in base pairs.",
+        "end": "Feature end along its chromosome, in base pairs.",
+        "value": "Optional number (a density, a count) drawn on a sequential colour scale.",
+        "category": "Optional class (BUSCO status, variant type) drawn in categorical colours.",
+        "sample": "Optional sample or genome: one karyotype per distinct value.",
+        "label": "Optional feature name shown in the hover.",
+        "chrom_length": "Optional chromosome length in base pairs; scales the bar.",
     },
     "record_card": {
         "id": "Column the incoming selection is matched against: which row the card shows.",
@@ -2199,6 +2467,38 @@ _KIND_ROLE_DESCRIPTIONS: dict[AdvancedVizKind, dict[str, str]] = {
         "uniprot": "UniProt accession used to fetch a predicted structure (resolve mode).",
         "gene": "Gene symbol used to fetch a predicted structure (resolve mode).",
         "sequence": "Protein sequence folded on demand when no accession resolves (resolve mode).",
+    },
+    "ranked_distribution": {
+        "feature_id": "One feature per value (gene id): a category on the shared axis.",
+        "score": "Score the features are ranked by (stability score, CV), drawn as the lollipop.",
+        "rank": "Optional precomputed rank, 1 first; otherwise ranked by the score.",
+        "label": "Optional display name (gene symbol) shown on the category axis.",
+        "group": "Optional class colouring each feature (a stability section, a gene class).",
+        "value": "Long form: one value per feature and sample, summarised as a box or violin.",
+        "q1": "Pre-aggregated: first quartile of the feature's values.",
+        "median": "Pre-aggregated: median of the feature's values.",
+        "q3": "Pre-aggregated: third quartile of the feature's values.",
+        "lower": "Pre-aggregated: optional lower whisker end.",
+        "upper": "Pre-aggregated: optional upper whisker end.",
+        "mean": "Pre-aggregated: optional mean, drawn as a dashed line in the box.",
+    },
+    "spatial_cells": {
+        "cell_id": "One row per segmented cell; a lasso emits these ids, so keep them unique.",
+        "x": "Cell centroid x in the image frame (pixels, or microns with a pixel size).",
+        "y": "Cell centroid y in the image frame, growing downwards from the top-left.",
+        "value": "Optional marker intensity the cells are coloured by first.",
+        "category": "Optional cell type, phenotype or segmenter, coloured categorically.",
+        "sample": "Optional image the cell belongs to: each one is drawn in its own frame.",
+        "area": "Optional cell area, which sizes each marker like the cell it stands for.",
+    },
+    "allele_grid": {
+        "sample_id": "One grid row per sample (donor, tumour, library).",
+        "locus": "One grid column per locus (HLA-A, HLA-B, DRB1); the 'HLA-' prefix is dropped.",
+        "allele": "Allele called at the locus, in HLA nomenclature (A*02:01, HLA-A*02:01:01).",
+        "haplotype": "Optional 1 or 2: which half of the cell a call fills; else row order.",
+        "category": "Optional locus class (HLA class I / II): groups the columns under a header.",
+        "value": "Optional per-sample score (OptiType objective), drawn as a side bar.",
+        "reads": "Optional per-sample read support, drawn as a side bar or as cell opacity.",
     },
 }
 
@@ -2511,6 +2811,15 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         ),
         "icon": "tabler:circle-dotted",
     },
+    "ideogram": {
+        "label": "Ideogram",
+        "description": (
+            "A karyotype: one bar per chromosome scaled to its length, with a glyph "
+            "per feature or density bins. Click a chromosome to zoom along it, then "
+            "filter the dashboard to it or to the visible range."
+        ),
+        "icon": "tabler:align-left",
+    },
     "record_card": {
         "label": "Record card",
         "description": (
@@ -2603,6 +2912,34 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
         ),
         "icon": "tabler:angle",
     },
+    "ranked_distribution": {
+        "label": "Ranked distribution",
+        "description": (
+            "The top-N features ranked by a score, each with its distribution "
+            "across samples as a box or violin beside a lollipop of the score, "
+            "on one shared feature axis. Gene stability, housekeeping genes."
+        ),
+        "icon": "tabler:chart-candle",
+    },
+    "spatial_cells": {
+        "label": "Spatial cells",
+        "description": (
+            "Segmented cells where they sit in the image: one marker per cell "
+            "at its centroid, sized by its area, coloured by a marker picked "
+            "from the panel or by cell type, over an optional image of the "
+            "sample. A lasso selects cells."
+        ),
+        "icon": "tabler:microscope",
+    },
+    "allele_grid": {
+        "label": "Allele grid",
+        "description": (
+            "Sample by locus grid of diploid genotypes: each cell split into its "
+            "two haplotypes, coloured by allele group, homozygous loci merged. "
+            "Click an allele to filter the dashboard to it (HLA typing)."
+        ),
+        "icon": "tabler:layout-columns",
+    },
 }
 
 
@@ -2623,6 +2960,19 @@ INCUBATING: frozenset[str] = frozenset(
         # showcase's synthetic fixture binds it. Kept and flagged rather than
         # deleted; revisit on a re-pin.
         "gsea_running_score",
+        # Pending the section 8 gate review against an embedding spatial view
+        # (an `embedding` bound to the centroids with an equal aspect); the
+        # showcase's spatial_cells tab draws both on the same cells so the
+        # review can compare them. No catalog output binds it yet: the
+        # nf-core/mcmicro mcquant tables are its first producer.
+        "spatial_cells",
+        # Bound only by the showcase tab, which draws it beside an oncoplot of
+        # the same table: pending the §8 gate review against oncoplot view;
+        # showcase tab compares both. The candidate marks (a cell split per
+        # haplotype, a merged homozygous cell, hue families per allele group)
+        # and the allele pick are the case for a kind; an oncoplot `view` is
+        # the case against.
+        "allele_grid",
     }
 )
 

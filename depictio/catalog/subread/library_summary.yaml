@@ -1,0 +1,19 @@
+id: subread_library_summary
+name: Library depth and complexity
+mode: quantification/library-summary
+description: >-
+  What the count matrix alone says about each library: reads counted over
+  features, features reaching ten reads, and the share of the library its 100
+  most counted features take. A narrow library (rRNA, a few very highly
+  transcribed loci) holds most of its reads in those 100.
+find:
+  path_glob: "**/*.featureCounts.txt"
+recipe: subread/library_summary.py
+fixture: library_summary.tsv
+renders_as:
+  - { component: card, column: assigned_reads, aggregation: sum, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: genes_detected, aggregation: median, aggregations: [box_plot_stats], secondary_layout: histogram }
+  - { component: card, column: top100_share_pct, aggregation: max, secondary_layout: gauge, coverage_max: 100 }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: assigned_reads, title: Reads counted over features per library} }
+  - { component: figure, visu_type: scatter, dict_kwargs: {x: assigned_reads, y: genes_detected, hover_name: sample, title: Depth against features detected} }
+  - { component: table, row_selection_enabled: true, row_selection_column: sample }

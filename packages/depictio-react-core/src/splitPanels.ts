@@ -213,6 +213,9 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   lollipop: 'colour',
   da_barplot: 'colour',
   metric_ci_bars: 'colour',
+  // Cells sit in the frame of their image: a per-group panel would redraw the
+  // same tissue with holes in it, so a group is a colour on the cells.
+  spatial_cells: 'colour',
 
   // Neither. Either the rows are not samples a group can name (terms, truth-set
   // results, one locus's structure), or a subset re-derives the layout itself
@@ -250,6 +253,9 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   transcript_structure: 'none',
   cnv_profile: 'none',
   genome_chord: 'none',
+  // A karyotype already draws one per sample when `sample_col` is bound, on
+  // one shared length scale; per-group copies would rebuild that scale.
+  ideogram: 'none',
   // One row read as text: there is no mark for a group to colour and no
   // distribution for a panel to re-derive.
   record_card: 'none',
@@ -271,6 +277,14 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   domain_architecture: 'none',
   pae_matrix: 'none',
   ramachandran: 'none',
+  // One box per feature across every sample: the rows are features, which no
+  // sample group names, and a per-group copy would rank them again on its own
+  // axis, so two panels would not share the order the picture is about.
+  ranked_distribution: 'none',
+  // One row per sample already: a group is a set of rows, and the grid shows
+  // it by its rows, not by panels re-deriving columns, colours and the allele
+  // legend's frequencies per subset. Drawn whole and badged.
+  allele_grid: 'none',
 };
 
 /** The policy for `vizKind`.

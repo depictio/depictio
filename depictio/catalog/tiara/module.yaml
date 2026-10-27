@@ -1,0 +1,14 @@
+# Tiara: a deep-learning classifier that labels every sequence of an assembly
+# (above its minimum length, 3 kb by default) as eukaryotic, bacterial,
+# archaeal, prokaryotic, organellar or unknown, and organellar ones as
+# mitochondrion or plastid. Its per-sequence table is read; the log beside it
+# repeats the same counts.
+id: tiara
+name: Tiara
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/tiara/tiara
+homepage: https://ibe-uw.github.io/tiara/
+biotools_url: https://bio.tools/tiara
+description: >-
+  Deep-learning classification of assembly sequences into eukaryotic,
+  prokaryotic and organellar ones, for decontaminating eukaryotic assemblies.
+stage: qc

@@ -1,0 +1,6 @@
+summary_key	sample	predictor	mhc_class	peptides	scored	unsupported	binders	binder_rate	alleles	median_ic50_nm
+PEPTIDES1|mhcflurry	PEPTIDES1	mhcflurry	Class I	199	123	76	13	0.1057	2	28364.12
+PEPTIDES1|mhcnuggets	PEPTIDES1	mhcnuggets	Class I	199	123	76	0	0.0	2	5480.64
+TUMOR2|mhcnuggetsii	TUMOR2	mhcnuggetsii	Class II	707	707	0	53	0.075	1	6166.29
+TUMOR1|mhcflurry	TUMOR1	mhcflurry	Class I	187	187	0	2	0.0107	1	26737.04
+TUMOR1|mhcnuggets	TUMOR1	mhcnuggets	Class I	187	187	0	0	0.0	1	5589.25
