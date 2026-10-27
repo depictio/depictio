@@ -402,7 +402,7 @@ export const VizControlsGrid: React.FC<{
       {layout === 'strip' ? (
         <StripFlow testId={innerTestId}>{children}</StripFlow>
       ) : (
-        <Stack gap={ROW_GAP} data-testid={innerTestId}>
+        <Stack gap={ROW_GAP} className="dpx-viz-grid" data-testid={innerTestId}>
           {children}
         </Stack>
       )}
@@ -446,8 +446,8 @@ export function VizControlGroup({
 }): React.ReactElement {
   const layout = useVizControlsLayout();
   return (
-    <Box style={{ gridColumn: '1 / -1', minWidth: 0, height: '100%' }}>
-      <Stack gap="xs" justify="space-between" h="100%">
+    <Box className="dpx-viz-group" style={{ gridColumn: '1 / -1', minWidth: 0, height: '100%' }}>
+      <Stack gap="xs" justify="space-between" h="100%" className="dpx-viz-group__stack">
         <Divider label={title} labelPosition="left" />
         <VizControlsGrid layout={layout}>{children}</VizControlsGrid>
       </Stack>

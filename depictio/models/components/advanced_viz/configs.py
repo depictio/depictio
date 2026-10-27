@@ -901,6 +901,27 @@ class ComplexHeatmapConfig(_BaseVizConfig):
     cluster_metric: Literal["euclidean", "correlation", "cosine"] = Field(default="euclidean")
     normalize: Literal["none", "row_z", "col_z", "log1p"] = Field(default="none")
     colorscale: str | None = Field(default=None, description="Plotly colorscale name override")
+    min_cell_px: int | None = Field(
+        default=None,
+        ge=2,
+        le=40,
+        description=(
+            "Shortest a heatmap row may be drawn, in px, when the tile asks the grid for "
+            "height (default 12, so 85 rows ask for about 12 grid rows). Lower it for a "
+            "dense matrix that should read as a picture rather than as bands."
+        ),
+    )
+    max_rows: int | None = Field(
+        default=None,
+        ge=3,
+        le=16,
+        description=(
+            "Let the tile grow to fit a large matrix, up to this many grid rows. Unset, a "
+            "heatmap keeps the height its layout gave it (and shrinks to a small matrix): "
+            "it never resizes itself past what the author chose. A taller layout `h` wins "
+            "over this cap. Needs dashboard autofit (the default)."
+        ),
+    )
 
     @field_validator("value_columns_pattern")
     @classmethod
