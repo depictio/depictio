@@ -42,7 +42,7 @@
   height: 14px;
   padding: 0;
   border-radius: 50%;
-  border: 2px solid var(--mantine-color-blue-6);
+  border: 2px solid var(--depictio-timeline-accent, var(--mantine-color-blue-6));
   background-color: var(--mantine-color-body);
   cursor: pointer;
   pointer-events: auto;
@@ -53,15 +53,25 @@
 }
 .depictio-timeline-dot:hover {
   transform: translate(-50%, -50%) scale(1.3);
-  box-shadow: 0 0 0 3px var(--mantine-color-blue-1);
+  box-shadow: 0 0 0 3px
+    color-mix(
+      in srgb,
+      var(--depictio-timeline-accent, var(--mantine-color-blue-6)) 20%,
+      transparent
+    );
 }
 .depictio-timeline-dot:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px var(--mantine-color-blue-2);
+  box-shadow: 0 0 0 3px
+    color-mix(
+      in srgb,
+      var(--depictio-timeline-accent, var(--mantine-color-blue-6)) 35%,
+      transparent
+    );
 }
 /* Dots inside the selected window read as "active" (filled). */
 .depictio-timeline-dot.is-in-range {
-  background-color: var(--mantine-color-blue-6);
+  background-color: var(--depictio-timeline-accent, var(--mantine-color-blue-6));
 }
 /* Per-dot label sits below the track, centered under the dot. */
 .depictio-timeline-dot-label {

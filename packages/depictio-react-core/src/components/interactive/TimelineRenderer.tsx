@@ -15,7 +15,13 @@ import {
   StoredMetadata,
 } from '../../api';
 import ComponentSkeleton from '../ComponentSkeleton';
-import { INTERACTIVE_FRAME, InteractiveTitle, SLIDER_MARK_LABEL_STYLE } from './frame';
+import {
+  INTERACTIVE_FRAME,
+  InteractiveTitle,
+  SLIDER_MARK_LABEL_STYLE,
+  interactiveAccent,
+  interactiveAccentRaw,
+} from './frame';
 import './TimelineRenderer.css';
 
 /**
@@ -512,10 +518,18 @@ const TimelineRenderer: React.FC<{
         pb={marksVisible ? 28 : 4}
         px={8}
         className="depictio-timeline-slider"
-        style={{ flex: 1, minWidth: 0 }}
+        style={
+          {
+            flex: 1,
+            minWidth: 0,
+            // The dots are plain CSS, so they read the accent through a variable.
+            '--depictio-timeline-accent': interactiveAccent(metadata),
+          } as React.CSSProperties
+        }
       >
         <RangeSlider
           size="sm"
+          color={interactiveAccentRaw(metadata)}
           thumbSize={compact ? 12 : 14}
           min={lo}
           max={hi}
