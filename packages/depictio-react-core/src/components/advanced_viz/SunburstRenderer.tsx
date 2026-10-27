@@ -113,6 +113,10 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
       columns: requiredCols,
       filters,
       vizKind: 'sunburst',
+      // The tree below only adds abundances up the lineage, so one row per
+      // lineage says the same as one per lineage and sample, in a fraction of
+      // the bytes (4.5 MB of rows for a few hundred distinct lineages).
+      aggregate: { group_by: ranks, sum: config.abundance_col },
     })
       .then((res) => {
         if (cancelled) return;

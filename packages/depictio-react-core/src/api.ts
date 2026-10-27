@@ -1775,6 +1775,10 @@ export interface AdvancedVizDataRequest {
    *  needs (e.g. which column carries significance). */
   roles?: Record<string, string>;
   tail?: AdvancedVizTailSpec;
+  /** Sum `sum` per distinct `group_by` combination on the server, for a renderer
+   *  that only adds the rows up (the sunburst). One row per lineage instead of
+   *  one per lineage and sample. */
+  aggregate?: { group_by: string[]; sum: string };
 }
 
 /** Project a column subset from a DC + apply global filters. Rendering is
@@ -1801,6 +1805,7 @@ export async function fetchAdvancedVizData(
         viz_kind: req.vizKind,
         roles: req.roles,
         tail: req.tail,
+        aggregate: req.aggregate,
       }),
       signal,
     });
