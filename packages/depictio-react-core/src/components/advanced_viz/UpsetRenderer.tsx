@@ -62,7 +62,7 @@ const INTERSECTION_PANEL_PX = 220;
 /** The intersection labels along the bottom plus the figure's own margins. */
 const UPSET_CHROME_PX = 90;
 /** One annotation track, drawn as its own band under the matrix. */
-const ANNOTATION_TRACK_PX = 90;
+const ANNOTATION_TRACK_PX = 70;
 
 interface UpsetPlotConfig {
   /** Deprecated/unused: data comes from the component's resolved dc_id
