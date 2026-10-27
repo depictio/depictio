@@ -64,3 +64,13 @@
   box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.85),
               0 0 12px 3px rgba(255, 193, 7, 0.5) !important;
 }
+
+/**
+ * Rows another tile's hover refers to (a genome browser's feature, a plot's
+ * point). Theme colour through Mantine's variable, ``!important`` for the same
+ * reason as the pinned tint: the Alpine row backgrounds out-specify a bare class.
+ */
+.ag-theme-alpine .ag-row.depictio-row-linked,
+.ag-theme-alpine-dark .ag-row.depictio-row-linked {
+  background-color: var(--mantine-primary-color-light) !important;
+}

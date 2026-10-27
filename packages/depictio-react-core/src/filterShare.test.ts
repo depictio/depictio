@@ -121,6 +121,13 @@ describe('sanitizeRestoredFilters', () => {
       sanitizeRestoredFilters([kept, floatingMap, stale], new Set(['c1', 'm1'])),
     ).toEqual([kept, floatingMap]);
   });
+
+  it('keeps the second half of a two-part selection with its component', () => {
+    const chrom: InteractiveFilter = { index: 'nav', value: ['chr6'], source: 'genome_selection' };
+    const pos: InteractiveFilter = { index: 'nav::pos', value: [1, 2], source: 'genome_selection' };
+    const orphan: InteractiveFilter = { index: 'gone::pos', value: [1, 2], source: 'genome_selection' };
+    expect(sanitizeRestoredFilters([chrom, pos, orphan], new Set(['nav']))).toEqual([chrom, pos]);
+  });
 });
 
 describe('syncFiltersToLocation', () => {

@@ -1217,11 +1217,17 @@ tabs:
   - name: Partner contigs
     icon: mdi:relation-many-to-many
     color: cyan
-    description: From the contig of the 5' partner to that of the 3' partner, then on the ring
+    description: From the contig of the 5' partner to that of the 3' partner
   - name: Event classes
     icon: mdi:chart-bar
     color: cyan
     description: Read support by event class, and by the feature each breakpoint fell in
+  - name: Breakpoints and reads
+    icon: mdi:dna
+    color: cyan
+    description: Click a link on the ring and the browser beside it frames that fusion's 5' breakpoint; its Breakpoint view shows both sides.
+    # One screen: the ring and the browser it drives, side by side.
+    display: linked
   components:
   # The tab's intro: the method, with its link, and how to read the tab.
   - component_type: text
@@ -1381,7 +1387,7 @@ tabs:
     tag: rf-bp-sankey
     index: bp-sankey
     title: Partner contigs, 5' to 3'
-    layout: {x: 0, y: 0, w: 4, h: 6}
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: rnafusion
     data_collection_tag: arriba_fusion_links
@@ -1391,11 +1397,16 @@ tabs:
       show_labels: true
       intra_chromosomal: true
       max_links: 200
-    section: Partner contigs
+    # A click picks the call: the browser beside it reads the same collection
+    # and frames the call's 5' breakpoint.
+    selection_enabled: true
+    selection_column: label
+    section: Breakpoints and reads
     tag: rf-bp-chord
     index: bp-chord
     title: Breakpoints on the genome
-    layout: {x: 4, y: 0, w: 4, h: 6}
+    description: Each call between its two breakpoints; click one to read it in the browser.
+    layout: {x: 0, y: 0, w: 3, h: 7}
   - component_type: figure
     workflow_tag: rnafusion
     data_collection_tag: arriba_fusions
@@ -1428,6 +1439,40 @@ tabs:
     title: Read support by breakpoint site
     description: Per transcript feature of the 5' breakpoint, split by the 3' one; two splice sites is the clean case.
     layout: {x: 4, y: 0, w: 4, h: 4, fit: auto}
+  # The reads behind a call: a link clicked on the ring, or a fusion picked in
+  # the left panel, narrows arriba_fusion_links to its call, and the view frames the 5'
+  # breakpoint. Unpicked, it opens on the best supported call (most reads), and
+  # the stepper walks the others; the mate columns give the 3' side for the
+  # Breakpoint view.
+  - component_type: jbrowse
+    workflow_tag: rnafusion
+    data_collection_tag: tracks
+    section: Breakpoints and reads
+    initial_tracks: 2
+    max_tracks: 6
+    show_overview: false
+    selection_enabled: true
+    selection_column: sample
+    show_junctions: true
+    views: [breakpoint]
+    read_pairs_display: arcs
+    locus_from:
+      data_collection_tag: arriba_fusion_links
+      chrom_column: chrom_a
+      start_column: pos_a
+      padding: 400
+      max_rows: 20
+      sort_by: weight
+      descending: true
+      label_column: label
+      mate:
+        chrom_column: chrom_b
+        start_column: pos_b
+    tag: rf-bp-browser
+    index: bp-browser
+    title: Genome browser
+    description: The reads of the samples in view around the 5' breakpoint of the fusion picked on the ring.
+    layout: {x: 3, y: 0, w: 5, h: 7}
 
 - title: Validation
   subtitle: Which calls hold up when the reads are re-aligned?
@@ -2029,6 +2074,7 @@ tabs:
       min_count: 2
       top_n: 40
       log_width: true
+      views: [plotly]
     section: Junction arcs
     tag: rf-splice-arcs
     index: splice-arcs

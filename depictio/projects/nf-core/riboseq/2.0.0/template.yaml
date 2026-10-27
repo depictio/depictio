@@ -17,6 +17,12 @@
 # `*.anota2seq.results.tsv`, `ribotish/*_pred.txt`, `*_collapsed.txt`), never
 # on the pipeline's output directories.
 #
+# Genome tracks: the run's P-site tracks, coverage bigWigs and BAMs are not part
+# of the tables-only megatest subset. Pass `--var TRACKS_URI=<results folder>` to
+# read them in place (see the variable below); without it the `tracks`
+# collection uploads whichever of them DATA_ROOT holds. The assembly is the
+# GENOME variable.
+#
 # Design: the sample sheet already carries the design columns the contrasts
 # name. METADATA_FILE (optional, ampliseq convention) adds a design table whose
 # first column is the sample id and whose first annotation column becomes
@@ -44,6 +50,13 @@ template:
       required: false
     - name: "GROUP_COL_DISPLAY"
       description: "Auto-populated: title-cased GROUP_COL for display."
+      required: false
+    - name: "GENOME"
+      description: "UCSC name of the assembly the run aligned to (hg38, hg19, mm10): the axis and gene lane of the genome browser."
+      required: false
+      default: "hg38"
+    - name: "TRACKS_URI"
+      description: "s3:// or https:// folder holding the run's results (the folder DATA_ROOT mirrors), to read the genome-browser tracks (P-sites, coverage bigWig, BAM) in place instead of uploading them from DATA_ROOT. Without it the `tracks` collection uploads whichever of those files DATA_ROOT holds."
       required: false
   # Variables supplied when materialising the bundled reference/demo dataset:
   # the fetch drops the vendored sheet, design table and contrasts into input/.
@@ -104,6 +117,14 @@ template:
       dashboards: ["dashboards/base.yaml"]
     - if_var_present: "METADATA_FILE"
       dashboards: ["dashboards/base.yaml"]
+    # Genome tracks: read in place when TRACKS_URI names the results folder,
+    # uploaded from DATA_ROOT otherwise (the `tracks` recipe keeps only the
+    # files it finds there).
+    - if_var_present: "TRACKS_URI"
+      override_dcs:
+        - data_collection_tag: "tracks"
+          dc_properties:
+            remote_base_uri: "{TRACKS_URI}"
 
 # ============================================================================
 # PROJECT CONFIGURATION
@@ -545,11 +566,72 @@ workflows:
               "gene_type": "Gene biotype"
               "orf_class": "Shared ORF class (RiboCode's when it called the ORF)"
               "aa_length": "Longest protein length either caller reported, amino acids"
+              "chrom": "Contig of the ORF, read off the key"
+              "orf_start": "Approximate start of the ORF on the genome: the stop codon coordinate pushed back by 3 bases per amino acid (an ORF split over exons reaches further)"
+              "orf_end": "Approximate end of the ORF on the genome, the other side of the stop codon coordinate"
               "ribotish": "1 when Ribo-TISH reported the ORF in at least one library"
               "ribocode": "1 when RiboCode reported the ORF in at least one library"
               "annotated_cds": "1 when either caller classed the ORF as the annotated CDS"
               "ribotish_libraries": "Libraries in which Ribo-TISH reported the ORF"
               "ribocode_libraries": "Libraries in which RiboCode reported the ORF"
+
+      # ----------------------------------------------------------------
+      # Genome tracks. A manifest of the run's track files (Plastid P-sites,
+      # stranded or unstranded coverage and the genome BAM of every library)
+      # that the genome browser reads by range, through the API. One row per
+      # file, keyed on `sample` like the hub. The megatest was aligned to
+      # Ensembl GRCh38 (chromosomes 1, 2, ...): the hg38 preset's chromAlias
+      # maps them.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "tracks"
+        description: "Genome-browser tracks of the run: P-sites, coverage and alignments of every library, one row per file"
+        config:
+          type: "genomic_tracks"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/riboseq/tracks.py"
+            source_overrides:
+              samplesheet:
+                path: "{SAMPLESHEET_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            uri_column: "uri"
+            track_id_column: "track_id"
+            sample_column: "sample"
+            format_column: "format"
+            name_column: "name"
+            color_column: "color"
+            category_column: "category"
+            order_column: "order"
+            assembly: "{GENOME}"
+            display_defaults:
+              bedgraph:
+                displays:
+                  - type: "LinearWiggleDisplay"
+                    height: 50
+                    autoscale: "local"
+              bigwig:
+                displays:
+                  - type: "LinearWiggleDisplay"
+                    height: 50
+                    autoscale: "local"
+              bam:
+                displays:
+                  - type: "LinearPileupDisplay"
+                    height: 100
+            columns_description:
+              "track_id": "<sample>.<kind>[.<strand>], unique per file"
+              "sample": "Library the file belongs to"
+              "assay": "RNA-seq, Ribo-seq or TI-seq, from the sheet's type column"
+              "strand": "Genomic strand of a stranded track, empty otherwise"
+              "kind": "psites, coverage or alignments"
+              "format": "Track file format"
+              "uri": "Path relative to the results folder"
+              "name": "Track label shown in the browser"
+              "color": "Track colour"
+              "category": "Track-selector folder"
+              "order": "Row order the browser opens with"
 
 # ============================================================================
 # LINKS
@@ -819,4 +901,21 @@ links:
     target_type: "table"
     link_config: {resolver: "direct", target_field: "orf_class"}
     description: "Narrow the ORF class composition to the picked classes"
+    enabled: true
+
+  # Hub <-> genome tracks: picking libraries opens their tracks, and clicking a
+  # track in the browser picks its library back.
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Show the genome tracks of the libraries picked in the left panel"
+    enabled: true
+  - source_dc_tag: "tracks"
+    source_column: "sample"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the dashboard by the libraries whose tracks are picked in the genome browser"
     enabled: true

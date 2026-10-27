@@ -171,3 +171,28 @@ describe('withSectionCategory', () => {
     expect(out).toEqual([{ trackId: 'unknown', category: ['External tracks'] }]);
   });
 });
+
+describe('grouping by a value (color_by)', () => {
+  const manifest = [
+    row('a', { category: 'bigwig' }),
+    row('b', { category: 'bigwig' }),
+    row('c', { category: 'bigwig' }),
+  ];
+  const group = (r: JBrowseTrackRow) => (r.track_id === 'c' ? null : r.track_id === 'a' ? 'treated' : 'control');
+
+  it('groups the manifest rows under the value, keeping the category when there is none', () => {
+    const groups = groupTrackRows(manifest, '', group);
+    expect(groups.map((g) => [g.label, g.rows.map((r) => r.track_id)])).toEqual([
+      ['treated', ['a']],
+      ['control', ['b']],
+      ['bigwig', ['c']],
+    ]);
+  });
+
+  it("sets JBrowse's selector path from the value, project section first", () => {
+    const confs = manifest.map((r) => ({ trackId: r.track_id, category: ['bigwig'] }));
+    const out = withSectionCategory(confs, manifest, (c) => (c.trackId === 'a' ? 'treated' : null));
+    expect(out[0].category).toEqual(['Project tracks', 'treated']);
+    expect(out[1].category).toEqual(['Project tracks', 'bigwig']);
+  });
+});

@@ -1673,7 +1673,7 @@ tabs:
     tag: sk-cc-av-rainfall
     index: cc-rainfall
     title: Rainfall, distance to the previous call
-    description: Clusters of short distances on a germline callset are gene-dense intervals, not kataegis.
+    description: Clusters of short distances on a germline callset are gene-dense intervals, not kataegis. Click a call, then Open in genome browser to read the reads under it.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: sarek
@@ -2413,12 +2413,14 @@ tabs:
     title: Coding variants with a protein position
     description: Gene, amino-acid position, impact, consequence and protein change, one row per call.
     layout: {x: 0, y: 0, w: 8, h: 6}
-# One genome_view navigator on mosdepth_windows drives the tracks through the
-# region links in template.yaml (per-interval depth, the calls over the
-# {GENOME} gene lane) and through follow_region_filter (the annotated VCFs
-# read from their files). coverage_track and genome_view never share a
-# collection here (test_no_double_track_binding). The cards opt in to the
-# region with follow_region_filter, so they recount what the region holds.
+# One genome_view navigator on mosdepth_windows, one lane per sample, and the
+# genome browser under it that follows its brush: the browser's CRAM coverage
+# is the depth at the region, so no second depth track repeats it. The region
+# links in template.yaml still carry the region onto the per-target depth card
+# and the calls. The cards opt in to the region with
+# follow_region_filter, so they recount what the region holds. This is the only
+# browser of the template: the Caller concordance rainfall reaches it through
+# the Open in genome browser action.
 - title: Locus
   subtitle: What do depth and calls show at one region?
   tab_group: Annotation
@@ -2438,17 +2440,19 @@ tabs:
     icon: mdi:counter
     color: indigo
     description: What the region in view holds, recounted on every brush or locus entry
-  - name: One region, four tracks
+  - name: Depth and reads on one axis
     icon: mdi:dna
     color: indigo
-    description: The depth navigator and the tracks that follow its region
+    description: The lanes drive the browser below. A brush or a locus on the lanes moves it, and its view comes back on the lanes as a dashed band, in the colour of the two tiles' link tags.
+    # One screen: the depth lanes and the browser they drive, as on atacseq.
+    display: linked
   components:
   - component_type: text
     order: 1
     body: >
-      The navigator draws the mean depth in 1 Mb windows over the genome; the per-interval
-      depth, the calls and the annotated VCFs follow its region. Type a locus or a gene in its
-      header, or brush its axis, and the tracks and cards follow.
+      The navigator draws the mean depth of every sample in 1 Mb windows over the genome;
+      the genome browser below shows every caller's calls and the reads at its region. Type a
+      locus or a gene in its header, or brush its axis, and the browser and cards follow.
     tag: sk-loc-intro
     index: loc-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -2575,82 +2579,54 @@ tabs:
       end_col: end
       score_col: depth
       feature_col: sample
+      # One lane per sample: a dropout in one library shows as a gap in its
+      # lane, which a pooled bar hides.
+      sample_col: sample
+      facet_by_sample: true
+      max_facets: 6
       mark: rect
       assembly: '{GENOME}'
       score_title: mean depth
       opacity: 0.8
       default_region: "chr1:1,000,000-2,000,000"
       region_filter_enabled: true
-    section: One region, four tracks
+    section: Depth and reads on one axis
     tag: sk-loc-av-genome
     index: loc-depth-navigator
-    title: Depth navigator, 1 Mb windows
-    description: Mean depth per megabase window. A locus or gene in the header, or a brush, moves every track.
-    layout: {x: 0, y: 0, w: 8, h: 3}
-  - component_type: advanced_viz
+    title: Depth per sample, 1 Mb windows
+    description: Mean depth per megabase window, one lane per sample. A locus or gene in the header, or a brush, moves the browser below.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  # The navigator's brush moves the view without filtering. Unpicked, it opens
+  # on the call with the highest quality, and the stepper walks the others. The
+  # circular view lists the structural variants.
+  - component_type: jbrowse
     workflow_tag: sarek
-    data_collection_tag: mosdepth_targets
-    viz_kind: coverage_track
-    config:
-      viz_kind: coverage_track
-      chromosome_col: chrom
-      position_col: pos
-      end_col: end
-      value_col: depth
-      sample_col: sample
-      view_mode: facet
-      color_by: sample
-      mark: rect
-      smoothing_window: 0
-      show_annotation_lane: false
-      view: track
-      views: [track]
-    section: One region, four tracks
-    tag: sk-loc-av-track
-    index: loc-interval-depth
-    title: Depth per interval
-    description: One lane per sample, one bar per interval at its mean depth; gaps lie between intervals.
-    layout: {x: 0, y: 3, w: 8, h: 4}
-  - component_type: advanced_viz
-    workflow_tag: sarek
-    data_collection_tag: vcf_variants
-    use: vcf/variant_genome_view
-    config:
-      mark: point
-      assembly: '{GENOME}'
-      annotation: "{GENOME}"
-      score_title: VAF
-      point_size: 5
-      facet_by_sample: true
-      max_facets: 5
-      region_filter_enabled: false
-      follow_region_filter: true
-    section: One region, four tracks
-    tag: sk-loc-av-calls
-    index: loc-call-track
-    title: Calls over the genes, one lane per caller
-    description: Every call in the region at its variant allele fraction (VAF), over the gene lane.
-    layout: {x: 0, y: 7, w: 8, h: 5}
-  - component_type: advanced_viz
-    workflow_tag: sarek
-    data_collection_tag: snpeff_vcf_files
-    viz_kind: genome_view
-    config:
-      viz_kind: genome_view
-      source: file
-      chr_col: chrom
-      pos_col: pos
-      assembly: '{GENOME}'
-      point_size: 6
-      file_max_lanes: 8
-      # 2 Mb, not the 1 Mb default: the navigator's default region spans 1 Mb,
-      # and a lazy file lane reads nothing until the view is under its window.
-      file_window_size: 2000000
-      region_filter_enabled: false
-      follow_region_filter: true
-    section: One region, four tracks
-    tag: sk-loc-av-vcf
-    index: loc-vcf-files
-    title: The annotated VCFs, read from the files
-    description: Each callset's annotated VCF, range-read through its index below 2 Mb, one lane per callset.
-    layout: {x: 0, y: 12, w: 8, h: 5}
+    data_collection_tag: tracks
+    section: Depth and reads on one axis
+    initial_tracks: 3
+    max_tracks: 8
+    show_overview: false
+    # The lanes above already say where the browser is: its locus bar only
+    # costs height here, and the tile's menu brings it back.
+    show_header: false
+    views: [circular]
+    circular_categories: [Structural variants]
+    selection_enabled: true
+    selection_column: sample_id
+    locus_from:
+      data_collection_tag: vcf_variants
+      chrom_column: chrom
+      start_column: pos
+      padding: 300
+      max_rows: 60
+      sort_by: qual
+      descending: true
+      label_column: variant_key
+    # Calls take the colour of their snpEff impact, as in the figures.
+    variant_color_by:
+      column: impact
+    tag: sk-loc-browser
+    index: loc-reads-browser
+    title: Genome browser
+    description: Each caller's VCF and the CRAM of the samples in scope, framed on the region of the navigator above.
+    layout: {x: 0, y: 4, w: 8, h: 8}

@@ -54,6 +54,7 @@ import {
   AdvancedVizSettingsPopover,
   AdvancedVizZoomSyncToggle,
 } from './AdvancedVizExtras';
+import OpenInGenomeBrowserButton from './OpenInGenomeBrowserButton';
 import { vizKindLabel } from './vizKindTag';
 import { AdvancedVizKindContext } from './VizKindBadge';
 import { useDensity } from '../density';
@@ -98,6 +99,7 @@ import {
   advancedVizShowcase,
   tabLinkName,
 } from './advancedVizShowcase';
+import { describeFilters, traceGenome } from '../genomeLink/genomeDebug';
 
 /** The viewer's fold of a tile's docked controls, kept per component in this
  *  browser. Storage can be missing or refuse (a private window): then the
@@ -574,13 +576,29 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   const onResetSelection =
     onFilterChange && own.filters.length > 0
       ? () => {
-          for (const cleared of clearedSelectionFilters(own.filters)) onFilterChange(cleared);
+          const cleared = clearedSelectionFilters(own.filters);
+          traceGenome(String(metadata.index), 'tile reset: own selection cleared', describeFilters(cleared));
+          for (const filter of cleared) onFilterChange(filter);
         }
       : undefined;
 
-  const combinedExtras = popovers || extraActions ? (
+  // "Open in genome browser": on a genomic tile that says where it is looking,
+  // when the family has a browser (the button hides itself otherwise). Built
+  // here rather than in `popovers` because it reads the dashboard filters.
+  const openInBrowser = published?.openLocus ? (
+    <OpenInGenomeBrowserButton
+      key="open-genome-browser"
+      reader={published.openLocus}
+      vizKind={vizKind}
+      config={metadata.config}
+      index={String(metadata.index)}
+      filters={filters}
+    />
+  ) : null;
+  const combinedExtras = popovers || openInBrowser || extraActions ? (
     <>
       {popovers}
+      {openInBrowser}
       {extraActions}
     </>
   ) : undefined;

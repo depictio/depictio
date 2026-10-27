@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { wheelIntent, wheelPixels, zoomFactor } from './wheel';
+import { canScrollBy, wheelIntent, wheelPixels, zoomFactor } from './wheel';
 
 const wheel = (over: Partial<Parameters<typeof wheelIntent>[0]> = {}) => ({
   deltaX: 0,
@@ -45,5 +45,18 @@ describe('zoomFactor', () => {
     expect(zoomFactor(100)).toBeGreaterThan(1);
     expect(zoomFactor(-100)).toBeLessThan(1);
     expect(zoomFactor(100) * zoomFactor(-100)).toBeCloseTo(1);
+  });
+});
+
+describe('canScrollBy', () => {
+  const box = (scrollTop: number) => ({ scrollTop, scrollHeight: 600, clientHeight: 200 });
+  it('scrolls the tracks until their edge, then hands over', () => {
+    expect(canScrollBy(box(0), 100)).toBe(true);
+    expect(canScrollBy(box(0), -100)).toBe(false);
+    expect(canScrollBy(box(400), 100)).toBe(false);
+    expect(canScrollBy(box(400), -100)).toBe(true);
+  });
+  it('never scrolls a box that fits', () => {
+    expect(canScrollBy({ scrollTop: 0, scrollHeight: 200, clientHeight: 200 }, 100)).toBe(false);
   });
 });

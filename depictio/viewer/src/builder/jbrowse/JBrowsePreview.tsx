@@ -213,7 +213,8 @@ const JBrowsePreview: React.FC<Props> = ({ dcProps }) => {
   const assembly = ownAssembly || dcProps?.assembly || null;
   const ucsc = config.ucsc_tracks ?? [];
   const annotation = config.show_annotation !== false;
-  const locusDc = config.locus_from?.data_collection_tag;
+  const locusDc = (Array.isArray(config.locus_from) ? config.locus_from[0] : config.locus_from)
+    ?.data_collection_tag;
   const selectionColumn = config.selection_column || dcProps?.sampleColumn || 'sample';
   const opened =
     manifest.pinnedNames.length + manifest.openingNames.length + ucsc.length;

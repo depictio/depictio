@@ -96,6 +96,11 @@ components:
       end_column: END
       padding: 150
       max_rows: 3
+      # The stepper walks the calls from the first position on; `location`
+      # above wins on open.
+      sort_by: POS
+      descending: false
+      label_column: mutation_label
     config_overrides:
       # A gene track the collection does not ship, added from UCSC.
       extra_tracks:

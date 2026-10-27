@@ -1492,11 +1492,11 @@ tabs:
 # The locus section: three collections on one genomic region. The navigator
 # (macs2/peak_genome_view on macs2_peaks) opens on its default_region and emits
 # the chromosome and position filters; the two region links in template.yaml
-# rename them onto the consensus intervals and the HOMER annotation, so every
-# track clamps to the same window. A tab of its own: a region filter narrows
-# every tile of its collection on the tab. The axis comes from GENOME, empty by
-# default, which lays it out from the contigs of the calls (2.x runs on any
-# reference); the HOMER track stands in for a gene lane.
+# rename them onto the consensus intervals and the HOMER annotation, so the
+# consensus lanes and the cards clamp to the same window. A tab of its own: a
+# region filter narrows every tile of its collection on the tab. The axis comes
+# from GENOME, empty by default, which lays it out from the contigs of the calls
+# (2.x runs on any reference).
 - title: Locus
   subtitle: What do the libraries call at one genomic region?
   tab_group: Peak calls
@@ -1519,15 +1519,15 @@ tabs:
   - name: Peaks on one axis
     icon: mdi:dna
     color: teal
-    description: The calls per library, then the tracks that follow their region
+    description: The calls per library, then the consensus lanes that follow their region
   components:
   - component_type: text
     order: 1
     body: >
-      The calls of every ChIP, the consensus intervals per antibody and the HOMER
-      annotation on one genome axis. The tab opens on the first contig the calls carry;
-      type a locus in the navigator's header or brush its axis, and the tracks and cards
-      follow.
+      The calls of every ChIP and the consensus intervals per antibody on one genome
+      axis, with the HOMER annotation counted in the cards. The tab opens on the first
+      contig the calls carry; type a locus in the navigator's header or brush its axis,
+      and the lanes and cards follow.
     tag: cs-loc-intro
     index: loc-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1681,7 +1681,7 @@ tabs:
     tag: cs-loc-navigator
     index: loc-navigator
     title: Calls per library
-    description: Every MACS3 call on the region, one lane per library, as high as its significance. The locus field and a brush on this axis move every track below.
+    description: Every MACS3 call on the region, one lane per library, as high as its significance. The locus field and a brush on this axis move every lane below.
     layout: {x: 0, y: 0, w: 8, h: 6}
   # A coverage track, faceted by consensus set: chipseq builds one consensus
   # set per antibody, and a lane per set keeps them apart.
@@ -1709,31 +1709,6 @@ tabs:
     title: Consensus intervals per antibody
     description: The merged intervals of each consensus set on the same region, each as high as the number of libraries calling a peak there.
     layout: {x: 0, y: 6, w: 8, h: 3}
-  - component_type: advanced_viz
-    workflow_tag: chipseq
-    data_collection_tag: homer_annotated_peaks
-    viz_kind: genome_view
-    config:
-      viz_kind: genome_view
-      chr_col: chr
-      pos_col: start
-      end_col: end
-      score_col: peak_score
-      feature_col: gene_name
-      category_col: annotation_class
-      mark: rect
-      score_title: HOMER peak score
-      assembly: '{GENOME}'
-      region_filter_enabled: false
-      follow_region_filter: true
-      selection_enabled: true
-      selection_column: peak_id
-    section: Peaks on one axis
-    tag: cs-loc-genes
-    index: loc-genes
-    title: Nearest gene of every call
-    description: The same calls as HOMER annotated them, coloured by feature class; hover a call for its nearest gene.
-    layout: {x: 0, y: 9, w: 8, h: 3}
 # ============================================================================
 # Comparison
 # ============================================================================

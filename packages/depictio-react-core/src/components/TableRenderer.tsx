@@ -19,7 +19,7 @@ import type {
   SelectionChangedEvent,
   SortChangedEvent,
 } from 'ag-grid-community';
-import type { RowClickedEvent } from 'ag-grid-community';
+import type { CellMouseOverEvent, IRowNode, RowClickedEvent } from 'ag-grid-community';
 
 import { renderTable, InteractiveFilter, StoredMetadata } from '../api';
 import { useDataVersionRequest } from '../dataVersions';
@@ -38,6 +38,8 @@ import { enqueueFetch, isStaleFetch } from '../fetchQueue';
 import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
 import { ActiveHighlight } from '../highlight';
+import { useHighlight, usePublishHighlight } from '../highlight/bus';
+import { rowMatcher, type RowMatcher } from '../highlight/genomicHover';
 import { useUiScale } from '../uiScale';
 import { rowsForHeight, useContentDemand } from './autofit';
 import RefetchOverlay from './RefetchOverlay';
@@ -68,6 +70,56 @@ const NO_ANNOTATIONS: RenderableAnnotation[] = [];
  *  the table has no marked rows (toggled via the column API, never by
  *  replacing ``columnDefs``, which would reset the user's sort). */
 const ANNOTATION_COL_ID = '__depictio_annotation';
+
+/** `positionColumn` of the hover a table publishes: no residue axis carries
+ *  this name, so the protein tiles ignore the event. */
+const RECORD_POSITION_COLUMN = '__record__';
+
+/**
+ * Lights the rows another tile's hover refers to. It lives in its own
+ * component so a hover re-renders this one (a few lines) and not the table:
+ * the matcher goes into `matcherRef`, which the table's `getRowClass` reads,
+ * and only the rendered rows whose state flipped are redrawn. The bus already
+ * delivers one event per animation frame. Nothing here touches filters, so
+ * nothing refetches.
+ */
+const TableHoverLink: React.FC<{
+  ownIndex: string;
+  selectionColumn?: string;
+  gridApiRef: React.RefObject<GridApi | null>;
+  matcherRef: React.MutableRefObject<RowMatcher | null>;
+}> = ({ ownIndex, selectionColumn, gridApiRef, matcherRef }) => {
+  const hovered = useHighlight(ownIndex);
+  const litRef = useRef<Set<IRowNode>>(new Set());
+  useEffect(() => {
+    const matcher = rowMatcher(hovered, selectionColumn);
+    matcherRef.current = matcher;
+    const api = gridApiRef.current;
+    if (!api || api.isDestroyed()) return;
+    const before = litRef.current;
+    if (!matcher && before.size === 0) return;
+    const now = new Set<IRowNode>();
+    if (matcher) {
+      for (const node of api.getRenderedNodes()) {
+        if (node.data && matcher(node.data as Record<string, unknown>)) now.add(node);
+      }
+    }
+    const flipped: IRowNode[] = [];
+    for (const n of now) if (!before.has(n)) flipped.push(n);
+    for (const n of before) if (!now.has(n)) flipped.push(n);
+    litRef.current = now;
+    if (flipped.length) api.redrawRows({ rowNodes: flipped });
+  }, [hovered, selectionColumn, gridApiRef, matcherRef]);
+  // The grid is rebuilt (new data version, "show all"): drop the stale nodes.
+  useEffect(
+    () => () => {
+      litRef.current = new Set();
+      matcherRef.current = null;
+    },
+    [matcherRef],
+  );
+  return null;
+};
 
 interface TableRendererProps {
   dashboardId: string;
@@ -625,13 +677,15 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   // Stringified row id → raw value (kept so numeric ids stay numeric).
   const annotateSelectedRef = useRef<Map<string, string | number>>(new Map());
 
+  // The row test for the hover in force (set by `TableHoverLink`).
+  const hoverMatcherRef = useRef<RowMatcher | null>(null);
+  const publishHover = usePublishHighlight(componentIndex);
   const getRowClass = useMemo(() => {
     const legacyOn = !!rowIdColumn && highlightActive && newRowIds.size > 0;
     const batchOn =
       batchHighlightOn && !!batchIds && !!batchIdColumn && batchIds.size > 0;
     const annotOn = !!annotationColumn && rowAnnotations.size > 0;
     const annotSelOn = annotating && !!annotationColumn;
-    if (!legacyOn && !batchOn && !annotOn && !annotSelOn) return undefined;
     const realtimeClass = (data: Record<string, unknown>): string | undefined => {
       // A pinned batch gets the steady ``-pinned`` class (stays until cleared);
       // live arrivals (batch or legacy diff) get the one-shot ``-new`` flash.
@@ -662,6 +716,9 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       }
       const rt = realtimeClass(data);
       if (rt) classes.push(rt);
+      // Read at draw time: the hover lands in a ref so it never rebuilds this
+      // callback (which would redraw every row on every hover).
+      if (hoverMatcherRef.current?.(data)) classes.push('depictio-row-linked');
       return classes.length ? classes : undefined;
     };
   }, [
@@ -897,6 +954,23 @@ const TableRenderer: React.FC<TableRendererProps> = ({
     return () => window.removeEventListener('keydown', onKey);
   }, [annotating, layer, pendingHere, containerRef]);
 
+  // The row under the pointer goes out whole: each subscriber reads its own
+  // columns from it (a browser its contig and start, a plot its chrom and
+  // position), so a dashboard names no extra field. The selection value rides
+  // as the row key for tiles that ring rows. A hover is never a filter.
+  const onCellMouseOver = (event: CellMouseOverEvent) => {
+    const data = event.data as Record<string, unknown> | undefined;
+    if (!data) return;
+    const key = rowIdColumn ? data[rowIdColumn] : undefined;
+    publishHover({
+      record: data,
+      rowKeys: key != null && key !== '' ? [String(key)] : undefined,
+      start: 0,
+      positionColumn: RECORD_POSITION_COLUMN,
+    });
+  };
+  const clearHover = () => publishHover(null);
+
   const onSelectionChanged = (event: SelectionChangedEvent) => {
     if (!selectionEnabled || !selectionColumn || !onFilterChange) return;
     const selectedRows = event.api.getSelectedRows() as Array<Record<string, unknown>>;
@@ -1058,6 +1132,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
             </Text>
           )}
           <div
+            onMouseLeave={clearHover}
             className={`${isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}${
               badgesClickable ? ' depictio-annot-badges-clickable' : ''
             }`}
@@ -1132,8 +1207,16 @@ const TableRenderer: React.FC<TableRendererProps> = ({
               suppressRowClickSelection={selectionEnabled ? annotating : undefined}
               onSelectionChanged={selectionEnabled ? onSelectionChanged : undefined}
               onRowClicked={onRowClicked}
+              onCellMouseOver={onCellMouseOver}
+              onCellMouseOut={clearHover}
               onDisplayedColumnsChanged={(e) => syncCsvColumns(e.api)}
               onSortChanged={onSortChanged}
+            />
+            <TableHoverLink
+              ownIndex={componentIndex}
+              selectionColumn={rowIdColumn}
+              gridApiRef={gridApiRef}
+              matcherRef={hoverMatcherRef}
             />
             {annotating && layer && (
               <AnnotateToolbar

@@ -73,6 +73,11 @@ export { default as TextRenderer } from './components/TextRenderer';
 export { default as Glyph, glyphColorVar, isImagePath, isMultiqcIcon, themedIconSrc } from './components/Glyph';
 export { TabLinkContext, tabLinkKey, useTabLinkResolver } from './components/tabLinks';
 export type { TabLinkResolver, TabLinkTarget } from './components/tabLinks';
+export { GenomeBrowserTargetContext, useGenomeBrowserTarget } from './components/jbrowse/browserTarget';
+export type { GenomeBrowserTarget } from './components/jbrowse/browserTarget';
+export { genomeSelectionRegion, locusForAction } from './components/jbrowse/locusForAction';
+export { isGenomicKind } from './components/advanced_viz/genomicAxis';
+export type { OpenLocusReader, OpenLocusSource } from './components/jbrowse/locusForAction';
 export {
   groupTabs,
   sameTabGroup,
@@ -805,7 +810,9 @@ export {
   syncFiltersToLocation,
   buildFilterShareUrl,
   sanitizeRestoredFilters,
+  filterComponentIndex,
 } from './filterShare';
+export { default as GenomeDebugPanel } from './components/genomeLink/GenomeDebugPanel';
 export {
   readEditorFilters,
   writeEditorFilters,
@@ -1304,6 +1311,9 @@ export {
   pickFromFamily,
   pinnedDemoSections,
   selectionColumnOf,
+  genomeConfigOf,
+  genomeTabsOf,
+  jbrowseRank,
   siblingDemoSections,
   takesSelection,
 } from './guide/demoSources';
@@ -1312,6 +1322,9 @@ export type {
   GuideFamilyDoc,
   GuideFamilyPick,
   GuideFilterDemoPick,
+  GuideGenomeConfig,
+  GuideGenomeSection,
+  GuideGenomeTab,
   GuideSiblingSectionsPick,
   PinnedDemoSections,
 } from './guide/demoSources';

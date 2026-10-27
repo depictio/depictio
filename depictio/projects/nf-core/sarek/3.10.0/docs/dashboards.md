@@ -97,8 +97,9 @@ type (a ring), the allele fraction (box plot) and the depth at the call (distrib
 the UpSet of PASS calls shared between callsets (fixed: the pickers do not narrow it), the
 allele fraction against depth as a density beside its histogram per caller (log count axis:
 homozygous calls pile at 1), and the rainfall
-of the calls along the genome. Collapsed: the call table. Filters: caller, variant type,
-contig and a depth range.
+of the calls along the genome. The rainfall's Open in genome browser action opens the Locus
+tab on the call clicked. Collapsed: the call table. Filters: caller, variant type, contig and
+a depth range.
 
 **Consequences.** Strip: the annotated calls (a ring by impact class), the HIGH-impact calls
 (split by variant type), the genes with a HIGH or MODERATE call (the callers that hit most)
@@ -148,20 +149,36 @@ model".
 Until a point of the scatter is clicked, the structure tile opens on the first gene of the table, in
 alphabetical order, which may be one without a model.
 
-**Locus.** A depth navigator in 1 Mb windows drives three tracks on one axis through the
-region links: the depth per interval, the calls over the gene lane and the annotated VCFs read
-from their files. It opens on a default region in the second megabase of chromosome 1, inside
-the 2 Mb under which the file track reads its VCFs. The four cards (calls by caller, depth per interval,
-allele fraction, depth at the call) take `follow_region_filter: true`, so they follow the
-region and recount it on every brush or locus entry. Filters: caller and variant type.
+**Locus.** A depth navigator in 1 Mb windows, one lane per sample, drives the genome browser
+under it, in one linked section held to one screen. It opens on a default region in the
+second megabase of chromosome 1, and its region reaches the cards through the region links. The four
+cards (calls by caller, depth per interval, allele fraction, depth at the call) take
+`follow_region_filter: true`, so they follow the region and recount it on every brush or locus
+entry. Filters: caller and variant type. The browser is the only one of the template: it shows
+every caller's VCF and the CRAMs (whose coverage is the depth at the region, so no
+per-interval depth track repeats it), follows the navigator's brush without filtering, and
+offers the circular view of the structural variants (`views: [circular]`).
+
+## Genome tracks
+
+The `tracks` collection lists the files the genome browser reads: every caller's VCF of every
+sample (the snpEff-annotated twin when the run has one, so calls take their impact colour) and
+the CRAM of every sample, built by `recipes/tracks.py` from sarek's own `csv/` manifests. The
+VCFs come first and the CRAMs last, so the browser opens on the light files. The reference
+sequence of a CRAM comes from the `{GENOME}` preset, so `GENOME` must name the build the run was
+aligned to. With `--var TRACKS_URI=<results folder>` the files are read in place; without it the
+VCFs and CRAMs that DATA_ROOT holds, with their index, are uploaded. Germline runs only: a somatic
+pair is not listed. The sample links carry a sample pick to the tracks and a track click back to
+the sample filter. The use cases are in `docs/design/jbrowse/sarek.md`.
 
 ## Routes and pruning
 
 | Route | What changes |
 |---|---|
-| No SnpEff (`--tools` without `snpeff`) | No Consequences, Genes or Protein tab, no shared-calls UpSet or annotated VCF track, no HIGH-impact row or impact highlight on the Overview. |
+| No SnpEff (`--tools` without `snpeff`) | No Consequences, Genes or Protein tab, no shared-calls UpSet, no HIGH-impact row or impact highlight on the Overview. |
 | VCFtools skipped | No FILTER partitions, quality sweep or FILTER filter on Call quality; the FILTER highlight is dropped. |
 | No X/Y sex check | No sex-check scatter or table on Coverage. |
+| No `TRACKS_URI` and no VCF or CRAM under DATA_ROOT | The genome browsers list the files a run publishes and load none. |
 | Somatic outputs | Loaded when present (ASCAT, CNVkit, MSIsensor-pro, NGSCheckMate), with no tiles yet. |
 
 The import re-packs the Overview grid after a drop, so a lone highlight takes the full row.

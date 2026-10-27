@@ -1,5 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { Badge, CloseButton, Group, Stack, Text, useMantineColorScheme } from '@mantine/core';
+import {
+  ActionIcon,
+  Badge,
+  CloseButton,
+  Group,
+  Stack,
+  Text,
+  Tooltip,
+  useMantineColorScheme,
+} from '@mantine/core';
+import { Icon } from '@iconify/react';
 import { AgGridReact } from 'ag-grid-react';
 import type {
   ColDef,
@@ -70,7 +80,14 @@ export interface DataGridBodyProps {
    *  leaves the trigger icon and Escape as the only ways out — neither of them
    *  visible from inside a table that covers most of the screen. */
   onClose?: () => void;
+  /** Whether the grid is shown enlarged (`DataGridModal`); with
+   *  `onToggleExpand`, a button in the header switches between the two. */
+  expanded?: boolean;
+  onToggleExpand?: () => void;
 }
+
+/** Grid heights in the popover and enlarged in `DataGridModal`. */
+const GRID_HEIGHT = { compact: 420, expanded: '75vh' };
 
 const TIER_COLUMN = '__tier';
 const ROW_ID_COLUMN = '__rowIndex';
@@ -100,9 +117,12 @@ const DataGridBody: React.FC<DataGridBodyProps> = ({
   tierAnnotation,
   extraBadge,
   selection,
-  height = 420,
+  height,
   onClose,
+  expanded = false,
+  onToggleExpand,
 }) => {
+  const gridHeight = height ?? (expanded ? GRID_HEIGHT.expanded : GRID_HEIGHT.compact);
   const { colorScheme } = useMantineColorScheme();
   const uiScale = useUiScale();
   // A fullscreen tile shows its own subtree only (see
@@ -292,6 +312,20 @@ const DataGridBody: React.FC<DataGridBodyProps> = ({
   const isDark = colorScheme === 'dark';
   const paginated = total > PAGINATION_THRESHOLD;
 
+  const expandButton = onToggleExpand ? (
+    <Tooltip label={expanded ? 'Shrink the table' : 'Enlarge the table'} withinPortal={false}>
+      <ActionIcon
+        size="sm"
+        variant="subtle"
+        color="gray"
+        aria-label={expanded ? 'Shrink the data table' : 'Enlarge the data table'}
+        onClick={onToggleExpand}
+      >
+        <Icon icon={expanded ? 'mdi:fullscreen-exit' : 'mdi:fullscreen'} width={16} height={16} />
+      </ActionIcon>
+    </Tooltip>
+  ) : null;
+
   const closeButton = onClose ? (
     <CloseButton size="sm" aria-label="Close the data table" onClick={onClose} />
   ) : null;
@@ -319,6 +353,7 @@ const DataGridBody: React.FC<DataGridBodyProps> = ({
             {paginated ? ' · paginated' : ''}
           </Badge>
           {extraBadge}
+          {expandButton}
           {closeButton}
         </Group>
       </Group>
@@ -334,8 +369,8 @@ const DataGridBody: React.FC<DataGridBodyProps> = ({
         style={
           {
             width: '100%',
-            height,
-            flex: height === '100%' ? 1 : undefined,
+            height: gridHeight,
+            flex: gridHeight === '100%' ? 1 : undefined,
             minHeight: 0,
             '--ag-font-size': `${Math.round(11 * uiScale)}px`,
             '--ag-row-height': `${Math.round(24 * uiScale)}px`,

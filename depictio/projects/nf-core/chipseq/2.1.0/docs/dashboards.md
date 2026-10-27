@@ -114,14 +114,14 @@ the promoter window shaded. The collapsed `Peak annotation` holds the HOMER tabl
 peak record card beside it: the card waits for a picked row. Filters: feature class and
 distance to the start site.
 
-**Locus.** Three collections on one genome axis. Strip: calls in the region (split by
-library), libraries per consensus interval, feature classes and nearest genes; the cards
-follow the region like the tracks. Then the navigator (`macs2/peak_genome_view`, one lane
-per library, `assembly: {GENOME}`, opening on the first contig the calls carry), a coverage
-track of the consensus intervals with one lane per consensus set, and the HOMER annotation
-coloured by feature class (it stands in for a gene lane, so the locus field takes
-coordinates, not gene symbols). Filters: significance, libraries per interval and feature
-class.
+**Locus.** The calls and the consensus intervals on one genome axis. Strip: calls in the
+region (split by library), libraries per consensus interval, feature classes and nearest
+genes; the cards follow the region like the lane below. Then the navigator
+(`macs2/peak_genome_view`, one lane per library, `assembly: {GENOME}`, opening on the first
+contig the calls carry) and a coverage track of the consensus intervals with one lane per
+consensus set (`views: [track]`). The locus field takes coordinates, not gene symbols. This
+template has no genome browser tile. Filters: significance, libraries per
+interval and feature class.
 
 **Consensus.** Pick one consensus set first: the libraries of two antibodies never meet.
 Strip: consensus intervals (the chromosomes with the most), libraries per interval (box
@@ -168,7 +168,7 @@ antibody reaches them, and the PCA, through a prefix (`wildcard`) link on the se
 set is named after the longest common prefix of its samples, so that link holds when the
 sample names start with the antibody. The MACS3 and HOMER peak tables are linked both ways
 on `peak_id`. On the Locus tab, two region links rename the navigator's chromosome and
-position filters onto the consensus and HOMER tracks.
+position filters onto the consensus intervals and the HOMER annotation cards.
 
 ## Controls
 

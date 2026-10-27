@@ -1513,7 +1513,7 @@ tabs:
     tag: at-pk-manhattan
     index: pk-manhattan
     title: Peak significance along the genome
-    description: Every broad call at its region centre; height is -log10 of the MACS2 q-value, colour is the library.
+    description: Every broad call at its region centre; height is -log10 of the MACS2 q-value, colour is the library. Click a peak, then Open in genome browser to read its signal and reads.
     layout: {x: 0, y: 0, w: 8, h: 6}
   # Log x: peak width is a long tail. On a linear axis the widest call sets the
   # range and the panel reads as a single spike.
@@ -1768,13 +1768,15 @@ tabs:
     title: Peak record
     description: The call picked in the table beside it, with the feature and gene HOMER assigned to it.
     layout: {x: 5, y: 0, w: 3, h: 5}
-# The locus section: three collections on one genomic region. The navigator (a
-# genome_view on macs2_broad_peaks) opens on its default_region and emits the
-# chromosome and position filters; the two region links in template.yaml
-# rename them onto the consensus intervals and the HOMER annotation, so every
-# track clamps to the same window. A tab of its own: a region filter narrows
-# every tile of its collection on the tab. The axis comes from GENOME (the
-# bundled gene lanes are hg38 and mm10 only, so the HOMER track stands in).
+# The locus section: the broad calls and the run's own files on one genomic
+# region. The navigator (a genome_view on macs2_broad_peaks) opens on its
+# default_region and emits the chromosome and position filters; the two region
+# links in template.yaml rename them onto the consensus intervals and the HOMER
+# annotation, so the cards clamp to the same window, and the genome browser under
+# the navigator follows its brush. A tab of its own: a region filter narrows
+# every tile of its collection on the tab. The axis comes from GENOME. This is
+# the only browser of the template: the Peaks Manhattan reaches it through the
+# Open in genome browser action.
 - title: Locus
   subtitle: What do the libraries call at one genomic region?
   tab_group: Peak calls
@@ -1797,14 +1799,18 @@ tabs:
   - name: Peaks on one axis
     icon: mdi:dna
     color: teal
-    description: The broad calls per library, then the tracks that follow their region
+    description: The lanes drive the browser below. A brush or a locus on the lanes moves it, and its view comes back on the lanes as a dashed band, in the colour of the two tiles' link tags.
+    # One screen: the lanes and the browser they drive, compact headers with
+    # each tile's kind, as the protein templates' linked views.
+    display: linked
   components:
   - component_type: text
     order: 1
     body: >
-      The broad calls of every library, the consensus intervals and the HOMER annotation
-      on one genome axis. The tab opens on a fixed default region set in the navigator;
-      type a locus in its header or brush its axis, and the tracks and cards follow.
+      The broad calls of every library on one genome axis, with the signal and reads of the
+      libraries in a genome browser under them. The tab opens on a fixed default region set
+      in the navigator; type a locus in its header or brush its axis, and the browser and
+      cards follow.
     tag: at-loc-intro
     index: loc-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1951,9 +1957,12 @@ tabs:
       score_col: neg_log10_qvalue
       feature_col: peak_id
       sample_col: sample
-      mark: bar
+      mark: rect
       facet_by_sample: true
       max_facets: 6
+      # Per lane: the OMNI libraries reach far higher q-values than the others,
+      # which a shared ruler would draw flat.
+      facet_y_scale: independent
       score_title: -log10(q-value)
       opacity: 0.8
       assembly: '{GENOME}'
@@ -1965,62 +1974,55 @@ tabs:
     tag: at-loc-navigator
     index: loc-navigator
     title: Broad calls per library
-    description: Every MACS2 broad call from start to end, one lane per library. The locus field and a brush on this axis move every track below.
+    description: Every MACS2 broad call from start to end, one lane per library. The locus field and a brush on this axis move the browser below.
     layout: {x: 0, y: 0, w: 8, h: 6}
-  # A genome_view rather than a coverage_track: the consensus table holds about
-  # a hundred thousand intervals, which GenomeSpy draws on the GPU and zooms to
-  # the followed region.
-  - component_type: advanced_viz
+  # No fixed location: the browser opens on the most significant peak, and a
+  # brush on the navigator moves it without filtering. No selection write-back
+  # here: a picked track would narrow the peaks to one library and reframe the
+  # view.
+  - component_type: jbrowse
     workflow_tag: atacseq
-    data_collection_tag: macs2_consensus_boolean
-    viz_kind: genome_view
-    config:
-      viz_kind: genome_view
-      chr_col: chr
-      pos_col: start
-      end_col: end
-      score_col: num_samples
-      feature_col: peak_id
-      mark: bar
-      score_title: Libraries calling it
-      opacity: 0.8
-      assembly: '{GENOME}'
-      region_filter_enabled: false
-      follow_region_filter: true
-      selection_enabled: true
-      selection_column: peak_id
+    data_collection_tag: tracks
     section: Peaks on one axis
-    tag: at-loc-consensus
-    index: loc-consensus
-    title: Consensus intervals and their support
-    description: The merged intervals on the same region, each as high as the number of libraries calling a peak on it.
-    layout: {x: 0, y: 6, w: 8, h: 3}
-  - component_type: advanced_viz
-    workflow_tag: atacseq
-    data_collection_tag: homer_annotated_peaks
-    viz_kind: genome_view
-    config:
-      viz_kind: genome_view
-      chr_col: chr
-      pos_col: start
-      end_col: end
-      score_col: peak_score
-      feature_col: gene_name
-      category_col: annotation_class
-      mark: bar
-      score_title: Peak score
-      opacity: 0.8
-      assembly: '{GENOME}'
-      region_filter_enabled: false
-      follow_region_filter: true
-      selection_enabled: true
-      selection_column: peak_id
-    section: Peaks on one axis
-    tag: at-loc-genes
-    index: loc-genes
-    title: Nearest gene of every call
-    description: The same calls as HOMER annotated them, coloured by feature class; hover a call for its nearest gene.
-    layout: {x: 0, y: 9, w: 8, h: 3}
+    initial_tracks: 6
+    max_tracks: 18
+    show_overview: false
+    # Two sources: the per-library peaks (one density row per library; next /
+    # previous stop once on peaks several libraries share) and the consensus
+    # intervals DESeq2 scores. The first frames the view on a filter.
+    locus_from:
+      - data_collection_tag: macs2_broad_peaks
+        name: Peaks
+        color: teal
+        chrom_column: chr
+        start_column: start
+        end_column: end
+        padding: 500
+        max_rows: 2000
+        sort_by: neg_log10_qvalue
+        descending: true
+        label_column: peak_id
+        sample_column: sample
+        columns: [fold_enrichment, width]
+      - data_collection_tag: macs2_consensus_boolean
+        name: Consensus
+        color: grape
+        chrom_column: chr
+        start_column: start
+        end_column: end
+        padding: 500
+        sort_by: num_samples
+        descending: true
+        label_column: peak_id
+        columns: [num_samples, consensus_set]
+    tag: at-loc-browser
+    index: loc-browser
+    # The lanes above already say where the browser is: its locus bar only
+    # costs height here, and the tile's menu brings it back.
+    show_header: false
+    title: Genome browser
+    description: The signal of every library in view on the region of the lanes above, replicate 1 of each group first.
+    layout: {x: 0, y: 6, w: 8, h: 7}
 # ============================================================================
 # Comparison
 # ============================================================================

@@ -435,3 +435,94 @@ On a running stack, with the template ingested from its megatest data:
 - each conditional route still renders without a broken highlight or a stray `{VAR}`;
 - a sample picked in the left panel moves every card of a child tab, and the Locus tab opens
   on data (non-zero region cards) on every scenario, a partial-genome run included.
+
+## 16. Genome views and tracks
+
+### Genome views
+
+Views on genomic coordinates overlap, so each family of tile has one role in a template. The
+same table is never drawn twice on a genomic axis.
+
+| Role | Tile | Does | Does not |
+| --- | --- | --- | --- |
+| Summary | Plotly (`manhattan`, `coverage_track`, `cnv_profile`, `sashimi`) | Shows a table over the whole genome | Zoom to a locus behind a toggle |
+| Navigator | GenomeSpy `genome_view` with `region_filter_enabled: true` | Brushes a region that filters the dashboard and moves the browser | Follow a brush, or redraw a table another tile draws |
+| Locus detail | `jbrowse` | Shows the run's own files at a locus | Narrow a table |
+
+- A `genome_view` is a navigator, at most one per tab. The one exception is a tile that stacks
+  per-sample lanes (`facet_by_sample: true`), which JBrowse does not draw in one view. A
+  `genome_view` with `region_filter_enabled: false` and no lanes only follows a brush: remove
+  it, since a `coverage_track` with `mark: rect` already follows the region.
+- One `jbrowse` per template (per dashboard family, not per tab), in full width in the tab that
+  works at a locus. A second browser in another tab repeats the first. The exception is a
+  template whose tabs show disjoint track sets (oncoanalyser, variantbenchmarking), and the
+  showcase.
+- A template with a `jbrowse` sets `views: [track]` on its `coverage_track`, and `views: [plotly]`
+  on its `cnv_profile` and `sashimi`: no Plotly to GenomeSpy toggle. A template with no browser
+  keeps the toggle.
+- The other tabs do not get their own browser. Their genomic tiles carry the "Open in genome
+  browser" action, which opens the browser's tab on the clicked point, the brushed region or
+  the visible window. It replaces the per-tab copies, so no intro says "see the browser below"
+  for a tile of another tab.
+- The browser follows the navigator's brush of its own tab and moves without filtering. A
+  navigator therefore sits above the browser, in the same tab.
+- A floating browser is not used in a template (see below).
+
+`test_shipped_dashboard_yamls.py` enforces the first four points (one browser per family, no
+follower `genome_view`, no table drawn twice on a genomic axis, no GenomeSpy toggle beside a
+browser).
+
+### Genome tracks
+
+When a pipeline publishes indexed BAM/CRAM, VCF, bigWig or peak files, a genome browser can sit
+beside the tiles that point at a locus. The per-workflow pages are in
+`docs/design/jbrowse/`; `docs/design/jbrowse-genome-tracks.md` is the reference.
+
+- A `recipes/tracks.py` builds the manifest from the sample sheet, not from a glob: one row per
+  sample and kind, light tracks first (bigWig, VCF, peaks), BAM and CRAM last, `order` assigned
+  after filtering. On a tables-only run it keeps every row; with `remote_base_uri` it keeps every
+  row and checks nothing.
+- The `tracks` collection is `genomic_tracks` with `assembly: "{GENOME}"`, `display_defaults` per
+  format, links both ways with the hub on the sample column, and a link from the collection the
+  browser follows (`locus_from`). A `TRACKS_URI` variable sets `remote_base_uri`; its description
+  stays generic, megatest URIs go in the workflow page.
+- The browser goes into an existing tab whose rows carry coordinates (the Locus or Variants
+  tab), never into a tab of its own. Its section's description (at most 90 characters) says what it adds to the tiles beside
+  it; the generic gestures belong to the Guide, not to the dashboard.
+- The section starts collapsed when the tab would pass its open-row budget (§11). Tiles are w8:
+  the browser's header needs about 600 px.
+- No `location` naming a contig, and no genome name in any text (§14, `forbidden_terms`).
+- The browser opens on the first call of `locus_from`, so declare a `sort_by` on it (a column of
+  that collection, checked against its recipe; `descending` is true by default) and a
+  `label_column` that names a call in the stepper: split reads for a fusion, QUAL for a variant,
+  the q-value or signal for a peak. A collection whose rows are not calls (one exon block per
+  row) gets no `sort_by` and `call_stepper: false`. A tile with no `locus_from` opens on the
+  first region that holds data.
+- `locus_from` is one source or a list. List several sources rather than several tiles when the
+  regions belong together (peaks, DE genes and variants of one question); the first is the
+  primary source: it frames the view, carries the `mate` and feeds "Use this region". Give each
+  a `name` when two share a collection tag, and `workflow_tag` when several workflows do.
+- Declare `sample_column` (and `run_column`) on a region collection that holds the rows of
+  several libraries or runs: the picker shows them, merged regions count `n_samples` and the
+  density can be split per sample. `columns` lists what the picker shows beyond the label (a
+  fold change, a q-value), `search_columns` what its search box matches; keep both short.
+- The next / previous buttons step by position over regions merged across samples, so no
+  template needs a ranked list to be navigable; `sort_by` still decides the first call and the
+  picker's default order. `show_density: false` only for a collection with a handful of rows.
+- A fusion or SV tab declares `locus_from.mate` (the columns of the second breakend) and
+  `views: [breakpoint]`; DNA alignments on an SV tab open as `read_pairs_display: arcs`. Add
+  `views: [circular]` only when the tracks collection has SV tracks, and set `circular_categories`
+  to their `category` when it is not `sv`.
+- RNA templates set `show_junctions: true` (sashimi arcs over the coverage). `color_by` names a
+  manifest column that has a `category_colors` entry (the condition).
+- `display:` carries a template's default display settings (e.g. `color_scheme: pairOrientation`
+  on an SV tab, `scale: log` on coverage); set only what differs from JBrowse's default. Never
+  repeat a top-level field in it (`track_labels`, `show_junctions`, `read_pairs_display`): a
+  different value is a validation error.
+- `color_scheme: tag` needs `color_tag`, and `color_tag` is refused with any other scheme.
+- "Use this region" (header button, rubberband menu) filters on the `locus_from` columns, so a
+  tile without `locus_from` has no button; no extra YAML enables it.
+- No floating browser (`placement: floating`) in a template, only in a showcase: it is too small
+  to read alignments, and enlarged it hides the tiles that drive it.
+- A recipe test builds a fake run tree and validates the substituted collection with
+  `DCGenomicTracksConfig`.

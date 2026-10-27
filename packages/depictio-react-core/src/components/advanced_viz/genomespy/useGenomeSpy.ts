@@ -22,7 +22,6 @@ import { useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 
 import type { EmbedResult } from '@genome-spy/core/types/embedApi.js';
-import type { IntervalSelection } from '@genome-spy/core/types/selectionTypes.js';
 import type { RootSpec } from '@genome-spy/core/spec/root.js';
 import { attachZoomGate } from '../../zoomGateDom';
 import { BRUSH_PARAM, DATASET_NAME, GENOME_SCALE_NAME } from './genomeSpySpec';
@@ -51,6 +50,12 @@ export interface UseGenomeSpyOptions {
   /** Called with the brushed genome interval (linearised coordinates), or
    *  `null` when the brush is cleared. */
   onBrush?: (interval: number[] | null) => void;
+  /** Called with the row under the pointer, and `null` when it leaves the
+   *  marks or the canvas. Best effort: it needs GenomeSpy's `mouseover`
+   *  event, and a build without it simply never calls this. */
+  onHover?: (datum: Readonly<Record<string, unknown>> | null) => void;
+  /** What a drag does, appended to the zoom hint ("drag to select"). */
+  dragHint?: string;
 }
 
 export interface UseGenomeSpyResult {
@@ -58,6 +63,10 @@ export interface UseGenomeSpyResult {
   api: EmbedResult | null;
   /** Message from a failed embed, or `null`. */
   error: string | null;
+  /** True when this embed replaced another and reopened on the view the old
+   *  one showed (see {@link readViewDomain}): the region in force needs no
+   *  zoom of its own on it. */
+  restoredView: boolean;
 }
 
 /**
@@ -106,16 +115,32 @@ export async function loadAssemblyContigs(assembly: string): Promise<Contig[] | 
 export function useGenomeSpy(
   container: RefObject<HTMLDivElement | null>,
   spec: RootSpec | null,
-  { backend, lazySources = false, onPick, onBrush }: UseGenomeSpyOptions,
+  {
+    backend,
+    lazySources = false,
+    onPick,
+    onBrush,
+    onHover,
+    dragHint = 'drag to select',
+  }: UseGenomeSpyOptions,
 ): UseGenomeSpyResult {
   const [api, setApi] = useState<EmbedResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [restoredView, setRestoredView] = useState(false);
+  // What the torn-down embed showed, so a rebuild (a mark, a lane or a theme
+  // changed) reopens there rather than on the whole genome.
+  const lastViewRef = useRef<unknown[] | null>(null);
   // Callbacks are read through refs so a new closure from the renderer's
   // render does not count as a reason to remount the embed.
   const onPickRef = useRef(onPick);
   const onBrushRef = useRef(onBrush);
   onPickRef.current = onPick;
   onBrushRef.current = onBrush;
+  const onHoverRef = useRef(onHover);
+  onHoverRef.current = onHover;
+  // Read when the embed (re)mounts: a drag mode change rebuilds the spec.
+  const dragHintRef = useRef(dragHint);
+  dragHintRef.current = dragHint;
 
   useEffect(() => {
     const el = container.current;
@@ -125,8 +150,11 @@ export function useGenomeSpy(
     const unsubscribes: Array<() => void> = [];
     // GenomeSpy zooms the genome axis on a plain wheel. The gate on its host
     // keeps that wheel from the canvas: the page scrolls, Ctrl / Cmd + wheel
-    // and a two-finger pinch zoom.
-    const detachZoomGate = attachZoomGate(el);
+    // and a two-finger pinch zoom. Its hint shows on this axis's first hover,
+    // long enough to read, with what a drag does.
+    const detachZoomGate = attachZoomGate(el, {
+      ownHint: { visibleMs: 6000, extra: dragHintRef.current },
+    });
 
     (async () => {
       const [{ embed }] = await Promise.all([
@@ -159,18 +187,50 @@ export function useGenomeSpy(
           onPickRef.current?.(event.hit.datum);
         }),
       );
+      // Hover is optional: the event name is not in every GenomeSpy build, so
+      // the subscription is guarded and a failure costs only the hover publish.
       try {
-        const brush = result.getParam<IntervalSelection>(BRUSH_PARAM);
-        unsubscribes.push(
-          brush.subscribe((value) => {
-            onBrushRef.current?.(value?.intervals?.x ?? null);
-          }),
-        );
+        const marks = result.views.root().marks as unknown as {
+          subscribe?: (
+            type: string,
+            cb: (event: { hit?: { datum?: Record<string, unknown> } | null }) => void,
+          ) => void;
+        };
+        if (typeof marks.subscribe === 'function') {
+          marks.subscribe('mouseover', (event) => {
+            onHoverRef.current?.(event?.hit?.datum ?? null);
+          });
+        }
+      } catch {
+        // No hover event in this build.
+      }
+      const onLeave = () => onHoverRef.current?.(null);
+      el.addEventListener('mouseleave', onLeave);
+      unsubscribes.push(() => el.removeEventListener('mouseleave', onLeave));
+      try {
+        // `commit`: once, when the drag is released. The default delivery
+        // fires on every pointer move, and each one became a dashboard filter:
+        // a refetch and a reframe per pixel, in the middle of the gesture.
+        const brush = result.params.getSelection(BRUSH_PARAM);
+        if (brush.type === 'interval') {
+          unsubscribes.push(
+            brush.subscribe(
+              (snapshot) => {
+                const x = snapshot.intervals.x;
+                onBrushRef.current?.(snapshot.active && x ? [x[0], x[1]] : null);
+              },
+              { delivery: 'commit' },
+            ),
+          );
+        }
       } catch {
         // The spec legitimately declares no brush param when the tile's
         // `region_filter_enabled` is off.
       }
+      const restored = await restoreViewDomain(result, lastViewRef.current);
+      if (cancelled) return;
       setError(null);
+      setRestoredView(restored);
       setApi(result);
     })().catch((err: unknown) => {
       if (!cancelled) setError(err instanceof Error ? err.message : String(err));
@@ -180,22 +240,97 @@ export function useGenomeSpy(
       cancelled = true;
       detachZoomGate();
       for (const off of unsubscribes) off();
-      if (live) finalizeGenomeSpy(live);
+      if (live) {
+        lastViewRef.current = readViewDomain(live) ?? lastViewRef.current;
+        finalizeGenomeSpy(live);
+      }
       setApi(null);
     };
   }, [container, spec, backend, lazySources]);
 
-  return { api, error };
+  return { api, error, restoredView };
 }
 
-/** Replace a dataset's rows in place, without a remount. */
+interface ViewScale {
+  getComplexDomain?: () => unknown;
+  isZoomable?: () => boolean;
+  zoomTo?: (domain: unknown, options?: { duration?: number }) => Promise<void>;
+}
+
+const genomeScale = (api: EmbedResult): ViewScale | undefined => {
+  try {
+    return (api as unknown as OverlayApi).getScaleResolutionByName?.(GENOME_SCALE_NAME) as
+      | ViewScale
+      | undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * The genome axis's current view, as loci (`{chrom, pos}` pairs) rather than
+ * linearised offsets, so it still means the same place on an embed whose
+ * contig list differs. `null` when the build does not say.
+ */
+export function readViewDomain(api: EmbedResult): unknown[] | null {
+  if (!isGenomeSpyLive(api)) return null;
+  try {
+    const domain = genomeScale(api)?.getComplexDomain?.();
+    return Array.isArray(domain) && domain.length >= 2 ? domain : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Put a view read by {@link readViewDomain} on `api`, at once. False when
+ * there is none, or when it does not fit this axis (a contig it lacks).
+ */
+export async function restoreViewDomain(api: EmbedResult, domain: unknown[] | null): Promise<boolean> {
+  if (!domain) return false;
+  const scale = genomeScale(api);
+  if (!scale?.zoomTo || !scale.isZoomable?.()) return false;
+  try {
+    await scale.zoomTo(domain, { duration: 0 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Clear the region brush drawn on the axis, through the selection's own
+ * `clear()`. A cleared brush may reach the subscription as `null`, which the
+ * tile reads as "no region".
+ */
+export function clearGenomeSpyBrush(api: EmbedResult): void {
+  if (!isGenomeSpyLive(api)) return;
+  try {
+    api.params.getSelection(BRUSH_PARAM).clear();
+  } catch {
+    // No brush param (region filter off) or no setter in this build.
+  }
+}
+
+/**
+ * Replace a dataset's rows in place, without a remount. GenomeSpy throws from
+ * inside the swap on a row it cannot place (a contig the axis does not name):
+ * caught here, so one tile keeps its previous rows rather than the error
+ * reaching the dashboard's error boundary. False when the rows were refused.
+ */
 export function setGenomeSpyRows(
   api: EmbedResult,
   rows: Record<string, unknown>[],
   dataset: string = DATASET_NAME,
-): void {
-  if (!isGenomeSpyLive(api)) return;
-  api.datasets.set(dataset, rows);
+): boolean {
+  if (!isGenomeSpyLive(api)) return false;
+  try {
+    api.datasets.set(dataset, rows);
+    return true;
+  } catch (err) {
+    console.warn(`genomespy: rows of ${dataset} refused`, err);
+    return false;
+  }
 }
 
 /**
@@ -237,4 +372,83 @@ export async function zoomToRegion(
     { chrom: region.chrom, pos: region.start },
     { chrom: region.chrom, pos: end },
   ]);
+}
+
+/** The slice of the embed API the overlays use, checked at runtime: the
+ *  installed `@genome-spy/core` types are not always available, and a build
+ *  may lack either call. */
+interface OverlayApi {
+  updateNamedData?: (name: string, rows: unknown[]) => void;
+  datasets?: { set?: (name: string, rows: unknown[]) => void };
+  getScaleResolutionByName?: (name: string) => unknown;
+}
+
+/**
+ * Replace the rows of one of the overlay layers' named data sources.
+ *
+ * Prefers `api.updateNamedData`, the call GenomeSpy defines for `data.name`
+ * sources, and falls back to `api.datasets.set` (the same swap the data lanes
+ * use). Returns which one took the rows, or `null` when the embed is finalized
+ * or has neither, which is the caller's cue for the DOM fallback. Nothing here
+ * is a brush, a filter or a zoom.
+ */
+export function pushOverlayRows(
+  api: EmbedResult,
+  name: string,
+  rows: unknown[],
+): 'named' | 'dataset' | null {
+  if (!isGenomeSpyLive(api)) return null;
+  const a = api as unknown as OverlayApi;
+  try {
+    if (typeof a.updateNamedData === 'function') {
+      a.updateNamedData(name, rows);
+      return 'named';
+    }
+    if (typeof a.datasets?.set === 'function') {
+      a.datasets.set(name, rows);
+      return 'dataset';
+    }
+  } catch {
+    // A source the spec does not declare (a file-backed tile): no overlay.
+  }
+  return null;
+}
+
+/** The linearised domain the genome axis shows now, or `null` when the build
+ *  does not expose it (the DOM fallback then draws nothing). */
+export function readScaleDomain(api: EmbedResult): [number, number] | null {
+  if (!isGenomeSpyLive(api)) return null;
+  try {
+    const res = (api as unknown as OverlayApi).getScaleResolutionByName?.(GENOME_SCALE_NAME) as
+      | {
+          getDomain?: () => unknown;
+          getScale?: () => { domain?: () => unknown } | undefined;
+        }
+      | undefined;
+    const raw = res?.getDomain?.() ?? res?.getScale?.()?.domain?.();
+    if (!Array.isArray(raw) || raw.length < 2) return null;
+    const lo = Number(raw[0]);
+    const hi = Number(raw[raw.length - 1]);
+    return Number.isFinite(lo) && Number.isFinite(hi) ? [lo, hi] : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Notify `cb` when the genome axis zooms or pans, where the build says so.
+ *  Returns the unsubscribe (a no-op when there is no such event). */
+export function onScaleDomainChange(api: EmbedResult, cb: () => void): () => void {
+  try {
+    const res = (api as unknown as OverlayApi).getScaleResolutionByName?.(GENOME_SCALE_NAME) as
+      | {
+          addEventListener?: (type: string, cb: () => void) => void;
+          removeEventListener?: (type: string, cb: () => void) => void;
+        }
+      | undefined;
+    if (typeof res?.addEventListener !== 'function') return () => {};
+    res.addEventListener('domain', cb);
+    return () => res.removeEventListener?.('domain', cb);
+  } catch {
+    return () => {};
+  }
 }

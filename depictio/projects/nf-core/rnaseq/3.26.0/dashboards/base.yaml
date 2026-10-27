@@ -1600,12 +1600,13 @@ tabs:
     workflow_tag: rnaseq
     data_collection_tag: tracks
     title: Genome browser
-    location: chr11:5,240,000-5,300,000
     max_tracks: 16
     initial_tracks: 6
     selection_enabled: true
     selection_column: sample
     show_overview: false
+    show_junctions: true
+    color_by: condition
     layout: {x: 0, y: 3, w: 8, h: 9}
   - component_type: figure
     tag: rna-tracks-fig-depth

@@ -159,3 +159,35 @@ export async function loadGenomeViewRows(
   });
   return { rows: res.rows, estimated: Boolean(res.sampling?.degraded) };
 }
+
+/**
+ * The rows a navigator draws while its fetch is narrowed to a window: the
+ * whole-genome read (sampled by the server) everywhere but the window's
+ * chromosome, and the window's own read, whole, on it. So a region never
+ * empties the rest of the axis, and the region keeps its full detail.
+ * Column-oriented; the columns are the window read's.
+ */
+export function mergeWindowRows(
+  background: Record<string, unknown[]>,
+  windowRows: Record<string, unknown[]>,
+  chrColumn: string,
+  chrom: string,
+  known?: ReadonlySet<string> | null,
+): Record<string, unknown[]> {
+  const columns = Object.keys(windowRows);
+  const chr = background[chrColumn];
+  if (!chr) return windowRows;
+  const keep: number[] = [];
+  for (let i = 0; i < chr.length; i++) {
+    const c = String(chr[i]);
+    // A contig the assembly does not name (alt, unplaced) has no place on the
+    // axis: GenomeSpy throws on it.
+    if (c !== chrom && (!known || known.has(c))) keep.push(i);
+  }
+  const out: Record<string, unknown[]> = {};
+  for (const c of columns) {
+    const bg = background[c];
+    out[c] = [...keep.map((i) => (bg ? bg[i] : null)), ...windowRows[c]];
+  }
+  return out;
+}

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Badge,
   Box,
@@ -28,7 +28,23 @@ import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 import { GenomeAnnotation, resolveAnnotation } from './genome_annotations';
+import { useHighlight, usePublishHighlight } from '../../highlight/bus';
+import { hoverInterval } from '../../highlight/genomicHover';
+import { useViewWindow } from '../../highlight/viewWindow';
+import {
+  hoveredColor,
+  hoverShape,
+  pickRange,
+  windowRange,
+  withCursorShape,
+  type RangeSource,
+} from './crossTileCursor';
 import { regionXRange, useFollowedRegion } from './genomicAxis';
+import {
+  readPlotXRange,
+  type GenomePoint,
+  type OpenLocusReader,
+} from '../jbrowse/locusForAction';
 import { usePersistedVizControl, useVizConfigWriter } from './usePersistedVizControl';
 import GenomeViewRenderer from './GenomeViewRenderer';
 import {
@@ -410,7 +426,7 @@ const CoverageTrackRenderer: React.FC<Props> = ({
   /** The followed region as an x-axis window, once the rows on screen are
    *  actually the ones that region names. A region on a contig this tile does
    *  not hold would clamp the axis onto an empty span. */
-  const regionRange = useMemo<[number, number] | null>(() => {
+  const filterRange = useMemo<[number, number] | null>(() => {
     if (!followedRegion) return null;
     const shown = selectedChromosomes.length
       ? selectedChromosomes
@@ -418,6 +434,40 @@ const CoverageTrackRenderer: React.FC<Props> = ({
     if (shown.length && !shown.includes(followedRegion.chrom)) return null;
     return regionXRange(followedRegion);
   }, [followedRegion, selectedChromosomes, data]);
+
+  // ---- Sharing a cursor and a window with a genome browser ----------------
+  // Same bus as the protein tiles, nothing here is a filter. The contigs the
+  // rows on screen hold are what an event's contig is matched against.
+  const ownIndex = String(metadata.index);
+  const shownChroms = useMemo<string[]>(
+    () =>
+      (selectedChromosomes.length ? selectedChromosomes : (data?.summary.chromosomes ?? [])).map(
+        String,
+      ),
+    [selectedChromosomes, data],
+  );
+  const shownKey = shownChroms.join('\u0000');
+  // The window a browser on the tab shows. When a region filter also names a
+  // range, the one that changed last wins: panning a browser is not undone by
+  // a region that was already there, and a region brushed afterwards is not
+  // undone by the browser. The window fits the axis only (no refetch), so the
+  // bins stay those of the last fetch. This tile only reads the window and
+  // never publishes one, so a browser that also follows the window (the
+  // `follow_window` genome tile) cannot start a loop through it.
+  const viewWindow = useViewWindow(ownIndex, activeView === 'track');
+  const windowRng = useMemo(
+    () => windowRange(viewWindow, shownChroms),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [viewWindow, shownKey],
+  );
+  const [rangeSource, setRangeSource] = useState<RangeSource>('filter');
+  useEffect(() => {
+    if (filterRange) setRangeSource('filter');
+  }, [filterRange]);
+  useEffect(() => {
+    if (windowRng) setRangeSource('window');
+  }, [windowRng]);
+  const regionRange = pickRange(rangeSource, filterRange, windowRng);
 
   /** Aggregate the long-format rows by position across samples. For each unique
    *  position we compute min/q1/median/q3/max so the renderer can draw a Tukey-
@@ -478,6 +528,8 @@ const CoverageTrackRenderer: React.FC<Props> = ({
     const positions = (data.rows[cols.position] as number[]) || [];
     const values = (data.rows[cols.value] as number[]) || [];
     const samplesArr = cols.sample ? ((data.rows[cols.sample] as string[]) || []) : null;
+    const chromsArr = (data.rows[cols.chromosome] as unknown[]) || [];
+    const endsArr = cols.end ? ((data.rows[cols.end] as unknown[]) || []) : null;
     const categoriesArr = cols.category
       ? ((data.rows[cols.category] as string[]) || [])
       : null;
@@ -613,7 +665,14 @@ const CoverageTrackRenderer: React.FC<Props> = ({
           // of samples is matched against. One trace is one sample, so a track
           // is assigned to a group whole. The hover reads `text`, not
           // `customdata`, so it renders exactly as it did before.
-          customdata: idxs.map(() => [sample]),
+          // Slots 1-3 are what a hover publishes to the genome browser: the
+          // contig, the bin or amplicon end and the region name.
+          customdata: idxs.map((i) => [
+            sample,
+            chromsArr[i] ?? null,
+            endsArr?.[i] ?? null,
+            categoriesArr?.[i] ?? null,
+          ]),
           hovertemplate: `%{text}<br>pos %{x:,}<br>cov %{y:,.2f}<extra></extra>`,
           xaxis: 'x',
           yaxis,
@@ -997,6 +1056,110 @@ const CoverageTrackRenderer: React.FC<Props> = ({
         : null,
     [groupedFigure, isDark, theme],
   );
+  // ---- Hover → the genome browser, and its cursor → a line here ---------------
+  // A hover goes out as a contig and a position: the bin's window in the
+  // genome view (a coverage bin has a start and no end of its own), or the
+  // amplicon's whole span with its region name when the rows carry an end. The
+  // band takes the hovered trace's colour. Slot 0 of `customdata` is the sample,
+  // slots 1-3 the contig, the end and the region name; a trace without them
+  // (the cohort median) falls back to the only contig on screen.
+  const publishHighlight = usePublishHighlight(ownIndex);
+  const binWidth = data?.summary.bin_width ?? null;
+  const onlyChrom = shownChroms.length === 1 ? shownChroms[0] : null;
+  const handleHover = useCallback(
+    (event: any) => {
+      const point = event?.points?.[0];
+      if (!point) return;
+      const cd = Array.isArray(point.customdata) ? point.customdata : [];
+      const start = Number(point.x);
+      const chrom = cd[1] != null ? String(cd[1]) : onlyChrom;
+      if (!chrom || !Number.isFinite(start)) return;
+      const rowEnd = cd[2] != null ? Number(cd[2]) : Number.NaN;
+      const end = Number.isFinite(rowEnd) && rowEnd >= start
+        ? rowEnd
+        : binWidth && binWidth > 1
+          ? start + binWidth - 1
+          : start;
+      publishHighlight({
+        entity: chrom,
+        start,
+        end,
+        positionColumn: config.position_col,
+        color: hoveredColor(point),
+        rowKeys: cd[3] != null ? [String(cd[3])] : undefined,
+        // The bin as an interval and as a row, for a table or a browser that
+        // reads its own columns from it.
+        genomic: { refName: chrom, start, end },
+        record: { [config.chromosome_col]: chrom, [config.position_col]: start },
+      });
+    },
+    [publishHighlight, onlyChrom, binWidth, config.position_col, config.chromosome_col],
+  );
+  const handleUnhover = useCallback(() => publishHighlight(null), [publishHighlight]);
+
+  // The last bin the reader clicked, as the hover reads it (the contig from
+  // `customdata`, else the only one on screen): where "Open in genome browser"
+  // goes. A ref, since a click changes nothing that is drawn.
+  const lastPointRef = useRef<GenomePoint | null>(null);
+  const handleClick = useCallback(
+    (event: any) => {
+      const point = event?.points?.[0];
+      if (!point) return;
+      const cd = Array.isArray(point.customdata) ? point.customdata : [];
+      const pos = Number(point.x);
+      const chrom = cd[1] != null ? String(cd[1]) : onlyChrom;
+      if (chrom && Number.isFinite(pos)) lastPointRef.current = { chrom, pos };
+    },
+    [onlyChrom],
+  );
+
+  // Only this shape changes on a hover elsewhere: the data, the traces and the
+  // fetch are untouched. The positions are the x axis' own, so every shown
+  // contig sits at offset 0.
+  const hovered = useHighlight(ownIndex, activeView === 'track');
+  const cursorColor = theme.colors[theme.primaryColor]?.[isDark ? 4 : 7] ?? theme.colors.blue[isDark ? 4 : 7];
+  // A browser's `genomic` interval, or a table row's `record` read through this
+  // tile's contig and position columns (a single-contig tile whose table has no
+  // contig column falls back to the contig on screen), becomes the span to
+  // mark, in the plot's single-contig-axis terms. A hover that names neither
+  // (the browser's plain cursor, a residue) stays as the event spells it.
+  const hoveredSpan = useMemo(() => {
+    if (!hovered) return null;
+    const record =
+      hovered.record && onlyChrom && hovered.record[config.chromosome_col] == null
+        ? { ...hovered.record, [config.chromosome_col]: onlyChrom }
+        : hovered.record;
+    const span = hoverInterval(
+      record === hovered.record ? hovered : { ...hovered, record },
+      config.chromosome_col,
+      config.position_col,
+      config.end_col,
+    );
+    if (!span) return hovered;
+    return {
+      ...hovered,
+      entity: span.refName,
+      entityAliases: span.aliases ?? hovered.entityAliases,
+      start: span.start,
+      end: span.end,
+    };
+  }, [hovered, onlyChrom, config.chromosome_col, config.position_col, config.end_col]);
+  const cursor = useMemo(
+    () => hoverShape(hoveredSpan, new Map(shownChroms.map((c) => [c, 0] as const)), cursorColor),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hoveredSpan, shownKey, cursorColor],
+  );
+  // `uirevision` is bumped whenever the figure itself changes (so a refetch or
+  // a followed range still resets the view, as before) and held across a
+  // cursor-only change, so a hover elsewhere never throws away the reader's zoom.
+  const revision = useRef(0);
+  const layoutRevision = useMemo(() => ++revision.current, [plotLayout]);
+  const shownLayout = useMemo(
+    () =>
+      plotLayout ? { ...withCursorShape(plotLayout, cursor), uirevision: layoutRevision } : null,
+    [plotLayout, cursor, layoutRevision],
+  );
+
   // Chart annotations, on a single coverage panel only: the per-sample view
   // and the gene strip each add a y axis under the same component. Coverage
   // bins are not rows, so marked points are stored as coordinates. Called
@@ -1008,8 +1171,18 @@ const CoverageTrackRenderer: React.FC<Props> = ({
     componentIndex: String(metadata.index),
     enabled: supportsAdvancedVizAnnotation(metadata) && singlePanel && activeView !== 'locus',
     data: plotData,
-    layout: plotLayout,
+    layout: shownLayout,
   });
+
+  // Where the tile is looking: the last click, and the axis' visible window
+  // when one contig is on screen (read off the graph div, so a zoom counts).
+  const openLocus = useCallback<OpenLocusReader>(() => {
+    const range = onlyChrom ? readPlotXRange(annotations.gdRef.current) : null;
+    return {
+      point: lastPointRef.current,
+      window: onlyChrom && range ? { chrom: onlyChrom, start: range[0], end: range[1] } : null,
+    };
+  }, [annotations.gdRef, onlyChrom]);
 
   /** The view switch itself. Drawn in the frame's header rather than inside the
    *  Settings popover: it picks which plot the tile is, not how that plot looks,
@@ -1072,8 +1245,8 @@ const CoverageTrackRenderer: React.FC<Props> = ({
             label={
               followedRegion
                 ? `Following the dashboard region ${followedRegion.chrom}${
-                    regionRange
-                      ? `:${Math.round(regionRange[0])}-${Math.round(regionRange[1])}`
+                    filterRange
+                      ? `:${Math.round(filterRange[0])}-${Math.round(filterRange[1])}`
                       : ''
                   }`
                 : ''
@@ -1114,7 +1287,7 @@ const CoverageTrackRenderer: React.FC<Props> = ({
       yScale,
       smoothingWindow,
       followedRegion,
-      regionRange,
+      filterRange,
       selectedChromosomes,
       selectedSamples,
       data,
@@ -1184,6 +1357,7 @@ const CoverageTrackRenderer: React.FC<Props> = ({
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Coverage track'}
+      openLocus={openLocus}
       subtitle={(metadata as { description?: string; subtitle?: string }).description}
       primaryControls={primaryControls}
       controls={controls}
@@ -1201,7 +1375,11 @@ const CoverageTrackRenderer: React.FC<Props> = ({
             useResizeHandler
             style={{ width: '100%', height: '100%' }}
             config={{ displaylogo: false, responsive: true } as any}
-            {...annotations.plotProps()}
+            {...annotations.plotProps({
+              onHover: handleHover,
+              onUnhover: handleUnhover,
+              onClick: handleClick,
+            })}
           />
           {annotations.toolbar}
         </>

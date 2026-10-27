@@ -563,6 +563,19 @@ function buildMap(
   };
 }
 
+/** A stored list of `locus_from` sources. */
+type StoredLocusList = Extract<NonNullable<StoredMetadata['locus_from']>, unknown[]>;
+
+/** The `locus_from` fields the builder form edits (one source). */
+interface LocusFromForm {
+  data_collection_tag?: string;
+  chrom_column?: string;
+  start_column?: string;
+  end_column?: string | null;
+  padding?: number;
+  max_rows?: number;
+}
+
 function clampInt(v: unknown, min: number, max: number, fallback: number): number {
   const n = typeof v === 'number' ? v : Number(v);
   if (v == null || v === '' || !Number.isFinite(n)) return fallback;
@@ -582,14 +595,7 @@ function buildJBrowse(
     title?: string;
     assembly?: string | null;
     location?: string | null;
-    locus_from?: {
-      data_collection_tag?: string;
-      chrom_column?: string;
-      start_column?: string;
-      end_column?: string | null;
-      padding?: number;
-      max_rows?: number;
-    } | null;
+    locus_from?: LocusFromForm | LocusFromForm[] | null;
     track_mode?: string;
     max_tracks?: number;
     initial_tracks?: number;
@@ -609,10 +615,16 @@ function buildJBrowse(
   }>(state.config);
   // `locus_from` requires the DC and both coordinate columns (JBrowseLocusSource
   // forbids partial objects), so a half-filled section is dropped, not saved.
-  const lf = c.locus_from;
-  const locusFrom =
+  // A list of sources: the form edits the first, the others are kept as stored.
+  const lfRaw = c.locus_from;
+  const lf: LocusFromForm | null | undefined = Array.isArray(lfRaw) ? lfRaw[0] : lfRaw;
+  // Stored entries the form never saw went through the model already.
+  const lfRest = (Array.isArray(lfRaw) ? lfRaw.slice(1) : []) as StoredLocusList;
+  const primaryLocus =
     lf && lf.data_collection_tag && lf.chrom_column && lf.start_column
       ? {
+          // Keep what the form does not edit (sort_by, label_column, mate...).
+          ...lf,
           data_collection_tag: lf.data_collection_tag,
           chrom_column: lf.chrom_column,
           start_column: lf.start_column,
@@ -621,6 +633,11 @@ function buildJBrowse(
           max_rows: clampInt(lf.max_rows, 1, Number.MAX_SAFE_INTEGER, 20),
         }
       : null;
+  const locusFrom = lfRest.length
+    ? primaryLocus
+      ? [primaryLocus, ...lfRest]
+      : lfRest
+    : primaryLocus;
   const overrides = c.config_overrides;
   const fetchLimit =
     typeof c.fetch_size_limit_mb === 'number' ? c.fetch_size_limit_mb : Number.NaN;

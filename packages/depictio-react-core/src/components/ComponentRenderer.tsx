@@ -42,6 +42,7 @@ import MapDataButton from './map/MapDataButton';
 import { SectionColorContext } from './SectionIcon';
 import {
   cardScopedFilters,
+  clearedSelectionFilters,
   isMapSelectionEnabled,
   isSourceFilterActive,
   ownSelection,
@@ -652,16 +653,25 @@ const JBrowseBlock: React.FC<{
   // keys its node so ComponentChrome's positional re-keying never remounts it.
   const [toolbarNode, setToolbarNode] = React.useState<React.ReactNode>(null);
   const selectionEnabled = Boolean(metadata.selection_enabled) && !!onFilterChange;
+  // The tile's own region ("Use this region") is a selection too: Reset drops
+  // it with the track pick, through the same scheme every selection tile uses.
+  const ownRegion = ownSelection(filters, metadata.index);
   const onResetSelection =
-    selectionEnabled && onFilterChange
-      ? () =>
-          onFilterChange({
-            index: metadata.index,
-            value: [],
-            source: 'jbrowse_selection',
-          })
+    (selectionEnabled || ownRegion.filters.length > 0) && onFilterChange
+      ? () => {
+          if (selectionEnabled) {
+            onFilterChange({
+              index: metadata.index,
+              value: [],
+              source: 'jbrowse_selection',
+            });
+          }
+          for (const cleared of clearedSelectionFilters(ownRegion.filters)) onFilterChange(cleared);
+        }
       : undefined;
-  const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'jbrowse_selection');
+  const sourceFilterActive =
+    isSourceFilterActive(filters, metadata.index, 'jbrowse_selection') ||
+    ownRegion.filters.length > 0;
   const jbrowseExtras = (
     <>
       {extraActions}

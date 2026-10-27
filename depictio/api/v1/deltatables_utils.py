@@ -116,6 +116,9 @@ def _generate_filter_hash(metadata: list[dict] | None) -> str:
 
         # Create stable representation
         filter_dict = {"col": column_name, "type": component_type, "val": value}
+        # A region pair compares chromosome names loosely (see GENOME_SELECTION_SOURCE).
+        if component.get("source") == GENOME_SELECTION_SOURCE:
+            filter_dict["src"] = GENOME_SELECTION_SOURCE
         filter_repr.append(filter_dict)
 
     # Sort for stability
@@ -127,6 +130,11 @@ def _generate_filter_hash(metadata: list[dict] | None) -> str:
 
     return filter_hash
 
+
+# Filter source of a genome region pair (``genomeRegionFilters`` in selection.ts).
+# Its chromosome half matches names with and without the ``chr`` prefix: the region
+# comes from an assembly or another collection that may spell them differently.
+GENOME_SELECTION_SOURCE = "genome_selection"
 
 # Synthetic ``interactive_component_type`` for "a cross-DC link resolved to no
 # target values". Not a user-facing component: it exists so an empty resolution
@@ -426,11 +434,21 @@ def process_metadata_and_filter(
             filter_expr = component.get("filter_expr")
             slider_mode = component.get("slider_mode")
 
+        value = component["value"]
+        if (
+            component.get("source") == GENOME_SELECTION_SOURCE
+            and interactive_component_type in ("Select", "MultiSelect")
+            and value
+        ):
+            from depictio.api.v1.services.jbrowse.regions import chrom_name_variants
+
+            value = chrom_name_variants(value)
+
         add_filter(
             filter_list,
             interactive_component_type=interactive_component_type,
             column_name=column_name,
-            value=component["value"],
+            value=value,
             dtype=schema.get(column_name) if schema else None,
             slider_mode=slider_mode,
         )
@@ -1317,6 +1335,8 @@ def clean_filter_payload(filters: list[dict] | None) -> list[dict]:
         filter_expr = f.get("filter_expr") or meta.get("filter_expr")
         if filter_expr:
             entry["filter_expr"] = filter_expr
+        if (f.get("source") or meta.get("source")) == GENOME_SELECTION_SOURCE:
+            entry["source"] = GENOME_SELECTION_SOURCE
         out.append(entry)
     return out
 

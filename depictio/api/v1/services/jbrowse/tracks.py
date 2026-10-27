@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlsplit
 
 import polars as pl
 from bson import ObjectId
@@ -41,8 +43,6 @@ def s3_base_folder(dc_id: str, props: DCGenomicTracksConfig) -> str:
         # Read-in-place folders are someone else's storage: never Depictio's own
         # bucket, which would let a DC owner read any key with the server's keys.
         if props.remote_base_uri.startswith(f"s3://{settings.s3.bucket}/"):
-            from depictio.api.v1.services.remote_read import RemoteReadError
-
             raise RemoteReadError(403, "remote_base_uri cannot point into Depictio's bucket")
         return props.remote_base_uri
     default = default_s3_base_folder(dc_id)
@@ -53,6 +53,48 @@ def s3_base_folder(dc_id: str, props: DCGenomicTracksConfig) -> str:
     if bucket == settings.s3.bucket and not custom.startswith(default):
         raise RemoteReadError(403, f"s3_base_folder in Depictio's bucket must be inside {default}")
     return custom
+
+
+LOCAL_ABSOLUTE = re.compile(r"^(?:/|[A-Za-z]:[\\/]|\\\\)")
+
+
+def _basename(path: str) -> str:
+    return path.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+
+
+def display_uri(uri: str | None, storage: str = "remote", anonymous: bool = False) -> str | None:
+    """``uri`` as the client may be shown it: the one sanitizer for display fields.
+
+    Never carries userinfo, query or fragment (a presigned URL's signature, a
+    ``user:pw@`` host). An ingested file (``storage="depictio"``) shows its file
+    name, never an internal bucket key, and so does an absolute local path. A
+    remote URI keeps its host and path, except for an anonymous viewer, who sees
+    the file name only. A relative path is shown as is. Display fields only: the
+    locations JBrowse fetches are built elsewhere and are not touched.
+    """
+    text = (uri or "").strip()
+    if not text:
+        return None
+    if "://" in text:
+        try:
+            parts = urlsplit(text)
+        except ValueError:  # e.g. an unclosed IPv6 bracket
+            return _basename(text.split("?", 1)[0].split("#", 1)[0]) or None
+        netloc = parts.netloc.rsplit("@", 1)[-1]
+        if storage == "depictio" or anonymous:
+            return _basename(parts.path) or netloc or None
+        return f"{parts.scheme}://{netloc}{parts.path}"
+    bare = text.split("#", 1)[0].split("?", 1)[0]
+    if LOCAL_ABSOLUTE.match(bare):
+        return _basename(bare) or None
+    return bare or None
+
+
+def display_base_uri(uri: str | None, anonymous: bool = False) -> str | None:
+    """A ``remote_base_uri`` as host + prefix; nothing for an anonymous viewer."""
+    if anonymous or not uri or "://" not in uri:
+        return None
+    return display_uri(uri, "remote")
 
 
 def track_key(uri: str) -> str:
@@ -145,6 +187,18 @@ class TracksDC:
     props: DCGenomicTracksConfig
     delta_location: str | None
 
+    def init_data(self) -> dict[str, dict]:
+        """The ``init_data`` argument of ``load_deltatable_lite`` for this DC."""
+        if not self.delta_location:
+            return {}
+        return {
+            self.dc_id: {
+                "delta_location": self.delta_location,
+                "dc_type": "genomic_tracks",
+                "size_bytes": 0,
+            }
+        }
+
 
 def find_tracks_dc(dc_id: str) -> TracksDC | None:
     from depictio.api.v1.db import deltatables_collection, projects_collection
@@ -198,17 +252,10 @@ def tracks_by_key(tdc: TracksDC, delta_version: int | None = None) -> dict[str, 
 
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
-    init_data: dict[str, dict] = {}
-    if tdc.delta_location:
-        init_data[tdc.dc_id] = {
-            "delta_location": tdc.delta_location,
-            "dc_type": "genomic_tracks",
-            "size_bytes": 0,
-        }
     df = load_deltatable_lite(
         workflow_id=ObjectId(tdc.wf_id),
         data_collection_id=tdc.dc_id,
-        init_data=init_data,
+        init_data=tdc.init_data(),
         delta_version=delta_version,
     )
     mapping = {t.key: t for t in manifest_rows(df, tdc.props)}

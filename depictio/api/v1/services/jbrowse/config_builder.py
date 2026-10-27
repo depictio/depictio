@@ -12,6 +12,7 @@ Merge order, lowest to highest precedence:
 from __future__ import annotations
 
 import copy
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -21,7 +22,7 @@ from depictio.api.v1.services.jbrowse.assemblies import (
     preset_annotation_track,
     preset_assembly_config,
 )
-from depictio.api.v1.services.jbrowse.tracks import TrackRow
+from depictio.api.v1.services.jbrowse.tracks import LOCAL_ABSOLUTE, TrackRow, display_uri
 from depictio.models.models.data_collections_types.genomic_tracks import CustomAssembly
 
 # role → URL for one track (data / index)
@@ -48,6 +49,9 @@ FEATURE_COLOR_JEXL = (
     "? 'rgb(' + get(feature,'itemRgb') + ')' "
     ": (get(feature,'color') || '{fallback}')"
 )
+
+# JBrowse's own colour for a feature (CanvasFeatureRenderer ``color1`` default).
+DEFAULT_FEATURE_COLOR = "goldenrod"
 
 BUILTIN_PRESETS: dict[str, dict[str, Any]] = {
     "sv-calls": {
@@ -169,6 +173,61 @@ def deep_merge(base: Any, override: Any) -> Any:
     return copy.deepcopy(override)
 
 
+def _jexl_quote(value: str) -> str:
+    return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+
+def _concrete_colors(colors: dict[str, Any]) -> dict[str, str]:
+    """The ``category_colors`` entries that are a colour, in order.
+
+    The wildcard (``*``) and the ``auto`` / ``auto:<column>`` sentinels are not
+    colours: a sentinel is turned into palette colours when a dashboard is
+    imported, and a feature matching no entry keeps the wildcard's colour.
+    """
+    return {
+        str(k): v.strip()
+        for k, v in colors.items()
+        if isinstance(v, str) and v.strip() and v.strip() != "auto" and not v.startswith("auto:")
+    }
+
+
+def variant_color_jexl(
+    spec: dict[str, Any] | None, category_colors: dict[str, dict[str, str]] | None
+) -> str | None:
+    """Jexl for the colour of a variant, from ``category_colors`` and an INFO field.
+
+    ``spec`` is the component's ``variant_color_by`` (``column``, ``info_field``).
+    The colours of ``column`` are tested in order against the whole INFO value
+    (``ANN`` is an array: its entries are joined with ``|``) and the first
+    category found in it wins, else the ``*`` colour, else JBrowse's default.
+    A substring test, not a parse of one field: a variant can carry several
+    annotations and the dashboard's category (e.g. viralrecon's ``EFFECT``) is
+    not always the first one, so a variant with an annotation of two
+    categories takes the one listed first. Returns None when there is no
+    colour to apply.
+    """
+    if not spec or not spec.get("column"):
+        return None
+    colors = (category_colors or {}).get(spec["column"])
+    if not isinstance(colors, dict):
+        return None
+    fallback = _concrete_colors({"*": colors.get("*")}).get("*", DEFAULT_FEATURE_COLOR)
+    by_category = {k: v for k, v in _concrete_colors(colors).items() if k != "*"}
+    if not by_category:
+        return None
+    info_field = spec.get("info_field") or "ANN"
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", info_field):
+        raise ValueError(f"Invalid INFO field name '{info_field}'")
+    # ``join`` drops a missing field and flattens an array into one string.
+    value = f"join('|', get(feature,'INFO').{info_field})"
+    expression = _jexl_quote(fallback)
+    for category, color in reversed(list(by_category.items())):
+        expression = (
+            f"includes({value}, {_jexl_quote(category)}) ? {_jexl_quote(color)} : {expression}"
+        )
+    return "jexl:" + expression
+
+
 def _loc(uri: str) -> dict[str, str]:
     return {"uri": uri, "locationType": "UriLocation"}
 
@@ -252,7 +311,9 @@ def _fill_locations(node: Any, track: TrackRow, url_for: UrlFor) -> Any:
     return node
 
 
-def _color_displays(track_type: str, color: str | None) -> list[dict[str, Any]]:
+def _color_displays(
+    track_type: str, color: str | None, variant_color: str | None = None
+) -> list[dict[str, Any]]:
     if track_type == "QuantitativeTrack":
         if not color:
             return []
@@ -276,6 +337,13 @@ def _color_displays(track_type: str, color: str | None) -> list[dict[str, Any]]:
                 },
             }
         ]
+    if track_type == "VariantTrack" and variant_color:
+        return [
+            {
+                "type": "LinearVariantDisplay",
+                "renderer": {"type": "CanvasFeatureRenderer", "color1": variant_color},
+            }
+        ]
     return []
 
 
@@ -285,6 +353,32 @@ _DISPLAY_FOR_TRACK = {
     "VariantTrack": "LinearVariantDisplay",
     "AlignmentsTrack": "LinearAlignmentsDisplay",
 }
+
+
+def _alignment_displays(show_junctions: bool) -> list[dict[str, Any]]:
+    """Display settings of an alignments track from the component's flags.
+
+    ``show_junctions`` turns on the sashimi arcs: ``LinearAlignmentsDisplay``
+    nests a ``LinearSNPCoverageDisplay`` (``snpCoverageDisplay``), and the arcs
+    are the ``showArcs`` setting of that display's ``SNPCoverageRenderer``.
+
+    The initial lower panel (pileup, read arcs, read cloud) is *not* a config
+    setting in JBrowse 4.3: ``lowerPanelType`` is display state, so the viewer
+    passes it when it opens the track (``showTrack``'s display snapshot).
+    """
+    if not show_junctions:
+        return []
+    return [
+        {
+            "type": "LinearAlignmentsDisplay",
+            "snpCoverageDisplay": {
+                "type": "LinearSNPCoverageDisplay",
+                "renderers": {
+                    "SNPCoverageRenderer": {"type": "SNPCoverageRenderer", "showArcs": True}
+                },
+            },
+        }
+    ]
 
 
 _ALIGNMENT_SUBDISPLAYS = {
@@ -328,14 +422,41 @@ def _finalize_displays(conf: dict[str, Any]) -> dict[str, Any]:
     return conf
 
 
+def _display_metadata(track: TrackRow, display: Callable[[str], str | None]) -> dict[str, Any]:
+    """The manifest row with its URI and absolute-path cells sanitized."""
+    uris = {track.uri, track.index_uri}
+    out: dict[str, Any] = {}
+    for key, value in track.row.items():
+        if value is None:
+            continue
+        if isinstance(value, str) and (
+            "://" in value or value.strip() in uris or LOCAL_ABSOLUTE.match(value.strip())
+        ):
+            out[key] = display(value.strip()) or ""
+        else:
+            out[key] = value
+    return out
+
+
 def build_track_config(
     track: TrackRow,
     assembly_name: str,
     url_for: UrlFor,
     format_overrides: list[dict[str, Any]],
     fetch_size_limit: int | None = None,
+    variant_color: str | None = None,
+    display: Callable[[str], str | None] | None = None,
+    show_junctions: bool = False,
 ) -> dict[str, Any]:
-    """One JBrowse track configuration for a manifest row."""
+    """One JBrowse track configuration for a manifest row.
+
+    ``variant_color`` (see ``variant_color_jexl``) colours a variant track's
+    features; the format layers merge into that display, so a height set there
+    stays. ``display`` maps a URI cell of the row to what the client may be
+    shown (default: ``display_uri``); only ``metadata`` goes through it, the
+    adapter locations keep the URLs JBrowse fetches. ``show_junctions`` draws
+    splice-junction arcs on an alignments track (see ``_alignment_displays``).
+    """
     track_type, adapter = _base_track(track, assembly_name)
     conf: dict[str, Any] = {
         "type": track_type,
@@ -344,9 +465,11 @@ def build_track_config(
         "assemblyNames": [assembly_name],
         "category": [track.category] if track.category else [track.fmt],
         "adapter": _fill_locations(adapter, track, url_for),
-        "metadata": {k: v for k, v in track.row.items() if v is not None},
+        "metadata": _display_metadata(track, display or display_uri),
     }
-    colored = _color_displays(track_type, track.color)
+    colored = _color_displays(track_type, track.color, variant_color)
+    if track_type == "AlignmentsTrack":
+        colored = _alignment_displays(show_junctions)
     if colored:
         conf["displays"] = colored
     for override in format_overrides:

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
 
@@ -25,9 +26,11 @@ from depictio.api.v1.services import remote_read
 from depictio.api.v1.services.jbrowse import signing, ucsc
 from depictio.api.v1.services.jbrowse.assemblies import (
     PRESET_ROLES,
+    SEARCH_QUERY_PATTERN,
     get_assembly_preset,
     list_assembly_presets,
     preset_file_uri,
+    search_genes,
 )
 from depictio.api.v1.services.jbrowse.config_builder import list_builtin_presets
 from depictio.api.v1.services.jbrowse.tracks import (
@@ -262,6 +265,33 @@ def _serve_bytes(request: Request, data: bytes, uri: str) -> Response:
         status_code=206,
         headers={**base_headers, "Content-Range": f"bytes {rng.start}-{rng.end}/{size}"},
     )
+
+
+# Declared before ``/preset/{name}/{role}``, which would otherwise take "search"
+# for a file role.
+@jbrowse_endpoints_router.get("/preset/{name}/search")
+def search_preset_genes(
+    name: str,
+    q: Annotated[str, Query(min_length=1, max_length=64, pattern=SEARCH_QUERY_PATTERN)],
+    limit: int = Query(10, ge=1, le=50),
+) -> list[dict[str, str]]:
+    """Genes and features of a built-in assembly matching ``q``: ``[{label, locus}]``.
+
+    Proxies the UCSC search API (the browser reads UCSC through this API, not
+    directly), MANE and HGNC matches first. Public, like the preset files: the
+    query only ever reaches UCSC's own search for that assembly's genome.
+    """
+    preset = get_assembly_preset(name)
+    if preset is None:
+        raise HTTPException(status_code=404, detail="Unknown assembly preset")
+    genome = ucsc.ucsc_genome(preset.name)
+    if genome is None or not settings.jbrowse.ucsc_tracks_enabled:
+        return []
+    try:
+        return search_genes(genome, q, limit, settings.jbrowse.ucsc_api_url)
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.info(f"jbrowse gene search failed for {genome}: {exc}")
+        raise HTTPException(status_code=502, detail="Gene search is unavailable") from exc
 
 
 @jbrowse_endpoints_router.api_route("/preset/{name}/{role}", methods=["GET", "HEAD"])

@@ -155,9 +155,9 @@ A JBrowse genome browser over the `tracks` collection, a manifest the project-lo
 sample the forward and reverse strand bigWig coverage and the duplicate-marked STAR BAM under
 `star_salmon/` (24 rows on the megatest), coloured by condition with the reverse strand a
 lighter shade. The megatest was aligned to Ensembl GRCh37, whose bare chromosome names
-(`1`, `2`, ...) the `hg19` preset maps through UCSC's chromAlias. The browser opens on the
-beta-globin cluster (`chr11:5,240,000-5,300,000`), where HBG1, HBG2 and HBE1 reach thousands
-of TPM in K562 and stay near zero in the three other lines; the first six rows are the
+(`1`, `2`, ...) the `hg19` preset maps through UCSC's chromAlias. The browser has no fixed
+location: it opens on the first region that holds data in its first tracks, where the
+coverage is visible, and junction arcs (sashimi) draw over the coverage. The first six rows are the
 replicate-1 coverage pairs of GM12878, H1 and K562.
 
 The samplesheet links to the manifest both ways on `sample`: the sample scope of the left

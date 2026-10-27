@@ -60,7 +60,8 @@ export interface JBrowseConfig {
   title?: string;
   assembly?: string | null;
   location?: string | null;
-  locus_from?: JBrowseLocusFrom | null;
+  /** One source, or a list whose first entry the form edits (the others are kept). */
+  locus_from?: JBrowseLocusFrom | JBrowseLocusFrom[] | null;
   track_mode?: 'filtered' | 'all';
   max_tracks?: number;
   initial_tracks?: number;
@@ -229,7 +230,11 @@ const JBrowseBuilder: React.FC = () => {
   );
 
   // ---- locus from filtered rows -----------------------------------------
-  const locusFrom = config.locus_from ?? null;
+  // A list of sources (YAML only): the form edits the primary one and keeps the rest.
+  const locusRaw = config.locus_from;
+  const locusFrom: JBrowseLocusFrom | null =
+    (Array.isArray(locusRaw) ? locusRaw[0] : locusRaw) ?? null;
+  const locusRest: JBrowseLocusFrom[] = Array.isArray(locusRaw) ? locusRaw.slice(1) : [];
   const [projectDcs, setProjectDcs] = useState<Array<{ id: string; tag: string }>>([]);
   const [locusCols, setLocusCols] = useState<string[]>([]);
 
@@ -274,8 +279,10 @@ const JBrowseBuilder: React.FC = () => {
     };
   }, [locusDcId]);
 
-  const patchLocus = (patch: Partial<JBrowseLocusFrom>) =>
-    patchConfig({ locus_from: { ...LOCUS_DEFAULTS, ...(locusFrom ?? {}), ...patch } });
+  const patchLocus = (patch: Partial<JBrowseLocusFrom>) => {
+    const primary = { ...LOCUS_DEFAULTS, ...(locusFrom ?? {}), ...patch };
+    patchConfig({ locus_from: locusRest.length ? [primary, ...locusRest] : primary });
+  };
 
   // ---- options -------------------------------------------------------------
   const assemblyOptions = useMemo(() => {
@@ -520,7 +527,13 @@ const JBrowseBuilder: React.FC = () => {
                 checked={!!locusFrom}
                 onChange={(e) =>
                   patchConfig({
-                    locus_from: e.currentTarget.checked ? { ...LOCUS_DEFAULTS } : null,
+                    locus_from: e.currentTarget.checked
+                      ? locusRest.length
+                        ? [{ ...LOCUS_DEFAULTS }, ...locusRest]
+                        : { ...LOCUS_DEFAULTS }
+                      : locusRest.length
+                        ? locusRest
+                        : null,
                   })
                 }
               />

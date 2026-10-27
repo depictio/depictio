@@ -126,14 +126,12 @@ the promoter window shaded. The collapsed `Peak annotation` holds the HOMER tabl
 peak record card beside it: the card waits for a picked row. Filters: feature class and
 distance to the start site.
 
-**Locus.** Three collections on one genome axis. Strip: calls in the region (split by
+**Locus.** The broad calls on one genome axis. Strip: calls in the region (split by
 library), libraries per consensus interval, feature classes and nearest genes; the cards
-follow the region like the tracks. Then the navigator, a `genome_view` on the broad calls
-with one lane per library and `assembly: {GENOME}`, opening on the first chromosome the
-calls carry, and two follower tracks: the consensus intervals as high as their support,
-and the HOMER annotation coloured by feature class (it stands in for a gene lane, which is
-bundled for hg38 and mm10 only). Filters: significance, libraries per interval and feature
-class.
+follow the region. Then the navigator, a `genome_view` on the broad calls with one lane per
+library and `assembly: {GENOME}`, opening on the first chromosome the calls carry. This
+template has no genome browser tile. Filters: significance, libraries per interval and
+feature class.
 
 **Consensus.** Strip: consensus intervals (by chromosome), libraries per interval (box
 plot), peaks merged and the support of the strongest intervals (a ring). Then the UpSet of
@@ -183,7 +181,7 @@ sample filters do not narrow them.
 The link from the broad calls to the HOMER annotation on `peak_id` carries range filters as
 a span, so the q-value and width sliders and a lasso on the Peaks tab narrow the HOMER tiles
 too. On the Locus tab, two region links rename the navigator's chromosome and position
-filters onto the consensus and HOMER tracks.
+filters onto the consensus intervals and the HOMER annotation cards.
 
 ## Controls
 

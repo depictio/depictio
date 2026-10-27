@@ -91,10 +91,13 @@ evidence and each caller's calls). Filters: caller, supporting reads and caller 
 **Breakpoints.** Arriba's calls as loci. Strip: Arriba calls (split by event class), the
 calls between chromosomes (a ring by Arriba confidence), the median share of the local
 reads that support a call (its distribution) and the median split reads (a box). Then the
-flow from the contig of the 5' partner to that of the 3' partner beside the chord ring of
-the same calls, and the read support by event class (split by confidence) and by breakpoint
-site. Filters: contig pair, event class and Arriba confidence; they narrow the Arriba
-collection, not the chord's, which the sample and fusion filters reach.
+flow from the contig of the 5' partner to that of the 3' partner, and the read support by
+event class (split by confidence) and by breakpoint site. Last, one linked section: the chord
+ring of the same calls beside the genome browser, the STAR alignments of the samples in view.
+A link clicked on the ring, or a fusion picked in the left panel, frames the browser on its
+5' breakpoint. Filters: contig pair, event class and
+Arriba confidence; they narrow the Arriba collection, not the chord's, which the sample and
+fusion filters reach.
 
 **Validation.** FusionInspector's re-quantified calls. Strip: validated fusions (ranked by
 predicted protein), the median fragments per million (against 0.1, STAR-Fusion's default
@@ -130,7 +133,8 @@ optional collection no tile reads: the megatest's cancer intron file is header o
 | `SKIP_CTATSPLICING` | No Splice Junctions tab. |
 
 The import re-packs the Overview grid after a drop, so a lone highlight takes the full row.
-`SAMPLESHEET_FILE` overrides where the samplesheet is looked for.
+`SAMPLESHEET_FILE` overrides where the samplesheet is looked for. rnafusion publishes no
+bigWig, so the genome browser holds alignments only (BAM, or CRAM with `--cram`).
 
 ## Colours
 

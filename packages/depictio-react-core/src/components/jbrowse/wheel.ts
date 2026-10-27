@@ -46,3 +46,15 @@ export function wheelPixels(event: WheelLike, pagePx: number): number {
 export function zoomFactor(pixels: number): number {
   return Math.exp(pixels * 0.002);
 }
+
+/** Whether a box scrolled to `scrollTop` (of `scrollHeight`, showing
+ *  `clientHeight`) can still move by `dy`: the tracks of a tile taller than
+ *  it scroll before the page does, as the browser chains a native scroll. */
+export function canScrollBy(
+  box: { scrollTop: number; scrollHeight: number; clientHeight: number },
+  dy: number,
+): boolean {
+  const max = box.scrollHeight - box.clientHeight;
+  if (max <= 1 || dy === 0) return false;
+  return dy > 0 ? box.scrollTop < max - 1 : box.scrollTop > 0;
+}

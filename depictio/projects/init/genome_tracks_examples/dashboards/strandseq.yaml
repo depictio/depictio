@@ -148,6 +148,11 @@ components:
     selection_enabled: true
     selection_column: cell
     show_overview: false
+    # Display defaults (a reader's own choice in the menu wins): 24 cells fit
+    # better as compact rows, without the centre line.
+    display:
+      feature_mode: compact
+      center_line: false
     locus_from:
       data_collection_tag: sv_calls
       chrom_column: chrom
@@ -155,7 +160,41 @@ components:
       end_column: end
       padding: 1000000
       max_rows: 3
+      # The stepper walks the calls, the best-supported (highest log-likelihood
+      # ratio against the reference) first. `location` above wins on open.
+      sort_by: llr_to_ref
+      descending: true
+      label_column: call_id
     layout: { x: 3, y: 0, w: 5, h: 8 }
+
+  # The same collection as a floating panel: it declares no section and no
+  # layout, and stays on screen when the tab changes. It opens as a compact
+  # card; the grid browser above is the full-size one.
+  - tag: sseq-browser-floating
+    index: sseq-browser-floating
+    component_type: jbrowse
+    workflow_tag: python/genome_tracks_demo
+    data_collection_tag: sv_tracks
+    title: 'SV calls per cell'
+    description: 'The SV calls of the cells in view, kept on screen across the tabs'
+    placement: floating
+    floating_initial_state: compact
+    max_tracks: 6
+    initial_tracks: 3
+    show_annotation: false
+    show_overview: false
+    selection_enabled: true
+    selection_column: cell
+    locus_from:
+      data_collection_tag: sv_calls
+      chrom_column: chrom
+      start_column: start
+      end_column: end
+      padding: 1000000
+      max_rows: 3
+      sort_by: llr_to_ref
+      descending: true
+      label_column: call_id
 
   - tag: sseq-table-cells
     index: sseq-table-cells

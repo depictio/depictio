@@ -58,6 +58,7 @@ _JBROWSE_FIELDS: tuple[str, ...] = (
     "assembly",
     "location",
     "locus_from",
+    "show_density",
     "track_mode",
     "max_tracks",
     "initial_tracks",
@@ -70,11 +71,29 @@ _JBROWSE_FIELDS: tuple[str, ...] = (
     "show_header",
     "show_overview",
     "track_labels",
+    "display",
+    "variant_color_by",
+    "color_by",
+    "show_junctions",
+    "read_pairs_display",
+    "call_stepper",
+    "follow_window",
+    "views",
+    "circular_categories",
     "force_load",
     "fetch_size_limit_mb",
     "preset",
     "config_overrides",
 )
+
+
+def _without_nulls(value: Any) -> Any:
+    """``value`` (a dict, possibly nested) without its null entries."""
+    if isinstance(value, dict):
+        return {k: _without_nulls(v) for k, v in value.items() if v is not None}
+    return value
+
+
 _JBROWSE_DEFAULTS: dict[str, Any] = {
     f: JBrowseLiteComponent.model_fields[f].get_default(call_default_factory=True)
     for f in _JBROWSE_FIELDS
@@ -117,6 +136,7 @@ _DEFAULT_PLACEMENT: dict[str, str] = {
     "interactive": "left",
     "map": "grid",
     "advanced_viz": "grid",
+    "jbrowse": "grid",
 }
 
 
@@ -1686,7 +1706,20 @@ class DashboardDataLite(BaseModel):
                     value = comp.get(f)
                     if value is None or value == _JBROWSE_DEFAULTS.get(f):
                         continue
+                    if f == "locus_from":
+                        # One source or a list; the model dump carries every unset key.
+                        value = (
+                            [_without_nulls(v) for v in value]
+                            if isinstance(value, list)
+                            else _without_nulls(value)
+                        )
                     lite_comp[f] = value
+                # `placement: floating` was written by the prologue above; its
+                # opening state travels with it, skipped at the default.
+                if comp.get("placement") == "floating" and comp.get(
+                    "floating_initial_state", "compact"
+                ) not in ("compact", None):
+                    lite_comp["floating_initial_state"] = comp["floating_initial_state"]
 
             elif comp_type == "map":
                 # Fields exported only when they differ from model defaults
@@ -1988,8 +2021,13 @@ class DashboardDataLite(BaseModel):
                 comp_dict = {**comp_dict, **layout_nested}
 
             # Unpack nested display dict (card/interactive styling) into flat comp_dict fields
+            # (A jbrowse tile's `display` is a typed block of its own, kept nested.)
             display_nested = comp_dict.get("display", {})
-            if display_nested and isinstance(display_nested, dict):
+            if (
+                display_nested
+                and isinstance(display_nested, dict)
+                and comp_dict.get("component_type") != "jbrowse"
+            ):
                 comp_dict = {**comp_dict, **display_nested}
 
             full_comp = build_base_component(comp_dict)
@@ -2167,6 +2205,20 @@ class DashboardDataLite(BaseModel):
             elif comp_type == "jbrowse":
                 for f in _JBROWSE_FIELDS:
                     full_comp[f] = comp_dict.get(f, _JBROWSE_DEFAULTS.get(f))
+                # Only the settings the YAML sets: the model dump carries every
+                # unset one as null.
+                if isinstance(full_comp.get("display"), dict):
+                    full_comp["display"] = {
+                        k: v for k, v in full_comp["display"].items() if v is not None
+                    } or None
+                # Written only when it floats, like an advanced viz's: a stored
+                # grid tile keeps its shape. The layout loop below reads
+                # `placement` to give a floating tile no grid slot.
+                if comp_dict.get("placement") == "floating":
+                    full_comp["placement"] = "floating"
+                    full_comp["floating_initial_state"] = (
+                        comp_dict.get("floating_initial_state") or "compact"
+                    )
 
             elif comp_type == "map":
                 _MAP_FULL_DEFAULTS: dict[str, Any] = {

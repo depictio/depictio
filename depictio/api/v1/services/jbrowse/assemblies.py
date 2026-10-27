@@ -10,9 +10,16 @@ and one gene annotation bigBed where UCSC publishes one.
 
 from __future__ import annotations
 
+import html
+import re
+import threading
+import time
+from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
+
+import httpx
 
 _UCSC = "https://hgdownload.soe.ucsc.edu"
 
@@ -269,3 +276,89 @@ def preset_annotation_track(
             "bigBedLocation": _uri(url_for(preset, "annotation")),
         },
     }
+
+
+# --------------------------------------------------------------------------
+# Gene search (UCSC search API, cached)
+# --------------------------------------------------------------------------
+
+SEARCH_QUERY_PATTERN = r"^[A-Za-z0-9._-]{1,64}$"
+_SEARCH_TTL_S = 3600.0
+_SEARCH_CACHE_MAX = 512
+_SEARCH_TIMEOUT_S = 5.0
+# Tracks whose matches are genes worth jumping to, best first: the MANE Select
+# transcript frames the gene the way a clinician expects, HGNC is the gene span.
+_SEARCH_PRIORITY = ("mane", "hgnc")
+_LOCUS = re.compile(r"^[A-Za-z0-9_.\-]+:\d+-\d+$")
+
+_search_cache: OrderedDict[tuple[str, str, int], tuple[float, list[dict[str, str]]]] = OrderedDict()
+_search_lock = threading.Lock()
+
+
+def parse_search_matches(payload: dict[str, Any], limit: int) -> list[dict[str, str]]:
+    """``[{label, locus}]`` from a UCSC ``/search`` response.
+
+    MANE and HGNC matches come first, then the other tracks in UCSC's order.
+    Entries that are not a ``chrom:start-end`` position (an mRNA accession) are
+    dropped, and so is a second hit on the same gene name.
+    """
+    tracks = [t for t in payload.get("positionMatches") or [] if isinstance(t, dict)]
+    rank = {name: i for i, name in enumerate(_SEARCH_PRIORITY)}
+    tracks.sort(key=lambda t: rank.get(str(t.get("name")), len(rank)))  # stable
+    out: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for track in tracks:
+        for match in track.get("matches") or []:
+            locus = str(match.get("position") or "")
+            name = html.unescape(str(match.get("posName") or "")).strip()
+            if not name or not _LOCUS.match(locus):
+                continue
+            # "BCR (NM_004327.4 / ENST...)" names the transcript; the gene is enough.
+            name = name.split(" (", 1)[0]
+            key = name.upper()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({"label": name, "locus": locus})
+            if len(out) >= limit:
+                return out
+    return out
+
+
+def search_genes(
+    genome: str,
+    query: str,
+    limit: int,
+    api_url: str = "https://api.genome.ucsc.edu",
+) -> list[dict[str, str]]:
+    """Gene / feature matches of ``query`` in the UCSC genome ``genome``, cached an hour.
+
+    Raises ``httpx.HTTPError`` (or ``ValueError`` on a body that is not JSON)
+    when UCSC cannot answer; nothing is cached then.
+    """
+    key = (genome, query.lower(), limit)
+    now = time.monotonic()
+    with _search_lock:
+        hit = _search_cache.get(key)
+        if hit and now - hit[0] < _SEARCH_TTL_S:
+            _search_cache.move_to_end(key)
+            return [dict(r) for r in hit[1]]
+    resp = httpx.get(
+        f"{api_url.rstrip('/')}/search",
+        params={"search": query, "genome": genome},
+        timeout=_SEARCH_TIMEOUT_S,
+        follow_redirects=False,
+    )
+    resp.raise_for_status()
+    results = parse_search_matches(resp.json(), limit)
+    with _search_lock:
+        _search_cache[key] = (now, results)
+        _search_cache.move_to_end(key)
+        while len(_search_cache) > _SEARCH_CACHE_MAX:
+            _search_cache.popitem(last=False)
+    return [dict(r) for r in results]
+
+
+def clear_search_cache() -> None:
+    with _search_lock:
+        _search_cache.clear()

@@ -1737,7 +1737,7 @@ tabs:
   - name: Isoform structures
     icon: mdi:dna
     color: gray
-    description: Exon lanes, when the run publishes the models it used
+    description: Exon lanes, then the reads under them, for the transcript picked in the DEXSeq table
     collapsed: true
   - name: Isoform tables
     icon: mdi:table
@@ -1949,6 +1949,38 @@ tabs:
     title: Isoform structures of one gene
     description: One lane per transcript of the chosen gene, exons on a base-pair axis.
     layout: {x: 0, y: 0, w: 8, h: 6}
+  # The reads behind the isoform: a transcript picked in the DEXSeq results
+  # table narrows gtf_transcripts to its exon blocks (a link), and the view
+  # frames their span. Without the published models there is no jump: the
+  # tracks open on the highest-expressed transcript. A row of gtf_transcripts is
+  # one exon block, so a stepper would walk blocks, not isoforms: it is off.
+  - component_type: jbrowse
+    workflow_tag: nanoseq
+    data_collection_tag: tracks
+    section: Isoform structures
+    initial_tracks: 4
+    max_tracks: 12
+    show_overview: false
+    selection_enabled: true
+    selection_column: sample
+    show_junctions: true
+    color_by: condition
+    call_stepper: false
+    locus_from:
+      data_collection_tag: gtf_transcripts
+      chrom_column: chrom
+      start_column: start
+      end_column: end
+      padding: 500
+      max_rows: 300
+      sort_by: expression
+      descending: true
+      label_column: transcript_id
+    tag: ns-is-browser
+    index: is-browser
+    title: Genome browser
+    description: The coverage and long reads of the libraries in view, on the transcript picked in the DEXSeq table.
+    layout: {x: 0, y: 6, w: 8, h: 8}
   - component_type: table
     workflow_tag: nanoseq
     data_collection_tag: dexseq_results

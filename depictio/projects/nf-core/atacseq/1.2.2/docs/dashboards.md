@@ -100,9 +100,10 @@ marked and the gene body shaded. Filters: coverage concentration and extrapolate
 
 **Peaks.** Strip: peaks in view (the chromosomes with the most), peak width (box plot), fold
 enrichment (distribution) and the median -log10 q-value (threshold at 1.3, q 0.05). Then the
-genome-wide significance panel, without point labels, and the width distribution on a log
-axis. The MACS2 table is
-collapsed. Filters: significance, width and chromosome.
+genome-wide significance panel, without point labels, then the width distribution on a log
+axis. The panel's Open in genome browser action opens the Locus tab on the peak clicked, the
+region selected or the window in view. The MACS2 table is collapsed. Filters: significance,
+width and chromosome.
 
 **Annotation.** Strip: annotated peaks (a ring by feature class), genes reached (by feature
 class), the distance to the nearest start site (box plot) and the peak score. Then the
@@ -111,12 +112,12 @@ the promoter window shaded. The collapsed `Peak annotation` holds the HOMER tabl
 peak record card beside it: the card waits for a picked row. Filters: feature class and
 distance to the start site.
 
-**Locus.** Three collections on one genome axis. Strip: calls in the region (split by
-library), libraries per consensus interval, feature classes and nearest genes; the
-cards follow the region like the tracks. Then the navigator, a `genome_view` on the broad
-calls with one lane per library and `assembly: {GENOME}`, and two follower tracks: the
-consensus intervals as high as their support, and the HOMER annotation coloured by feature
-class (it stands in for a gene lane, which is bundled for hg38 and mm10 only). Filters:
+**Locus.** The broad calls and the run's own files on one genome axis, and the only genome
+browser of the template. Strip: calls in the region (split by library), libraries per
+consensus interval, feature classes and nearest genes; the cards follow the region. Then
+the navigator, a `genome_view` on the broad calls with one lane per library and
+`assembly: {GENOME}`, and under it, at full width, a genome browser that opens on the most
+significant peak and follows the navigator's brush without filtering. Filters:
 significance, libraries per interval and feature class.
 
 **Consensus.** Strip: consensus intervals (by chromosome), libraries per interval (box
@@ -135,6 +136,18 @@ effects per contrast beside the calls per contrast, and the sample space: the pi
 consensus counts beside the library distance heatmap (`ward`, `Blues`). The three tables
 are collapsed. The `Contrast` filter is a single `Select`: the interval ids repeat in every
 contrast, so a row is an interval only together with its contrast.
+
+## Genome tracks
+
+The `tracks` collection lists the merged-library files the run published under
+`bwa/mergedLibrary/`: the bigWig signal, the MACS2 peak calls (`macs/broadPeak/`, or
+`macs/narrowPeak/` on a narrow run) and the filtered BAM, one row per file, keyed on the
+`<sample>.mLb.clN` spelling the peak calls use. Rows are ordered signal first (replicate 1
+of every group before replicate 2), then peaks, then BAMs. The bigWig, peak and BAM files are
+not in the tables-only megatest subset: pass `--var TRACKS_URI=<results folder>` at ingest to
+read them in place, or leave them under `DATA_ROOT` and the CLI uploads the ones it finds.
+The merged-replicate level (`bwa/mergedReplicate/`) is not listed. The design notes are in
+`docs/design/jbrowse/atacseq.md`.
 
 ## Routes and pruning
 
@@ -170,7 +183,7 @@ The value link from the broad calls to the HOMER annotation on `peak_id` is disa
 `template.yaml`: a range filter on the calls resolves through it as a handful of ids and
 empties the HOMER tiles. A lasso on the Peaks tab therefore narrows the MACS2 tiles only;
 the reverse link (HOMER to MACS2) still works. On the Locus tab, two region links rename
-the navigator's chromosome and position filters onto the consensus and HOMER tracks, and
+the navigator's chromosome and position filters onto the consensus intervals and the HOMER annotation cards, and
 the navigator's own read is capped at about 10k rows ranked by q-value.
 
 ## Controls

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from './LegendAwarePlot';
 
@@ -40,6 +40,13 @@ import {
   plotlyThemeFragment,
 } from './plotlyTheme';
 import { regionXRange, useFollowedRegion } from './genomicAxis';
+import {
+  pointOnAxis,
+  readPlotXRange,
+  windowOnOneChrom,
+  type GenomePoint,
+  type OpenLocusReader,
+} from '../jbrowse/locusForAction';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
 /** Mirrors `CnvProfileConfig` in depictio/models/components/advanced_viz/configs.py.
@@ -155,7 +162,11 @@ const CnvProfilePlot = React.memo<{
   figure: { data?: unknown[]; layout?: Record<string, unknown> };
   isDark: boolean;
   theme: Theme;
-}>(({ figure, isDark, theme }) => {
+  /** A click on a point, as Plotly reports it. */
+  onClick?: (event: any) => void;
+  /** The graph div, once Plotly has drawn it. */
+  onGraph?: (gd: unknown) => void;
+}>(({ figure, isDark, theme, onClick, onGraph }) => {
   const themedData = useMemo(
     () => applyDataTheme(figure.data, isDark, theme),
     [figure.data, isDark, theme],
@@ -171,6 +182,9 @@ const CnvProfilePlot = React.memo<{
       useResizeHandler
       style={PLOT_STYLE}
       config={PLOT_CONFIG as any}
+      onClick={onClick}
+      onInitialized={onGraph ? (_fig: unknown, gd: unknown) => onGraph(gd) : undefined}
+      onUpdate={onGraph ? (_fig: unknown, gd: unknown) => onGraph(gd) : undefined}
     />
   );
 });
@@ -526,6 +540,9 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
 
     return {
       data,
+      // Where each drawn chromosome starts on the x axis, for the action that
+      // reads a click or the visible window back as a contig and a position.
+      offsets: axis.offset as ReadonlyMap<string, number>,
       layout: {
         ...plotlyThemeFragment(isDark, theme),
         xaxis,
@@ -731,6 +748,31 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     </>
   );
 
+  // "Open in genome browser": the last point clicked on the Plotly profile and
+  // the axis' visible window when it covers one chromosome. Refs throughout, a
+  // click or a zoom redraws nothing.
+  const offsetsRef = useRef<ReadonlyMap<string, number> | null>(null);
+  offsetsRef.current = figure?.offsets ?? null;
+  const lastPointRef = useRef<GenomePoint | null>(null);
+  const gdRef = useRef<unknown>(null);
+  const handlePlotClick = useCallback((event: any) => {
+    const x = Number(event?.points?.[0]?.x);
+    const point = offsetsRef.current ? pointOnAxis(x, offsetsRef.current) : null;
+    if (point) lastPointRef.current = point;
+  }, []);
+  const handleGraph = useCallback((gd: unknown) => {
+    gdRef.current = gd;
+  }, []);
+  const openLocus = useCallback<OpenLocusReader>(
+    () => ({
+      point: lastPointRef.current,
+      window: offsetsRef.current
+        ? windowOnOneChrom(readPlotXRange(gdRef.current), offsetsRef.current)
+        : null,
+    }),
+    [],
+  );
+
   // The frame appends the region filter itself, brushed here or elsewhere.
   const echo = locus ? (facetOn ? `${locusLanes.length} samples` : (activeSample ?? undefined)) : undefined;
 
@@ -738,6 +780,7 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     <AdvancedVizFrame
       estimated={estimated}
       title={metadata.title || 'Copy-number profile'}
+      openLocus={openLocus}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       primaryControls={primaryControls}
       controls={controls}
@@ -768,7 +811,13 @@ const CnvProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
           onFilterChange={onFilterChange}
         />
       ) : null}
-      {!locus && figure ? <CnvProfilePlot figure={figure} isDark={isDark} theme={theme} /> : null}
+      {!locus && figure ? <CnvProfilePlot
+          figure={figure}
+          isDark={isDark}
+          theme={theme}
+          onClick={handlePlotClick}
+          onGraph={handleGraph}
+        /> : null}
     </AdvancedVizFrame>
   );
 };

@@ -104,8 +104,10 @@ RiboCode report (each spread by the libraries reporting an ORF) and the median p
 (a box plot). All four read the pooled table, so a skipped caller keeps its card and reads 0.
 Then the ORF classes per library, one caller at a time (opening on the first caller the run
 has), and the UpSet of Ribo-TISH, RiboCode and the annotated CDS. Collapsed: the pooled
-table with the ORF record beside it, then each caller's calls per library. Filters: ORF
-class, gene and a protein-length range.
+table with the ORF record beside it and the genome browser under them (a picked ORF frames its
+approximate genomic span, from the contig and stop codon of its key and its protein length; the
+P-sites and coverage of the libraries in view open beneath), then each caller's calls per
+library. Filters: ORF class, gene and a protein-length range.
 
 ## Routes and pruning
 

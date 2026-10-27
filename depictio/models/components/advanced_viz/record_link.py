@@ -178,6 +178,10 @@ def emitted_selection_column(
         if comp.get("selection_enabled") and comp.get("selection_column"):
             return str(comp["selection_column"])
         return None
+    if ctype == "jbrowse":
+        if comp.get("selection_enabled") and comp.get("selection_column"):
+            return str(comp["selection_column"])
+        return None
     if ctype == "advanced_viz":
         cfg = config if config is not None else _config(comp)
         kind = str(cfg.get("viz_kind") or viz_kind_of(comp))
@@ -225,7 +229,7 @@ def linked_component_problems(
             problems.append(
                 f"[{label}] linked_component '{source_label}' emits no selection "
                 "(a table needs row_selection_enabled + row_selection_column, a "
-                "figure or map selection_enabled + selection_column, an "
+                "figure, map or jbrowse selection_enabled + selection_column, an "
                 f"advanced_viz one of {sorted(SELECTION_EMITTING_KINDS)} with "
                 "selection_enabled)"
             )

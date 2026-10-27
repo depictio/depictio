@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Button,
   ColorInput,
@@ -42,6 +42,7 @@ import {
   plotlyThemeFragment,
 } from './plotlyTheme';
 import { regionXRange, useFollowedRegion } from './genomicAxis';
+import type { OpenLocusReader } from '../jbrowse/locusForAction';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import SashimiGenomeSpyView from './sashimi/SashimiGenomeSpyView';
 import { coverageData, junctionData, UNANNOTATED } from './sashimi/sashimiGenomeSpySpec';
@@ -1565,6 +1566,16 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
     };
   }, [activeRegion, view, fitRange]);
 
+  // "Open in genome browser": the window on screen, whichever panel draws it
+  // (the arc panel's zoom, else the junctions' span). No clicked point: a
+  // junction is a span, and the window is what the reader is looking at.
+  const gsRegionRef = useRef(gsRegion);
+  gsRegionRef.current = gsRegion;
+  const openLocus = useCallback<OpenLocusReader>(
+    () => ({ window: gsRegionRef.current }),
+    [],
+  );
+
   const gsColours = useMemo(() => {
     const themeColours = plotlyThemeColors(isDark, theme);
     const palette = resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark));
@@ -2005,6 +2016,7 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Splice junctions'}
+      openLocus={openLocus}
       subtitle={(metadata as { description?: string; subtitle?: string }).description}
       primaryControls={primaryControls}
       controls={controls}

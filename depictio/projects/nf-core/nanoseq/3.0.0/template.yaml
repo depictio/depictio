@@ -55,6 +55,11 @@
 # every other per-sample collection, so one pick in the left panel narrows
 # read QC, alignment distributions, sample structure and counts together.
 #
+# GENOME TRACKS. The long-read BAMs and coverage bigWigs are not part of the
+# tables-only megatest subset. Pass `--var TRACKS_URI=<results folder>` to read
+# them in place (see the variable below); without it the `tracks` collection
+# uploads whichever of them DATA_ROOT holds. The assembly is the GENOME variable.
+#
 # CATALOG NOTE. `deseq2_results` no longer uses the pipeline-agnostic
 # `deseq2/results_long.py`: nanoseq runs DESeq2 straight on Bambu's matrix, so
 # every feature id is a GTF attribute string and the volcano / MA labels were
@@ -88,6 +93,13 @@ template:
     - name: "ANNOTATION_COLS"
       description: "Auto-populated: comma-separated factor columns of METADATA_FILE."
       required: false
+    - name: "GENOME"
+      description: "UCSC name of the assembly the run aligned to (hg38, hg19, mm10): the axis and gene lane of the genome browser."
+      required: false
+      default: "hg38"
+    - name: "TRACKS_URI"
+      description: "s3:// or https:// folder holding the run's results (the folder DATA_ROOT mirrors), to read the genome-browser tracks (coverage bigWig, long-read BAM) in place instead of uploading them from DATA_ROOT. Without it the `tracks` collection uploads whichever of those files DATA_ROOT holds."
+      required: false
   # The bundled reference dataset: the megatest's design table is vendored in
   # input/ (built once from the source dataset's library annotations; see
   # VALIDATION_REPORT.md).
@@ -97,6 +109,7 @@ template:
       METADATA_ID_COL: "sample"
       GROUP_COL: "condition"
       GROUP_COL_DISPLAY: "Condition"
+      GENOME: "hg19"
   provenance:
     sources:
       - name: "software_versions"
@@ -117,6 +130,14 @@ template:
       dashboards: ["dashboards/base.yaml"]
     - if_var_present: "METADATA_FILE"
       dashboards: ["dashboards/base.yaml"]
+    # Genome tracks: read in place when TRACKS_URI names the results folder,
+    # uploaded from DATA_ROOT otherwise (the `tracks` recipe keeps only the
+    # files it finds there).
+    - if_var_present: "TRACKS_URI"
+      override_dcs:
+        - data_collection_tag: "tracks"
+          dc_properties:
+            remote_base_uri: "{TRACKS_URI}"
 
 # ============================================================================
 # PROJECT CONFIGURATION
@@ -718,6 +739,54 @@ workflows:
               "sample": "Annotation the block was read from; `all_samples` for the run-level extended annotation"
               "expression": "TPM, else FPKM, else coverage, when the writer recorded one"
 
+      # ----------------------------------------------------------------
+      # Genome tracks. A manifest of the run's track files (coverage bigWig
+      # and the coordinate-sorted long-read BAM of every sample) that the
+      # genome browser reads by range, through the API. One row per file,
+      # keyed on `sample` like the hub. The megatest was aligned to Ensembl
+      # GRCh37 (chromosomes 1, 2, ...): the hg19 preset's chromAlias maps them.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "tracks"
+        description: "Genome-browser tracks of the run: coverage (bigWig) and long-read alignments (BAM) of every sample, one row per file"
+        config:
+          type: "genomic_tracks"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nanoseq/tracks.py"
+          dc_specific_properties:
+            format: "TSV"
+            uri_column: "uri"
+            track_id_column: "track_id"
+            sample_column: "sample"
+            format_column: "format"
+            name_column: "name"
+            color_column: "color"
+            category_column: "category"
+            order_column: "order"
+            assembly: "{GENOME}"
+            display_defaults:
+              bigwig:
+                displays:
+                  - type: "LinearWiggleDisplay"
+                    height: 50
+                    autoscale: "local"
+              bam:
+                displays:
+                  - type: "LinearPileupDisplay"
+                    height: 120
+            columns_description:
+              "track_id": "<sample>.<kind>, unique per file"
+              "sample": "Sample the file belongs to"
+              "condition": "Biological group, read off the sample name"
+              "kind": "coverage or alignments"
+              "format": "Track file format"
+              "uri": "Path relative to the results folder"
+              "name": "Track label shown in the browser"
+              "color": "Track colour"
+              "category": "Track-selector folder"
+              "order": "Row order the browser opens with"
+
 links:
   # Hub -> MultiQC, keyed on the sample name.
   - source_dc_tag: "samples"
@@ -853,4 +922,38 @@ links:
       resolver: "direct"
       target_field: "sample_id"
     description: "Scope the sample hub to a sample picked on the PCA"
+    enabled: true
+
+  # Hub <-> genome tracks: picking samples opens their tracks, and clicking a
+  # track in the browser picks its sample back.
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Show the genome tracks of the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "tracks"
+    source_column: "sample"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the dashboard by the samples whose tracks are picked in the genome browser"
+    enabled: true
+
+  # A picked DEXSeq transcript narrows the isoform structures to its exons,
+  # whose span the genome browser frames (`locus_from`).
+  - source_dc_tag: "dexseq_results"
+    source_column: "feature_id"
+    target_dc_tag: "gtf_transcripts"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "transcript_id"
+    description: "Carry a transcript picked in the DEXSeq results onto its isoform structure"
     enabled: true

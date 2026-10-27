@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from './LegendAwarePlot';
 
@@ -18,10 +18,33 @@ import {
   hasOwnSelection,
 } from '../../selection';
 import { adaptGlTrace, useWebglSlot } from '../../webglBudget';
-import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
+import { useCategoryColorMap, usePinnedCategoryColors } from '../../hooks/useCategoryColors';
+import { NEUTRAL_CATEGORY_COLOR } from '../../categoryColors';
+import { useHighlight, usePublishHighlight } from '../../highlight/bus';
+import {
+  hoverInterval,
+  nearestGenomicPoint,
+  pixelsToBp,
+  type GenomicPoints,
+} from '../../highlight/genomicHover';
+import { useViewWindow } from '../../highlight/viewWindow';
 import AdvancedVizFrame, { TIER_COLORS } from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
+import {
+  hoveredColor,
+  hoverRingShape,
+  hoverShape,
+  windowBandShape,
+  withCursorShape,
+} from './crossTileCursor';
+import { hoverColumnList, hoverRow, hoverTemplateLines } from './hoverColumns';
 import { regionXRange, useFollowedRegion } from './genomicAxis';
+import {
+  readPlotXRange,
+  windowOnOneChrom,
+  type GenomePoint,
+  type OpenLocusReader,
+} from '../jbrowse/locusForAction';
 import { rainfallDistances } from './rainfallDistances';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import {
@@ -45,6 +68,15 @@ type Highlight = 'above' | 'below' | 'none';
  *  chromosome blocks, the selection and the labels are the same in both. */
 type VizMode = 'manhattan' | 'rainfall';
 
+/** The drawn points of the main trace: cumulative x, y, and the source contig,
+ *  position and selection value of each. */
+type HoverPoints = GenomicPoints & { x: number[]; y: number[] };
+
+/** Radius of the ring a hover from another tile draws, in pixels. */
+const HOVER_RING_PX = 8;
+/** How far from a hovered feature a point still counts as it, in pixels. */
+const HOVER_TOLERANCE_PX = 6;
+
 const RAINFALL_Y_TITLE = 'log10(distance to previous variant, bp)';
 
 interface ManhattanConfig {
@@ -62,6 +94,9 @@ interface ManhattanConfig {
   highlight?: Highlight;
   /** Extra columns to fetch + expose in the Colour-by dropdown. */
   color_by_columns?: string[];
+  /** Extra columns fetched with the points and listed in the hover tooltip,
+   *  one `label: value` line each, after the position and the score. */
+  hover_cols?: string[];
   /** Opt into lasso/box/click selection as a dashboard filter. Inert without
    *  `selection_column`; resolved through `advancedVizSelectionColumn`. */
   selection_enabled?: boolean;
@@ -177,10 +212,40 @@ const ManhattanRenderer: React.FC<Props> = ({
   const rainfallClassCol = rainfall ? config.rainfall_class_col || null : null;
   // A value of the Colour-by column, or of the rainfall class column, wears
   // the dashboard's colour for it; the rest take the palette.
-  const colorByPinned = usePinnedCategoryColors(
-    colorBy === COLOR_BY_CHROMOSOME || colorBy === COLOR_BY_SCORE ? null : colorBy,
-  );
+  const colorByColumn =
+    colorBy === COLOR_BY_CHROMOSOME || colorBy === COLOR_BY_SCORE ? null : colorBy;
   const classPinned = usePinnedCategoryColors(rainfallClassCol);
+
+  // ---- Hover → the genome browser --------------------------------------------
+  // The point under the pointer goes out on the highlight bus as a contig and a
+  // position, which a JBrowse tile draws as a band across its tracks, in the
+  // colour the point is drawn in. `x` is the cumulative genome-wide coordinate,
+  // so the real position is read from `customdata` (slot 1 chromosome, slot 2
+  // position, slot 0 selection value).
+  const publishHighlight = usePublishHighlight(String(metadata.index));
+  const handleHover = useCallback(
+    (event: any) => {
+      const cd = event?.points?.[0]?.customdata;
+      if (!Array.isArray(cd)) return;
+      const position = Number(cd[2]);
+      const chrom = cd[1] == null ? '' : String(cd[1]);
+      if (!chrom || !Number.isFinite(position)) return;
+      publishHighlight({
+        entity: chrom,
+        start: position,
+        end: position,
+        positionColumn: config.pos_col,
+        color: hoveredColor(event.points[0]),
+        rowKeys: cd[0] != null && cd[0] !== '' ? [String(cd[0])] : undefined,
+        // The point as an interval and as a row, for a table or a browser
+        // that reads its own columns from it.
+        genomic: { refName: chrom, start: position, end: position },
+        record: { [config.chr_col]: chrom, [config.pos_col]: position },
+      });
+    },
+    [publishHighlight, config.pos_col, config.chr_col],
+  );
+  const handleUnhover = useCallback(() => publishHighlight(null), [publishHighlight]);
 
   // ---- Following a region someone else brushed ----------------------------
   // A `genome_selection` filter on this collection's own `chr_col` / `pos_col`
@@ -206,6 +271,8 @@ const ManhattanRenderer: React.FC<Props> = ({
   const selectionColumn = onFilterChange ? advancedVizSelectionColumn(metadata) : undefined;
   const selectionEnabled = Boolean(selectionColumn);
 
+  const hoverCols = useMemo(() => hoverColumnList(config.hover_cols), [config.hover_cols]);
+
   const requiredCols = useMemo(() => {
     const cols = [config.chr_col, config.pos_col, config.score_col].filter(Boolean) as string[];
     if (config.feature_col) cols.push(config.feature_col);
@@ -215,6 +282,9 @@ const ManhattanRenderer: React.FC<Props> = ({
     for (const c of config.color_by_columns ?? []) {
       if (!cols.includes(c)) cols.push(c);
     }
+    // The hover columns ride with the points so a tooltip never waits on a
+    // second request.
+    for (const c of hoverCols) if (!cols.includes(c)) cols.push(c);
     // The selection column is fetched whether or not it is also a colour-by
     // option, so a dashboard only has to name it once.
     if (selectionColumn && !cols.includes(selectionColumn)) cols.push(selectionColumn);
@@ -222,7 +292,7 @@ const ManhattanRenderer: React.FC<Props> = ({
     // column, and fetching it anyway would widen every variant frame.
     if (rainfallClassCol && !cols.includes(rainfallClassCol)) cols.push(rainfallClassCol);
     return cols;
-  }, [config, selectionColumn, rainfallClassCol]);
+  }, [config, hoverCols, selectionColumn, rainfallClassCol]);
 
   // This component must NOT narrow itself by its own selection: a lasso would
   // otherwise redraw the track as only the variants it caught, and the user
@@ -237,6 +307,16 @@ const ManhattanRenderer: React.FC<Props> = ({
   );
 
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
+  // The colour-by column's values, for the dashboard colour rule: a value is
+  // coloured by its place in the sorted universe, so an unpinned sample gets
+  // the colour every other tile gives it. A numeric column colours by gradient
+  // and has no universe.
+  const colorByUniverse = useMemo(() => {
+    const column = colorByColumn ? rows?.[colorByColumn] : undefined;
+    if (!column || column.find((v) => v != null) == null) return [];
+    return typeof column.find((v) => v != null) === 'number' ? [] : column;
+  }, [rows, colorByColumn]);
+  const colorByColors = useCategoryColorMap(colorByColumn, colorByUniverse);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -301,13 +381,15 @@ const ManhattanRenderer: React.FC<Props> = ({
   // webglBudget.
   const glGranted = useWebglSlot(true);
 
-  const { figure, allChrs, tiers, counts } = useMemo(() => {
+  const { figure, allChrs, tiers, counts, chrOffsets, hoverPoints } = useMemo(() => {
     if (!rows)
       return {
+        hoverPoints: null as HoverPoints | null,
         figure: null,
         allChrs: [] as string[],
         tiers: null as ('ABOVE' | 'BELOW')[] | null,
         counts: undefined as Record<string, number> | undefined,
+        chrOffsets: new Map<string, number>(),
       };
 
     const chrs = (rows[config.chr_col] || []).map((v) => String(v ?? '')) as string[];
@@ -513,7 +595,7 @@ const ManhattanRenderer: React.FC<Props> = ({
         }
       }
       const map = new Map(
-        uniqueVals.map((v, i) => [v, colorByPinned?.[v] ?? _palette[i % _palette.length]]),
+        uniqueVals.map((v) => [v, colorByColors.get(v) ?? NEUTRAL_CATEGORY_COLOR]),
       );
       categoricalColor = (i: number) => {
         const v = colorByValues[i];
@@ -741,12 +823,17 @@ const ManhattanRenderer: React.FC<Props> = ({
     // layout and one hover template rather than two of each.
     const selectionSource = selectionColumn ? (rows[selectionColumn] as unknown[]) ?? [] : [];
     const hasFeatureText = feats.length > 0;
+    // The hover columns sit after the three fixed slots, which the selection
+    // extraction and the cursor publish read by position.
+    const hoverColumnValues = hoverCols.map((c) => (rows[c] as unknown[] | undefined) ?? []);
+    const hoverExtraTpl = hoverTemplateLines(hoverCols, 3);
     const yHoverLabel = rainfall ? 'log10 distance' : 'score';
+    const ys = rowIdx.map(yAt);
     const mainTrace: Record<string, unknown> = {
       type: 'scattergl' as const,
       mode: 'markers' as const,
       x: xs,
-      y: rowIdx.map(yAt),
+      y: ys,
       ...(hasFeatureText ? { text: rowIdx.map((i) => String(feats[i] ?? '')) } : {}),
       customdata: rowIdx.map((i) => [
         // null rather than '' for a row the selection column has no value for:
@@ -755,10 +842,11 @@ const ManhattanRenderer: React.FC<Props> = ({
         selectionColumn && selectionSource[i] != null ? String(selectionSource[i]) : null,
         chrs[i],
         Number(positions[i] ?? 0),
+        ...hoverRow(hoverColumnValues, i),
       ]),
       hovertemplate: hasFeatureText
-        ? `%{customdata[1]}:%{customdata[2]:,d}<br>${yHoverLabel}: %{y}<br>%{text}<extra></extra>`
-        : `%{customdata[1]}:%{customdata[2]:,d}<br>${yHoverLabel}: %{y}<extra></extra>`,
+        ? `%{customdata[1]}:%{customdata[2]:,d}<br>${yHoverLabel}: %{y}<br>%{text}${hoverExtraTpl}<extra></extra>`
+        : `%{customdata[1]}:%{customdata[2]:,d}<br>${yHoverLabel}: %{y}${hoverExtraTpl}<extra></extra>`,
       marker: { color: colors, size: sizes, opacity: 0.85 },
       showlegend: false,
     };
@@ -909,10 +997,22 @@ const ManhattanRenderer: React.FC<Props> = ({
       allChrs,
       tiers,
       counts,
+      chrOffsets: offsetByChr,
+      // The drawn points, for a hover from another tile to find its mark.
+      hoverPoints: {
+        x: xs,
+        y: ys,
+        chroms: rowIdx.map((i) => chrs[i]),
+        positions: rowIdx.map((i) => Number(positions[i] ?? 0)),
+        keys: rowIdx.map((i) =>
+          selectionColumn && selectionSource[i] != null ? String(selectionSource[i]) : null,
+        ),
+      } as HoverPoints,
     };
   }, [
     rows,
     config,
+    hoverCols,
     refreshTick,
     selectionRevision,
     selectionColumn,
@@ -926,7 +1026,7 @@ const ManhattanRenderer: React.FC<Props> = ({
     markerSizeUniform,
     highlight,
     colorBy,
-    colorByPinned,
+    colorByColors,
     rainfall,
     rainfallClassCol,
     classPinned,
@@ -1127,6 +1227,60 @@ const ManhattanRenderer: React.FC<Props> = ({
     [tiers, highlight],
   );
 
+  // ---- Another tile's hover → a line on this axis ----------------------------
+  // The genome browser's cursor (or a coverage window) is a contig and a
+  // position; on the cumulative axis it sits at that contig's offset plus the
+  // position. Only this shape changes on a hover, so the data, the traces and
+  // the fetch are untouched; a contig this plot does not draw draws nothing.
+  const hovered = useHighlight(String(metadata.index));
+  const cursorColor = theme.colors[theme.primaryColor]?.[isDark ? 4 : 7] ?? theme.colors.blue[isDark ? 4 : 7];
+  // A hover that names a feature (a browser's `genomic`, a table's `record`, a
+  // row key) rings the nearest drawn point instead; a plain cursor stays a line.
+  // The pixel tolerance is read off the graph div at hover time, so a zoomed
+  // plot keeps a one-base feature hittable.
+  // The graph div comes from the annotation layer declared further down, which
+  // reads this memo's layout, so it reaches here through a ref filled after it.
+  const graphDivProbe = useRef<unknown>(null);
+  const ring = useMemo(() => {
+    if (!hovered || !hoverPoints) return null;
+    const interval = hoverInterval(hovered, config.chr_col, config.pos_col);
+    const rowKeys = hovered.rowKeys?.length ? hovered.rowKeys : undefined;
+    if (!interval && !rowKeys) return null;
+    const gd = graphDivProbe.current as {
+      _fullLayout?: { xaxis?: { _length?: number } };
+    } | null;
+    const toleranceBp = pixelsToBp(
+      HOVER_TOLERANCE_PX,
+      readPlotXRange(gd),
+      gd?._fullLayout?.xaxis?._length,
+    );
+    const at = nearestGenomicPoint(hoverPoints, interval, { toleranceBp, rowKeys });
+    if (at < 0) return null;
+    return hoverRingShape(
+      hoverPoints.x[at],
+      hoverPoints.y[at],
+      hovered.color || cursorColor,
+      HOVER_RING_PX,
+    );
+  }, [hovered, hoverPoints, config.chr_col, config.pos_col, cursorColor]);
+  const isFeatureHover =
+    Boolean(hovered?.genomic || hovered?.record) || Boolean(ring);
+  const cursor = useMemo(
+    () => (isFeatureHover ? ring : hoverShape(hovered, chrOffsets, cursorColor)),
+    [isFeatureHover, ring, hovered, chrOffsets, cursorColor],
+  );
+
+  // ---- The genome browser's window → a band on this axis -------------------
+  // The window a JBrowse tile has on screen is a stretch of one contig; here
+  // it is a translucent band behind the points. The plot keeps showing the
+  // whole genome (it is an overview, not a follower), and as with the cursor
+  // only the layout's shapes change when the browser pans.
+  const viewWindow = useViewWindow(String(metadata.index));
+  const windowBand = useMemo(
+    () => windowBandShape(viewWindow, chrOffsets, cursorColor),
+    [viewWindow, chrOffsets, cursorColor],
+  );
+
   // Lasso / box / click all land on the same `(index, 'scatter_selection')`
   // entry, so the last gesture replaces the previous one and a deselect
   // clears it. Two caps bound what a gesture can produce: the data endpoint
@@ -1148,13 +1302,24 @@ const ManhattanRenderer: React.FC<Props> = ({
         ? (event: any) => emitSelection(extractScatterSelection(event, 0))
         : undefined,
     );
+  // The last point the reader clicked, as a contig and a position (customdata
+  // slots 1 and 2, as the hover reads them): where "Open in genome browser"
+  // goes. Kept whether or not the tile selects, and forgotten on a deselect.
+  const lastPointRef = useRef<GenomePoint | null>(null);
   // A single click is a one-point selection, which is how the scatter figures
   // and the Dash viewer have always read it.
   const handleClick = (event: any) => {
+    const cd = event?.points?.[0]?.customdata;
+    if (Array.isArray(cd)) {
+      const pos = Number(cd[2]);
+      const chrom = cd[1] == null ? '' : String(cd[1]);
+      if (chrom && Number.isFinite(pos)) lastPointRef.current = { chrom, pos };
+    }
     if (!selectionEnabled) return;
     emitSelection(extractScatterSelection(event, 0));
   };
   const handleDeselect = () => {
+    lastPointRef.current = null;
     if (!selectionEnabled) return;
     emitSelection([]);
   };
@@ -1173,6 +1338,16 @@ const ManhattanRenderer: React.FC<Props> = ({
         : null,
     [groupedFigure, isDark, theme],
   );
+  // The figure plus the other tile's window band and cursor line. A pan or a
+  // hover elsewhere changes only the layout's shapes (`uirevision` keeps the
+  // zoom and the lasso).
+  const shownLayout = useMemo(
+    () =>
+      plotFigure
+        ? withCursorShape(withCursorShape(plotFigure.layout, windowBand), cursor)
+        : undefined,
+    [plotFigure, windowBand, cursor],
+  );
 
   // Chart annotations. Slot 0 of `customdata` holds the selection value when
   // the component selects; otherwise marked points are stored as coordinates.
@@ -1181,14 +1356,27 @@ const ManhattanRenderer: React.FC<Props> = ({
     componentIndex: String(metadata.index),
     enabled: supportsAdvancedVizAnnotation(metadata),
     data: plotFigure?.data,
-    layout: plotFigure?.layout,
+    layout: shownLayout,
     pointIdIndex: 0,
     pointIdColumn: selectionColumn,
   });
 
+  graphDivProbe.current = annotations.gdRef.current;
+
+  // Where the tile is looking: the last click, and the axis' visible window
+  // when it covers one chromosome (read off the graph div, so a zoom counts).
+  const openLocus = useCallback<OpenLocusReader>(
+    () => ({
+      point: lastPointRef.current,
+      window: windowOnOneChrom(readPlotXRange(annotations.gdRef.current), chrOffsets),
+    }),
+    [annotations.gdRef, chrOffsets],
+  );
+
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Manhattan'}
+      openLocus={openLocus}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       primaryControls={primaryControls}
       controls={controls}
@@ -1212,8 +1400,10 @@ const ManhattanRenderer: React.FC<Props> = ({
             {...annotations.plotProps({
               onSelecting: handleSelecting,
               onSelected: handleSelected,
-              onClick: selectionEnabled ? handleClick : undefined,
+              onClick: handleClick,
               onDeselect: selectionEnabled ? handleDeselect : undefined,
+              onHover: handleHover,
+              onUnhover: handleUnhover,
             })}
           />
           {annotations.toolbar}

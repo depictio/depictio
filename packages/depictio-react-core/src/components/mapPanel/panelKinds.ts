@@ -3,14 +3,15 @@ import type { FloatingComponent, StoredMetadata } from '../../api';
 /**
  * What a floating panel can hold.
  *
- * The panel started as the dashboard's map and is now one shell for two
- * things: a `map`, and a `structure` (a `molecule_3d` advanced viz, the "light
- * 3D module"). Each kind gets its own panel instance (its own header control,
- * its own saved position and size), so a map and a structure can sit on screen
- * together. Everything the two share lives in `useMapPanel`, `MapPanelBody`,
+ * The panel started as the dashboard's map and is now one shell for three
+ * things: a `map`, a `structure` (a `molecule_3d` advanced viz, the "light
+ * 3D module") and a `genome` (a `jbrowse` genome browser). Each kind gets its
+ * own panel instance (its own header control, its own saved position and
+ * size), so a map, a structure and a genome browser can sit on screen
+ * together. Everything they share lives in `useMapPanel`, `MapPanelBody`,
  * `MapPanelSurface` and `MapPanelDock`, which read this table for what differs.
  */
-export type FloatingPanelKind = 'map' | 'structure';
+export type FloatingPanelKind = 'map' | 'structure' | 'genome';
 
 /**
  * The advanced viz kinds that may float. Mirrors `FLOATING_ADVANCED_VIZ_KINDS`
@@ -44,6 +45,7 @@ export function floatingPanelKindOf(m: FloatingCandidate): FloatingPanelKind | n
   ) {
     return 'structure';
   }
+  if (m.component_type === 'jbrowse') return 'genome';
   return null;
 }
 
@@ -57,7 +59,7 @@ export function isFloatingComponent(m: FloatingCandidate): boolean {
 export function partitionFloating(
   floating: readonly FloatingComponent[],
 ): Record<FloatingPanelKind, FloatingComponent[]> {
-  const out: Record<FloatingPanelKind, FloatingComponent[]> = { map: [], structure: [] };
+  const out: Record<FloatingPanelKind, FloatingComponent[]> = { map: [], structure: [], genome: [] };
   for (const c of floating) {
     const kind = floatingPanelKindOf(c.metadata);
     if (kind) out[kind].push(c);
@@ -82,12 +84,17 @@ export interface PanelKindSpec {
   testId: string;
   /** The floating card's compact footprint, px. Small enough to leave the
    *  dashboard readable behind it; a structure gets a little more height than a
-   *  map because its card keeps a header row of its own above the viewer. */
+   *  map because its card keeps a header row of its own above the viewer, and a
+   *  genome browser is wider again because a track view needs the horizontal
+   *  room. */
   compact: { width: number; height: number };
   /** Where the floating card sits until it is dragged. The map keeps the
    *  bottom-right corner clear of the Notes button; the structure takes the
    *  top-right, below the header whichever chrome style draws it (the header's
-   *  height is `--dc-header-h`), so the two never start on top of each other. */
+   *  height is `--dc-header-h`), so the two never start on top of each other.
+   *  The genome browser sits at the bottom, left of the map's card (its width
+   *  plus the margin), so a track view gets the room it needs without starting
+   *  over the map or the structure. */
   anchor: { right: number; top?: string; bottom?: number };
 }
 
@@ -113,5 +120,16 @@ export const PANEL_KINDS: Record<FloatingPanelKind, PanelKindSpec> = {
     testId: 'structure-panel',
     compact: { width: 380, height: 340 },
     anchor: { right: 16, top: 'calc(var(--dc-header-h, 50px) + 16px)' },
+  },
+  genome: {
+    storagePrefix: 'depictio:genome-panel:',
+    noun: 'genome browser',
+    label: 'Genome browser',
+    thing: 'the genome browser',
+    icon: 'tabler:dna',
+    hiddenIcon: 'tabler:dna-off',
+    testId: 'genome-panel',
+    compact: { width: 560, height: 360 },
+    anchor: { right: 392, bottom: 72 },
   },
 };

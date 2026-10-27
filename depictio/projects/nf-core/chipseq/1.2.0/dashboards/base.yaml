@@ -1458,13 +1458,16 @@ tabs:
     title: Peak record
     description: The call picked in the table beside it, with the feature and gene HOMER assigned to it.
     layout: {x: 5, y: 0, w: 3, h: 5}
-# The locus section: three collections on one genomic region. The navigator
-# (macs2/peak_genome_view on macs2_peaks) opens on its default_region and emits
-# the chromosome and position filters; the two region links in template.yaml
-# rename them onto the consensus intervals and the HOMER annotation, so every
-# track clamps to the same window. A tab of its own: a region filter narrows
-# every tile of its collection on the tab. The axis comes from GENOME (the
-# bundled gene lanes are hg38 and mm10 only, so the HOMER track stands in).
+# The locus section: the calls and the run's own files on one genomic region.
+# The navigator (macs2/peak_genome_view on macs2_peaks) opens on its
+# default_region and emits the chromosome and position filters; the two region
+# links in template.yaml rename them onto the consensus intervals and the HOMER
+# annotation, so the cards clamp to the same window, and the genome browser
+# below it follows the brush. The consensus intervals are a source of the
+# browser (its density strip and next / previous), not a lane of their own. A tab of its own: a
+# region filter narrows every tile of its collection on the tab. The axis comes
+# from GENOME. This is the only browser of the template: the other tabs reach it
+# through the Open in genome browser action of their genomic plots.
 - title: Locus
   subtitle: What do the libraries call at one genomic region?
   tab_group: Peak calls
@@ -1487,15 +1490,17 @@ tabs:
   - name: Peaks on one axis
     icon: mdi:dna
     color: teal
-    description: The narrow calls per library, then the tracks that follow their region
+    description: The lanes drive the browser below. A brush or a locus on the lanes moves it, and its view comes back on the lanes as a dashed band, in the colour of the two tiles' link tags.
+    # One screen: the lanes and the browser they drive, as on atacseq.
+    display: linked
   components:
   - component_type: text
     order: 1
     body: >
-      The narrow calls of every ChIP, the consensus intervals per antibody and the HOMER
-      annotation on one genome axis. The tab opens on a fixed default region set in the
-      navigator; type a locus in its header or brush its axis, and the tracks and cards
-      follow.
+      The narrow calls of every ChIP on one genome axis, with the run's own signal and
+      alignments in a genome browser under them. The tab opens on a fixed default region
+      set in the navigator; type a locus in its header or brush its axis, and the browser
+      and cards follow.
     tag: cs-loc-intro
     index: loc-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1637,7 +1642,10 @@ tabs:
     config:
       mark: rect
       facet_by_sample: true
-      max_facets: 8
+      max_facets: 6
+      # Per lane: the inputs and the weaker antibodies would draw flat on a
+      # shared ruler.
+      facet_y_scale: independent
       score_title: -log10(q)
       opacity: 0.85
       assembly: '{GENOME}'
@@ -1649,59 +1657,59 @@ tabs:
     tag: cs-loc-navigator
     index: loc-navigator
     title: Narrow calls per library
-    description: Every MACS2 call on the region, one lane per library, as high as its significance. The locus field and a brush on this axis move every track below.
+    description: Every MACS2 call on the region, one lane per library, as high as its significance. The locus field and a brush on this axis move the browser below.
     layout: {x: 0, y: 0, w: 8, h: 6}
-  # A coverage track, faceted by consensus set: chipseq builds one consensus
-  # set per antibody, and a lane per set keeps them apart.
-  - component_type: advanced_viz
-    workflow_tag: chipseq
-    data_collection_tag: macs2_consensus_boolean
-    viz_kind: coverage_track
-    config:
-      viz_kind: coverage_track
-      chromosome_col: chr
-      position_col: start
-      end_col: end
-      value_col: num_samples
-      sample_col: consensus_set
-      color_by: sample
-      view_mode: facet
-      mark: rect
-      smoothing_window: 0
-      show_annotation_lane: false
-      view: track
-      views: [track]
+  # The run's own files in a genome browser: bigWig signal of every ChIP and
+  # input, the MACS2 narrowPeak calls and the filtered BAMs, read by range from
+  # the results folder (TRACKS_URI) or from the files uploaded at ingestion. The
+  # sample filter of the left panel (persistent across tabs) picks which tracks
+  # are open.
+  - component_type: jbrowse
+    tag: cs-loc-browser
+    index: loc-browser
     section: Peaks on one axis
-    tag: cs-loc-consensus
-    index: loc-consensus
-    title: Consensus intervals per antibody
-    description: The merged intervals of each consensus set on the same region, each as high as the number of libraries calling a peak there.
-    layout: {x: 0, y: 6, w: 8, h: 3}
-  - component_type: advanced_viz
     workflow_tag: chipseq
-    data_collection_tag: homer_annotated_peaks
-    viz_kind: genome_view
-    config:
-      viz_kind: genome_view
-      chr_col: chr
-      pos_col: start
-      end_col: end
-      score_col: peak_score
-      feature_col: gene_name
-      category_col: annotation_class
-      mark: rect
-      score_title: HOMER peak score
-      assembly: '{GENOME}'
-      region_filter_enabled: false
-      follow_region_filter: true
-      selection_enabled: true
-      selection_column: peak_id
-    section: Peaks on one axis
-    tag: cs-loc-genes
-    index: loc-genes
-    title: Nearest gene of every call
-    description: The same calls as HOMER annotated them, coloured by feature class; hover a call for its nearest gene.
-    layout: {x: 0, y: 9, w: 8, h: 3}
+    data_collection_tag: tracks
+    title: Genome browser
+    max_tracks: 16
+    initial_tracks: 6
+    show_overview: false
+    # The lanes above already say where the browser is: its locus bar only
+    # costs height here, and the tile's menu brings it back.
+    show_header: false
+    # JASPAR 2022 motifs from UCSC: FOXA1 sites under the FOXA1 peaks.
+    ucsc_tracks: [jaspar2022]
+    # No selection write-back: a picked track would narrow the peaks to one
+    # library and reframe the view. Two sources: the per-library calls (one
+    # density row per library) and the consensus intervals of each antibody.
+    # A picked peak narrows macs2_peaks to a few rows and the view jumps to it;
+    # a sample filter leaves hundreds, so it never moves the view.
+    locus_from:
+      - data_collection_tag: macs2_peaks
+        name: Peaks
+        color: teal
+        chrom_column: chr
+        start_column: start
+        end_column: end
+        padding: 2000
+        max_rows: 5
+        sort_by: neg_log10_qvalue
+        descending: true
+        label_column: peak_id
+        sample_column: sample
+        columns: [fold_enrichment, width]
+      - data_collection_tag: macs2_consensus_boolean
+        name: Consensus
+        color: grape
+        chrom_column: chr
+        start_column: start
+        end_column: end
+        padding: 2000
+        sort_by: num_samples
+        descending: true
+        label_column: peak_id
+        columns: [num_samples, consensus_set]
+    layout: {x: 0, y: 6, w: 8, h: 7}
 # ============================================================================
 # Comparison
 # ============================================================================
@@ -2252,174 +2260,3 @@ tabs:
     title: Library distance matrix
     description: The square distance table behind the heatmap; a pair from two different antibodies is empty.
     layout: {x: 0, y: 12, w: 8, h: 6}
-
-# ============================================================================
-# Genome tracks
-# ============================================================================
-# The run's own files in a genome browser: bigWig signal of every ChIP and
-# input, the MACS2 narrowPeak calls and the filtered BAMs, read by range from
-# the results folder (TRACKS_URI) or from the files uploaded at ingestion. The
-# sample filter of the left panel (persistent across tabs) picks which tracks
-# are open; clicking a peak or a signal track picks its sample back for every
-# other tab.
-- title: Genome tracks
-  subtitle: Signal, peak calls and alignments of the selected samples, read by range from the run's results
-  tab_order: 8
-  tab_icon: mdi:dna
-  tab_icon_color: teal
-  icon: /assets/images/workflows/nf-core.png
-  icon_color: green
-  workflow_system: nf-core
-  grid_sections:
-  - name: Genome browser
-    icon: mdi:dna
-    color: teal
-    description: The tracks of the samples in scope, around GREB1
-  - name: Peaks
-    icon: mdi:chart-scatter-plot
-    color: indigo
-    description: Pick a peak to open its sample's tracks at that peak
-  components:
-  - component_type: text
-    tag: cs-tracks-intro
-    section: Genome browser
-    title: Signal next to the calls
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Each ChIP's bigWig sits next to its MACS2 peaks; the grey tracks are the
-      inputs. The view opens on one locus, the cards summarise the peaks of the
-      samples in scope, and a click on a peak in the Manhattan or in the peak
-      table below opens its sample's tracks at that peak.
-    workflow_tag: chipseq
-    data_collection_tag: tracks
-    layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: card
-    tag: cs-tracks-card-peaks
-    index: cs-tracks-card-peaks
-    section: Genome browser
-    workflow_tag: chipseq
-    data_collection_tag: macs2_peaks
-    use: macs2/peaks
-    aggregation: count
-    column_name: peak_id
-    column_type: object
-    secondary_layout: top_n
-    breakdown_col: sample
-    top_n_count: 3
-    display: {icon_name: 'mdi:counter', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: MACS2 peaks in view
-    layout: {x: 0, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: cs-tracks-card-width
-    index: cs-tracks-card-width
-    section: Genome browser
-    workflow_tag: chipseq
-    data_collection_tag: macs2_peaks
-    use: macs2/peaks
-    aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: width
-    column_type: int64
-    display: {icon_name: 'mdi:ruler', icon_color: '#5E35B1', title_color: '#5E35B1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Median peak width
-    layout: {x: 2, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: cs-tracks-card-fold
-    index: cs-tracks-card-fold
-    section: Genome browser
-    workflow_tag: chipseq
-    data_collection_tag: macs2_peaks
-    use: macs2/peaks
-    aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: fold_enrichment
-    column_type: float64
-    display: {icon_name: 'mdi:magnet', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Median fold enrichment
-    layout: {x: 4, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: cs-tracks-card-samples
-    index: cs-tracks-card-samples
-    section: Genome browser
-    workflow_tag: chipseq
-    data_collection_tag: design
-    aggregation: nunique
-    column_name: sample_id
-    column_type: object
-    secondary_layout: donut
-    breakdown_col: antibody
-    display: {icon_name: 'mdi:test-tube', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: ChIP samples in scope
-    layout: {x: 6, y: 1, w: 2, h: 2}
-  - component_type: jbrowse
-    tag: cs-tracks-browser
-    index: cs-tracks-browser
-    section: Genome browser
-    workflow_tag: chipseq
-    data_collection_tag: tracks
-    title: Genome browser
-    location: chr2:11,640,000-11,720,000
-    max_tracks: 16
-    initial_tracks: 6
-    selection_enabled: true
-    selection_column: sample_id
-    show_overview: false
-    # JASPAR 2022 motifs from UCSC: FOXA1 sites under the FOXA1 peaks.
-    ucsc_tracks: [jaspar2022]
-    # A picked peak (Manhattan point or table row) narrows macs2_peaks to a
-    # few rows: the view then jumps to it. A sample filter leaves hundreds of
-    # rows, so it never moves the view off GREB1.
-    locus_from:
-      data_collection_tag: macs2_peaks
-      chrom_column: chr
-      start_column: start
-      end_column: end
-      padding: 2000
-      max_rows: 5
-    layout: {x: 0, y: 3, w: 8, h: 9}
-  - component_type: advanced_viz
-    tag: cs-tracks-av-manhattan
-    index: cs-tracks-av-manhattan
-    section: Peaks
-    workflow_tag: chipseq
-    data_collection_tag: macs2_peaks
-    use: macs2/peak_significance
-    config:
-      feature_col: peak_id
-      score_kind: "-log10(q)"
-      color_by_columns: [sample]
-      default_color_by: sample
-      selection_enabled: true
-      selection_column: peak_id
-      top_n_labels: 10
-    title: Peak significance along the genome
-    description: Every peak at its summit position, height is -log10 of the MACS2 q-value. Click a peak to open its sample's tracks at that peak.
-    title_size: h3
-    layout: {x: 0, y: 0, w: 8, h: 6}
-  - component_type: table
-    tag: cs-tracks-table-peaks
-    index: cs-tracks-table-peaks
-    section: Peaks
-    workflow_tag: chipseq
-    data_collection_tag: macs2_peaks
-    use: macs2/peaks
-    row_selection_enabled: true
-    row_selection_column: peak_id
-    title: MACS2 peak calls
-    description: Pick a peak to open its sample's tracks at that peak.
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 6, w: 8, h: 4}

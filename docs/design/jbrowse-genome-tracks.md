@@ -53,6 +53,62 @@ Closer, the same tiles:
 The same code runs in `depictio local up` (no Docker, single origin), Compose
 and Kubernetes: there is no extra service, port, volume or CORS origin.
 
+## Genome views and roles
+
+A template can draw genomic coordinates three ways, and they overlap unless each
+has one job (RULES.md section 16 states the rules, and
+`test_shipped_dashboard_yamls.py` enforces them):
+
+| Role | Tile | Reads | Job |
+| --- | --- | --- | --- |
+| Summary | Plotly: `manhattan`, `coverage_track`, `cnv_profile`, `sashimi` | a table | the whole genome at a glance |
+| Navigator | GenomeSpy `genome_view`, `region_filter_enabled: true` | a table | brush a region; the dashboard follows it |
+| Locus detail | `jbrowse` | the run's files | reads, variants and peaks at one locus |
+
+The consequences for a template:
+
+- One `jbrowse` per template, in the tab that works at a locus. The exception is
+  a template whose tabs show disjoint track sets (oncoanalyser, variantbenchmarking)
+  and the showcase.
+- A `genome_view` is a navigator, unless it stacks per-sample lanes. A tile that
+  only follows a brush adds nothing a `coverage_track` or the browser does not
+  already show.
+- The same table is drawn once on a genomic axis per tab, or as a navigator plus
+  one detail tile.
+- A template with a browser pins the Plotly tiles to their Plotly view, so no
+  toggle leads to a second locus view of the same rows.
+
+### Open in genome browser
+
+The genomic tiles of the other tabs (manhattan, coverage, copy number, sashimi,
+and the navigator) carry an "Open in genome browser" action instead of a copy of
+the browser. The locus comes from, in this order: the last point clicked
+(chromosome and position, padded), the region of the active `genome_selection`
+filter, then the visible window when it covers a single chromosome. The action is
+disabled when none gives a locus, or when the family has no browser.
+
+Switching tab reloads the page, so the locus travels through `sessionStorage`
+(`depictio:pending-locus:<familyId>`: dashboard id, tile index, locus, a 60 s
+timestamp), read once by the browser's tile when it builds and deleted. When the
+browser is in the same tab, a `depictio:pending-locus` window event does the same
+and scrolls the tile into view. A pending locus has priority over every opening
+level and is not stored as a reader navigation.
+
+### The browser follows the navigator
+
+A `genome_view` brush publishes a `genome_selection` region filter (chromosome
+plus position range). The browser of the same tab reads it and navigates to the
+region, resolving contig aliases through the assembly. It does not filter: the
+region is removed from the filters sent to the render endpoint, so `locus_from`
+is not narrowed by the brush and the manifest keeps every track.
+
+### Floating evaluation
+
+`placement: floating` was tried as the way to reach the browser from every tab.
+The panel is too small to read alignments, and enlarged it covers the tiles that
+drive it. It stays available as an option (the showcase has one) and no template
+uses it; the action above replaces it.
+
 ## The `genomic_tracks` data collection
 
 A table of track files: one row per track. It is ingested like a table DC (so
@@ -147,7 +203,7 @@ only the present ones when they are uploaded.
   workflow_tag: rnaseq
   data_collection_tag: tracks
   title: Genome browser
-  location: chr11:5,240,000-5,300,000   # else the assembly default
+  location: chr11:5,240,000-5,300,000   # optional; else the first call, else the data
   track_mode: filtered        # or `all`: every track, filters ignored
   max_tracks: 16              # cap on tracks shown under a filter
   initial_tracks: 6           # tracks shown when nothing is filtered
@@ -169,6 +225,23 @@ only the present ones when they are uploaded.
     end_column: END
     padding: 150
     max_rows: 3
+    sort_by: AF               # order of the calls: first call, picker
+    descending: true
+    label_column: mutation_label   # name of a region in the picker
+    mate: {chrom_column: CHROM_B, start_column: POS_B}   # second side of a call
+    # locus_from may also be a list of such sources (see "Navigating regions"); each
+    # accepts name, color, workflow_tag, sample_column, run_column, columns, search_columns
+  show_density: true          # genome-wide density of the regions under the header
+  show_junctions: false       # sashimi arcs on RNA alignments
+  read_pairs_display: pileup  # DNA alignments open as pileup | arcs | cloud
+  display: {scale: log}       # default display settings, see "Display settings"
+  call_stepper: true          # next / previous region and the region picker
+  follow_window: true         # follow the region of the other genome tiles
+  views: [breakpoint, circular]   # extra views; breakpoint needs locus_from.mate
+  circular_categories: [sv]   # track categories the circular view draws
+  color_by: condition         # manifest column that colours and groups tracks
+  placement: grid             # or floating (a panel kept across the tabs)
+  floating_initial_state: compact   # compact | expanded | docked | hidden
   preset: signal              # built-in (sv-calls, signal, compact, peaks) or the DC's own
   config_overrides:           # raw JBrowse config, merged last
     formats: {bam: {displays: [{type: LinearAlignmentsDisplay, height: 80}]}}
@@ -195,8 +268,12 @@ without restating the display.
   `selection_column` with `metadata.dc_id` = the tracks DC. Links from the
   tracks DC propagate it. The component drops its own filter before fetching,
   so selecting does not hide the other tracks.
-- `locus_from` jumps to the coordinates of the filtered rows of another DC
-  (e.g. a picked variant).
+- `locus_from` frames the filtered rows of another DC (e.g. a picked variant,
+  or every mutation of a gene) when between 1 and `max_rows` remain: from the
+  smallest start to the largest end among the rows on the most frequent
+  chromosome (ties: the one seen first), `padding` bases on both sides, start
+  clamped at 1. Above `max_rows` the view does not move; what it shows then is
+  the opening locus below.
 
 **Chrome:** the tile's settings action (the same icon and *Controls* popover
 as every other tile's viz settings) holds one switch per display option,
@@ -257,6 +334,301 @@ current filters would show.
 
 ![Builder](../images/jbrowse/builder_jbrowse.png)
 
+### Opening locus
+
+The browser opens where the data is, not on the assembly's default view. The
+render payload carries `location` and `opening`, the level that produced it; the
+first level that gives a locus wins:
+
+1. `filter`: a dashboard filter narrowed the `locus_from` collection to at most
+   `max_rows` rows (a picked table row, a volcano point, a gene);
+2. `yaml`: the tile's `location`;
+3. `first_call`: the first row of `locus_from` (of the filtered rows, when there
+   are some), ordered by `sort_by`, `descending` by default; without `sort_by`,
+   the collection's own order;
+4. `data`: the first region holding data in the first tracks shown, read from
+   their index (BAI, tabix, bigWig); any failure falls through;
+5. `preset`: the assembly preset's default view.
+
+A template declares a `sort_by` on its `locus_from` (RULES.md section 16) so
+level 3 gives the call worth looking at first: the most supported fusion, the
+highest-quality variant, the most significant peak. A template with no
+`locus_from` opens on level 4. Only `filter` and `yaml` move a view that is
+already open; the other levels are defaults for a view that has just been
+created, so a refetch never pulls the reader away.
+
+The viewer remembers the locus a reader left the view at (per tile, in
+`localStorage`, key `.loc.v2`) and writes it only after a navigation by the
+reader, never for the opening view. A locus saved by an older build is ignored.
+
+### Navigating regions
+
+When the tile has a `locus_from`, its regions (the rows of the collection, under
+the current filters) can be walked, picked and surveyed. Nothing here writes a
+filter: moving the view is not a selection. `call_stepper: false` hides the
+next / previous buttons and the picker; `show_density: false` hides the strip.
+
+- **Next / previous region.** The buttons step by position, like IGV's Ctrl+F /
+  Ctrl+B: the next region is the first whose start is past the current position
+  (the previous: the one whose end is before it), and past the last region of a
+  chromosome the first one of the next chromosome of the assembly. They run over
+  the merged regions (below), so six samples that all have a peak at the same
+  place are one stop. There is no wrap-around at the ends.
+- **Region picker.** A grid (AG Grid) listing the regions, sortable by any column
+  (`sort_by`, `label_column`, `sample_column`, `run_column`, the `columns` of the
+  source, plus chromosome, start, end), with a search box matching
+  `label_column` and `search_columns` (case-insensitive substring), paged on the
+  server. Picking a row moves the view to it (padded by `padding`; with a `mate`,
+  the view shows both sides).
+- **Density heatmap.** A strip under the header: one row per source (or per
+  sample or run), one cell per genome bin, coloured by how many regions start in
+  it. Clicking a cell moves the view there. It answers "where are the regions"
+  for 200 000 peaks, which no stepper can.
+
+All three read the same data and the same filters as the render: the regions of
+the collections, filters extended over DC links, at their pinned commit.
+
+#### Merged regions
+
+With `merge`, regions of one source that overlap, across samples and runs, are
+joined into one. Sources are never merged together: a copy-number segment spans
+megabases and would swallow every variant under it, so each omics layer keeps
+its own stops (a peak and the consensus interval on it are two stops). They are ordered by chromosome and start; a region starts a new
+group when its start is past the largest end seen so far on its chromosome. A
+merged row spans the union and reports `n_rows`, `n_samples` (distinct values of
+`sample_column`), `samples` (at most 10 names) and `sources`. Its `score`, label
+and `source` are those of the best row: the largest `sort_by` value when
+`descending`, else the smallest.
+
+#### Several sources
+
+`locus_from` is one source or a list. List the sources rather than adding tiles
+when the regions belong together (ATAC peaks, the differentially expressed genes
+and the variants of one question):
+
+```yaml
+locus_from:
+  - name: Peaks
+    data_collection_tag: consensus_peaks
+    workflow_tag: atacseq        # only when several workflows have the tag
+    chrom_column: chr
+    start_column: start
+    end_column: end
+    sort_by: score
+    sample_column: library
+    columns: [fold, gene]
+    search_columns: [gene]
+    color: teal
+  - name: DE genes
+    data_collection_tag: de_genes
+    workflow_tag: rnaseq
+    chrom_column: chromosome
+    start_column: pos
+    label_column: symbol
+    color: orange
+```
+
+The first source is the primary one. It alone frames the view when the filters
+narrow it (the opening locus above), carries the `mate`, and is what "Use this
+region" filters on (`locus_source`). Calls, merging and density use every source;
+the viewer lets a reader switch sources off. A source is named by `name`, else by
+its collection tag; names are unique in a tile. `workflow_tag` picks the
+collection of that workflow when several workflows share the collection tag.
+Filters reach each source through its own DC links, so a source whose collection
+no link reaches ignores the filters on others.
+
+`sample_column` and `run_column` name the library and the run a region belongs
+to, on a collection that holds the regions of several. They feed `n_samples`, the
+sample and run columns of the picker, and the density grouped by sample or run
+(a source without the column stays one row). Up to 64 rows are drawn, the
+busiest kept.
+
+#### Endpoints
+
+`POST /dashboards/jbrowse_calls/{dashboard_id}/{component_index}` (same filters,
+link resolution, version pins and permission check as the render) takes
+`{filters, start, limit (at most 200), sources, sort: {column, descending},
+search, near: {chrom, pos, direction, chrom_order}, merge}`, all but the filters
+optional. `sort.column` is a common-shape name (`chrom`, `start`, `end`, `score`,
+`label`, `sample`, `run`, `source`; merged: `n_rows`, `n_samples`) or a raw
+column of a source; anything else is a 400. `near` returns at most one row while
+`total` stays the full count. It answers `{total, rows}`; a row has `locus`,
+`mate_locus` (primary source only), `label`, `chrom`, `start`, `end`, `score`,
+`extra` (the `columns` cells), `source`, `sample`, `run` and, merged, the counts
+above. Without the optional keys and with one source, a request is read as a
+Delta page as before; the other modes read the filtered regions into memory and
+keep them in a small cache keyed by the filters, the pinned commit and the
+collection's aggregation version, so paging and searching do not read Delta again.
+
+`POST /dashboards/jbrowse_call_density/{dashboard_id}/{component_index}` takes
+`{filters, regions: [{refName, length}], bins (1 to 2000), sources, group:
+source | sample | run}` and answers `{bin_size, max, tracks, truncated}`: one bin
+size (bp) for the whole genome, and per track the counts of each region.
+
+Chromosome names are compared without the `chr` prefix everywhere (`chr1` is
+`1`, `M` is `MT`), including in the `genome_selection` filter the region picker
+and "Use this region" publish, since a collection and the assembly rarely agree.
+
+### Gene search
+
+Typing a gene name in the locus box searches it. For a preset assembly the
+browser asks `GET /jbrowse/preset/{name}/search?q=&limit=10`, which proxies the
+UCSC search API for that genome (HGNC and MANE entries first, deduplicated,
+cached in the API process). A custom assembly has no search: type a locus, or
+use `location`.
+
+### Extra views (breakpoint, circular)
+
+`views` adds buttons to the tile's toolbar; each opens its view in a large
+dialog, loaded on demand as its own chunk.
+
+- **Breakpoint view** (`breakpoint`, needs `locus_from.mate`): JBrowse's breakpoint
+  split view, two stacked panes on the two sides of the current call, joined by
+  the split reads and discordant pairs of the open alignment tracks. The mate
+  columns come from the same row as the primary locus: `mate: {chrom_column,
+  start_column, end_column}` (the end defaults to the start). The call is the one
+  the view stands on, else the one the view opened on.
+- **Circular view** (`circular`): the structural variants of the tracks as chords.
+  It draws the tracks whose manifest `category` is in `circular_categories`
+  (default `["sv"]`; the payload lists them as `sv_track_ids`), and is hidden when
+  there are none. A recipe that names its SV folder otherwise ("Structural
+  variants") sets `circular_categories` to that name.
+
+With a mate, the toolbar menu also has **Both sides**, on by default: one view
+with two regions, the call and its mate, side by side.
+
+### Read pairs and junctions
+
+- `show_junctions: true` draws the splice junctions as arcs (sashimi) over the
+  coverage of the RNA alignment tracks.
+- `read_pairs_display` sets how DNA alignment tracks open: `pileup` (default),
+  `arcs` (read arcs, a discordant pair is an arc between its mates) or `cloud`
+  (read cloud, pairs by insert size). The other displays stay in each track's
+  menu. Use `arcs` on a structural-variant tab.
+- `color_by: <manifest column>` colours the signal and coverage tracks by that
+  column, from the dashboard's `category_colors`, and groups the Tracks menu by
+  it (a track whose manifest row already carries a `color` keeps it).
+
+### Display settings
+
+The toolbar menu groups the display settings by kind of track: View,
+Alignments, Coverage, Features and Variants. A group only appears while a track
+of that kind is open. `display:` gives the dashboard's defaults, every key
+optional:
+
+```yaml
+display:
+  # view
+  center_line: false
+  gridlines: false
+  cytobands: true
+  track_outlines: false
+  color_by_cds: false
+  track_labels: offset          # offset | overlapping | hidden
+  # alignments
+  color_scheme: strand          # normal | mappingQuality | strand | perBaseQuality |
+                                # stranded | pairOrientation | insertSize | tag |
+                                # modifications | methylation
+  color_tag: HP                 # only with color_scheme: tag, and required then
+  soft_clipping: false
+  mismatch_alpha: false
+  read_height: compact          # normal | compact | super_compact
+  hide_small_indels: false
+  hide_mismatches: false
+  lower_panel: pileup           # pileup | arcs | cloud
+  coverage_height: 80           # 20 to 2000
+  sashimi_arcs: false
+  min_arc_score: 2
+  # quantitative tracks
+  scale: log                    # linear | log
+  autoscale: local              # local | global | globalsd | localsd
+  renderer: xyplot              # xyplot | density | line
+  fill: filled                  # filled | line | emphasis
+  summary: avg                  # min | max | avg | whiskers
+  # feature tracks
+  feature_mode: compact         # normal | compact | reducedRepresentation | collapse
+  feature_labels: true
+  feature_descriptions: false
+  gene_glyph: longestCoding     # all | longest | longestCoding
+  # variant tracks
+  variant_row_height: 10        # 1 to 50
+  phased: false
+```
+
+**Precedence**, highest first: the viewer's own choice in the menu (kept in the
+browser, per tile), then `display:`, then JBrowse's default. "Reset to dashboard
+defaults" in the menu drops the local choices. `track_labels`, `sashimi_arcs`
+and `lower_panel` overlap the top-level `track_labels`, `show_junctions` and
+`read_pairs_display`: the top-level fields keep working, and setting both to
+different values is a validation error. The same value on both is accepted.
+`color_by` colours tracks by a manifest column and is not a `color_scheme`.
+
+### Selecting a region and hover links
+
+With `locus_from`, the tile can drive the dashboard as well as follow it:
+
+- the header's "Use this region" button, and the "Use this region" entry of the
+  menu that opens after dragging across the ruler (rubberband), emit a
+  `genome_selection` filter on the `locus_from` chromosome and start columns.
+  Everything that follows a region (Manhattan, tables, GenomeSpy) narrows to it.
+  The region stays drawn as a band in the browser;
+- a second click on the button, or the tile's Reset, clears the filter;
+- the button needs `locus_from`: the render payload carries `locus_source`
+  (`{dc_id, chrom_column, start_column, end_column}`, null without
+  `locus_from`), and the tile has no button when it is null.
+
+Hover works in both directions, on the shared highlight bus: hovering a feature
+in the browser (a variant, a peak, a read, a coverage bin) highlights the
+matching points of the Manhattan and the matching rows of the tables, and
+draws a line on the coverage and GenomeSpy tracks. Hovering a point or a table
+row bands its region in the browser. A table row matches by the coordinate
+columns it shares with `locus_from`; a table without them ignores the event.
+The view never navigates on hover.
+
+### Linked view and floating
+
+The browser takes part in the dashboard's linked views:
+
+- a click on a feature emits `jbrowse_selection` (`selection_enabled`), which a
+  record card can follow through `selection_source`; the card names its
+  `selection_column` explicitly;
+- `follow_window` (default on) makes it follow the genomic window another genome
+  tile publishes (a coverage track, another browser), and publish its own; the
+  toolbar switch "Follow other genome tiles" turns it off per viewer. It is
+  ignored while Both sides holds two regions;
+- in a compact density the header is one line, with a "Genome" tag, and the
+  table of the shown tracks opens from the toolbar.
+
+`placement: floating` lifts the browser out of the grid into the floating panel,
+which stays on screen from tab to tab, like a 3D structure or a map. A floating
+tile declares no `section` and no `layout`; `floating_initial_state` is
+`compact`, `expanded`, `docked` or `hidden`. The Genome Tracks Showcase has one.
+
+### Metadata panel
+
+The tile's metadata panel (the info icon, and the inspector's Info tab) has a
+*Genome tracks* section: assembly (name, aliases, preset or custom), location
+(current locus, the `locus_from` collection and columns), the shown tracks by
+category (format, sample, file, index, storage), the UCSC tracks, and the data
+(live or pinned version, shown out of total, truncation, remote folder). The
+tile hands its last render payload and visible locus to a small module store
+(`components/jbrowse/genomeTracksStore.ts`), so the panel needs no wiring to
+the tile; a tile that has not mounted yet (`LazyMount`) shows its static config
+and "Scroll the browser into view to load its tracks.". Read-only: no track
+toggles.
+
+The payload carries three fields for it: `storage` per manifest track
+(`remote` read in place, `direct` for `direct_access`, `depictio` ingested),
+`index_uri` per track, and `data_version` (the pinned manifest commit, or null).
+Every URI shown goes through one sanitizer, `display_uri`
+(`services/jbrowse/tracks.py`): no userinfo, query or fragment (a presigned
+signature never leaves the API), a file name only for an ingested file or an
+absolute local path, never a bucket key. `remote_base_uri` is shown as host and
+prefix only, and not at all to an anonymous viewer, who sees file names. The
+same sanitizer covers the URI cells of `tracks[].metadata`. Only display fields
+change: the adapter locations JBrowse fetches (signed proxy URLs, or the https
+URL of a `direct_access` collection) are built apart and are untouched.
+
 ## Security model
 
 - The browser never receives a storage URL or credentials. Render returns
@@ -315,7 +687,7 @@ key of `backend.env`), `.env.example` and `depictio local up`.
    preset and an extra UCSC gene track from `config_overrides`.
    ![variant in context](../images/jbrowse/sarscov2_context.png)
    ![variant](../images/jbrowse/sarscov2_variant.png)
-3. **nf-core/cutandrun 3.1** — *Genome tracks* tab: bigWig per sample coloured
+3. **nf-core/cutandrun 3.1**: *Genome tracks* tab: bigWig per sample coloured
    per target, SEACR and MACS2 peaks, deduplicated BAM, driven by the target
    filter; cards, a SEACR Manhattan and a region table on the same tab.
    ![cutandrun in context](../images/jbrowse/nfcore_cutandrun_context.png)
@@ -325,11 +697,11 @@ key of `backend.env`), `.env.example` and `depictio local up`.
    component of the tab narrows with it:
    ![peak picked in context](../images/jbrowse/nfcore_cutandrun_peak_context.png)
    ![peak picked](../images/jbrowse/nfcore_cutandrun_peak.png)
-4. **nf-core/chipseq 1.2.0** — ChIP and input bigWigs, MACS2 narrowPeak calls
+4. **nf-core/chipseq 1.2.0**: ChIP and input bigWigs, MACS2 narrowPeak calls
    and BAM per antibody (hg19 megatest), with cards, a MACS2 Manhattan and a
    peak table that drive it the same way. ![chipseq in context](../images/jbrowse/nfcore_chipseq_context.png)
    ![chipseq](../images/jbrowse/nfcore_chipseq.png)
-5. **nf-core/rnaseq 3.26.0** — strand-specific bigWig coverage and BAM per
+5. **nf-core/rnaseq 3.26.0**: strand-specific bigWig coverage and BAM per
    sample (hg19 megatest), with cards and two lassoable sample scatters.
    ![rnaseq in context](../images/jbrowse/nfcore_rnaseq_context.png)
    ![rnaseq](../images/jbrowse/nfcore_rnaseq.png)
@@ -338,23 +710,42 @@ The nf-core templates read the tracks in place when `TRACKS_URI` is set
 (`depictio run --var TRACKS_URI=s3://…/results/`; the template turns it into
 `remote_base_uri`), and upload the files found in the results folder otherwise.
 
-## Which templates benefit
+## Workflows
 
-| Lot | Template | Tracks it publishes | Fit |
-| --- | --- | --- | --- |
-| 1 | cutandrun | bigWig, SEACR/MACS2 peaks, BAM | **High — shipped** |
-| 1 | chipseq | bigWig (ChIP + input), MACS2 peaks, BAM | **High — shipped** |
-| 1 | rnaseq | bigWig (±strand), BAM | **High — shipped** |
-| 1 | atacseq | bigWig, MACS2 peaks, consensus peaks, BAM | High — same recipe as chipseq, next |
-| 1 | rnafusion | fusion BEDPE / Arriba PDFs, BAM | Low — fusions need an arc/breakpoint view |
-| 1 | differentialabundance, funcscan, airrflow, taxprofiler, ampliseq | tables, no coordinates | None |
-| 1 | viralrecon | VCF, BAM (MN908947.3) | High — shown in the showcase project |
-| 1 | variantbenchmarking | truth/query VCFs | Medium — VCF pairs on hg38 |
-| 2 (#1102) | sarek | VCF (per caller), CRAM | High — VCF + CRAM on GRCh38 |
-| 2 | nanoseq | bigWig, bigBed, BAM | High |
-| 2 | methylseq | bedGraph / coverage | Medium — needs bgzip + tabix of the bedGraphs |
-| 2 | hic | `.hic`, cool | Low — `.hic` only, a HiC display rather than tracks |
-| 2 | eager, scrnaseq, mag | BAM / count matrices | Low / none |
+Each workflow has its own page under `jbrowse/`: a map of its tabs (the question each answers,
+its tiles, what drives the browser), the tracks and their paths, use cases written as click
+sequences, and limits. The generic gestures are in the dashboard Guide's "Browse the genome"
+part, which shows only when a dashboard holds a browser; the pages do not repeat them. In a
+dashboard, the section that holds a browser says in its description why it is there.
+
+"Live" means the megatest results on the public bucket hold the tracks, so an ingest with
+`--var TRACKS_URI=<megatest prefix>` reads them in place. "Recipe" means the recipe is tested on
+a fake run tree only.
+
+| Template | Tabs with a browser | Tracks | Use case | Status |
+| --- | --- | --- | --- | --- |
+| chipseq 1.2.0 | Genome tracks section | bigWig (ChIP and input), MACS2 peaks, BAM | A peak's signal against its input | Live |
+| cutandrun 3.1 | Genome tracks section | bigWig, SEACR/MACS2 peaks, BAM | A target's peaks across replicates | Live |
+| rnaseq 3.26.0 | Genome tracks section | Stranded bigWig, BAM | A gene's coverage per condition | Live |
+| viralrecon 3.0.0 (`v2.yaml`) | Coverage, Variants, Gene, Sample | VCF (snpEff), BAM | A mutation's reads and the amplicon under it | Live |
+| [sarek 3.10.0](jbrowse/sarek.md) | Locus, Caller concordance | VCF per caller, Manta, CRAM | A call checked against the reads, callers compared on one locus | Live |
+| [oncoanalyser 3.0.0](jbrowse/oncoanalyser.md) | Small variants, Copy number, Structural variants | PURPLE somatic, germline and SV VCFs, tumour and normal BAMs | A driver in tumour versus normal, a segment beside its breakends | Live |
+| [variantbenchmarking 1.4.0](jbrowse/variantbenchmarking.md) | Germline, Structural & CNV | FP, FN and TP VCFs (rtg-tools, Truvari) | Where a callset's errors fall | Live (germline), recipe (Truvari) |
+| [atacseq 1.2.2](jbrowse/atacseq.md) | Peaks, Locus | bigWig, broad peaks, BAM | One accessible region across libraries | Live |
+| [nanoseq 3.0.0](jbrowse/nanoseq.md) | Isoform usage | bigWig, long-read BAM | The reads behind an isoform switch | Live (needs the annotation GTF) |
+| [riboseq 2.0.0](jbrowse/riboseq.md) | ORF discovery | Coverage bigWig, P-site bedGraph, BAM | The footprints over an ORF | Live |
+| [rnasplice 1.0.4](jbrowse/rnasplice.md) | Splicing Events | Stranded bigWig, BAM | A differential splicing event | Recipe |
+| [rnafusion 4.1.3](jbrowse/rnafusion.md) | Breakpoints | STAR BAM | The reads at a fusion's 5' breakpoint | Live |
+| [methylseq 2.3.0](jbrowse/methylseq.md) | none | Bismark bedGraphs are not indexed, BAMs unsorted | | Not added |
+
+Next:
+
+- rnavar, nascent and viralmetagenome, once their templates (#1265) are merged.
+- atacseq 2.1.2, on the 2.x layout, once a megatest run holds its files.
+- raredisease, a new template built from a `-profile test` run (its megatest prefixes hold
+  `pipeline_info/` only).
+- hic (`.hic` needs a HiC display, not linear tracks); eager, scrnaseq, mag have no tracks worth
+  a browser.
 
 ## Reuse from BelSVedere
 

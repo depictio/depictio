@@ -399,6 +399,9 @@ class ManhattanConfig(_BaseVizConfig):
             "``['effect', 'lineage', 'sample']``."
         ),
     )
+    hover_cols: list[str] = Field(
+        default_factory=list, description="Extra columns to show in the hover tooltip"
+    )
     default_color_by: str | None = Field(
         default=None,
         description=(
@@ -2492,14 +2495,16 @@ class GenomeViewConfig(_BaseVizConfig):
         default=None,
         description=(
             "Optional per-row annotation (gene region, peak caller, cluster) used "
-            "as the colour channel in place of the chromosome."
+            "as the colour channel. Without it, marks wear their sample's colour "
+            "(the genome browser track of the same sample, or the dashboard's "
+            "pin), else one neutral colour."
         ),
     )
     mark: Literal["point", "rect", "bar"] = Field(
-        default="point",
+        default="rect",
         description=(
-            "Mark type. ``rect`` needs ``end_col`` and draws one rectangle per "
-            "interval; ``bar`` draws the score as a bar from a baseline (GenomeSpy "
+            "Mark type. ``rect`` (the default) needs ``end_col`` and draws one "
+            "rectangle per interval; ``bar`` draws the score as a bar from a baseline (GenomeSpy "
             "has no line or area mark, so this is the coverage profile look); "
             "without ``end_col`` both degrade to points."
         ),
@@ -2519,6 +2524,25 @@ class GenomeViewConfig(_BaseVizConfig):
             "Upper bound on stacked lanes. Beyond it the lanes would be a few "
             "pixels tall each, so the renderer keeps the first ``max_facets`` "
             "samples in genome order and says how many it dropped."
+        ),
+    )
+    lane_height: int | None = Field(
+        default=None,
+        ge=16,
+        le=240,
+        description=(
+            "Height in pixels of each stacked lane. Unset (the default), the "
+            "lanes fit the tile and follow its resizes (never under 26 px each); "
+            "set, every lane is that tall and the tile scrolls when they do not fit."
+        ),
+    )
+    facet_y_scale: Literal["shared", "independent"] = Field(
+        default="shared",
+        description=(
+            "Y scale of the stacked lanes: ``shared`` reads every sample against "
+            "one ruler (coverage), ``independent`` scales each lane to its own "
+            "values, so a sample with low scores is not drawn flat next to a "
+            "high one (peak significance)."
         ),
     )
     annotation: GeneLaneAssembly = Field(
@@ -2555,6 +2579,14 @@ class GenomeViewConfig(_BaseVizConfig):
             "the brushed region."
         ),
     )
+    drag_mode: Literal["select", "pan"] = Field(
+        default="select",
+        description=(
+            "What a drag on the genome axis does: ``select`` brushes a region "
+            "(the region filter), ``pan`` moves the view, with shift + drag "
+            "still brushing. The wheel with Cmd/Ctrl zooms in both."
+        ),
+    )
     follow_region_filter: bool = Field(
         default=False,
         description=(
@@ -2579,6 +2611,17 @@ class GenomeViewConfig(_BaseVizConfig):
             "bare contig name opens the whole contig. ``first`` opens the whole "
             "first contig the data carries, for a template that serves any "
             "reference and so cannot name one."
+        ),
+    )
+
+    default_view: Literal["chromosome", "region"] = Field(
+        default="chromosome",
+        description=(
+            "What the axis shows when the tile opens on a region (the default "
+            "region, or one already in force): ``chromosome`` (the default) shows "
+            "the whole chromosome, with the region framed in it, so the reader "
+            "sees where it sits; ``region`` zooms onto the region itself. Later "
+            "regions (a locus typed, a brush) always zoom onto the region."
         ),
     )
 
@@ -2961,7 +3004,9 @@ class RecordCardConfig(_BaseVizConfig):
             "here renders as a link instead of as text."
         ),
     )
-    selection_source: Literal["scatter_selection", "table_selection", "any"] = Field(
+    selection_source: Literal[
+        "scatter_selection", "table_selection", "jbrowse_selection", "any"
+    ] = Field(
         default="any",
         description=(
             "Which selection the card follows. `any` takes whichever arrives, "

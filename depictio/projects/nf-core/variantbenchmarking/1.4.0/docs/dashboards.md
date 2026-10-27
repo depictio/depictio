@@ -64,8 +64,10 @@ ids pile up); the iso-F1 contours read F1 off the plane.
 **Germline.** Strip: F1 (box plot), recall against a 0.9 floor, false positives (the callers
 with most) and true positives (split by caller). Then the vcfeval precision-recall scatter
 beside the error counts per callset, and hap.py's F1 by variant type (all calls against PASS
-calls) beside the quality-threshold sweep. Collapsed: the vcfeval, hap.py and sweep tables.
-Filters: caller, callset, hap.py variant type and hap.py calls (ALL or PASS).
+calls) beside the quality-threshold sweep. Collapsed: a genome browser (Errors on the genome)
+with the false positive, false negative and true positive VCFs of the callsets picked in the
+left panel, and the vcfeval, hap.py and sweep tables. Filters: caller, callset, hap.py variant
+type and hap.py calls (ALL or PASS).
 
 **Somatic.** Strip: F1 (box plot), precision against a 0.5 floor, false positives (the callers
 with most) and true positives (split by caller). Then the som.py precision-recall
@@ -80,8 +82,29 @@ caller reaches the strata and the cross-check through the links.
 **Structural & CNV.** Strip: true positives (split by caller), F1 (box plot), recall against a
 0.8 floor and precision (distribution), all from Truvari. Then the Truvari precision-recall
 scatter beside its error counts, and the SVanalyzer F1 per callset beside the Wittyer F1 per
-event and per base. Collapsed: the Truvari, SVanalyzer and Wittyer tables. Filters: callset,
-caller and Wittyer level; the callset reaches SVanalyzer and Wittyer through the links.
+event and per base. Collapsed: a genome browser (Errors on the genome) with the Truvari false
+positive, false negative and true positive VCFs of the picked callsets, and the Truvari,
+SVanalyzer and Wittyer tables. Filters: callset, caller and Wittyer level; the callset reaches
+SVanalyzer and Wittyer through the links.
+
+## Genome tracks
+
+The `tracks` collection lists the files the genome browser reads: per benchmarked callset, the
+false positives and the false negatives (the first two tracks it opens) and the true positives,
+as small VCFs the pipeline publishes next to its summary tables. `recipes/tracks.py` spells
+them out from the rtg-tools summary (germline, `small/<id>/benchmarks/rtgtools/`) and the
+Truvari summary (structural, `structural/<id>/benchmarks/truvari/`); the file names carry the
+callset id, the truth set and the caller. Picking a callset in the filter panel or in a table
+opens its tracks, and clicking a track filters the tables back. The collection is optional, and
+so are its two sources: a run holding neither summary, such as the somatic route, leaves it out,
+and the import drops the browser with it.
+
+The build is the `GENOME` variable (UCSC name, default hg38): pass `--var GENOME=hg19` for a
+GRCh37 run. With `--var TRACKS_URI=<results folder>` the VCFs are read in place; without it the
+VCFs, with their `.tbi`, that DATA_ROOT holds are uploaded. The browser has no `locus_from`: no
+collection of this template carries per-call coordinates, so the view opens on its default
+window and the reader moves along the chromosome. The use cases are in
+`docs/design/jbrowse/variantbenchmarking.md`.
 
 ## Undefined metrics
 
@@ -101,9 +124,9 @@ both blocks, stacked.
 
 | Route (`--variant_type`) | What remains |
 |---|---|
-| `small` (germline) | The Germline tab, the germline cards, rows and highlights. |
-| `snv` or `indel` (somatic) | The Somatic tab, the somatic cards, rows and highlights. |
-| `structural` | The Structural & CNV tab, the structural cards, rows and highlights. |
+| `small` (germline) | The Germline tab, the germline cards, rows and highlights, the genome browser on rtg-tools files. |
+| `snv` or `indel` (somatic) | The Somatic tab, the somatic cards, rows and highlights; no genome browser. |
+| `structural` | The Structural & CNV tab, the structural cards, rows and highlights, the genome browser on Truvari files. |
 | `copynumber` | Only the Wittyer tiles of the Structural & CNV tab and the Wittyer row. |
 
 ## Colours

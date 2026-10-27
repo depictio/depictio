@@ -184,6 +184,18 @@
 .depictio-component-chrome.fullscreen-active > *:not(.depictio-component-actions) {
   height: 100%;
 }
+/* Portals land in the fullscreen element too (see `useFullscreenPortalTarget`),
+ * each in a bare div; a closed modal keeps its own. At `height: 100%` every
+ * one of them took a screen of the flex column and squeezed the renderer to
+ * its header. */
+/* Floating layers (JBrowse's feature tooltip) portal there directly, placed
+ * by an inline `position`: stretched to the screen, a hover drew a grey bar. */
+.depictio-component-chrome.fullscreen-active > div:not([class]),
+.depictio-component-chrome.fullscreen-active > [style*='position: fixed'],
+.depictio-component-chrome.fullscreen-active > [style*='position: absolute'] {
+  height: auto;
+  flex: 0 0 auto;
+}
 
 /* Drag handle — sits inside the chrome action row alongside the other
  * icons. Show the closed-hand "grabbing" cursor on hover so it's obvious
@@ -266,4 +278,33 @@
 .depictio-component-actions > .depictio-annotate-active {
   opacity: 1;
   pointer-events: auto;
+}
+
+/* The embedded genome browser resets every inherited property on its root
+ * (an inline `all: initial`), `color-scheme` included: its scroll areas then
+ * follow the OS appearance and draw dark scrollbars on a light dashboard.
+ * Hand it the dashboard's scheme back. */
+.depictio-jbrowse-host > div {
+  color-scheme: inherit !important;
+}
+
+/* With its header hidden, the browser floats its zoom buttons (a paper
+ * holding a paper) in the top right corner, under the tile's action rail.
+ * Moved left of the rail so both stay clickable. */
+.depictio-jbrowse-host .MuiPaper-elevation1:has(> .MuiPaper-elevation1) {
+  right: 44px !important;
+}
+
+/* A linked tile, ringed while the chip naming it is hovered or focused (see
+ * `genomeLink/LinkedTileChip.tsx`): which tile drives which, at a glance. */
+.depictio-link-ring {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 2px;
+  border-radius: var(--mantine-radius-md);
+  transition: outline-color 120ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .depictio-link-ring {
+    transition: none;
+  }
 }

@@ -604,6 +604,64 @@ export interface StoredMetadata {
   /** Grid placement. `y` doubles as the render-queue priority so components
    *  nearer the top of the dashboard are fetched first (see `fetchQueue`). */
   layout?: { x?: number; y?: number; w?: number; h?: number };
+  // Genome browser (`component_type: jbrowse`). `placement` and
+  // `floating_initial_state` above also apply to it (a floating genome panel).
+  /** Where the browser opens: a data collection's genomic regions, optionally
+   *  ordered (the "first call") and with a second region (the mate). */
+  locus_from?: JBrowseLocusFrom | JBrowseLocusFrom[] | null;
+  /** Region density strip under the header: unset = offered in the view menu,
+   *  hidden; true = shown on opening; false = not offered. */
+  show_density?: boolean;
+  /** Manifest column the tracks are coloured by (a condition). */
+  color_by?: string;
+  /** Draw splice junction arcs (sashimi) on the RNA alignment tracks. */
+  show_junctions?: boolean;
+  /** Previous / next through the calls of `locus_from` (default on). */
+  call_stepper?: boolean;
+  /** Follow the genomic window of the other genome tiles (default on). */
+  follow_window?: boolean;
+  /** Extra views the tile can open in a large dialog. */
+  views?: Array<'breakpoint' | 'circular'>;
+  /** Initial display of the DNA alignment tracks. */
+  read_pairs_display?: 'pileup' | 'arcs' | 'cloud';
+  /** Track categories the circular view draws (default `["sv"]`). */
+  circular_categories?: string[];
+  [key: string]: unknown;
+}
+
+/** `locus_from` of a genome browser tile: mirrors `JBrowseLocusSource`. */
+export interface JBrowseLocusFrom {
+  data_collection_tag?: string;
+  chrom_column?: string;
+  start_column?: string;
+  end_column?: string | null;
+  /** Bases added on each side of the rows a filter narrows it to. */
+  padding?: number;
+  /** A filter frames the rows only when at most this many match. */
+  max_rows?: number;
+  /** Column the calls are ordered by (the first one is where the browser opens). */
+  sort_by?: string | null;
+  /** Sort direction of `sort_by`; default true. */
+  descending?: boolean;
+  /** Column naming a call in the stepper. */
+  label_column?: string | null;
+  /** Columns of the second region of a fusion or SV. */
+  mate?: { chrom_column: string; start_column: string; end_column?: string | null } | null;
+  /** Name of the source in a list of `locus_from` (defaults to the
+   *  collection tag); unique within the tile. */
+  name?: string | null;
+  /** Mantine palette name the source is drawn with. */
+  color?: string | null;
+  /** Workflow holding the collection, when several workflows have the tag. */
+  workflow_tag?: string | null;
+  /** Column naming the sample (library) a region belongs to. */
+  sample_column?: string | null;
+  /** Column naming the run a region belongs to. */
+  run_column?: string | null;
+  /** Extra columns shown in the region picker. */
+  columns?: string[] | null;
+  /** Columns the picker's search box matches, besides `label_column`. */
+  search_columns?: string[] | null;
   [key: string]: unknown;
 }
 
@@ -2469,10 +2527,21 @@ export interface JBrowseTrackRow {
   category?: string | null;
   /** Display colour (any CSS colour) from the manifest, when it declares one. */
   color?: string | null;
+  /** The group that colour stands for: the tile's `color_by` value, else the
+   *  manifest's `group` column. Labels the legend. */
+  group?: string | null;
   /** Where the track comes from: a manifest row, the assembly's annotation,
    *  a UCSC track, or a `config_overrides.extra_tracks` entry. Absent on an
    *  older backend: read as `manifest`. */
   source?: 'manifest' | 'annotation' | 'ucsc' | 'extra';
+  /** Display-only, sanitized (no query, userinfo or bucket key) location of the
+   *  track's file; manifest tracks only. Never what the browser fetches. */
+  uri?: string | null;
+  /** Display-only location of the track's index, when it has one. */
+  index_uri?: string | null;
+  /** How the file is read: in place from remote storage, straight by the
+   *  browser (`direct_access`), or from files Depictio ingested. */
+  storage?: 'remote' | 'direct' | 'depictio';
 }
 
 /** `POST /dashboards/render_jbrowse` — everything the embedded linear genome
@@ -2501,6 +2570,262 @@ export interface JBrowseSessionResponse {
   max_tracks?: number;
   /** Requested UCSC track names the backend could not resolve. */
   ucsc_missing?: string[];
+  /** Manifest commit a pinned view reads, null when it reads live data. */
+  data_version?: number | null;
+  /** Sanitized host + prefix of the DC's `remote_base_uri`; null when there is
+   *  none or the viewer is anonymous. */
+  remote_base?: string | null;
+  /** Whether the assembly is a built-in preset or a custom one. */
+  assembly_kind?: 'preset' | 'custom';
+  /** Where `location` came from: the filters narrowed `locus_from` (`filter`),
+   *  the component's YAML `location` (`yaml`), the first call by `sort_by`
+   *  (`first_call`), the first region holding data in the first track (`data`)
+   *  or the assembly's preset view (`preset`). Absent on an older backend. */
+  opening?: 'filter' | 'yaml' | 'first_call' | 'data' | 'preset';
+  /** Locus of the second side of the call `location` was taken from, when
+   *  `locus_from.mate` is declared. */
+  mate_location?: string | null;
+  /** Ids of the tracks the circular view can draw (SV VCF, BEDPE). */
+  sv_track_ids?: string[];
+  /** Initial display of the alignment tracks, echoed from the component. */
+  read_pairs_display?: 'pileup' | 'arcs' | 'cloud';
+  /** The collection and columns a region taken on the browser is expressed in
+   *  (`locus_from`, resolved server-side). Null without `locus_from`: the tile
+   *  has nothing to filter a region on, so it offers no "Use this region". */
+  locus_source?: JBrowseLocusSource | null;
+  /** The component's `display:` block, the YAML defaults of the display menu. */
+  display?: JBrowseDisplaySettings | null;
+}
+
+/** Where a region of the genome browser lands in the dashboard's data. */
+export interface JBrowseLocusSource {
+  dc_id: string;
+  chrom_column: string;
+  start_column: string;
+  end_column: string | null;
+}
+
+/** The `display:` block of a genome browser tile: every setting optional, the
+ *  values the display menu opens on (a viewer's own choice wins, see
+ *  components/jbrowse/displaySettings.ts). */
+export interface JBrowseDisplaySettings {
+  // view
+  center_line?: boolean;
+  gridlines?: boolean;
+  cytobands?: boolean;
+  track_outlines?: boolean;
+  color_by_cds?: boolean;
+  track_labels?: 'overlapping' | 'offset' | 'hidden';
+  // alignments
+  color_scheme?: string;
+  color_tag?: string;
+  soft_clipping?: boolean;
+  mismatch_alpha?: boolean;
+  read_height?: 'normal' | 'compact' | 'super_compact';
+  hide_small_indels?: boolean;
+  hide_mismatches?: boolean;
+  lower_panel?: 'pileup' | 'arcs' | 'cloud';
+  coverage_height?: number;
+  sashimi_arcs?: boolean;
+  min_arc_score?: number;
+  // coverage (wiggle and SNP coverage)
+  scale?: 'linear' | 'log';
+  autoscale?: 'local' | 'global' | 'globalsd' | 'localsd';
+  /** One y scale for every quantitative track, or each its own. */
+  y_scale?: 'per_track' | 'shared';
+  renderer?: 'xyplot' | 'density' | 'line';
+  fill?: 'filled' | 'line' | 'emphasis';
+  summary?: 'min' | 'max' | 'avg' | 'whiskers';
+  // features
+  feature_mode?: 'normal' | 'compact' | 'reducedRepresentation' | 'collapse';
+  feature_labels?: boolean;
+  feature_descriptions?: boolean;
+  gene_glyph?: 'all' | 'longest' | 'longestCoding';
+  // variants
+  variant_row_height?: number;
+  phased?: boolean;
+}
+
+/** One call (a row of `locus_from`) of the stepper. */
+export interface JBrowseCall {
+  /** Null when the row's coordinates are unreadable: it still counts in `total`
+   *  but there is nowhere to navigate to. */
+  locus: string | null;
+  mate_locus: string | null;
+  label: string | null;
+  /** The row's own coordinates (1-based start), null when unreadable. */
+  chrom?: string | null;
+  start?: number | null;
+  end?: number | null;
+  /** The `sort_by` cell, null without `sort_by`. */
+  score?: number | string | null;
+  /** The `locus_from.columns` cells, by column name. */
+  extra?: Record<string, unknown>;
+  /** Name of the source (a `locus_from` entry) the row comes from. */
+  source?: string;
+  /** The `sample_column` / `run_column` cells. */
+  sample?: string | null;
+  run?: string | null;
+  /** Merged rows only (`merge: true`): how many rows, samples and sources the
+   *  overlapping regions joined, with up to 10 sample names. `score` is the
+   *  best score among them. */
+  n_rows?: number;
+  n_samples?: number;
+  samples?: string[];
+  sources?: string[];
+}
+
+/** `POST /dashboards/jbrowse_calls`: one page of the calls, in `sort_by` order. */
+export interface JBrowseCallsResponse {
+  total: number;
+  rows: JBrowseCall[];
+}
+
+/** The region next to a position: the first whose start is past `pos`
+ *  (direction 1) or whose end is before it (-1) on `chrom`, else the first on
+ *  the next / previous chromosome of `chrom_order`. */
+export interface JBrowseNearQuery {
+  chrom: string;
+  pos: number;
+  direction: 1 | -1;
+  /** The assembly's refNames, in order. */
+  chrom_order: string[];
+}
+
+/** One column filter of the region picker; `column` takes the names a sort takes. */
+export interface JBrowseColumnFilter {
+  column: string;
+  kind: 'text' | 'number';
+  op: string;
+  value: string | number;
+  value_to?: number | null;
+}
+
+export interface JBrowseCallsBody {
+  filters: InteractiveFilter[];
+  start?: number;
+  /** At most 200. */
+  limit?: number;
+  /** Overrides `locus_from.sort_by`; the column must be one the calls read. */
+  sort?: { column: string; descending: boolean } | null;
+  /** Case-insensitive substring over `label_column` and `search_columns`. */
+  search?: string | null;
+  /** The region picker's per-column filters (AG Grid's ops), all applied. */
+  column_filters?: JBrowseColumnFilter[];
+  /** Spatial step: at most one row comes back (`total` is still the full count). */
+  near?: JBrowseNearQuery | null;
+  /** Names of the sources to read; null or absent = all. */
+  sources?: string[] | null;
+  /** Overlapping regions of one source (across samples and runs) merged into
+   *  one row; sources stay apart. `total` then counts merged regions. */
+  merge?: boolean;
+  as_of_version?: string | null;
+  data_versions?: Record<string, unknown> | null;
+}
+
+/** `POST /dashboards/jbrowse_call_density`: how many calls fall in each bin. */
+export interface JBrowseCallDensityBody {
+  filters: InteractiveFilter[];
+  /** The assembly's regions, in order. */
+  regions: { refName: string; length: number }[];
+  /** Total bins over the genome, at most 2000. */
+  bins: number;
+  /** Names of the sources to read; null or absent = all. */
+  sources?: string[] | null;
+  /** One track per source, per sample or per run (default `source`). A source
+   *  without the column falls back to one track. */
+  group?: 'source' | 'sample' | 'run';
+  as_of_version?: string | null;
+  data_versions?: Record<string, unknown> | null;
+}
+
+export interface JBrowseCallDensity {
+  /** One bin size (bp) shared by every chromosome. */
+  bin_size: number;
+  /** The largest count of any bin. */
+  max: number;
+  /** One row of the heatmap per source / sample / run, at most 64 (the
+   *  busiest kept, in source then first-seen order). */
+  tracks: JBrowseDensityTrack[];
+  /** Tracks dropped past the cap. */
+  truncated: number;
+}
+
+export interface JBrowseDensityTrack {
+  source: string;
+  /** The source name, the sample or the run. */
+  label: string;
+  /** The run of a sample track, when the source has `run_column`. */
+  run?: string | null;
+  /** One entry per requested region, in order; `counts[i]` covers
+   *  [i * bin_size, (i + 1) * bin_size). */
+  chroms: { refName: string; counts: number[] }[];
+}
+
+export async function fetchJBrowseCallDensity(
+  dashboardId: string,
+  componentIndex: string,
+  body: JBrowseCallDensityBody,
+  signal?: AbortSignal,
+): Promise<JBrowseCallDensity> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/jbrowse_call_density/${dashboardId}/${componentIndex}`,
+    { method: 'POST', body: JSON.stringify(body), signal },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to read the region density');
+  const json = (await res.json()) as Partial<JBrowseCallDensity>;
+  return {
+    bin_size: typeof json?.bin_size === 'number' ? json.bin_size : 0,
+    max: typeof json?.max === 'number' ? json.max : 0,
+    tracks: Array.isArray(json?.tracks) ? json.tracks : [],
+    truncated: typeof json?.truncated === 'number' ? json.truncated : 0,
+  };
+}
+
+export async function fetchJBrowseCalls(
+  dashboardId: string,
+  componentIndex: string,
+  body: JBrowseCallsBody,
+  signal?: AbortSignal,
+): Promise<JBrowseCallsResponse> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/jbrowse_calls/${dashboardId}/${componentIndex}`,
+    { method: 'POST', body: JSON.stringify(body), signal },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list genome calls');
+  const json = (await res.json()) as Partial<JBrowseCallsResponse>;
+  const rows = Array.isArray(json?.rows) ? json.rows : [];
+  return { total: typeof json?.total === 'number' ? json.total : rows.length, rows };
+}
+
+/** One gene-name match of the locus box. */
+export interface JBrowseGeneHit {
+  label: string;
+  /** A locus string ("chr22:23180509-23318037"). */
+  locus: string;
+}
+
+/** `GET /jbrowse/preset/{name}/search`: gene names matching `q` in a preset
+ *  assembly (hgnc and MANE first). */
+export async function searchJBrowseGenes(
+  assembly: string,
+  q: string,
+  limit = 10,
+  signal?: AbortSignal,
+): Promise<JBrowseGeneHit[]> {
+  const params = new URLSearchParams({ q, limit: String(limit) });
+  const res = await authFetch(
+    `${API_BASE}/jbrowse/preset/${encodeURIComponent(assembly)}/search?${params.toString()}`,
+    { signal },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to search genes');
+  const json = (await res.json()) as unknown;
+  return Array.isArray(json)
+    ? json.filter(
+        (h): h is JBrowseGeneHit =>
+          !!h && typeof (h as JBrowseGeneHit).label === 'string' && typeof (h as JBrowseGeneHit).locus === 'string',
+      )
+    : [];
 }
 
 export async function fetchJBrowseSession(

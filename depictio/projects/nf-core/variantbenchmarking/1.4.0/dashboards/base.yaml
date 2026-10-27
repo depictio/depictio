@@ -762,6 +762,11 @@ tabs:
     icon: mdi:chart-bar
     color: indigo
     description: SNP and indel F1, and precision against recall over the quality cut-off
+  - name: Errors on the genome
+    icon: mdi:dna
+    color: indigo
+    description: Where the picked callsets' false positives and false negatives sit
+    collapsed: true
   - name: Germline tables
     icon: mdi:table
     color: gray
@@ -971,6 +976,22 @@ tabs:
     title: Quality-threshold sweep
     description: Precision against recall as the quality cut-off rises, with its AUC (SNP, PASS).
     layout: {x: 4, y: 0, w: 4, h: 5}
+  # Each callset's false positives and false negatives (rtg-tools vcfeval), with its
+  # true positives, as VCFs. Pick a callset in the left panel to open its tracks.
+  - component_type: jbrowse
+    workflow_tag: variantbenchmarking
+    data_collection_tag: tracks
+    section: Errors on the genome
+    initial_tracks: 2
+    max_tracks: 12
+    show_overview: false
+    selection_enabled: true
+    selection_column: sample_id
+    tag: vb-gl-browser
+    index: gl-browser
+    title: Genome browser
+    description: The false positives and false negatives of the callsets picked in the left panel, with their true positives.
+    layout: {x: 0, y: 0, w: 8, h: 8}
   - component_type: table
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_vcfeval_summary
@@ -1330,6 +1351,11 @@ tabs:
     icon: mdi:chart-bar
     color: orange
     description: The same callsets scored by SVanalyzer, and by Wittyer per event and per base
+  - name: Errors on the genome
+    icon: mdi:dna
+    color: orange
+    description: Where the picked callsets' false positives and false negatives sit
+    collapsed: true
   - name: Structural tables
     icon: mdi:table
     color: gray
@@ -1533,6 +1559,22 @@ tabs:
     title: F1 per callset, Wittyer
     description: Two bars per callset, scored per event and per base.
     layout: {x: 4, y: 0, w: 4, h: 5}
+  # Each callset's false positives and false negatives (Truvari), with its true
+  # positives, as VCFs. Pick a callset in the left panel to open its tracks.
+  - component_type: jbrowse
+    workflow_tag: variantbenchmarking
+    data_collection_tag: tracks
+    section: Errors on the genome
+    initial_tracks: 2
+    max_tracks: 12
+    show_overview: false
+    selection_enabled: true
+    selection_column: sample_id
+    tag: vb-sv-browser
+    index: sv-browser
+    title: Genome browser
+    description: The false positives and false negatives of the callsets picked in the left panel, with their true positives.
+    layout: {x: 0, y: 0, w: 8, h: 8}
   - component_type: table
     workflow_tag: variantbenchmarking
     data_collection_tag: sv_truvari_summary

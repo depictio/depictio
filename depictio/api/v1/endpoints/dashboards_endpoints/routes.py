@@ -4762,7 +4762,7 @@ def _resolve_tab_family(
 def _is_floating_component(meta: dict[str, Any]) -> bool:
     """Whether a stored component is lifted out of the grid into the floating panel.
 
-    A map floats whenever it says so. An advanced viz does only when it is one
+    A map or a genome browser floats whenever it says so. An advanced viz does only when it is one
     of the kinds a panel can hold (`FLOATING_ADVANCED_VIZ_KINDS`): stored
     metadata never went through the lite model's own check, and the viewer takes
     whatever floats off the grid, so a tile of any other kind has to stay on it.
@@ -4770,13 +4770,13 @@ def _is_floating_component(meta: dict[str, Any]) -> bool:
     if meta.get("placement") != "floating":
         return False
     component_type = meta.get("component_type")
-    if component_type == "map":
+    if component_type in ("map", "jbrowse"):
         return True
     return component_type == "advanced_viz" and meta.get("viz_kind") in FLOATING_ADVANCED_VIZ_KINDS
 
 
 def _floating_components_of(tabs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The family's floating components (maps and 3D structures), each paired with its owning tab."""
+    """The family's floating components (maps, genome browsers and 3D structures), each paired with its owning tab."""
     components: list[dict[str, Any]] = []
     for tab in tabs:
         for meta in tab.get("stored_metadata") or []:
@@ -4986,36 +4986,56 @@ def get_cross_tab_components(
 # ============================================================================
 
 
-def _find_project_dc(project_id: Any, dc_tag: str) -> tuple[str, str] | None:
-    """(wf_id, dc_id) of the DC tagged ``dc_tag`` in the project, if any."""
+def _find_project_dc(
+    project_id: Any, dc_tag: str, workflow_tag: str | None = None
+) -> tuple[str, str] | None:
+    """(wf_id, dc_id) of the DC tagged ``dc_tag`` in the project, if any.
+
+    ``workflow_tag`` prefers the DC of the workflow with that tag (or name), for a
+    project whose workflows share a collection tag; without a match the first
+    workflow holding the tag answers.
+    """
     project = projects_collection.find_one(
-        {"_id": ObjectId(str(project_id))}, {"workflows._id": 1, "workflows.data_collections": 1}
+        {"_id": ObjectId(str(project_id))},
+        {
+            "workflows._id": 1,
+            "workflows.name": 1,
+            "workflows.workflow_tag": 1,
+            "workflows.data_collections": 1,
+        },
     )
+    first: tuple[str, str] | None = None
     for wf in (project or {}).get("workflows", []) or []:
         for dc in wf.get("data_collections", []) or []:
-            if dc.get("data_collection_tag") == dc_tag:
-                return str(wf.get("_id")), str(dc.get("_id"))
-    return None
+            if dc.get("data_collection_tag") != dc_tag:
+                continue
+            found = (str(wf.get("_id")), str(dc.get("_id")))
+            if not workflow_tag or workflow_tag in (wf.get("workflow_tag"), wf.get("name")):
+                return found
+            first = first or found
+    return first
 
 
-def _jbrowse_locus(
-    component: dict,
+def _jbrowse_find_dc(project_id: Any, spec: dict) -> tuple[str, str] | None:
+    """(wf_id, dc_id) of the collection a ``locus_from`` source reads, if it is in the project."""
+    tag = spec.get("data_collection_tag", "")
+    if spec.get("workflow_tag"):
+        return _find_project_dc(project_id, tag, workflow_tag=spec["workflow_tag"])
+    return _find_project_dc(project_id, tag)
+
+
+def _jbrowse_resolve_source(
+    spec: dict,
     filters: list[dict],
     project_id: Any,
     access_token: str | None,
-    pins: DataVersionPins,
-) -> str | None:
-    """Locus of the filtered rows of ``locus_from`` when they narrow to a few rows.
+) -> tuple[dict, str, str, list[dict]] | None:
+    """``(source, wf_id, dc_id, filter metadata)`` of one ``locus_from`` source, if readable.
 
-    The ``locus_from`` collection is read at its pinned commit, like the tracks.
+    The filters are extended over DC links onto the source's collection, like the
+    track manifest's; ``None`` when the collection is not in the project.
     """
-    from depictio.api.v1.deltatables_utils import load_deltatable_lite
-    from depictio.api.v1.services.jbrowse.render import locus_from_rows
-
-    spec = component.get("locus_from")
-    if not spec or not filters:
-        return None
-    found = _find_project_dc(project_id, spec.get("data_collection_tag", ""))
+    found = _jbrowse_find_dc(project_id, spec)
     if not found:
         return None
     wf_id, dc_id = found
@@ -5026,7 +5046,87 @@ def _jbrowse_locus(
         access_token=access_token,
         component_type="jbrowse",
     )
-    metadata = _build_filter_metadata(merged)
+    return spec, wf_id, dc_id, _build_filter_metadata(merged)
+
+
+def _jbrowse_calls_source(
+    component: dict,
+    filters: list[dict],
+    project_id: Any,
+    access_token: str | None,
+) -> tuple[dict, str, str, list[dict]] | None:
+    """``(locus_from, wf_id, dc_id, filter metadata)`` of the primary source's calls, if any.
+
+    ``None`` when the component declares no ``locus_from`` or the primary
+    source's collection is not in the project. It frames the view and carries the
+    mate, so it is the primary source (the first of a list) alone.
+    """
+    from depictio.api.v1.services.jbrowse.render import primary_locus_source
+
+    spec = primary_locus_source(component)
+    if not spec:
+        return None
+    return _jbrowse_resolve_source(spec, filters, project_id, access_token)
+
+
+def _jbrowse_calls_sources(
+    component: dict,
+    filters: list[dict],
+    project_id: Any,
+    access_token: str | None,
+) -> list[tuple[dict, str, str, list[dict]]]:
+    """Every readable ``locus_from`` source (see ``_jbrowse_resolve_source``), in declared order."""
+    from depictio.api.v1.services.jbrowse.render import locus_sources
+
+    resolved = (
+        _jbrowse_resolve_source(spec, filters, project_id, access_token)
+        for spec in locus_sources(component)
+    )
+    return [r for r in resolved if r is not None]
+
+
+def _jbrowse_locus_source(component: dict, project_id: Any) -> dict[str, str | None] | None:
+    """The primary ``locus_from`` collection and columns a region selection filters on, if any.
+
+    ``None`` without ``locus_from`` or when its collection is not in the project.
+    """
+    from depictio.api.v1.services.jbrowse.render import primary_locus_source
+
+    spec = primary_locus_source(component)
+    if not spec:
+        return None
+    found = _jbrowse_find_dc(project_id, spec)
+    if not found:
+        return None
+    return {
+        "dc_id": found[1],
+        "chrom_column": spec.get("chrom_column"),
+        "start_column": spec.get("start_column"),
+        "end_column": spec.get("end_column"),
+    }
+
+
+def _jbrowse_filter_rows(
+    component: dict,
+    filters: list[dict],
+    project_id: Any,
+    access_token: str | None,
+    pins: DataVersionPins,
+) -> tuple[dict, list[dict]] | None:
+    """``(locus_from, rows)`` when the filters narrow ``locus_from`` to a few rows.
+
+    Between 1 and ``max_rows`` rows (see ``locus_from_rows`` for how they are
+    framed); above, the view does not jump. The ``locus_from`` collection is
+    read at its pinned commit, like the tracks.
+    """
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+    if not filters:
+        return None
+    source = _jbrowse_calls_source(component, filters, project_id, access_token)
+    if source is None:
+        return None
+    spec, wf_id, dc_id, metadata = source
     if not metadata:
         return None
     try:
@@ -5041,7 +5141,267 @@ def _jbrowse_locus(
         return None
     if df.height == 0 or df.height > int(spec.get("max_rows", 20)):
         return None
-    return locus_from_rows(df.head(1).to_dicts(), spec)
+    return spec, df.to_dicts()
+
+
+def _jbrowse_call_columns(spec: dict) -> list[str]:
+    """The ``locus_from`` columns a call reads, each once."""
+    mate = spec.get("mate") or {}
+    columns = [
+        spec.get("chrom_column"),
+        spec.get("start_column"),
+        spec.get("end_column"),
+        spec.get("sort_by"),
+        spec.get("label_column"),
+        spec.get("sample_column"),
+        spec.get("run_column"),
+        *(spec.get("columns") or []),
+        *(spec.get("search_columns") or []),
+        mate.get("chrom_column"),
+        mate.get("start_column"),
+        mate.get("end_column"),
+    ]
+    return list(dict.fromkeys(c for c in columns if c))
+
+
+def _jbrowse_calls_page_frame(
+    source: tuple[dict, str, str, list[dict]],
+    pins: DataVersionPins,
+    start: int,
+    limit: int,
+):
+    """``limit`` rows of the calls from ``start``, ordered by ``sort_by`` (else natural order).
+
+    A sorted read is the table's (memoised sorted frame, lazy page past the
+    memo cap), an unsorted one pushes the window into the Delta scan.
+    """
+    from depictio.api.v1.deltatables_utils import load_sorted_deltatable_lite
+
+    spec, wf_id, dc_id, metadata = source
+    wf_oid = ObjectId(wf_id)
+    columns = _jbrowse_call_columns(spec)
+    delta_version = pins.for_dc(dc_id)
+    if spec.get("sort_by"):
+        return load_sorted_deltatable_lite(
+            workflow_id=wf_oid,
+            data_collection_id=dc_id,
+            sort_by=spec["sort_by"],
+            descending=bool(spec.get("descending", True)),
+            metadata=metadata or None,
+            select_columns=columns,
+            page=(start, limit),
+            delta_version=delta_version,
+        )
+    return _load_natural_page(
+        wf_oid, dc_id, metadata, None, columns, start, limit, delta_version=delta_version
+    )
+
+
+def _jbrowse_calls_page(
+    source: tuple[dict, str, str, list[dict]],
+    pins: DataVersionPins,
+    start: int,
+    limit: int,
+) -> list[dict]:
+    """``_jbrowse_calls_page_frame`` as raw rows (the collection's own columns)."""
+    return _jbrowse_calls_page_frame(source, pins, start, limit).to_dicts()
+
+
+class _FrameLRU:
+    """A few frames kept by key, built once even when several requests ask together.
+
+    The region picker pages, sorts and searches the same (filtered) regions again
+    and again; the per-key lock makes concurrent first requests (the picker and
+    the density strip) share one read of the collections.
+    """
+
+    def __init__(self, size: int) -> None:
+        self._size = size
+        self._data: dict[tuple, Any] = {}
+        self._locks: dict[tuple, threading.Lock] = {}
+        self._guard = threading.Lock()
+
+    def clear(self) -> None:
+        with self._guard:
+            self._data.clear()
+            self._locks.clear()
+
+    def get_or_build(self, key: tuple, build: Callable[[], Any]) -> Any:
+        with self._guard:
+            if key in self._data:
+                self._data[key] = self._data.pop(key)
+                return self._data[key]
+            lock = self._locks.setdefault(key, threading.Lock())
+        with lock:
+            with self._guard:
+                if key in self._data:
+                    return self._data[key]
+            value = build()
+            with self._guard:
+                self._data[key] = value
+                while len(self._data) > self._size:
+                    self._data.pop(next(iter(self._data)))
+                self._locks.pop(key, None)
+            return value
+
+
+# Region frames of the genome browser's picker and density: one per source, their
+# union, and the union merged. Keys carry the filters, the pinned commit and the
+# collection's aggregation version, so an ingest or a pin never reads a stale frame.
+_JBROWSE_SOURCE_FRAMES = _FrameLRU(8)
+_JBROWSE_UNION_FRAMES = _FrameLRU(4)
+_JBROWSE_MERGED_FRAMES = _FrameLRU(4)
+
+
+def _jbrowse_source_key(
+    source: tuple[dict, str, str, list[dict]], pins: DataVersionPins, is_primary: bool
+) -> tuple:
+    from depictio.api.v1 import deltatables_utils
+
+    spec, _wf_id, dc_id, metadata = source
+    version = pins.for_dc(dc_id)
+    try:
+        salt = deltatables_utils._version_salt_for(dc_id, version)
+    except Exception:  # noqa: BLE001 - a salt that cannot be read must not fail the listing
+        salt = None
+    return (
+        dc_id,
+        json.dumps(metadata, sort_keys=True, default=str),
+        version,
+        salt,
+        json.dumps(spec, sort_keys=True, default=str),
+        is_primary,
+    )
+
+
+def _jbrowse_union_frame(
+    sources: list[tuple[dict, str, str, list[dict]]],
+    pins: DataVersionPins,
+    primary_name: str,
+) -> tuple[Any, tuple]:
+    """``(frame, key)``: the regions of ``sources`` in the common shape, one under the other.
+
+    Each source is read once (filters and pinned commit applied, only the
+    columns the calls need) and memoised, see ``_JBROWSE_SOURCE_FRAMES``.
+    """
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+    from depictio.api.v1.services.jbrowse import regions
+
+    keys = tuple(
+        _jbrowse_source_key(src, pins, src[0].get("name") == primary_name) for src in sources
+    )
+
+    def one(src: tuple[dict, str, str, list[dict]], key: tuple):
+        spec, wf_id, dc_id, metadata = src
+
+        def build():
+            df = load_deltatable_lite(
+                workflow_id=ObjectId(wf_id),
+                data_collection_id=dc_id,
+                metadata=metadata or None,
+                select_columns=_jbrowse_call_columns(spec),
+                delta_version=pins.for_dc(dc_id),
+            )
+            return regions.source_frame(df, spec, is_primary=key[-1])
+
+        return _JBROWSE_SOURCE_FRAMES.get_or_build(key, build)
+
+    frame = _JBROWSE_UNION_FRAMES.get_or_build(
+        keys, lambda: regions.union_frames([one(src, k) for src, k in zip(sources, keys)])
+    )
+    return frame, keys
+
+
+def _json_cell(value: Any) -> Any:
+    """A frame cell as JSON: non-finite floats become null, dates text."""
+    if isinstance(value, float) and value - value != 0:  # nan and inf
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
+
+
+def _jbrowse_call_rows(rows: list[dict], declared: list[dict]) -> list[dict]:
+    """The response rows for rows of the common shape (see ``regions.source_frame``).
+
+    ``declared`` are the component's sources (the first one is the primary): a
+    row's locus is padded as its own source says, and only a row of the primary
+    source has a mate locus.
+    """
+    from depictio.api.v1.services.jbrowse import regions
+    from depictio.api.v1.services.jbrowse.render import locus_from_rows
+
+    by_name = {s["name"]: s for s in declared}
+    primary = declared[0]
+    out = []
+    for row in rows:
+        spec = by_name.get(row.get("source")) or primary
+        cells = {"chrom_column": "chrom", "start_column": "start", "end_column": "end"}
+        locus = locus_from_rows([row], {**cells, "padding": spec.get("padding", 5000)})
+        mate_locus = None
+        if spec is primary and row.get("_mchrom") is not None:
+            mate_locus = locus_from_rows(
+                [
+                    {
+                        "chrom": row.get("_mchrom"),
+                        "start": row.get("_mstart"),
+                        "end": row.get("_mend"),
+                    }
+                ],
+                {**cells, "padding": primary.get("padding", 5000)},
+            )
+        start = row.get("start")
+        item: dict[str, Any] = {
+            "locus": locus,
+            "mate_locus": mate_locus,
+            "label": row.get("label"),
+            "chrom": row.get("chrom"),
+            "start": None if start is None else max(int(start), 1),
+            "end": row.get("end"),
+            "score": _json_cell(row.get("score")),
+            "extra": {c: _json_cell(row.get(f"x:{c}")) for c in regions.extra_columns(spec)},
+            "source": row.get("source"),
+            "sample": row.get("sample"),
+            "run": row.get("run"),
+        }
+        if "n_rows" in row:
+            item.update(
+                n_rows=row["n_rows"],
+                n_samples=row["n_samples"],
+                samples=row["samples"],
+                sources=row["sources"],
+            )
+        out.append(item)
+    return out
+
+
+def _jbrowse_first_call(
+    component: dict,
+    filters: list[dict],
+    project_id: Any,
+    access_token: str | None,
+    pins: DataVersionPins,
+) -> dict[str, str | None] | None:
+    """``{"locus", "mate_locus"}`` of the first call (best ``sort_by`` row), if any.
+
+    Among the rows left by the dashboard filters when there are some, so a
+    filtered view still opens on a call. Any failure (a column the collection
+    lacks, an unreadable table) is not the view's: it opens at the next level.
+    """
+    from depictio.api.v1.services.jbrowse.render import locus_from_rows, mate_locus_from_rows
+
+    try:
+        source = _jbrowse_calls_source(component, filters, project_id, access_token)
+        if source is None:
+            return None
+        rows = _jbrowse_calls_page(source, pins, 0, 1)
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"render_jbrowse: first call lookup failed: {e}")
+        return None
+    locus = locus_from_rows(rows, source[0]) if rows else None
+    if not locus:
+        return None
+    return {"locus": locus, "mate_locus": mate_locus_from_rows(rows, source[0])}
 
 
 @dashboards_endpoint_router.post("/render_jbrowse/{dashboard_id}/{component_id}")
@@ -5066,10 +5426,19 @@ def render_jbrowse_endpoint(
     Returns the assembly and track configurations (file locations are signed
     proxy URLs), the track ids to show, the locus and view flags, plus a
     per-track summary the viewer uses to turn a click back into a filter.
+
+    The view opens on (``opening`` says which): the filtered ``locus_from``
+    rows, the component's ``location``, the first call of ``locus_from``, the
+    first region holding data in the first tracks, the assembly's default.
+    ``mate_location`` is the second side of the filtered or first call.
+    ``locus_source`` is the ``locus_from`` collection and columns (null without
+    ``locus_from``), and ``display`` the YAML display defaults (null when unset).
     """
     from depictio.api.v1.services.jbrowse.render import (
         build_jbrowse_payload,
         filtered_track_rows,
+        locus_from_rows,
+        mate_locus_from_rows,
     )
     from depictio.api.v1.services.jbrowse.tracks import find_tracks_dc
 
@@ -5109,20 +5478,398 @@ def render_jbrowse_endpoint(
     try:
         delta_version = pins.for_dc(str(dc_id))
         filtered = filtered_track_rows(tdc, _build_filter_metadata(merged_filters), delta_version)
-        locus = _jbrowse_locus(component, filters, project_id, access_token, pins)
+        locus = mate_locus = first_call = None
+        narrowed = _jbrowse_filter_rows(component, filters, project_id, access_token, pins)
+        if narrowed is not None:
+            locus = locus_from_rows(narrowed[1], narrowed[0])
+            mate_locus = mate_locus_from_rows(narrowed[1], narrowed[0])
+        # The first call only matters when nothing nearer opens the view.
+        if locus is None and not component.get("location"):
+            first_call = _jbrowse_first_call(component, filters, project_id, access_token, pins)
         return build_jbrowse_payload(
             component,
             tdc,
             filtered,
             uid=str(getattr(current_user, "id", "")),
             locus=locus,
+            mate_locus=mate_locus,
+            first_call=first_call,
+            locus_source=_jbrowse_locus_source(component, project_id),
             delta_version=delta_version,
+            category_colors=effective_category_colors(dashboard_data),
+            # The anonymous user is the owner in single-user mode, a stranger on a
+            # public link otherwise.
+            anonymous=bool(getattr(current_user, "is_anonymous", False))
+            and not settings.auth.is_single_user_mode,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"render_jbrowse failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to build the genome browser: {e}")
+        # The exception text can name storage paths: it stays in the log.
+        raise HTTPException(status_code=500, detail="Failed to build the genome browser.") from e
+
+
+def _jbrowse_calls_context(
+    dashboard_id: PyObjectId,
+    component_index: str,
+    request: dict | None,
+    current_user: User,
+) -> tuple[dict, dict, Any, DataVersionPins]:
+    """``(body, component, project_id, pins)`` of a request about a tile's regions.
+
+    404 when the genome browser is disabled or the dashboard is unknown, 403
+    without viewer access to its project.
+    """
+    if not settings.jbrowse.enabled:
+        raise HTTPException(status_code=404, detail="The genome browser is disabled.")
+    body = request or {}
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+    component = _render_component(
+        dashboard_data, component_index, "jbrowse", request, label="JBrowse"
+    )
+    return body, component, project_id, _data_pins(body, dashboard_data)
+
+
+def _jbrowse_enabled_sources(
+    component: dict,
+    body: dict,
+    filters: list[dict],
+    project_id: Any,
+    access_token: str | None,
+) -> tuple[list[dict], list[tuple[dict, str, str, list[dict]]]]:
+    """``(declared sources, the readable ones the request's ``sources`` keeps)``.
+
+    400 when no declared source has a collection in the project. Names the
+    request lists that match no source are ignored, so the kept list may be
+    empty (a total of 0).
+    """
+    from depictio.api.v1.services.jbrowse.render import locus_sources
+
+    declared = locus_sources(component)
+    resolved = _jbrowse_calls_sources(component, filters, project_id, access_token)
+    if not resolved:
+        raise HTTPException(
+            status_code=400, detail="The component has no readable locus_from collection."
+        )
+    wanted = body.get("sources")
+    if isinstance(wanted, list):
+        names = {str(n) for n in wanted}
+        resolved = [r for r in resolved if r[0].get("name") in names]
+    return declared, resolved
+
+
+def _jbrowse_listing(
+    union: Any,
+    union_key: tuple,
+    declared: list[dict],
+    enabled: list[dict],
+    *,
+    sort: dict | None,
+    search: str | None,
+    near: dict | None,
+    merge: bool,
+    start: int,
+    limit: int,
+    column_filters: list[dict] | None = None,
+) -> tuple[int, list[dict]]:
+    """``(total, rows)`` of the regions in ``union`` (the common shape of ``regions.source_frame``).
+
+    Merge first (one row per overlapping region), then search, then either the
+    single region ``near`` asks for or the sorted page. Unsorted, the rows keep the
+    sources' own order (merged: genome order); when a source has a ``sort_by``
+    they come best-first by it, in the direction of the first source that has one.
+    """
+    from depictio.api.v1.services.jbrowse import regions
+
+    frame = union
+    default_descending = next(
+        (bool(s.get("descending", True)) for s in enabled if s.get("sort_by")), True
+    )
+    has_score = any(s.get("sort_by") for s in enabled)
+    if merge:
+        # The best row of a merged region is the one the order puts first.
+        best_descending = default_descending
+        if sort and (
+            sort["column"] == "score"
+            or any(regions.normalised_name(s, sort["column"]) == "score" for s in enabled)
+        ):
+            best_descending = sort["descending"]
+        frame = _JBROWSE_MERGED_FRAMES.get_or_build(
+            (union_key, best_descending), lambda: regions.merge_regions(union, best_descending)
+        )
+    if search and search.strip():
+        frame = frame.filter(regions.search_mask(frame, enabled, search))
+    if column_filters:
+        frame = frame.filter(regions.column_filter_mask(frame, declared, column_filters, merge))
+    total = frame.height
+    if near:
+        row = regions.near_region(
+            frame, near["chrom"], near["pos"], near["direction"], near["chrom_order"]
+        )
+        return total, [row] if row else []
+
+    keys: list | None = None
+    descending = default_descending
+    if sort:
+        keys = regions.sort_keys(frame, declared, sort["column"], merged=merge)
+        descending = sort["descending"]
+    elif has_score:
+        keys = regions.sort_keys(frame, declared, "score", merged=merge)
+    if keys:
+        frame = regions.sort_calls(frame, keys, descending)
+    return total, frame.slice(start, limit).to_dicts()
+
+
+def _jbrowse_parse_calls_body(body: dict, declared: list[dict], merge: bool) -> dict[str, Any]:
+    """The ``sort`` / ``search`` / ``near`` of a calls request, validated (400 otherwise)."""
+    from depictio.api.v1.services.jbrowse import regions
+
+    out: dict[str, Any] = {"sort": None, "search": None, "near": None, "column_filters": []}
+    sort = body.get("sort")
+    if sort:
+        column = sort.get("column") if isinstance(sort, dict) else None
+        if not isinstance(column, str) or not column:
+            raise HTTPException(status_code=400, detail="sort needs a column name.")
+        allowed = regions.sortable_columns(declared, merged=merge)
+        if column not in allowed:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot sort the calls by '{column}'. Sortable columns: "
+                f"{', '.join(allowed)}.",
+            )
+        out["sort"] = {"column": column, "descending": bool(sort.get("descending", True))}
+    search = body.get("search")
+    if search is not None:
+        if not isinstance(search, str):
+            raise HTTPException(status_code=400, detail="search must be a string.")
+        out["search"] = search
+    raw_filters = body.get("column_filters") or []
+    if not isinstance(raw_filters, list):
+        raise HTTPException(status_code=400, detail="column_filters must be a list.")
+    allowed_filter_columns = regions.sortable_columns(declared, merged=merge)
+    for f in raw_filters:
+        if not isinstance(f, dict):
+            raise HTTPException(status_code=400, detail="Each column filter must be an object.")
+        column, kind, op = f.get("column"), f.get("kind"), f.get("op")
+        if column not in allowed_filter_columns:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot filter the calls by '{column}'. Filterable columns: "
+                f"{', '.join(allowed_filter_columns)}.",
+            )
+        ops = regions.TEXT_FILTER_OPS if kind == "text" else regions.NUMBER_FILTER_OPS
+        if kind not in ("text", "number") or op not in ops:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Column filter kind must be text or number, op one of {', '.join(ops)}.",
+            )
+        value, value_to = f.get("value"), f.get("value_to")
+        if kind == "number":
+            try:
+                value = float(value)
+                value_to = float(value_to) if op == "inRange" else None
+            except (TypeError, ValueError) as exc:
+                raise HTTPException(
+                    status_code=400, detail="A number filter needs a numeric value."
+                ) from exc
+        elif not isinstance(value, str):
+            raise HTTPException(status_code=400, detail="A text filter needs a string value.")
+        out["column_filters"].append(
+            {"column": column, "kind": kind, "op": op, "value": value, "value_to": value_to}
+        )
+    near = body.get("near")
+    if near:
+        try:
+            order = near["chrom_order"]
+            if not isinstance(order, list) or not isinstance(near["chrom"], str):
+                raise TypeError
+            direction = int(near["direction"])
+            if direction not in (1, -1):
+                raise ValueError
+            out["near"] = {
+                "chrom": near["chrom"],
+                "pos": float(near["pos"]),
+                "direction": direction,
+                "chrom_order": [str(c) for c in order],
+            }
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="near needs chrom, pos, direction (1 or -1) and chrom_order (a list).",
+            ) from exc
+    return out
+
+
+@dashboards_endpoint_router.post("/jbrowse_calls/{dashboard_id}/{component_index}")
+def jbrowse_calls_endpoint(
+    dashboard_id: PyObjectId,
+    component_index: str,
+    request: dict | None = Body(default=None),
+    current_user: User = Depends(get_user_or_anonymous),
+    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+):
+    """One page of the regions ("calls") a ``jbrowse`` component lists, steps through and bins.
+
+    Request body: ``{"filters": [...], "start": 0, "limit": 50}`` (``limit`` at
+    most 200), plus the time-travel keys of the render endpoints and these
+    optional keys (a body without them behaves as before):
+
+    - ``sources``: names of the ``locus_from`` sources to read (unknown names are
+      ignored; none left = ``total`` 0);
+    - ``sort``: ``{"column", "descending"}``, overriding ``sort_by``. ``column`` is a
+      common-shape name (``chrom``, ``start``, ``end``, ``score``, ``label``,
+      ``sample``, ``run``, ``source``; merged: ``n_rows``, ``n_samples``) or a raw
+      column of a source (``sort_by``, ``label_column``, ``sample_column``,
+      ``run_column``, ``columns``); anything else is a 400;
+    - ``search``: case-insensitive substring over the label and ``search_columns``;
+    - ``column_filters``: ``[{"column", "kind": "text" | "number", "op", "value",
+      "value_to"}]``, the picker's per-column filters (AG Grid's ops), all applied;
+    - ``near``: ``{"chrom", "pos", "direction", "chrom_order"}``, at most one row (see
+      ``regions.near_region``); ``total`` is still the full count;
+    - ``merge``: overlapping regions of one source (across samples and runs) joined into
+      one row each (``n_rows``, ``n_samples``, ``samples``, ``sources``); ``total``
+      counts the merged regions and every other key applies to them.
+
+    The regions are the rows of the sources' collections left by the filters
+    (extended over DC links) at their pinned commit, read in memory and memoised
+    for the modes above; the plain single-source page keeps its Delta page read.
+
+    Returns ``{"total": N, "rows": [...]}``; a row is ``{"locus", "mate_locus",
+    "label", "chrom", "start", "end", "score", "extra", "source", "sample", "run"}``
+    (plus the merge keys). A row whose coordinates are unreadable has a null
+    ``locus`` and still counts in ``total``; ``mate_locus`` is set for the primary
+    source (the first) when it declares a ``mate``.
+    """
+    from depictio.api.v1.deltatables_utils import count_deltatable_lite
+    from depictio.api.v1.services.jbrowse import regions
+
+    body, component, project_id, pins = _jbrowse_calls_context(
+        dashboard_id, component_index, request, current_user
+    )
+    filters = body.get("filters") or []
+    try:
+        start = max(int(body.get("start") or 0), 0)
+        limit = min(max(int(body.get("limit") or 50), 1), 200)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="start and limit must be integers.") from exc
+    declared, sources = _jbrowse_enabled_sources(component, body, filters, project_id, access_token)
+    merge = bool(body.get("merge"))
+    mode = _jbrowse_parse_calls_body(body, declared, merge)
+    if not sources:
+        return {"total": 0, "rows": []}
+    primary_name = declared[0]["name"]
+
+    try:
+        simple = (
+            len(declared) == 1
+            and len(sources) == 1
+            and not (
+                merge
+                or mode["sort"]
+                or mode["near"]
+                or mode["column_filters"]
+                or (mode["search"] or "").strip()
+            )
+        )
+        if simple:
+            source = sources[0]
+            spec, wf_id, dc_id, metadata = source
+            total = _cached_row_count(
+                ObjectId(wf_id),
+                dc_id,
+                metadata,
+                None,
+                count_deltatable_lite,
+                delta_version=pins.for_dc(dc_id),
+            )
+            page = _jbrowse_calls_page_frame(source, pins, start, limit) if start < total else None
+            rows = (
+                []
+                if page is None
+                else regions.source_frame(
+                    page, spec, is_primary=spec.get("name") == primary_name
+                ).to_dicts()
+            )
+        else:
+            union, union_key = _jbrowse_union_frame(sources, pins, primary_name)
+            total, rows = _jbrowse_listing(
+                union,
+                union_key,
+                declared,
+                [src[0] for src in sources],
+                sort=mode["sort"],
+                search=mode["search"],
+                near=mode["near"],
+                merge=merge,
+                start=start,
+                limit=limit,
+                column_filters=mode["column_filters"],
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"jbrowse_calls failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to read the calls.") from e
+    return {"total": total, "rows": _jbrowse_call_rows(rows, declared)}
+
+
+@dashboards_endpoint_router.post("/jbrowse_call_density/{dashboard_id}/{component_index}")
+def jbrowse_call_density_endpoint(
+    dashboard_id: PyObjectId,
+    component_index: str,
+    request: dict | None = Body(default=None),
+    current_user: User = Depends(get_user_or_anonymous),
+    access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+):
+    """How many regions of a ``jbrowse`` component start in each genome bin, per track.
+
+    Request body: ``{"filters": [...], "regions": [{"refName", "length"}],
+    "bins": 500, "sources": null, "group": "source"}`` plus the time-travel keys.
+    ``bins`` (1 to 2000) is the total over the genome: every chromosome shares one
+    bin size, ``ceil(sum(length) / bins)``. ``group`` is ``source`` (one track per
+    source), ``sample`` or ``run`` (one per sample / run of each source that has
+    the column; the others stay one track). The regions are read like
+    ``jbrowse_calls`` reads them (filters, pinned commit, memoised).
+
+    Returns ``{"bin_size", "max", "tracks", "truncated"}``, see ``regions.density``.
+    """
+    from depictio.api.v1.services.jbrowse import regions
+
+    body, component, project_id, pins = _jbrowse_calls_context(
+        dashboard_id, component_index, request, current_user
+    )
+    filters = body.get("filters") or []
+    chroms = body.get("regions")
+    if not isinstance(chroms, list) or not chroms:
+        raise HTTPException(status_code=400, detail="regions must list the assembly's regions.")
+    try:
+        chroms = [{"refName": str(r["refName"]), "length": int(r["length"])} for r in chroms]
+        bins = min(max(int(body.get("bins") or 500), 1), 2000)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=400, detail="regions are {refName, length} and bins an integer."
+        ) from exc
+    group = body.get("group") or "source"
+    if group not in ("source", "sample", "run"):
+        raise HTTPException(status_code=400, detail="group must be source, sample or run.")
+
+    declared, sources = _jbrowse_enabled_sources(component, body, filters, project_id, access_token)
+    names = [src[0]["name"] for src in sources]
+    bin_size = regions.bin_size_for(chroms, bins)
+    if not sources:
+        return {"bin_size": bin_size, "max": 0, "tracks": [], "truncated": 0}
+    try:
+        union, _key = _jbrowse_union_frame(sources, pins, declared[0]["name"])
+        return regions.density(union, chroms, bin_size, group, source_order=names)
+    except Exception as e:
+        logger.error(f"jbrowse_call_density failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to read the region density.") from e
 
 
 # ============================================================================

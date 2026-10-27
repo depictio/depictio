@@ -100,14 +100,19 @@ the promoter window shaded. The collapsed `Peak annotation` holds the HOMER tabl
 peak record card beside it: the card waits for a picked row. Filters: feature class and
 distance to the start site.
 
-**Locus.** Three collections on one genome axis. Strip: calls in the region (split by
-library), libraries per consensus interval, feature classes and nearest genes; the
-cards follow the region like the tracks. Then the navigator (`macs2/peak_genome_view`, one
-lane per library, `assembly: {GENOME}`), a coverage track of the consensus intervals with
-one lane per consensus set, and the HOMER annotation coloured by feature class (it stands in
-for a gene lane, which is bundled for hg38 and mm10 only, so the locus field takes
-coordinates, not gene symbols). Filters: significance, libraries per interval and feature
-class.
+**Locus.** The calls and the run's own files on one genome axis, and the only genome browser
+of the template. Strip: calls in the region (split by library),
+libraries per consensus interval, feature classes and nearest genes; the cards follow the
+region like the tracks. Then one linked section, held to one screen: the navigator (`macs2/peak_genome_view`, one
+lane per library on its own scale, `assembly: {GENOME}`) and the genome browser under it at
+full width (see the end of this section). A brush on the navigator moves the browser without
+filtering it, and the browser's view comes back on the lanes as a dashed band. The consensus
+intervals are the browser's second region source (its density strip and next / previous),
+not a lane of their own. The
+locus field takes coordinates, not gene symbols (the bundled gene lane is hg38 and mm10
+only). Filters: significance, libraries per interval and feature class. The Peaks tab's
+Manhattan reaches this tab through its Open in genome browser action, which opens it on the
+point clicked, the region selected or the window in view.
 
 **Consensus.** Pick one consensus set first: the libraries of two antibodies never meet.
 Strip: consensus intervals (by consensus set), libraries per interval (box plot), peaks
@@ -133,15 +138,16 @@ distance matrix is block diagonal, and the PCA uses a pipeline-local recipe
 (`nf-core/chipseq/deseq2_qc_pca.py`) that resolves the components per matrix while keeping
 the catalog output's columns.
 
-**Genome tracks.** A genome browser over the `tracks` collection, a manifest the pipeline-local
-recipe `nf-core/chipseq/tracks.py` spells out from `pipeline_info/design_controls.csv`: per
-ChIP sample its bigWig signal, MACS2 narrowPeak calls and filtered BAM, and per input control
-its bigWig (32 rows on the megatest). The assembly is the `hg19` preset, and the browser opens
-on GREB1 (`chr2:11,640,000-11,720,000`). Four cards, a peak significance track and the MACS2 peak
-table share the tab with it. The left-panel sample filter, the pinned sample sheet and the
-peaks picked in the table pick which tracks are open; clicking a feature in the browser
-filters every other tab on its sample. The tables-only megatest subset holds none of the track
-files: pass `--var TRACKS_URI=s3://nf-core-awsmegatests/chipseq/results-048fd6854fcc85b355c61dfc2e21da0bcc6399ea`
+**Genome browser (in the Locus tab).** A browser over the `tracks` collection, a manifest the
+pipeline-local recipe `nf-core/chipseq/tracks.py` spells out from
+`pipeline_info/design_controls.csv`: per ChIP sample its bigWig signal, MACS2 narrowPeak calls
+and filtered BAM, and per input control its bigWig (32 rows on the megatest). The assembly is
+the `hg19` preset, and the browser opens on the most significant MACS2 peak (`locus_from`
+sorted by `neg_log10_qvalue`; the stepper walks the peaks in that order). The left-panel
+sample filter and the pinned sample sheet pick which tracks are open; clicking a feature in
+the browser filters every other tab on its sample. The tables-only megatest subset holds none
+of the track files: pass
+`--var TRACKS_URI=s3://nf-core-awsmegatests/chipseq/results-048fd6854fcc85b355c61dfc2e21da0bcc6399ea`
 and the collection reads them in place, by range; without it the recipe keeps only the files
 DATA_ROOT holds and the CLI uploads them at ingestion.
 
@@ -170,7 +176,7 @@ consensus sets, the DESeq2 contrasts and the PCA have no library column, so the 
 reaches them through a prefix (`wildcard`) link on the set or contrast name. The MACS2 and
 HOMER peak tables are linked both ways on `peak_id`, and a consensus interval links to its
 DESeq2 rows on `interval_id`. On the Locus tab, two region links rename the navigator's
-chromosome and position filters onto the consensus and HOMER tracks.
+chromosome and position filters onto the consensus intervals and the HOMER annotation cards.
 
 ## Controls
 

@@ -17,6 +17,15 @@
 # No data collection can therefore be required: whichever one is, every run on
 # another route fails to ingest. They are all optional, and the scan reports which
 # ones a given run reached. Generic, core-facility compatible.
+#
+# GENOME TRACKS.
+# The germline and the structural routes publish each callset's false positives,
+# false negatives and true positives as small VCFs next to the summary tables.
+# The `tracks` collection lists them (one row per file) for the genome browser on
+# the Germline and Structural & CNV tabs. The build is the GENOME variable (UCSC
+# name, default hg38): pass `--var GENOME=hg19` for a GRCh37 run. Pass
+# `--var TRACKS_URI=<results folder>` to read the VCFs in place; without it the
+# collection uploads whichever of them DATA_ROOT holds, with their index.
 # ============================================================================
 
 # Template metadata (parsed and removed before Project model validation)
@@ -28,6 +37,22 @@ template:
     - name: "DATA_ROOT"
       description: "Root directory containing variantbenchmarking output (small/, indel/, and optionally sv/, cnv/)."
       required: true
+    - name: "GENOME"
+      description: "UCSC name of the assembly the benchmark ran on (hg38, hg19): the axis and gene lane of the genome browser."
+      required: false
+      default: "hg38"
+    - name: "TRACKS_URI"
+      description: "s3:// or https:// folder holding the run's results (the one with the <variant_type>/ sub-directories), to read the genome-browser tracks (each callset's false positive, false negative and true positive VCFs) in place instead of uploading them from DATA_ROOT. Without it the `tracks` collection uploads whichever of those files DATA_ROOT holds."
+      required: false
+  conditional:
+    # Genome tracks: read in place when TRACKS_URI names the results folder,
+    # uploaded from DATA_ROOT otherwise (the `tracks` recipe keeps only the
+    # files it finds there).
+    - if_var_present: "TRACKS_URI"
+      override_dcs:
+        - data_collection_tag: "tracks"
+          dc_properties:
+            remote_base_uri: "{TRACKS_URI}"
   dashboards:
     - "dashboards/base.yaml"
 
@@ -274,6 +299,49 @@ workflows:
               "recall": "Recall (0-1)"
               "f1": "F1 score (0-1)"
 
+      # ----------------------------------------------------------------
+      # Genome tracks: the false positives, false negatives and true positives of
+      # each callset on the germline (rtg-tools) and structural (Truvari) routes.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "tracks"
+        optional: true  # only the germline and structural routes write these files
+        description: "Genome-browser tracks of the run: the false positive, false negative and true positive VCFs of every callset, one row per file"
+        config:
+          type: "genomic_tracks"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/variantbenchmarking/tracks.py"
+          dc_specific_properties:
+            format: "TSV"
+            uri_column: "uri"
+            track_id_column: "track_id"
+            sample_column: "sample_id"
+            format_column: "format"
+            name_column: "name"
+            color_column: "color"
+            category_column: "category"
+            order_column: "order"
+            assembly: "{GENOME}"
+            display_defaults:
+              vcf:
+                displays:
+                  - type: "LinearVariantDisplay"
+                    height: 60
+            columns_description:
+              "track_id": "<tool>.<id>.<truth>.<caller>.<kind>, unique per file"
+              "sample_id": "Callset id in the pipeline samplesheet, the key the benchmark tables link on"
+              "caller": "Variant caller that made the calls"
+              "truth_set": "Truth set the callset was compared against"
+              "tool": "Benchmarking tool that wrote the file (rtgtools or truvari)"
+              "kind": "fp, fn or tp"
+              "format": "Track file format"
+              "uri": "Path relative to the outdir"
+              "name": "Track label shown in the browser"
+              "color": "Track colour"
+              "category": "Track-selector folder"
+              "order": "Row order the browser opens with"
+
 # ============================================================================
 # RUNTIME LINKS CONFIGURATION
 # ============================================================================
@@ -318,4 +386,34 @@ links:
       resolver: "direct"
       target_field: "label"
     description: "Filter the Wittyer summary by the callsets picked on the Structural tab"
+    enabled: true
+
+  # The callset picker reaches the genome tracks, and back.
+  - source_dc_tag: "germline_vcfeval_summary"
+    source_column: "label"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config: {resolver: "direct", target_field: "sample_id"}
+    description: "Show the genome tracks of the germline callsets picked on the Germline tab"
+    enabled: true
+  - source_dc_tag: "tracks"
+    source_column: "sample_id"
+    target_dc_tag: "germline_vcfeval_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "label"}
+    description: "Filter the germline summary by the callsets whose tracks are picked in the genome browser"
+    enabled: true
+  - source_dc_tag: "sv_truvari_summary"
+    source_column: "label"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config: {resolver: "direct", target_field: "sample_id"}
+    description: "Show the genome tracks of the structural callsets picked on the Structural tab"
+    enabled: true
+  - source_dc_tag: "tracks"
+    source_column: "sample_id"
+    target_dc_tag: "sv_truvari_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "label"}
+    description: "Filter the Truvari summary by the callsets whose tracks are picked in the genome browser"
     enabled: true

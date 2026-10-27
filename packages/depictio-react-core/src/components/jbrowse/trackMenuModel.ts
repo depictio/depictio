@@ -77,12 +77,16 @@ const UCSC_GROUP_LABELS: Record<string, string> = {
 export function withSectionCategory<T extends { trackId: string; category?: string[] }>(
   confs: T[],
   rows: JBrowseTrackRow[],
+  /** Value a manifest track is grouped under instead of its own category path
+   *  (the tile's `color_by` column); null keeps the path. */
+  groupOf?: (conf: T) => string | null,
 ): T[] {
   const sources = new Map(rows.map((r) => [r.track_id, rowSource(r)]));
   return confs.map((conf) => {
     const path = conf.category ?? [];
     if (sources.get(conf.trackId) === 'manifest') {
-      return { ...conf, category: [SECTION_LABELS.project, ...path] };
+      const group = groupOf?.(conf) ?? null;
+      return { ...conf, category: [SECTION_LABELS.project, ...(group ? [group] : path)] };
     }
     const rest =
       path[0] === 'UCSC' && path.length > 1
@@ -112,7 +116,13 @@ export function ucscGroupLabel(code: string | null | undefined): string {
  * order, uncategorised ones last), then the UCSC tracks, one section per
  * UCSC group. Empty groups are dropped.
  */
-export function groupTrackRows(rows: JBrowseTrackRow[], query = ''): TrackGroup[] {
+export function groupTrackRows(
+  rows: JBrowseTrackRow[],
+  query = '',
+  /** Group of a manifest row, replacing its category (the tile's `color_by`
+   *  value); null keeps the category. */
+  groupOf?: (row: JBrowseTrackRow) => string | null,
+): TrackGroup[] {
   const categories = new Map<string, JBrowseTrackRow[]>();
   const uncategorised: JBrowseTrackRow[] = [];
   const ucsc = new Map<string, JBrowseTrackRow[]>();
@@ -127,10 +137,11 @@ export function groupTrackRows(rows: JBrowseTrackRow[], query = ''): TrackGroup[
       else ucsc.set(code, [row]);
     } else if (source === 'annotation' || source === 'extra') {
       reference.push(row);
-    } else if (row.category) {
-      const list = categories.get(row.category);
+    } else if (groupOf?.(row) ?? row.category) {
+      const key = (groupOf?.(row) ?? row.category) as string;
+      const list = categories.get(key);
       if (list) list.push(row);
-      else categories.set(row.category, [row]);
+      else categories.set(key, [row]);
     } else {
       uncategorised.push(row);
     }

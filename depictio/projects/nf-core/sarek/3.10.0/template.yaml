@@ -26,6 +26,12 @@
 # sarek ships a MultiQC parquet (`multiqc/multiqc_data/multiqc.parquet`), so no
 # `multiqc_reprocess` step is needed. `modules` / `plots` below were read off
 # `multiqc.list_plots()` against a real run.
+#
+# GENOME TRACKS.
+# The callers' VCFs and the CRAMs are not part of the tables-only megatest subset
+# (the CRAMs are gigabytes each). Pass `--var TRACKS_URI=<results folder>` to read
+# them in place (see the variable below); without it the `tracks` collection
+# uploads whichever of them DATA_ROOT holds, with their index.
 template:
   template_id: "nf-core/sarek/3.10.0"
   description: "nf-core/sarek template: variant calling compared caller by caller, from coverage and bcftools statistics down to the annotated variant, on top of the native MultiQC report."
@@ -38,6 +44,9 @@ template:
       description: "UCSC name of the assembly the run was aligned to (hg38, hg19, mm10): the axis and gene lane of every locus track."
       required: false
       default: "hg38"
+    - name: "TRACKS_URI"
+      description: "s3:// or https:// folder holding the run's results (the one that holds csv/, variant_calling/, annotation/ and preprocessing/), to read the genome-browser tracks (the callers' VCFs and the CRAMs) in place instead of uploading them from DATA_ROOT. Without it the `tracks` collection uploads whichever of those files DATA_ROOT holds."
+      required: false
   # The bundled reference dataset needs no variable beyond DATA_ROOT: the hub
   # reads csv/, and GENOME keeps its default.
   reference:
@@ -81,6 +90,15 @@ template:
       - "joint_germline"
   dashboards:
     - "dashboards/base.yaml"
+  conditional:
+    # Genome tracks: read in place when TRACKS_URI names the results folder,
+    # uploaded from DATA_ROOT otherwise (the `tracks` recipe keeps only the
+    # files it finds there).
+    - if_var_present: "TRACKS_URI"
+      override_dcs:
+        - data_collection_tag: "tracks"
+          dc_properties:
+            remote_base_uri: "{TRACKS_URI}"
 
 # ============================================================================
 # PROJECT CONFIGURATION
@@ -126,6 +144,53 @@ workflows:
               "status": "0 = normal, 1 = tumour (sarek convention); empty when only variantcalled.csv was published"
               "status_label": "Normal, Tumour or Unknown, derived from status"
               "n_callers": "Variant callers that produced a VCF for the sample"
+
+      # ----------------------------------------------------------------
+      # Genome tracks. A manifest of the run's track files (every caller's
+      # VCF and the CRAM of every sample) that the genome browser reads by
+      # range, through the API. One row per file, keyed on sample_id like the
+      # hub; the recipe spells it out from the same csv/ manifests. The CRAM
+      # needs the reference sequence, which the {GENOME} preset supplies.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "tracks"
+        description: "Genome-browser tracks of the run: every caller's VCF and the CRAM of every sample, one row per file"
+        config:
+          type: "genomic_tracks"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/sarek/tracks.py"
+          dc_specific_properties:
+            format: "TSV"
+            uri_column: "uri"
+            track_id_column: "track_id"
+            sample_column: "sample_id"
+            format_column: "format"
+            name_column: "name"
+            color_column: "color"
+            category_column: "category"
+            order_column: "order"
+            assembly: "{GENOME}"
+            display_defaults:
+              cram:
+                displays:
+                  - type: "LinearPileupDisplay"
+                    height: 80
+              vcf:
+                displays:
+                  - type: "LinearVariantDisplay"
+                    height: 40
+            columns_description:
+              "track_id": "<sample_id>.<caller> or <sample_id>.alignments, unique per file"
+              "sample_id": "Sample the file belongs to"
+              "caller": "Variant caller of a VCF row; empty on an alignment row"
+              "kind": "variants, sv or alignments"
+              "format": "Track file format"
+              "uri": "Path relative to the results folder"
+              "name": "Track label shown in the browser"
+              "color": "Track colour"
+              "category": "Track-selector folder"
+              "order": "Row order the browser opens with"
 
       # ----------------------------------------------------------------
       # MultiQC. Native (not reprocessed). Module and plot names come from
@@ -1432,4 +1497,38 @@ links:
       resolver: "direct"
       target_field: "caller"
     description: "Carry the caller picked on the Variant yield tab over to the callset QC profile"
+    enabled: true
+
+  # ----------------------------------------------------------------
+  # Genome tracks. Picking samples (the left panel, or a call's sample) opens
+  # their tracks; clicking a track in the browser picks its sample back.
+  # ----------------------------------------------------------------
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Show the genome tracks of the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "tracks"
+    source_column: "sample_id"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the dashboard by the samples whose tracks are picked in the genome browser"
+    enabled: true
+
+  - source_dc_tag: "vcf_variants"
+    source_column: "sample"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Open the genome tracks of the samples a picked call was made in"
     enabled: true

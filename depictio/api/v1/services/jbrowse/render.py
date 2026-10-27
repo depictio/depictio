@@ -13,17 +13,20 @@ from bson import ObjectId
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.services.jbrowse import signing, ucsc
+from depictio.api.v1.services.jbrowse import probe, signing, ucsc
 from depictio.api.v1.services.jbrowse.config_builder import (
     apply_fetch_size_limit,
     build_assembly_config,
     build_track_config,
     deep_merge,
     resolve_preset,
+    variant_color_jexl,
 )
 from depictio.api.v1.services.jbrowse.tracks import (
     TrackRow,
     TracksDC,
+    display_base_uri,
+    display_uri,
     manifest_rows,
     tracks_by_key,
 )
@@ -47,20 +50,46 @@ def _absolute(uri: str | None, props: Any) -> str | None:
     return uri
 
 
+def _storage_of(uri: str, props: Any) -> str:
+    """Where a track location is read from: ``direct``, ``remote`` or ``depictio``."""
+    if _direct_url(uri, props):
+        return "direct"
+    if "://" not in uri:
+        return "remote" if props.remote_base_uri else "depictio"
+    if uri.lower().startswith(f"s3://{settings.s3.bucket}/"):
+        return "depictio"
+    return "remote"
+
+
+def _shown_uri(uri: str | None, props: Any, anonymous: bool) -> tuple[str | None, str]:
+    """(what the client may be shown of ``uri``, its storage). Display only."""
+    if not uri:
+        return None, "depictio"
+    storage = _storage_of(uri, props)
+    shown = _absolute(uri, props) if storage == "direct" else uri
+    return display_uri(shown, storage, anonymous), storage
+
+
+def _direct_url(uri: str | None, props: Any) -> str | None:
+    """The https URL JBrowse may fetch itself (``direct_access``), else None."""
+    absolute = _absolute(uri, props)
+    if props.direct_access and absolute and _is_https(absolute):
+        return absolute
+    return None
+
+
 def _url_factory(tdc: TracksDC, uid: str, delta_version: int | None = None):
     def track_url(track: TrackRow, role: str) -> str:
-        target = _absolute(track.uri if role == "data" else track.index_uri, tdc.props)
-        if tdc.props.direct_access and _is_https(target):
-            assert target
-            return target
+        direct = _direct_url(track.uri if role == "data" else track.index_uri, tdc.props)
+        if direct:
+            return direct
         query = signing.signed_query("track", tdc.dc_id, track.key, role, uid, delta_version)
         return f"{API_PREFIX}/jbrowse/tracks/{tdc.dc_id}/{track.key}/{role}?{query}"
 
     def assembly_url(uri: str, role: str) -> str:
-        absolute = _absolute(uri, tdc.props)
-        if tdc.props.direct_access and _is_https(absolute):
-            assert absolute
-            return absolute
+        direct = _direct_url(uri, tdc.props)
+        if direct:
+            return direct
         query = signing.signed_query("assembly", tdc.dc_id, "assembly", role, uid)
         return f"{API_PREFIX}/jbrowse/assembly/{tdc.dc_id}/{role}?{query}"
 
@@ -76,8 +105,19 @@ def _selection_column(component: dict[str, Any], tdc: TracksDC) -> str | None:
     return component.get("selection_column") or tdc.props.sample_column
 
 
-def _track_summary(track: TrackRow, selection_column: str | None) -> dict[str, Any]:
+def _track_summary(
+    track: TrackRow,
+    selection_column: str | None,
+    props: Any,
+    anonymous: bool = False,
+    group_column: str | None = None,
+) -> dict[str, Any]:
     value = track.row.get(selection_column) if selection_column else None
+    uri, storage = _shown_uri(track.uri, props, anonymous)
+    # The group a track's colour stands for (the legend, and the lanes of a
+    # genome view on the same samples): the tile's `color_by` column, else the
+    # manifest's `group`.
+    group = track.row.get(group_column or "group")
     return {
         "track_id": track.track_id,
         "name": track.name,
@@ -86,7 +126,11 @@ def _track_summary(track: TrackRow, selection_column: str | None) -> dict[str, A
         "selection_value": None if value is None else str(value),
         "category": track.category,
         "color": track.color,
+        "group": None if group in (None, "") else str(group),
         "source": "manifest",
+        "uri": uri,
+        "index_uri": _shown_uri(track.index_uri, props, anonymous)[0],
+        "storage": storage,
     }
 
 
@@ -101,27 +145,80 @@ def _conf_summary(conf: dict[str, Any], source: str) -> dict[str, Any]:
         "selection_value": None,
         "category": category[-1] if isinstance(category, list) and category else None,
         "color": None,
+        "group": None,
         "source": source,
     }
 
 
+def locus_sources(component: dict[str, Any]) -> list[dict[str, Any]]:
+    """The ``locus_from`` sources of a component (one dict or a list), each with its ``name``.
+
+    The name is ``name``, else the collection tag, like the viewer's
+    ``locusSources``. The first source is the primary one.
+    """
+    raw = component.get("locus_from")
+    items = raw if isinstance(raw, list) else [raw]
+    return [
+        {**item, "name": str(item.get("name") or item.get("data_collection_tag") or "").strip()}
+        for item in items
+        if isinstance(item, dict) and item
+    ]
+
+
+def primary_locus_source(component: dict[str, Any]) -> dict[str, Any] | None:
+    """The first ``locus_from`` source: it frames the view, carries the mate, feeds "Use this region"."""
+    sources = locus_sources(component)
+    return sources[0] if sources else None
+
+
 def locus_from_rows(rows: list[dict[str, Any]], spec: dict[str, Any]) -> str | None:
-    """``chrom:start-end`` around the first row, padded; None when unusable."""
-    if not rows:
-        return None
-    row = rows[0]
-    chrom = row.get(spec["chrom_column"])
-    start = row.get(spec["start_column"])
-    end = row.get(spec.get("end_column") or spec["start_column"])
-    try:
-        start_i, end_i = int(float(start)), int(float(end))
-    except (TypeError, ValueError):
-        return None
-    if chrom is None:
-        return None
+    """``chrom:start-end`` framing the span of ``rows``, padded; None when unusable.
+
+    The rows that sit on the most frequent chromosome (ties: the one seen
+    first) are framed from their smallest start to their largest end, with
+    ``padding`` on both sides and the start clamped at 1. Rows with an
+    unreadable chromosome or coordinate are ignored.
+    """
     pad = int(spec.get("padding", 5000))
-    lo, hi = sorted((start_i, end_i))
+    end_column = spec.get("end_column") or spec["start_column"]
+    spans: dict[Any, list[tuple[int, int]]] = {}
+    for row in rows:
+        chrom = row.get(spec["chrom_column"])
+        if chrom is None:
+            continue
+        try:
+            start_i = int(float(row.get(spec["start_column"])))  # type: ignore[arg-type]
+            end_i = int(float(row.get(end_column)))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            continue
+        spans.setdefault(chrom, []).append(tuple(sorted((start_i, end_i))))  # type: ignore[arg-type]
+    if not spans:
+        return None
+    # max() returns the first maximal key, and dicts keep insertion order.
+    chrom = max(spans, key=lambda c: len(spans[c]))
+    lo = min(s for s, _ in spans[chrom])
+    hi = max(e for _, e in spans[chrom])
     return f"{chrom}:{max(lo - pad, 1)}-{hi + pad}"
+
+
+def mate_locus_from_rows(rows: list[dict[str, Any]], spec: dict[str, Any]) -> str | None:
+    """Locus of the second side of the ``rows`` framed by ``locus_from_rows``.
+
+    Same framing and padding as the primary locus, on the ``locus_from.mate``
+    columns; None when the component declares no mate or the cells are unusable.
+    """
+    mate = spec.get("mate")
+    if not mate:
+        return None
+    return locus_from_rows(
+        rows,
+        {
+            "chrom_column": mate["chrom_column"],
+            "start_column": mate["start_column"],
+            "end_column": mate.get("end_column"),
+            "padding": spec.get("padding", 5000),
+        },
+    )
 
 
 def build_jbrowse_payload(
@@ -131,6 +228,11 @@ def build_jbrowse_payload(
     uid: str,
     locus: str | None = None,
     delta_version: int | None = None,
+    category_colors: dict[str, dict[str, str]] | None = None,
+    anonymous: bool = False,
+    mate_locus: str | None = None,
+    first_call: dict[str, str | None] | None = None,
+    locus_source: dict[str, str | None] | None = None,
 ) -> dict[str, Any]:
     """The render payload.
 
@@ -138,6 +240,16 @@ def build_jbrowse_payload(
     filter applies to the tracks (then the view starts with ``initial_tracks``).
     ``delta_version`` is the manifest commit a pinned view reads; the track
     URLs carry it, so the proxy serves the files of that same manifest.
+    ``category_colors`` is the dashboard's effective map (see
+    ``effective_category_colors``): the component's ``variant_color_by`` reads
+    its colours from it. ``anonymous`` (a public-link viewer) hides the
+    ``remote_base_uri`` and shows remote files by name only. Every URI the
+    payload shows (``track_rows``, ``tracks[].metadata``, ``remote_base``)
+    goes through ``display_uri``; the adapter locations are the URLs JBrowse
+    fetches and are left as built. ``locus_source`` names the ``locus_from``
+    collection and columns (``{dc_id, chrom_column, start_column, end_column}``)
+    the tile's "Use this region" filters on (the primary source); None when it has
+    no ``locus_from``.
     """
     props = tdc.props
     all_tracks = list(tracks_by_key(tdc, delta_version).values())
@@ -149,8 +261,7 @@ def build_jbrowse_payload(
     by_id = {t.track_id: t for t in all_tracks}
 
     filter_applied = filtered_rows is not None
-    if filter_applied:
-        assert filtered_rows is not None
+    if filtered_rows is not None:
         matched = filtered_rows
     else:
         matched = all_tracks[: int(component.get("initial_tracks", 5) or 0)]
@@ -173,6 +284,7 @@ def build_jbrowse_payload(
     config_tracks = list(carried.values())
     limit_mb = component.get("fetch_size_limit_mb")
     fetch_size_limit = int(float(limit_mb) * 1024 * 1024) if limit_mb else None
+    show_junctions = bool(component.get("show_junctions", False))
 
     # Assembly (component override wins over the DC's)
     assembly_spec: str | CustomAssembly = component.get("assembly") or props.assembly
@@ -191,12 +303,20 @@ def build_jbrowse_payload(
         overrides.get("formats") or overrides.get("displays") or {},
     ]
     per_track = overrides.get("tracks") or {}
+    variant_color = variant_color_jexl(component.get("variant_color_by"), category_colors)
 
     tracks_conf: list[dict[str, Any]] = []
     for track in config_tracks:
         try:
             conf = build_track_config(
-                track, assembly_name, track_url, format_layers, fetch_size_limit
+                track,
+                assembly_name,
+                track_url,
+                format_layers,
+                fetch_size_limit,
+                variant_color,
+                display=lambda uri: _shown_uri(uri, props, anonymous)[0],
+                show_junctions=show_junctions,
             )
         except ValueError as exc:
             logger.info(f"jbrowse: skipping track {track.track_id}: {exc}")
@@ -207,7 +327,11 @@ def build_jbrowse_payload(
 
     built = {c["trackId"] for c in tracks_conf}
     shown_ids = [t.track_id for t in shown if t.track_id in built]
-    track_rows = [_track_summary(t, selection_column) for t in config_tracks if t.track_id in built]
+    track_rows = [
+        _track_summary(t, selection_column, props, anonymous, component.get("color_by"))
+        for t in config_tracks
+        if t.track_id in built
+    ]
     if annotation and component.get("show_annotation", True):
         tracks_conf.insert(0, annotation)
         shown_ids.insert(0, annotation["trackId"])
@@ -245,13 +369,36 @@ def build_jbrowse_payload(
         preset.get("configuration") or {}, overrides.get("configuration") or {}
     )
 
-    location = locus or component.get("location") or preset_location
+    circular_categories = component.get("circular_categories")
+    circular = set(["sv"] if circular_categories is None else circular_categories)
+    sv_track_ids = [
+        t.track_id for t in config_tracks if t.track_id in built and t.category in circular
+    ]
+
+    # Where the view opens, first level that yields a locus wins: the filter
+    # narrowing ``locus_from``, the YAML ``location``, the first call (best row
+    # of ``locus_from``), the first region holding data in the first tracks
+    # shown (read from their index), the preset's default.
+    mate_location: str | None = None
+    if locus:
+        location, opening = locus, "filter"
+        mate_location = mate_locus
+    elif component.get("location"):
+        location, opening = component["location"], "yaml"
+    elif first_call and first_call.get("locus"):
+        location, opening = first_call["locus"], "first_call"
+        mate_location = first_call.get("mate_locus")
+    else:
+        probed = probe.first_region(tdc, shown, delta_version)
+        location, opening = (probed, "data") if probed else (preset_location, "preset")
 
     return {
         "assembly": assembly_conf,
         "tracks": tracks_conf,
         "shown_track_ids": shown_ids,
         "location": location,
+        "opening": opening,
+        "mate_location": mate_location,
         "view": view,
         "configuration": configuration,
         "track_rows": track_rows,
@@ -264,6 +411,14 @@ def build_jbrowse_payload(
         "max_tracks": max_tracks,
         "force_load": bool(component.get("force_load", False)),
         "ucsc_missing": ucsc_missing,
+        "data_version": delta_version,
+        "remote_base": display_base_uri(props.remote_base_uri, anonymous),
+        "assembly_kind": "custom" if isinstance(assembly_spec, CustomAssembly) else "preset",
+        "sv_track_ids": sv_track_ids,
+        "read_pairs_display": component.get("read_pairs_display") or "pileup",
+        "display": {k: v for k, v in (component.get("display") or {}).items() if v is not None}
+        or None,
+        "locus_source": locus_source,
     }
 
 
@@ -278,18 +433,11 @@ def filtered_track_rows(
         return None
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
 
-    init_data: dict[str, dict] = {}
-    if tdc.delta_location:
-        init_data[tdc.dc_id] = {
-            "delta_location": tdc.delta_location,
-            "dc_type": "genomic_tracks",
-            "size_bytes": 0,
-        }
     df = load_deltatable_lite(
         workflow_id=ObjectId(tdc.wf_id),
         data_collection_id=tdc.dc_id,
         metadata=filter_metadata,
-        init_data=init_data,
+        init_data=tdc.init_data(),
         delta_version=delta_version,
     )
     rows = manifest_rows(df, tdc.props)

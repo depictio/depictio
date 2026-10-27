@@ -213,9 +213,9 @@ const VIZ_KIND: Readonly<Record<string, VizKindLabel>> = {
     'Ancient-DNA damage: substitution frequency by position from the read end',
   ),
   genome_view: label(
-    'Genome',
+    'Overview',
     'tabler:dna-2',
-    'Scores along the chromosomes on a zoomable genome axis, with a region brush',
+    'Calls of every sample along the chromosomes: brush a region to drive the browser',
   ),
   group_compare: label(
     'Compare',

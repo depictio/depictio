@@ -6,8 +6,8 @@ WiGiTS toolkit on tumor and normal DNA and on tumor RNA: SAGE and PAVE call and 
 variants, ESVEE calls structural variants, AMBER and COBALT feed PURPLE's purity, ploidy and
 copy-number fit, LINX clusters the SVs and calls fusions, and CUPPA, SIGS, CHORD, LILAC, TEAL, Neo
 and QSEE add tissue of origin, signatures, HRD, HLA typing, telomere length, neoepitopes and QC.
-The template reads their tables; it reads no BAM and no MultiQC report (the pipeline writes
-none). The family rules it follows are in `depictio/projects/nf-core/RULES.md`.
+The template reads their tables and lists PURPLE's VCFs and the BAMs as genome-browser tracks;
+it reads no MultiQC report (the pipeline writes none). The family rules it follows are in `depictio/projects/nf-core/RULES.md`.
 
 ## Inputs
 
@@ -31,6 +31,7 @@ none). The family rules it follows are in `depictio/projects/nf-core/RULES.md`.
 | `neo_neoepitopes` | `neo/scorer/*.neo.neoepitope.tsv` | neoepitope |
 | `hmf_bamtools_*` | `bamtools/*/*.bam_metric.{summary,coverage,frag_length}.tsv` | DNA sample |
 | `qsee_status` | `qsee/*.qsee.status.tsv.gz` | sample and QC feature |
+| `tracks` | built by `recipes/tracks.py` from the samplesheet: PURPLE's VCFs and the REDUX BAMs | track file |
 
 oncoanalyser publishes every output under `<group_id>/<tool>/`, so `DATA_ROOT` is the pipeline
 outdir and every recipe globs its files recursively: a cohort run is several group directories
@@ -50,7 +51,8 @@ context tab when LILAC, Neo and TEAL are all missing.
 | `METADATA_FILE` | `{DATA_ROOT}/input/samplesheet.csv` | samplesheet read by `samples` |
 | `METADATA_ID_COL` | `sample_id` | samplesheet id column (fixed by the pipeline) |
 | `GROUP_COL`, `GROUP_COL_DISPLAY` | `sample_class`, `Sample class` | grouping filter, Key figures breakdown and group colours |
-| `GENOME` | `hg38` | assembly of the chord diagram, the copy-number locus view and the genome track |
+| `GENOME` | `hg38` | assembly of the chord diagram and the genome tracks |
+| `TRACKS_URI` | unset | `s3://` or `https://` outdir to read the genome tracks in place; unset uploads the VCFs and BAMs DATA_ROOT holds |
 
 `sample_class` is derived by the sample hub (`sample_type` and `sequence_type` joined, for
 example `tumor_dna`), so the default works on any sheet; any sheet column can be named instead.
@@ -111,14 +113,18 @@ every other tab.
    the CUPPA and CHORD tables are collapsed.
 3. **Copy number.** *Which regions are gained or lost, and in which genes?* Segments, segment
    copy number, genes in view and the LOH share. The PURPLE copy-number profile (log2 of copy
-   number over 2 with BAF, plus a locus view) and lowest against highest copy number per gene.
+   number over 2 with BAF, Plotly view only) and lowest against highest copy number per gene.
+   The profile's Open in genome browser action opens the reads and the SV breakpoints at the
+   region clicked, selected or in view, in a genome browser tab.
    The tab opens with the event filter on amplifications and deletions, so the gene scatter
    stays readable; clearing it adds the genes with loss of heterozygosity or no change. The gene
    table with a gene record card is collapsed.
 4. **Structural variants.** *Which rearrangements shaped the genome, and which fusions follow?*
    SVs, clusters, junction copy number and candidate fusions. A chord diagram of breakend pairs
    beside the SVs per resolved event, then kept and lost exons per fusion beside the fusions per
-   reading frame. The fusion table with a fusion record card and the SV table are collapsed.
+   reading frame. The fusion table with a fusion record card and the SV table are collapsed,
+   as is a genome browser (Reads at the breakends) that jumps to the first breakend of the SV
+   picked in the chord diagram or the table.
 
 **Variants**
 
@@ -130,8 +136,10 @@ every other tab.
    record card is collapsed.
 6. **Small variants.** *How many somatic variants are there, and how clonal?* PASS calls, coding
    calls, purity-adjusted allele frequency and variant copy number; their histograms (variant
-   types keep one colour on every tile); every call along the genome (GenomeSpy, with a gene
-   lane). The variant table with a variant record card is collapsed.
+   types keep one colour on every tile); then one linked section: every call along the genome
+   (GenomeSpy, with a gene lane, coloured by coding effect as the browser's calls) and the
+   genome browser under it, which follows its brush and jumps to the call picked in the table.
+   The variant table with a variant record card is collapsed.
 7. **Protein changes.** *Which proteins change, and where on the protein and its structure?*
    Protein changes, proteins hit, hotspots and allele frequency. A scatter of the genes with a
    change (highest purity-adjusted allele frequency against PURPLE's driver likelihood, sized by
@@ -151,6 +159,17 @@ event and chromosome (Copy number); resolved event, SV type and fusion phase (St
 variants); driver type, gene role, origin and report status (Drivers); coding effect, variant
 type and allele frequency (Small variants); protein and coding effect (Protein changes); HLA gene
 and neoepitope source (Immune context).
+
+## Genome tracks
+
+The `tracks` collection lists PURPLE's somatic and germline VCFs of every analysis group and
+the tumor and normal REDUX BAMs, one row per file, built from the samplesheet by
+`recipes/tracks.py`. Every row is keyed on the group's tumor sample, so a sample pick (or a call,
+copy-number segment or SV of that tumor) opens the tumor's VCFs and both alignments. The VCFs
+come first and the BAMs, 80 to 170 GB each on a WGS run, last. With `--var TRACKS_URI=<outdir>`
+the files are read in place by range; without it the VCFs and BAMs that DATA_ROOT holds, with
+their index, are uploaded. The tumor RNA alignment is not listed. The use cases are in
+`docs/design/jbrowse/oncoanalyser.md`.
 
 ## Selection
 

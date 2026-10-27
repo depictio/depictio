@@ -18,6 +18,12 @@ may be absent.
 
 Output: see ``OUTPUT_SCHEMA``. ``orf_class`` is RiboCode's class when
 RiboCode called the ORF, else Ribo-TISH's.
+
+Where the ORF sits (``chrom``, ``orf_start``, ``orf_end``): the key carries the
+contig and the stop-codon coordinate, and the protein length says how far the
+ORF reaches back from it (3 bases per amino acid, upstream of the stop on its
+strand). The span is approximate (an ORF split over exons covers more of the
+genome than that), which is what the genome browser needs to frame it.
 """
 
 from __future__ import annotations
@@ -66,12 +72,19 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "gene_type": pl.Utf8,
     "orf_class": pl.Utf8,
     "aa_length": pl.Int64,
+    "chrom": pl.Utf8,
+    "orf_start": pl.Int64,
+    "orf_end": pl.Int64,
     "ribotish": pl.Int64,
     "ribocode": pl.Int64,
     "annotated_cds": pl.Int64,
     "ribotish_libraries": pl.Int64,
     "ribocode_libraries": pl.Int64,
 }
+
+# `<chrom>:<strand>:<stop>`, the key the two callers' recipes build. The contig
+# may itself hold a colon (an HLA allele), so it is everything before the last two.
+_ORF_KEY = r"^(?P<chrom>.+):(?P<strand>[+-]):(?P<stop>\d+)$"
 
 _KEEP = ["orf_id", "gene_id", "gene_name", "gene_type", "orf_class", "aa_length"]
 
@@ -96,6 +109,23 @@ def _pool(df: pl.DataFrame | None, name: str) -> pl.DataFrame:
     )
 
 
+def _locus(orf_id: pl.Expr, aa_length: pl.Expr) -> list[pl.Expr]:
+    """Contig and approximate genomic span of an ORF, from its key and protein length."""
+    key = orf_id.str.extract_groups(_ORF_KEY)
+    strand = key.struct.field("strand")
+    stop = key.struct.field("stop").cast(pl.Int64)
+    reach = aa_length.fill_null(0).cast(pl.Int64) * 3
+    return [
+        key.struct.field("chrom").alias("chrom"),
+        pl.when(strand == "+")
+        .then((stop - reach).clip(lower_bound=1))
+        .otherwise(stop)
+        .cast(pl.Int64)
+        .alias("orf_start"),
+        pl.when(strand == "+").then(stop).otherwise(stop + reach).cast(pl.Int64).alias("orf_end"),
+    ]
+
+
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Outer join of the two callers' ORF sets on the stop-codon key."""
     tish = _pool(sources.get("ribotish"), "ribotish")
@@ -117,4 +147,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("ribotish_libraries").fill_null(0).cast(pl.Int64),
         pl.col("ribocode_libraries").fill_null(0).cast(pl.Int64),
     )
+    out = out.with_columns(_locus(pl.col("orf_id"), pl.col("aa_length")))
     return out.sort("orf_id").select(list(OUTPUT_SCHEMA))

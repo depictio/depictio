@@ -24,6 +24,7 @@ from depictio.api.v1.services.jbrowse.config_builder import (
     build_track_config,
     deep_merge,
     resolve_preset,
+    variant_color_jexl,
 )
 from depictio.api.v1.services.jbrowse.tracks import (
     TrackRow,
@@ -242,6 +243,93 @@ class TestDisplays:
             {"bigwig": {"displays": [{"type": "LinearWiggleDisplay", "height": 90}]}},
         ]
         assert _build(_track("c1.bw"), layers)["displays"][0]["height"] == 90
+
+
+EFFECT_COLORS = {
+    "EFFECT": {
+        "*": "auto",
+        "missense_variant": "#e8590c",
+        "synonymous_variant": "#2f9e44",
+        "stop_gained": "#c92a2a",
+    }
+}
+BY_EFFECT = {"column": "EFFECT"}
+ANN = "join('|', get(feature,'INFO').ANN)"
+
+
+class TestVariantColor:
+    def test_effects_are_tested_in_order_then_the_default(self):
+        assert variant_color_jexl(BY_EFFECT, EFFECT_COLORS) == (
+            f"jexl:includes({ANN}, 'missense_variant') ? '#e8590c' : "
+            f"includes({ANN}, 'synonymous_variant') ? '#2f9e44' : "
+            f"includes({ANN}, 'stop_gained') ? '#c92a2a' : 'goldenrod'"
+        )
+
+    def test_sentinels_are_skipped(self):
+        colors = {"EFFECT": {"*": "auto:AF", "a": "auto", "b": "auto:AF", "c": "#111111"}}
+        jexl = variant_color_jexl(BY_EFFECT, colors)
+        assert jexl == f"jexl:includes({ANN}, 'c') ? '#111111' : 'goldenrod'"
+
+    def test_a_concrete_wildcard_is_the_fallback(self):
+        colors = {"EFFECT": {"*": "#adb5bd", "a": "#111111"}}
+        assert variant_color_jexl(BY_EFFECT, colors).endswith(": '#adb5bd'")
+
+    def test_nothing_concrete_means_no_expression(self):
+        assert variant_color_jexl(BY_EFFECT, {"EFFECT": {"*": "auto"}}) is None
+        assert variant_color_jexl(BY_EFFECT, {"OTHER": {"a": "red"}}) is None
+        assert variant_color_jexl(BY_EFFECT, None) is None
+        assert variant_color_jexl(None, EFFECT_COLORS) is None
+
+    def test_quotes_are_escaped(self):
+        colors = {"EFFECT": {"it's": "red'); alert(1); ('", "back\\slash": "blue"}}
+        jexl = variant_color_jexl(BY_EFFECT, colors)
+        assert "'it\\'s'" in jexl
+        assert "'red\\'); alert(1); (\\''" in jexl
+        assert "'back\\\\slash'" in jexl
+
+    def test_info_field_is_configurable_and_checked(self):
+        jexl = variant_color_jexl({"column": "EFFECT", "info_field": "CSQ"}, EFFECT_COLORS)
+        assert "get(feature,'INFO').CSQ" in jexl
+        with pytest.raises(ValueError):
+            variant_color_jexl({"column": "EFFECT", "info_field": "A') || ('"}, EFFECT_COLORS)
+
+    def test_the_variant_display_carries_the_renderer(self):
+        jexl = variant_color_jexl(BY_EFFECT, EFFECT_COLORS)
+        conf = build_track_config(_track("s.vcf.gz"), "hg38", _url_for, [], None, jexl)
+        (display,) = conf["displays"]
+        assert display["type"] == "LinearVariantDisplay"
+        assert display["renderer"] == {"type": "CanvasFeatureRenderer", "color1": jexl}
+        assert display["displayId"] == f"{conf['trackId']}-LinearVariantDisplay"
+
+    def test_dc_defaults_merge_into_the_variant_display(self):
+        jexl = variant_color_jexl(BY_EFFECT, EFFECT_COLORS)
+        layers = [{"vcf": {"displays": [{"type": "LinearVariantDisplay", "height": 40}]}}]
+        conf = build_track_config(_track("s.vcf.gz"), "hg38", _url_for, layers, None, jexl)
+        (display,) = conf["displays"]
+        assert display["height"] == 40
+        assert display["renderer"]["color1"] == jexl
+
+    def test_only_variant_tracks_are_colored(self):
+        jexl = variant_color_jexl(BY_EFFECT, EFFECT_COLORS)
+        conf = build_track_config(_track("c1.bw"), "hg38", _url_for, [], None, jexl)
+        assert "displays" not in conf
+
+    def test_the_component_override_wins(self):
+        jexl = variant_color_jexl(BY_EFFECT, EFFECT_COLORS)
+        layers = [
+            {
+                "vcf": {
+                    "displays": [
+                        {
+                            "type": "LinearVariantDisplay",
+                            "renderer": {"color1": "black"},
+                        }
+                    ]
+                }
+            }
+        ]
+        conf = build_track_config(_track("s.vcf.gz"), "hg38", _url_for, layers, None, jexl)
+        assert conf["displays"][0]["renderer"]["color1"] == "black"
 
 
 class TestDeepMerge:
@@ -539,12 +627,109 @@ class TestPayloadSelection:
             "category": None,
             "color": None,
             "source": "manifest",
+            "uri": "cells/c00.bw",
+            "index_uri": None,
+            "storage": "depictio",
         }
         assert payload["selection_column"] == "cell"
 
     def test_component_selection_column_wins(self, cells):
         payload = _payload({"initial_tracks": 1, "selection_column": "uri"})
         assert payload["track_rows"][0]["selection_value"] == "cells/c00.bw"
+
+
+class TestDisplayedUris:
+    """What the payload shows of a location is sanitized; what JBrowse fetches is not."""
+
+    SIGNED = "https://data.example.org/run/a.bw?X-Amz-Signature=abc123&X-Amz-Credential=key"
+
+    def _one(self, monkeypatch, track: TrackRow, tdc: TracksDC, **kw):
+        monkeypatch.setattr(
+            render, "tracks_by_key", lambda tdc, delta_version=None: {track.key: track}
+        )
+        return _payload({"initial_tracks": 1}, tdc=tdc, **kw)
+
+    def test_a_presigned_remote_base_loses_its_signature(self, monkeypatch):
+        base = "https://data.example.org/run/?X-Amz-Signature=abc123"
+        out = self._one(monkeypatch, _track("a.bw", track_id="a"), _tdc(remote_base_uri=base))
+        assert out["remote_base"] == "https://data.example.org/run/"
+        assert "abc123" not in str(out["remote_base"])
+        row = out["track_rows"][0]
+        assert (row["uri"], row["storage"]) == ("a.bw", "remote")
+
+    def test_a_presigned_track_uri_loses_its_signature_everywhere_shown(self, monkeypatch):
+        track = _track(
+            self.SIGNED, track_id="a", index_uri=self.SIGNED.replace("a.bw?", "a.bw.bai?")
+        )
+        track.name = "a.bw"  # as manifest_rows derives it: the URI's file name, no query
+        out = self._one(monkeypatch, track, _tdc())
+        row = out["track_rows"][0]
+        assert row["uri"] == "https://data.example.org/run/a.bw"
+        assert row["index_uri"] == "https://data.example.org/run/a.bw.bai"
+        meta = out["tracks"][0]["metadata"]
+        assert meta["uri"] == "https://data.example.org/run/a.bw"
+        assert "Signature" not in str(row) + str(meta)
+
+    def test_userinfo_is_stripped(self, monkeypatch):
+        track = _track("https://bob:s3cret@host.example.org/x/a.bw", track_id="a")
+        out = self._one(monkeypatch, track, _tdc())
+        assert out["track_rows"][0]["uri"] == "https://host.example.org/x/a.bw"
+        assert "s3cret" not in str(out["track_rows"]) + str(out["tracks"][0]["metadata"])
+        base = self._one(
+            monkeypatch, track, _tdc(remote_base_uri="https://bob:s3cret@host.example.org/x/")
+        )["remote_base"]
+        assert base == "https://host.example.org/x/"
+
+    def test_an_absolute_local_path_shows_its_file_name_only(self, monkeypatch):
+        track = _track("/home/me/private/run/a.bw", track_id="a")
+        out = self._one(monkeypatch, track, _tdc())
+        assert out["track_rows"][0]["uri"] == "a.bw"
+        assert out["tracks"][0]["metadata"]["uri"] == "a.bw"
+        assert "private" not in str(out["track_rows"]) + str(out["tracks"][0]["metadata"])
+
+    def test_an_absolute_path_in_any_column_shows_its_file_name_only(self, monkeypatch):
+        track = _track("a.bw", track_id="a")
+        track.row = {**track.row, "source_path": "/home/me/private/run/a.bam"}
+        meta = self._one(monkeypatch, track, _tdc())["tracks"][0]["metadata"]
+        assert meta["source_path"] == "a.bam"
+
+    def test_an_unparsable_uri_does_not_fail_the_render(self, monkeypatch):
+        track = _track("a.bw", track_id="a")
+        track.row = {**track.row, "mirror": "http://[bad/run/a.bw?sig=x"}
+        meta = self._one(monkeypatch, track, _tdc())["tracks"][0]["metadata"]
+        assert meta["mirror"] == "a.bw"
+
+    def test_an_ingested_bucket_key_shows_its_file_name_only(self, monkeypatch):
+        bucket = render.settings.s3.bucket
+        track = _track(f"s3://{bucket}/{DC_ID}/abc/a.bw", track_id="a")
+        row = self._one(monkeypatch, track, _tdc())["track_rows"][0]
+        assert (row["uri"], row["storage"]) == ("a.bw", "depictio")
+
+    def test_an_anonymous_viewer_gets_no_base_and_file_names_only(self, monkeypatch):
+        track = _track("https://data.example.org/run/a.bw", track_id="a")
+        tdc = _tdc(remote_base_uri="https://data.example.org/run/")
+        out = self._one(monkeypatch, track, tdc, anonymous=True)
+        assert out["remote_base"] is None
+        assert out["track_rows"][0]["uri"] == "a.bw"
+        assert "data.example.org" not in str(out["track_rows"])
+
+    def test_direct_access_is_marked_and_its_adapter_url_is_unchanged(self, monkeypatch):
+        track = _track(self.SIGNED, track_id="a")
+        out = self._one(monkeypatch, track, _tdc(direct_access=True))
+        assert out["track_rows"][0]["storage"] == "direct"
+        # JBrowse still fetches the signed URL itself.
+        assert out["tracks"][0]["adapter"]["bigWigLocation"]["uri"] == self.SIGNED
+
+    def test_proxied_adapter_urls_are_unchanged(self, monkeypatch):
+        track = _track(self.SIGNED, track_id="a")
+        out = self._one(monkeypatch, track, _tdc())
+        (url,) = _proxy_urls(out)
+        assert url.startswith(f"{render.API_PREFIX}/jbrowse/tracks/{DC_ID}/{track.key}/data?")
+        assert "sig=" in url
+
+    def test_the_pinned_data_version_is_reported(self, cells):
+        assert _payload({})["data_version"] is None
+        assert _payload({}, delta_version=4)["data_version"] == 4
 
 
 class TestPayloadConfig:
@@ -616,6 +801,25 @@ class TestPayloadConfig:
         assert display["autoscale"] == "local"  # from the preset
         assert display["maxScore"] == 5  # component override
 
+    def test_variant_tracks_take_the_dashboard_effect_colors(self, monkeypatch):
+        vcf = _track("s1.vcf.gz", track_id="v1")
+        monkeypatch.setattr(render, "tracks_by_key", lambda tdc, delta_version=None: {vcf.key: vcf})
+        tdc = _tdc(
+            display_defaults={"vcf": {"displays": [{"type": "LinearVariantDisplay", "height": 40}]}}
+        )
+        component = {"variant_color_by": {"column": "EFFECT"}}
+        payload = _payload(component, tdc=tdc, category_colors=EFFECT_COLORS)
+        (display,) = payload["tracks"][0]["displays"]
+        assert display["height"] == 40
+        assert "'#e8590c'" in display["renderer"]["color1"]
+        # No colour map, or no setting: the track is left as it was.
+        for plain in (
+            _payload(component, tdc=tdc),
+            _payload({}, tdc=tdc, category_colors=EFFECT_COLORS),
+        ):
+            (display,) = plain["tracks"][0]["displays"]
+            assert "renderer" not in display
+
     def test_per_track_override(self, cells):
         payload = _payload(
             {"initial_tracks": 2, "config_overrides": {"tracks": {"c01": {"name": "Renamed"}}}}
@@ -683,9 +887,30 @@ class TestPayloadConfig:
 class TestLocusFromRows:
     SPEC = {"chrom_column": "chrom", "start_column": "start", "end_column": "end", "padding": 100}
 
-    def test_padded_first_row(self):
-        rows = [{"chrom": "chr1", "start": 1000, "end": 2000}, {"chrom": "chr2"}]
+    def test_padded_single_row(self):
+        rows = [{"chrom": "chr1", "start": 1000, "end": 2000}]
         assert render.locus_from_rows(rows, self.SPEC) == "chr1:900-2100"
+
+    def test_span_of_several_rows(self):
+        rows = [
+            {"chrom": "chr1", "start": 1000, "end": 2000},
+            {"chrom": "chr1", "start": 500, "end": 600},
+            {"chrom": "chr1", "start": 3000, "end": 3500},
+        ]
+        assert render.locus_from_rows(rows, self.SPEC) == "chr1:400-3600"
+
+    def test_majority_chromosome_wins_and_ties_keep_first_seen(self):
+        rows = [
+            {"chrom": "chr2", "start": 10, "end": 20},
+            {"chrom": "chr1", "start": 1000, "end": 2000},
+            {"chrom": "chr1", "start": 1500, "end": 1600},
+        ]
+        assert render.locus_from_rows(rows, self.SPEC) == "chr1:900-2100"
+        assert render.locus_from_rows(rows[:2], self.SPEC) == "chr2:1-120"
+
+    def test_unreadable_rows_are_skipped(self):
+        rows = [{"chrom": "chr1", "start": "x", "end": 1}, {"chrom": "chr1", "start": 5, "end": 9}]
+        assert render.locus_from_rows(rows, self.SPEC) == "chr1:1-109"
 
     def test_start_clamped_to_one_and_sorted(self):
         rows = [{"chrom": "chr1", "start": "150.0", "end": 50}]

@@ -48,6 +48,7 @@ import { Icon } from '@iconify/react';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useContentScaleStyle } from './hooks/useUiScalePref';
 import TabLinkProvider from './chrome/TabLinkProvider';
+import GenomeBrowserTargetProvider from './chrome/GenomeBrowserTargetProvider';
 import { setContentWidthScope, useContentMaxWidth } from './hooks/useContentWidthPref';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
 import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
@@ -814,7 +815,8 @@ const EditorApp: React.FC = () => {
   // ever entering its editable grid. Rendered through the grid's
   // `beforeSections` slot so it sits after this tab's own unsectioned
   // components (title / intro text), exactly as the viewer draws it.
-  // One panel per kind of thing that can float: maps, and 3D structures.
+  // One panel per kind of thing that can float: maps, 3D structures and genome
+  // browsers.
   const floatingByKind = useMemo(() => partitionFloating(crossTab.floating), [crossTab.floating]);
   const mapPanel = useMapPanel({
     components: floatingByKind.map,
@@ -825,6 +827,13 @@ const EditorApp: React.FC = () => {
   const structurePanel = useMapPanel({
     kind: 'structure',
     components: floatingByKind.structure,
+    familyId: crossTab.familyId,
+    filters,
+    onFilterChange: handleFilterChange,
+  });
+  const genomePanel = useMapPanel({
+    kind: 'genome',
+    components: floatingByKind.genome,
     familyId: crossTab.familyId,
     filters,
     onFilterChange: handleFilterChange,
@@ -1343,7 +1352,7 @@ const EditorApp: React.FC = () => {
 
   /**
    * The same Edit / Delete menu a grid tile carries, for the component in a
-   * floating panel (a map, or a 3D structure).
+   * floating panel (a map, a 3D structure or a genome browser).
    *
    * A component with `placement: floating` claims no grid cell, so it never
    * gets a `renderItemOverlay`, so without this there is no way to edit or delete
@@ -1378,6 +1387,11 @@ const EditorApp: React.FC = () => {
   const renderStructurePanelEditActions = useCallback(
     (componentId: string, ownerDashboardId: string) =>
       panelEditActions('advanced_viz', componentId, ownerDashboardId),
+    [panelEditActions],
+  );
+  const renderGenomePanelEditActions = useCallback(
+    (componentId: string, ownerDashboardId: string) =>
+      panelEditActions('jbrowse', componentId, ownerDashboardId),
     [panelEditActions],
   );
 
@@ -2637,6 +2651,7 @@ const EditorApp: React.FC = () => {
           <>
             <MapPanelControl panel={mapPanel} />
             <MapPanelControl panel={structurePanel} />
+            <MapPanelControl panel={genomePanel} />
           </>
         }
         // No refreshTick: the editor threads no realtime refresh
@@ -2657,13 +2672,20 @@ const EditorApp: React.FC = () => {
               filters={tabFilters}
               onFilterChange={handleFilterChange}
               renderEditActions={renderMapPanelEditActions}
-              followedByDock={structurePanel.docked}
+              followedByDock={structurePanel.docked || genomePanel.docked}
             />
             <MapPanelDock
               panel={structurePanel}
               filters={tabFilters}
               onFilterChange={handleFilterChange}
               renderEditActions={renderStructurePanelEditActions}
+              followedByDock={genomePanel.docked}
+            />
+            <MapPanelDock
+              panel={genomePanel}
+              filters={tabFilters}
+              onFilterChange={handleFilterChange}
+              renderEditActions={renderGenomePanelEditActions}
             />
           </>
         }
@@ -2684,6 +2706,7 @@ const EditorApp: React.FC = () => {
           <>
             <MapPanelControl panel={mapPanel} />
             <MapPanelControl panel={structurePanel} />
+            <MapPanelControl panel={genomePanel} />
           </>
         }
       />
@@ -2861,6 +2884,14 @@ const EditorApp: React.FC = () => {
             renderEditActions={renderStructurePanelEditActions}
           />
         )}
+        {dashboard && dashboardId && (
+          <MapPanelSurface
+            panel={genomePanel}
+            filters={tabFilters}
+            onFilterChange={handleFilterChange}
+            renderEditActions={renderGenomePanelEditActions}
+          />
+        )}
       </div>
       {guide.open && guideModel && dashboard && dashboardId && (
         <DashboardGuide
@@ -3032,6 +3063,7 @@ const EditorApp: React.FC = () => {
     {/* Tab links in text resolve here too, so the canvas shows them as the
         viewer does rather than as plain text. */}
     <TabLinkProvider tabs={tabSiblings} mode="edit">
+      <GenomeBrowserTargetProvider dashboardId={dashboardId ?? null} dashboard={dashboard} tabs={tabSiblings}>
     <ShellHost
       mode="edit"
       isNarrow={Boolean(isNarrow)}
@@ -3117,6 +3149,7 @@ const EditorApp: React.FC = () => {
       analysis={{ open: analysisOpen, widthPx: ANALYSIS_PANEL_WIDTH_PX }}
       guideOpen={guide.open}
     />
+      </GenomeBrowserTargetProvider>
     </TabLinkProvider>
     </CategoryColorsContext.Provider>
     </BrandScope>

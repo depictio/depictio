@@ -24,8 +24,12 @@ template:
     - name: "IS_NANOPORE"
       description: "Auto-set from params.json (platform=nanopore). Repoints coverage/lineage DCs at the artic_minion/ layout and drops illumina-only variant DCs."
       required: false
+    - name: "TRACKS_URI"
+      description: "s3:// or https:// folder holding the run's results, to read the genome-browser tracks (iVar VCF, primer-trimmed BAM) in place instead of uploading them from DATA_ROOT. Without it the `tracks` collection uploads whichever of those files DATA_ROOT holds."
+      required: false
   dashboards:
     - "dashboards/base.yaml"
+    - "dashboards/v2.yaml"
   # How a run's provenance is collected. Without this block the CLI falls back
   # to _DEFAULT_PROVENANCE_SPEC, which reads params.json but drops every key
   # into a single ungrouped "Parameters" list and never looks at the software
@@ -102,6 +106,14 @@ template:
         - data_collection_tag: "nextclade_results"
           source_overrides:
             nextclade_raw: {glob_pattern: "artic_minion/nextclade/*.csv"}
+    # Genome tracks: read in place when TRACKS_URI names the results folder,
+    # uploaded from DATA_ROOT otherwise (the `tracks` recipe keeps only the
+    # files it finds there).
+    - if_var_present: "TRACKS_URI"
+      override_dcs:
+        - data_collection_tag: "tracks"
+          dc_properties:
+            remote_base_uri: "{TRACKS_URI}"
 
 # ============================================================================
 # PROJECT CONFIGURATION
@@ -244,6 +256,51 @@ workflows:
               "num_variants_indel": "Number of indel variants called"
               "num_variants_total": "Total number of variants called"
               "lineage": "Pangolin lineage assignment"
+
+      # ----------------------------------------------------------------
+      # Genome tracks. A manifest of the run's track files (called variants
+      # and primer-trimmed alignments of every sample) that the genome
+      # browser reads by range, through the API. One row per file, keyed on
+      # sample_id like summary_metrics. The reference is SARS-CoV-2.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "tracks"
+        description: "Genome-browser tracks of the run: called variants (VCF) and primer-trimmed alignments (BAM) of every sample, one row per file"
+        config:
+          type: "genomic_tracks"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralrecon/tracks.py"
+          dc_specific_properties:
+            format: "TSV"
+            uri_column: "uri"
+            track_id_column: "track_id"
+            sample_column: "sample_id"
+            format_column: "format"
+            name_column: "name"
+            color_column: "color"
+            category_column: "category"
+            order_column: "order"
+            assembly: "wuhCor1"
+            display_defaults:
+              bam:
+                displays:
+                  - type: "LinearPileupDisplay"
+                    height: 80
+              vcf:
+                displays:
+                  - type: "LinearVariantDisplay"
+                    height: 40
+            columns_description:
+              "track_id": "<sample_id>.<kind>, unique per file"
+              "sample_id": "Sample the file belongs to"
+              "kind": "variants or alignments"
+              "format": "Track file format"
+              "uri": "Path relative to the results folder"
+              "name": "Track label shown in the browser"
+              "color": "Track colour"
+              "category": "Track-selector folder"
+              "order": "Row order the browser opens with"
 
       - data_collection_tag: "variants_long"
         optional: true  # ivar variants_long_table.csv absent when consensus is empty / --skip_variants_long_table
@@ -642,4 +699,47 @@ links:
       resolver: "direct"
       target_field: "sample_id"
     description: "Filter the variant feature matrix by selected samples"
+    enabled: true
+
+  # Summary Metrics <-> genome tracks: picking samples opens their tracks, and
+  # clicking a track in the browser picks its sample back.
+  - source_dc_tag: "summary_metrics"
+    source_column: "sample"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Show the genome tracks of the samples picked in the summary metrics"
+    enabled: true
+
+  - source_dc_tag: "tracks"
+    source_column: "sample_id"
+    target_dc_tag: "summary_metrics"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the dashboard by the samples whose tracks are picked in the genome browser"
+    enabled: true
+
+  # A picked variant or low-coverage amplicon opens the tracks of its sample.
+  - source_dc_tag: "variants_long"
+    source_column: "sample"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Open the genome tracks of the sample a picked variant was called in"
+    enabled: true
+
+  - source_dc_tag: "mosdepth_amplicon_coverage"
+    source_column: "sample"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Open the genome tracks of the sample whose amplicon coverage is picked"
     enabled: true

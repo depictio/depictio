@@ -69,7 +69,9 @@ def test_optional_roles_cover_intervals_lanes_and_colour():
 def test_config_defaults_are_a_plain_point_track():
     config = GenomeViewConfig()
     assert config.viz_kind == KIND
-    assert config.mark == "point"
+    assert config.mark == "rect"
+    assert config.default_view == "chromosome"
+    assert config.lane_height is None
     assert config.annotation == "none"
     assert config.facet_by_sample is False
     # The brush is on by default: a region filter is unambiguous, unlike a
@@ -196,3 +198,10 @@ def test_default_region_takes_the_first_contig_keyword(region: str):
     # the first one the data carries (resolved in the viewer, defaultRegion.ts).
     config = GenomeViewConfig(chr_col="chr", pos_col="pos", default_region=region)
     assert config.default_region == region
+
+
+def test_lane_height_bounds() -> None:
+    assert GenomeViewConfig(lane_height=64).lane_height == 64
+    for bad in (8, 500):
+        with pytest.raises(ValidationError):
+            GenomeViewConfig(lane_height=bad)

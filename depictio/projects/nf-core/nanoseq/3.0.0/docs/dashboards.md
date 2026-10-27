@@ -126,7 +126,9 @@ the volcano (QQ view; DEXSeq writes no mean intensity, so no MA view), without p
 with no fold-change cut, so its colours are DEXSeq's own calls, and the per-library transcript
 shares of the top genes (no legend: a hover names the transcript).
 Collapsed: the per-library transcript expression distribution, the isoform lane view (it reads
-`bambu/extended_annotations.gtf` and is dropped on a quantification-only run), then the tables.
+`bambu/extended_annotations.gtf` and is dropped on a quantification-only run) with the genome
+browser under it (coverage and long reads of the libraries in view; a transcript picked in the
+DEXSeq table frames its exons), then the tables.
 No sashimi view: nanoseq publishes no splice-junction table. Filters: biotype and a log-CPM
 range on the transcript counts.
 
@@ -135,7 +137,7 @@ range on the transcript counts.
 | Route | What changes |
 |---|---|
 | No `METADATA_FILE` | The condition is the samplesheet group; preparation, flow-cell run and source replicate read `unknown`, so their filters and cards hold one value. |
-| No `bambu/extended_annotations.gtf` | No isoform lane view. |
+| No `bambu/extended_annotations.gtf` | No isoform lane view, and the genome browser opens on the first region that holds data instead of framing the picked transcript. |
 
 The flow-cell views (yield over time, channel map) need pycoQC, which nanoseq runs only when a
 `sequencing_summary.txt` is supplied; the template has no tile for them.

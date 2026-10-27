@@ -1230,14 +1230,14 @@ tabs:
     config:
       minor_copy_number_col: minor_copy_number
       annotation: '{GENOME}'
-      views: [plotly, locus]
+      views: [plotly]
       show_baf: true
       facet_by_sample: true
     section: Copy-number profile
     tag: oa-cn-av-profile
     index: cn-profile
     title: Copy-number profile along the genome
-    description: PURPLE's fitted segments as log2 of copy number over 2, with the B-allele frequency underneath. Hover a segment for its major and minor allele copy number.
+    description: PURPLE's fitted segments as log2 of copy number over 2, with the B-allele frequency underneath. Hover a segment for its major and minor allele copy number. Open in genome browser shows the reads and breakpoints at the region.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: oncoanalyser
@@ -1313,6 +1313,11 @@ tabs:
     icon: mdi:chart-donut
     color: violet
     description: Breakend pairs around the genome and the events they resolve to
+  - name: Reads at the breakends
+    icon: mdi:dna
+    color: violet
+    description: PURPLE's SV calls and the reads at the first breakend of the rearrangement picked above
+    collapsed: true
   - name: Fusion structure
     icon: mdi:relation-many-to-many
     color: violet
@@ -1495,6 +1500,43 @@ tabs:
     title: SVs per resolved event
     description: Structural variants by the event LINX resolved their cluster to, split by SV type.
     layout: {x: 4, y: 0, w: 4, h: 6}
+  # An SV picked in the chord diagram or the table narrows linx_svs to one row:
+  # the view jumps to its first breakend. Unpicked, it opens on the SV with the
+  # highest junction copy number; the stepper walks the others, and the
+  # Breakpoint view links the two breakends by their split reads and pairs.
+  - component_type: jbrowse
+    workflow_tag: oncoanalyser
+    data_collection_tag: tracks
+    section: Reads at the breakends
+    initial_tracks: 2
+    max_tracks: 6
+    show_overview: false
+    selection_enabled: true
+    selection_column: sample_id
+    read_pairs_display: arcs
+    views: [breakpoint, circular]
+    # Reads coloured by pair orientation: the inverted and everted pairs that
+    # support a breakend stand out from the concordant ones.
+    display:
+      color_scheme: pairOrientation
+    circular_categories: [Structural variants]
+    locus_from:
+      data_collection_tag: linx_svs
+      chrom_column: chrom_a
+      start_column: pos_a
+      padding: 500
+      max_rows: 3
+      sort_by: junction_copy_number
+      descending: true
+      label_column: label
+      mate:
+        chrom_column: chrom_b
+        start_column: pos_b
+    tag: oa-sx-browser
+    index: sx-reads-browser
+    title: Genome browser
+    description: PURPLE's SV calls with the tumor and normal reads, framed on the picked breakend.
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: oncoanalyser
     data_collection_tag: linx_fusion_structure
@@ -1852,10 +1894,12 @@ tabs:
     icon: mdi:chart-bell-curve
     color: cyan
     description: How clonal the calls are and on how many copies they sit
-  - name: Along the genome
-    icon: mdi:chart-scatter-plot
+  - name: Calls and reads on one axis
+    icon: mdi:dna
     color: cyan
-    description: Purity-adjusted allele frequency of every call by position
+    description: The calls drive the browser below. A brush or a locus on the calls moves it, and its view comes back on the calls as a dashed band, in the colour of the two tiles' link tags.
+    # One screen: the calls and the browser they drive, as on atacseq.
+    display: linked
   - name: Variant detail
     icon: mdi:table
     color: gray
@@ -2034,14 +2078,85 @@ tabs:
       annotation: '{GENOME}'
       score_title: purity-adjusted allele frequency
       point_size: 4
+      # Coloured by coding effect, as the calls in the browser below.
+      category_col: coding_effect
       region_filter_enabled: true
       follow_region_filter: true
-    section: Along the genome
+    section: Calls and reads on one axis
     tag: oa-sv-av-genome
     index: sv-genome
     title: Somatic calls along the genome
-    description: One point per call at its position, raised by its purity-adjusted allele frequency and coloured by variant type. Zoom into a region to see its genes.
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: One point per call at its position, raised by its purity-adjusted allele frequency and coloured by coding effect, as in the browser below. Zoom into a region to see its genes.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  # A call picked in the table, or few calls in the plot's region (a zoomed
+  # region), narrows purple_somatic_variants: the view then frames them.
+  # Unpicked, it opens on the call with the highest purity-adjusted allele
+  # frequency, and the stepper walks the others. Open the tumor and normal
+  # alignments (last in the manifest) from the tracks menu, or pick a sample in
+  # the left panel.
+  - component_type: jbrowse
+    workflow_tag: oncoanalyser
+    data_collection_tag: tracks
+    section: Calls and reads on one axis
+    initial_tracks: 1
+    max_tracks: 6
+    show_overview: false
+    # The calls above already say where the browser is: its locus bar only
+    # costs height here, and the tile's menu brings it back.
+    show_header: false
+    selection_enabled: true
+    selection_column: sample_id
+    # Three omics layers of the same tumors: small variants (primary: they
+    # frame the view on a filter), LINX SV breakends and PURPLE copy-number
+    # segments. Next / previous steps through all three along the genome; the
+    # density strip has one row per layer, or per tumor sample.
+    locus_from:
+      - data_collection_tag: purple_somatic_variants
+        name: Small variants
+        color: blue
+        chrom_column: chrom
+        start_column: pos
+        padding: 150
+        max_rows: 20
+        sort_by: purple_af
+        descending: true
+        label_column: gene
+        sample_column: sample
+        columns: [coding_effect, hgvs_p]
+        search_columns: [hgvs_p]
+      - data_collection_tag: linx_svs
+        name: SV breakends
+        color: grape
+        chrom_column: chrom_a
+        start_column: pos_a
+        padding: 500
+        sort_by: junction_copy_number
+        descending: true
+        label_column: label
+        sample_column: sample
+        columns: [type, resolved_type]
+        search_columns: [genes_a, genes_b]
+      - data_collection_tag: purple_cnv_segments
+        name: CN segments
+        color: orange
+        chrom_column: chrom
+        start_column: start
+        end_column: end
+        padding: 0
+        sort_by: copy_number
+        descending: true
+        label_column: label
+        sample_column: sample
+        columns: [copy_number, baf]
+    # Calls take the colour of their coding effect, as in the figures.
+    variant_color_by:
+      column: coding_effect
+      info_field: IMPACT
+    tag: oa-sv-browser
+    index: sv-reads-browser
+    title: Genome browser
+    description: PURPLE's somatic and germline calls with the tumor and normal reads, framed on the picked call.
+    layout: {x: 0, y: 5, w: 8, h: 7}
   - component_type: table
     workflow_tag: oncoanalyser
     data_collection_tag: purple_somatic_variants

@@ -30,7 +30,7 @@ import {
   Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { TextRenderer, useCommentsControl } from 'depictio-react-core';
+import { genomeConfigOf, TextRenderer, useCommentsControl } from 'depictio-react-core';
 import type {
   DashboardData,
   DashboardSummary,
@@ -43,6 +43,7 @@ import { DemoFrame, TabPillsDemo, YourViewDemo } from './GuideDemos';
 import { ActionsDemo } from './demos/ActionsDemo';
 import { AnalysisDemo } from './demos/AnalysisDemo';
 import { CommentsDemo, type CommentsRole } from './demos/CommentsDemo';
+import { GenomeDemo, GenomeWhere } from './demos/GenomeDemo';
 import { LiveFilterDemo, LiveFilterDemoSkeleton } from './demos/LiveFilterDemo';
 import { SectionsDemo } from './demos/SectionsDemo';
 import { VersionsDemo } from './demos/VersionsDemo';
@@ -622,6 +623,119 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
       demoLabel: 'Live · three steps',
       demo: <AnalysisDemo source={sources.analysis} />,
       showMe: { target: 'analysis', label: 'Show me the next step' },
+    });
+  }
+
+  // 5b. The genome browser: only where the dashboard has one, on any tab.
+  // The Guide carries what is true of every genome browser tile; why this
+  // dashboard has one where it does is the author's line in the section that
+  // holds it, shown as written under "Where the browser appears".
+  if (sources.genome) {
+    const genome = sources.genome;
+    const genomeConfig = genomeConfigOf(genome.tile.metadata);
+    const tilesHere = genome.tabs.some((t) => t.here);
+    // What the tile adds on top of the shared gestures, from its own config:
+    // the stepper needs `locus_from`, the Breakpoint view a mate, the circular
+    // view a `views` entry.
+    const genomeMeta = genome.tile.metadata;
+    const genomeViews: unknown[] = Array.isArray(genomeMeta.views) ? genomeMeta.views : [];
+    const genomeStepper = Boolean(genomeConfig.locusFromDc) && genomeMeta.call_stepper !== false;
+    const genomeBreakpoint = genomeViews.includes('breakpoint');
+    const genomeCircular = genomeViews.includes('circular');
+    parts.push({
+      id: 'genome',
+      navLabel: 'Genome',
+      icon: 'mdi:dna',
+      title: 'Browse the genome',
+      subtitle: tilesHere
+        ? 'A genome browser on this tab shows the tracks behind the numbers'
+        : `A genome browser on ${genome.tile.tabLabel} shows the tracks behind the numbers`,
+      points: [
+        <>
+          The browser has JBrowse's own menus. <Kbd icon="mdi:format-list-checks">Tracks</Kbd>{' '}
+          lists every track: search it, then switch a track on to open it or off to close it. The
+          settings icon switches the header, the overview ruler and the status bar, and loads
+          tracks the region is too large for.
+        </>,
+        <>
+          Drag to move along the genome. Hold Ctrl or ⌘ and turn the mouse wheel, or pinch on a
+          trackpad, to zoom. A plain wheel scrolls the page, not the tracks.
+        </>,
+        genomeConfig.locusFromDc && (
+          <>
+            The browser follows the rows you filter in{' '}
+            <Text span inherit fw={600}>
+              {genomeConfig.locusFromDc}
+            </Text>
+            : when a few rows are left, it jumps to where they sit on the genome. With many rows
+            left, it stays where it is.
+          </>
+        ),
+        genomeStepper && (
+          <>
+            Without a pick, the browser opens on the first call. The{' '}
+            <Kbd icon="mdi:chevron-right">previous and next</Kbd> buttons of the header jump to the
+            nearest region left or right of the view (overlapping regions of several samples are one
+            stop); the region count opens a sortable, searchable list, and the density strip under
+            the header shows where the regions fall. The view moves, the filters do not. Type a gene
+            name in the locus box to go to it.
+          </>
+        ),
+        <>
+          The browser sits on one tab. The genomic plots on the other tabs carry an{' '}
+          <Kbd icon="mdi:dna">Open in genome browser</Kbd> action: it opens that tab on the point
+          you clicked, the region you selected or the window in view.
+        </>,
+        <>
+          Where a tab has a genome navigator above the browser, drag across it to pick a region.
+          The browser follows that region without filtering anything itself.
+        </>,
+        genomeBreakpoint && (
+          <>
+            <Kbd icon="mdi:vector-link">Breakpoint view</Kbd>, in the tile's toolbar, opens both
+            sides of the call in two panes joined by the reads that span them.
+          </>
+        ),
+        genomeCircular && (
+          <>
+            <Kbd icon="mdi:chart-donut">Circular view</Kbd>, in the tile's toolbar, draws the
+            structural variants of the run as chords around the genome.
+          </>
+        ),
+        genomeConfig.selects && (
+          <>
+            {genomeConfig.selectionMode === 'visible_tracks'
+              ? 'The tracks open in the view select their samples'
+              : 'Click a track, or a feature on it, to select its sample'}
+            {genomeConfig.selectionColumn ? (
+              <>
+                {' '}
+                on{' '}
+                <Text span inherit fw={600}>
+                  {genomeConfig.selectionColumn}
+                </Text>
+              </>
+            ) : null}
+            : the rest of the tab filters to it.
+          </>
+        ),
+        genomeConfig.ucscTracks.length > 0 && (
+          <>
+            {plural(genomeConfig.ucscTracks.length, 'track')} here come from the UCSC Genome
+            Browser, for the same assembly. They are in the Tracks menu with the others.
+          </>
+        ),
+        <>
+          <Kbd icon="mdi:information-outline">Component metadata</Kbd>, in the tile's corner, lists
+          every track with where it comes from.
+        </>,
+      ],
+      demoLabel: genome.tile.here
+        ? 'This tab · the genome browser'
+        : `From ${genome.tile.tabLabel} · the genome browser`,
+      demo: <GenomeDemo source={genome} />,
+      note: <GenomeWhere tabs={genome.tabs} mode={mode} onCurrent={onClose} />,
+      showMe: { target: 'genome', label: 'Show me the browser' },
     });
   }
 

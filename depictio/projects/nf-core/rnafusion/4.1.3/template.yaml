@@ -9,6 +9,11 @@
 # megatest.yaml next to this file.
 # ============================================================================
 #
+# GENOME TRACKS. The STAR alignments are not part of the tables-only megatest
+# subset. Pass `--var TRACKS_URI=<results folder>` to read them in place (see the
+# variable below); without it the `tracks` collection uploads whichever of them
+# DATA_ROOT holds. The assembly is the GENOME variable.
+#
 # ONE ROW IS ONE FUSION IN ONE SAMPLE.
 # rnafusion writes one file per tool per sample and none of those files carries a
 # sample column. Every catalog recipe the template binds declares `source_path`
@@ -31,6 +36,13 @@ template:
       required: true
     - name: "SAMPLESHEET_FILE"
       description: "Path to the run samplesheet. Defaults to {DATA_ROOT}/input/samplesheet.csv. rnafusion does not publish the samplesheet, so fetch the one params.json `input` points at (see megatest.yaml post_fetch_help)."
+      required: false
+    - name: "GENOME"
+      description: "UCSC name of the assembly the run aligned to (hg38, hg19, mm10): the axis and gene lane of the genome browser."
+      required: false
+      default: "hg38"
+    - name: "TRACKS_URI"
+      description: "s3:// or https:// folder holding the run's results (the folder DATA_ROOT mirrors), to read the genome-browser tracks (STAR alignments) in place instead of uploading them from DATA_ROOT. Without it the `tracks` collection uploads whichever of those files DATA_ROOT holds."
       required: false
     - name: "SKIP_ARRIBA"
       description: "Set when params.json `tools` does not include arriba. Prunes the Arriba data collection."
@@ -106,6 +118,18 @@ template:
       override_dcs:
         - data_collection_tag: "samplesheet"
           scan_filename: "{SAMPLESHEET_FILE}"
+        - data_collection_tag: "tracks"
+          source_overrides:
+            samplesheet:
+              path: "{SAMPLESHEET_FILE}"
+    # Genome tracks: read in place when TRACKS_URI names the results folder,
+    # uploaded from DATA_ROOT otherwise (the `tracks` recipe keeps only the
+    # files it finds there).
+    - if_var_present: "TRACKS_URI"
+      override_dcs:
+        - data_collection_tag: "tracks"
+          dc_properties:
+            remote_base_uri: "{TRACKS_URI}"
     # --tools without arriba: no arriba/ directory at all.
     - if_var_present: "SKIP_ARRIBA"
       remove_dc_tags: ["arriba_fusions", "arriba_fusion_links"]
@@ -491,6 +515,56 @@ workflows:
               "top_gtex_tissue": "GTEx tissue reporting it most often"
               "variant_name": "Named cancer splicing variant, when the catalog has one"
 
+      # ----------------------------------------------------------------
+      # Genome tracks. A manifest of the run's genome-aligned track files (the
+      # STAR alignment of every sample; rnafusion publishes no bigWig) that
+      # the genome browser reads by range, through the API. One row per file,
+      # keyed on `sample` like the samplesheet. The megatest was aligned to
+      # Ensembl GRCh38 (chromosomes 1, 2, ...): the hg38 preset's chromAlias
+      # maps them.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "tracks"
+        description: "Genome-browser tracks of the run: the STAR alignments (BAM, or CRAM) of every sample, one row per file"
+        config:
+          type: "genomic_tracks"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/rnafusion/tracks.py"
+            source_overrides:
+              samplesheet:
+                path: "{DATA_ROOT}/input/samplesheet.csv"
+          dc_specific_properties:
+            format: "TSV"
+            uri_column: "uri"
+            track_id_column: "track_id"
+            sample_column: "sample"
+            format_column: "format"
+            name_column: "name"
+            color_column: "color"
+            category_column: "category"
+            order_column: "order"
+            assembly: "{GENOME}"
+            display_defaults:
+              bam:
+                displays:
+                  - type: "LinearPileupDisplay"
+                    height: 150
+              cram:
+                displays:
+                  - type: "LinearPileupDisplay"
+                    height: 150
+            columns_description:
+              "track_id": "<sample>.alignments, unique per file"
+              "sample": "Sample the file belongs to"
+              "kind": "alignments"
+              "format": "Track file format (bam, or cram with --cram)"
+              "uri": "Path relative to the results folder"
+              "name": "Track label shown in the browser"
+              "color": "Track colour"
+              "category": "Track-selector folder"
+              "order": "Row order the browser opens with"
+
 # ============================================================================
 # CROSS-COLLECTION LINKS
 # The fusion consensus is the hub: every caller collection is keyed by `fusion`,
@@ -708,4 +782,26 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Narrow cancer introns to the selected samples"
+    enabled: true
+
+  # Samplesheet <-> genome tracks: picking samples opens their alignments, and
+  # clicking a track in the browser picks its sample back.
+  - source_dc_tag: "samplesheet"
+    source_column: "sample"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Show the genome tracks of the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "tracks"
+    source_column: "sample"
+    target_dc_tag: "samplesheet"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Filter the dashboard by the samples whose tracks are picked in the genome browser"
     enabled: true
