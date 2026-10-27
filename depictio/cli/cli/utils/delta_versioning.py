@@ -117,7 +117,10 @@ def frame_run_tags(frame: pl.DataFrame) -> list[str]:
     """The distinct run tags in ``frame``; none when it has no run column."""
     if RUN_ID_COLUMN not in frame.columns:
         return []
-    return [str(tag) for tag in frame[RUN_ID_COLUMN].unique().to_list() if tag is not None]
+    # Through an expression rather than ``Series.unique()``: on Python 3.15 polars
+    # 1.43 leaves its docstring-only Series methods undispatched, and they return None.
+    tags = frame.select(pl.col(RUN_ID_COLUMN).unique()).to_series().to_list()
+    return [str(tag) for tag in tags if tag is not None]
 
 
 def _metric(metrics: dict[str, Any], *names: str) -> int | None:
