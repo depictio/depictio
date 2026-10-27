@@ -259,3 +259,49 @@ class TestProjectScanAndSchemaCache:
         for i in range(3):
             _get_cached_schema(self._lf(), f"dc{i}", "v")
         assert len(dtu._DELTA_SCHEMA_CACHE) <= 2
+
+
+class TestBaseDeltaScanCache:
+    """`_base_delta_scan` reuses a table's scan per aggregation version."""
+
+    def setup_method(self):
+        dtu._BASE_SCAN_CACHE.clear()
+
+    def test_same_version_builds_the_scan_once(self, monkeypatch):
+        built = MagicMock(side_effect=lambda *a, **k: pl.LazyFrame({"a": [1]}))
+        monkeypatch.setattr(dtu, "_create_delta_scan", built)
+        first = dtu._base_delta_scan("s3://b/dc", "table", None, "v1")
+        again = dtu._base_delta_scan("s3://b/dc", "table", None, "v1")
+        assert again is first
+        assert built.call_count == 1
+
+    def test_new_version_builds_a_fresh_scan(self, monkeypatch):
+        built = MagicMock(side_effect=lambda *a, **k: pl.LazyFrame({"a": [1]}))
+        monkeypatch.setattr(dtu, "_create_delta_scan", built)
+        first = dtu._base_delta_scan("s3://b/dc", "table", None, "v1")
+        second = dtu._base_delta_scan("s3://b/dc", "table", None, "v2")
+        assert second is not first
+        assert built.call_count == 2
+
+    def test_pinned_commit_is_never_served_the_live_scan(self, monkeypatch):
+        built = MagicMock(side_effect=lambda *a, **k: pl.LazyFrame({"a": [1]}))
+        monkeypatch.setattr(dtu, "_create_delta_scan", built)
+        live = dtu._base_delta_scan("s3://b/dc", "table", None, "v1")
+        pinned = dtu._base_delta_scan("s3://b/dc", "table", 3, "v1_dv3")
+        assert pinned is not live
+        assert built.call_count == 2
+
+    def test_unknown_version_is_never_cached(self, monkeypatch):
+        built = MagicMock(side_effect=lambda *a, **k: pl.LazyFrame({"a": [1]}))
+        monkeypatch.setattr(dtu, "_create_delta_scan", built)
+        dtu._base_delta_scan("s3://b/dc", "table", None, None)
+        dtu._base_delta_scan("s3://b/dc", "table", None, None)
+        assert built.call_count == 2
+        assert not dtu._BASE_SCAN_CACHE
+
+    def test_cache_is_bounded(self, monkeypatch):
+        monkeypatch.setattr(dtu, "_BASE_SCAN_CACHE_MAX", 2)
+        monkeypatch.setattr(dtu, "_create_delta_scan", lambda *a, **k: pl.LazyFrame({"a": [1]}))
+        for i in range(5):
+            dtu._base_delta_scan(f"s3://b/dc{i}", "table", None, "v1")
+        assert len(dtu._BASE_SCAN_CACHE) <= 2
