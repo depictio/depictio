@@ -20,6 +20,7 @@ from depictio.cli.cli.utils.delta_versioning import (
     _metric,
     _parse_commit,
     build_commit_metadata,
+    frame_run_tags,
     list_delta_versions,
     plan_partitioning,
     plan_scoped_write,
@@ -117,6 +118,15 @@ class TestCommitMetadata:
         )
         assert f"{METADATA_PREFIX}run_tags" not in metadata
         assert f"{METADATA_PREFIX}run_count" in metadata
+
+
+class TestFrameRunTags:
+    def test_distinct_tags_without_nulls(self):
+        frame = pl.DataFrame({RUN_ID_COLUMN: ["run_b", "run_a", "run_b", None]})
+        assert sorted(frame_run_tags(frame)) == ["run_a", "run_b"]
+
+    def test_no_run_column_means_no_tags(self):
+        assert frame_run_tags(pl.DataFrame({"sample": ["s1"]})) == []
 
 
 class TestHistoryParsing:

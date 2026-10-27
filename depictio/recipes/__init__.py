@@ -304,12 +304,15 @@ def _read_source_outside_root(
 
 def _resolve_glob_source(
     root: str | Path | DataRoot, source: RecipeSource, pattern_override: str | None = None
-) -> pl.DataFrame:
+) -> pl.DataFrame | None:
     """Glob for multiple files and concatenate into a single DataFrame.
 
     ``pattern_override`` (from a DC's ``source_overrides``) repoints the source at a
     different glob — e.g. a route conditional pointing the lineage recipes at the
     nanopore ``artic_minion/`` layout instead of the illumina default.
+
+    A glob that matches nothing is ``None`` for an ``optional`` source (as for an
+    optional file) and an error otherwise.
     """
     pattern = pattern_override or source.glob_pattern
     if pattern is None:
@@ -318,6 +321,8 @@ def _resolve_glob_source(
     root = _as_data_root(root)
     matched_files = root.glob(pattern)  # root-relative and already sorted
     if not matched_files:
+        if source.optional:
+            return None
         raise RecipeError(
             f"Source '{source.ref}': no files matched glob '{pattern}' in {root.location}"
         )
@@ -378,7 +383,7 @@ def resolve_sources(
         # present) repoints the glob pattern for this source.
         if source.glob_pattern is not None:
             pattern_override = overrides.get(source.ref) if overrides else None
-            sources[source.ref] = _resolve_glob_source(root, source, pattern_override)
+            sources[source.ref] = _resolve_glob_source(root, source, pattern_override)  # type: ignore[assignment]
             continue
 
         # Determine file path (apply override if present)

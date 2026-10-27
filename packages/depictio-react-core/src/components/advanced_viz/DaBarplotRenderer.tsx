@@ -15,16 +15,37 @@ import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
 import { demandForItems } from './contentDemand';
+import { contrastLabel, contrastSides, resolveEffectLabel } from './deViews';
+
+/** Bar labels and axis text; the default 12 was small beside the tile's title. */
+const BAR_FONT_SIZE = 14;
 
 interface DaBarplotConfig {
   feature_id_col: string;
   contrast_col: string;
   lfc_col: string;
+  /** Axis title of the log-fold change; the column name when unset. */
+  effect_label?: string | null;
   significance_col?: string | null;
   label_col?: string | null;
+  /** Second hover line (e.g. the Kingdom). */
+  hover_col?: string | null;
+  /** Name the contrast of the panel in the hover. */
+  hover_category?: boolean;
   significance_threshold?: number;
   top_n?: number;
   contrast_view?: string;
+  /** The group on the negative side of every contrast (the model's baseline). */
+  reference?: string | null;
+  /** Stripped from a contrast value to name the group on its positive side:
+   *  prefix `locality` turns `localityBarcelona` into `Barcelona`. */
+  contrast_prefix?: string | null;
+  /** A contrast value holding this separator names both its sides, and its own
+   *  baseline replaces `reference` (see `ContrastGroups`). */
+  contrast_separator?: string | null;
+  /** Colour per group name. A bar takes the colour of the group it leans toward;
+   *  without a palette the bars are the volcano's pink (up) and blue (down). */
+  group_colors?: Record<string, string> | null;
 }
 
 interface Props {
@@ -37,8 +58,9 @@ interface Props {
   groupRender?: GroupRenderState;
 }
 
-const POSITIVE = '#1f77b4';
-const NEGATIVE = '#d62728';
+// The volcano's UP / DN colours, so a taxon reads the same on both: up pink, down blue.
+const POSITIVE = '#e64980';
+const NEGATIVE = '#1c7ed6';
 const FADED = 'rgba(127,127,127,0.45)';
 const ALL_TAB = 'all';
 
@@ -50,7 +72,85 @@ const FACET_GAP_PX = 20;
 /** The tab strip above the panels and the axis furniture below the last one. */
 const TABS_CHROME_PX = 72;
 
-type FeatureRow = { feat: string; label: string; lfc: number; sig: number };
+/** Bar colours for the two sides of one contrast. */
+const sideColours = (contrast: string, config: DaBarplotConfig) =>
+  contrastSides(contrast, config, { positive: POSITIVE, negative: NEGATIVE });
+
+/**
+ * The key to the bars: one swatch per group a bar can lean toward, then solid
+ * against hatched. Drawn outside the plot because the bars are one trace, and
+ * a Plotly legend names traces.
+ */
+const DaLegend: React.FC<{
+  contrasts: string[];
+  config: DaBarplotConfig;
+  sigThreshold: number;
+  hasSignificance: boolean;
+}> = ({ contrasts, config, sigThreshold, hasSignificance }) => {
+  const groups = new Map<string, string>();
+  for (const c of contrasts) {
+    const sides = sideColours(c, config);
+    if (sides.negativeName) groups.set(sides.negativeName, sides.negative);
+    groups.set(sides.positiveName, sides.positive);
+  }
+  const swatch = (colour: string, hatched: boolean) => (
+    <span
+      aria-hidden
+      style={{
+        display: 'inline-block',
+        width: 14,
+        height: 10,
+        marginRight: 5,
+        borderRadius: 2,
+        border: `1px solid ${colour}`,
+        background: hatched
+          ? `repeating-linear-gradient(135deg, ${colour} 0 2px, transparent 2px 5px)`
+          : colour,
+      }}
+    />
+  );
+  const item = (key: string, node: React.ReactNode) => (
+    <span key={key} style={{ display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
+      {node}
+    </span>
+  );
+  return (
+    <div
+      data-testid="da-barplot-legend"
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '2px 16px',
+        padding: '4px 8px 0',
+        fontSize: 12,
+        opacity: 0.85,
+      }}
+    >
+      {Array.from(groups, ([name, colour]) =>
+        item(name, (
+          <>
+            {swatch(colour, false)}
+            {config.group_colors ? `More in ${name}` : name}
+          </>
+        )),
+      )}
+      {hasSignificance &&
+        item('sig', (
+          <>
+            {swatch('currentColor', false)}solid: significant (≤ {sigThreshold})
+          </>
+        ))}
+      {hasSignificance &&
+        item('ns', (
+          <>
+            {swatch('currentColor', true)}hatched: not significant
+          </>
+        ))}
+    </div>
+  );
+};
+
+type FeatureRow = { feat: string; label: string; lfc: number; sig: number; hover: string };
 
 const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, groupRender }) => {
   const { colorScheme } = useMantineColorScheme();
@@ -67,6 +167,7 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
     if (config.significance_col && !cols.includes(config.significance_col))
       cols.push(config.significance_col);
     if (config.label_col && !cols.includes(config.label_col)) cols.push(config.label_col);
+    if (config.hover_col && !cols.includes(config.hover_col)) cols.push(config.hover_col);
     return cols;
   }, [config]);
 
@@ -143,6 +244,7 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
       ? ((rows[config.significance_col] || []) as number[])
       : null;
     const labels = config.label_col ? (rows[config.label_col] as (string | number)[]) : null;
+    const hovers = config.hover_col ? (rows[config.hover_col] as (string | number)[]) : null;
 
     for (let i = 0; i < feats.length; i++) {
       const c = String(contrasts[i] ?? '');
@@ -154,6 +256,7 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
         label: labels ? String(labels[i] ?? '') : String(feats[i] ?? ''),
         lfc,
         sig: Number.isFinite(sig) ? sig : 1,
+        hover: hovers ? String(hovers[i] ?? '') : '',
       };
       const arr = map.get(c) ?? [];
       arr.push(r);
@@ -193,9 +296,12 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
     if (!all || all.length === 0) return null;
     const ranked = [...all].sort((a, b) => Math.abs(b.lfc) - Math.abs(a.lfc)).slice(0, topN);
     ranked.sort((a, b) => a.lfc - b.lfc);
-    const colour = ranked.map((r) =>
-      r.sig <= sigThreshold ? (r.lfc >= 0 ? POSITIVE : NEGATIVE) : FADED,
-    );
+    const sides = sideColours(contrastName, config);
+    // Significance is the pattern, direction is the colour: a bar that clears the
+    // cutoff is solid, one that does not is hatched in the same colour, so a
+    // non-significant taxon still shows which locality it leans toward.
+    const hit = ranked.map((r) => r.sig <= sigThreshold);
+    const colour = ranked.map((r) => (r.lfc >= 0 ? sides.positive : sides.negative));
     return {
       data: [
         {
@@ -203,12 +309,39 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
           orientation: 'h' as const,
           x: ranked.map((r) => r.lfc),
           y: ranked.map((r) => r.label),
-          text: ranked.map((r) => r.label),
-          customdata: ranked.map((r) => [r.feat, r.sig]),
+          // Long names are cut here (the hover has the whole name): the text sits
+          // outside the bar, in a margin of fixed width.
+          text: ranked.map((r) => (r.label.length > 24 ? `${r.label.slice(0, 23)}…` : r.label)),
+          customdata: ranked.map((r, i) => [
+            r.feat,
+            r.sig,
+            r.hover,
+            r.label,
+            `${r.lfc >= 0 ? sides.positiveName : sides.negativeName || 'reference'} · ${
+              hit[i] ? 'significant' : 'not significant'
+            }`,
+          ]),
           textposition: 'outside' as const,
-          marker: { color: colour, line: { width: 0 } },
+          // The label sits past the bar's end, outside the plot area for the
+          // longest bars; clipping it to the axis cut the names in half.
+          cliponaxis: false,
+          textfont: { size: BAR_FONT_SIZE },
+          marker: {
+            color: colour,
+            line: { color: colour, width: 1 },
+            pattern: {
+              shape: hit.map((h) => (h ? '' : '/')),
+              fgcolor: colour,
+              bgcolor: colour.map((c, i) => (hit[i] ? c : 'rgba(0,0,0,0)')),
+              size: 6,
+              solidity: 0.35,
+            },
+          },
           hovertemplate:
-            `<b>%{text}</b><br>${config.lfc_col}: %{x:.3f}` +
+            `<b>%{customdata[3]}</b>` +
+            (config.hover_col ? `<br>%{customdata[2]}` : '') +
+            (config.hover_category ? `<br>${config.contrast_col}: ${contrastLabel(contrastName, config)}` : '') +
+            `<br>${config.lfc_col}: %{x:.3f}` +
             (config.significance_col
               ? `<br>${config.significance_col}: %{customdata[1]:.2e}`
               : '') +
@@ -218,11 +351,17 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
       ],
       layout: {
         ...plotlyThemeFragment(isDark, theme),
-        margin: { l: 8, r: 80, t: 12, b: 36 },
+        font: { ...plotlyThemeFragment(isDark, theme).font, size: BAR_FONT_SIZE },
+        margin: { l: 170, r: 170, t: 12, b: 36 },
         xaxis: {
           ...plotlyAxisOverrides(isDark, theme),
-          title: { text: config.lfc_col },
+          title: { text: resolveEffectLabel(config.effect_label, [contrastName], config) || config.lfc_col },
           zeroline: true,
+          // Room beyond the longest bar for its label, on whichever side it points.
+          range: [
+            Math.min(0, ...ranked.map((r) => r.lfc)) * 1.4,
+            Math.max(0, ...ranked.map((r) => r.lfc)) * 1.4,
+          ],
         },
         yaxis: {
           ...plotlyAxisOverrides(isDark, theme),
@@ -325,7 +464,7 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
         {drawnPanels.map(({ contrast: c, grouped: panel }) => {
           const layout = {
             ...panel.layout,
-            title: { text: c, font: { size: 12 } },
+            title: { text: contrastLabel(c, config), font: { size: 12 } },
             margin: { ...panel.layout.margin, t: 32 },
           };
           return (
@@ -399,10 +538,18 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
           <Tabs.List>
             {tabValues.map((v) => (
               <Tabs.Tab key={v} value={v}>
-                {v === ALL_TAB ? 'All' : v}
+                {v === ALL_TAB ? 'All' : contrastLabel(v, config)}
               </Tabs.Tab>
             ))}
           </Tabs.List>
+          {(config.group_colors || config.significance_col) && (
+            <DaLegend
+              contrasts={drawnContrasts}
+              config={config}
+              sigThreshold={sigThreshold}
+              hasSignificance={Boolean(config.significance_col)}
+            />
+          )}
           <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
             {activeTab === ALL_TAB ? renderAllFaceted() : renderSinglePanel()}
           </div>

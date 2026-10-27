@@ -6,6 +6,8 @@ import {
   bannerFactColumns,
   bannerFactIcon,
   bannerFactItems,
+  optionDescription,
+  optionLabel,
   scopeUnits,
   unitSteps,
 } from './scope';
@@ -103,5 +105,23 @@ describe('unitSteps', () => {
     expect(unitSteps(opts, 'b')).toEqual({ position: 0, total: 3, prev: null, next: 'a' });
     expect(unitSteps(opts, undefined)).toEqual({ position: 0, total: 3, prev: null, next: 'a' });
     expect(unitSteps([], 'x')).toEqual({ position: 0, total: 0, prev: null, next: null });
+  });
+});
+
+describe('optionLabel', () => {
+  const m = select('c', {
+    option_cards: { localityNaples: { label: 'Naples vs Athens', description: 'against the baseline' } },
+  });
+
+  it('reads the label an option_cards entry gives, else the value', () => {
+    expect(optionLabel(m, 'localityNaples')).toBe('Naples vs Athens');
+    expect(optionLabel(m, 'localityBarcelona')).toBe('localityBarcelona');
+    expect(optionLabel(select('plain'), 'x')).toBe('x');
+  });
+
+  it('reads the description, and nothing for an unlabelled or unheld value', () => {
+    expect(optionDescription(m, 'localityNaples')).toBe('against the baseline');
+    expect(optionDescription(m, 'localityBarcelona')).toBeUndefined();
+    expect(optionDescription(m, undefined)).toBeUndefined();
   });
 });

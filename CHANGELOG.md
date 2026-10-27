@@ -3,6 +3,34 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.19.2
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.19.2</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.19.1 → 1.19.2 [e40ca798b]
+* feat(ampliseq): switch ANCOM-BC between two reference databases from the top of the tab ([#1264](https://github.com/depictio/depictio/pull/1264)) [88efe3eeb]
+* Update CHANGELOG.md for v1.19.1 [51343829f]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.19.1
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable

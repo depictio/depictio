@@ -828,9 +828,13 @@
    (about 900px): the filters sit side by side and share the bar's width
    equally, their segments a little tighter and stretched to their share, and
    More filters follows the last one instead
-   of dropping to a line of its own. Reset takes room only when it is
-   offered. Narrower, the bar stacks as everywhere else. The bar's wrapper
-   is the container measured: the bar cannot query its own width. */
+   of dropping to a line of its own. A filter is never given less than the
+   bar's own column width (`--strip-item-min`): once unfolded filters no
+   longer fit that way, the next one drops to a row of its own rather than
+   squeezing them all until the chips' names run into each other. Reset takes
+   room only when it is offered. Narrower, the bar stacks as everywhere else.
+   The bar's wrapper is the container measured: the bar cannot query its own
+   width. */
 :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-section-filter-bar {
   container: hy-strip-bar / inline-size;
 }
@@ -845,12 +849,12 @@
   }
   :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-filter-strip__grid {
     display: flex;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     column-gap: 20px;
   }
   :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-filter-strip__item {
     --strip-gap: 20px;
-    flex: 1 1 0;
+    flex: 1 1 var(--strip-item-min);
     min-width: 0;
   }
   :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-strip-segments {

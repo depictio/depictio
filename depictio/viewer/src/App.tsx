@@ -447,8 +447,25 @@ const App: React.FC = () => {
         setDashboard(dash);
         // Declared filter defaults (`default_value` / `default_range`) land in
         // the same batch as the dashboard, so the first render is already
-        // filtered. Values hydrated from storage keep precedence.
-        setFilters((prev) => withInteractiveDefaults(prev, dash.stored_metadata));
+        // filtered. Values hydrated from storage keep precedence, except on an
+        // `open_with_defaults` tab: it starts from its declared defaults, so
+        // what was remembered or carried over from another tab is dropped and
+        // only a share link's own filters stay.
+        const hydration = hydrationRef.current;
+        if (dash.open_with_defaults && hydration && !previewVersionId) {
+          hydratedIndicesRef.current = new Set();
+          hydrationRef.current = {
+            ...hydration,
+            crossTabIndices: new Set(),
+            restoredIndices: new Set(hydration.urlFilters.map((f) => f.index)),
+            localUpdatedAt: 0,
+          };
+          // The stored copy would otherwise outlive the visit it no longer serves.
+          if (dashboardId) clearLocalFilterState(dashboardId);
+          setFilters(withInteractiveDefaults(hydration.urlFilters, dash.stored_metadata));
+        } else {
+          setFilters((prev) => withInteractiveDefaults(prev, dash.stored_metadata));
+        }
         setAllDashboards(all);
       })
       .catch((err) => {
@@ -1015,6 +1032,8 @@ const App: React.FC = () => {
     }
     serverStateAppliedRef.current = true;
     if (userTouchedRef.current) return;
+    // An `open_with_defaults` tab never takes the remembered view back.
+    if (dashboard.open_with_defaults) return;
     const sane = sanitizeRestoredFilters(
       serverFilterState,
       new Set(summaryMetadata.map((m) => m.index)),
@@ -1181,7 +1200,13 @@ const App: React.FC = () => {
     [dashboard],
   );
   const topComponents = useMemo(
-    () => interactiveComponents.filter((m) => m.placement === 'top'),
+    () => interactiveComponents.filter((m) => m.placement === 'top' && !m.option_cards),
+    [interactiveComponents],
+  );
+  // A switch drawn as cards chooses what the whole tab shows, so it sits in the
+  // canvas under the tab's title and description, not in the strip below it.
+  const switchComponents = useMemo(
+    () => interactiveComponents.filter((m) => m.placement === 'top' && m.option_cards),
     [interactiveComponents],
   );
   const leftComponents = useMemo(() => {
@@ -1744,6 +1769,30 @@ const App: React.FC = () => {
             holds — including a foreign `pin: top` section, which would
             otherwise introduce another tab before this one is named. */}
         <TabIntro dashboard={dashboard} activeTab={activeTab} />
+        {switchComponents.length > 0 && (
+          <Box
+            px={4}
+            pt={4}
+            pb="sm"
+            style={{
+              flexShrink: 0,
+              // Pinned under the header as the canvas scrolls, so the choice
+              // that frames the tab stays in reach.
+              position: 'sticky',
+              top: 0,
+              zIndex: 20,
+              background: 'var(--mantine-color-body)',
+            }}
+          >
+            <TopPanel
+              bare
+              components={switchComponents}
+              filters={filters}
+              onFilterChange={handleFilterChange}
+              refreshTick={refreshTick}
+            />
+          </Box>
+        )}
         {/* Only claims the leftover height when nothing follows it —
             otherwise a short grid would push the bottom-pinned sections
             to the fold with a gap above them. */}
@@ -2149,6 +2198,9 @@ interface InitialFilterHydration {
    *  it, so the server reconcile compares against the previous visit and not
    *  against the write this mount just made. */
   localUpdatedAt: number;
+  /** What the `#filters=` fragment alone carried: the one source an
+   *  `open_with_defaults` tab still honors, because a link is a deliberate act. */
+  urlFilters: InteractiveFilter[];
 }
 
 /** Merge the remembered / cross-tab / share-link filter sources in ascending
@@ -2186,6 +2238,7 @@ function readInitialFilters(
       restoredIndices: new Set(),
       urlConsumed: false,
       localUpdatedAt: 0,
+      urlFilters: [],
     };
   }
   const url = readFiltersFromLocation();
@@ -2202,6 +2255,7 @@ function readInitialFilters(
     restoredIndices: new Set(restored.map((f) => f.index)),
     urlConsumed: url !== null,
     localUpdatedAt: local?.updatedAt ?? 0,
+    urlFilters: url ?? [],
   };
 }
 

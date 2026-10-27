@@ -117,6 +117,8 @@ export interface QqSeries {
   ids: string[];
   /** The sorted p-values themselves, for the inflation factor. */
   ps: number[];
+  /** Source row index of each point, so a caller can look up the row's other columns. */
+  indices: number[];
   n: number;
 }
 
@@ -146,6 +148,7 @@ export function qqSeries(
     observed: sorted.map((entry) => -Math.log10(entry.p)),
     ids: sorted.map((entry) => (ids ? String(ids[entry.index] ?? '') : '')),
     ps: sorted.map((entry) => entry.p),
+    indices: sorted.map((entry) => entry.index),
     n,
   };
 }
@@ -258,4 +261,78 @@ export function maTableOf(config: {
 export function resolveDeView(view: DeView, offered: readonly DeView[]): DeView {
   if (offered.includes(view)) return view;
   return offered[0] ?? 'volcano';
+}
+
+/** The config fields that name the groups a contrast compares. */
+export interface ContrastGroups {
+  /** The group on the negative side of every contrast (the baseline). */
+  reference?: string | null;
+  /** Stripped from a contrast value to name its positive side: prefix
+   *  `locality` turns `localityBarcelona` into `Barcelona`. */
+  contrast_prefix?: string | null;
+  /** A contrast value that holds this separator names both its sides, and its
+   *  own baseline replaces `reference`: separator `_vs_` turns
+   *  `localityNaples_vs_Barcelona` into Naples (positive) against Barcelona. */
+  contrast_separator?: string | null;
+  /** Colour per group name. */
+  group_colors?: Record<string, string> | null;
+}
+
+/**
+ * The two sides of one contrast, named and coloured: the group it tests
+ * (positive effect) and the reference (negative effect). A group the palette
+ * does not name takes the matching fallback, so a partial palette still draws.
+ */
+export function contrastSides(
+  contrast: string,
+  groups: ContrastGroups,
+  fallback: { positive: string; negative: string },
+) {
+  const palette = groups.group_colors ?? {};
+  const prefix = groups.contrast_prefix ?? '';
+  const separator = groups.contrast_separator ?? '';
+  const at = separator ? contrast.indexOf(separator) : -1;
+  const positiveValue = at > 0 ? contrast.slice(0, at) : contrast;
+  const positiveName =
+    prefix && positiveValue.startsWith(prefix) ? positiveValue.slice(prefix.length) : positiveValue;
+  const negativeName = at > 0 ? contrast.slice(at + separator.length) : (groups.reference ?? '');
+  return {
+    positiveName,
+    negativeName,
+    positive: palette[positiveName] ?? fallback.positive,
+    negative: (negativeName && palette[negativeName]) || fallback.negative,
+  };
+}
+
+/**
+ * A contrast as the reader should see it: "Barcelona vs Athens" when the config
+ * names its groups, the contrast's own value otherwise.
+ */
+export function contrastLabel(contrast: string, groups: ContrastGroups): string {
+  if (!groups.reference) return contrast;
+  const { positiveName, negativeName } = contrastSides(contrast, groups, {
+    positive: '',
+    negative: '',
+  });
+  return `${positiveName} vs ${negativeName}`;
+}
+
+/**
+ * An axis title that names the baseline: `{reference}` becomes the reference of
+ * the contrast on show. With several contrasts in the data (or none) the
+ * config's own reference stands in, since no one of them is the plot's.
+ */
+export function resolveEffectLabel(
+  label: string | null | undefined,
+  contrasts: readonly (string | number | null | undefined)[],
+  groups: ContrastGroups,
+): string | undefined {
+  if (!label) return undefined;
+  if (!label.includes('{reference}')) return label;
+  const shown = [...new Set(contrasts.filter((c) => c != null).map(String))];
+  const reference =
+    shown.length === 1
+      ? contrastSides(shown[0], groups, { positive: '', negative: '' }).negativeName
+      : (groups.reference ?? '');
+  return label.replace('{reference}', reference || 'the reference');
 }

@@ -9,6 +9,12 @@ derived from the raw composition counts. Produces the canonical MA roles:
 
 Optional ``significance`` (q_val) drives tier colouring; ``label`` (Phylum)
 appears in hover.
+
+When the ANCOM-BC table carries a ``taxonomy`` label (a run analysed against two
+reference databases, see ``qiime2/ancombc.py``), the taxa of a label that has a
+barplot of its own, ``qiime2/barplot/level-N.<label>.csv``, take their mean
+abundance from it: their lineages are that database's, which the default
+composition does not hold.
 """
 
 import polars as pl
@@ -24,6 +30,15 @@ SOURCES: list[RecipeSource] = [
         dc_ref="taxonomy_composition",
         input_schema={"taxonomy": pl.Utf8, "count": pl.Float64},
     ),
+    # The barplots of the other analyses, one per label. Absent on an ordinary run.
+    RecipeSource(
+        ref="labelled_barplots",
+        glob_pattern="qiime2/barplot/level-2.*.csv",
+        format="CSV",
+        source_path="source_path",
+        optional=True,
+        input_schema={"index": pl.Utf8},
+    ),
 ]
 
 # OUTPUT SCHEMA: the columns transform() returns, checked after it.
@@ -36,13 +51,35 @@ OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "significance": pl.Float64,
     "label": pl.Utf8,
     "contrast": pl.Utf8,
+    "taxonomy": pl.Utf8,
+    "Kingdom": pl.Utf8,
 }
+
+
+def _labelled_intensity(barplots: pl.DataFrame) -> pl.DataFrame:
+    """Mean log10(count + 1) per taxon of each labelled barplot.
+
+    The same quantity as below, taken from the wide barplot the way the
+    composition table is built from it: zero counts are dropped before the mean.
+    """
+    taxa = [c for c in barplots.columns if ";" in c]
+    return (
+        barplots.with_columns(
+            pl.col("source_path").str.extract(r"\.([^/.]+)\.csv$", 1).alias("taxonomy")
+        )
+        .unpivot(on=taxa, index="taxonomy", variable_name="feature_id", value_name="count")
+        .with_columns(pl.col("count").cast(pl.Float64))
+        .filter(pl.col("count") > 0)
+        .group_by("taxonomy", "feature_id")
+        .agg((pl.col("count") + 1).log(base=10).mean().alias("labelled_intensity"))
+    )
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Compute mean log intensity per taxon and join with ANCOM-BC lfc."""
     composition = sources["composition"]
     ancombc = sources["ancombc"]
+    labelled = sources.get("labelled_barplots")
 
     # Mean log10(count + 1) per taxon across samples — the A axis.
     intensity = (
@@ -64,6 +101,12 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     )
 
     df = ancombc_renamed.join(intensity, on="feature_id", how="left")
+    if labelled is not None and "taxonomy" in df.columns:
+        df = df.join(
+            _labelled_intensity(labelled), on=["taxonomy", "feature_id"], how="left"
+        ).with_columns(
+            pl.coalesce("labelled_intensity", "avg_log_intensity").alias("avg_log_intensity")
+        )
 
     df = df.with_columns(
         pl.col("feature_id").cast(pl.Utf8),
@@ -84,6 +127,8 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             "significance",
             "label",
             "contrast",
+            "taxonomy",
+            "Kingdom",
         )
         if c in df.columns
     ]

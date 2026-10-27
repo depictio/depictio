@@ -286,12 +286,15 @@ export function buildInteractive(
   const title =
     (c.title && c.title.trim()) ||
     defaultInteractiveTitle(c.interactive_component_type, c.column_name);
-  // `placement: 'top'` is allow-listed to Timeline in the Pydantic model
+  // `placement: 'top'` is allow-listed to Timeline and SegmentedControl in the Pydantic model
   // (validate_placement in depictio/models/components/lite.py). Clamp here so
   // switching an existing top-placed Timeline to another variant can't save a
   // component the backend will then reject.
   const placement =
-    c.placement === 'top' && c.interactive_component_type === 'Timeline' ? 'top' : 'left';
+    c.placement === 'top' &&
+    (c.interactive_component_type === 'Timeline' || c.interactive_component_type === 'SegmentedControl')
+      ? 'top'
+      : 'left';
   return {
     ...existing,
     ...base,
