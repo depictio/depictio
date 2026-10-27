@@ -208,6 +208,34 @@ class TestProjectScanAndSchemaCache:
         # The v1 entry is untouched under its own key.
         assert set(dtu._DELTA_SCHEMA_CACHE[("dc1", "v1")]) == {"a", "b", "c"}
 
+    def test_column_names_hit_never_builds_the_scan(self, monkeypatch):
+        # The point of `get_cached_column_names`: a hit must not open the Delta
+        # table, which is the ~200 ms S3 round-trip the cache exists to skip.
+        monkeypatch.setattr(dtu, "_version_salt_for", lambda dc, v=None: "v1")
+        make_scan = MagicMock(return_value=self._lf())
+        first = dtu.get_cached_column_names("dc1", make_scan)
+        assert first == frozenset({"a", "b", "c"})
+        assert make_scan.call_count == 1
+        again = dtu.get_cached_column_names("dc1", make_scan)
+        assert again == first
+        assert make_scan.call_count == 1
+
+    def test_column_names_new_version_reads_the_table_again(self, monkeypatch):
+        salts = iter(["v1", "v2"])
+        monkeypatch.setattr(dtu, "_version_salt_for", lambda dc, v=None: next(salts))
+        make_scan = MagicMock(side_effect=[self._lf(), pl.LazyFrame({"a": [1], "z": [2]})])
+        assert dtu.get_cached_column_names("dc1", make_scan) == frozenset({"a", "b", "c"})
+        assert dtu.get_cached_column_names("dc1", make_scan) == frozenset({"a", "z"})
+        assert make_scan.call_count == 2
+
+    def test_column_names_unknown_version_is_not_memoised(self, monkeypatch):
+        # No aggregation version means no safe key; read fresh every time.
+        monkeypatch.setattr(dtu, "_version_salt_for", lambda dc, v=None: None)
+        make_scan = MagicMock(side_effect=lambda: self._lf())
+        dtu.get_cached_column_names("dc1", make_scan)
+        dtu.get_cached_column_names("dc1", make_scan)
+        assert make_scan.call_count == 2
+
     def test_schema_read_failure_returns_none_and_is_not_cached(self):
         bad = MagicMock()
         bad.collect_schema.side_effect = RuntimeError("boom")

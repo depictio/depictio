@@ -760,13 +760,19 @@ def fetch_advanced_viz_data(
     # the metadata list and (b) avoid passing missing columns to .select(),
     # which would otherwise fail at collect() with ColumnNotFoundError.
     try:
-        from depictio.api.v1.deltatables_utils import _create_delta_scan
+        from depictio.api.v1.deltatables_utils import _create_delta_scan, get_cached_column_names
 
-        _scan = _create_delta_scan(
-            init_data[str(dc_id)]["delta_location"],
-            init_data[str(dc_id)].get("dc_type"),
+        # Cached per (collection, aggregation version): building the scan reads
+        # the Delta log from S3, which cost ~200 ms on every request, and the
+        # load below opens the table again.
+        _cols = get_cached_column_names(
+            str(dc_id),
+            lambda: _create_delta_scan(
+                init_data[str(dc_id)]["delta_location"],
+                init_data[str(dc_id)].get("dc_type"),
+            ),
         )
-        available_cols = set(_scan.collect_schema().names())
+        available_cols = set(_cols) if _cols is not None else None
     except Exception as _exc:
         logger.warning("advanced_viz/data: schema introspection failed: %s", _exc)
         available_cols = None

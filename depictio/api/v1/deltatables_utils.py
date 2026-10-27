@@ -4,6 +4,7 @@ import os
 import sys
 import threading
 import warnings
+from collections.abc import Callable
 
 import httpx
 import polars as pl
@@ -923,6 +924,26 @@ def _get_cached_schema(
     """
     schema = _get_cached_dtypes(delta_scan, data_collection_id_str, version_salt)
     return None if schema is None else frozenset(schema)
+
+
+def get_cached_column_names(
+    data_collection_id_str: str,
+    make_scan: Callable[[], pl.LazyFrame],
+    delta_version: int | None = None,
+) -> frozenset[str] | None:
+    """A DC's column names from the schema cache, opening the Delta table only on a miss.
+
+    ``_get_cached_schema`` takes an already-built scan, and building one reads
+    the Delta log, so a caller that made the scan first paid that round-trip on
+    every request and used the cache for nothing. Taking the scan as a factory
+    means a hit costs one Mongo lookup for the version salt and no S3 access.
+    """
+    salt = _version_salt_for(data_collection_id_str, delta_version)
+    if salt is not None:
+        cached = _DELTA_SCHEMA_CACHE.get((data_collection_id_str, str(salt)))
+        if cached is not None:
+            return frozenset(cached)
+    return _get_cached_schema(make_scan(), data_collection_id_str, salt)
 
 
 def _filter_columns(metadata: list[dict] | None) -> set[str]:
