@@ -682,8 +682,7 @@ class UpSetPlot:
 
     def _style_figure(self, fig: go.Figure) -> None:
         """Apply global figure styling."""
-        # Room for the horizontal legend sitting above the plot
-        top_margin = 50
+        top_margin = 30
         if self.title:
             top_margin = 60
             if self.subtitle:
@@ -698,11 +697,14 @@ class UpSetPlot:
             font={"family": FONT_FAMILY, "size": 11},
             barmode="stack",
             showlegend=True,
+            # The top-left corner, over the set-size bars, is empty: the legend
+            # sits there instead of taking a column at the right edge or a band
+            # of its own above the plot.
             legend={
-                "orientation": "h",
                 "x": 0,
-                "y": 1.02,
-                "yanchor": "bottom",
+                "y": 1,
+                "xanchor": "left",
+                "yanchor": "top",
                 "font": {"size": 10, "family": FONT_FAMILY},
                 "tracegroupgap": 4,
                 "itemsizing": "constant",

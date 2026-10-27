@@ -82,7 +82,7 @@ class TestUpSetPlotBasic:
         df = pd.DataFrame({"A": [1, 0, 1], "B": [0, 1, 1]})
         assert UpSetPlot(df, dot_size=9).dot_size == 9
 
-    def test_legend_is_horizontal_above_the_plot(self, annotated_df: pd.DataFrame) -> None:
+    def test_legend_sits_in_the_empty_top_left_corner(self, annotated_df: pd.DataFrame) -> None:
         anno = UpSetAnnotation(data=annotated_df, category="category")
         fig = UpSetPlot(
             annotated_df,
@@ -90,11 +90,10 @@ class TestUpSetPlotBasic:
             annotation=anno,
         ).to_plotly()
         legend = fig.layout.legend
-        assert legend.orientation == "h"
-        assert legend.x == 0
-        assert legend.y == 1.02
-        assert legend.yanchor == "bottom"
-        assert fig.layout.margin.t >= 50
+        assert (legend.x, legend.y) == (0, 1)
+        assert (legend.xanchor, legend.yanchor) == ("left", "top")
+        # No band reserved above the plot for it.
+        assert fig.layout.margin.t == 30
 
     def test_titled_plot_keeps_its_larger_top_margin(self, binary_df: pd.DataFrame) -> None:
         assert UpSetPlot(binary_df, title="T").to_plotly().layout.margin.t == 60
@@ -102,7 +101,7 @@ class TestUpSetPlotBasic:
 
     def test_legend_without_annotation_tracks_still_builds(self, binary_df: pd.DataFrame) -> None:
         fig = UpSetPlot(binary_df).to_plotly()
-        assert fig.layout.legend.orientation == "h"
+        assert fig.layout.legend.yanchor == "top"
 
     def test_set_columns_explicit(self, annotated_df: pd.DataFrame) -> None:
         plot = UpSetPlot(annotated_df, set_columns=["SetA", "SetB", "SetC", "SetD"])
