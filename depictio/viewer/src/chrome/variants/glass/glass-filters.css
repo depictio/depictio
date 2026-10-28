@@ -260,7 +260,10 @@
 :root[data-chrome='glass'] .mantine-MultiSelect-inputField {
   min-width: 3ch !important;
 }
-:root[data-chrome='glass'] .mantine-MultiSelect-pillsList:has(.mantine-MultiSelect-pill) .mantine-MultiSelect-inputField::placeholder {
+/* Sibling combinator, not `:has(.mantine-MultiSelect-pill)` on the list: a
+ * descendant `:has()` makes every DOM write on the page recalculate style for
+ * the whole document (~6 ms per write on a dashboard, once per Plotly label). */
+:root[data-chrome='glass'] .mantine-MultiSelect-pill ~ .mantine-MultiSelect-inputField::placeholder {
   color: transparent;
 }
 :root[data-chrome='glass'] .mantine-MultiSelect-pill {
