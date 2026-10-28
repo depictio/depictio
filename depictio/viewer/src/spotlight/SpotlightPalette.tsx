@@ -326,6 +326,9 @@ const SpotlightPalette: React.FC<SpotlightPaletteProps> = ({
       // Above drawers: the shortcut works with the filter drawer open too.
       zIndex={Z_LAYERS.nestedOverlay}
       transitionProps={{ transition: 'pop', duration: 120 }}
+      // A chrome style anchors the palette by its wrapper (glass raises it out
+      // of the dock), without a `:has()` on the content.
+      classNames={{ inner: 'dc-spotlight-inner' }}
     >
       <Modal.Overlay backgroundOpacity={0.35} blur={2} />
       <Modal.Content aria-label="Search this dashboard" data-testid="dashboard-spotlight">

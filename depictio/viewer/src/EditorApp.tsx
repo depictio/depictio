@@ -163,7 +163,7 @@ import GroupingHeaderControl, {
 import SectionsModal from './components/sections/SectionsModal';
 import { applySectionOp, groupWith, sectionsFor } from './components/sections/sectionMutations';
 import type { SectionKind, SectionOp } from './components/sections/sectionMutations';
-import { Sidebar, RunParametersHost, SettingsDrawer, TabIntro, TabModal } from './chrome';
+import { Sidebar, RunParametersHost, SettingsDrawer, TabIntro, TabModal, tabIntroShown } from './chrome';
 import type { HeaderAction } from './chrome/Header';
 import ShellHost from './chrome/shell/ShellHost';
 import type { FilterPanelOptions } from './chrome/shell/types';
@@ -2724,6 +2724,9 @@ const EditorApp: React.FC = () => {
       <Box
         data-tour-id="editor-grid"
         data-testid="dashboard-content"
+        // A strip or the scope banner leads the canvas (layout.css trims the
+        // canvas's top padding under it).
+        data-lead={topComponents.length > 0 || scope.length > 0 ? '' : undefined}
         // Under the Guide: kept mounted for when it closes; the filter
         // panel stays beside it (see App.tsx).
         aria-hidden={guide.open || undefined}
@@ -3088,6 +3091,7 @@ const EditorApp: React.FC = () => {
       boot={boot}
       canvas={canvas}
       topStrip={topStrip}
+      tabIntro={ready && tabIntroShown(dashboard, activeTab)}
       filters={{
         members: leftComponents,
         values: filters,

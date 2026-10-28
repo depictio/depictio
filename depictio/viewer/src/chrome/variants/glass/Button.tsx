@@ -292,8 +292,18 @@ export const GlassButtonGroup: React.FC<ChromeButtonGroupRenderProps> = ({
       </div>
     );
   }
+  // A tray (glass.css) is a bar group with two actions or more; a lone one
+  // stays a loose pill. Counted from the children, so the stylesheet needs no
+  // `:has()` to find out.
+  const tray = place === 'bar' && React.Children.toArray(children).length > 1;
   return (
-    <div role="group" data-group={group} data-hy-place={place} className={cn(className, `hy-group hy-group--${place}`)}>
+    <div
+      role="group"
+      data-group={group}
+      data-hy-place={place}
+      data-tray={tray ? '' : undefined}
+      className={cn(className, `hy-group hy-group--${place}`)}
+    >
       {children}
     </div>
   );

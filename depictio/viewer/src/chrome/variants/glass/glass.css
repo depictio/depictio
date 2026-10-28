@@ -238,14 +238,15 @@
 :root[data-chrome='glass'] .hy-key--rail {
   border-radius: 14px;
 }
-/* A tray of panel tools: loose pills on one soft well. */
-:root[data-chrome='glass'] .hy-group--bar:has(> :nth-child(2)) {
+/* A tray of panel tools: loose pills on one soft well. GlassButtonGroup sets
+ * `data-tray` on a bar group that holds two actions or more. */
+:root[data-chrome='glass'] .hy-group--bar[data-tray] {
   gap: 3px;
   padding: 3px;
   border-radius: 14px;
   background: var(--gl-well);
 }
-:root[data-chrome='glass'] .hy-top .hy-group--bar:has(> :nth-child(2)) {
+:root[data-chrome='glass'] .hy-top .hy-group--bar[data-tray] {
   padding: 0;
   gap: 4px;
   background: transparent;
@@ -261,9 +262,10 @@
   background: var(--gl-glass-strong);
   box-shadow: inset 0 1px 0 var(--gl-rim), 0 0 0 1px var(--gl-hair);
 }
-/* The canvas carries the tab's heading, so the bar drops the tab's icon. */
+/* The canvas carries the tab's heading, so the bar drops the tab's icon. The
+ * shell sets `data-intro` while the canvas shows that heading (TabIntro). */
 @media (min-width: 48em) {
-  :root[data-chrome='glass'] .hy-shell:has(.dc-tab-intro) .hy-top-icon {
+  :root[data-chrome='glass'] .hy-shell[data-intro] .hy-top-icon {
     display: none;
   }
 }
@@ -303,7 +305,9 @@
   line-height: 1.5 !important;
   color: var(--gl-muted) !important;
 }
-:root[data-chrome='glass'] .dc-tab-intro:not(:has(> .mantine-Group-root > :is(svg, img))) > .mantine-Text-root {
+/* A tab without an icon (TabIntro adds `dc-tab-intro--bare`) has nothing to
+ * align the description under. */
+:root[data-chrome='glass'] .dc-tab-intro.dc-tab-intro--bare > .mantine-Text-root {
   margin-left: 0 !important;
 }
 :root[data-chrome='glass'] .dc-tab-intro > .mantine-Divider-root {
@@ -381,26 +385,28 @@
    the same inner edge (16px), a header row of the same height and type
    (title, an optional row count or subtitle under it; the actions float in
    from the right on hover, so the title stops short of them), then the
-   content from the same edge. */
+   content from the same edge. The header row is the one the renderer marks
+   `dc-tile-head` (a Group or Stack whose first child is the title, set by the
+   figure, table, map and advanced figure renderers). */
 :root[data-chrome='glass'] [data-testid='dashboard-content'] :is(.dc-tile.mantine-Paper-root:not([data-showcase]), .depictio-component-chrome:is([data-component-type='map'], [data-component-type='advanced_viz']) > .mantine-Paper-root) {
   padding: 14px 16px 12px !important;
 }
 :root[data-chrome='glass'] [data-testid='dashboard-content'] .dc-tile--table.mantine-Paper-root {
   overflow: hidden;
 }
-:root[data-chrome='glass'] [data-testid='dashboard-content'] :is(.dc-tile.mantine-Paper-root:not([data-showcase]), .depictio-component-chrome:is([data-component-type='map'], [data-component-type='advanced_viz']) > .mantine-Paper-root) > :is(.mantine-Group-root, .mantine-Stack-root):first-child:has(> .mantine-Text-root:first-child) {
+:root[data-chrome='glass'] [data-testid='dashboard-content'] :is(.dc-tile.mantine-Paper-root:not([data-showcase]), .depictio-component-chrome:is([data-component-type='map'], [data-component-type='advanced_viz']) > .mantine-Paper-root) > .dc-tile-head:first-child {
   min-height: 22px;
   margin-bottom: 10px !important;
   padding-right: 32px;
   row-gap: 0 !important;
 }
-:root[data-chrome='glass'] [data-testid='dashboard-content'] :is(.dc-tile.mantine-Paper-root:not([data-showcase]), .depictio-component-chrome:is([data-component-type='map'], [data-component-type='advanced_viz']) > .mantine-Paper-root) > :is(.mantine-Group-root, .mantine-Stack-root):first-child:has(> .mantine-Text-root:first-child) > .mantine-Text-root:first-child {
+:root[data-chrome='glass'] [data-testid='dashboard-content'] :is(.dc-tile.mantine-Paper-root:not([data-showcase]), .depictio-component-chrome:is([data-component-type='map'], [data-component-type='advanced_viz']) > .mantine-Paper-root) > .dc-tile-head:first-child > .mantine-Text-root:first-child {
   font-size: 14px !important;
   font-weight: 650 !important;
   line-height: 22px !important;
   color: var(--gl-fg) !important;
 }
-:root[data-chrome='glass'] [data-testid='dashboard-content'] :is(.dc-tile.mantine-Paper-root:not([data-showcase]), .depictio-component-chrome:is([data-component-type='map'], [data-component-type='advanced_viz']) > .mantine-Paper-root) > :is(.mantine-Group-root, .mantine-Stack-root):first-child:has(> .mantine-Text-root:first-child) > .mantine-Text-root + .mantine-Text-root {
+:root[data-chrome='glass'] [data-testid='dashboard-content'] :is(.dc-tile.mantine-Paper-root:not([data-showcase]), .depictio-component-chrome:is([data-component-type='map'], [data-component-type='advanced_viz']) > .mantine-Paper-root) > .dc-tile-head:first-child > .mantine-Text-root + .mantine-Text-root {
   font-size: 12px !important;
   line-height: 16px !important;
   color: var(--gl-faint) !important;
@@ -447,10 +453,10 @@
 :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-component-chrome:hover .js-plotly-plot .modebar--hover > :not(.watermark) {
   opacity: 1 !important;
 }
-/* A figure with a header row carries the toolbar up into it, left of the
-   tile's actions, on the same paper strip, so it never sits on the
-   plot's facet titles or legend. */
-:root[data-chrome='glass'] [data-testid='dashboard-content'] .dc-tile--figure:not([data-showcase]):has(> .mantine-Group-root:first-child) .js-plotly-plot .modebar {
+/* A figure with a header row (FigureRenderer sets `data-headed` on the tile)
+   carries the toolbar up into it, left of the tile's actions, on the same
+   paper strip, so it never sits on the plot's facet titles or legend. */
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .dc-tile--figure[data-headed]:not([data-showcase]) .js-plotly-plot .modebar {
   top: -34px !important;
   right: 32px !important;
   padding: 1px 4px;
@@ -553,7 +559,7 @@
 :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-card:not(.depictio-card--split):not(.depictio-card--minimal) > div:not(.depictio-card-icon) {
   justify-content: flex-start !important;
 }
-:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-card:not(.depictio-card--split):not(.depictio-card--minimal) > div:not(.depictio-card-icon):has(> div:last-child:not(.mantine-Card-section) > .mantine-Stack-root) {
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-card:not(.depictio-card--split):not(.depictio-card--minimal) > div:not(.depictio-card-icon)[data-strip] {
   flex: 1 1 auto !important;
   margin-bottom: 30px;
   justify-content: space-between !important;
@@ -623,7 +629,7 @@
 :root[data-chrome='glass'] [data-testid='dashboard-content'] .is-linked-view:not(.is-plain) :is(.dc-tile.mantine-Paper-root:not([data-showcase]), .depictio-component-chrome:is([data-component-type='map'], [data-component-type='advanced_viz']) > .mantine-Paper-root) {
   padding: 8px 10px !important;
 }
-:root[data-chrome='glass'] [data-testid='dashboard-content'] .is-linked-view:not(.is-plain) :is(.dc-tile.mantine-Paper-root:not([data-showcase]), .depictio-component-chrome:is([data-component-type='map'], [data-component-type='advanced_viz']) > .mantine-Paper-root) > :is(.mantine-Group-root, .mantine-Stack-root):first-child:has(> .mantine-Text-root:first-child) {
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .is-linked-view:not(.is-plain) :is(.dc-tile.mantine-Paper-root:not([data-showcase]), .depictio-component-chrome:is([data-component-type='map'], [data-component-type='advanced_viz']) > .mantine-Paper-root) > .dc-tile-head:first-child {
   margin-bottom: 6px !important;
 }
 /* Hover on the canvas, one system:

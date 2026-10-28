@@ -175,14 +175,14 @@
   );
 }
 /* Mantine's own hover fill (the Comments group rows, default buttons). */
-:root[data-chrome='glass'] :is(.hy-drawer, .hy-sheet, .hy-inspector, .dc-analysis-panel, [data-testid='comments-drawer'], .mantine-Drawer-root:has([aria-label='Expand notes to fullscreen'])) {
+:root[data-chrome='glass'] :is(.hy-drawer, .hy-sheet, .hy-inspector, .dc-analysis-panel, [data-testid='comments-drawer'], .mantine-Drawer-root.dc-notes-drawer) {
   --mantine-color-default-hover: var(--gl-row-hover);
 }
-:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet, .hy-inspector, .dc-analysis-panel, [data-testid='comments-drawer'], .mantine-Drawer-root:has([aria-label='Expand notes to fullscreen'])) :is(.mantine-Accordion-control, .mantine-NavLink-root),
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet, .hy-inspector, .dc-analysis-panel, [data-testid='comments-drawer'], .mantine-Drawer-root.dc-notes-drawer) :is(.mantine-Accordion-control, .mantine-NavLink-root),
 :root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-content .mantine-Paper-root:not(.dc-tile) > .mantine-Group-root:first-child > button {
   transition: background-color 120ms ease !important;
 }
-:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet, .hy-inspector, .dc-analysis-panel, [data-testid='comments-drawer'], .mantine-Drawer-root:has([aria-label='Expand notes to fullscreen'])) :is(.mantine-Accordion-control, .mantine-NavLink-root):hover,
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet, .hy-inspector, .dc-analysis-panel, [data-testid='comments-drawer'], .mantine-Drawer-root.dc-notes-drawer) :is(.mantine-Accordion-control, .mantine-NavLink-root):hover,
 :root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-content .mantine-Paper-root:not(.dc-tile) > .mantine-Group-root:first-child > button:hover {
   background-color: var(--gl-row-hover) !important;
 }
@@ -191,7 +191,7 @@
   padding: 2px 6px;
   border-radius: 8px;
 }
-:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet, .hy-inspector, .dc-analysis-panel, [data-testid='comments-drawer'], .mantine-Drawer-root:has([aria-label='Expand notes to fullscreen'])) .dashboard-component-hover:hover {
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet, .hy-inspector, .dc-analysis-panel, [data-testid='comments-drawer'], .mantine-Drawer-root.dc-notes-drawer) .dashboard-component-hover:hover {
   box-shadow: none !important;
 }
 

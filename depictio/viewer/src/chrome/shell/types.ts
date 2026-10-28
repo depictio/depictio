@@ -61,6 +61,9 @@ export interface DashboardShellProps {
   canvas: React.ReactNode;
   /** The full-width strip of `placement: top` controls (Timeline), or null. */
   topStrip: React.ReactNode | null;
+  /** The canvas opens on the tab's own heading (`TabIntro`). A chrome style may
+   *  then drop the tab's icon from the top bar. */
+  tabIntro?: boolean;
   filters: {
     /** The panel's filter components (the docked column's members). */
     members: StoredMetadata[];
