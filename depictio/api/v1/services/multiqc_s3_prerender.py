@@ -150,7 +150,11 @@ def delete_dc_prefix(dc_id: str) -> int:
         objects = fs.find(prefix)
         if not objects:
             return 0
-        fs.rm(objects)
+        try:
+            fs.rm(objects)
+        except Exception:  # noqa: BLE001 — no bulk delete (GCS XML API): one by one
+            for obj in objects:
+                fs.rm_file(obj)
         return len(objects)
     except Exception as exc:  # noqa: BLE001 — invalidation must never raise
         logger.warning(f"multiqc_s3_prerender: prefix delete failed for {prefix}: {exc}")
