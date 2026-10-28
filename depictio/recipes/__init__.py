@@ -215,14 +215,11 @@ def _read_source_file(
     location when the caller has none, e.g. an absolute override outside the
     root), so the recipe can derive a key the content lacks.
 
-    A ``csv``/``tsv`` source whose location is a YAML or JSON samplesheet
-    (``--var SAMPLESHEET_FILE=sheet.yaml``) is read as a list of records
-    (``record_sheets``), through ``root`` when the file is under it.
+    A source declared as a CSV/TSV file, repointed at a YAML or JSON
+    samplesheet (``--var SAMPLESHEET_FILE=sheet.yaml``), is read as a list of
+    records (``record_sheets``), through ``root`` when the file is under it.
     """
-    # Lazily, for the same reason as in ``_as_data_root``.
-    from depictio.cli.cli.utils.record_sheets import is_record_sheet
-
-    if source.format in ("csv", "tsv") and is_record_sheet(rel_path or location):
+    if _repointed_at_record_sheet(source, rel_path or location):
         return _with_source_path(
             _read_record_source(location, source, root, rel_path), source, location, rel_path
         )
@@ -238,6 +235,25 @@ def _read_source_file(
     else:
         df = read(location, **format_kwargs, **kwargs)
     return _with_source_path(df, source, location, rel_path)
+
+
+def _repointed_at_record_sheet(source: RecipeSource, location: str | Path) -> bool:
+    """Whether ``location`` is a YAML/JSON samplesheet standing in for a CSV/TSV ``source``.
+
+    Only a repointed ``path`` source qualifies. Recipes that read their own
+    ``.json`` outputs as one text column (isoseq, crisprseq, pairgenomealign)
+    declare that ``.json`` path or glob themselves, and keep that read.
+    """
+    # Lazily, for the same reason as in ``_as_data_root``.
+    from depictio.cli.cli.utils.record_sheets import is_record_sheet
+
+    return (
+        source.format in ("csv", "tsv")
+        and source.glob_pattern is None
+        and source.path is not None
+        and not is_record_sheet(source.path)
+        and is_record_sheet(location)
+    )
 
 
 def _read_record_source(
@@ -310,7 +326,10 @@ def _read_source_outside_root(
 
         _scan, _read, format_kwargs = _format_readers(source)
         kwargs = {**format_kwargs, **(source.read_kwargs or {})}
-        if source.format == "csv":
+        if _repointed_at_record_sheet(source, location):
+            # No CSV options, so the remote reader reads it as records.
+            kwargs = {}
+        elif source.format == "csv":
             # The format the recipe declared, as on every other read of it: the
             # remote reader would otherwise pick tabs for a ``.tsv`` name.
             kwargs.setdefault("separator", ",")

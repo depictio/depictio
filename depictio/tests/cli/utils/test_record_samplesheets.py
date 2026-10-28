@@ -168,6 +168,24 @@ def test_a_recipe_refuses_a_malformed_record_sheet(run, cli_context):
         )
 
 
+@pytest.mark.parametrize(
+    "fields",
+    [{"path": "reports/stats.json"}, {"glob_pattern": "reports/*.json"}],
+    ids=["path", "glob"],
+)
+def test_a_recipe_reading_its_own_json_keeps_its_csv_read(tmp_path, cli_context, fields):
+    """Recipes (isoseq, crisprseq, pairgenomealign) read their ``.json`` outputs
+    one line per row: only a CSV/TSV source *repointed* at a sheet changes."""
+    (tmp_path / "reports").mkdir()
+    (tmp_path / "reports" / "stats.json").write_text('{\n  "reads": 3\n}\n')
+    module = _module(
+        read_kwargs={"separator": "\x1f", "has_header": False, "new_columns": ["raw"]},
+        **fields,
+    )
+    sources = resolve_sources(module, str(tmp_path))
+    assert sources["samplesheet"]["raw"].to_list() == ["{", '  "reads": 3', "}"]
+
+
 @pytest.fixture()
 def http_sheets(monkeypatch):
     """The fixtures served over loopback, which the CLI reads directly."""
@@ -207,6 +225,16 @@ def test_a_table_collection_declared_csv_reads_a_record_sheet(cli_context, name,
     """rnafusion's ``samplesheet`` collection, repointed by ``SAMPLESHEET_FILE``."""
     frame = deltatables._lazy_scan_path(str(FIXTURES / name), fmt, {}).collect()
     assert frame.to_dicts() == _csv_frame().to_dicts()
+
+
+def test_a_raw_json_collection_with_a_separator_keeps_its_csv_read(tmp_path, cli_context):
+    """bcl2fastq ``Stats.json``, simpleaf ``map_info.json``: declared TSV/CSV
+    with a separator the file cannot hold, read one line per row as before."""
+    report = tmp_path / "Stats.json"
+    report.write_text('{\n  "Flowcell": "X"\n}\n')
+    kwargs = {"separator": "\x1f", "has_header": False, "new_columns": ["raw"]}
+    frame = deltatables._lazy_scan_path(str(report), "tsv", kwargs).collect()
+    assert frame["raw"].to_list() == ["{", '  "Flowcell": "X"', "}"]
 
 
 @pytest.mark.parametrize("name", RECORD_SHEETS)

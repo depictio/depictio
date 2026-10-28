@@ -228,6 +228,17 @@ def _delimited_kwargs(file_path: str, file_format: str, polars_kwargs: dict) -> 
     return effective_kwargs
 
 
+def _reads_as_records(location: str, polars_kwargs: dict) -> bool:
+    """Whether a CSV/TSV-declared ``location`` is a YAML/JSON samplesheet to read as records.
+
+    The extension says so, unless the collection tells the CSV reader how to
+    split the file: the raw-JSON collections (bcl2fastq ``Stats.json``,
+    simpleaf ``map_info.json``...) read their report one line per row with a
+    ``separator`` it cannot contain, and keep that read.
+    """
+    return is_record_sheet(location) and "separator" not in polars_kwargs
+
+
 def _lazy_scan_path(
     file_path: str, file_format: str, polars_kwargs: dict, *, confine: bool = True
 ) -> pl.LazyFrame:
@@ -247,8 +258,7 @@ def _lazy_scan_path(
                 "local_path_outside",
             )
     if file_format in ["csv", "tsv", "txt"]:
-        if is_record_sheet(file_path):
-            # A YAML/JSON samplesheet standing where a CSV/TSV one is declared.
+        if _reads_as_records(file_path, polars_kwargs):
             with open(file_path, "rb") as handle:
                 return read_record_sheet(handle.read(), str(file_path)).lazy()
         return pl.scan_csv(file_path, **_delimited_kwargs(file_path, file_format, polars_kwargs))
@@ -328,7 +338,7 @@ def _read_remote_file_lazy(
         # object-store wants the scheme in lower case; the key stays verbatim.
         url = "s3://" + url[5:]
         target = s3_read_target_in_region(url, CLI_config)
-        if file_format != "parquet" and is_record_sheet(url):
+        if file_format != "parquet" and _reads_as_records(url, polars_kwargs):
             # A YAML/JSON samplesheet has no scanner: one GetObject, parsed whole.
             try:
                 body = target.client().get_object(Bucket=target.bucket, Key=target.key)
