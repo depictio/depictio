@@ -13,6 +13,8 @@ import './plotlyStrictMode';
 // Before any Plot mounts: plain wheel scrolls the page, Ctrl / Cmd + wheel zooms.
 import './plotlyZoomGate';
 import './plotlySkipIdenticalUpdate';
+// A resize that finds the box at the size of the last draw is not a redraw.
+import './plotlySkipIdleResize';
 
 // Grid + top-level renderer
 export { default as DashboardGrid, SectionSummary } from './components/DashboardGrid';
