@@ -12,6 +12,7 @@ import './styles/realtime-highlight.css';
 import './plotlyStrictMode';
 // Before any Plot mounts: plain wheel scrolls the page, Ctrl / Cmd + wheel zooms.
 import './plotlyZoomGate';
+import './plotlySkipIdenticalUpdate';
 
 // Grid + top-level renderer
 export { default as DashboardGrid, SectionSummary } from './components/DashboardGrid';
