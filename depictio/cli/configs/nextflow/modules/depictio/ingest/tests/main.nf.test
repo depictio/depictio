@@ -1,0 +1,42 @@
+nextflow_process {
+
+    name "Test Process DEPICTIO_INGEST"
+    script "../main.nf"
+    process "DEPICTIO_INGEST"
+
+    tag "modules"
+    tag "depictio"
+    tag "depictio/ingest"
+
+    // A real ingestion needs a Depictio server, which a module test has no way
+    // to reach, so only the stub runs here. The CLI's own tests cover ingestion.
+    test("results directory with a template - stub") {
+
+        options "-stub"
+
+        when {
+            process {
+                """
+                input[0] = [
+                    [ id:'test' ],
+                    file("${moduleDir}/tests", checkIfExists: true),
+                    []
+                ]
+                input[1] = 'nf-core/rnaseq/latest'
+                input[2] = []
+                input[3] = []
+                input[4] = []
+                """
+            }
+        }
+
+        then {
+            assertAll(
+                { assert process.success },
+                { assert process.out.result.size() == 1 },
+                { assert file(process.out.result[0][1]).name == 'test.depictio.json' },
+                { assert path(process.out.versions[0]).text.contains('depictio:') }
+            )
+        }
+    }
+}

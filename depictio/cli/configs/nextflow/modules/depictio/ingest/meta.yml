@@ -1,0 +1,74 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/meta-schema.json
+name: "depictio_ingest"
+description: Ingest a pipeline's results into a Depictio instance, with the
+  dashboards of the pipeline's bundled template
+keywords:
+  - depictio
+  - dashboard
+  - visualisation
+  - report
+tools:
+  - "depictio":
+      description: "Interactive dashboards for bioinformatics workflow outputs"
+      homepage: "https://github.com/depictio/depictio"
+      documentation: "https://depictio.github.io/depictio-docs/latest/"
+      tool_dev_url: "https://github.com/depictio/depictio"
+      licence: ["MIT"]
+      identifier: ""
+input:
+  - - meta:
+        type: map
+        description: |
+          Groovy Map containing run information, e.g. `[ id:'run1' ]`.
+          `id` names the result file.
+    - files:
+        type: file
+        description: |
+          The pipeline's results directory, or the files the template reads.
+          Directories are copied as a tree of links, so a template's scan
+          patterns see the published layout.
+        pattern: "*"
+    - relpaths:
+        type: list
+        description: |
+          One path per entry of `files`, relative to the results directory
+          (e.g. `multiqc/multiqc_data`). Empty: a single directory is used as
+          the results directory itself, several files are laid out flat.
+  - template:
+      type: string
+      description: |
+        Bundled template id, e.g. `nf-core/rnaseq/3.26.0` or
+        `nf-core/rnaseq/latest`. Empty: derived from `workflow.manifest`
+        (`<name>/<version>`), unless `project_config` is given.
+  - project_config:
+      type: file
+      description: Project YAML for a pipeline without a bundled template. Pass `[]` to use a template.
+      pattern: "*.{yaml,yml}"
+  - dashboards:
+      type: file
+      description: Dashboard YAMLs to import with the project. Pass `[]` for none.
+      pattern: "*.{yaml,yml}"
+  - cli_config:
+      type: file
+      description: |
+        Depictio CLI configuration (`CLI.yaml`). Pass `[]` to use
+        `DEPICTIO_CLI_TOKEN` and `DEPICTIO_CLI_API_BASE_URL` instead.
+      pattern: "*.{yaml,yml}"
+output:
+  - result:
+      - meta:
+          type: map
+          description: Groovy Map containing run information
+      - "${prefix}.depictio.json":
+          type: file
+          description: How the ingestion ended (status, project and dashboard ids and links)
+          pattern: "*.depictio.json"
+  - versions:
+      - "versions.yml":
+          type: file
+          description: File containing software versions
+          pattern: "versions.yml"
+authors:
+  - "@weber8thomas"
+maintainers:
+  - "@weber8thomas"
