@@ -76,8 +76,22 @@
   column-gap: 12px;
   row-gap: 4px;
 }
+/* A named group (VizControlGroup) is a captioned column of its own. In this
+   row it would be one flex item, 136-220px wide, its controls stacked under a
+   caption: tall, and the captions of neighbouring groups at different
+   heights. Dissolve the group so its controls join the row, and drop the
+   caption (the row has no room for one, and the labels name the controls). */
+.dpx-viz-dock--top .dpx-viz-group,
+.dpx-viz-dock--top .dpx-viz-group__stack,
+.dpx-viz-dock--top .dpx-viz-group__stack > .dpx-viz-grid {
+  display: contents;
+}
+.dpx-viz-dock--top .dpx-viz-group__stack > .mantine-Divider-root {
+  display: none;
+}
 /* Three to a row on a half-width tile. */
-.dpx-viz-dock--top .dpx-viz-dock__controls > .mantine-Stack-root > * {
+.dpx-viz-dock--top .dpx-viz-dock__controls > .mantine-Stack-root > *,
+.dpx-viz-dock--top .dpx-viz-group__stack > .dpx-viz-grid > * {
   flex: 1 1 136px;
   min-width: 0;
   max-width: 220px;
