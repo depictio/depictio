@@ -918,18 +918,34 @@ export async function fetchSpecs(dcId: string): Promise<Record<string, unknown>>
  *  with the supplied Polars expression so the returned options reflect only
  *  the rows matching that scope.
  */
-export async function fetchUniqueValues(
+export function fetchUniqueValues(
   dcId: string,
   columnName: string,
   filterExpr?: string | null,
 ): Promise<string[]> {
-  const params = new URLSearchParams({ column: columnName });
-  if (filterExpr) params.set('filter_expr', filterExpr);
-  const res = await authFetch(`${API_BASE}/deltatables/unique_values/${dcId}?${params.toString()}`);
-  if (!res.ok) throw new Error(`Failed to fetch unique values: ${res.status}`);
-  const body = (await res.json()) as { values?: string[] };
-  return body.values || [];
+  // One request per (collection, column, scope) while one is in flight: a
+  // dashboard mounts several filters on the same column (the filter panel, the
+  // viz controls, a card), and a page load sent ~45 requests for ~20 lists.
+  // Nothing is kept once it settles, so a later call still sees fresh data.
+  const key = `${dcId}|${columnName}|${filterExpr ?? ''}`;
+  const pending = UNIQUE_VALUES_IN_FLIGHT.get(key);
+  // A copy per caller, so one caller sorting its list cannot reorder another's.
+  if (pending) return pending.then((values) => values.slice());
+  const request = (async () => {
+    const params = new URLSearchParams({ column: columnName });
+    if (filterExpr) params.set('filter_expr', filterExpr);
+    const res = await authFetch(
+      `${API_BASE}/deltatables/unique_values/${dcId}?${params.toString()}`,
+    );
+    if (!res.ok) throw new Error(`Failed to fetch unique values: ${res.status}`);
+    const body = (await res.json()) as { values?: string[] };
+    return body.values || [];
+  })().finally(() => UNIQUE_VALUES_IN_FLIGHT.delete(key));
+  UNIQUE_VALUES_IN_FLIGHT.set(key, request);
+  return request;
 }
+
+const UNIQUE_VALUES_IN_FLIGHT = new Map<string, Promise<string[]>>();
 
 /** The distinct values of a column, ranked by the largest value of another
  *  column each one carries (``default_by`` of an ``always_selected`` Select). */
