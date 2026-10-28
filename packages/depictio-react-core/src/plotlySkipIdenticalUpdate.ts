@@ -28,10 +28,20 @@ interface FigureProps {
   revision?: number;
 }
 
-type DidUpdate = ((this: { props: FigureProps }, prev: FigureProps) => void) & {
+/** The parts of a react-plotly.js instance a skipped update still touches. */
+interface PlotInstance {
+  props: FigureProps & { onError?: (err: unknown) => void };
+  p?: Promise<unknown>;
+  el?: { on?: unknown } | null;
+  unmounting?: boolean;
+  syncEventHandlers?: () => void;
+  syncWindowResize?: (invoke: boolean) => void;
+}
+
+type DidUpdate = ((this: PlotInstance, prev: FigureProps) => void) & {
   depictioSkipsIdentical?: true;
 };
-type DidMount = ((this: { props: FigureProps }) => void) & { depictioSkipsIdentical?: true };
+type DidMount = ((this: PlotInstance) => void) & { depictioSkipsIdentical?: true };
 
 const NO_SIGNATURE = Symbol('no-signature');
 
@@ -44,7 +54,7 @@ function checksum(view: ArrayBufferView): string {
   return `${view.constructor.name}:${bytes.length}:${h >>> 0}`;
 }
 
-function signatureOf(value: unknown): string | typeof NO_SIGNATURE {
+export function signatureOf(value: unknown): string | typeof NO_SIGNATURE {
   if (value === null || typeof value !== 'object') return String(value);
   const cached = signatures.get(value);
   if (cached !== undefined) return cached;
@@ -63,11 +73,24 @@ function signatureOf(value: unknown): string | typeof NO_SIGNATURE {
   return sig;
 }
 
-function sameContent(a: unknown, b: unknown): boolean {
+export function sameContent(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false;
   const sa = signatureOf(a);
   return sa !== NO_SIGNATURE && sa === signatureOf(b);
+}
+
+// react-plotly.js attaches the event handler props (onClick, onSelected, ...)
+// and the resize handler only after a redraw. A skipped redraw still has to
+// swap them, or the graph div keeps calling the closures of an earlier render.
+function resyncHandlers(plot: PlotInstance): void {
+  plot.p = (plot.p ?? Promise.resolve())
+    .then(() => {
+      if (plot.unmounting || typeof plot.el?.on !== 'function') return;
+      plot.syncWindowResize?.(false);
+      plot.syncEventHandlers?.();
+    })
+    .catch((err) => plot.props.onError?.(err));
 }
 
 const proto = (Plot as unknown as {
@@ -95,6 +118,12 @@ if (didMount && !didMount.depictioSkipsIdentical) {
 if (didUpdate && !didUpdate.depictioSkipsIdentical) {
   const skipping: DidUpdate = function (prev) {
     const next = this.props;
+    // Signed before the original can draw them, whichever comparison below
+    // short-circuits: a figure first signed after its draw carries what Plotly
+    // wrote into it (autoranged axes) and never matches the next fresh copy.
+    signatureOf(next.data);
+    signatureOf(next.layout);
+    signatureOf(next.config);
     const framesChanged = (prev.frames?.length ?? 0) !== (next.frames?.length ?? 0);
     const identical =
       !framesChanged &&
@@ -104,6 +133,7 @@ if (didUpdate && !didUpdate.depictioSkipsIdentical) {
       sameContent(prev.config, next.config);
     // Handing the original the current props as the previous ones makes it see
     // no change and return before it touches Plotly.
+    if (identical) resyncHandlers(this);
     didUpdate.call(this, identical ? next : prev);
   };
   skipping.depictioSkipsIdentical = true;

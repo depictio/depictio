@@ -6,6 +6,7 @@ into the effective projection (so filtering never silently drops a column), and
 the schema-guarded scan projection backed by a per-(collection, version) cache.
 """
 
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock
 
 import polars as pl
@@ -305,3 +306,23 @@ class TestBaseDeltaScanCache:
         for i in range(5):
             dtu._base_delta_scan(f"s3://b/dc{i}", "table", None, "v1")
         assert len(dtu._BASE_SCAN_CACHE) <= 2
+
+    def test_concurrent_callers_from_the_thread_pool(self, monkeypatch):
+        # `get_unique_values` now runs in the thread pool, so callers race on the
+        # dict, including the clear on overflow. Every caller must get a scan of
+        # its own table, and the bound must hold within the number of workers.
+        monkeypatch.setattr(dtu, "_BASE_SCAN_CACHE_MAX", 4)
+        monkeypatch.setattr(
+            dtu, "_create_delta_scan", lambda loc, *a, **k: pl.LazyFrame({"loc": [loc]})
+        )
+        workers = 16
+
+        def call(i: int) -> tuple[str, str]:
+            loc = f"s3://b/dc{i % 10}"
+            scan = dtu._base_delta_scan(loc, "table", None, "v1")
+            return loc, scan.collect()["loc"][0]
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            results = list(pool.map(call, range(400)))
+        assert all(asked == got for asked, got in results)
+        assert len(dtu._BASE_SCAN_CACHE) <= 4 + workers
