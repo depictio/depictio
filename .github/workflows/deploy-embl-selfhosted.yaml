@@ -104,7 +104,7 @@ jobs:
             --set celery.image.tag="${VERSION}" \
             --set viewer.image.tag="${VERSION}" \
             "${wipe_args[@]}" \
-            --wait --timeout 10m --atomic \
+            --wait --timeout 30m --atomic \
             --insecure-skip-tls-verify
 
           echo "✅ TREC demo deployment complete"
@@ -216,7 +216,7 @@ jobs:
             -f ~/actions-runner-embl/secrets/values-embl-secrets.yaml \
             --set backend.image.tag="${VERSION}" \
             --set frontend.image.tag="${VERSION}" \
-            --wait --timeout 10m --atomic \
+            --wait --timeout 30m --atomic \
             --insecure-skip-tls-verify
 
           echo "✅ Demo deployment complete"
