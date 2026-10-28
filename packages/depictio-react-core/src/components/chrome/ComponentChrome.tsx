@@ -123,6 +123,11 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   const fullscreenRef = externalFullscreenRef ?? localFullscreenRef;
 
   const [isFullscreenActive, setIsFullscreenActive] = useState(false);
+  // Keyboard focus on one of the row's own actions. Tracked here rather than
+  // with `:has(:focus-visible)` in CSS: that selector makes the browser redo
+  // style for the whole document on every DOM write, which stalled a Plotly
+  // draw (one forced style pass per text measurement) for seconds.
+  const [actionsKbFocus, setActionsKbFocus] = useState(false);
   useEffect(() => {
     const onChange = () => {
       setIsFullscreenActive(document.fullscreenElement === fullscreenRef.current);
@@ -441,6 +446,11 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           (compact ? ' is-compact' : '')
         }
         wrap="nowrap"
+        data-kb-focus={actionsKbFocus || undefined}
+        onFocus={(e: React.FocusEvent<HTMLElement>) => {
+          if (e.target.matches(':focus-visible')) setActionsKbFocus(true);
+        }}
+        onBlur={() => setActionsKbFocus(false)}
       >
         {vertical && clearSlot}
         {/* Grouping action first (after the grip, which stays where authors
