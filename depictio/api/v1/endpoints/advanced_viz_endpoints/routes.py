@@ -453,6 +453,37 @@ def _log_rank_sample(scan: Any, roles: dict[str, str], available: set[str], cap:
     return scan.filter(pl.col(rank_col).is_in(keep)).collect()
 
 
+def _aggregate_frame(df, aggregate: Any):
+    """Sum ``aggregate["sum"]`` per distinct ``aggregate["group_by"]`` combination.
+
+    For a renderer that only ever adds up the rows it is handed (the sunburst
+    walks each row's lineage and accumulates its abundance into every prefix),
+    this is lossless and ships one row per lineage instead of one per lineage
+    and sample. Null keys stay a group of their own: a row whose lineage stops
+    early is still a leaf at that depth.
+    """
+    import polars as pl
+
+    group_by = aggregate.get("group_by") if isinstance(aggregate, dict) else None
+    sum_col = aggregate.get("sum") if isinstance(aggregate, dict) else None
+    if (
+        not isinstance(group_by, list)
+        or not group_by
+        or not all(isinstance(c, str) for c in group_by)
+        or not isinstance(sum_col, str)
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="aggregate must be {group_by: [column, ...], sum: column}",
+        )
+    missing = [c for c in [*group_by, sum_col] if c not in df.columns]
+    if missing:
+        raise HTTPException(
+            status_code=400, detail=f"aggregate names columns not in the frame: {missing}"
+        )
+    return df.group_by(group_by, maintain_order=True).agg(pl.col(sum_col).sum())
+
+
 def _load_reduced(
     wf_oid,
     dc_oid,
@@ -631,6 +662,7 @@ def fetch_advanced_viz_data(
     viz_kind = payload.get("viz_kind")
     roles = payload.get("roles") or {}
     tail = payload.get("tail") or None
+    aggregate = payload.get("aggregate") or None
 
     if not wf_id or not dc_id:
         raise HTTPException(status_code=400, detail="wf_id and dc_id are required")
@@ -728,13 +760,19 @@ def fetch_advanced_viz_data(
     # the metadata list and (b) avoid passing missing columns to .select(),
     # which would otherwise fail at collect() with ColumnNotFoundError.
     try:
-        from depictio.api.v1.deltatables_utils import _create_delta_scan
+        from depictio.api.v1.deltatables_utils import _create_delta_scan, get_cached_column_names
 
-        _scan = _create_delta_scan(
-            init_data[str(dc_id)]["delta_location"],
-            init_data[str(dc_id)].get("dc_type"),
+        # Cached per (collection, aggregation version): building the scan reads
+        # the Delta log from S3, which cost ~200 ms on every request, and the
+        # load below opens the table again.
+        _cols = get_cached_column_names(
+            str(dc_id),
+            lambda: _create_delta_scan(
+                init_data[str(dc_id)]["delta_location"],
+                init_data[str(dc_id)].get("dc_type"),
+            ),
         )
-        available_cols = set(_scan.collect_schema().names())
+        available_cols = set(_cols) if _cols is not None else None
     except Exception as _exc:
         logger.warning("advanced_viz/data: schema introspection failed: %s", _exc)
         available_cols = None
@@ -842,6 +880,11 @@ def fetch_advanced_viz_data(
     # Drop any requested columns that didn't survive projection (e.g. user
     # bound an optional column the recipe didn't emit). The renderer
     # decides what to do with missing optional columns.
+    # After the counts above, so ``total_rows`` still says how many rows the
+    # table held, and before the column build, so it measures what is shipped.
+    if aggregate:
+        df = _aggregate_frame(df, aggregate)
+
     _t_build = _time.perf_counter()
     present = [c for c in columns if c in df.columns]
 
@@ -877,7 +920,7 @@ def fetch_advanced_viz_data(
     response.headers["X-Rows-Loaded"] = str(total_rows)
     response.headers["X-Rows-Displayed"] = str(int(df.height))
     response.headers["X-Frame-Bytes"] = str(int(df.estimated_size()))
-    response.headers["X-Aggregated"] = "0"
+    response.headers["X-Aggregated"] = "1" if aggregate else "0"
     response.headers["X-Sampling-Policy"] = str(sampling["policy"])
     response.headers["X-Total-Ms"] = f"{(_time.perf_counter() - _t0) * 1000:.1f}"
     return result

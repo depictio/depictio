@@ -115,7 +115,7 @@ const FILTER_DEBOUNCE_MS = 250;
  *  out a whole burst of interaction. */
 const SAVE_FILTER_STATE_DEBOUNCE_MS = 800;
 import { notifications } from '@mantine/notifications';
-import { Sidebar, RunParametersHost, SettingsDrawer, TabIntro } from './chrome';
+import { Sidebar, RunParametersHost, SettingsDrawer, TabIntro, tabIntroShown } from './chrome';
 import type { HeaderAction } from './chrome/Header';
 import ShellHost from './chrome/shell/ShellHost';
 import type { FilterPanelOptions } from './chrome/shell/types';
@@ -1708,6 +1708,9 @@ const App: React.FC = () => {
     ready && dashboard ? (
       <Box
         data-testid="dashboard-content"
+        // A strip or the scope banner leads the canvas (layout.css trims the
+        // canvas's top padding under it).
+        data-lead={topComponents.length > 0 || scope.length > 0 ? '' : undefined}
         // Under the Guide: kept mounted (and its figures loaded) for when
         // the Guide closes, but neither painted nor in the focus order.
         // Only the canvas: the filter panel stays on screen beside the
@@ -2093,6 +2096,7 @@ const App: React.FC = () => {
         boot={boot}
         canvas={canvas}
         topStrip={topStrip}
+        tabIntro={ready && tabIntroShown(dashboard, activeTab)}
         filters={{
           members: leftComponents,
           values: filters,

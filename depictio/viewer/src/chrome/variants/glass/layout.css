@@ -711,7 +711,10 @@
   padding: var(--gl-panel-pad) !important;
   border-radius: 0 !important;
 }
-.hy-drawer:has(.dc-filter-panel-header) .hy-drawer-head {
+/* The shell sets `data-tools` on the drawer while the panel's tool row is
+ * showing (the panel is open and drawn): the head and the row share one
+ * hairline. */
+.hy-drawer[data-tools] .hy-drawer-head {
   border-bottom: 0;
 }
 /* The list scrolls with a reserved gutter; slide it into the panel's padding
@@ -862,8 +865,9 @@
 }
 /* A `placement: top` strip (the Timeline) heads the canvas, full width of the
  * reading column; the canvas scrolls under it, the dock stays at the foot. The
- * scope banner (the unit a one-unit tab shows) is the same card. */
-.hy-stage:has(> :is(.hy-strip, .depictio-scope-banner)) > [data-testid='dashboard-content'] {
+ * scope banner (the unit a one-unit tab shows) is the same card. The page marks
+ * the canvas `data-lead` when it has either. */
+.hy-stage > [data-testid='dashboard-content'][data-lead] {
   padding-top: 12px !important;
 }
 .hy-strip,
@@ -926,8 +930,9 @@
   left: auto;
   right: calc(var(--gl-pad-r, 0px) + var(--gl-gutter));
 }
-/* The notes button holds the foot's right corner: the dock stops short of it. */
-:root:has(.dc-notes-toggle) .hy-anchor[data-anchor='bottom-right'] {
+/* The notes button holds the foot's right corner: the dock stops short of it.
+ * NotesFooter sets `data-notes-toggle` on the root while its button is mounted. */
+:root[data-notes-toggle] .hy-anchor[data-anchor='bottom-right'] {
   right: calc(var(--gl-pad-r, 0px) + 78px);
 }
 .hy-anchor[data-anchor^='bottom'] {
@@ -1717,7 +1722,7 @@ button.hy-sheet-link {
   --gl-panel-pad: 16px;
   --gl-panel-head-h: 56px;
 }
-:root[data-chrome='glass'] :is(.dc-analysis-panel, [data-testid='comments-drawer'], .mantine-Drawer-root:has([aria-label='Expand notes to fullscreen'])) .mantine-Drawer-header {
+:root[data-chrome='glass'] :is(.dc-analysis-panel, [data-testid='comments-drawer'], .mantine-Drawer-root.dc-notes-drawer) .mantine-Drawer-header {
   min-height: var(--gl-panel-head-h);
   padding: 0 calc(var(--gl-panel-pad) - 6px) 0 var(--gl-panel-pad) !important;
 }
@@ -1757,7 +1762,7 @@ button.hy-sheet-link {
   }
 
   /* Search rises out of the dock, centred over the canvas. */
-  :root[data-chrome='glass'] .mantine-Modal-inner:has(> [data-testid='dashboard-spotlight']) {
+  :root[data-chrome='glass'] .mantine-Modal-inner.dc-spotlight-inner {
     align-items: flex-end !important;
     padding: 0 0 86px var(--gl-nav-offset, 0px) !important;
   }
@@ -1779,12 +1784,12 @@ button.hy-sheet-link {
   }
 
   /* The notes open as a card over their button, bottom right. */
-  :root[data-chrome='glass'] .mantine-Drawer-root:has([aria-label='Expand notes to fullscreen']) .mantine-Drawer-inner {
+  :root[data-chrome='glass'] .mantine-Drawer-root.dc-notes-drawer .mantine-Drawer-inner {
     left: auto !important;
     right: 0 !important;
     width: min(640px, calc(100vw - var(--gl-nav-offset, 0px) - 24px)) !important;
   }
-  :root[data-chrome='glass'] .mantine-Drawer-root:has([aria-label='Expand notes to fullscreen']) .mantine-Drawer-content {
+  :root[data-chrome='glass'] .mantine-Drawer-root.dc-notes-drawer .mantine-Drawer-content {
     --drawer-offset: var(--gl-pane-inset);
     margin-bottom: 84px !important;
     max-height: calc(100dvh - var(--gl-top-offset, 0px) - 108px);

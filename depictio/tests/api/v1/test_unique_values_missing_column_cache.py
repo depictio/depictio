@@ -7,7 +7,7 @@ version, like the positive path), so repeats are answered from the cache.
 
 from __future__ import annotations
 
-import asyncio
+import inspect
 
 import mongomock
 import polars as pl
@@ -57,10 +57,8 @@ def env(tmp_path, monkeypatch):
 
 
 def _call(dc_id, column, **kw):
-    return asyncio.run(
-        routes.get_unique_values(
-            dc_id, column, current_user="u", **{"limit": 1000, "filter_expr": None, **kw}
-        )
+    return routes.get_unique_values(
+        dc_id, column, current_user="u", **{"limit": 1000, "filter_expr": None, **kw}
     )
 
 
@@ -82,3 +80,16 @@ def test_missing_column_404_is_cached(env):
     with pytest.raises(HTTPException):
         _call(dc_id, "nope", limit=5)
     assert len(scans) == 1
+
+
+def test_endpoint_runs_in_the_thread_pool():
+    # Blocking Mongo/S3/Polars work in an `async def` stalls the event loop, so
+    # ~20 option lists requested by one dashboard load queued behind each other.
+    assert not inspect.iscoroutinefunction(routes.get_unique_values)
+
+
+def test_other_columns_reuse_the_open_table(env):
+    dc_id, scans = env
+    assert _call(dc_id, "sample")["values"] == ["a", "b"]
+    assert _call(dc_id, "reads")["values"] == ["1", "2", "3"]
+    assert len(scans) == 1, "one base scan per table version, shared by every column"

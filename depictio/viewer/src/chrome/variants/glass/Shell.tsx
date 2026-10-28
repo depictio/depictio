@@ -119,10 +119,7 @@ const SURFACES: [string, string][] = [
   ['analysis', '.dc-analysis-panel'],
   ['search', '[data-testid="dashboard-spotlight"]'],
   ['settings', '[data-testid="settings-modal"]'],
-  [
-    'notes',
-    '.mantine-Drawer-root:has([aria-label="Expand notes to fullscreen"], [aria-label="Restore notes drawer"])',
-  ],
+  ['notes', '.mantine-Drawer-root.dc-notes-drawer'],
 ];
 function useOpenSurfaces(): string {
   const [open, setOpen] = React.useState('');
@@ -297,6 +294,7 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
   boot,
   canvas,
   topStrip,
+  tabIntro,
   filters,
   overlays,
   outside,
@@ -430,6 +428,7 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
       data-density={dense ? 'compact' : undefined}
       data-dock={dockAt}
       data-panel={filtersOpen ? 'filters' : undefined}
+      data-intro={tabIntro || undefined}
       data-hy-showing={showing || undefined}
       style={shellStyle}
     >
@@ -544,6 +543,9 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
       <aside
         className="hy-drawer"
         aria-label="Filters"
+        // The panel's tool row shows while the panel is open (a closed one is
+        // the icon rail): layout.css lets the head and that row share a hairline.
+        data-tools={(ready && filters.docked.opened) || undefined}
         aria-hidden={!filtersOpen || undefined}
         {...({ inert: filtersOpen ? undefined : '' } as Record<string, string | undefined>)}
       >
@@ -619,6 +621,7 @@ const PhoneLayout: React.FC<DashboardShellProps> = ({
   boot,
   canvas,
   topStrip,
+  tabIntro,
   filters,
   overlays,
   outside,
@@ -650,6 +653,7 @@ const PhoneLayout: React.FC<DashboardShellProps> = ({
       className="hy-shell hy-shell--phone"
       data-testid="app-shell"
       data-mode={mode}
+      data-intro={tabIntro || undefined}
       data-hy-showing={showing || undefined}
       style={
         {

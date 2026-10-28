@@ -23,6 +23,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import HTTPException
+from fastapi.concurrency import run_in_threadpool
 
 from depictio.api.v1.configs.logging_init import logger
 
@@ -85,7 +86,8 @@ async def _categorical_options(
         # route; calling the handler directly skips that, and the Mongo query
         # `{"data_collection_id": <str>}` matches nothing — which surfaces as a
         # misleading "No DeltaTable found" rather than a type error.
-        result = await get_unique_values(
+        result = await run_in_threadpool(
+            get_unique_values,
             data_collection_id=PyObjectId(dc_id),
             column=column,
             limit=MAX_OPTIONS + 1,
