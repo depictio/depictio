@@ -75,6 +75,12 @@ pre-commit run --all-files         # mandatory after all code changes
 ### Documentation
 - After significant PRs, update depictio-docs and Obsidian notes
 
+### Autopilot
+- `/autopilot` solves one GitHub issue labelled `autopilot` per tick: gate, test-first fix,
+  checks, ready PR driven to green. Never merges. `/loop /autopilot` drains the queue;
+  `/autopilot #N` targets one issue. Blocked decisions go to the issue with `needs-thomas`
+- Definition and reserved areas: `.claude/commands/autopilot.md`
+
 ## Architecture Pointers
 
 ### SPA Routes (served by FastAPI from `depictio/viewer` build)

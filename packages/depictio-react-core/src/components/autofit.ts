@@ -291,13 +291,14 @@ interface FittableMember {
   selected_plot?: string | null;
   /** Advanced viz only: which kind it draws. */
   viz_kind?: unknown;
+  /** Advanced viz only: the kind's own settings (a heatmap reads `max_rows`,
+   *  a `genome_view` its `auto_height`). */
+  config?: unknown;
   /** A card's style, its section's already folded in: a row of compact cards
    *  fits its content both ways. */
   variant?: unknown;
   /** A genome browser (`jbrowse`): its height follows its open tracks. */
   auto_height?: unknown;
-  /** Advanced viz only: the kind's own config (`genome_view`'s `auto_height`). */
-  config?: unknown;
 }
 
 /** The MultiQC general statistics table, the one MultiQC tile that is a table
@@ -316,6 +317,18 @@ export const PHYLOGENY_FIT_TYPE = 'advanced_viz_phylogenetic';
  *  opt-in each is what it always was (an advanced viz grows, a browser holds
  *  the height it was given). */
 export const GENOME_FIT_TYPE = 'genome_auto_height';
+
+/** The clustered heatmap. Its demand is one row per matrix row, so a tile
+ *  authored for a short matrix would jump to the 16-row ceiling the moment a
+ *  large one answered. It keeps the height its author gave it and shrinks to a
+ *  small matrix; `config.max_rows` is the author's opt-in to growing. */
+export const COMPLEX_HEATMAP_FIT_TYPE = 'advanced_viz_complex_heatmap';
+
+/** The most grid rows a heatmap's author let it grow to, if any. */
+function heatmapMaxRows(member: FittableMember): number | undefined {
+  const raw = (member.config as { max_rows?: unknown } | null | undefined)?.max_rows;
+  return typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? Math.round(raw) : undefined;
+}
 
 /** The key a component's fit policy and default are looked up under. */
 export function fitType(member: FittableMember): string {
@@ -337,6 +350,9 @@ export function fitType(member: FittableMember): string {
     (member.config as { auto_height?: unknown } | null | undefined)?.auto_height === true
   ) {
     return GENOME_FIT_TYPE;
+  }
+  if (member.component_type === 'advanced_viz' && member.viz_kind === 'complex_heatmap') {
+    return COMPLEX_HEATMAP_FIT_TYPE;
   }
   return member.component_type ?? '';
 }
@@ -383,6 +399,7 @@ const FIT_POLICIES: Readonly<Record<string, FitPolicy>> = {
   // Tracks and lanes are counted, so the tile follows them both ways; a
   // browser with twenty tracks stops at the cap and scrolls the rest.
   [GENOME_FIT_TYPE]: { min: 3, max: 16, grow: true, shrink: true },
+  [COMPLEX_HEATMAP_FIT_TYPE]: { min: 3, max: 16, grow: false, shrink: true },
 };
 
 /**
@@ -402,6 +419,7 @@ const DEFAULT_FIT: Readonly<Record<string, FitMode>> = {
   advanced_viz: 'auto',
   [PHYLOGENY_FIT_TYPE]: 'auto',
   [GENOME_FIT_TYPE]: 'auto',
+  [COMPLEX_HEATMAP_FIT_TYPE]: 'auto',
   figure: 'fixed',
   multiqc: 'fixed',
 };
@@ -492,10 +510,11 @@ export function fitLayoutHeights<T extends SizedItem>(
   const bounds = (member: FittableMember, stored: SizedItem) => {
     const type = fitType(member);
     const policy = FIT_POLICIES[type]!;
+    const heatmapCap = type === COMPLEX_HEATMAP_FIT_TYPE ? heatmapMaxRows(member) : undefined;
     return {
       min: policy.min * scale,
-      max: Math.max(policy.max * scale, stored.h),
-      grow: policy.grow,
+      max: Math.max((heatmapCap ?? policy.max) * scale, stored.h),
+      grow: policy.grow || heatmapCap !== undefined,
       shrink: policy.shrink || (type === 'card' && compactRows.get(stored.y) === true),
     };
   };

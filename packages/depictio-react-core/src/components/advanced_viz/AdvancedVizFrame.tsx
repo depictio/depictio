@@ -635,7 +635,8 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     estimated ||
     groupBadge ||
     extraBadges ? (
-    <Stack gap={2} mb="xs">
+    // `dc-tile-head` while a text line leads the stack (see FigureRenderer).
+    <Stack gap={2} mb="xs" className={title || subtitle || echoLine ? 'dc-tile-head' : undefined}>
       {title ? (
         <Text fw={600} size="sm" lineClamp={1}>
           {title}
@@ -684,12 +685,21 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
       <ComponentSkeleton variant="block" />
     </div>
   );
+  // One shape for the drawn plot, loading or not: `children` always sits at
+  // index 0 of the same fragment and only the skeleton after it comes and goes.
+  // The loaded state used to render `children` bare. A renderer whose children
+  // are a fragment then had a fragment at index 0 while loading and its first
+  // element (the plot div) once loaded, so every filter change remounted the
+  // plot: a new graph div and a full first draw, twice.
+  const drawn = (
+    <>
+      {children}
+      {loading ? skeleton : null}
+    </>
+  );
   const body = loading ? (
     hasDrawnRef.current ? (
-      <>
-        {children}
-        {skeleton}
-      </>
+      drawn
     ) : (
       skeleton
     )
@@ -712,7 +722,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
       {emptyMessage}
     </div>
   ) : (
-    children
+    drawn
   );
 
   const rail = inlineLayout === 'rail-side' || inlineLayout === 'rail-below';

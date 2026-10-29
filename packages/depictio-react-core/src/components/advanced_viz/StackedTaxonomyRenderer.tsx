@@ -268,6 +268,51 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     };
   }, [wide, metadata.dc_id, config.taxon_col]);
 
+  // The table holds every rank (Kingdom to Genus, 773k rows for a metabarcoding
+  // run) but a bar chart draws one. The rank picker's options come from this
+  // cheap lookup, and the fetch below asks for the active rank only, so the
+  // server ships the rows that are drawn rather than every rank's.
+  const [rankUniverse, setRankUniverse] = useState<string[] | null>(null);
+  const [rankLookupFailed, setRankLookupFailed] = useState(false);
+  useEffect(() => {
+    if (!metadata.dc_id || !config.rank_col) return;
+    let cancelled = false;
+    setRankLookupFailed(false);
+    fetchUniqueValues(metadata.dc_id, config.rank_col)
+      .then((values) => {
+        if (!cancelled) setRankUniverse(withRanksInOrder(values));
+      })
+      .catch(() => {
+        // Without the list the old behaviour stands: fetch every rank, read the
+        // picker's options off the rows.
+        if (!cancelled) setRankLookupFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [metadata.dc_id, config.rank_col]);
+  const wantedRank = rank || config.default_rank || rankUniverse?.[0] || null;
+  const rankFilter = useMemo<InteractiveFilter[]>(
+    () =>
+      wantedRank && config.rank_col
+        ? [
+            {
+              index: `${metadata.index}-rank`,
+              value: [wantedRank],
+              column_name: config.rank_col,
+              interactive_component_type: 'MultiSelect',
+              metadata: {
+                dc_id: metadata.dc_id,
+                column_name: config.rank_col,
+                interactive_component_type: 'MultiSelect',
+              },
+            },
+          ]
+        : [],
+    [wantedRank, config.rank_col, metadata.index, metadata.dc_id],
+  );
+  const rankReady = rankUniverse !== null || rankLookupFailed;
+
   // The bindings (long form) or the sample id and value columns (wide form),
   // then the columns any annotation strip needs, so the renderer looks up
   // per-sample categorical values without a second fetch, then the group
@@ -287,6 +332,9 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   );
 
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
+  // The rank the rows were fetched for: the figure follows the rows, not the picker,
+  // so choosing a rank keeps the old bars up until the new ones arrive.
+  const [rowsRank, setRowsRank] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   // Server-side downsampling state (mirrors the scatter-figure Load-All UX).
@@ -312,6 +360,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
       setLoading(false);
       return;
     }
+    if (!rankReady) return;
     let cancelled = false;
     const ctrl = new AbortController();
     setLoading(true);
@@ -321,7 +370,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
         wfId: metadata.wf_id,
         dcId: metadata.dc_id,
         columns: requiredCols,
-        filters,
+        filters: [...filters, ...rankFilter],
         fullLoad,
         vizKind: 'stacked_taxonomy',
       },
@@ -330,6 +379,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
       .then((res) => {
         if (cancelled) return;
         setRows(res.rows);
+        setRowsRank(rankFilter.length ? wantedRank : null);
         setReduction({
           displayed: res.row_count,
           total: res.total_rows ?? res.row_count,
@@ -348,7 +398,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
       cancelled = true;
       ctrl.abort();
     };
-  }, [metadata.wf_id, metadata.dc_id, bound, JSON.stringify(requiredCols), filterSig, refreshTick, fullLoad]);
+  }, [metadata.wf_id, metadata.dc_id, bound, JSON.stringify(requiredCols), filterSig, refreshTick, fullLoad, rankReady, wantedRank]);
 
   const { figure, allRanks, categories, seriesCount, stripCount, slotCount, canZoom } = useMemo(() => {
     if (!rows)
@@ -382,10 +432,11 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     const ab = melted?.abundances ?? ((rows[config.abundance_col] || []) as number[]);
 
     const seen = Array.from(new Set(ranks));
-    // Root to leaf in the picker; unset, the rank stays the one the table
-    // lists first, as before.
-    const allRanks = withRanksInOrder(seen);
-    const activeRank = seen.length ? rank || seen[0] : null;
+    // Root to leaf in the picker. The options come from the lookup; only when it
+    // failed (and every rank was fetched) are they read off the rows.
+    const allRanks = rankUniverse ?? withRanksInOrder(seen);
+    // The rank the rows are for. Rows fetched without a rank filter hold several.
+    const activeRank = rowsRank ?? (rank || seen[0] || null);
 
     // Filter to active rank, then aggregate (sample × taxon → abundance).
     const cellTotals = new Map<string, Map<string, number>>(); // sample -> taxon -> abundance
@@ -807,7 +858,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
       },
       allRanks,
     };
-  }, [rows, config, rankCol, wide, valueCols, horizontal, rank, topN, normalise, sampleSort, sortCategory, activeGroupCol, yZoom, showLegend, logY, isDark, theme, taxonUniverse, categorySource, stripBand, stripGap, groupLabelBand]);
+  }, [rows, rowsRank, rankUniverse, config, rankCol, wide, valueCols, horizontal, rank, topN, normalise, sampleSort, sortCategory, activeGroupCol, yZoom, showLegend, logY, isDark, theme, taxonUniverse, categorySource, stripBand, stripGap, groupLabelBand]);
 
   // Memoised so AdvancedVizFrame's `extras` useMemo stays stable — an unmemoised
   // element re-fires the frame's publish effect and loops it against

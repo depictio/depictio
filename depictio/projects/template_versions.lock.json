@@ -28,7 +28,7 @@
     },
     "nf-core/ampliseq/2.18.0": {
       "version": "1.2.0",
-      "content_hash": "c23c9db73843a62de81d95fc3b484b52a7f7787a09d45a17b7019000515df016"
+      "content_hash": "50bbdc23f9b749bb14f97e1262de6703e0d0896bcf4a03f54a7731ac4576710d"
     },
     "nf-core/atacseq/1.2.2": {
       "version": "2.0.0",
@@ -152,7 +152,7 @@
     },
     "nf-core/raredisease/3.1.2": {
       "version": "1.0.0",
-      "content_hash": "ae5606a4de028f11f7d09bb01d4cc28ba1a4f577aa8c30e0b5b4509d79db4bb5"
+      "content_hash": "547cec5b63bd7b2b167596366ad6d952daf04853abd046cb0943a896a12c43cc"
     },
     "nf-core/riboseq/2.0.0": {
       "version": "2.0.0",

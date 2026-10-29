@@ -339,6 +339,32 @@ describe('fitLayoutHeights with a genome view or a browser that sizes to its con
   });
 });
 
+describe('fitLayoutHeights with a complex heatmap', () => {
+  const heatmap = (config?: { max_rows?: number }) => [
+    { index: 'hm', component_type: 'advanced_viz', viz_kind: 'complex_heatmap', config },
+  ];
+  const layouts = [{ i: 'hm', y: 0, h: 7 }];
+
+  it('does not grow past the height its author gave it', () => {
+    expect(fitLayoutHeights(heatmap(), layouts, { hm: heightForRows(14) })[0].h).toBe(7);
+  });
+
+  it('shrinks to a matrix that needs less', () => {
+    expect(fitLayoutHeights(heatmap(), layouts, { hm: heightForRows(4) })[0].h).toBe(4);
+  });
+
+  it('grows up to max_rows when the author opts in, and no further', () => {
+    const cfg = heatmap({ max_rows: 10 });
+    expect(fitLayoutHeights(cfg, layouts, { hm: heightForRows(14) })[0].h).toBe(10);
+    expect(fitLayoutHeights(cfg, layouts, { hm: heightForRows(9) })[0].h).toBe(9);
+  });
+
+  it('keeps a taller authored height whatever max_rows says', () => {
+    const cfg = heatmap({ max_rows: 5 });
+    expect(fitLayoutHeights(cfg, [{ i: 'hm', y: 0, h: 9 }], { hm: heightForRows(14) })[0].h).toBe(9);
+  });
+});
+
 describe('fitLayoutHeights with compact cards', () => {
   const layouts = [
     { i: 'a', y: 0, h: 8 },

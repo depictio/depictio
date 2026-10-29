@@ -84,7 +84,7 @@
   z-index: -1;
 }
 .depictio-component-chrome:hover .depictio-component-actions::before,
-.depictio-component-actions:has(:focus-visible)::before {
+.depictio-component-actions[data-kb-focus]::before {
   opacity: 1;
 }
 /* Per-child opacity so a single action (the analysis marker) can stay
@@ -106,7 +106,7 @@
   pointer-events: none;
 }
 .depictio-component-chrome:hover .depictio-component-actions > *,
-.depictio-component-actions:has(:focus-visible) > * {
+.depictio-component-actions[data-kb-focus] > * {
   opacity: 1;
   pointer-events: auto;
 }

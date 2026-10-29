@@ -29,9 +29,23 @@ interface TabIntroProps {
  * the DASHBOARD's identity line — what the listing card shows under the title
  * — which is a statement about the whole family, not about the tab being read.
  */
-const TabIntro: React.FC<TabIntroProps> = ({ dashboard, activeTab }) => {
-  const { colorScheme } = useMantineColorScheme();
-  const isDark = colorScheme === 'dark';
+interface TabIntroParts {
+  name: string | undefined;
+  description: string;
+  iconRaw: string | null;
+  iconColor: string;
+}
+
+/**
+ * What the intro shows, or null when it shows nothing. The page asks too (see
+ * `tabIntroShown`): the top bar drops the tab's icon while the canvas carries
+ * the heading, and says so with an attribute instead of a `:has()` that looks
+ * for the intro.
+ */
+function tabIntroParts(
+  dashboard: DashboardData | null,
+  activeTab: DashboardSummary | null | undefined,
+): TabIntroParts | null {
   // A tab that opens on its own title (a landing page's study name) opts out:
   // "Overview" above it would be the largest and least informative line.
   if (dashboard?.show_tab_header === false) return null;
@@ -44,16 +58,39 @@ const TabIntro: React.FC<TabIntroProps> = ({ dashboard, activeTab }) => {
   const subtitle = typeof dashboard?.subtitle === 'string' ? dashboard.subtitle.trim() : '';
   const description = isChildTab ? subtitle : '';
   if (!name && !description) return null;
-
   const iconRaw = (activeTab?.tab_icon || activeTab?.icon) ?? null;
   const iconColor = (activeTab?.tab_icon_color || activeTab?.icon_color) ?? 'gray';
+  return { name, description, iconRaw, iconColor };
+}
+
+/** True when `TabIntro` draws a heading for this tab. */
+export function tabIntroShown(
+  dashboard: DashboardData | null,
+  activeTab: DashboardSummary | null | undefined,
+): boolean {
+  return tabIntroParts(dashboard, activeTab) !== null;
+}
+
+const TabIntro: React.FC<TabIntroProps> = ({ dashboard, activeTab }) => {
+  const { colorScheme } = useMantineColorScheme();
+  const isDark = colorScheme === 'dark';
+  const parts = tabIntroParts(dashboard, activeTab);
+  if (!parts) return null;
+  const { name, description, iconRaw, iconColor } = parts;
   // Image-path icons (the workflow logos) render as an <img>; dropping them
   // left the MultiQC tab — whose icon is only ever a logo — with a bare title.
   const iconImageSrc = iconRaw && isImagePath(iconRaw) ? themedIconSrc(iconRaw, isDark) : null;
   const showIcon = Boolean(iconRaw);
 
   return (
-    <Box px={0} pt={4} pb={10} className="dc-tab-intro">
+    <Box
+      px={0}
+      pt={4}
+      pb={10}
+      // No icon: the description starts at the left edge, not under the title
+      // (the chrome style reads the class, not the icon's presence in the DOM).
+      className={showIcon ? 'dc-tab-intro' : 'dc-tab-intro dc-tab-intro--bare'}
+    >
       <Group gap={10} align="center" wrap="nowrap">
         {iconImageSrc ? (
           <img

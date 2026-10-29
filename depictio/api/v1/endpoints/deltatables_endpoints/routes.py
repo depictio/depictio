@@ -893,7 +893,7 @@ async def specs(
 
 
 @deltatables_endpoint_router.get("/unique_values/{data_collection_id}")
-async def get_unique_values(
+def get_unique_values(
     data_collection_id: PyObjectId,
     column: str,
     limit: int = 1000,
@@ -902,6 +902,10 @@ async def get_unique_values(
     current_user: str = Depends(get_user_or_anonymous),
 ):
     """Return the sorted unique values of ``column`` within a data collection.
+
+    Synchronous on purpose: the work is blocking (Mongo, S3, Polars), so FastAPI runs
+    it in the thread pool instead of on the event loop, where ~20 option lists
+    requested together used to queue behind each other and stall every other request.
 
     Backs the React viewer's MultiSelect options fetch. Mirrors the code path
     Dash uses via ``load_deltatable_lite(..., load_for_options=True)`` so both
@@ -1010,7 +1014,11 @@ async def get_unique_values(
     # mount of every MultiSelect, on every dashboard load, for a list that only
     # changes when the data does. The aggregation version salt is part of the key,
     # so an ingest invalidates it for free (same contract as the frame cache).
-    from depictio.api.v1.deltatables_utils import _get_aggregation_version
+    from depictio.api.v1.deltatables_utils import (
+        _base_delta_scan,
+        _get_aggregation_version,
+        _get_cached_schema,
+    )
 
     dc_id_str = str(data_collection_id)
     agg_version = _get_aggregation_version(dc_id_str)
@@ -1050,10 +1058,16 @@ async def get_unique_values(
             logger.debug(f"unique_values: cache write failed for {missing_key}: {exc}")
 
     try:
-        lazy = pl.scan_delta(delta_table_location, storage_options=polars_s3_config)
+        # The base scan and the schema are reused per aggregation version: a dashboard
+        # load asks for ~20 option lists at once, and each used to open the Delta
+        # table twice (schema, then data), ~200 ms apiece.
+        lazy = _base_delta_scan(delta_table_location, None, None, agg_version)
         # Schema comes from the Delta log alone: answer "no such column" before
         # any data scan, and cache it.
-        if column not in lazy.collect_schema().names():
+        columns = _get_cached_schema(lazy, dc_id_str, agg_version)
+        if columns is None:
+            columns = frozenset(lazy.collect_schema().names())
+        if column not in columns:
             _remember_missing()
             raise column_missing_exc
 

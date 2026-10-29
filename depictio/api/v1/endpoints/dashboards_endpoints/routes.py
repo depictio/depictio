@@ -10456,7 +10456,8 @@ async def filter_options_endpoint(
     if delta_version is None and kind == "unique":
         from depictio.api.v1.endpoints.deltatables_endpoints.routes import get_unique_values
 
-        return await get_unique_values(
+        return await run_in_threadpool(
+            get_unique_values,
             PyObjectId(dc_id),
             column=column,
             limit=_FILTER_OPTIONS_LIMIT,

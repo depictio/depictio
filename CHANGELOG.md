@@ -3,6 +3,51 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.19.3
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.19.3</summary>
+
+### Changes 📜
+
+#### Improvements 🚀
+
+* perf: dashboard load and interaction (stacked taxonomy rank, filters, Delta scans, CSS :has(), redraws) ([#1286](https://github.com/depictio/depictio/pull/1286)) [f04290adb]
+
+#### Documentation Updates 📚
+
+* docs: rebuild the Slack emojis from the depictio rose animations [a2315e991]
+* docs: add :depictio-parrot:, the party parrot remixed in depictio colours [f9425cafd]
+* docs: add depictio Slack emoji pack generated from the favicon [485f35441]
+
+#### Other Changes 📝
+
+* Bump version: 1.19.2 → 1.19.3 [7f3a668fd]
+* feat(nf-core/ampliseq): Kingdom filter on the Ordination tab, declarative column strips in the reference ([#1292](https://github.com/depictio/depictio/pull/1292)) [9b0da7619]
+* feat(upset): larger dot matrix, set-size bars and annotation strip ([#1287](https://github.com/depictio/depictio/pull/1287)) [821fb5692]
+* feat(viewer): compact docked viz controls, heatmaps keep their authored height ([#1285](https://github.com/depictio/depictio/pull/1285)) [f1e96ed3c]
+* feat(viewer): timeline slider and dots take the component accent ([#1284](https://github.com/depictio/depictio/pull/1284)) [a7eb76094]
+* fix(viewer): bundle Monaco so the figure code editor loads under the CSP ([#1283](https://github.com/depictio/depictio/pull/1283)) [6b01fbd2f]
+* feat(claude): /autopilot command to solve one labelled issue per tick [02617ed11]
+* fix(cli): read run tags through an expression, not Series.unique() ([#1281](https://github.com/depictio/depictio/pull/1281)) [b6b6fe339]
+* fix(cli): read run tags through an expression, not Series.unique() [be550dcd6]
+* Update CHANGELOG.md for v1.19.2 [0d1aa0a66]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.19.2
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable

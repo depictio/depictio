@@ -79,6 +79,11 @@ interface ComplexHeatmapConfig {
   cluster_metric?: 'euclidean' | 'correlation' | 'cosine';
   normalize?: 'none' | 'row_z' | 'col_z' | 'log1p';
   colorscale?: string | null;
+  /** Shortest a row may be drawn (px) when the tile asks the grid for height.
+   *  Default MIN_CELL_PX. */
+  min_cell_px?: number | null;
+  /** Most grid rows the tile may ask for. Default: the advanced_viz ceiling. */
+  max_rows?: number | null;
 }
 
 interface Props {
@@ -309,11 +314,16 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
   // when the columns cluster, and one strip per drawn annotation. Row
   // annotations are a right-side strip and cost no height.
   const drawnRows = dims?.rows ?? 0;
+  const minCellPx = config.min_cell_px ?? MIN_CELL_PX;
+  const maxRows = config.max_rows;
   const bandsPx =
     (clusterCols ? COL_DENDROGRAM_PX : 0) + drawnColAnnotations.length * ANNOTATION_BAND_PX;
   const contentDemand = useMemo(
-    () => demandForItems(drawnRows, MIN_CELL_PX, HEATMAP_CHROME_PX + bandsPx),
-    [drawnRows, bandsPx],
+    () =>
+      demandForItems(drawnRows, minCellPx, HEATMAP_CHROME_PX + bandsPx, {
+        max: maxRows ?? undefined,
+      }),
+    [drawnRows, bandsPx, minCellPx, maxRows],
   );
 
   const colAnnotationData = useMemo(

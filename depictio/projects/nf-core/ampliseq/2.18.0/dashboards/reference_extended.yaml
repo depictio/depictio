@@ -1265,7 +1265,7 @@ tabs:
   - name: Ordination filters
     icon: mdi:filter-variant
     color: pink
-    description: Phylum narrows the rows of the abundance heatmap
+    description: Kingdom and Phylum narrow the rows of the abundance heatmap
   grid_sections:
   - name: Ordination at a glance
     icon: mdi:counter
@@ -1296,6 +1296,24 @@ tabs:
     workflow_tag: ampliseq
     data_collection_tag: complex_heatmap_canonical
     interactive_component_type: MultiSelect
+    column_name: Kingdom
+    column_type: object
+    display:
+      icon_name: mdi:bacteria
+      custom_color: grape
+    section: Ordination filters
+    tag: am-ord-filter-kingdom
+    index: ord-kingdom-filter
+    title: Kingdom
+    layout:
+      x: 0
+      y: 0
+      w: 1
+      h: 3
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: complex_heatmap_canonical
+    interactive_component_type: MultiSelect
     column_name: Phylum
     column_type: object
     display:
@@ -1307,7 +1325,7 @@ tabs:
     title: Phylum
     layout:
       x: 0
-      y: 0
+      y: 3
       w: 1
       h: 3
   - component_type: card
@@ -1396,20 +1414,8 @@ tabs:
       cluster_metric: euclidean
       normalize: none
       colorscale: Blues
-      col_annotations:
-        habitat:
-          SRR10070130: Riverwater
-          SRR10070131: Riverwater
-          SRR10070132: Groundwater
-          SRR10070133: Groundwater
-          SRR10070134: Riverwater
-          SRR10070141: Groundwater
-          SRR10070149: Sediment
-          SRR10070150: Sediment
-          SRR10070151: Sediment
-          SRR10102392: Soil
-          SRR10102393: Soil
-          SRR10102394: Soil
+      col_annotation_cols:
+      - habitat
     section: Sample relationships
     tag: am-ord-bray-curtis
     index: ord-bray-curtis
@@ -1435,20 +1441,8 @@ tabs:
       cluster_method: ward
       cluster_metric: euclidean
       normalize: row_z
-      col_annotations:
-        habitat:
-          SRR10070130: Riverwater
-          SRR10070131: Riverwater
-          SRR10070132: Groundwater
-          SRR10070133: Groundwater
-          SRR10070134: Riverwater
-          SRR10070141: Groundwater
-          SRR10070149: Sediment
-          SRR10070150: Sediment
-          SRR10070151: Sediment
-          SRR10102392: Soil
-          SRR10102393: Soil
-          SRR10102394: Soil
+      col_annotation_cols:
+      - habitat
     section: Clustered abundance
     tag: am-ord-abundance-heatmap
     index: ord-complex-heatmap

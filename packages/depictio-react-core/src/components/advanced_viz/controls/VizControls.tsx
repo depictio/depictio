@@ -537,6 +537,7 @@ export const VizControlsGrid: React.FC<{
       ) : (
         <Stack
           gap={ROW_GAP}
+          className="dpx-viz-grid"
           data-testid={innerTestId}
           data-viz-group-body={groupBody ? '' : undefined}
         >
@@ -626,8 +627,8 @@ export function VizControlGroup({
     );
   }
   return (
-    <Box data-viz-group="" style={{ gridColumn: '1 / -1', minWidth: 0, height: '100%' }}>
-      <Stack gap="xs" justify="space-between" h="100%">
+    <Box data-viz-group="" className="dpx-viz-group" style={{ gridColumn: '1 / -1', minWidth: 0, height: '100%' }}>
+      <Stack gap="xs" justify="space-between" h="100%" className="dpx-viz-group__stack">
         {plan.caption != null ? <Divider label={plan.caption} labelPosition="left" /> : null}
         <VizControlsGrid layout={layout} groupBody>
           {children}

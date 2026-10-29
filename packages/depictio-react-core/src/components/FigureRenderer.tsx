@@ -600,6 +600,12 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   const caption = typeof metadata.caption === 'string' ? metadata.caption.trim() : '';
   const showcaseHeader =
     showcase && Boolean(metadata.title || subtitle || iconName || reductionBadge || groupedBadge || sourceLink);
+  // The plain header row: the title and the figure's status chips. A chrome
+  // style styles the row (`data-headed` on the tile) and, when the title leads
+  // it, the title (`dc-tile-head`), without a `:has()` to look for either.
+  const plainHeader =
+    !showcase &&
+    Boolean(metadata.title || reductionBadge || groupedBadge || missingPointsBadges.length > 0);
 
   return (
     <Paper
@@ -609,6 +615,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       radius="md"
       className="dc-tile dc-tile--figure"
       data-showcase={showcase || undefined}
+      data-headed={plainHeader || undefined}
       style={{
         flex: 1,
         minHeight: 0,
@@ -638,9 +645,13 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
           }
         />
       ) : (
-        !showcase &&
-        (metadata.title || reductionBadge || groupedBadge || missingPointsBadges.length > 0) && (
-          <Group gap="xs" mb="xs" wrap="nowrap">
+        plainHeader && (
+          <Group
+            gap="xs"
+            mb="xs"
+            wrap="nowrap"
+            className={metadata.title ? 'dc-tile-head' : undefined}
+          >
             {metadata.title && (
               <Text fw={600} size="sm">
                 {metadata.title}

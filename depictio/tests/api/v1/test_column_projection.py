@@ -6,6 +6,7 @@ into the effective projection (so filtering never silently drops a column), and
 the schema-guarded scan projection backed by a per-(collection, version) cache.
 """
 
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock
 
 import polars as pl
@@ -208,6 +209,34 @@ class TestProjectScanAndSchemaCache:
         # The v1 entry is untouched under its own key.
         assert set(dtu._DELTA_SCHEMA_CACHE[("dc1", "v1")]) == {"a", "b", "c"}
 
+    def test_column_names_hit_never_builds_the_scan(self, monkeypatch):
+        # The point of `get_cached_column_names`: a hit must not open the Delta
+        # table, which is the ~200 ms S3 round-trip the cache exists to skip.
+        monkeypatch.setattr(dtu, "_version_salt_for", lambda dc, v=None: "v1")
+        make_scan = MagicMock(return_value=self._lf())
+        first = dtu.get_cached_column_names("dc1", make_scan)
+        assert first == frozenset({"a", "b", "c"})
+        assert make_scan.call_count == 1
+        again = dtu.get_cached_column_names("dc1", make_scan)
+        assert again == first
+        assert make_scan.call_count == 1
+
+    def test_column_names_new_version_reads_the_table_again(self, monkeypatch):
+        salts = iter(["v1", "v2"])
+        monkeypatch.setattr(dtu, "_version_salt_for", lambda dc, v=None: next(salts))
+        make_scan = MagicMock(side_effect=[self._lf(), pl.LazyFrame({"a": [1], "z": [2]})])
+        assert dtu.get_cached_column_names("dc1", make_scan) == frozenset({"a", "b", "c"})
+        assert dtu.get_cached_column_names("dc1", make_scan) == frozenset({"a", "z"})
+        assert make_scan.call_count == 2
+
+    def test_column_names_unknown_version_is_not_memoised(self, monkeypatch):
+        # No aggregation version means no safe key; read fresh every time.
+        monkeypatch.setattr(dtu, "_version_salt_for", lambda dc, v=None: None)
+        make_scan = MagicMock(side_effect=lambda: self._lf())
+        dtu.get_cached_column_names("dc1", make_scan)
+        dtu.get_cached_column_names("dc1", make_scan)
+        assert make_scan.call_count == 2
+
     def test_schema_read_failure_returns_none_and_is_not_cached(self):
         bad = MagicMock()
         bad.collect_schema.side_effect = RuntimeError("boom")
@@ -231,3 +260,69 @@ class TestProjectScanAndSchemaCache:
         for i in range(3):
             _get_cached_schema(self._lf(), f"dc{i}", "v")
         assert len(dtu._DELTA_SCHEMA_CACHE) <= 2
+
+
+class TestBaseDeltaScanCache:
+    """`_base_delta_scan` reuses a table's scan per aggregation version."""
+
+    def setup_method(self):
+        dtu._BASE_SCAN_CACHE.clear()
+
+    def test_same_version_builds_the_scan_once(self, monkeypatch):
+        built = MagicMock(side_effect=lambda *a, **k: pl.LazyFrame({"a": [1]}))
+        monkeypatch.setattr(dtu, "_create_delta_scan", built)
+        first = dtu._base_delta_scan("s3://b/dc", "table", None, "v1")
+        again = dtu._base_delta_scan("s3://b/dc", "table", None, "v1")
+        assert again is first
+        assert built.call_count == 1
+
+    def test_new_version_builds_a_fresh_scan(self, monkeypatch):
+        built = MagicMock(side_effect=lambda *a, **k: pl.LazyFrame({"a": [1]}))
+        monkeypatch.setattr(dtu, "_create_delta_scan", built)
+        first = dtu._base_delta_scan("s3://b/dc", "table", None, "v1")
+        second = dtu._base_delta_scan("s3://b/dc", "table", None, "v2")
+        assert second is not first
+        assert built.call_count == 2
+
+    def test_pinned_commit_is_never_served_the_live_scan(self, monkeypatch):
+        built = MagicMock(side_effect=lambda *a, **k: pl.LazyFrame({"a": [1]}))
+        monkeypatch.setattr(dtu, "_create_delta_scan", built)
+        live = dtu._base_delta_scan("s3://b/dc", "table", None, "v1")
+        pinned = dtu._base_delta_scan("s3://b/dc", "table", 3, "v1_dv3")
+        assert pinned is not live
+        assert built.call_count == 2
+
+    def test_unknown_version_is_never_cached(self, monkeypatch):
+        built = MagicMock(side_effect=lambda *a, **k: pl.LazyFrame({"a": [1]}))
+        monkeypatch.setattr(dtu, "_create_delta_scan", built)
+        dtu._base_delta_scan("s3://b/dc", "table", None, None)
+        dtu._base_delta_scan("s3://b/dc", "table", None, None)
+        assert built.call_count == 2
+        assert not dtu._BASE_SCAN_CACHE
+
+    def test_cache_is_bounded(self, monkeypatch):
+        monkeypatch.setattr(dtu, "_BASE_SCAN_CACHE_MAX", 2)
+        monkeypatch.setattr(dtu, "_create_delta_scan", lambda *a, **k: pl.LazyFrame({"a": [1]}))
+        for i in range(5):
+            dtu._base_delta_scan(f"s3://b/dc{i}", "table", None, "v1")
+        assert len(dtu._BASE_SCAN_CACHE) <= 2
+
+    def test_concurrent_callers_from_the_thread_pool(self, monkeypatch):
+        # `get_unique_values` now runs in the thread pool, so callers race on the
+        # dict, including the clear on overflow. Every caller must get a scan of
+        # its own table, and the bound must hold within the number of workers.
+        monkeypatch.setattr(dtu, "_BASE_SCAN_CACHE_MAX", 4)
+        monkeypatch.setattr(
+            dtu, "_create_delta_scan", lambda loc, *a, **k: pl.LazyFrame({"loc": [loc]})
+        )
+        workers = 16
+
+        def call(i: int) -> tuple[str, str]:
+            loc = f"s3://b/dc{i % 10}"
+            scan = dtu._base_delta_scan(loc, "table", None, "v1")
+            return loc, scan.collect()["loc"][0]
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            results = list(pool.map(call, range(400)))
+        assert all(asked == got for asked, got in results)
+        assert len(dtu._BASE_SCAN_CACHE) <= 4 + workers

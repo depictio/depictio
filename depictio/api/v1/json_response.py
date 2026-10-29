@@ -14,6 +14,27 @@ from fastapi.responses import JSONResponse
 
 from depictio.models.models.base import PyObjectId
 
+_PLAIN_TYPES = frozenset({str, int, bool, type(None)})
+_NUMERIC_TYPES = frozenset({int, float, bool, type(None)})
+
+
+def _is_plain_list(items: list) -> bool:
+    """Whether ``json.dumps`` can take this list as it is.
+
+    A column of 773k strings or numbers (an advanced_viz frame) went through the
+    recursion below one element at a time, a Python call each, which cost several
+    seconds and nothing else: none of its elements needs encoding. Exact types,
+    so a subclass (an ObjectId wrapper, an enum) still takes the slow path; a
+    float list is plain only when every value is finite, since NaN and Inf
+    must become null.
+    """
+    kinds = set(map(type, items))
+    if kinds <= _PLAIN_TYPES:
+        return True
+    if kinds <= _NUMERIC_TYPES:
+        return all(math.isfinite(x) for x in items if isinstance(x, float))
+    return False
+
 
 def custom_jsonable_encoder(obj: Any, **kwargs: Any) -> Any:
     """
@@ -35,6 +56,9 @@ def custom_jsonable_encoder(obj: Any, **kwargs: Any) -> Any:
 
     if isinstance(obj, dict):
         return {k: custom_jsonable_encoder(v, **kwargs) for k, v in obj.items()}
+
+    if type(obj) is list and _is_plain_list(obj):
+        return obj
 
     if isinstance(obj, list | tuple | set):
         return [custom_jsonable_encoder(i, **kwargs) for i in obj]
