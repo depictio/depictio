@@ -23,10 +23,16 @@ process DEPICTIO_INGEST {
     path project_config
     // Optional dashboard YAMLs to import with the project.
     path dashboards
-    // CLI configuration (CLI.yaml), or [] for $DEPICTIO_CLI_CONFIG_PATH /
-    // ~/.depictio/CLI.yaml. DEPICTIO_CLI_TOKEN and DEPICTIO_CLI_API_BASE_URL
-    // override the token and URL of whichever file is read; they do not replace it.
+    // CLI configuration (CLI.yaml) of a remote instance, or [] for
+    // $DEPICTIO_CLI_CONFIG_PATH / ~/.depictio/CLI.yaml. DEPICTIO_CLI_TOKEN and
+    // DEPICTIO_CLI_API_BASE_URL override the token and URL of whichever file is
+    // read; they do not replace it.
     path cli_config
+    // '' for the instance cli_config names, or 'local' for the single-user server
+    // `depictio local up` runs on this machine: reused when it runs, started
+    // otherwise. 'local' needs executor 'local' and no container, since the server
+    // must outlive the task.
+    val server
 
     output:
     tuple val(meta), path("${prefix}.depictio.json"), emit: result
@@ -63,7 +69,26 @@ process DEPICTIO_INGEST {
     }
     def dashboard_list = dashboards instanceof List ? dashboards : (dashboards ? [dashboards] : [])
     def dashboard_args = dashboard_list.collect { d -> "--dashboard ${d}" }.join(' ')
-    def server_args = cli_config ? "--server ${cli_config}" : ''
+    def local_server = (server ?: '').toString() == 'local'
+    if (server && !local_server) {
+        error "DEPICTIO_INGEST: server is 'local' or '', not '${server}'; reach a remote instance with cli_config"
+    }
+    if (local_server && cli_config) {
+        error "DEPICTIO_INGEST: server 'local' and a cli_config name two servers; pass one"
+    }
+    if (local_server && task.executor != 'local') {
+        error "DEPICTIO_INGEST: server 'local' needs executor 'local', not '${task.executor}': the server must run where the pipeline is launched"
+    }
+    def server_args = local_server ? '--server local' : (cli_config ? "--server ${cli_config}" : '')
+    // The server's processes run in their own sessions, so they outlive the task,
+    // but not the container a task runs in.
+    def start_local = !local_server ? '' : """
+    if [ -e /.dockerenv ] || [ -e /run/.containerenv ] || [ -n "\${SINGULARITY_CONTAINER:-}\${APPTAINER_CONTAINER:-}" ]; then
+        echo "DEPICTIO_INGEST: server 'local' cannot run inside a container, which stops with the task; disable the container for this process (conda or a local install)" >&2
+        exit 1
+    fi
+    depictio local up --no-open --examples none
+    """
     def result_json = quote.call("${prefix}.depictio.json")
     """
     # Rebuild the published layout the template's scan patterns expect. The
@@ -92,6 +117,7 @@ process DEPICTIO_INGEST {
     mkdir -p data_root
     ${layout}
 
+    ${start_local}
     # Expanded in a project YAML's locations ({DEPICTIO_DATA_ROOT}).
     export DEPICTIO_DATA_ROOT="\$PWD/data_root"
     depictio \\

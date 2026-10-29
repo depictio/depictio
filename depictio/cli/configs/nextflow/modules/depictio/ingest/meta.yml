@@ -56,6 +56,14 @@ input:
         out for `DEPICTIO_CLI_TOKEN` to supply. Pass `[]` to read
         `$DEPICTIO_CLI_CONFIG_PATH` or `~/.depictio/CLI.yaml` instead.
       pattern: "*.{yaml,yml}"
+  - server:
+      type: string
+      description: |
+        `''` for the instance `cli_config` names (or the CLI's default), or
+        `local` for the single-user server `depictio local up` runs on the
+        machine that launched the pipeline: reused when it runs, started
+        otherwise. `local` needs `executor 'local'` and no container.
+      enum: ["", "local"]
 output:
   result:
     - - meta:

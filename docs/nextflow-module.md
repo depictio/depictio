@@ -30,7 +30,7 @@ include { DEPICTIO_INGEST } from './modules/local/depictio/ingest/main'
 The process runs `depictio ingest` with the pipeline's bundled template, which
 brings the template's dashboards with it. Its container is the
 `ghcr.io/depictio/depictio-cli` image of the same release, and its conda
-environment installs `depictio[multiqc]` from PyPI.
+environment installs `depictio[local]` from PyPI: MultiQC for the templates, and the local server for `server 'local'`.
 
 ## Inputs
 
@@ -40,7 +40,8 @@ environment installs `depictio[multiqc]` from PyPI.
 | `val template` | A template id (`nf-core/rnaseq/3.26.0`, `nf-core/rnaseq/latest`), or `''` to let the CLI detect the pipeline from the run's `pipeline_info/` and pick the closest bundled version |
 | `path project_config` | A project YAML for a pipeline with no bundled template, else `[]`. Its `locations` must read `{DEPICTIO_DATA_ROOT}`, which the module sets to the rebuilt results directory |
 | `path dashboards` | Dashboard YAMLs to import with the project, else `[]`. Templates bring their own |
-| `path cli_config` | A `CLI.yaml`, else `[]` to read `$DEPICTIO_CLI_CONFIG_PATH` or `~/.depictio/CLI.yaml` (see [Authentication](#authentication-and-network)) |
+| `path cli_config` | A `CLI.yaml`, else `[]` to read `$DEPICTIO_CLI_CONFIG_PATH` or `~/.depictio/CLI.yaml` (see [Choosing the server](#choosing-the-server)) |
+| `val server` | `''` for the instance `cli_config` names, or `'local'` for the single-user server `depictio local up` runs on the launching machine, started when it does not run yet |
 
 `task.ext.args` is appended to the command, for `--attach-run`, `--project NAME`,
 `--update-config`, `--var NAME=VALUE` and the other `ingest` options. It is
@@ -70,7 +71,7 @@ ch_depictio = ch_multiqc_data
         [ 'multiqc/multiqc_data', 'star_salmon/salmon.merged.gene_counts.tsv' ],
     ] }
 
-DEPICTIO_INGEST(ch_depictio, 'nf-core/rnaseq/3.26.0', [], [], [])
+DEPICTIO_INGEST(ch_depictio, 'nf-core/rnaseq/3.26.0', [], [], [], '')
 ```
 
 The two lists pair up by position, and a size mismatch stops the task, as does
@@ -85,7 +86,7 @@ leave `relpaths` empty:
   ```groovy
   DEPICTIO_INGEST(
       Channel.of([ [id: 'run'], file(params.results, type: 'dir'), [] ]),
-      '', [], [], [],
+      '', [], [], [], '',
   )
   ```
 
@@ -125,6 +126,7 @@ if (params.depictio) {
         '',     // template: detected from pipeline_info/
         [], [],
         params.depictio_cli_config ? file(params.depictio_cli_config, checkIfExists: true) : [],
+        params.depictio_server,   // '' or 'local'
     )
 }
 ```
@@ -135,6 +137,7 @@ In its `nextflow.config`:
 params {
     depictio            = true
     depictio_cli_config = null
+    depictio_server     = ''    // 'local': the depictio local up server
 }
 
 process {
@@ -154,7 +157,7 @@ process {
 }
 ```
 
-Declare `depictio` and `depictio_cli_config` in `nextflow_schema.json` too, or
+Declare the `depictio*` parameters in `nextflow_schema.json` too, or
 nf-schema rejects them.
 
 The route flags are the per-template part: each template documents its
@@ -173,10 +176,28 @@ version (the tested `--skip_alignment` run wrote `multiqc/multiqc_report_data`):
 it comes from the task, not from the copy, and wins over whatever the copy
 holds.
 
-## Authentication and network
+## Choosing the server
 
-The task talks to the Depictio API, so the node it runs on needs network access
-to it. On a cluster whose compute nodes have none, run it on the head node:
+Four set-ups, one module. Each was run end to end against the nf-core/rnaseq
+3.26.0 results: project created, 12 data collections, template dashboard.
+
+| Set-up | `cli_config` | `server` | Secrets | `ext.args` |
+| --- | --- | --- | --- | --- |
+| No server yet, single user | `[]` | `'local'` | none | |
+| A `depictio local up` server already runs | `[]` | `'local'` | none | |
+| A remote instance | its `CLI.yaml` | `''` | `DEPICTIO_CLI_TOKEN` | |
+| A remote multi-user instance, as a given user | its `CLI.yaml` | `''` | `DEPICTIO_AUTH_PROVISIONING_API_KEY` | `--user alice@lab.org` |
+
+### A local server: `server 'local'`
+
+The task runs `depictio local up`, which reuses the server when it runs and
+starts it otherwise (the first start downloads MongoDB, Redis and SeaweedFS,
+about 700 MB, into `~/.depictio/local`), then ingests with `--server local`.
+The server's processes run in their own sessions, so they outlive the task and
+the pipeline: open the link the result JSON gives, and stop it with
+`depictio local down`. `DEPICTIO_LOCAL_HOME` picks another home, as for the CLI.
+
+That only holds where the task shares the machine and its lifetime with you:
 
 ```groovy
 process {
@@ -185,6 +206,13 @@ process {
     }
 }
 ```
+
+The module refuses `server 'local'` on any other executor, and inside a Docker,
+Podman, Singularity or Apptainer container, which stops with the task, with a
+message saying so. Run it with `-profile conda`, whose environment brings
+`depictio[local]`, or with depictio installed on the launching machine.
+
+### A remote instance
 
 The CLI always reads a `CLI.yaml`: the one passed as `cli_config`, else
 `$DEPICTIO_CLI_CONFIG_PATH`, else `~/.depictio/CLI.yaml`, which a container
@@ -208,6 +236,38 @@ process {
 The secret reaches the task's environment without being written into its
 `.command.*` files. A `cli_config` that holds the token is staged like any
 input, so on a cloud executor it is uploaded to the work directory's bucket.
+
+### A multi-user instance, as a given user
+
+On an instance where each run belongs to the person who launched it, the CLI
+provisions that person: `--user` names them, and the instance's provisioning
+key, which the server must have too, comes from a secret. The account is
+created on its first run and reused afterwards, whether provisioning or a
+registration made it; the project and its dashboards are owned by that user,
+and the task log ends with a one-time login link for them (see
+[Pipeline provisioning](pipeline-provisioning-magic-link.md)).
+
+```bash
+nextflow secrets set DEPICTIO_AUTH_PROVISIONING_API_KEY <the instance's key>
+```
+
+```groovy
+process {
+    withName: 'DEPICTIO_INGEST' {
+        secret   = ['DEPICTIO_AUTH_PROVISIONING_API_KEY']
+        ext.args = { "--user ${params.depictio_user}" }
+    }
+}
+```
+
+`cli_config` still names the instance and its storage; its own token is not
+used, the run acting with the provisioned user's.
+
+### Network
+
+The task talks to the Depictio API, so the node it runs on needs network
+access to it. On a cluster whose compute nodes have none, run it on the head
+node with `executor = 'local'`.
 
 ## Failure
 

@@ -73,13 +73,25 @@ class TestInterface:
         emitted = re.findall(r"emit:\s*(\w+)", _main())
         assert list(meta["output"]) == emitted
 
-    def test_every_option_it_passes_is_an_ingest_option(self):
+    def test_every_option_it_passes_is_a_cli_option(self):
         """A renamed or removed CLI option would only surface at the end of a pipeline."""
-        command = typer.main.get_command(app).commands["ingest"]
-        known = {opt for param in command.params for opt in param.opts}
+        root = typer.main.get_command(app)
+
+        def options(command) -> set[str]:
+            return {opt for param in command.params for opt in (*param.opts, *param.secondary_opts)}
+
+        def flags(text: str) -> set[str]:
+            return set(re.findall(r"(?<![\w-])--[a-z][a-z-]+", text))
+
         script = _main().split("script:", 1)[1].split("stub:", 1)[0]
-        passed = set(re.findall(r"(?<![\w-])--[a-z][a-z-]+", script))
-        assert passed and passed <= known, passed - known
+        local_up = re.findall(r"depictio local up([^\n]*)", script)
+        assert local_up, "server 'local' no longer starts the local server"
+        up_flags = flags("".join(local_up))
+        assert up_flags <= options(root.commands["local"].commands["up"]), up_flags
+        ingest_flags = flags(re.sub(r"depictio local up[^\n]*", "", script))
+        assert ingest_flags and ingest_flags <= options(root.commands["ingest"]), (
+            ingest_flags - options(root.commands["ingest"])
+        )
 
     def test_directories_are_staged_as_real_trees(self):
         """The scan skips symlinked directories, so linking one whole loses its files."""
@@ -98,7 +110,7 @@ class TestPinsFollowThePackageVersion:
 
     def test_conda_pin(self):
         env = (INGEST / "environment.yml").read_text()
-        assert re.findall(r"depictio\[multiqc\]==(\S+)", env) == [_package_version()]
+        assert re.findall(r"depictio\[local\]==(\S+)", env) == [_package_version()]
 
     def test_bumpversion_rewrites_both_pins(self):
         cfg = configparser.ConfigParser(interpolation=None)
