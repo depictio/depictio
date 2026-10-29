@@ -85,8 +85,9 @@ def compose_override(mongo_version: str, seaweedfs_version: str, user: str | Non
     """The override that points the stock docker-compose.yaml at the exported data.
 
     SeaweedFS runs the exact version the local server wrote the data with, and
-    MongoDB the same series, raised to a patch release that starts on recent
-    kernels (``mongo_image_tag``). Paths are relative to the export directory, so it can be moved. The key
+    MongoDB the same series, raised to a recent patch release
+    (``mongo_image_tag``) and run with glibc owning rseq, without which the
+    image refuses to start on Linux 6.19 and newer. Paths are relative to the export directory, so it can be moved. The key
     files are mounted one by one over the keys volume: the API also writes a lock
     file next to them, which a bind-mounted directory owned by the host user would
     refuse to the image's own user.
@@ -101,6 +102,9 @@ def compose_override(mongo_version: str, seaweedfs_version: str, user: str | Non
         "services:\n"
         "  mongo:\n"
         f"    image: mongo:{mongo_image_tag(mongo_version)}\n"
+        # The release's compose file may predate it: see docker-compose.yaml.
+        "    environment:\n"
+        "      GLIBC_TUNABLES: glibc.pthread.rseq=1\n"
         f"{run_as}"
         "    volumes:\n"
         "      - ./data/mongo:/data/db\n"

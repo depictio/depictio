@@ -14,6 +14,11 @@ services:
     image: mongo:8.0.34
     container_name: mongo
     command: mongod --port 27018
+    environment:
+      # The official image sets glibc.pthread.rseq=0, and mongod then refuses
+      # Linux 6.19+ (SERVER-121912). Letting glibc own rseq moves tcmalloc to
+      # per-thread caches, the path that does not crash.
+      GLIBC_TUNABLES: glibc.pthread.rseq=1
     volumes:
       - mongo_data:/data/db
     # Internal-only: no host port — don't publish the DB.
