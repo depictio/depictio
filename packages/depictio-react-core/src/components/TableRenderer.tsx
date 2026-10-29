@@ -1034,7 +1034,9 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       }}
     >
       {(metadata.title || rowBadge) && (
-        <Group gap="xs" mb="xs" wrap="nowrap">
+        // `dc-tile-head`: the title leads the row (a chrome style reads the
+        // class instead of looking into the row with `:has()`).
+        <Group gap="xs" mb="xs" wrap="nowrap" className={metadata.title ? 'dc-tile-head' : undefined}>
           {metadata.title && (
             <Text fw={600} size="sm">
               {metadata.title}

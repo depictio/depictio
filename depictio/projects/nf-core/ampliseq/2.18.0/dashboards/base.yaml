@@ -916,7 +916,7 @@ tabs:
   - name: Ordination filters
     icon: mdi:filter-variant
     color: pink
-    description: Phylum narrows the rows of the abundance heatmap
+    description: Kingdom and Phylum narrow the rows of the abundance heatmap
   grid_sections:
   - name: Ordination at a glance
     icon: mdi:counter
@@ -946,6 +946,20 @@ tabs:
     workflow_tag: ampliseq
     data_collection_tag: complex_heatmap_canonical
     interactive_component_type: MultiSelect
+    column_name: Kingdom
+    column_type: object
+    display:
+      icon_name: mdi:bacteria
+      custom_color: grape
+    section: Ordination filters
+    tag: am-ord-filter-kingdom
+    index: ord-kingdom-filter
+    title: Kingdom
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: complex_heatmap_canonical
+    interactive_component_type: MultiSelect
     column_name: Phylum
     column_type: object
     display:
@@ -955,7 +969,7 @@ tabs:
     tag: am-ord-filter-phylum
     index: ord-phylum-filter
     title: Phylum
-    layout: {x: 0, y: 0, w: 1, h: 3}
+    layout: {x: 0, y: 3, w: 1, h: 3}
   # Two cards: the R² one exists only when the run tested a PERMANOVA formula,
   # and the import widens the samples card to the full row without it.
   - component_type: card

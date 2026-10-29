@@ -936,7 +936,7 @@ button.gp-status:focus-visible {
 :root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-root[data-variant='dot'] {
   --gp-tag-dot: var(--badge-dot-color);
 }
-:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-root:not(:has(> .mantine-Badge-section))::before {
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-root:not([data-with-left-section], [data-with-right-section])::before {
   content: '';
   flex: none;
   width: 7px;

@@ -38,6 +38,7 @@ cd /path/to/depictio && claude
 │   ├── logs.md           # /logs - View service logs
 │   ├── review.md         # /review - Code review helper
 │   ├── db.md             # /db - Database operations
+│   ├── autopilot.md      # /autopilot - Solve one `autopilot`-labelled issue end to end
 │   └── arch.md           # /arch - Architecture explorer
 ├── workflows/            # Development workflow guides
 │   ├── new-feature.md    # Feature implementation workflow
