@@ -77,7 +77,9 @@ def test_export_compose_copies_data_and_pins_the_local_versions(
     assert "ip.bind=127.0.0.1" in (paths.home / "s3" / "mini.options").read_text()
     assert (out / "data" / "keys" / "private_key.pem").read_text() == "private_key.pem"
     override = (out / "docker-compose.override.yaml").read_text()
-    assert "image: mongo:8.0.23" in override
+    # The local 8.0.23 data runs on the newest 8.0 image: older ones refuse
+    # Linux 6.19+ kernels (SERVER-121912).
+    assert "image: mongo:8.0.34" in override
     assert "image: chrislusf/seaweedfs:4.46" in override
     assert "./data/mongo:/data/db" in override
     assert f'user: "{local_compose.os.getuid()}:{local_compose.os.getgid()}"' in override
@@ -240,3 +242,16 @@ def test_an_unwritable_out_is_refused_before_stopping_the_server(
     finally:
         parent.chmod(0o755)
     source.stop_all.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("installed", "image"),
+    [
+        ("8.0.23", "8.0.34"),  # conda-forge's only 8.0 build
+        ("8.0.4", "8.0.34"),
+        ("8.0.40", "8.0.40"),  # never downgraded
+        ("8.2.1", "8.2.1"),  # no floor for that series
+    ],
+)
+def test_the_mongo_image_is_one_that_starts_on_recent_kernels(installed, image):
+    assert local_compose.mongo_image_tag(installed) == image

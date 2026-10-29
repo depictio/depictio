@@ -36,6 +36,11 @@ COMPOSE_URL = "https://raw.githubusercontent.com/depictio/depictio/v{version}/do
 # Data carried over. Redis holds only cache and queue, and thumbnails are re-rendered.
 EXPORTED_DIRS = ("mongo", "s3")
 KEY_FILES = ("private_key.pem", "public_key.pem", "api_internal_key.pem")
+# The oldest official mongo image each series is exported to. Before 8.0.30 the
+# image refuses to start on Linux 6.19 and newer (SERVER-121912, lifted for fixed
+# kernels by SERVER-125742), which is what CI runners and current distributions
+# run. A patch release reads the data of any other in its series.
+MONGO_IMAGE_FLOOR = {"8.0": "8.0.34"}
 
 
 def release_version() -> str | None:
@@ -64,11 +69,24 @@ def installed_version(paths: Paths, package: str) -> str:
     )
 
 
+def mongo_image_tag(installed: str) -> str:
+    """The mongo image tag for data the local ``installed`` version wrote."""
+    floor = MONGO_IMAGE_FLOOR.get(".".join(installed.split(".")[:2]))
+    if floor is None:
+        return installed
+
+    def key(version: str) -> tuple[int, ...]:
+        return tuple(int(part) for part in version.split("."))
+
+    return max(installed, floor, key=key)
+
+
 def compose_override(mongo_version: str, seaweedfs_version: str, user: str | None) -> str:
     """The override that points the stock docker-compose.yaml at the exported data.
 
-    Mongo and SeaweedFS run the exact versions the local server wrote the data
-    with. Paths are relative to the export directory, so it can be moved. The key
+    SeaweedFS runs the exact version the local server wrote the data with, and
+    MongoDB the same series, raised to a patch release that starts on recent
+    kernels (``mongo_image_tag``). Paths are relative to the export directory, so it can be moved. The key
     files are mounted one by one over the keys volume: the API also writes a lock
     file next to them, which a bind-mounted directory owned by the host user would
     refuse to the image's own user.
@@ -82,7 +100,7 @@ def compose_override(mongo_version: str, seaweedfs_version: str, user: str | Non
         "# of a local server. docker compose reads it next to docker-compose.yaml.\n"
         "services:\n"
         "  mongo:\n"
-        f"    image: mongo:{mongo_version}\n"
+        f"    image: mongo:{mongo_image_tag(mongo_version)}\n"
         f"{run_as}"
         "    volumes:\n"
         "      - ./data/mongo:/data/db\n"
