@@ -61,17 +61,19 @@ process DEPICTIO_INGEST {
     """
     # Rebuild the published layout the template's scan patterns expect. The
     # scan does not descend into symlinked directories, so directories are
-    # recreated for real with their files linked, never linked whole.
+    # recreated for real with their files linked, never linked whole. A later
+    # entry wins over an earlier one at the same path, so a fresh copy of a
+    # file can be laid over a results directory.
     stage_into() {
         local src dst
         src=\$(readlink -f "\$1")
         dst="data_root/\$2"
         if [ -d "\$src" ]; then
             mkdir -p "\$dst"
-            cp -rs "\$src/." "\$dst/"
+            cp -rsf "\$src/." "\$dst/"
         else
             mkdir -p "\$(dirname "\$dst")"
-            ln -s "\$src" "\$dst"
+            ln -sfn "\$src" "\$dst"
         fi
     }
     mkdir -p data_root

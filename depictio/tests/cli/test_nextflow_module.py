@@ -71,7 +71,7 @@ class TestInterface:
 
     def test_directories_are_staged_as_real_trees(self):
         """The scan skips symlinked directories, so linking one whole loses its files."""
-        assert 'cp -rs "$src/." "$dst/"' in _main().replace("\\$", "$")
+        assert 'cp -rsf "$src/." "$dst/"' in _main().replace("\\$", "$")
 
     def test_the_cli_is_called_as_depictio(self):
         main = _main()

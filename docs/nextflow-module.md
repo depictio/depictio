@@ -66,8 +66,10 @@ ch_depictio = ch_multiqc_data                       // multiqc/multiqc_data
 DEPICTIO_INGEST(ch_depictio, '', [], [], [])
 ```
 
-The two lists pair up by position, and a size mismatch stops the task. Two
-shortcuts leave `relpaths` empty:
+The two lists pair up by position, and a size mismatch stops the task. When
+two entries land on the same path, the later one wins and the rest of the
+earlier one is kept, so a fresh copy of some files can be laid over a whole
+results directory. Two shortcuts leave `relpaths` empty:
 
 - **One directory** is used as the results directory itself. This is the
   simplest way to run the module on the results of a run that already finished:
@@ -81,6 +83,80 @@ shortcuts leave `relpaths` empty:
 
 - **Several files** are laid out flat, which suits a project YAML whose scan
   patterns match file names only.
+
+## In an nf-core pipeline
+
+An nf-core template reads files from all over the results directory (the
+rnaseq one reads about thirty globs), so wiring each of them through `relpaths`
+is not worth it. Hand over the results directory once the run's last process,
+MultiQC, is done, plus the samplesheet, which nf-core does not publish but the
+templates read from `input/`. This was run end to end on nf-core/rnaseq 3.26.0
+(`-profile test,conda`): the pipeline finished, the module ingested 10 data
+collections and created the template's dashboard.
+
+In the pipeline's `main.nf`, after the main workflow:
+
+```groovy
+include { DEPICTIO_INGEST } from './modules/local/depictio/ingest/main'
+
+if (params.depictio) {
+    def samplesheet = file(params.input)
+    DEPICTIO_INGEST(
+        NFCORE_RNASEQ.out.multiqc_report
+            .collect()
+            .map { _reports -> [
+                [ id: workflow.runName ],
+                [ file(params.outdir, type: 'dir'), samplesheet ],
+                [ '.', "input/${samplesheet.name}" ],
+            ] },
+        '',     // template: from the manifest, nf-core/rnaseq/<version>
+        [], [],
+        params.depictio_cli_config ? file(params.depictio_cli_config, checkIfExists: true) : [],
+    )
+}
+```
+
+In its `nextflow.config`:
+
+```groovy
+params {
+    depictio            = true
+    depictio_cli_config = null
+}
+
+process {
+    withName: 'DEPICTIO_INGEST' {
+        executor      = 'local'
+        errorStrategy = 'ignore'
+        ext.args      = { [
+            // One project per run. A '/' in a project name breaks the CLI's
+            // lookup by name, hence the last part of the manifest name only.
+            "--project '${workflow.manifest.name.tokenize('/').last()} ${workflow.runName}'",
+            // The template's route flags, from the run's own parameters.
+            params.skip_alignment                   ? '--var PSEUDOALIGNER_ONLY=true'        : '',
+            (params.skip_multiqc || params.skip_qc) ? '--var SKIP_MULTIQC=true'              : '',
+            params.skip_quantification_merge        ? '--var SKIP_QUANTIFICATION_MERGE=true' : '',
+        ].findAll { a -> a }.join(' ') }
+    }
+}
+```
+
+Declare `depictio` and `depictio_cli_config` in `nextflow_schema.json` too, or
+nf-schema rejects them.
+
+The route flags are the per-template part: each template documents its
+variables in its `template.yaml`, and the pipeline is the one place that knows
+its own parameters. The CLI reads a run's `params.json` for ampliseq only, so
+without them a `--skip_alignment` rnaseq run looks for `star_salmon/` and
+fails.
+
+The results directory is read as published, so it relies on MultiQC's own
+outputs having been copied by the time the module starts. Publishing is
+asynchronous; in the tested run it had finished, but a slow file system can
+lag. When that matters, add MultiQC's `data` output as a further `files`
+entry at its published path (`multiqc/multiqc_report_data` for a
+`--skip_alignment` run, `multiqc/<aligner>/multiqc_report_data` otherwise): it
+comes from the task, not from the copy, and wins over whatever the copy holds.
 
 ## Authentication and network
 
