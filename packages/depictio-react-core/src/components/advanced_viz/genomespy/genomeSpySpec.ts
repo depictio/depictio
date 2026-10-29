@@ -28,6 +28,10 @@
  *    container-wide overlay for it and `gridChild.js` deliberately skips it so
  *    the controllers do not double up.
  */
+import { sequentialColorMap, type ColorScaleSpec } from '../../../categoryColors';
+import { sortNaturalOrDuration } from '../../../durationOrder';
+import { brushTrigger, laneCursor, specInteractionMode } from './interactionMode';
+import type { InteractionMode } from './interactionMode';
 
 export interface GenomeViewConfig {
   /** `table` reads rows from /advanced_viz/data; `file` hands GenomeSpy an
@@ -40,6 +44,8 @@ export interface GenomeViewConfig {
   end_col?: string | null;
   sample_col?: string | null;
   category_col?: string | null;
+  /** Colour the marks along a sequential ramp instead of one hue per value. */
+  color_scale?: ColorScaleSpec | null;
   mark?: 'point' | 'rect' | 'bar';
   facet_by_sample?: boolean;
   max_facets?: number;
@@ -52,17 +58,30 @@ export interface GenomeViewConfig {
   point_size?: number;
   opacity?: number;
   region_filter_enabled?: boolean;
-  /** `select` (default): a drag brushes a region. `pan`: a drag moves the
-   *  view and shift + drag brushes. */
-  drag_mode?: 'select' | 'pan';
+  /** What the pointer does on the axis (see `interactionMode.ts`). The
+   *  renderer resolves its opening value (`initialInteractionMode`) and hands
+   *  the live one here; unset, the spec follows `drag_mode`. */
+  interaction_mode?: InteractionMode | null;
+  /** The older field: `select` (a drag brushes a region) or `pan` (a drag moves
+   *  the view and shift + drag brushes). Only read when `interaction_mode` is
+   *  unset. */
+  drag_mode?: 'select' | 'pan' | null;
+  /** Panning and zooming this axis moves the browsers that follow other genome
+   *  tiles (default off: only a brushed region does). */
+  publish_view_window?: boolean;
+  /** The tile's height follows its content instead of the stored grid height. */
+  auto_height?: boolean;
   follow_region_filter?: boolean;
   /** `chr1:10,000,000-12,000,000`: the region the section opens on, emitted
    *  once on the tile's first render. See `defaultRegion.ts`. */
   default_region?: string | null;
-  /** Fixed height of each stacked lane in px; unset, they share the tile. */
+  /** Fixed height of each stacked lane in px; unset, they share the tile
+   *  (never under `FACET_LANE_HEIGHT` nor over `FACET_LANE_MAX_HEIGHT`). */
   lane_height?: number | null;
   /** On opening: the whole chromosome of the region (default) or the region. */
   default_view?: 'chromosome' | 'region';
+  /** On opening: the chromosome the genome browser shows, not the whole genome. */
+  open_on_view_window?: boolean;
   selection_enabled?: boolean;
   selection_column?: string | null;
   // --- source: 'file' only -------------------------------------------------
@@ -96,6 +115,10 @@ export interface GenomeSpyThemeColors {
    *  `trackSampleColours`): a lane, or a sample's marks, wear its track's
    *  colour, so one library is one colour on both tiles. */
   laneColors?: Record<string, string> | null;
+  /** Group value → colour of the genome browser tiles' `color_by` /
+   *  `color_scale` (see `useTrackGroupColours`): a category (or a
+   *  `color_scale` value) the browsers colour keeps that colour here. */
+  groupColors?: Record<string, string> | null;
   /** The one colour of marks no category, lane colour or pin names. Unset:
    *  the palette's first hue. */
   neutral?: string | null;
@@ -132,7 +155,14 @@ export interface OverlayColors {
   selectionColor?: string;
   /** The overlay labels. */
   labelColor?: string;
+  /** Opacity of the window band's fill (0 to 1). The renderer raises it on a
+   *  dark theme, where a faint tint of the link colour all but disappears.
+   *  Default `DEFAULT_WINDOW_OPACITY`. */
+  windowOpacity?: number;
 }
+
+/** Fill of the genome browser's window band when the theme does not say. */
+export const DEFAULT_WINDOW_OPACITY = 0.16;
 
 export interface BuildSpecInput {
   rows: Record<string, unknown[]>;
@@ -164,10 +194,34 @@ export interface BuiltGenomeSpec {
   rowCount: number;
   /** Genes drawn in the annotation lane. */
   geneCount: number;
+  /** Stacked lanes scroll inside the embed (fixed `lane_height`, or fitted
+   *  lanes in a tile too short for their floor): the genome axis is its own
+   *  view under the viewport, so it stays in sight, and the tile must give the
+   *  embed the tile's height instead of scrolling it. */
+  scrolls: boolean;
+  /** The colour a row's mark wears (null: the neutral one), for a hover to
+   *  hand to the tiles that draw it. */
+  colorOf: (datum: Readonly<Record<string, unknown>>) => string | null;
   /** Names of the named data sources that feed the overlay layers, one pair
    *  per data lane (see `overlaySourceNames`). Empty without `colors.overlay`. */
   overlays: OverlaySources[];
 }
+
+/** Name of the axis-only view under a scrolling stack of lanes. */
+export const STICKY_AXIS_NAME = 'axis';
+/** The x axis of a lane in a scrolling stack: the chromosome grid lines stay,
+ *  nothing is drawn (and no room reserved) for labels, ticks or a domain line;
+ *  the sticky axis view underneath carries those. */
+const GRID_ONLY_AXIS = {
+  chromGrid: true,
+  title: null,
+  labels: false,
+  ticks: false,
+  domain: false,
+  minExtent: 0,
+  labelPadding: 0,
+  tickSize: 0,
+};
 
 /** Name of the dataset the spec reads; `api.datasets.set(DATASET_NAME, …)`
  *  replaces it live. */
@@ -180,6 +234,8 @@ export const GENES_DATASET_NAME = 'genes';
 export const PICK_PARAM = 'pick';
 /** Interval selection param along the genome axis, declared once on the root. */
 export const BRUSH_PARAM = 'brush';
+/** Top-level param holding the colour of the hover rule (a CSS colour). */
+export const HOVER_COLOR_PARAM = 'depictio_hover_color';
 /** Named data source of the band the genome browser's visible window draws. */
 export const WINDOW_SOURCE = 'depictioWindow';
 /** Named data source of the rule a hovered feature draws. */
@@ -249,23 +305,55 @@ export function rowsToObjects(
 }
 
 /**
+ * The lanes a faceted tile draws from `rows` (its sample column's values,
+ * sorted and capped at `max_facets`, as `facetValues` keeps them), as one
+ * string; `null` for a tile that is not faceted.
+ */
+export function facetKeyOf(
+  rows: Record<string, unknown[]> | null,
+  config: Pick<GenomeViewConfig, 'facet_by_sample' | 'sample_col' | 'max_facets'>,
+): string | null {
+  if (!rows || !config.facet_by_sample || !config.sample_col) return null;
+  const column = rows[config.sample_col];
+  if (!column) return null;
+  const seen = new Set<string>();
+  for (const v of column) if (v !== null && v !== undefined && v !== '') seen.add(String(v));
+  const sorted = sortNaturalOrDuration([...seen]);
+  return JSON.stringify(sorted.slice(0, Math.max(1, config.max_facets ?? 8)));
+}
+
+/**
  * The rows the spec is built from: the first fetch that carries at least one
  * usable row, kept for the life of the tile.
  *
  * A fetch with no usable rows (the tile mounted under a persistent filter that
  * matches nothing) must not become the seed: `contigsFromRows` would derive an
  * empty assembly and every later fetch would be swapped into a spec with no
- * contigs to draw on. Once a seed is latched it is never replaced, so a later
- * empty fetch only empties the dataset and the embed stays up.
+ * contigs to draw on. Once a seed is latched a later empty fetch only empties
+ * the dataset and the embed stays up.
+ *
+ * One thing replaces a latched seed: the lanes of a faceted tile. They are
+ * part of the spec, so a seed fixes them, and a dashboard filter that narrows
+ * or widens the libraries (a time point, a group) would otherwise leave the
+ * lanes of the first fetch in place, empty ones for what was filtered out and
+ * none for what came back. A fetch that carries other lanes seeds the spec
+ * again (the embed is rebuilt once per change of lanes, not per filter move).
  */
 export function latchSeedRows(
   seed: Record<string, unknown[]> | null,
   rows: Record<string, unknown[]> | null,
   chrCol: string,
   posCol: string,
+  facets?: Pick<GenomeViewConfig, 'facet_by_sample' | 'sample_col' | 'max_facets'> | null,
 ): Record<string, unknown[]> | null {
-  if (seed) return seed;
-  if (!rows) return null;
+  if (!rows) return seed;
+  if (seed) {
+    if (!facets || rows === seed) return seed;
+    const key = facetKeyOf(rows, facets);
+    if (key === null || key === facetKeyOf(seed, facets)) return seed;
+    // Lanes changed: only a fetch that has rows to draw them on counts.
+    return rowsToObjects(rows, [], chrCol, posCol).length > 0 ? rows : seed;
+  }
   return rowsToObjects(rows, [], chrCol, posCol).length > 0 ? rows : null;
 }
 
@@ -302,6 +390,8 @@ export function requiredColumns(config: GenomeViewConfig, selectionColumn?: stri
     config.feature_col,
     config.sample_col,
     config.category_col,
+    config.color_scale?.column,
+    config.color_scale?.order_by,
     selectionColumn,
   ]) {
     if (c && !cols.includes(c)) cols.push(c);
@@ -345,9 +435,10 @@ export function facetValues(
     set.add(s);
     seen.push(s);
   }
-  seen.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  // Lanes of a time course run in time: `GM_30min` before `GM_1h`.
+  const ordered = sortNaturalOrDuration(seen);
   const cap = Math.max(1, maxFacets);
-  return { kept: seen.slice(0, cap), dropped: Math.max(0, seen.length - cap) };
+  return { kept: ordered.slice(0, cap), dropped: Math.max(0, ordered.length - cap) };
 }
 
 // --- Linearised genome coordinates ----------------------------------------
@@ -406,15 +497,18 @@ export function regionFromInterval(
 const ANNOTATION_LANE_HEIGHT = 34;
 /** Minimum height of one data lane once several are stacked. */
 export const FACET_LANE_HEIGHT = 26;
-/** A stacked lane takes its share of the tile and never less than its floor,
+/** Height one data lane takes at most when it fits the tile, so a few lanes in
+ *  a tall tile stay lanes instead of stretching into slabs. */
+export const FACET_LANE_MAX_HEIGHT = 160;
+/** A stacked lane takes its share of the tile between its floor and its cap,
  *  so a taller tile, or the tile in fullscreen, draws taller lanes. */
-const FACET_LANE_SIZE = { grow: 1, minPx: FACET_LANE_HEIGHT };
+const FACET_LANE_SIZE = { grow: 1, minPx: FACET_LANE_HEIGHT, maxPx: FACET_LANE_MAX_HEIGHT };
+
+export type LaneSize = number | { grow: number; minPx: number; maxPx?: number };
 
 /** Unset, lanes share the tile (fit, a resize redraws them); set, each lane
  *  is that tall whatever the tile, which scrolls when they do not fit. */
-export function laneSize(
-  laneHeight: number | null | undefined,
-): number | { grow: number; minPx: number } {
+export function laneSize(laneHeight: number | null | undefined): LaneSize {
   return laneHeight ? laneHeight : FACET_LANE_SIZE;
 }
 
@@ -447,12 +541,54 @@ function colourEncoding(
   };
 }
 
+/** A `color_scale` resolved against the rows: the column, its values in
+ *  scale order and the ramp colour of each. */
+export interface ResolvedColorScale {
+  column: string;
+  domain: string[];
+  colours: Record<string, string>;
+}
+
 /**
- * The marks' colour: by `category_col` when the rows carry one (dashboard pins,
- * then the palette); else by sample, from the genome browser tracks of the same
- * samples (`laneColors`) or the dashboard's pins on the sample column; else one
- * neutral colour. A chromosome is never a colour of its own: the axis already
- * separates them, and a hue per contig reads as a grouping the data lacks.
+ * The colour of every distinct value of `scale.column` in `data`, along the
+ * ramp. A value is placed by the first non-empty `order_by` it appears with.
+ * Null without a scale or when the column holds nothing.
+ */
+export function resolveColorScale(
+  data: readonly Record<string, unknown>[],
+  scale: ColorScaleSpec | null | undefined,
+): ResolvedColorScale | null {
+  if (!scale?.column) return null;
+  const keys = new Map<string, string | number>();
+  const values: string[] = [];
+  for (const d of data) {
+    const v = d[scale.column];
+    if (v === null || v === undefined || v === '') continue;
+    const value = String(v);
+    values.push(value);
+    if (scale.order_by && !keys.has(value)) {
+      const k = d[scale.order_by];
+      if (k !== null && k !== undefined && k !== '') keys.set(value, typeof k === 'number' ? k : String(k));
+    }
+  }
+  if (!values.length) return null;
+  const map = sequentialColorMap(values, scale.order_by ? keys : null, scale.scheme);
+  return {
+    column: scale.column,
+    domain: [...map.keys()],
+    colours: Object.fromEntries(map),
+  };
+}
+
+/**
+ * The marks' colour: by `color_scale` when the tile has one (a sequential
+ * ramp over the column, a genome browser's colour for the same value winning);
+ * else by `category_col` when the rows carry one (the browsers' group colours,
+ * dashboard pins, then the palette); else by sample, from the genome browser
+ * tracks of the same samples (`laneColors`) or the dashboard's pins on the
+ * sample column; else one neutral colour. A chromosome is never a colour of
+ * its own: the axis already separates them, and a hue per contig reads as a
+ * grouping the data lacks.
  */
 function markColour(
   config: GenomeViewConfig,
@@ -460,15 +596,21 @@ function markColour(
   categories: string[],
   samples: string[],
   laneSample: string | undefined,
+  scale: ResolvedColorScale | null = null,
 ): Record<string, unknown> {
   const neutral = colors.neutral || colors.palette[0];
+  if (scale) {
+    const shared = { ...colors.groupColors, ...colors.laneColors };
+    if (laneSample !== undefined && scale.column === config.sample_col) {
+      return { value: shared[laneSample] ?? scale.colours[laneSample] ?? neutral };
+    }
+    return colourEncoding(scale.column, scale.domain, [neutral], { ...scale.colours, ...shared });
+  }
   if (config.category_col && categories.length) {
-    return colourEncoding(
-      config.category_col,
-      categories,
-      colors.palette,
-      colors.pinned?.[config.category_col],
-    );
+    return colourEncoding(config.category_col, categories, colors.palette, {
+      ...colors.groupColors,
+      ...colors.pinned?.[config.category_col],
+    });
   }
   const sampleCol = config.sample_col;
   const bySample = {
@@ -482,6 +624,47 @@ function markColour(
   return { value: neutral };
 }
 
+/**
+ * The colour `markColour` gives a row, as a CSS colour, or null when the row
+ * wears the neutral one (nothing a hovered mark should hand to another tile).
+ * Mirrors `markColour` branch for branch: the two must agree, since this is
+ * what a hover publishes as `HighlightEvent.color` so the band it draws on a
+ * genome browser wears the colour of the mark the reader is on.
+ */
+export function markColourOf(
+  config: GenomeViewConfig,
+  colors: GenomeSpyThemeColors,
+  categories: string[],
+  scale: ResolvedColorScale | null = null,
+): (datum: Readonly<Record<string, unknown>>) => string | null {
+  const valueOf = (d: Readonly<Record<string, unknown>>, col: string | null | undefined) => {
+    const v = col ? d[col] : undefined;
+    return v === null || v === undefined || v === '' ? null : String(v);
+  };
+  if (scale) {
+    const shared = { ...colors.groupColors, ...colors.laneColors };
+    return (d) => {
+      const v = valueOf(d, scale.column);
+      return v === null ? null : (shared[v] ?? scale.colours[v] ?? null);
+    };
+  }
+  if (config.category_col && categories.length) {
+    const overrides = { ...colors.groupColors, ...colors.pinned?.[config.category_col] };
+    return (d) => {
+      const v = valueOf(d, config.category_col);
+      if (v === null) return null;
+      const i = categories.indexOf(v);
+      return overrides[v] ?? (i >= 0 ? colors.palette[i % colors.palette.length] : null);
+    };
+  }
+  const sampleCol = config.sample_col;
+  const bySample = { ...(sampleCol ? colors.pinned?.[sampleCol] : null), ...colors.laneColors };
+  return (d) => {
+    const v = valueOf(d, sampleCol);
+    return v === null ? null : (bySample[v] ?? null);
+  };
+}
+
 function markFor(
   mark: 'point' | 'rect' | 'bar',
   config: GenomeViewConfig,
@@ -490,7 +673,10 @@ function markFor(
   // A bar has to stay visible when a whole chromosome is a handful of pixels
   // wide, hence the clamped minimum width and the opacity floor that keeps the
   // clamping from fading it away entirely.
-  return { type: 'rect', minWidth: mark === 'bar' ? 1 : 0.5, minOpacity: 0.4 };
+  if (mark === 'bar') return { type: 'rect', minWidth: 1, minOpacity: 0.4 };
+  // An interval is drawn as a level segment at its score (see `y2` in
+  // `unitLayer`), so it needs a floor on its height as well as its width.
+  return { type: 'rect', minWidth: 0.5, minHeight: 2, minOpacity: 0.4 };
 }
 
 /**
@@ -579,7 +765,13 @@ function buildOverlayLayers(
     {
       name: `${lane}-window`,
       data: { name: sources.window },
-      mark: { type: 'rect', color: overlay.windowColor, opacity: 0.06, minWidth: 2, tooltip: null },
+      mark: {
+        type: 'rect',
+        color: overlay.windowColor,
+        opacity: overlay.windowOpacity ?? DEFAULT_WINDOW_OPACITY,
+        minWidth: 2,
+        tooltip: null,
+      },
       encoding: span,
     },
     ...edges(`${lane}-window`, sources.window, overlay.windowColor, {
@@ -596,7 +788,12 @@ function buildOverlayLayers(
   layers.push({
     name: `${lane}-hover`,
     data: { name: sources.hover },
-    mark: { type: 'rule', color: overlay.hoverColor, size: 1.5, tooltip: null },
+    // The rule wears the colour of the tile that hovered, held in a param the
+    // renderer sets (`HOVER_COLOR_PARAM`). Not a colour encoding on the rows:
+    // a `scale: null` colour channel has no range for GenomeSpy's WebGL range
+    // texture ("o.range is not a function"), and a real scale next to the marks'
+    // own colour scale cannot be merged ("Cannot merge objects with nulls!").
+    mark: { type: 'rule', color: { expr: HOVER_COLOR_PARAM }, size: 1.5, tooltip: null },
     encoding: { x: x('pos') },
   });
   return layers;
@@ -619,11 +816,15 @@ function buildDataLane(
     title?: string;
     /** Leave the y axis untitled (stacked lanes: the lane title names it). */
     noYTitle?: boolean;
-    height?: number | { grow: number; minPx: number };
+    height?: LaneSize;
     overlay?: { sources: OverlaySources; colors: OverlayColors; labelled: boolean };
+    scale?: ResolvedColorScale | null;
+    /** The lane sits in a scrolling stack whose axis is drawn apart (see
+     *  `STICKY_AXIS_NAME`): keep its chromosome grid, draw no axis of its own. */
+    gridOnly?: boolean;
   },
 ): Record<string, unknown> {
-  const color = markColour(config, colors, categories, samples, opts.laneSample);
+  const color = markColour(config, colors, categories, samples, opts.laneSample, opts.scale);
 
   const encoding: Record<string, unknown> = {
     x: {
@@ -631,7 +832,7 @@ function buildDataLane(
       pos: config.pos_col,
       type: 'locus',
       scale: { name: GENOME_SCALE_NAME },
-      axis: { chromGrid: true, title: null },
+      axis: opts.gridOnly ? GRID_ONLY_AXIS : { chromGrid: true, title: null },
     },
     y: {
       field: config.score_col,
@@ -654,6 +855,11 @@ function buildDataLane(
     // GenomeSpy has no area mark: a rect anchored at the baseline is the
     // coverage profile. `datum` pins the second endpoint to a constant.
     encoding.y2 = { datum: 0 };
+  } else if (mark === 'rect') {
+    // Without a y2 a rect also fills down to the baseline, which drew an
+    // interval exactly like a bar. Both ends on the score make it a segment
+    // spanning pos..end at the score's level.
+    encoding.y2 = { field: config.score_col };
   }
 
   const layers: Record<string, unknown>[] = [
@@ -685,12 +891,13 @@ function buildDataLane(
     );
   }
 
+  const cursor = laneCursor(specInteractionMode(config));
   const lane: Record<string, unknown> = {
     name: opts.name,
     // A drag selects a region (see the brush param), as the crosshair says,
-    // or moves the view in pan mode; a mark a click filters on overrides it
-    // with a pointer.
-    cursor: config.drag_mode === 'pan' ? 'grab' : 'crosshair',
+    // or moves the view in pan mode, and does nothing in pointer mode (the
+    // arrow); a mark a click filters on overrides it with a pointer.
+    ...(cursor ? { cursor } : {}),
     layer: layers,
   };
   if (opts.filterExpr) lane.transform = [{ type: 'filter', expr: opts.filterExpr }];
@@ -726,6 +933,7 @@ function buildDataLane(
 function buildAnnotationLane(
   genes: readonly GeneRow[],
   colors: GenomeSpyThemeColors,
+  noAxis = false,
 ): Record<string, unknown> {
   const [geneColor] = colors.palette;
   return {
@@ -740,7 +948,13 @@ function buildAnnotationLane(
         name: 'annotation-genes',
         mark: { type: 'rect', minWidth: 1, minOpacity: 0.4 },
         encoding: {
-          x: { chrom: 'chrom', pos: 'start', type: 'locus', scale: { name: GENOME_SCALE_NAME } },
+          x: {
+            chrom: 'chrom',
+            pos: 'start',
+            type: 'locus',
+            scale: { name: GENOME_SCALE_NAME },
+            ...(noAxis ? { axis: null } : {}),
+          },
           x2: { chrom: 'chrom', pos: 'end' },
           y: { value: 0.3 },
           y2: { value: 0.7 },
@@ -805,6 +1019,7 @@ export function buildGenomeSpySpec({
       ).sort((a, b) => a.localeCompare(b))
     : [];
 
+  const scale = resolveColorScale(data, config.color_scale);
   const faceted = facetingEnabled(config);
   const { kept, dropped } = faceted
     ? facetValues(data, config.sample_col as string, config.max_facets ?? 8)
@@ -819,6 +1034,13 @@ export function buildGenomeSpySpec({
     return { sources, colors: overlayColors, labelled: lane === 0 };
   };
 
+  // Stacked lanes sit in GenomeSpy's own scrollable viewport, with the genome
+  // axis a view of its own under it. Lanes taller than the tile (fixed
+  // `lane_height`, or fitted lanes held at their floor) then scroll inside the
+  // embed; scrolled by the DOM, the shared axis under the last lane would scroll
+  // away with them. Fitted lanes share the viewport between their floor and
+  // their cap, so lanes fill the tile when they can and scroll when they cannot.
+  const scrolls = faceted && kept.length > 1;
   const lanes: Record<string, unknown>[] = [];
   if (faceted && kept.length > 0) {
     const sampleCol = config.sample_col as string;
@@ -838,6 +1060,8 @@ export function buildGenomeSpySpec({
           noYTitle: true,
           height: laneSize(config.lane_height),
           overlay: overlayFor(i),
+          scale,
+          gridOnly: scrolls,
         }),
       );
     });
@@ -848,6 +1072,7 @@ export function buildGenomeSpySpec({
         pickParam: PICK_PARAM,
         clickable,
         overlay: overlayFor(0),
+        scale,
       }),
     );
   }
@@ -856,7 +1081,8 @@ export function buildGenomeSpySpec({
     genes && genes.length
       ? genes.filter((g) => contigs.some((c) => c.name === g.chrom))
       : [];
-  if (laneGenes.length) lanes.push(buildAnnotationLane(laneGenes, colors));
+  const annotationLane = laneGenes.length ? buildAnnotationLane(laneGenes, colors, scrolls) : null;
+  if (annotationLane && !scrolls) lanes.push(annotationLane);
 
   const datasets: Record<string, unknown[]> = { [DATASET_NAME]: data };
   if (laneGenes.length) datasets[GENES_DATASET_NAME] = laneGenes as unknown[];
@@ -897,17 +1123,57 @@ export function buildGenomeSpySpec({
     // Room for each lane's title above it.
     spacing: 7,
   };
+  if (scrolls) {
+    const lanesY = config.facet_y_scale === 'independent' ? 'independent' : 'shared';
+    const contig = contigs[0];
+    Object.assign(spec, {
+      // Three parts: the scrolling lanes (they take the tile's height, less
+      // the rest), the gene lane, and an axis-only view that stays put.
+      resolve: { axis: { x: 'independent' }, scale: { x: 'shared', y: 'independent' } },
+      spacing: 0,
+      vconcat: [
+        {
+          name: 'lanes',
+          viewportHeight: { grow: 1 },
+          resolve: { axis: { x: 'shared' }, scale: { x: 'shared', y: lanesY } },
+          spacing: 7,
+          vconcat: lanes,
+        },
+        ...(annotationLane ? [annotationLane] : []),
+        {
+          name: STICKY_AXIS_NAME,
+          height: 1,
+          data: { values: [{ chrom: contig?.name ?? '', pos: 0 }] },
+          mark: { type: 'point', opacity: 0, tooltip: null },
+          encoding: {
+            x: {
+              chrom: 'chrom',
+              pos: 'pos',
+              type: 'locus',
+              scale: { name: GENOME_SCALE_NAME },
+              axis: { chromGrid: false, title: null },
+            },
+            y: { value: 0 },
+          },
+        },
+      ],
+    });
+  }
   if (config.region_filter_enabled !== false) {
     // Declared on the vconcat root on purpose: GenomeSpy builds a
     // container-wide selection overlay for an interval param owned by a grid
     // view, so one drag brushes every lane at once.
-    // A plain drag brushes, as in a Plotly figure's default drag mode, and
-    // the axis zooms with Cmd/Ctrl + wheel. In pan mode a plain drag moves the
-    // view and the brush takes shift + drag, GenomeSpy's own default on a
-    // zoomable axis; the hover hint says which.
-    const on =
-      config.drag_mode === 'pan' ? { type: 'mousedown', filter: 'event.shiftKey' } : 'mousedown';
+    // Which drag brushes is the interaction mode's (see `brushTrigger`): a
+    // plain drag in select mode, shift + drag in pan mode (a plain one moves
+    // the view), none in pointer mode.
+    const on = brushTrigger(specInteractionMode(config));
     spec.params = [{ name: BRUSH_PARAM, select: { type: 'interval', encodings: ['x'], on } }];
+  }
+  if (overlayColors) {
+    spec.params = [
+      ...((spec.params as unknown[] | undefined) ?? []),
+      { name: HOVER_COLOR_PARAM, value: overlayColors.hoverColor },
+    ];
   }
   if (!useBuiltinContigs) {
     spec.genomes = { [DATA_ASSEMBLY]: { contigs } };
@@ -920,6 +1186,8 @@ export function buildGenomeSpySpec({
     droppedFacets: dropped,
     rowCount: data.length,
     geneCount: laneGenes.length,
+    scrolls,
+    colorOf: markColourOf(config, colors, categories, scale),
     overlays,
   };
 }

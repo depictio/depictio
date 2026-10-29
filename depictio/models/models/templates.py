@@ -18,6 +18,8 @@ from typing import Any
 from bson import ObjectId
 from pydantic import BaseModel, Field, field_validator
 
+from depictio.models.timestamps import utc_now_str
+
 
 def _require_nonempty(v: str, label: str) -> str:
     """Strip and validate that a string field is non-empty."""
@@ -368,6 +370,41 @@ class ExpectedDataCollection(BaseModel):
         description="Why an excluded DC was dropped "
         "(e.g. 'gated: METADATA_FILE absent (if_var_absent)')",
     )
+
+
+class DashboardTemplateOrigin(BaseModel):
+    """Which template revision a dashboard was last imported from.
+
+    Stored on the dashboard document by the template import (``depictio ingest
+    --template``, ``POST /projects/from_manifest``). It is provenance, not
+    content: it is never in the dashboard YAML, never in a version snapshot, and
+    a save from the viewer cannot change it. A dashboard built in the viewer, or
+    imported from a plain file, has none.
+
+    ``template_version`` is the template's own revision (``template.version`` in
+    its ``template.yaml``, see ``depictio/projects/nf-core/RULES.md``), not the
+    version of the pipeline it targets, which is the last segment of
+    ``template_id``.
+    """
+
+    template_id: str = Field(..., description="Template identifier (e.g., 'nf-core/nascent/2.3.0')")
+    template_version: str = Field(
+        ..., description="The template's own revision (semver) when the dashboard was imported"
+    )
+    imported_at: str = Field(
+        default_factory=utc_now_str,
+        description="UTC timestamp of the import, '%Y-%m-%d %H:%M:%S'",
+    )
+
+    @field_validator("template_id")
+    @classmethod
+    def validate_template_id(cls, v: str) -> str:
+        return _require_nonempty(v, "Template ID")
+
+    @field_validator("template_version")
+    @classmethod
+    def validate_template_version(cls, v: str) -> str:
+        return _require_nonempty(v, "Template version")
 
 
 class TemplateOrigin(BaseModel):

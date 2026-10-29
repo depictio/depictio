@@ -238,3 +238,56 @@ export function rowMatcher(
     return record ? recordMatches(record, row, undefined, aliases) : false;
   };
 }
+
+/** The other spellings of a contig a tile may know it by: with and without
+ *  the `chr` prefix. `undefined` for a name with no such twin. */
+export function contigSpellings(name: string | null | undefined): string[] | undefined {
+  if (!name) return undefined;
+  const bare = name.replace(/^chr/i, '');
+  const alt = bare === name ? `chr${name}` : bare;
+  return alt && alt !== name ? [alt] : undefined;
+}
+
+/** Columns a table names its position, interval start and interval end by. */
+const POSITION_COLUMN = /^(pos|position|start|chromstart|chrom_start|bp|locus_start)$/i;
+const END_COLUMN = /^(end|stop|chromend|chrom_end|locus_end)$/i;
+
+/**
+ * The interval a table row names, found by the usual column names (a contig
+ * column, a position or start column, an optional end column), for a table
+ * that binds no genomic columns of its own. `null` when the row has no
+ * contig/position pair or the position is not a number.
+ */
+export function genomicFromRowByName(
+  row: Record<string, unknown> | null | undefined,
+): GenomicInterval | null {
+  if (!row) return null;
+  const keys = Object.keys(row);
+  const chromCol = keys.find((k) => isContigColumn(k) && !isBlank(row[k]));
+  if (!chromCol) return null;
+  const posCol = keys.find((k) => POSITION_COLUMN.test(k) && Number.isFinite(Number(row[k])) && !isBlank(row[k]));
+  if (!posCol) return null;
+  const endCol = keys.find((k) => END_COLUMN.test(k) && Number.isFinite(Number(row[k])) && !isBlank(row[k]));
+  return genomicFromRecord(row, chromCol, posCol, endCol);
+}
+
+/** Bases kept on each side of a single position when a locus is opened on it. */
+export const LOCUS_PAD_BP = 500;
+
+/**
+ * The locus string (`chr8:100-900`) to open a browser on `interval`: a single
+ * position gets `pad` bases on each side, a span 10% of its length (at least
+ * `pad`). `null` for an interval without a contig or finite bounds.
+ */
+export function locusOfInterval(
+  interval: GenomicInterval | null | undefined,
+  pad: number = LOCUS_PAD_BP,
+): string | null {
+  if (!interval || !interval.refName) return null;
+  if (!Number.isFinite(interval.start) || !Number.isFinite(interval.end)) return null;
+  const span = interval.end - interval.start;
+  const margin = span > 0 ? Math.max(pad, Math.round(span * 0.1)) : pad;
+  const lo = Math.max(1, Math.floor(interval.start - margin));
+  const hi = Math.max(lo, Math.ceil(interval.end + margin));
+  return `${interval.refName}:${lo}-${hi}`;
+}

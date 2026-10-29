@@ -46,6 +46,8 @@ import CnvProfileRenderer from './CnvProfileRenderer';
 import GenomeChordRenderer from './GenomeChordRenderer';
 import IdeogramRenderer from './IdeogramRenderer';
 import AlleleGridRenderer from './AlleleGridRenderer';
+import PedigreeRenderer from './PedigreeRenderer';
+import RankedTableRenderer from './RankedTableRenderer';
 import RecordCardRenderer from './RecordCardRenderer';
 import ParallelCoordinatesRenderer from './ParallelCoordinatesRenderer';
 import RankedDistributionRenderer from './RankedDistributionRenderer';
@@ -273,6 +275,8 @@ const RENDERERS: Record<string, React.ComponentType<any>> = {
   ramachandran: RamachandranRenderer,
   spatial_cells: SpatialCellsRenderer,
   allele_grid: AlleleGridRenderer,
+  pedigree: PedigreeRenderer,
+  ranked_table: RankedTableRenderer,
 };
 
 /**

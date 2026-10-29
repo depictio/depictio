@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   GENOME_SCALE_NAME,
+  HOVER_COLOR_PARAM,
   HOVER_SOURCE,
   SELECTION_SOURCE,
   WINDOW_SOURCE,
@@ -131,7 +132,8 @@ describe('the overlay layers in the spec', () => {
 
     const hover = byName('hover');
     expect(hover.data).toEqual({ name: HOVER_SOURCE });
-    expect(hover.mark).toMatchObject({ type: 'rule', color: 'hover-colour' });
+    expect(hover.mark).toMatchObject({ type: 'rule', color: { expr: HOVER_COLOR_PARAM } });
+    expect((spec as any).params).toContainEqual({ name: HOVER_COLOR_PARAM, value: 'hover-colour' });
     expect(hover.encoding.x.pos).toBe('pos');
     expect(overlays).toEqual([overlaySourceNames(0)]);
     expect((spec as any).datasets[WINDOW_SOURCE]).toEqual([]);
@@ -142,7 +144,8 @@ describe('the overlay layers in the spec', () => {
     const { spec } = buildGenomeSpySpec({ rows, config: base, colors });
     const s = spec as any;
     expect(s.vconcat[0].layer[0].params).toBeDefined();
-    expect(s.params.map((p: any) => p.name)).toEqual(['brush']);
+    // Brush plus the hover colour param; nothing that selects or filters.
+    expect(s.params.map((p: any) => p.name)).toEqual(['brush', HOVER_COLOR_PARAM]);
   });
 
   it('gives each faceted lane its own pair of source names', () => {
@@ -152,12 +155,13 @@ describe('the overlay layers in the spec', () => {
       colors,
     });
     expect(overlays.map((o) => o.window)).toEqual([WINDOW_SOURCE, `${WINDOW_SOURCE}_1`]);
-    const used = (spec as any).vconcat.map(
+    const lanes = (spec as any).vconcat[0].vconcat;
+    const used = lanes.map(
       (l: any) => l.layer.find((x: any) => x.name.endsWith('-window')).data.name,
     );
     expect(new Set(used).size).toBe(2);
     // Only the first lane names the overlays.
-    const labels = (spec as any).vconcat.map(
+    const labels = lanes.map(
       (l: any) => l.layer.filter((x: any) => x.mark.type === 'text').length,
     );
     expect(labels).toEqual([2, 0]);
@@ -264,5 +268,37 @@ describe('windowInDomain', () => {
   it('holds when the domain or a contig cannot be read, so nothing moves', () => {
     expect(windowInDomain(null, { chrom: 'chr2', start: 0, end: 1 }, names)).toBe(true);
     expect(windowInDomain(dom(['chr2', 0], ['chr2', 9]), { chrom: 'chrZ', start: 0, end: 1 }, names)).toBe(true);
+  });
+});
+
+describe('the hover rule colour', () => {
+  it('wears the colour of the tile that hovered, else the fallback', () => {
+    expect(hoverRows({ refName: 'chr1', start: 40, end: 60 }, names, '#ff0000', '#000000')).toEqual([
+      { chrom: 'chr1', pos: 40, color: '#ff0000' },
+      { chrom: 'chr1', pos: 60, color: '#ff0000' },
+    ]);
+    expect(hoverRows({ refName: 'chr1', start: 40, end: 40 }, names, null, '#000000')).toEqual([
+      { chrom: 'chr1', pos: 40, color: '#000000' },
+    ]);
+  });
+  it('carries it into the DOM fallback boxes', () => {
+    const boxes = fallbackBoxes(contigs, [0, 1000], [], [{ chrom: 'chr1', pos: 500, color: '#ff0000' }]);
+    expect(boxes).toEqual([expect.objectContaining({ kind: 'hover', color: '#ff0000' })]);
+  });
+});
+
+describe('windowInDomain tolerance', () => {
+  const names3 = ['chr1', 'chr2'];
+  const dom = [
+    { chrom: 'chr1', pos: 1000 },
+    { chrom: 'chr1', pos: 5000 },
+  ];
+  it('takes a window a hair past the edge as the same window coming back', () => {
+    expect(windowInDomain(dom, { chrom: 'chr1', start: 998, end: 5001 }, names3)).toBe(true);
+    expect(windowInDomain(dom, { chrom: 'chr1', start: 1000 - 50, end: 5000 + 50 }, names3)).toBe(true);
+  });
+  it('still fails for a window that really left', () => {
+    expect(windowInDomain(dom, { chrom: 'chr1', start: 800, end: 4000 }, names3)).toBe(false);
+    expect(windowInDomain(dom, { chrom: 'chr1', start: 4000, end: 6000 }, names3)).toBe(false);
   });
 });

@@ -45,6 +45,7 @@ import ComponentSkeleton from './ComponentSkeleton';
 import RefetchOverlay from './RefetchOverlay';
 import { useReportLoadStatus } from './DashboardLoadingProvider';
 import JBrowseDataPopover from './jbrowse/JBrowseDataPopover';
+import FeatureDetails from './jbrowse/FeatureDetails';
 import type { RegionGridProps } from './jbrowse/RegionPicker';
 import VizKindBadge, { AdvancedVizKindContext } from './advanced_viz/VizKindBadge';
 import { useDensity } from './density';
@@ -60,7 +61,7 @@ import DensityStrip from './jbrowse/DensityStrip';
 import { defaultDensityGroup, type DensityGroup } from './jbrowse/densityBins';
 import { useGenomeBrowserTarget } from './jbrowse/browserTarget';
 import { naturalChromOrder } from './jbrowse/chromOrder';
-import { followTarget } from './jbrowse/followWindow';
+import { MAX_FOLLOW_SPAN, followTarget } from './jbrowse/followWindow';
 import {
   genomeSelectionRegion,
   genomeSelectionSource,
@@ -86,6 +87,7 @@ import {
   initialLocus,
   shouldRenavigate,
   sidesLocus,
+  wideRegionTarget,
 } from './jbrowse/openingLocus';
 import { trackRowsToColumns } from './jbrowse/trackRowsData';
 import { alignmentTrackIds, initTrackEntry, pairsDisplaySnapshot } from './jbrowse/readPairs';
@@ -109,9 +111,13 @@ import {
   type JBrowseRegion,
   type RegionSelectHandle,
 } from './jbrowse/regionSelection';
-import { setGenomeTracksLocus, setGenomeTracksPayload } from './jbrowse/genomeTracksStore';
-import { trackLegend } from './jbrowse/trackLegend';
-import { categoryColorMap } from '../categoryColors';
+import {
+  setGenomeTracksColours,
+  setGenomeTracksLocus,
+  setGenomeTracksPayload,
+} from './jbrowse/genomeTracksStore';
+import { legendRamp, trackLegend } from './jbrowse/trackLegend';
+import { categoryColorMap, readColorScale } from '../categoryColors';
 import {
   canonicalRefName,
   createAliasLookup,
@@ -125,8 +131,10 @@ import {
   colourTracksBy,
   conditionColourMap,
   conditionOf,
+  conditionSequentialMap,
   sampleColourColumn,
   sampleColourMap,
+  trackColoursBy,
 } from './jbrowse/sampleColors';
 import {
   hasLiftedLimits,
@@ -138,6 +146,7 @@ import ViewMenu, { type ViewMenuItem } from './jbrowse/ViewMenu';
 import { useDisplaySettings } from './jbrowse/useDisplaySettings';
 import { useSharedScale } from './jbrowse/useSharedScale';
 import { useFitTracks } from './jbrowse/useFitTracks';
+import { useJBrowseAutoHeight } from './jbrowse/useAutoHeight';
 import { canScrollBy, wheelIntent, wheelPixels, zoomFactor } from './jbrowse/wheel';
 import { attachZoomGate } from './zoomGateDom';
 
@@ -402,6 +411,13 @@ function pageScroller(el: HTMLElement): Element {
   return document.scrollingElement ?? document.documentElement;
 }
 
+/** A track's display name off a widget's track reference. */
+function trackNameOf(track: { configuration?: unknown } | null | undefined): string | undefined {
+  if (!track?.configuration) return undefined;
+  const name = readConfObject(track.configuration as never, ['name']);
+  return typeof name === 'string' && name ? name : undefined;
+}
+
 /**
  * The linear genome view without JBrowse's own title bar (hamburger, view
  * name, logo): Depictio's chrome already frames the tile. Mirrors
@@ -410,9 +426,12 @@ function pageScroller(el: HTMLElement): Element {
 const EmbeddedLGV = observer(function EmbeddedLGV({
   viewState,
   muiThemeOverrides,
+  leaveFeatureWidget,
 }: {
   viewState: ViewState;
   muiThemeOverrides: Record<string, unknown>;
+  /** True for a feature widget the click-to-filter reaction already handles. */
+  leaveFeatureWidget: (widgetType: string) => boolean;
 }) {
   const { session } = viewState;
   const { view } = session;
@@ -449,6 +468,14 @@ const EmbeddedLGV = observer(function EmbeddedLGV({
           </Paper>
         </ScopedCssBaseline>
       </div>
+      {/* A clicked feature opens Depictio's panel (Mantine), not JBrowse's
+          drawer: the widget is hidden as it appears. Every other widget (track
+          config, about-track...) still renders here. */}
+      <FeatureDetails
+        session={session}
+        leaveWidget={leaveFeatureWidget}
+        trackNameOf={trackNameOf}
+      />
       <ModalWidget session={session} />
     </ThemeProvider>
   );
@@ -565,7 +592,11 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
   // changes below run in callbacks that outlive a render.
   const pairsModeRef = useRef<unknown>(undefined);
   pairsModeRef.current = metadata.read_pairs_display ?? payload?.read_pairs_display;
-  const colorBy = typeof metadata.color_by === 'string' ? metadata.color_by : '';
+  // `color_scale` (a sequential ramp over a manifest column) replaces
+  // `color_by` (one hue per value) when both are set; either names the column
+  // the tracks are grouped and coloured by.
+  const colorScale = readColorScale(metadata.color_scale);
+  const colorBy = colorScale?.column ?? (typeof metadata.color_by === 'string' ? metadata.color_by : '');
   const [toolbar, setToolbar] = useState<JBrowseToolbarState>(() => ({
     showHeader: readToggle(`${storageKey}.header`, metadata.show_header !== false),
     showOverview: readToggle(`${storageKey}.overview`, metadata.show_overview !== false),
@@ -576,11 +607,25 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     bothSides: readToggle(`${storageKey}.bothSides`, hasMate),
     followWindow: readToggle(`${storageKey}.followWindow`, metadata.follow_window !== false),
     showDensity: readToggle(`${storageKey}.density`, metadata.show_density === true),
-    showLegend: readToggle(`${storageKey}.legend`, true),
+    // On by default only when a `color_by` / `color_scale` colours the tracks:
+    // the per-sample colours alone barely show on reads, and the legend then
+    // reads as noise (the track names say whose track it is).
+    showLegend: readToggle(`${storageKey}.legend`, Boolean(colorBy)),
     fitTracks: readToggle(`${storageKey}.fitTracks`, false),
   }));
   const toolbarRef = useRef(toolbar);
   toolbarRef.current = toolbar;
+  // With click-to-filter on, a clicked feature's BaseFeatureWidget belongs to
+  // the feature_click reaction below (it hides the widget and emits the
+  // filter); Depictio's feature panel stands aside for exactly that case.
+  const leaveRef = useRef<(type: string) => boolean>(() => false);
+  leaveRef.current = (type) =>
+    type === 'BaseFeatureWidget' &&
+    selectionEnabled &&
+    !!payload?.selection_column &&
+    selectionMode === 'feature_click' &&
+    toolbar.clickFilters;
+  const leaveFeatureWidget = useCallback((type: string) => leaveRef.current(type), []);
   const setToggle = useCallback(
     (key: keyof JBrowseToolbarState, suffix: string) => {
       setToolbar((prev) => {
@@ -691,13 +736,21 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     // `color_by`: one colour per value of a manifest column (the condition),
     // applied first; the per-sample colours then only fill what it left bare.
     const confs = absolutize(payload.tracks);
-    const byCondition = colorBy
-      ? colourTracksBy(
-          confs,
-          colorBy,
-          conditionColourMap(colorSource, colorBy, confs, colorPalette),
-        )
-      : confs;
+    const conditionColours = colorBy
+      ? colorScale
+        ? conditionSequentialMap(colorScale, confs)
+        : conditionColourMap(colorSource, colorBy, confs, colorPalette)
+      : null;
+    const byCondition = colorBy && conditionColours ? colourTracksBy(confs, colorBy, conditionColours) : confs;
+    // What the colouring above resolved goes to the dashboard's other genome
+    // tiles (a genome view's lanes), so one sample is one colour on both.
+    setGenomeTracksColours(
+      dashboardId,
+      metadata.index,
+      colorBy && conditionColours
+        ? trackColoursBy(confs, payload.track_rows, colorBy, conditionColours)
+        : null,
+    );
     const tracks = colourAlignmentTracks(
       withSectionCategory(
         byCondition,
@@ -774,6 +827,8 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
                   pending,
                   region: windowLocus(selectionRegionRef.current),
                   persisted,
+                  location: payload.location,
+                  opening: payload.opening,
                 });
                 return loc;
               })(),
@@ -998,11 +1053,15 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
   );
   // In fullscreen the tile is the page: the tracks always fill it.
   const inFullscreen = !!fullscreenEl && !!rootRef.current && fullscreenEl.contains(rootRef.current);
+  // `auto_height` sizes the tile to the tracks, so the tracks must not stretch
+  // to the tile (fullscreen aside, where the tile is the page).
+  const autoHeight = metadata.auto_height === true;
   useFitTracks(
     viewState ? viewState.session.view : null,
     lgvBoxRef,
-    toolbar.fitTracks || inFullscreen,
+    autoHeight ? inFullscreen : toolbar.fitTracks || inFullscreen,
   );
+  useJBrowseAutoHeight(String(metadata.index), lgvBoxRef, autoHeight, !!viewState, inFullscreen);
 
   // ---- region density strip --------------------------------------------------
   // Where the regions of the enabled sources fall along the genome, one row per
@@ -1579,6 +1638,14 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     }
     if (regionKey === followedRegionKey.current) return;
     followedRegionKey.current = regionKey;
+    // A whole contig (a navigator's default region) is no place to read
+    // calls: the best row of `locus_from` inside it is.
+    const zoomed = wideRegionTarget(selectionRegion, payloadRef.current?.location, MAX_FOLLOW_SPAN);
+    if (zoomed) {
+      traceGenome(ownIndex, 'region too wide to follow: browser opens on the best row in it', `${regionKey} -> ${zoomed}`);
+      navigate(zoomed);
+      return;
+    }
     traceGenome(ownIndex, 'browser follows a region', regionKey);
     const session = viewState.session as unknown as {
       assemblyManager?: {
@@ -1601,7 +1668,9 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
       const view = viewRef.current;
       if (view && aliveNode(view)) navigate(detail.locus);
       else eventLocusRef.current = detail.locus;
-      lgvBoxRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+      if (detail.scroll !== false) {
+        lgvBoxRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+      }
     };
     window.addEventListener(PENDING_LOCUS_EVENT, onPending);
     return () => window.removeEventListener(PENDING_LOCUS_EVENT, onPending);
@@ -1792,14 +1861,20 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
         checked: toolbar.scrollTracks,
         onChange: () => setToggle('scrollTracks', 'scrollTracks'),
       },
-      {
-        key: 'fittracks',
-        group: 'View',
-        label: 'Fit tracks to the tile',
-        description: 'Signal tracks share the height of the tile. Always on in fullscreen',
-        checked: toolbar.fitTracks,
-        onChange: () => setToggle('fitTracks', 'fitTracks'),
-      },
+      // Not offered when the tile's height follows its tracks (`auto_height`):
+      // the two would chase each other.
+      ...(metadata.auto_height === true
+        ? []
+        : [
+            {
+              key: 'fittracks',
+              group: 'View' as const,
+              label: 'Fit tracks to the tile',
+              description: 'Signal tracks share the height of the tile. Always on in fullscreen',
+              checked: toolbar.fitTracks,
+              onChange: () => setToggle('fitTracks', 'fitTracks'),
+            },
+          ]),
     ];
     toggles.push({
       key: 'legend',
@@ -1944,6 +2019,7 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     hasMate,
     toggleBothSides,
     metadata.follow_window,
+    metadata.auto_height,
     metadata.show_density,
     locusFrom,
     canBreakpoint,
@@ -1964,13 +2040,21 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
         payload.filter_applied ? ' match the filters' : ''
       }${payload.truncated ? ` (first ${payload.max_tracks ?? metadata.max_tracks ?? 20})` : ''}`
     : '';
+  const colorScaleKey = JSON.stringify(colorScale);
+  const sequentialLegendMap = useMemo(
+    () => (colorScale && payload ? conditionSequentialMap(colorScale, payload.tracks as never[]) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [payload, colorScaleKey],
+  );
   // The colours the open tracks wear, by the same rules the view applies them:
   // the manifest's colour, else `color_by`'s, else the sample's.
   const legend = useMemo(() => {
     if (!payload || !toolbar.showLegend) return [];
     const rows = payload.track_rows;
     const byGroup = colorBy
-      ? categoryColorMap(colorSource, colorBy, rows.map((r) => r.group ?? null), colorPalette)
+      ? colorScale
+        ? sequentialLegendMap
+        : categoryColorMap(colorSource, colorBy, rows.map((r) => r.group ?? null), colorPalette)
       : null;
     const bySample = sampleColourMap(
       colorSource,
@@ -1981,7 +2065,17 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
     return trackLegend(rows, openIds, (r) =>
       r.color || (byGroup ? byGroup.get(r.group ?? '') : r.sample ? bySample.get(r.sample) : null),
     );
-  }, [payload, toolbar.showLegend, openIds, colorBy, colorSource, colorPalette]);
+  }, [payload, toolbar.showLegend, openIds, colorBy, colorSource, colorPalette, sequentialLegendMap]);
+  // A `color_scale` draws a gradient between its extreme open values rather
+  // than one swatch per value.
+  const legendGradient = useMemo(
+    () =>
+      payload && toolbar.showLegend && colorScale && sequentialLegendMap
+        ? legendRamp(payload.track_rows, openIds, sequentialLegendMap, colorScale.scheme)
+        : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [payload, toolbar.showLegend, openIds, sequentialLegendMap],
+  );
   const compact = useDensity() === 'compact';
   const description =
     typeof metadata.description === 'string' && metadata.description ? metadata.description : '';
@@ -2101,7 +2195,11 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
           className="depictio-jbrowse-host"
           style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}
         >
-          <EmbeddedLGV viewState={viewState} muiThemeOverrides={muiThemeOverrides} />
+          <EmbeddedLGV
+            viewState={viewState}
+            muiThemeOverrides={muiThemeOverrides}
+            leaveFeatureWidget={leaveFeatureWidget}
+          />
         </Box>
       )}
       {viewState && toolbar.showStatus && payload && (
@@ -2117,7 +2215,27 @@ const JBrowseRenderer: React.FC<JBrowseRendererProps> = ({
           <Text size="xs" c="dimmed" truncate>
             {statusText}
           </Text>
-          {legend.length > 0 && (
+          {legendGradient && (
+            <Tooltip label={legendGradient.values.join(' > ')} withinPortal={false}>
+              <Group gap={4} wrap="nowrap" data-testid="jbrowse-legend-ramp" style={{ flexShrink: 0 }}>
+                <Text size="xs" c="dimmed">
+                  {legendGradient.from}
+                </Text>
+                <Box
+                  style={{
+                    width: 56,
+                    height: 8,
+                    borderRadius: 4,
+                    background: `linear-gradient(to right, ${legendGradient.stops.join(', ')})`,
+                  }}
+                />
+                <Text size="xs" c="dimmed">
+                  {legendGradient.to}
+                </Text>
+              </Group>
+            </Tooltip>
+          )}
+          {legend.length > 0 && !legendGradient && (
             <Group
               gap={8}
               wrap="nowrap"

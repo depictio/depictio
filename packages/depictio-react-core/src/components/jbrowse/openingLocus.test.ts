@@ -5,6 +5,7 @@ import {
   initialLocus,
   shouldRenavigate,
   sidesLocus,
+  wideRegionTarget,
 } from './openingLocus';
 
 describe('sidesLocus', () => {
@@ -21,6 +22,13 @@ describe('sidesLocus', () => {
 });
 
 describe('initialLocus', () => {
+  it('zooms into the region on the payload location when it lies inside it', () => {
+    const region = { chrom: 'chr1', start: 0, end: Number.POSITIVE_INFINITY };
+    const args = { region, regionLocus: 'chr1', persisted: null, bothSides: false };
+    expect(initialLocus({ ...args, location: 'chr1:1,200,000-1,260,000' })).toBe('chr1:1,200,000-1,260,000');
+    // Elsewhere, the region wins: the browser opens where the navigator shows.
+    expect(initialLocus({ ...args, location: 'chr5:1,200,000-1,260,000' })).toBe('chr1');
+  });
   it('opens on a locus another tile handed over, before anything else', () => {
     expect(
       initialLocus({
@@ -87,5 +95,19 @@ describe('shouldRenavigate', () => {
   });
   it('keeps the old behaviour against a backend that sends no opening', () => {
     expect(shouldRenavigate(undefined, 'chr4:1-2', 'chr1:1-2')).toBe(true);
+  });
+});
+
+describe('wideRegionTarget', () => {
+  const contig = { chrom: 'chr21', start: 0, end: Number.POSITIVE_INFINITY };
+  it('sends a whole-contig region to the location inside it', () => {
+    expect(wideRegionTarget(contig, '21:10934854-11029747', 1_000_000)).toBe('21:10934854-11029747');
+  });
+  it('keeps a narrow region as is', () => {
+    expect(wideRegionTarget({ chrom: 'chr21', start: 0, end: 500_000 }, 'chr21:100-200', 1_000_000)).toBeNull();
+  });
+  it('keeps a wide region whose location is elsewhere', () => {
+    expect(wideRegionTarget(contig, 'chr2:100-200', 1_000_000)).toBeNull();
+    expect(wideRegionTarget(contig, null, 1_000_000)).toBeNull();
   });
 });

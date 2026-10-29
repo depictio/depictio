@@ -48,6 +48,7 @@ Output schema (the design columns right after ``sample``):
     snvs : Int64                        PASS SNVs
     indels : Int64                      PASS indels
     pass_pct : Float64                  PASS calls over all calls, percent
+    filtered_pct : Float64              calls that failed a filter, over all calls, percent
     ts_tv : Float64                     transitions over transversions, PASS SNVs
     het_hom_ratio : Float64             heterozygous over homozygous-alternate PASS calls
     median_dp : Float64                 median read depth at the PASS calls
@@ -145,6 +146,7 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "snvs": pl.Int64,
     "indels": pl.Int64,
     "pass_pct": pl.Float64,
+    "filtered_pct": pl.Float64,
     "ts_tv": pl.Float64,
     "het_hom_ratio": pl.Float64,
     "median_dp": pl.Float64,
@@ -282,7 +284,11 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     if _present(callset, "sample", "pass_calls"):
         cols = ["pass_calls", "snvs", "indels", "pass_pct", "ts_tv", "het_hom_ratio", "median_dp"]
         # rnavar runs one caller; should a callset carry several, the first one wins.
-        parts.append(callset.unique(subset="sample", keep="first").select("sample", *cols))
+        parts.append(
+            callset.unique(subset="sample", keep="first")
+            .select("sample", *cols)
+            .with_columns((100.0 - pl.col("pass_pct")).round(2).alias("filtered_pct"))
+        )
 
     for part in parts:
         hub = hub.join(part, on="sample", how="left")

@@ -54,25 +54,26 @@ def test_missing_files_are_dropped(tmp_path: Path) -> None:
         "G1/alignments/G1.normal_dna/G1.normal_dna.redux.bam",
     )
     df = _run(tmp_path)
+    # The first group leads with its files, reads included; the next group follows.
     assert df["track_id"].to_list() == [
         "G1.tumor_dna.somatic",
         "G1.tumor_dna.sv",
-        "G2.tumor_dna.somatic",
         "G1.tumor_dna.normal_reads",
+        "G2.tumor_dna.somatic",
     ]
-    assert df["format"].to_list() == ["vcf", "vcf", "vcf", "bam"]
+    assert df["format"].to_list() == ["vcf", "vcf", "bam", "vcf"]
     assert df["uri"].to_list() == [
         "G1/purple/G1.tumor_dna.purple.somatic.vcf.gz",
         "G1/purple/G1.tumor_dna.purple.sv.vcf.gz",
-        "G2/purple/G2.tumor_dna.purple.somatic.vcf.gz",
         "G1/alignments/G1.normal_dna/G1.normal_dna.redux.bam",
+        "G2/purple/G2.tumor_dna.purple.somatic.vcf.gz",
     ]
     assert df["order"].to_list() == [1, 2, 3, 4]
     assert df["category"].to_list() == [
         "Small variants",
         "Structural variants",
-        "Small variants",
         "Alignments",
+        "Small variants",
     ]
 
 
@@ -100,12 +101,36 @@ def test_read_in_place_keeps_every_row(tmp_path: Path) -> None:
     assert df.height == 9
 
 
-def test_vcfs_come_first_and_the_bams_last_tumor_before_normal(tmp_path: Path) -> None:
+def test_the_first_group_opens_with_its_vcfs_and_its_reads(tmp_path: Path) -> None:
     df = _run(tmp_path)
-    assert df["format"].to_list() == ["vcf"] * 6 + ["bam"] * 3
-    assert df["kind"].to_list()[6:] == ["tumor_reads", "normal_reads", "tumor_reads"]
+    # G1 leads: 4 VCFs, then its tumor and normal reads. G2's VCFs follow, its BAM is last.
+    assert df["kind"].to_list() == [
+        "somatic",
+        "sv",
+        "germline",
+        "sv_germline",
+        "tumor_reads",
+        "normal_reads",
+        "somatic",
+        "sv",
+        "tumor_reads",
+    ]
+    assert df["group_id"].to_list()[:6] == ["G1"] * 6
     assert df["order"].to_list() == list(range(1, 10))
     assert df["track_id"].n_unique() == df.height
+
+
+def test_the_manifest_has_no_colour_column(tmp_path: Path) -> None:
+    """Tracks are coloured by ``kind`` through the dashboard's category_colors."""
+    df = _run(tmp_path)
+    assert "color" not in df.columns
+    template = yaml.safe_load(TEMPLATE.read_text(encoding="utf-8"))
+    dc = next(
+        d
+        for d in template["workflows"][0]["data_collections"]
+        if d["data_collection_tag"] == "tracks"
+    )
+    assert "color_column" not in dc["config"]["dc_specific_properties"]
 
 
 def test_every_row_is_keyed_on_the_tumor_and_names_its_own_sample(tmp_path: Path) -> None:

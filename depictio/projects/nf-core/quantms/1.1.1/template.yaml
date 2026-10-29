@@ -1,0 +1,554 @@
+# nf-core/quantms Template v1.1.1 - Proteomics quantification (DIA, label free)
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio ingest --template nf-core/quantms/1.1.1 --data-root /path/to/results
+#
+# Tested against nf-core/quantms AWS megatest results, the DIA profile:
+#   s3://nf-core-awsmegatests/quantms/results-600505011027ab196bb18b1320607468bdae951a/mode_dia
+#   (see megatest.yaml for the fetch manifest; the run root is mode_dia/)
+# ============================================================================
+#
+# SCOPE. quantms runs three modes (DDA label free, DDA isobaric labelling, DIA).
+# This template reads the DIA-NN route: diannsummary/diann_report.tsv (precursors),
+# diannsummary/diann_report.pg_matrix.tsv (protein groups), msstats/*_comparisons.csv
+# (MSstats contrasts), mzmlstatistics/*_mzml_info.tsv (spectra) and sdrfparsing/ (the
+# experimental design). The DDA and TMT routes write other tables and need their own
+# template.
+#
+# DESIGN METADATA. quantms keeps the design in the SDRF it was started with, and
+# parses it into sdrfparsing/*_openms_design.tsv (runs, sample, MSstats condition) and
+# sdrfparsing/*_config.tsv (acquisition method, label, enzyme, tolerances, modifications).
+# The sample hub reads both, so the template works without an SDRF. The SDRF named by
+# METADATA_FILE (default: input/sdrf.tsv under DATA_ROOT, where download_test_data.sh
+# puts the vendored copy) only adds its characteristics columns (organism, instrument,
+# and so on). The sample key is run_id, the raw file name without its extension, which
+# is how DIA-NN and the mzML statistics name a run.
+#
+# MULTIQC. quantms reports through pmultiqc custom content, with no MultiQC module
+# and no multiqc.parquet in this release, so the template has no MultiQC collection and
+# no MultiQC tab. Every plot the report shows is rebuilt here from the result tables.
+#
+# GROUPING. The contrast means, the condition correlation and the replicate pairs are
+# built per condition, so GROUP_COL is best left at the hub's condition column (the
+# MSstats condition). Another SDRF column can be named, but the MSstats comparison
+# then still compares MSstats conditions.
+
+template:
+  template_id: "nf-core/quantms/1.1.1"
+  description: "nf-core/quantms DIA proteomics template: acquisition QC from the mzML statistics, identification yield and peptide quality from DIA-NN, protein quantification with detection, completeness and run-to-run agreement, and the MSstats differential abundance between conditions."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "quantms output directory of one mode (the folder holding diannsummary/, msstats/, mzmlstatistics/, sdrfparsing/ and pipeline_info/). For the megatest this is the mode_dia/ folder."
+      required: true
+    - name: "METADATA_FILE"
+      description: "The SDRF the run was started with (--input). Optional: the design is already in sdrfparsing/, the SDRF adds its characteristics columns. Defaults to input/sdrf.tsv under DATA_ROOT."
+      required: false
+      default: "{DATA_ROOT}/input/sdrf.tsv"
+    - name: "METADATA_ID_COL"
+      description: "Hub id column. The quantms hub is keyed on run_id, the raw file name without its extension; this only records that value."
+      required: false
+      default: "run_id"
+    - name: "GROUP_COL"
+      description: "Hub column the dashboard groups and filters runs by. Defaults to condition, the MSstats condition of the design."
+      required: false
+      default: "condition"
+    - name: "GROUP_COL_DISPLAY"
+      description: "Reader-facing label of GROUP_COL, used in filter and card titles."
+      required: false
+      default: "Condition"
+  # Variables used when materialising the bundled reference dataset.
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/sdrf.tsv"
+      METADATA_ID_COL: "run_id"
+      GROUP_COL: "condition"
+      GROUP_COL_DISPLAY: "Condition"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "genomes"
+          - "hook_url"           # nf-core runs put a live Slack webhook here
+          - "email*"
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "Design"
+        key_patterns: ["input", "acquisition_method", "labelling_type", "root_folder", "local_input_type", "enable_pmultiqc", "skip_post_msstats", "skip_preliminary_analysis"]
+      - group: "Search database"
+        key_patterns: ["database", "add_decoys", "decoy_string*", "shuffle_*", "protein_level_fdr_cutoff"]
+      - group: "Digestion and modifications"
+        key_patterns: ["enzyme", "fixed_mods", "variable_mods", "min_peptide_length", "max_peptide_length", "max_missed_cleavages", "max_mods", "min_precursor_charge", "max_precursor_charge", "min_mz", "max_mz"]
+      - group: "Mass tolerances"
+        key_patterns: ["precursor_mass_tolerance*", "fragment_mass_tolerance*", "mass_acc_automatic", "scan_window*", "mzml_features"]
+      - group: "DIA-NN"
+        key_patterns: ["diann_*", "diann*", "random_preanalysis*", "empirical_assembly_*", "skip_preliminary_analysis"]
+      - group: "MSstats"
+        key_patterns: ["msstats_*", "ref_condition", "contrasts", "skip_post_msstats", "quantification_method", "normalization*", "feature_with_*", "remove_*", "min_feature_*", "summarization_*", "mbimpute*", "maxQuantileforCensored"]
+      - group: "Run context"
+        key_patterns: ["outdir", "version", "publish_dir_mode", "email", "email_on_fail", "plaintext_email", "max_multiqc_email_size", "monochrome_logs", "validate_params", "pipelines_testdata_base_path", "trace_report_suffix", "help*", "show_hidden", "config_profile_*", "custom_config_*", "multiqc_*"]
+    highlight:
+      - "acquisition_method"
+      - "database"
+      - "enzyme"
+      - "fixed_mods"
+      - "variable_mods"
+      - "precursor_mass_tolerance"
+      - "fragment_mass_tolerance"
+      - "diann_normalize"
+  dashboards:
+    - "dashboards/base.yaml"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "quantms DIA Proteomics"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "quantms"
+    version: "1.1.1"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/quantms"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "The experimental design, one row per run: sample, condition, replicate and the acquisition settings quantms parsed from the SDRF, with the SDRF characteristics"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/quantms/samples.py"
+            source_overrides:
+              sdrf:
+                path: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "run_id": "Run, the raw file name without its extension"
+              "sample": "Sample number of the design"
+              "condition": "MSstats condition of the run, as a readable label"
+              "condition_raw": "MSstats condition exactly as the design writes it"
+              "replicate": "Rank of the run within its condition"
+              "run_label": "Short label for an axis: the condition and the replicate"
+              "bio_replicate": "MSstats biological replicate"
+              "fraction": "Fraction group of the run (1 without fractionation)"
+              "acquisition": "Acquisition method, DIA or DDA"
+              "label": "Labelling of the sample"
+              "enzyme": "Digestion enzyme"
+              "precursor_tolerance": "Precursor mass tolerance"
+              "fragment_tolerance": "Fragment mass tolerance"
+              "dissociation": "Dissociation method"
+              "fixed_mods": "Fixed modifications"
+              "variable_mods": "Variable modifications"
+              "organism": "Organism of the sample (SDRF)"
+              "instrument": "Instrument the run was acquired on (SDRF)"
+
+      # ----------------------------------------------------------------
+      - data_collection_tag: "quantms_precursors"
+        description: "Every precursor DIA-NN identified in every run, with its protein group, peptide, charge, modifications, scores, retention time and quantity"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/quantms/precursors.py"
+            params:
+              group_col: "{GROUP_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "run_id": "Run, the raw file name without its extension"
+              "condition": "Condition the run belongs to (GROUP_COL of the hub)"
+              "protein_group": "DIA-NN protein group, accessions joined by a semicolon"
+              "protein_name": "Entry names of the protein group"
+              "genes": "Gene names of the protein group"
+              "peptide": "Stripped peptide sequence"
+              "peptidoform": "Peptide sequence with its modifications"
+              "charge": "Precursor charge"
+              "charge_state": "Precursor charge as a label, e.g. 2+"
+              "length": "Peptide length in residues"
+              "missed_cleavages": "Internal K or R not followed by P"
+              "n_variable_mods": "Variable modifications on the peptide, fixed carbamidomethylation not counted"
+              "modification_state": "Modified or Unmodified"
+              "specificity": "Proteotypic (one protein group) or Shared"
+              "q_value": "Precursor q-value in the run"
+              "pg_q_value": "Protein-group q-value in the run"
+              "cscore": "DIA-NN CScore of the identification"
+              "evidence": "DIA-NN evidence score"
+              "spectrum_similarity": "Similarity of the observed and library spectrum"
+              "ms1_profile_corr": "Correlation of the MS1 elution profile with the fragment profiles"
+              "rt_min": "Observed retention time, minutes"
+              "predicted_rt_min": "Library-predicted retention time, minutes"
+              "rt_error_min": "Observed minus predicted retention time, minutes"
+              "peak_width_min": "Elution peak width, minutes"
+              "quantity_quality": "DIA-NN quantity quality, 0 to 1"
+              "log10_quantity": "log10 normalised precursor quantity"
+
+      # ----------------------------------------------------------------
+      - data_collection_tag: "quantms_proteins"
+        description: "Protein-group quantities per run from the DIA-NN protein-group matrix, with the peptides and precursors that support each"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/quantms/proteins.py"
+            params:
+              group_col: "{GROUP_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "run_id": "Run, the raw file name without its extension"
+              "condition": "Condition the run belongs to (GROUP_COL of the hub)"
+              "protein_group": "DIA-NN protein group, accessions joined by a semicolon"
+              "protein_name": "Entry names of the protein group"
+              "genes": "Gene names of the protein group"
+              "description": "Protein description"
+              "intensity": "Normalised protein-group quantity"
+              "log2_intensity": "log2 of the quantity"
+              "peptides": "Distinct peptides identified for the group in the run"
+              "precursors": "Precursors identified for the group in the run"
+
+      # ----------------------------------------------------------------
+      - data_collection_tag: "quantms_acquisition"
+        description: "Spectra acquired per run, from the converted mzML files: MS1 and MS2 counts, peaks per MS2, base-peak intensity and the span of the gradient"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/quantms/acquisition.py"
+            params:
+              group_col: "{GROUP_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "run_id": "Run, the raw file name without its extension"
+              "condition": "Condition the run belongs to (GROUP_COL of the hub)"
+              "ms1_spectra": "MS1 spectra in the run"
+              "ms2_spectra": "MS2 spectra in the run"
+              "ms2_per_ms1": "MS2 spectra per MS1 spectrum (the DIA window cycle)"
+              "median_ms2_peaks": "Median peaks in an MS2 spectrum"
+              "median_base_peak_intensity": "Median base-peak intensity of the MS2 spectra"
+              "rt_start_min": "Retention time of the first spectrum, minutes"
+              "rt_end_min": "Retention time of the last spectrum, minutes"
+              "gradient_min": "Span of the acquisition, minutes"
+              "ms2_per_min": "MS2 spectra per minute of the acquisition"
+
+      # ----------------------------------------------------------------
+      - data_collection_tag: "quantms_acquisition_profile"
+        description: "Acquisition over the gradient: MS1 and MS2 spectra and median MS2 base-peak intensity per run and minute of retention time"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/quantms/acquisition_profile.py"
+            params:
+              group_col: "{GROUP_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "run_id": "Run, the raw file name without its extension"
+              "condition": "Condition the run belongs to (GROUP_COL of the hub)"
+              "rt_min": "Start of the one-minute retention-time bin, minutes"
+              "ms1_spectra": "MS1 spectra in the bin"
+              "ms2_spectra": "MS2 spectra in the bin"
+              "median_base_peak_intensity": "Median MS2 base-peak intensity in the bin"
+
+      # ----------------------------------------------------------------
+      - data_collection_tag: "quantms_ms2_peak_bins"
+        description: "MS2 spectra per run by the number of peaks they hold, in bins of one hundred"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/quantms/ms2_peak_bins.py"
+            params:
+              group_col: "{GROUP_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "run_id": "Run, the raw file name without its extension"
+              "condition": "Condition the run belongs to (GROUP_COL of the hub)"
+              "peaks": "Peak-count bin label"
+              "bin_start": "First peak count of the bin, for ordering"
+              "spectra": "MS2 spectra in the bin"
+              "fraction": "Share of the run's MS2 spectra"
+
+      # ----------------------------------------------------------------
+      - data_collection_tag: "quantms_run_summary"
+        description: "One row per run: precursors, peptides and protein groups identified, identification yield, modified and missed-cleavage shares, retention-time agreement and peak width"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/quantms/run_summary.py"
+            params:
+              group_col: "{GROUP_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "run_id": "Run, the raw file name without its extension"
+              "condition": "Condition the run belongs to (GROUP_COL of the hub)"
+              "precursors": "Distinct modified-sequence and charge pairs identified in the run"
+              "peptides": "Distinct stripped peptide sequences identified"
+              "protein_groups": "Protein groups with a quantity in the run"
+              "ms2_spectra": "MS2 spectra acquired in the run"
+              "precursors_per_1000_ms2": "Identification yield, precursors per thousand MS2 spectra"
+              "modified_pct": "Share of precursors carrying a variable modification, percent"
+              "missed_cleavage_pct": "Share of precursors with at least one missed cleavage, percent"
+              "median_abs_rt_error_min": "Median absolute gap between observed and predicted retention time, minutes"
+              "median_peak_width_min": "Median elution peak width, minutes"
+              "median_log10_quantity": "Median log10 normalised precursor quantity"
+              "run_label": "Short label for an axis: the condition and the replicate of the hub, the run id without a design"
+
+      # ----------------------------------------------------------------
+      - data_collection_tag: "quantms_protein_summary"
+        description: "One row per protein group: peptide support, the runs it was detected in (one 0 or 1 column per run), mean abundance, variation between runs and abundance rank"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/quantms/protein_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "protein_group": "DIA-NN protein group, accessions joined by a semicolon"
+              "protein_name": "Entry names of the protein group"
+              "genes": "Gene names of the protein group"
+              "description": "Protein description"
+              "peptides": "Distinct peptides identified for the group over all runs"
+              "peptide_support": "Peptide support class: 1 peptide, 2 to 3 peptides or 4 or more peptides"
+              "runs_detected": "Runs the group was quantified in"
+              "runs_total": "Runs of the experiment"
+              "detected_pct": "Share of the runs that quantified the group, percent"
+              "detection": "All runs, Some runs or One run"
+              "mean_log2_intensity": "Mean log2 quantity over the runs it was detected in"
+              "cv_pct": "Coefficient of variation of the quantity between runs, percent"
+              "abundance_rank": "Rank by mean quantity, 1 is the most abundant"
+              "<run_id>": "One 0 or 1 column per run: 1 when the group was quantified in the run (the set-membership matrix)"
+
+      # ----------------------------------------------------------------
+      - data_collection_tag: "quantms_protein_conditions"
+        description: "Mean abundance and variation of every protein group within each condition"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/quantms/protein_conditions.py"
+            params:
+              group_col: "{GROUP_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "protein_group": "DIA-NN protein group, accessions joined by a semicolon"
+              "protein_name": "Entry names of the protein group"
+              "genes": "Gene names of the protein group"
+              "condition": "Condition the run belongs to (GROUP_COL of the hub)"
+              "runs": "Runs of the condition the group was quantified in"
+              "mean_log2_intensity": "Mean log2 quantity within the condition"
+              "sd_log2_intensity": "Standard deviation of the log2 quantity within the condition"
+              "cv_pct": "Coefficient of variation within the condition, percent"
+
+      # ----------------------------------------------------------------
+      - data_collection_tag: "quantms_sample_embedding"
+        description: "Two-dimensional projection of the runs from their protein quantities (principal components of the complete-case proteins)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/quantms/sample_embedding.py"
+            params:
+              group_col: "{GROUP_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "run_id": "Run, the raw file name without its extension"
+              "condition": "Condition the run belongs to (GROUP_COL of the hub)"
+              "dim_1": "First principal component score"
+              "dim_2": "Second principal component score"
+              "explained_1": "Variance explained by the first component, percent"
+              "explained_2": "Variance explained by the second component, percent"
+              "proteins_used": "Protein groups quantified in every run, the ones the projection uses"
+
+      # ----------------------------------------------------------------
+      - data_collection_tag: "quantms_sample_correlation"
+        description: "Pearson correlation of every pair of runs over their shared protein quantities (one column per run)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/quantms/sample_correlation.py"
+            params:
+              group_col: "{GROUP_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "run_id": "Run, the raw file name without its extension"
+              "condition": "Condition the run belongs to (GROUP_COL of the hub)"
+              "<run_id>": "One column per run: correlation of the row's run with that run"
+
+      # ----------------------------------------------------------------
+      - data_collection_tag: "quantms_replicate_pairs"
+        description: "Protein quantities of every pair of runs of the same condition, for replicate agreement plots"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/quantms/replicate_pairs.py"
+            params:
+              group_col: "{GROUP_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "protein_group": "DIA-NN protein group, accessions joined by a semicolon"
+              "protein_name": "Entry names of the protein group"
+              "genes": "Gene names of the protein group"
+              "condition": "Condition the run belongs to (GROUP_COL of the hub)"
+              "pair": "The two runs compared, as a label"
+              "run_x": "First run of the pair"
+              "run_y": "Second run of the pair"
+              "log2_x": "log2 quantity in the first run"
+              "log2_y": "log2 quantity in the second run"
+
+      # ----------------------------------------------------------------
+      - data_collection_tag: "quantms_comparisons"
+        description: "MSstats differential abundance: log fold change, standard error, p-value and adjusted p-value of every protein group in every contrast, with the direction call"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/quantms/comparisons.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "protein": "Protein entry name as MSstats reports it"
+              "protein_group": "DIA-NN protein group accession"
+              "genes": "Gene names"
+              "contrast": "Contrast label, e.g. condition A vs condition B"
+              "condition_a": "First condition of the contrast"
+              "condition_b": "Second condition of the contrast"
+              "log2fc": "log2 fold change, first condition over second"
+              "abs_log2fc": "Absolute log2 fold change"
+              "se": "Standard error of the log fold change"
+              "t_value": "Test statistic"
+              "df": "Degrees of freedom"
+              "p_value": "Raw p-value"
+              "adj_p_value": "Benjamini-Hochberg adjusted p-value"
+              "missing_pct": "Share of the protein's runs without a value, percent"
+              "imputed_pct": "Share of the protein's runs with an imputed value, percent"
+              "issue": "MSstats flag: oneConditionMissing or completeMissing, empty when tested"
+              "mean_a": "Mean log2 quantity in the first condition"
+              "mean_b": "Mean log2 quantity in the second condition"
+              "avg_log2_intensity": "Mean log2 quantity over both conditions (the MA-plot abscissa)"
+              "direction": "Up, Down or Not significant at adjusted p below 0.05 and absolute log2 fold change of at least 1"
+
+# ============================================================================
+# LINKS: the design fans out to every collection
+# ============================================================================
+links:
+  - source_dc_tag: "samples"
+    source_column: "run_id"
+    target_dc_tag: "quantms_run_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "run_id"}
+    description: "Filter the run summary by design runs"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "run_id"
+    target_dc_tag: "quantms_acquisition"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "run_id"}
+    description: "Filter the acquisition summary by design runs"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "run_id"
+    target_dc_tag: "quantms_acquisition_profile"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "run_id"}
+    description: "Filter the acquisition profile by design runs"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "run_id"
+    target_dc_tag: "quantms_ms2_peak_bins"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "run_id"}
+    description: "Filter the MS2 peak bins by design runs"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "run_id"
+    target_dc_tag: "quantms_precursors"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "run_id"}
+    description: "Filter the precursors by design runs"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "run_id"
+    target_dc_tag: "quantms_proteins"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "run_id"}
+    description: "Filter the protein quantities by design runs"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "run_id"
+    target_dc_tag: "quantms_sample_embedding"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "run_id"}
+    description: "Filter the sample embedding by design runs"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "run_id"
+    target_dc_tag: "quantms_sample_correlation"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "run_id"}
+    description: "Filter the sample correlation by design runs"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "{GROUP_COL}"
+    target_dc_tag: "quantms_protein_conditions"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "{GROUP_COL}"}
+    description: "Filter the protein conditions by design conditions"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "{GROUP_COL}"
+    target_dc_tag: "quantms_replicate_pairs"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "{GROUP_COL}"}
+    description: "Filter the replicate pairs by design conditions"
+    enabled: true
+  # A protein picked in the comparisons reaches the protein tables that carry its group.
+  - source_dc_tag: "quantms_comparisons"
+    source_column: "protein_group"
+    target_dc_tag: "quantms_protein_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "protein_group"}
+    description: "Carry a protein selection from the comparisons to the protein summary"
+    enabled: true

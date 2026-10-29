@@ -1418,6 +1418,137 @@ workflows:
               percentile_rank: "Percentile rank of the affinity among random peptides for the allele."
               binder: "strong below 50 nM, weak below 500 nM, none above."
 
+      # Pedigree tab (the 8f6x block; 8f60 is the dashboard): three families in
+      # the PED coding, one row per individual.
+      - id: "646b0f3c1e4a2d7f8e5b8f61"
+        data_collection_tag: "pedigree_demo"
+        description: "Three families in the PED coding (18 individuals): a three-generation family with a couple married in, a trio with a sibling, and a mother with no father in the table"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/pedigree_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              family: "Family the individual belongs to. One tree per value, side by side."
+              individual: "Individual identifier, unique across the table. One symbol each, and what a click filters on."
+              father: "Identifier of the father; 0 means a founder on that side, as in a PED file."
+              mother: "Identifier of the mother; 0 means a founder on that side, as in a PED file."
+              sex: "PED sex: 1 male (square), 2 female (circle), 0 unknown (diamond)."
+              status: "PED phenotype: 2 affected (filled), 1 unaffected (open), 0 unknown (hatched)."
+              deceased: "1 when the individual has died (diagonal slash), else 0."
+              label: "Generation and position in the family (I-1, II-2), written under the symbol."
+              note: "Free-text clinical note, shown in the hover."
+
+      # Ranked table tab (the 8f7x block; 8f70 is the dashboard): the top
+      # variants of a rare-disease run with the family and genotypes behind a
+      # row, and the outlier genes of three samples.
+      - id: "646b0f3c1e4a2d7f8e5b8f71"
+        data_collection_tag: "ranked_variants_demo"
+        description: "Thirteen candidate variants of two cases, ranked by a rank score, with the genotypes of the proband and both parents"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/ranked_variants_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              variant_key: "Variant identifier (chromosome:position), unique. What a click filters on."
+              case_id: "Case the variant was called in. Matches the family table."
+              gene: "Gene symbol, drawn bold."
+              hgvs_p: "Protein change in HGVS notation, drawn in monospace."
+              model_class: "Inheritance model the variant fits."
+              impact: "Predicted consequence severity."
+              clinvar: "ClinVar classification."
+              rank_score: "Combined rank score. Higher ranks first."
+              cadd: "CADD phred score."
+              gnomad_af: "gnomAD allele frequency, or absent."
+              chrom: "Chromosome."
+              pos: "Position on the chromosome."
+              gt_proband: "Genotype of the proband."
+              gt_mother: "Genotype of the mother."
+              gt_father: "Genotype of the father."
+
+      - id: "646b0f3c1e4a2d7f8e5b8f72"
+        data_collection_tag: "ranked_family_demo"
+        description: "Two families in the PED coding: a trio and a quartet with an unaffected sister, with a proband flag"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/ranked_family_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              case_id: "Case the individual belongs to."
+              individual: "Individual identifier, unique across the table."
+              father: "Identifier of the father; 0 means a founder."
+              mother: "Identifier of the mother; 0 means a founder."
+              sex: "PED sex: 1 male, 2 female, 0 unknown."
+              status: "PED phenotype: 2 affected, 1 unaffected, 0 unknown."
+              proband: "1 for the proband of the case, else 0."
+
+      - id: "646b0f3c1e4a2d7f8e5b8f73"
+        data_collection_tag: "ranked_genotypes_demo"
+        description: "The genotype of every family member at each ranked variant, one row per variant and person"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/ranked_genotypes_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              variant_key: "Variant identifier, matches the variants table."
+              sample: "Individual identifier, matches the family table."
+              gt_class: "Genotype call (0/0, 0/1, 1/1 or ./.)."
+
+      - id: "646b0f3c1e4a2d7f8e5b8f74"
+        data_collection_tag: "ranked_outliers_demo"
+        description: "Outlier genes of three samples, ranked by significance, with the analyses that flagged each"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/ranked_outliers_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              sample: "Sample the outlier was found in."
+              gene: "Gene symbol, drawn bold."
+              signal: "What the outlier looks like."
+              status: "Whether the outlier is called, a candidate or not called."
+              expression: "yes when the expression analysis flags the gene."
+              splicing: "yes when the splicing analysis flags the gene."
+              mae: "yes when the mono-allelic expression analysis flags the gene."
+              neg_log10_p: "Minus log10 of the p-value. Higher ranks first."
+              pvalue: "Nominal p-value."
+              padj: "Adjusted p-value."
+              z_score: "Expression z-score."
+              delta_psi: "Change in percent spliced in."
+
 # Region links. A genomic region travels as a chromosome filter plus a
 # position range on the emitting collection's own columns; a region link
 # renames that pair onto the target's columns (depictio/models/models/links.py),

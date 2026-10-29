@@ -124,6 +124,14 @@ function advancedVizEmits(m: StoredMetadata): { emits: boolean; column: string |
     case 'ranked_distribution':
       column = named ?? str(config.feature_id_col) ?? 'feature_id';
       break;
+    case 'pedigree':
+      // A symbol is one individual.
+      column = named ?? str(config.individual_col) ?? 'individual';
+      break;
+    case 'ranked_table':
+      // A row is one candidate: its key when it has one, else its title.
+      column = named ?? str(config.title_col) ?? 'title';
+      break;
     default:
       return { emits: false, column: null };
   }

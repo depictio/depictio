@@ -208,6 +208,10 @@ AV_JSON_SOURCE: dict[str, AvJsonSource] = {
     "spatial_cells": "client_only",
     # Hand-drawn SVG (two halves per genotype cell): no Plotly figure exists.
     "allele_grid": "client_only",
+    # Hand-drawn SVG (symbols, couple and sibship lines): no Plotly figure exists.
+    "pedigree": "client_only",
+    # A styled HTML table with medals, badges and bars: no Plotly figure exists.
+    "ranked_table": "client_only",
 }
 
 

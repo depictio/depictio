@@ -237,6 +237,7 @@ only the present ones when they are uploaded.
   display: {scale: log}       # default display settings, see "Display settings"
   call_stepper: true          # next / previous region and the region picker
   follow_window: true         # follow the region of the other genome tiles
+  auto_height: true           # the tile is as tall as its open tracks (3 to 16 grid rows)
   views: [breakpoint, circular]   # extra views; breakpoint needs locus_from.mate
   circular_categories: [sv]   # track categories the circular view draws
   color_by: condition         # manifest column that colours and groups tracks
@@ -273,7 +274,10 @@ without restating the display.
   smallest start to the largest end among the rows on the most frequent
   chromosome (ties: the one seen first), `padding` bases on both sides, start
   clamped at 1. Above `max_rows` the view does not move; what it shows then is
-  the opening locus below.
+  the opening locus below. With `span_top: N` the first call of the opening
+  locus becomes the first N calls (in `sort_by` order), framed together when
+  they lie on one chromosome within `max_span` bases (default 1 Mb), else the
+  first call alone: the best few variants of one locus show in one window.
 
 **Chrome:** the tile's settings action (the same icon and *Controls* popover
 as every other tile's viz settings) holds one switch per display option,
@@ -595,7 +599,12 @@ The browser takes part in the dashboard's linked views:
 - `follow_window` (default on) makes it follow the genomic window another genome
   tile publishes (a coverage track, another browser), and publish its own; the
   toolbar switch "Follow other genome tiles" turns it off per viewer. It is
-  ignored while Both sides holds two regions;
+  ignored while Both sides holds two regions. A `genome_view` publishes its
+  window only when it opts in (`publish_view_window`); by default only a region
+  selected there (the Select mode of its header) moves the browser;
+- `auto_height` (default off) sizes the tile to the tracks it has open, between
+  3 and 16 grid rows, instead of the stored height; "Fit tracks to the tile" is
+  not offered then, since the tracks and the tile would chase each other;
 - in a compact density the header is one line, with a "Genome" tag, and the
   table of the shown tracks opens from the toolbar.
 

@@ -42,18 +42,20 @@ The landing page, at compact width with the filter panel collapsed:
   to its tab: the consensus genomes Nextclade rates good, the amplicons under 10x in at
   least one sample, the missense share of the calls, and the most common Pangolin lineage
   among the assigned samples. Below them, four figures in two rows, each linking its tab:
-  median depth against genome covered at 10x per sample beside the median depth of each
-  amplicon along the genome (a summary of the amplicon track, one tick per power of ten),
-  then the allele frequency of every call along the genome beside the classification flow
-  from QC verdict to lineage and clade. The bar of this section filters by sample and
-  genome at 10x.
+  median depth against genome covered at 10x per sample (it judges coverage only) beside
+  Nextclade's QC score of each consensus genome, worst first and coloured by its verdict, so
+  a sample that passes on coverage and is rated bad on its consensus shows up; then the
+  allele frequency of every call along the genome beside the calls per gene by functional
+  class. The figures answer one question each, and none repeats a tab's own figure under a
+  different type. The bar of this section filters by sample and genome at 10x.
 - **How to read this dashboard**: one tile per tab, by group, each showing its question.
 
 The persistent `Sample filters` (lineage, then sample id) sit in the collapsed left panel
 and narrow every tab; the persistent `QC thresholds` (genome at 10x, median depth, reads
 mapped and variants called) sit collapsed below them. The `Sample sheet` section, the run
 summary table, is pinned to the bottom of every child tab, collapsed, and absent from the
-Overview.
+Overview. Sample names come from the samplesheet, and the section says what a suffix such as
+_PE or _SE marks where a run uses one (paired-end or single-end reads).
 
 ## Child tabs
 
@@ -72,12 +74,18 @@ own sample filter reads the MultiQC report.
 **Sample QC.** Strip: median reads mapped (samples against the 1,000-read floor), the
 median share of reads mapped (a gauge), the median depth (with its spread) and the median
 genome at 10x (with its distribution). Then median depth (log axis) against genome
-covered at 10x, one point per sample with the 80% floor dashed, beside the sample record
-card (it waits for a pick in the scatter or the Sample sheet); every run's summary carries
-both columns, where a run no caller reached writes NA for its calls. Then Nextclade
-substitutions against deletions per consensus genome (whole-number axes from zero), and
-the genome covered at 1x and 10x per sample. Filters: SNPs and indels called, and the
-missing bases of the consensus.
+covered at 10x, one point per sample coloured pass or fail, with the 80% floor and the 10x
+depth drawn as dashed lines and the fail corners shaded (a failing sample carries its name;
+the markers are large because a run often has few samples), beside the sample record card (it
+waits for a pick in the scatter or the Sample sheet); every run's summary carries both
+columns, where a run no caller reached writes NA for its calls. The scatter judges coverage
+only: a sample can pass it and still be rated mediocre or bad by Nextclade, which also counts
+the bases the consensus could not read, and the intro says so. Then the Nextclade reading of
+each consensus genome in two panels, because the counts differ by orders of magnitude: the
+substitutions and deleted bases it finds against the reference (stacked, above) and the
+missing bases (below, log axis), the most missing first, with a dot in the Nextclade QC
+colour above each bottom bar; and the genome covered at 1x and 10x per sample. Filters: SNPs
+and indels called, and the missing bases of the consensus.
 
 **Coverage & Depth.** Strip: the median depth per 200 bp window (with its distribution),
 the windows under 10x (their depth, a bar at 0 being a true gap), the median amplicon depth
@@ -91,22 +99,50 @@ amplicon and amplicon depth.
 most samples share), the median allele frequency (calls against the 0.75 consensus cut-off)
 and the median read depth (with its spread). Then the allele frequency of every call along
 the genome (no point labels: mutation labels pile up over the dots), the allele frequency
-histogram beside the reference against alternate depth scatter, and the mutation matrix
+histogram, and the mutation matrix
 per sample and gene. Collapsed: the per-gene lollipops, calls per gene and per sample, and
 the variant table. Filters: gene, effect, functional class, allele frequency and read
 depth; a collapsed `Matrix filter` narrows the mutation matrix by mutation type only.
 
+**Genome browser (preview dashboard `v2.yaml`).** The preview dashboard adds a genome
+browser to the Variants tab, linked to the allele frequency plot. It has no fixed location:
+it opens on the best supported call and lists the calls in its region picker with their gene,
+effect and frequency. "Best supported" is the `call_score` column the variant recipe
+(`recipes/variants_long.py`) adds: the allele frequency first, the read depth to break the
+ties at 1.0, and the calls outside a gene (snpEff's intergenic pseudo-genes) last, so the
+first call is never one of those. Picking a dot of the plot or a row of the variant table
+narrows the calls to that mutation and centres the browser on it, on the samples that carry
+it. The window follows the other genome tiles of the tab. The tracks manifest holds one
+variant and one alignment file per sample and no colour of its own: the tracks take the
+colour of the sample's Pangolin lineage (`color_by: lineage`, the key of `category_colors`
+the plots read) and the variants the colour of their snpEff effect. The manifest leads with
+the sample of the best supported call, so the opening tracks are that sample's variants and
+reads, then the next sample's. The tile shows the assembly's gene track, the ARTIC primers
+and the Nextstrain clade markers.
+
 **Lineage & Clustering.** Strip: the distinct Pangolin lineages (unassigned genomes left
 out, the bar splitting the samples by lineage), the distinct Nextclade clades (a ring), the
-median Nextclade QC score (genomes against Nextclade's marks: under 30 good, 100 or more
-bad) and the median missing bases (with its spread). Then the classification flow from
-Pangolin QC verdict to lineage to clade (ribbons coloured by their target: on most runs
-every flow leaves the one verdict "pass"), the PCA of the samples by the mutations they
-share, and the UpSet of the mutations shared across lineages (no annotation strip, which
-would list every mutation in its legend). Collapsed: samples per lineage and per clade (the
-eight largest, the rest as Other), then the Pangolin table with
-its lineage record card (the Scorpio notes a cell cuts short) and the Nextclade table.
+median Nextclade QC score (Nextclade's own scale: under 30 good, 30 to 100 mediocre, 100 or
+more bad, a clean genome 0) and the median missing bases (with its spread). Open below it,
+what reads the same on three samples and on a hundred: Nextclade's QC score of each
+consensus genome (the worst 40, log axis, coloured by verdict, with the 30 and 100 marks as
+dashed lines), and the Pangolin table with its lineage record card (the Scorpio notes a cell
+cuts short). Collapsed, because they compare samples with each other and say little on a run
+of a few: the classification flow from Pangolin QC verdict to lineage to clade (ribbons
+coloured by their target: on most runs every flow leaves the one verdict "pass"), the PCA of
+the samples by the mutations they share, the UpSet of the mutations shared across lineages
+(no annotation strip, which would list every mutation in its legend), and, in the preview
+dashboard, the table of the mutations of a clicked intersection. Also collapsed: samples per
+lineage and per clade (the eight largest, the rest as Other) and the Nextclade table.
 Filters: lineage, clade and the two QC verdicts.
+
+**Gene and Sample (preview dashboard `v2.yaml`).** The preview dashboard groups its tabs as
+Data & QC, Mutations (Variants, Gene, Sample) and Typing (Lineage & Clustering). Gene and
+Sample each open on one pick. The Gene picker starts on the gene holding the best supported
+call (`default_by: call_score`, which never picks an intergenic pseudo-gene) and shows the
+mutations of that gene along it (a lollipop) beside the allele frequency of its calls
+sample by sample. The Sample picker starts on the best covered sample and shows its calls
+along the genome with a record card for the picked call, then its depth along the genome.
 
 ## Routes and pruning
 
@@ -114,8 +150,8 @@ Filters: lineage, clade and the two QC verdicts.
 |---|---|
 | Nanopore (`platform: nanopore`) | The ivar variant tables are pruned: no Variants tab, PCA, UpSet or missense row. `summary_metrics` stays (the ARTIC summary has every column but `% Mapped reads`, left empty), so the Key figures, the persistent filters and the Sample sheet stay too. Coverage and typing read the ARTIC outputs. |
 | A partial run (no caller output, no Pangolin) | The summary writes NA for the calls and the lineage: Variants per sample reads "–", the lineage filter in the left panel offers NA alone, and the Variants and Lineage & Clustering tabs are pruned. The Overview's bars and cards do not split by lineage. |
-| No primer scheme (metagenomic) | No amplicon cards, tracks, heatmap or table; the Coverage strip keeps its two window cards, and the amplicon row and figure leave the Overview. |
-| Non-SARS virus, `--skip_pangolin`, `--skip_nextclade` | No typing cards, flow or tables for the missing tool, and its Findings row and figure leave the Overview. |
+| No primer scheme (metagenomic) | No amplicon cards, tracks, heatmap or table; the Coverage strip keeps its two window cards, and the amplicon row leaves the Overview. |
+| Non-SARS virus, `--skip_pangolin`, `--skip_nextclade` | No typing cards, QC score bars, flow or tables for the missing tool, and its Findings row and figure leave the Overview. |
 | `--skip_variants_long_table` | No Variants tab, PCA, UpSet or missense row. |
 
 The import re-packs the Overview grid after a drop, so a lone figure takes the full row.
@@ -139,7 +175,8 @@ Analysis mode's groups when it has some.
 
 Every per-sample table (run summary, amplicon depth, Pangolin, Nextclade, variant calls)
 selects rows on `sample`, and the depth against breadth scatter, the Nextclade scatter,
-the allele frequency track, the read support scatter and the PCA select points on it.
+the allele frequency track and the PCA select points on it, and the Nextclade bars and the
+Nextclade QC score bars select a sample.
 `summary_metrics` links `sample` to every per-sample collection, so a pick narrows the rest
 of the tab. The record cards wait for a pick. A lasso on the PCA becomes an analysis group.
 

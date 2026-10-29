@@ -63,7 +63,7 @@
 template:
   template_id: "nf-core/chipseq/2.1.0"
   description: "nf-core/chipseq 2.x template: MACS3 peak calls (narrowPeak or broadPeak), HOMER peak annotation, consensus peak sets per antibody and their DESeq2 sample QC, for any aligner, on top of the MultiQC report."
-  version: "2.0.0"
+  version: "2.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "The chipseq --outdir (one directory per aligner, fastqc/, trimgalore/, multiqc/, pipeline_info/), with the MultiQC parquet under multiqc/narrow_peak/multiqc_data/ or multiqc/broad_peak/multiqc_data/, or multiqc/multiqc_data/ for a reprocessed run."

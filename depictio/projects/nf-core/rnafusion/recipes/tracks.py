@@ -14,7 +14,9 @@ fusion breakpoints themselves are not a track either: the browser frames them
 (the `locus_from` of the Breakpoints tab).
 
 Row order is what the browser opens on (``initial_tracks`` shows the first
-rows): the samples in sheet order.
+rows): the samples in sheet order. The manifest carries no colour: the tile
+colours its tracks by ``sample`` (``color_by``), the key the dashboard's
+``category_colors`` declares, so a sample keeps one hue everywhere.
 
 Two ways the files are read:
 - ``TRACKS_URI`` is set (the template turns it into ``remote_base_uri``): every
@@ -31,7 +33,6 @@ Output schema:
     format : Utf8       bam / cram
     uri : Utf8          path relative to the results folder
     name : Utf8         track label shown in the browser
-    color : Utf8        per-sample colour
     category : Utf8     track-selector folder
     order : Int64       row order the browser opens with (``order_column``)
 """
@@ -61,7 +62,6 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "format": pl.Utf8,
     "uri": pl.Utf8,
     "name": pl.Utf8,
-    "color": pl.Utf8,
     "category": pl.Utf8,
     "order": pl.Int64,
 }
@@ -71,16 +71,6 @@ _ALIGNMENTS = (
     ("bam", "star/{s}.Aligned.sortedByCoord.out.bam"),
     ("cram", "star/{s}.Aligned.sortedByCoord.out.cram"),
 )
-
-# One colour per sample, in sheet order.
-_PALETTE = [
-    "rgb(31,119,180)",
-    "rgb(214,39,40)",
-    "rgb(44,160,44)",
-    "rgb(148,103,189)",
-    "rgb(255,127,14)",
-    "rgb(23,190,207)",
-]
 
 
 def transform(sources: dict[str, pl.DataFrame], context=None) -> pl.DataFrame:
@@ -98,7 +88,7 @@ def transform(sources: dict[str, pl.DataFrame], context=None) -> pl.DataFrame:
         return next(((f, p) for f, p in candidates if context.exists(p)), candidates[0])
 
     rows = []
-    for i, sample in enumerate(samples):
+    for sample in samples:
         fmt, uri = pick(sample)
         rows.append(
             {
@@ -108,7 +98,6 @@ def transform(sources: dict[str, pl.DataFrame], context=None) -> pl.DataFrame:
                 "format": fmt,
                 "uri": uri,
                 "name": f"{sample} reads",
-                "color": _PALETTE[i % len(_PALETTE)],
                 "category": "Alignments",
             }
         )

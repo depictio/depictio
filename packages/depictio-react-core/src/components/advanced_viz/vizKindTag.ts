@@ -262,6 +262,16 @@ const VIZ_KIND: Readonly<Record<string, VizKindLabel>> = {
     'tabler:layout-columns',
     'Genotype per sample and locus, one half per haplotype, coloured by allele group',
   ),
+  pedigree: label(
+    'Pedigree',
+    'mdi:family-tree',
+    'Family tree with the standard symbols: sex as the shape, affected status as the fill',
+  ),
+  ranked_table: label(
+    'Top',
+    'mdi:podium',
+    'Leaderboard of candidates ordered by a score: medals, badges, bars and a hover popover',
+  ),
   // `record_card` is a card of fields, not a figure: no label.
 };
 

@@ -29,6 +29,15 @@ describe('vizKindTag', () => {
     expect(vizKindLabel('allele_grid')?.description).toMatch(/haplotype/);
   });
 
+  it('names the pedigree by its icon in the picker', () => {
+    expect(vizKindLabel('pedigree')).toMatchObject({ tag: 'Pedigree', icon: 'mdi:family-tree' });
+  });
+
+  it('tags the ranked table apart from the ranked distribution', () => {
+    expect(vizKindLabel('ranked_table')).toMatchObject({ tag: 'Top', icon: 'mdi:podium' });
+    expect(vizKindTag('ranked_table')).not.toBe(vizKindTag('ranked_distribution'));
+  });
+
   it('gives a legacy alias the tag of the kind it became', () => {
     expect(vizKindTag('ancombc_differentials')).toBe(vizKindTag('da_barplot'));
     expect(vizKindLabel('ancombc_differentials')).toEqual(vizKindLabel('da_barplot'));

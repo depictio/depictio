@@ -68,3 +68,31 @@ export function recordEcho(target: RecordTarget | null, recordCount: number | nu
   const n = recordCount ?? target.selection.values.length;
   return `selected: ${n}`;
 }
+
+/**
+ * The id of the best row for `default_record_by`: the highest value of `byCol`
+ * (the lowest when `ascending`), nulls and non-numbers skipped. Ties keep the
+ * first row. Null when no row has a value.
+ */
+export function bestRecordId(
+  rows: Record<string, unknown[]> | null | undefined,
+  idCol: string,
+  byCol: string,
+  ascending = false,
+): string | null {
+  const ids = rows?.[idCol];
+  const values = rows?.[byCol];
+  if (!ids || !values) return null;
+  let best: number | null = null;
+  let bestId: string | null = null;
+  for (let i = 0; i < ids.length; i++) {
+    const v = values[i];
+    const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v) : NaN;
+    if (!Number.isFinite(n) || ids[i] == null) continue;
+    if (best === null || (ascending ? n < best : n > best)) {
+      best = n;
+      bestId = String(ids[i]);
+    }
+  }
+  return bestId;
+}

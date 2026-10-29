@@ -12,10 +12,15 @@ Merge order, lowest to highest precedence:
 from __future__ import annotations
 
 import copy
+import os
 import re
-from collections.abc import Callable
+import threading
+import time
+from collections.abc import Callable, Iterable
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
+from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.services.jbrowse.assemblies import (
     PresetUrlFor,
     get_assembly_preset,
@@ -28,6 +33,20 @@ from depictio.models.models.data_collections_types.genomic_tracks import CustomA
 # role → URL for one track (data / index)
 UrlFor = Callable[[TrackRow, str], str]
 AssemblyUrlFor = Callable[[str, str], str]
+# Does the index a track declares exist? (None: not checked, the index is trusted)
+IndexExists = Callable[[TrackRow], bool]
+
+# Default per-track download limit (MB) of the whole-file formats, applied when
+# the component sets no ``fetch_size_limit_mb``. JBrowse's own 1 MB stops a
+# plain VCF / BED / bedGraph at "Force load" long before a useful region is in.
+# Indexed and bigWig/BAM/CRAM tracks read byte ranges and keep JBrowse's default.
+DEFAULT_FETCH_SIZE_LIMIT_MB = 20
+DEFAULT_FETCH_SIZE_LIMIT_FORMATS = frozenset(
+    {"vcf", "bed", "narrowpeak", "broadpeak", "bedgraph", "gff3", "gtf"}
+)
+
+# Formats whose tabix index can be absent: they fall back to the plain adapter.
+_TABIX_FORMATS = frozenset({"bedgraph", "bed", "narrowpeak", "broadpeak", "vcf", "gff3"})
 
 NARROWPEAK_COLUMNS = [
     "chrom",
@@ -228,6 +247,105 @@ def variant_color_jexl(
     return "jexl:" + expression
 
 
+def variant_label_jexl(spec: dict[str, Any] | None) -> str | None:
+    """Jexl naming a variant by one ``|`` part of an INFO field, else its ID.
+
+    ``spec`` is the component's ``variant_label_by`` (``info_field``, ``part``).
+    An array field (``CSQ``, ``ANN``) is joined first, so the part is read from
+    its first annotation.
+    """
+    if not spec:
+        return None
+    info_field = spec.get("info_field") or "CSQ"
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", info_field):
+        raise ValueError(f"Invalid INFO field name '{info_field}'")
+    part = int(spec.get("part", 3))
+    value = f"join('|', get(feature,'INFO').{info_field})"
+    return f"jexl:split({value}, '|')[{part}] || get(feature,'name') || get(feature,'id')"
+
+
+# --------------------------------------------------------------------------
+# Index existence (a manifest can declare an index that was never produced)
+# --------------------------------------------------------------------------
+
+_INDEX_CACHE_TTL_S = 300.0
+_INDEX_ERROR_TTL_S = 30.0  # a failed check is retried soon, not on every render
+_index_cache: dict[tuple[str, str], tuple[float, bool]] = {}
+_index_cache_lock = threading.Lock()
+
+
+def clear_index_exists_cache() -> None:
+    with _index_cache_lock:
+        _index_cache.clear()
+
+
+def _probe_index(uri: str, base_folder: str) -> bool:
+    """True when the object at ``uri`` exists; raises when that cannot be told."""
+    from depictio.api.v1.services import remote_read
+
+    if "://" not in uri and LOCAL_ABSOLUTE.match(uri):
+        return os.path.exists(uri)
+    try:
+        remote_read.source_size(remote_read.resolve_location(uri, base_folder))
+    except remote_read.RemoteReadError as exc:
+        if exc.status == 404:
+            return False
+        raise
+    return True
+
+
+def cached_index_exists(
+    uri: str, base_folder: str = "", probe: Callable[[str, str], bool] = _probe_index
+) -> bool:
+    """Existence of the index at ``uri``, cached per URI for a few minutes.
+
+    A check that fails (network, credentials, a location the proxy would refuse
+    anyway) never drops the index: the answer is "exists", remembered only for
+    ``_INDEX_ERROR_TTL_S`` so a down storage does not stall every render.
+    """
+    key = (base_folder, uri)
+    now = time.monotonic()
+    with _index_cache_lock:
+        cached = _index_cache.get(key)
+        if cached and now < cached[0]:
+            return cached[1]
+    try:
+        found = probe(uri, base_folder)
+        expires = now + _INDEX_CACHE_TTL_S
+    except Exception as exc:  # noqa: BLE001 - any failure of the check itself
+        logger.debug(f"jbrowse: could not check index {uri}: {exc}")
+        found, expires = True, now + _INDEX_ERROR_TTL_S
+    with _index_cache_lock:
+        if len(_index_cache) > 4096:
+            _index_cache.clear()
+        _index_cache[key] = (expires, found)
+    return found
+
+
+def storage_index_checker(
+    base_folder: str, probe: Callable[[str, str], bool] | None = None
+) -> IndexExists:
+    """An ``IndexExists`` checking a track's index in storage (``base_folder`` for relative ones)."""
+
+    def check(track: TrackRow) -> bool:
+        if not track.index_uri:
+            return False
+        return cached_index_exists(track.index_uri, base_folder, probe or _probe_index)
+
+    return check
+
+
+def prefetch_index_checks(
+    tracks: Iterable[TrackRow], index_exists: IndexExists, max_workers: int = 16
+) -> None:
+    """Warm the cache for every track that declares a checkable index, in parallel."""
+    todo = [t for t in tracks if t.index_uri and t.bgzipped and t.fmt in _TABIX_FORMATS]
+    if len(todo) < 2:
+        return
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(todo))) as pool:
+        list(pool.map(index_exists, todo))
+
+
 def _loc(uri: str) -> dict[str, str]:
     return {"uri": uri, "locationType": "UriLocation"}
 
@@ -236,10 +354,22 @@ def _index_type(index_uri: str | None, default: str) -> str:
     return "CSI" if index_uri and index_uri.split("?", 1)[0].endswith(".csi") else default
 
 
-def _base_track(track: TrackRow, assembly_name: str) -> tuple[str, dict[str, Any]]:
-    """Track type and adapter for ``track`` (locations filled in by the caller)."""
+def _base_track(
+    track: TrackRow, assembly_name: str, index_exists: IndexExists | None = None
+) -> tuple[str, dict[str, Any]]:
+    """Track type and adapter for ``track`` (locations filled in by the caller).
+
+    A bgzipped file whose declared index does not exist (per ``index_exists``)
+    gets the plain whole-file adapter, as if it declared none.
+    """
     fmt = track.fmt
     indexed = track.bgzipped and bool(track.index_uri)
+    if indexed and index_exists is not None and fmt in _TABIX_FORMATS and not index_exists(track):
+        logger.warning(
+            f"jbrowse: index {track.index_uri} of track {track.track_id} does not exist; "
+            "reading the whole file instead"
+        )
+        indexed = False
     if fmt == "bigwig":
         return "QuantitativeTrack", {"type": "BigWigAdapter", "bigWigLocation": "@data"}
     if fmt == "bedgraph":
@@ -312,7 +442,10 @@ def _fill_locations(node: Any, track: TrackRow, url_for: UrlFor) -> Any:
 
 
 def _color_displays(
-    track_type: str, color: str | None, variant_color: str | None = None
+    track_type: str,
+    color: str | None,
+    variant_color: str | None = None,
+    variant_label: str | None = None,
 ) -> list[dict[str, Any]]:
     if track_type == "QuantitativeTrack":
         if not color:
@@ -337,13 +470,13 @@ def _color_displays(
                 },
             }
         ]
-    if track_type == "VariantTrack" and variant_color:
-        return [
-            {
-                "type": "LinearVariantDisplay",
-                "renderer": {"type": "CanvasFeatureRenderer", "color1": variant_color},
-            }
-        ]
+    if track_type == "VariantTrack" and (variant_color or variant_label):
+        renderer: dict[str, Any] = {"type": "CanvasFeatureRenderer"}
+        if variant_color:
+            renderer["color1"] = variant_color
+        if variant_label:
+            renderer["labels"] = {"name": variant_label}
+        return [{"type": "LinearVariantDisplay", "renderer": renderer}]
     return []
 
 
@@ -387,13 +520,26 @@ _ALIGNMENT_SUBDISPLAYS = {
 }
 
 
-def apply_fetch_size_limit(conf: dict[str, Any], limit_bytes: int | None) -> dict[str, Any]:
+# JBrowse also hides a feature track behind "Force load" when it holds more
+# than ``maxFeatureScreenDensity`` features per pixel (0.3 by default): a
+# cluster of a few hundred calls in a 100 kb window already trips it, although
+# the canvas renderers draw thousands without trouble. A tile that raised the
+# download limit wants its features drawn, so it raises this one with it.
+_DENSE_DISPLAYS = {"LinearVariantDisplay", "LinearBasicDisplay"}
+DENSE_SCREEN_DENSITY = 5
+
+
+def apply_fetch_size_limit(
+    conf: dict[str, Any], limit_bytes: int | None, override: bool = True
+) -> dict[str, Any]:
     """Raise (or lower) JBrowse's per-track download limit on every display.
 
     JBrowse stops at ``fetchSizeLimit`` bytes (1 MB by default) and shows a
     "Force load" button instead of the features. The limit is a display setting,
     so the track's default display is created when the config has none; an
     alignments display carries it on its pileup and SNP-coverage sub-displays.
+    ``override=False`` keeps a limit a display already sets (a default must not
+    replace a value from a preset or an override).
     """
     if not limit_bytes:
         return conf
@@ -407,10 +553,14 @@ def apply_fetch_size_limit(conf: dict[str, Any], limit_bytes: int | None) -> dic
                 sub = dict(display.get(slot) or {})
                 sub.setdefault("type", sub_type)
                 sub.setdefault("displayId", f"{conf['trackId']}-{sub_type}")
-                sub["fetchSizeLimit"] = limit_bytes
+                if override or "fetchSizeLimit" not in sub:
+                    sub["fetchSizeLimit"] = limit_bytes
                 display[slot] = sub
         else:
-            display["fetchSizeLimit"] = limit_bytes
+            if override or "fetchSizeLimit" not in display:
+                display["fetchSizeLimit"] = limit_bytes
+            if display.get("type") in _DENSE_DISPLAYS:
+                display.setdefault("maxFeatureScreenDensity", DENSE_SCREEN_DENSITY)
     conf["displays"] = displays
     return conf
 
@@ -447,17 +597,23 @@ def build_track_config(
     variant_color: str | None = None,
     display: Callable[[str], str | None] | None = None,
     show_junctions: bool = False,
+    index_exists: IndexExists | None = None,
+    variant_label: str | None = None,
 ) -> dict[str, Any]:
     """One JBrowse track configuration for a manifest row.
 
     ``variant_color`` (see ``variant_color_jexl``) colours a variant track's
-    features; the format layers merge into that display, so a height set there
+    features and ``variant_label`` (see ``variant_label_jexl``) names them; the format layers merge into that display, so a height set there
     stays. ``display`` maps a URI cell of the row to what the client may be
     shown (default: ``display_uri``); only ``metadata`` goes through it, the
     adapter locations keep the URLs JBrowse fetches. ``show_junctions`` draws
     splice-junction arcs on an alignments track (see ``_alignment_displays``).
+    ``index_exists`` tells whether the index a track declares is really there
+    (see ``_base_track``). ``fetch_size_limit`` unset gives the whole-file
+    formats ``DEFAULT_FETCH_SIZE_LIMIT_MB`` (a limit set by a preset or override
+    on the display wins over that default).
     """
-    track_type, adapter = _base_track(track, assembly_name)
+    track_type, adapter = _base_track(track, assembly_name, index_exists)
     conf: dict[str, Any] = {
         "type": track_type,
         "trackId": track.track_id,
@@ -467,7 +623,7 @@ def build_track_config(
         "adapter": _fill_locations(adapter, track, url_for),
         "metadata": _display_metadata(track, display or display_uri),
     }
-    colored = _color_displays(track_type, track.color, variant_color)
+    colored = _color_displays(track_type, track.color, variant_color, variant_label)
     if track_type == "AlignmentsTrack":
         colored = _alignment_displays(show_junctions)
     if colored:
@@ -476,7 +632,13 @@ def build_track_config(
         fmt_conf = override.get(track.fmt)
         if fmt_conf:
             conf = deep_merge(conf, fmt_conf)
-    return _finalize_displays(apply_fetch_size_limit(conf, fetch_size_limit))
+    if fetch_size_limit:
+        conf = apply_fetch_size_limit(conf, fetch_size_limit)
+    elif track.fmt in DEFAULT_FETCH_SIZE_LIMIT_FORMATS:
+        conf = apply_fetch_size_limit(
+            conf, int(DEFAULT_FETCH_SIZE_LIMIT_MB * 1024 * 1024), override=False
+        )
+    return _finalize_displays(conf)
 
 
 def build_assembly_config(

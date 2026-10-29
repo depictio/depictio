@@ -27,8 +27,19 @@ bigWigs, which are range-read.
 
 Row order is what the browser opens on (``initial_tracks`` shows the first
 rows): the coverage, then the P-sites, then the BAMs (0.3 to 2 GB each in the
-megatest); inside a block, the first library of every assay before the second,
-so the first rows put one total-mRNA and one footprint library side by side.
+megatest). Inside a block the libraries come in design order: one representative
+per assay and design group first (one control and one treated library of each
+assay, the assays in sheet order), then the second library of every assay and
+group, and so on. The opening tracks therefore cover the design instead of the
+first replicates of one condition.
+
+The design group (the template's ``GROUP_COL``: a treatment, a condition) is a
+column of the manifest under its own name, which the tile colours by
+(``color_by``): the libraries of a group share a hue and the Tracks menu groups the
+tracks by it. It is read from the design table when that has the column, else from
+the sample sheet; without either, the column is the constant ``__no_group__``. A
+library's label is the sheet's (or the design table's) ``sample_description`` when
+it has one, else the sample id.
 
 Two ways the files are read:
 - ``TRACKS_URI`` is set (the template turns it into ``remote_base_uri``): every
@@ -37,16 +48,23 @@ Two ways the files are read:
   uploads them at ingestion (all rows are kept when none is present, so a
   tables-only run still lists what the pipeline publishes).
 
-Output schema:
+Parameters:
+    group_col  the design column the tracks are coloured by (the template's ``GROUP_COL``)
+
+Sources:
+    samplesheet  the run's ``--input`` sheet (assay, strandedness, design columns)
+    metadata     the optional design table (first column the sample id)
+
+Output schema (the group column is named by ``group_col``):
     track_id : Utf8     `<sample>.<kind>[.<strand>]`, unique per file
     sample : Utf8       the library the file belongs to (links to `samples`)
     assay : Utf8        RNA-seq / Ribo-seq / TI-seq, from the sheet's `type`
+    <group> : Utf8      the library's design group
     strand : Utf8       forward / reverse for the stranded tracks, empty otherwise
     kind : Utf8         psites / coverage / alignments
     format : Utf8       bedgraph / bigwig / bam
     uri : Utf8          path relative to the results folder
-    name : Utf8         track label shown in the browser
-    color : Utf8        per-assay colour, the reverse strand a lighter shade
+    name : Utf8         track label shown in the browser (library label, then what the file is)
     category : Utf8     track-selector folder
     order : Int64       row order the browser opens with (``order_column``)
 """
@@ -66,6 +84,8 @@ SOURCES: list[RecipeSource] = [
         format="csv",
         read_kwargs={"infer_schema_length": 0},
     ),
+    # The design table (METADATA_FILE), absent on a run without one.
+    RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
 # OUTPUT SCHEMA: the columns transform() returns, checked after it.
@@ -78,16 +98,21 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "format": pl.Utf8,
     "uri": pl.Utf8,
     "name": pl.Utf8,
-    "color": pl.Utf8,
     "category": pl.Utf8,
     "order": pl.Int64,
 }
+# The group column is named by the template's group_col and passes through.
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
-# The sheet's `type` -> (label, (forward / BAM colour, reverse colour)).
+#: Column the group falls back to when the template names none.
+NO_GROUP_COL = "__no_group__"
+NO_GROUP_VALUE = "All libraries"
+
+# The sheet's `type` -> assay label.
 _ASSAYS = {
-    "rnaseq": ("RNA-seq", ("rgb(31,119,180)", "rgb(140,186,222)")),
-    "riboseq": ("Ribo-seq", ("rgb(255,127,14)", "rgb(255,187,125)")),
-    "tiseq": ("TI-seq", ("rgb(148,103,189)", "rgb(199,175,222)")),
+    "rnaseq": "RNA-seq",
+    "riboseq": "Ribo-seq",
+    "tiseq": "TI-seq",
 }
 _DEFAULT_ASSAY = "riboseq"
 _FOOTPRINT = ("riboseq", "tiseq")
@@ -119,7 +144,24 @@ def _stranded(strandedness: str, assay_key: str) -> bool:
     return assay_key in _FOOTPRINT
 
 
-def transform(sources: dict[str, pl.DataFrame], context=None) -> pl.DataFrame:
+def _by_sample(df: pl.DataFrame | None, id_col: str | None, column: str) -> dict[str, str]:
+    """``sample -> value`` of one column of a table keyed on ``id_col``, blanks left out."""
+    if df is None or id_col is None or column not in df.columns or column == id_col:
+        return {}
+    out: dict[str, str] = {}
+    for record in df.to_dicts():
+        sample = str(record.get(id_col) or "").strip()
+        value = str(record.get(column) or "").strip()
+        if sample and value:
+            out.setdefault(sample, value)
+    return out
+
+
+def transform(
+    sources: dict[str, pl.DataFrame | None],
+    context=None,
+    params: dict[str, str] | None = None,
+) -> pl.DataFrame:
     """Spell out the expected track files of every library of the sheet."""
     sheet = _fix_delimiter(sources["samplesheet"])
     sheet = sheet.rename({c: c.strip() for c in sheet.columns})
@@ -131,6 +173,21 @@ def transform(sources: dict[str, pl.DataFrame], context=None) -> pl.DataFrame:
     type_col = next((c for c in sheet.columns if c.lower() == "type"), None)
     strand_col = next((c for c in sheet.columns if c.lower() == "strandedness"), None)
 
+    # The design table keys its rows on its first column.
+    design = sources.get("metadata")
+    if design is not None:
+        design = design.rename({c: c.strip() for c in design.columns})
+    design_id = design.columns[0] if design is not None and design.width else None
+
+    def lookup(column: str) -> dict[str, str]:
+        """A design column of the design table, else of the sheet."""
+        return _by_sample(design, design_id, column) or _by_sample(sheet, sample_col, column)
+
+    requested = ((params or {}).get("group_col") or "").strip()
+    group = requested if requested and requested not in OUTPUT_SCHEMA else NO_GROUP_COL
+    groups = lookup(group) if group != NO_GROUP_COL else {}
+    labels = lookup("sample_description")
+
     libraries: dict[str, tuple[str, str]] = {}
     for record in sheet.to_dicts():
         sample = str(record.get(sample_col) or "").strip()
@@ -141,15 +198,25 @@ def transform(sources: dict[str, pl.DataFrame], context=None) -> pl.DataFrame:
             assay_key = _DEFAULT_ASSAY
         libraries[sample] = (assay_key, str(record.get(strand_col) or "") if strand_col else "")
 
-    # The first library of every assay before the second, within a block.
-    seen: dict[str, int] = {}
+    def group_of(sample: str) -> str:
+        return groups.get(sample, NO_GROUP_VALUE)
+
+    # Design order: the assays as the template lists them, the groups as the sheet
+    # meets them. The first library of each (assay, group) represents it; the
+    # second library of every pair comes next, and so on.
+    assay_order = {key: i for i, key in enumerate(_ASSAYS)}
+    group_order = {g: i for i, g in enumerate(dict.fromkeys(group_of(s) for s in libraries))}
+    seen: dict[tuple[str, str], int] = {}
     rank: dict[str, int] = {}
     for sample, (assay_key, _) in libraries.items():
-        seen[assay_key] = seen.get(assay_key, 0) + 1
-        rank[sample] = seen[assay_key]
-    assay_order = {key: i for i, key in enumerate(_ASSAYS)}
+        pair = (assay_key, group_of(sample))
+        seen[pair] = seen.get(pair, 0) + 1
+        rank[sample] = seen[pair]
     # sorted() is stable: ties keep the sheet's order.
-    ordered = sorted(libraries, key=lambda s: (rank[s], assay_order[libraries[s][0]]))
+    ordered = sorted(
+        libraries,
+        key=lambda s: (rank[s], assay_order[libraries[s][0]], group_order[group_of(s)]),
+    )
 
     in_place = context is None or context.reads_in_place
 
@@ -157,20 +224,18 @@ def transform(sources: dict[str, pl.DataFrame], context=None) -> pl.DataFrame:
         return not in_place and any(context.exists(p) for p in paths)
 
     def row(sample: str, kind: str, fmt: str, path: str, strand: str, category: str) -> dict:
-        assay_key = libraries[sample][0]
-        label, (main, light) = _ASSAYS[assay_key]
         what = {"psites": "P-sites", "coverage": "coverage", "alignments": "reads"}[kind]
         suffix = f".{strand}" if strand else ""
         return {
             "track_id": f"{sample}.{kind}{suffix}",
             "sample": sample,
-            "assay": label,
+            "assay": _ASSAYS[libraries[sample][0]],
+            group: group_of(sample),
             "strand": strand,
             "kind": kind,
             "format": fmt,
             "uri": path.format(s=sample),
-            "name": f"{sample} {what}" + (f" {strand}" if strand else ""),
-            "color": light if strand == "reverse" else main,
+            "name": f"{labels.get(sample, sample)} {what}" + (f" {strand}" if strand else ""),
             "category": category,
         }
 
@@ -204,4 +269,17 @@ def transform(sources: dict[str, pl.DataFrame], context=None) -> pl.DataFrame:
     # order explicit, the browser opens on the first `initial_tracks`.
     for i, r in enumerate(rows, start=1):
         r["order"] = i
-    return pl.DataFrame(rows, schema=OUTPUT_SCHEMA)
+    schema = {**OUTPUT_SCHEMA, group: pl.Utf8}
+    return pl.DataFrame(rows, schema=schema).select(
+        "track_id",
+        "sample",
+        "assay",
+        group,
+        "strand",
+        "kind",
+        "format",
+        "uri",
+        "name",
+        "category",
+        "order",
+    )

@@ -40,6 +40,10 @@ main_dashboard:
     stats_type:
       Event: '#1098ad'
       Base: '#f08c00'
+    error_type:
+      False positives: '#e03131'
+      Missed calls: '#f08c00'
+      True positives: '#2f9e44'
   grid_sections:
   - name: Key figures
     icon: mdi:counter
@@ -62,6 +66,11 @@ main_dashboard:
     color: gray
     appearance: plain
     description: The tabs by group, each with the question it answers.
+  - name: Callsets
+    icon: mdi:table
+    color: gray
+    collapsed: true
+    description: The callsets of the run and their scores, one table per route.
   components:
   # First in component order on purpose: the Guide demos the first categorical
   # filter that shares a data collection with the first card (Callsets).
@@ -369,7 +378,7 @@ main_dashboard:
     tag: vb-ov-kf-somatic-recall
     index: ov-kf-somatic-recall
     title: Recall
-    description: Median share of the truth variants a somatic callset recovers.
+    description: Median share of the truth variants a somatic callset recovers. It counts every truth variant, also those outside the regions the run called, so a partial run scores low by design.
     layout: {x: 4, y: 2, w: 2, h: 2}
   - component_type: card
     workflow_tag: variantbenchmarking
@@ -607,7 +616,7 @@ main_dashboard:
       - **{{s_tp}}** of {{s_truth}} truth variants found, the most of any callset – som.py true positives [Somatic](tab:Somatic)
       - **{{s_best}}** best somatic F1, from {{s_top}} – som.py, one value per callset [Somatic](tab:Somatic)
       - **{{s_fp_share}}** of the false positives come from {{s_fp_top}} – som.py, summed per caller [Somatic](tab:Somatic)
-      - **{{r_best}}** best F1 on haplotypes, from {{r_top}} – rtg-tools vcfeval, the cross-check [Somatic](tab:Somatic)
+      - **{{r_best}}** best F1 on haplotypes, from {{r_top}} – rtg-tools vcfeval over all variants, the cross-check [Somatic](tab:Somatic)
       - **{{t_best}}** best structural F1, from {{t_top}} – Truvari, one value per callset [Structural](tab:Structural & CNV)
       - **{{v_best}}** best SVanalyzer F1, from {{v_top}} – the cross-check of Truvari [Structural](tab:Structural & CNV)
       - **{{w_event}}** median F1 per event, {{w_base}} per base – Wittyer, over the callsets [Structural](tab:Structural & CNV)
@@ -625,31 +634,31 @@ main_dashboard:
     caption: One point per callset, coloured by caller; top right is best, the curves are F1 contours.
     tag: vb-ov-hl-germline-pr
     index: ov-hl-germline-pr
-    layout: {x: 0, y: 2, w: 4, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Germline
     source_component: gl-happy-f1
-    caption: hap.py F1 for SNPs and indels, all calls against PASS calls only.
+    caption: hap.py F1 of the PASS calls for SNPs and indels; the ALL calls join them where hard-filtered calls change the score.
     tag: vb-ov-hl-germline-happy
     index: ov-hl-germline-happy
-    layout: {x: 4, y: 2, w: 4, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Germline
     source_component: gl-happy-roc
-    caption: Precision against recall as the quality cut-off rises (SNP, PASS).
+    caption: Precision against recall at each quality cut-off the run swept (SNP, PASS); few cut-offs give few points.
     tag: vb-ov-hl-germline-roc
     index: ov-hl-germline-roc
-    layout: {x: 0, y: 7, w: 4, h: 5}
+    layout: {x: 0, y: 6, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Germline
-    source_component: gl-confusion
-    caption: True positives, false positives and misses per callset; the shade is the share of its calls.
-    tag: vb-ov-hl-germline-confusion
-    index: ov-hl-germline-confusion
-    layout: {x: 4, y: 7, w: 4, h: 5}
+    source_component: gl-errors
+    caption: False positives and missed calls per callset, stacked; the longest bar errs most.
+    tag: vb-ov-hl-germline-errors
+    index: ov-hl-germline-errors
+    layout: {x: 4, y: 6, w: 4, h: 4}
   # -------------------------------------------------------------- somatic
   - component_type: highlight
     section: Findings
@@ -658,7 +667,7 @@ main_dashboard:
     caption: One point per callset, coloured by caller; top right is best, the curves are F1 contours.
     tag: vb-ov-hl-somatic-pr
     index: ov-hl-somatic-pr
-    layout: {x: 0, y: 12, w: 4, h: 5}
+    layout: {x: 0, y: 10, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Somatic
@@ -666,15 +675,15 @@ main_dashboard:
     caption: Recall per caller with its binomial 95% interval; overlapping whiskers cannot be told apart.
     tag: vb-ov-hl-somatic-ci
     index: ov-hl-somatic-ci
-    layout: {x: 4, y: 12, w: 4, h: 5}
+    layout: {x: 4, y: 10, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Somatic
-    source_component: so-confusion
-    caption: True positives, false positives and misses per caller; an over-calling caller fills the FP row.
-    tag: vb-ov-hl-somatic-confusion
-    index: ov-hl-somatic-confusion
-    layout: {x: 0, y: 17, w: 4, h: 5}
+    source_component: so-errors
+    caption: False positives and missed calls per caller and variant type; an over-calling caller fills the red bar.
+    tag: vb-ov-hl-somatic-errors
+    index: ov-hl-somatic-errors
+    layout: {x: 0, y: 14, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Somatic
@@ -682,7 +691,7 @@ main_dashboard:
     caption: Precision per caller with its binomial 95% interval; a wide whisker rests on few calls.
     tag: vb-ov-hl-somatic-precision
     index: ov-hl-somatic-precision
-    layout: {x: 4, y: 17, w: 4, h: 5}
+    layout: {x: 4, y: 14, w: 4, h: 4}
   # ----------------------------------------------------------- structural
   - component_type: highlight
     section: Findings
@@ -691,7 +700,7 @@ main_dashboard:
     caption: One point per callset, coloured by caller; top right is best, the curves are F1 contours.
     tag: vb-ov-hl-sv-pr
     index: ov-hl-sv-pr
-    layout: {x: 0, y: 22, w: 4, h: 5}
+    layout: {x: 0, y: 18, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Structural & CNV
@@ -700,15 +709,15 @@ main_dashboard:
     caption: SVanalyzer F1 per callset, the bar coloured by its caller.
     tag: vb-ov-hl-sv-svbench
     index: ov-hl-sv-svbench
-    layout: {x: 4, y: 22, w: 4, h: 5}
+    layout: {x: 4, y: 18, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Structural & CNV
-    source_component: sv-truvari-confusion
-    caption: Truvari true positives, false positives and misses per callset.
-    tag: vb-ov-hl-sv-confusion
-    index: ov-hl-sv-confusion
-    layout: {x: 0, y: 27, w: 4, h: 5}
+    source_component: sv-truvari-errors
+    caption: Truvari false positives and missed calls per callset, stacked; the longest bar errs most.
+    tag: vb-ov-hl-sv-errors
+    index: ov-hl-sv-errors
+    layout: {x: 0, y: 22, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Structural & CNV
@@ -716,7 +725,7 @@ main_dashboard:
     caption: Wittyer F1 per callset, scored per event and per base; a gap means misplaced breakpoints.
     tag: vb-ov-hl-sv-wittyer
     index: ov-hl-sv-wittyer
-    layout: {x: 4, y: 27, w: 4, h: 5}
+    layout: {x: 4, y: 22, w: 4, h: 4}
   # Link-only tab tiles: a tab the run does not have is left out, and a
   # heading whose tabs are all missing is hidden.
   - component_type: text
@@ -731,6 +740,41 @@ main_dashboard:
     tag: vb-ov-how-to-read
     index: ov-how-to-read
     layout: {x: 0, y: 0, w: 8, h: 2}
+  # The run has no sample sheet: its callsets are the samples. One table per
+  # route, each dropped with its data collection when the run did not take it.
+  - component_type: table
+    workflow_tag: variantbenchmarking
+    data_collection_tag: germline_vcfeval_summary
+    use: rtgtools/vcfeval_summary
+    row_selection_enabled: false
+    section: Callsets
+    tag: vb-ov-table-germline
+    index: ov-table-germline
+    title: Germline callsets
+    description: Each callset with its caller, truth set and rtg-tools vcfeval score.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: variantbenchmarking
+    data_collection_tag: somatic_sompy_summary
+    use: sompy/summary
+    row_selection_enabled: false
+    section: Callsets
+    tag: vb-ov-table-somatic
+    index: ov-table-somatic
+    title: Somatic callsets
+    description: Each callset with its caller, truth set and som.py score.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sv_truvari_summary
+    use: truvari/summary
+    row_selection_enabled: false
+    section: Callsets
+    tag: vb-ov-table-sv
+    index: ov-table-sv
+    title: Structural callsets
+    description: Each callset with its caller, truth set and Truvari score.
+    layout: {x: 0, y: 12, w: 8, h: 6}
 tabs:
 # ============================================================================
 # Small variants
@@ -757,7 +801,7 @@ tabs:
   - name: Precision and recall
     icon: mdi:chart-scatter-plot
     color: indigo
-    description: Each callset on the precision-recall plane, beside its error counts
+    description: Each callset on the precision-recall plane, beside its false positives and misses
   - name: hap.py by variant type
     icon: mdi:chart-bar
     color: indigo
@@ -765,8 +809,7 @@ tabs:
   - name: Errors on the genome
     icon: mdi:dna
     color: indigo
-    description: Where the picked callsets' false positives and false negatives sit
-    collapsed: true
+    description: Where the picked callsets' false positives and missed calls sit, with the known variants
   - name: Germline tables
     icon: mdi:table
     color: gray
@@ -779,8 +822,9 @@ tabs:
       [rtg-tools vcfeval](https://github.com/RealTimeGenomics/rtg-tools) matches each
       callset's haplotypes to the truth set, and [hap.py](https://github.com/Illumina/hap.py)
       scores SNPs and indels apart, for all calls and PASS calls. Top right on the
-      precision-recall plane is best; the confusion matrix beside it shows where each callset
-      errs.
+      precision-recall plane is best; the bars beside it count each callset's false positives
+      and missed calls. A callset's caller is the name its samplesheet row gives it: a tool, or
+      a version of the calls being compared.
     tag: vb-gl-intro
     index: gl-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -851,7 +895,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:trophy
-      icon_color: grape
+      icon_color: indigo.4
       caption: median per callset, with its spread
       decimals: 3
     section: Germline at a glance
@@ -873,7 +917,7 @@ tabs:
     threshold_warn: 0.8
     display:
       icon_name: mdi:magnet
-      icon_color: orange
+      icon_color: indigo.6
       caption: median per callset, floor 0.9
       decimals: 3
     section: Germline at a glance
@@ -894,7 +938,7 @@ tabs:
     top_n_count: 3
     display:
       icon_name: mdi:alert-outline
-      icon_color: red
+      icon_color: indigo.8
       caption: calls absent from the truth set, by caller
       decimals: 0
     section: Germline at a glance
@@ -914,7 +958,7 @@ tabs:
     breakdown_col: caller
     display:
       icon_name: mdi:check-decagram
-      icon_color: teal
+      icon_color: indigo.9
       caption: calls the truth set confirms, by caller
       decimals: 0
     section: Germline at a glance
@@ -928,41 +972,60 @@ tabs:
     data_collection_tag: germline_vcfeval_summary
     use: rtgtools/pr_scatter
     config:
-      support_col: tp_comp
       category_col: caller
-      show_labels: false
+      show_iso_f1: true
+      show_labels: true
     section: Precision and recall
     tag: vb-gl-av-pr
     index: gl-pr-scatter
     title: Precision against recall
-    description: One point per callset, sized by its true positives and coloured by caller.
+    description: One point per callset, labelled and coloured by its caller; the dotted curves are lines of equal F1.
     layout: {x: 0, y: 0, w: 4, h: 6}
-  - component_type: advanced_viz
+  - component_type: figure
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_vcfeval_summary
-    use: rtgtools/confusion
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # The errors of each callset, one stacked bar: calls the truth set does not hold and truth variants the callset missed. True positives are left out, they dwarf both.
+      colors = depictio_category_colors.get('error_type') or {}
+      names = {'fp': 'False positives', 'fn': 'Missed calls'}
+      d = df.select(['label', 'caller', 'fp', 'fn']).with_columns(pl.col('fp').fill_null(0), pl.col('fn').fill_null(0)).with_columns((pl.col('fp') + pl.col('fn')).alias('total'), pl.col('label').alias('callset'))
+      order = d.sort('total').get_column('callset').to_list()
+      m = d.unpivot(index=['label', 'caller', 'callset', 'total'], on=['fp', 'fn'], variable_name='kind', value_name='calls').with_columns(pl.col('kind').replace(names))
+      fig = px.bar(m.to_pandas(), x='calls', y='callset', color='kind', orientation='h', color_discrete_map=colors, category_orders={'callset': order, 'kind': list(names.values())}, hover_data=['label', 'caller'], labels={'calls': 'Calls', 'callset': '', 'kind': ''})
+      fig.update_layout(margin=dict(t=10), legend_title_text='', legend=dict(orientation='h', y=-0.2))
+      fig.update_yaxes(automargin=True)
+    selection_enabled: true
+    selection_column: label
     section: Precision and recall
-    tag: vb-gl-av-confusion
-    index: gl-confusion
-    title: Errors per callset
-    description: TP, FP and FN per callset; the shade is the share of its calls, the label the count.
+    tag: vb-gl-fig-errors
+    index: gl-errors
+    title: False positives and missed calls per callset
+    description: Calls the truth set does not hold, and truth variants the callset missed, summed per callset. The longest bar is the callset that errs most.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: figure
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_happy_summary
-    use: happy/summary
     visu_type: bar
-    dict_kwargs:
-      x: variant_type
-      y: f1
-      color: filter
-      barmode: group
-      labels: {variant_type: '', f1: F1, filter: Calls}
+    mode: code
+    code_content: |-
+      # F1 of the PASS calls per variant type. The ALL calls join them only where hard-filtered calls change the score: two identical bars say nothing.
+      colors = depictio_category_colors.get('filter') or {}
+      d = df.select(['variant_type', 'filter', 'f1']).drop_nulls('f1')
+      p = d.filter(pl.col('filter') == 'PASS').select('variant_type', pl.col('f1').alias('pass_f1'))
+      a = d.filter(pl.col('filter') == 'ALL').select('variant_type', pl.col('f1').alias('all_f1'))
+      j = p.join(a, on='variant_type', how='inner')
+      split = j.height > 0 and bool(j.select(((pl.col('pass_f1') - pl.col('all_f1')).abs() > 0.0005).any()).item())
+      show = d if (split or p.height == 0) else d.filter(pl.col('filter') == 'PASS')
+      fig = px.bar(show.to_pandas(), x='variant_type', y='f1', color='filter', barmode='group', color_discrete_map=colors, category_orders={'filter': ['PASS', 'ALL']}, text_auto='.3f', labels={'variant_type': '', 'f1': 'F1', 'filter': 'Calls'})
+      fig.update_layout(margin=dict(t=10), legend_title_text='')
+      fig.update_yaxes(automargin=True)
     section: hap.py by variant type
     tag: vb-gl-fig-happy
     index: gl-happy-f1
     title: F1 by variant type
-    description: Pooled over samples; ALL and PASS coincide when no call was hard-filtered.
+    description: F1 of the PASS calls, pooled over samples; the ALL calls are drawn beside them only where hard-filtered calls change the score.
     layout: {x: 0, y: 0, w: 4, h: 5}
   - component_type: advanced_viz
     workflow_tag: variantbenchmarking
@@ -974,7 +1037,7 @@ tabs:
     tag: vb-gl-av-roc
     index: gl-happy-roc
     title: Quality-threshold sweep
-    description: Precision against recall as the quality cut-off rises, with its AUC (SNP, PASS).
+    description: Precision against recall at each quality cut-off the run swept, with its AUC (SNP, PASS). A run that swept two cut-offs draws two operating points.
     layout: {x: 4, y: 0, w: 4, h: 5}
   # Each callset's false positives and false negatives (rtg-tools vcfeval), with its
   # true positives, as VCFs. Pick a callset in the left panel to open its tracks.
@@ -982,16 +1045,22 @@ tabs:
     workflow_tag: variantbenchmarking
     data_collection_tag: tracks
     section: Errors on the genome
-    initial_tracks: 2
+    # The manifest lists the callsets best first: the false positives, the missed
+    # calls and the true positives of the best one open, the others follow in the menu.
+    initial_tracks: 3
     max_tracks: 12
     show_overview: false
+    # The files wear the colours of the bars (category_colors: error_type).
+    color_by: error_type
+    # Common dbSNP sites and ClinVar under the calls, from UCSC (human germline only).
+    ucsc_tracks: [dbSnp155Common, clinvarMain]
     selection_enabled: true
     selection_column: sample_id
     tag: vb-gl-browser
     index: gl-browser
     title: Genome browser
-    description: The false positives and false negatives of the callsets picked in the left panel, with their true positives.
-    layout: {x: 0, y: 0, w: 8, h: 8}
+    description: The false positives, missed calls and true positives of the callsets picked in the left panel, best callset first.
+    layout: {x: 0, y: 0, w: 8, h: 7}
   - component_type: table
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_vcfeval_summary
@@ -1050,7 +1119,7 @@ tabs:
   - name: Precision and recall
     icon: mdi:chart-scatter-plot
     color: pink
-    description: Each callset on the precision-recall plane, beside its error counts
+    description: Each callset on the precision-recall plane, beside its false positives and misses
   - name: Confidence intervals
     icon: mdi:scale-balance
     color: pink
@@ -1059,10 +1128,11 @@ tabs:
     icon: mdi:chart-bell-curve
     color: pink
     description: False positives per allele-fraction bin, where low fractions are hardest
+    collapsed: true
   - name: rtg-tools cross-check
     icon: mdi:check-decagram
     color: gray
-    description: The same callers scored by rtg-tools vcfeval
+    description: rtg-tools vcfeval over all variants, not som.py's one type – compare ranks
     collapsed: true
   - name: Somatic tables
     icon: mdi:table
@@ -1074,10 +1144,10 @@ tabs:
     order: 1
     body: >
       [som.py](https://github.com/Illumina/hap.py) scores each somatic caller against the
-      truth set, with binomial 95% intervals, and bins its false positives by allele fraction;
-      [rtg-tools vcfeval](https://github.com/RealTimeGenomics/rtg-tools) cross-checks it on
-      haplotypes. A caller whose false positives pile up in the lowest bin is calling into the
-      noise floor.
+      truth set, with binomial 95% intervals, and bins its false positives by allele fraction.
+      Recall counts every truth variant, also those outside the regions the run called, so a
+      partial run scores low by design. [rtg-tools vcfeval](https://github.com/RealTimeGenomics/rtg-tools)
+      cross-checks the ranking over all variants, so its counts differ from som.py's.
     tag: vb-so-intro
     index: so-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1120,7 +1190,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:trophy
-      icon_color: grape
+      icon_color: pink.4
       caption: median per callset, with its spread
     section: Somatic at a glance
     tag: vb-so-card-f1
@@ -1141,7 +1211,7 @@ tabs:
     threshold_warn: 0.25
     display:
       icon_name: mdi:bullseye-arrow
-      icon_color: teal
+      icon_color: pink.6
       caption: median per callset, floor 0.5
     section: Somatic at a glance
     tag: vb-so-card-precision
@@ -1161,7 +1231,7 @@ tabs:
     top_n_count: 3
     display:
       icon_name: mdi:alert-outline
-      icon_color: red
+      icon_color: pink.8
       caption: calls absent from the truth set, by caller
       decimals: 0
     section: Somatic at a glance
@@ -1181,7 +1251,7 @@ tabs:
     breakdown_col: caller
     display:
       icon_name: mdi:check-decagram
-      icon_color: orange
+      icon_color: pink.9
       caption: calls the truth set confirms, by caller
       decimals: 0
     section: Somatic at a glance
@@ -1195,24 +1265,37 @@ tabs:
     data_collection_tag: somatic_sompy_summary
     use: sompy/pr_scatter
     config:
-      support_col: tp
       category_col: caller
-      show_labels: false
+      show_iso_f1: true
+      show_labels: true
     section: Precision and recall
     tag: vb-so-av-pr
     index: so-pr-scatter
     title: Precision against recall
-    description: One point per callset, sized by its true positives and coloured by caller.
+    description: One point per callset, labelled and coloured by its caller; the dotted curves are lines of equal F1.
     layout: {x: 0, y: 0, w: 4, h: 6}
-  - component_type: advanced_viz
+  - component_type: figure
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_sompy_summary
-    use: sompy/confusion
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # The errors of each caller and variant type, one stacked bar: calls the truth set does not hold and truth variants the caller missed. True positives are left out, they dwarf both.
+      colors = depictio_category_colors.get('error_type') or {}
+      names = {'fp': 'False positives', 'fn': 'Missed calls'}
+      d = df.select(['caller', 'variant_type', 'fp', 'fn']).with_columns(pl.col('fp').fill_null(0), pl.col('fn').fill_null(0)).with_columns((pl.col('fp') + pl.col('fn')).alias('total'), pl.when(pl.col('variant_type').is_not_null()).then(pl.concat_str([pl.col('caller'), pl.lit(' · '), pl.col('variant_type')])).otherwise(pl.col('caller')).alias('callset'))
+      order = d.sort('total').get_column('callset').to_list()
+      m = d.unpivot(index=['caller', 'variant_type', 'callset', 'total'], on=['fp', 'fn'], variable_name='kind', value_name='calls').with_columns(pl.col('kind').replace(names))
+      fig = px.bar(m.to_pandas(), x='calls', y='callset', color='kind', orientation='h', color_discrete_map=colors, category_orders={'callset': order, 'kind': list(names.values())}, hover_data=['caller', 'variant_type'], labels={'calls': 'Calls', 'callset': '', 'kind': ''})
+      fig.update_layout(margin=dict(t=10), legend_title_text='', legend=dict(orientation='h', y=-0.2))
+      fig.update_yaxes(automargin=True)
+    selection_enabled: true
+    selection_column: caller
     section: Precision and recall
-    tag: vb-so-av-confusion
-    index: so-confusion
-    title: Errors per caller
-    description: TP, FP and FN per caller; an over-calling caller dominates the FP row.
+    tag: vb-so-fig-errors
+    index: so-errors
+    title: False positives and missed calls per caller
+    description: Calls the truth set does not hold, and truth variants the caller missed, per variant type. An over-calling caller fills the false positive bar.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: variantbenchmarking
@@ -1253,37 +1336,21 @@ tabs:
     tag: vb-so-fig-af-fp
     index: so-af-fp
     title: False positives per allele-fraction bin
-    description: One bar per caller and bin, the bin read off the caller's allele fraction.
-    layout: {x: 0, y: 0, w: 4, h: 4}
-  - component_type: figure
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_regions
-    use: sompy/regions
-    visu_type: bar
-    dict_kwargs:
-      x: caller
-      y: fp
-      color: af_bin
-      labels: {caller: Caller, fp: False positives, af_bin: Allele-fraction bin}
-    section: Allele-fraction strata
-    tag: vb-so-fig-af-fp-caller
-    index: so-af-fp-caller
-    title: False positives of each caller, by bin
-    description: Where each caller's false positives fall. som.py bins a true positive or a miss by the truth set's allele fraction, so without one only false positives are binned.
-    layout: {x: 4, y: 0, w: 4, h: 4}
+    description: One bar per caller and bin, the bin read off the caller's allele fraction. som.py bins a true positive or a miss by the truth set's allele fraction, so without one only false positives are binned. A caller whose false positives pile up in the lowest bin is calling into the noise floor.
+    layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_vcfeval_summary
     use: rtgtools/pr_scatter
     config:
-      support_col: tp_comp
       category_col: caller
-      show_labels: false
+      show_iso_f1: true
+      show_labels: true
     section: rtg-tools cross-check
     tag: vb-so-av-vcfeval-pr
     index: so-vcfeval-pr
-    title: Precision against recall, rtg-tools vcfeval
-    description: vcfeval matches haplotypes, not sites; a caller that moves rank deserves a look.
+    title: Precision against recall, rtg-tools vcfeval (all variants)
+    description: vcfeval matches haplotypes over every variant of a callset, whereas som.py scores one variant type, so its counts and precision differ. Compare how the callers rank, not the values.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: variantbenchmarking
@@ -1295,7 +1362,7 @@ tabs:
     tag: vb-so-table-vcfeval
     index: so-table-vcfeval
     title: rtg-tools vcfeval summary
-    description: TP, FP, FN, precision, recall and F1 per callset, with its caller and truth set.
+    description: TP, FP, FN, precision, recall and F1 per callset over all variants, with its caller and truth set.
     layout: {x: 0, y: 6, w: 8, h: 6}
   - component_type: table
     workflow_tag: variantbenchmarking
@@ -1346,7 +1413,7 @@ tabs:
   - name: Precision and recall
     icon: mdi:chart-scatter-plot
     color: orange
-    description: Each callset on the precision-recall plane, beside its error counts
+    description: Each callset on the precision-recall plane, beside its false positives and misses
   - name: SVanalyzer and Wittyer
     icon: mdi:chart-bar
     color: orange
@@ -1354,8 +1421,7 @@ tabs:
   - name: Errors on the genome
     icon: mdi:dna
     color: orange
-    description: Where the picked callsets' false positives and false negatives sit
-    collapsed: true
+    description: Where the picked callsets' false positives and missed calls sit
   - name: Structural tables
     icon: mdi:table
     color: gray
@@ -1426,7 +1492,7 @@ tabs:
     breakdown_col: caller
     display:
       icon_name: mdi:check-decagram
-      icon_color: blue
+      icon_color: orange.4
       caption: calls the truth set confirms, by caller
       decimals: 0
     section: Structural at a glance
@@ -1446,7 +1512,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:trophy
-      icon_color: grape
+      icon_color: orange.6
       caption: median per callset, with its spread
       decimals: 3
     section: Structural at a glance
@@ -1468,7 +1534,7 @@ tabs:
     threshold_warn: 0.6
     display:
       icon_name: mdi:magnet
-      icon_color: orange
+      icon_color: orange.8
       caption: median per callset, floor 0.8
       decimals: 3
     section: Structural at a glance
@@ -1487,7 +1553,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:bullseye-arrow
-      icon_color: teal
+      icon_color: orange.9
       caption: median per callset, with its distribution
       decimals: 3
     section: Structural at a glance
@@ -1501,30 +1567,37 @@ tabs:
     data_collection_tag: sv_truvari_summary
     use: truvari/pr_scatter
     config:
-      support_col: tp_comp
       category_col: caller
-      show_labels: false
+      show_iso_f1: true
+      show_labels: true
     section: Precision and recall
     tag: vb-sv-av-pr
     index: sv-truvari-pr
     title: Precision against recall, Truvari
-    description: One point per callset, sized by its true positives and coloured by caller.
+    description: One point per callset, labelled and coloured by its caller; the dotted curves are lines of equal F1.
     layout: {x: 0, y: 0, w: 4, h: 6}
-  - component_type: advanced_viz
+  - component_type: figure
     workflow_tag: variantbenchmarking
     data_collection_tag: sv_truvari_summary
-    viz_kind: confusion_matrix
-    config:
-      viz_kind: confusion_matrix
-      label_col: label
-      tp_col: tp_comp
-      fp_col: fp
-      fn_col: fn
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # The errors of each callset, one stacked bar: calls the truth set does not hold and truth variants the callset missed. True positives are left out, they dwarf both.
+      colors = depictio_category_colors.get('error_type') or {}
+      names = {'fp': 'False positives', 'fn': 'Missed calls'}
+      d = df.select(['label', 'caller', 'fp', 'fn']).with_columns(pl.col('fp').fill_null(0), pl.col('fn').fill_null(0)).with_columns((pl.col('fp') + pl.col('fn')).alias('total'), pl.col('label').alias('callset'))
+      order = d.sort('total').get_column('callset').to_list()
+      m = d.unpivot(index=['label', 'caller', 'callset', 'total'], on=['fp', 'fn'], variable_name='kind', value_name='calls').with_columns(pl.col('kind').replace(names))
+      fig = px.bar(m.to_pandas(), x='calls', y='callset', color='kind', orientation='h', color_discrete_map=colors, category_orders={'callset': order, 'kind': list(names.values())}, hover_data=['label', 'caller'], labels={'calls': 'Calls', 'callset': '', 'kind': ''})
+      fig.update_layout(margin=dict(t=10), legend_title_text='', legend=dict(orientation='h', y=-0.2))
+      fig.update_yaxes(automargin=True)
+    selection_enabled: true
+    selection_column: label
     section: Precision and recall
-    tag: vb-sv-av-confusion
-    index: sv-truvari-confusion
-    title: Errors per callset, Truvari
-    description: TP, FP and FN per callset; the shade is the share of its calls, the label the count.
+    tag: vb-sv-fig-errors
+    index: sv-truvari-errors
+    title: False positives and missed calls per callset, Truvari
+    description: Calls the truth set does not hold, and truth variants the callset missed, summed per callset. The longest bar is the callset that errs most.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: figure
     workflow_tag: variantbenchmarking
@@ -1565,16 +1638,20 @@ tabs:
     workflow_tag: variantbenchmarking
     data_collection_tag: tracks
     section: Errors on the genome
-    initial_tracks: 2
+    # The manifest lists the callsets best first: the false positives, the missed
+    # calls and the true positives of the best one open, the others follow in the menu.
+    initial_tracks: 3
     max_tracks: 12
     show_overview: false
+    # The files wear the colours of the bars (category_colors: error_type).
+    color_by: error_type
     selection_enabled: true
     selection_column: sample_id
     tag: vb-sv-browser
     index: sv-browser
     title: Genome browser
-    description: The false positives and false negatives of the callsets picked in the left panel, with their true positives.
-    layout: {x: 0, y: 0, w: 8, h: 8}
+    description: The false positives, missed calls and true positives of the callsets picked in the left panel, best callset first.
+    layout: {x: 0, y: 0, w: 8, h: 7}
   - component_type: table
     workflow_tag: variantbenchmarking
     data_collection_tag: sv_truvari_summary

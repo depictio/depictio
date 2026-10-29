@@ -50,6 +50,7 @@
       "group": null,
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "teal",
@@ -58,7 +59,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "f14d6191-118f-44a4-9f2a-1acbb9260525",
+      "index": "ov-kf-genome-10x-range",
       "component_type": "interactive",
       "title": "Genome at 10x (%)",
       "workflow_tag": "viralrecon",
@@ -94,6 +95,7 @@
       "group": null,
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "cyan",
@@ -488,6 +490,7 @@
       "group": null,
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "teal",
@@ -532,6 +535,7 @@
       "group": null,
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "cyan",
@@ -682,59 +686,27 @@
       "source_tab": "Sample QC",
       "source_component": "qc-depth-breadth",
       "hide_legend": true,
-      "caption": "One point per sample, median depth against the share of the genome at 10x, coloured by lineage. Low and left is a thin sample; deep but low lost amplicons."
+      "caption": "One point per sample, median depth against the share of the genome at 10x, coloured pass or fail. The shaded corners are the fail zones; a sample in one is the one to check. It judges coverage only, so read it with the Nextclade scores beside it."
     },
     {
-      "index": "ov-amplicon-depth",
-      "component_type": "figure",
-      "title": "Depth per amplicon",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "mosdepth_amplicon_coverage",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c16"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Per-amplicon coverage depth across all samples (from mosdepth)",
-        "data_collection_tag": "mosdepth_amplicon_coverage",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c16"
-        }
-      },
+      "index": "ov-hl-qc-score",
+      "component_type": "highlight",
+      "title": "",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": null,
+      "dc_id": null,
+      "dc_config": {},
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
       "title_size": "sm",
       "title_align": "left",
-      "use": "mosdepth/amplicon_coverage",
-      "catalog_source": {
-        "toolId": "mosdepth",
-        "toolName": "mosdepth",
-        "outputId": "mosdepth_amplicon_coverage",
-        "use": "mosdepth/amplicon_coverage",
-        "description": "Per-amplicon coverage depth, aggregated across all samples (bindable as-is)."
-      },
       "section": "Findings",
-      "visu_type": "line",
-      "dict_kwargs": {},
-      "mode": "code",
-      "code_content": "# Median depth of each amplicon over the samples in view, along the genome,\n# one line per Analysis mode group when it has some. Floored at 1x for the\n# log axis; the dashed line is the 10x the consensus needs.\nd = df.group_by([*depictio_group_by, 'region', 'start']).agg(pl.col('coverage').median().alias('depth')).sort('start')\nd = d.with_columns(pl.col('depth').clip(lower_bound=1))\nfig = px.line(d.to_pandas(), x='start', y='depth', hover_data=['region'], markers=True, log_y=True, labels={'start': 'Genome position', 'depth': 'Median depth', 'region': 'Amplicon'}, **depictio_group_kwargs)\nfig.add_hline(y=10, line_dash='dash')\n# One tick per power of ten: a log axis otherwise labels 2 and 5 between.\nfig.update_yaxes(dtick=1)\nfig.update_layout(margin=dict(t=10))",
-      "displayed_data_count": 0,
-      "total_data_count": 0,
-      "was_sampled": false,
-      "filter_applied": false,
-      "max_points": null,
-      "selection_enabled": false,
-      "selection_column": null,
-      "font_scale": null,
-      "link": "tab:Coverage & Depth",
-      "caption": "Median depth of each amplicon along the genome, on a log axis; a dip under the dashed 10x line is a dropout.",
-      "wf_tag": "nextflow/viralrecon"
+      "source_tab": "Lineage & Clustering",
+      "source_component": "lin-qc-score",
+      "hide_legend": true,
+      "caption": "Nextclade's QC score of each consensus genome, worst first, coloured by its verdict. The dashed lines mark 30 (good below) and 100 (bad above)."
     },
     {
       "index": "ov-hl-manhattan",
@@ -757,7 +729,7 @@
       "caption": "One dot per call along the genome, as high as its allele frequency, coloured by effect; above the line, it enters the consensus."
     },
     {
-      "index": "ov-hl-sankey",
+      "index": "ov-hl-genes",
       "component_type": "highlight",
       "title": "",
       "workflow_tag": "",
@@ -771,9 +743,9 @@
       "title_size": "sm",
       "title_align": "left",
       "section": "Findings",
-      "source_tab": "Lineage & Clustering",
-      "source_component": "lin-sankey",
-      "caption": "Each sample from its Pangolin QC verdict to its lineage and its Nextclade clade; a thin ribbon is a rare or mismatched call."
+      "source_tab": "Variants",
+      "source_component": "var-by-gene",
+      "caption": "Calls per gene, the busiest first, by functional class; a gene dense in calls is the one to open in the Gene tab."
     },
     {
       "index": "ov-how-to-read",
@@ -835,6 +807,7 @@
       "group": "Sample scope",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "red",
@@ -878,6 +851,7 @@
       "group": "Sample scope",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "teal",
@@ -921,6 +895,7 @@
       "group": "Coverage & yield",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "cyan",
@@ -964,6 +939,7 @@
       "group": "Coverage & yield",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "blue",
@@ -1007,6 +983,7 @@
       "group": "Coverage & yield",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "indigo",
@@ -1050,6 +1027,7 @@
       "group": "Coverage & yield",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "grape",
@@ -1113,7 +1091,7 @@
       "static": false
     },
     {
-      "i": "box-f14d6191-118f-44a4-9f2a-1acbb9260525",
+      "i": "box-ov-kf-genome-10x-range",
       "x": 2,
       "y": 0,
       "w": 2,
@@ -1309,7 +1287,7 @@
       ]
     },
     {
-      "i": "box-ov-amplicon-depth",
+      "i": "box-ov-hl-qc-score",
       "x": 4,
       "y": 2,
       "w": 4,
@@ -1339,7 +1317,7 @@
       ]
     },
     {
-      "i": "box-ov-hl-sankey",
+      "i": "box-ov-hl-genes",
       "x": 4,
       "y": 7,
       "w": 4,
@@ -1471,7 +1449,7 @@
       "name": "Sample sheet",
       "icon": "mdi:table-account",
       "color": "gray",
-      "description": "The run summary behind every tab, narrowed by the sample filters",
+      "description": "The run summary behind every tab, narrowed by the sample filters. Sample names come from the samplesheet; a suffix such as _PE or _SE, where a run uses one, marks paired-end or single-end reads.",
       "collapsed": true,
       "persistent": true,
       "pin": "bottom",
@@ -1538,6 +1516,7 @@
   "filter_panel_default": "collapsed",
   "content_width_default": "compact",
   "show_tab_header": false,
+  "open_with_defaults": false,
   "show_guide": true,
   "guide_intro": "",
   "advanced_viz_controls": "popover",
@@ -1576,11 +1555,14 @@
       }
     ],
     "editors": [],
-    "viewers": []
+    "viewers": [],
+    "group_owners": [],
+    "group_editors": [],
+    "group_viewers": []
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-10-08 21:52:38",
+  "creation_time": "2026-10-22 10:02:19",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
@@ -1596,5 +1578,10 @@
   "project_realtime": null,
   "inherited_brand_theme": null,
   "inherited_category_colors": null,
-  "source_key": "nf-core/viralrecon:dashboards/base.yaml"
+  "source_key": "nf-core/viralrecon:dashboards/base.yaml",
+  "template_origin": {
+    "template_id": "nf-core/viralrecon/3.0.0",
+    "template_version": "2.0.0",
+    "imported_at": "2026-10-29 11:02:02"
+  }
 }

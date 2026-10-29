@@ -40,6 +40,7 @@ import SaveGroupAction, {
 } from './chrome/SaveGroupAction';
 import MapDataButton from './map/MapDataButton';
 import { SectionColorContext } from './SectionIcon';
+import { paletteHex } from '../paletteColor';
 import {
   cardScopedFilters,
   clearedSelectionFilters,
@@ -1024,9 +1025,8 @@ const CardRenderer: React.FC<{
   const sectionColor = useContext(SectionColorContext);
   const theme = useMantineTheme();
   const ownColor = metadata.icon_color as string | undefined;
-  const iconColor =
-    (ownColor ? (theme.colors[ownColor]?.[6] ?? ownColor) : undefined) ||
-    (sectionColor ? theme.colors[sectionColor]?.[6] : undefined);
+  // `paletteHex` takes `orange` and the shaded `orange.4` alike.
+  const iconColor = paletteHex(theme, ownColor) || paletteHex(theme, sectionColor);
   const wrapperStyle: React.CSSProperties = {
     opacity: dimming ? 0.6 : 1,
     transition: 'opacity 120ms ease-out',

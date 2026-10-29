@@ -80,6 +80,12 @@ def test_config_defaults_are_a_plain_point_track():
     assert config.follow_region_filter is False
     assert config.selection_enabled is False
     assert config.selection_column is None
+    # A plain pointer, and nothing that moves a browser or the tile's height
+    # unless the dashboard asks.
+    assert config.interaction_mode is None
+    assert config.drag_mode is None
+    assert config.publish_view_window is False
+    assert config.auto_height is False
 
 
 def test_union_discriminates_on_the_new_kind():
@@ -205,3 +211,36 @@ def test_lane_height_bounds() -> None:
     for bad in (8, 500):
         with pytest.raises(ValidationError):
             GenomeViewConfig(lane_height=bad)
+
+
+@pytest.mark.parametrize("mode", ["pointer", "pan", "select"])
+def test_interaction_mode_takes_the_three_tools(mode: str) -> None:
+    assert GenomeViewConfig(interaction_mode=mode).interaction_mode == mode
+    with pytest.raises(ValidationError):
+        GenomeViewConfig(interaction_mode="lasso")
+
+
+def test_the_older_drag_mode_is_still_accepted() -> None:
+    """Dashboards written before the mode switch keep validating; the viewer
+    reads it as the opening mode when ``interaction_mode`` is unset."""
+    assert GenomeViewConfig(drag_mode="pan").drag_mode == "pan"
+    assert GenomeViewConfig(drag_mode="select").drag_mode == "select"
+    with pytest.raises(ValidationError):
+        GenomeViewConfig(drag_mode="pointer")
+
+
+def test_auto_height_and_the_window_publish_are_opt_in() -> None:
+    config = GenomeViewConfig(auto_height=True, publish_view_window=True)
+    assert config.auto_height is True and config.publish_view_window is True
+
+
+def test_color_scale_is_optional_and_validated():
+    assert GenomeViewConfig().color_scale is None
+    config = GenomeViewConfig(color_scale={"column": "sample", "order_by": "day"})
+    assert config.color_scale is not None
+    assert config.color_scale.scheme == "viridis"
+    assert config.color_scale.order_by == "day"
+    with pytest.raises(ValidationError):
+        GenomeViewConfig(color_scale={"column": "sample", "scheme": "jet"})
+    with pytest.raises(ValidationError):
+        GenomeViewConfig(color_scale={"order_by": "day"})

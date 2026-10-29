@@ -117,6 +117,7 @@ import {
   buildGuideModel,
   resolveGuideSettings,
   CategoryColorsContext,
+  TabColorContext,
   barSectionNames,
   filtersInScope,
   hasSectionBar,
@@ -3060,6 +3061,7 @@ const EditorApp: React.FC = () => {
     {/* The viewer's `category_colors` scope, so a filter bar's chips take the
         colours readers will see. */}
     <CategoryColorsContext.Provider value={dashboard}>
+    <TabColorContext.Provider value={typeof dashboard?.tab_icon_color === 'string' ? dashboard.tab_icon_color : null}>
     {/* Tab links in text resolve here too, so the canvas shows them as the
         viewer does rather than as plain text. */}
     <TabLinkProvider tabs={tabSiblings} mode="edit">
@@ -3151,6 +3153,7 @@ const EditorApp: React.FC = () => {
     />
       </GenomeBrowserTargetProvider>
     </TabLinkProvider>
+    </TabColorContext.Provider>
     </CategoryColorsContext.Provider>
     </BrandScope>
     </SaveGroupContext.Provider>

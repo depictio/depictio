@@ -35,7 +35,7 @@
 template:
   template_id: "nf-core/oncoanalyser/3.0.0"
   description: "nf-core/oncoanalyser cancer genomics template (WiGiTS): tumor purity, ploidy and QC, allele-specific copy number, the driver catalog, somatic small variants and their protein changes, structural variants and fusions, tissue of origin, mutational signatures, homologous recombination deficiency, HLA typing and neoepitopes."
-  version: "1.0.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "oncoanalyser output directory (one <group_id>/ sub-directory per tumor, plus pipeline_info/)."
@@ -173,8 +173,9 @@ workflows:
       # and germline VCFs, the tumor and normal alignments) that the genome
       # browser reads by range, through the API. One row per file, keyed on the
       # group's tumor sample like every other collection; the recipe spells it
-      # out from the same samplesheet. The BAMs are the largest files of the
-      # run and come last in the manifest.
+      # out from the same samplesheet. The first group opens with its VCFs and
+      # the tumor and normal reads under them; the other groups' BAMs, the
+      # largest files of the run, come last.
       # ----------------------------------------------------------------
       - data_collection_tag: "tracks"
         description: "Genome-browser tracks of the run: PURPLE's somatic and germline VCFs and the tumor and normal alignments of every analysis group, one row per file"
@@ -194,7 +195,6 @@ workflows:
             sample_column: "sample_id"
             format_column: "format"
             name_column: "name"
-            color_column: "color"
             category_column: "category"
             order_column: "order"
             assembly: "{GENOME}"
@@ -212,11 +212,10 @@ workflows:
               "sample_id": "The group's tumor DNA sample, the key every collection links on"
               "group_id": "Analysis group the file is published under"
               "source_sample": "Sample the file belongs to (the normal's own id on its alignment)"
-              "kind": "somatic, sv, germline, sv_germline, tumor_reads or normal_reads"
+              "kind": "somatic, sv, germline, sv_germline, tumor_reads or normal_reads; the browsers colour a track by it"
               "format": "Track file format"
               "uri": "Path relative to the outdir"
               "name": "Track label shown in the browser"
-              "color": "Track colour"
               "category": "Track-selector folder"
               "order": "Row order the browser opens with"
 
@@ -427,8 +426,8 @@ workflows:
               "reported": "True when the variant is in the driver catalog"
 
       # One row per tumor and gene with a protein change: the Protein changes
-      # tab's scatter, whose click emits `entity` and so moves the lollipop and
-      # the 3D structure to that gene.
+      # tab's scatter, whose click emits `entity` and so moves the needles
+      # to that gene.
       - data_collection_tag: "purple_protein_genes"
         description: "One row per tumor and gene with a protein change: how many changes, their highest allele frequency and worst effect, and PURPLE's driver likelihood for the gene"
         config:

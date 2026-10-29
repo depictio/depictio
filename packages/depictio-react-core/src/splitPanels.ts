@@ -285,6 +285,12 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   // it by its rows, not by panels re-deriving columns, colours and the allele
   // legend's frequencies per subset. Drawn whole and badged.
   allele_grid: 'none',
+  // Parents live in other rows of the same table: a per-group copy would draw
+  // a child under a parent that the group filtered out. Drawn whole and badged.
+  pedigree: 'none',
+  // One ordering of candidates: a per-group copy would rank the same rows again
+  // on its own subset, so two tables would not share the order the list is about.
+  ranked_table: 'none',
 };
 
 /** The policy for `vizKind`.

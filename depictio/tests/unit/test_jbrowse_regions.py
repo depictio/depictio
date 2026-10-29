@@ -357,7 +357,6 @@ class TestSortAndSearch:
             True
         ]
 
-
     def test_column_filters_take_text_and_number_ops(self):
         df = pl.DataFrame(
             {
@@ -379,9 +378,10 @@ class TestSortAndSearch:
             "Alpha",
             "Gamma",
         ]
-        assert kept(
-            [{"column": "score", "kind": "number", "op": "greaterThan", "value": 1.0}]
-        ) == ["beta", "Gamma"]
+        assert kept([{"column": "score", "kind": "number", "op": "greaterThan", "value": 1.0}]) == [
+            "beta",
+            "Gamma",
+        ]
         both = [
             {"column": "chrom", "kind": "text", "op": "equals", "value": "chr1"},
             {"column": "score", "kind": "number", "op": "inRange", "value": 0, "value_to": 1},

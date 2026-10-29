@@ -72,6 +72,7 @@ import {
   buildGuideModel,
   resolveGuideSettings,
   CategoryColorsContext,
+  TabColorContext,
   barSectionNames,
   filtersInScope,
   hasSectionBar,
@@ -2061,6 +2062,7 @@ const App: React.FC = () => {
       {/* `category_colors` for the filter bar's chips and anything else that
           colours a category: one value, one colour, on every surface. */}
       <CategoryColorsContext.Provider value={dashboard}>
+      <TabColorContext.Provider value={typeof dashboard?.tab_icon_color === 'string' ? dashboard.tab_icon_color : null}>
       <TabLinkProvider tabs={tabSiblings}>
       <GenomeBrowserTargetProvider dashboardId={dashboardId ?? null} dashboard={dashboard} tabs={tabSiblings}>
       {/* Only while the server's export API is on: otherwise the provider
@@ -2159,6 +2161,7 @@ const App: React.FC = () => {
       </ComponentExportProvider>
       </GenomeBrowserTargetProvider>
       </TabLinkProvider>
+      </TabColorContext.Provider>
       </CategoryColorsContext.Provider>
       </BrandScope>
       </SaveGroupContext.Provider>

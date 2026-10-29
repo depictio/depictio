@@ -20,6 +20,8 @@ from pydantic import (
     model_validator,
 )
 
+from depictio.models.components.color_scale import ColorScale
+
 # The continuous colour scales every viz kind that exposes one offers. Single
 # definition on the Python side; its React twin lives in
 # packages/depictio-react-core/src/components/advanced_viz/colourScales.ts and
@@ -2736,6 +2738,19 @@ class GenomeViewConfig(_BaseVizConfig):
             "pin), else one neutral colour."
         ),
     )
+    color_scale: ColorScale | None = Field(
+        default=None,
+        description=(
+            "Colour the marks along a sequential ramp instead of one hue per "
+            "value: ``{column, order_by, scheme}``. ``column`` is a column of "
+            "this tile's rows (``sample_col``, ``category_col`` or another, "
+            "e.g. the timepoint); ``order_by`` another row column giving its "
+            "order (a day number). Replaces ``category_col``'s colours. A "
+            "genome browser tile of the dashboard with the same scale paints "
+            "its tracks the same way, and a sample it colours keeps that "
+            "colour here."
+        ),
+    )
     mark: Literal["point", "rect", "bar"] = Field(
         default="rect",
         description=(
@@ -2815,12 +2830,44 @@ class GenomeViewConfig(_BaseVizConfig):
             "the brushed region."
         ),
     )
-    drag_mode: Literal["select", "pan"] = Field(
-        default="select",
+    interaction_mode: Literal["pointer", "pan", "select"] | None = Field(
+        default=None,
         description=(
-            "What a drag on the genome axis does: ``select`` brushes a region "
-            "(the region filter), ``pan`` moves the view, with shift + drag "
-            "still brushing. The wheel with Cmd/Ctrl zooms in both."
+            "What the pointer does on the genome axis when the tile opens; the "
+            "reader switches it from the tile's header. ``pointer`` (the default) "
+            "shows tooltips and takes clicks, a drag does nothing and the wheel "
+            "scrolls the page (Cmd/Ctrl + wheel zooms); ``pan`` moves the view with "
+            "a drag and zooms with the wheel; ``select`` brushes a region (the "
+            "region filter) with a drag. Unset, ``drag_mode`` decides when it is "
+            "given, else ``pointer``."
+        ),
+    )
+    drag_mode: Literal["select", "pan"] | None = Field(
+        default=None,
+        description=(
+            "Kept for older dashboards: the opening mode when ``interaction_mode`` "
+            "is unset. ``select`` opens in the region brush, ``pan`` in the pan "
+            "mode (shift + drag still brushes there)."
+        ),
+    )
+    publish_view_window: bool = Field(
+        default=False,
+        description=(
+            "Let this tile's own panning and zooming move the genome browsers that "
+            "follow other genome tiles. Off by default: only a brushed region (or a "
+            "locus typed here) sends a browser somewhere, so moving around this "
+            "axis never drags it along. The browsers' view still shows here as a "
+            "band either way."
+        ),
+    )
+    auto_height: bool = Field(
+        default=False,
+        description=(
+            "Let the tile's height follow its content (the stacked lanes, the axis "
+            "and the gene lane) instead of the stored grid height: it grows and "
+            "shrinks between 3 and 16 grid rows. A tile on the same grid row takes "
+            "the tallest answer given on that row, and a tile the reader has "
+            "resized by hand keeps their height."
         ),
     )
     follow_region_filter: bool = Field(
@@ -2858,6 +2905,17 @@ class GenomeViewConfig(_BaseVizConfig):
             "the whole chromosome, with the region framed in it, so the reader "
             "sees where it sits; ``region`` zooms onto the region itself. Later "
             "regions (a locus typed, a brush) always zoom onto the region."
+        ),
+    )
+    open_on_view_window: bool = Field(
+        default=False,
+        description=(
+            "Open on the chromosome the genome browser shows rather than on the "
+            "whole genome, the browser's view framed in it (``default_view`` "
+            "decides chromosome or region). For a navigator above a browser that "
+            "opens on the best candidates: the reader starts where the browser "
+            "is. Only on opening, and never over a region already in force or a "
+            "view the reader left."
         ),
     )
 
@@ -3438,6 +3496,20 @@ class RecordCardConfig(_BaseVizConfig):
             "so the card opens filled. A real selection always wins, and "
             "clearing it brings this record back."
         ),
+    )
+    default_record_by: str | None = Field(
+        default=None,
+        description=(
+            "Column whose best row is the record shown when no selection reaches "
+            "the tile (highest unless ``default_record_ascending``), among the "
+            "rows the dashboard's filters leave: the top-ranked variant of a "
+            "ranked table, for a template that cannot name it. "
+            "``default_record`` wins when both are set."
+        ),
+    )
+    default_record_ascending: bool = Field(
+        default=False,
+        description="Take the lowest value of ``default_record_by`` instead of the highest.",
     )
 
 
@@ -5088,6 +5160,379 @@ class AlleleGridConfig(_BaseVizConfig):
 
 
 # ---------------------------------------------------------------------------
+# Clinical genetics
+# ---------------------------------------------------------------------------
+
+
+class PedigreeConfig(_BaseVizConfig):
+    """A family tree from a PED-like table, drawn with the standard symbols.
+
+    One row per individual. Founders (no parent in the table) sit on the top
+    row and each generation is drawn under the one it descends from, with a
+    couple line between the two parents and a sibship line over their
+    children. A square is a male, a circle a female and a diamond a person of
+    unknown sex; a filled symbol is affected, an open one unaffected and a
+    hatched one of unknown status; a diagonal slash marks a deceased person.
+    Several families (``family_col``) are drawn side by side.
+
+    The renderer reads the encodings PED files come in: sex as ``1`` / ``2`` /
+    ``0`` or ``male`` / ``female`` / ``unknown``; status as ``2`` (affected),
+    ``1`` (unaffected), ``0`` or ``-9`` (unknown) or the words; a parent of
+    ``0``, an empty cell or a null is no parent. A parent named in a row but
+    absent from the table is drawn as an unaffected individual of the sex its
+    role implies, so the tree still joins up.
+    """
+
+    viz_kind: Literal["pedigree"] = "pedigree"
+
+    individual_col: str = Field(
+        default="individual", description="Individual identifier: one symbol per distinct value"
+    )
+    father_col: str = Field(
+        default="father",
+        description="Father's identifier; 0, empty or null means a founder on that side",
+    )
+    mother_col: str = Field(
+        default="mother",
+        description="Mother's identifier; 0, empty or null means a founder on that side",
+    )
+    sex_col: str = Field(
+        default="sex", description="Sex: 1 / 2 / 0 or male / female / unknown (PED coding)"
+    )
+    status_col: str = Field(
+        default="status",
+        description="Affected status: 2 affected, 1 unaffected, 0 / -9 unknown, or the words",
+    )
+    family_col: str | None = Field(
+        default=None,
+        description=(
+            "Optional family identifier: one tree per value, drawn side by side. "
+            "Null treats the table as one family"
+        ),
+    )
+    label_col: str | None = Field(
+        default=None,
+        description="Optional text drawn under each symbol; null writes the individual identifier",
+    )
+    deceased_col: str | None = Field(
+        default=None,
+        description=(
+            "Optional deceased flag (1 / true / yes / deceased) drawn as a diagonal "
+            "slash across the symbol"
+        ),
+    )
+    proband_col: str | None = Field(
+        default=None,
+        description=(
+            "Optional proband flag (1 / true / yes / proband): the individual an arrow "
+            "points at. Null marks the first affected child of each family instead"
+        ),
+    )
+
+    show_labels: bool = Field(default=True, description="Write the label under each symbol")
+    max_individuals: int = Field(
+        default=300,
+        ge=1,
+        le=5000,
+        description="Guard on the symbols drawn; the rest are counted, never sampled",
+    )
+    max_families: int = Field(
+        default=12, ge=1, le=100, description="Guard on the trees drawn side by side"
+    )
+
+    # --- Selection as a cross-filter ---------------------------------------
+    # Off by default, as for the other non-protein kinds.
+    selection_enabled: bool = Field(
+        default=False,
+        description="Let a click on an individual filter the dashboard to that individual",
+    )
+    selection_column: str | None = Field(
+        default=None,
+        description=(
+            "Column a click selects on. Null uses ``individual_col``, which is what "
+            "a variant or QC table keyed by sample joins on"
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Ranked candidates
+# ---------------------------------------------------------------------------
+
+
+class RankedTableColumn(BaseModel):
+    """One column of a ranked table, and how its cells are drawn."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    column: str = Field(description="Column of the bound collection this cell reads")
+    label: str | None = Field(
+        default=None,
+        description="Header and popover label; null uses the config's ``labels`` entry, else the column name",
+    )
+    display: Literal["text", "mono", "badge", "bar", "number"] = Field(
+        default="text",
+        description=(
+            "How the value is drawn: ``text`` as written, ``mono`` in a monospace "
+            "face (a change, a coordinate), ``badge`` as a pill coloured by the "
+            "value (the dashboard's ``category_colors`` for the column, else a "
+            "stable palette), ``bar`` as a bar beside the number (a score), "
+            "``number`` right-aligned with ``decimals`` places"
+        ),
+    )
+    decimals: int | None = Field(
+        default=None,
+        ge=0,
+        le=8,
+        description="Decimal places for ``bar`` and ``number`` cells; null writes the value as stored",
+    )
+    min: float | None = Field(
+        default=None,
+        description=(
+            "Value a ``bar`` starts at. Null starts at 0, or at the smallest "
+            "value shown when some are negative"
+        ),
+    )
+    max: float | None = Field(
+        default=None,
+        description="Value a ``bar`` is full at. Null uses the largest value shown",
+    )
+
+    @model_validator(mode="after")
+    def _range_is_ordered(self) -> RankedTableColumn:
+        if self.min is not None and self.max is not None and self.min >= self.max:
+            raise ValueError("min must be smaller than max")
+        return self
+
+
+class RankedTableConfig(_BaseVizConfig):
+    """A styled leaderboard: candidates ranked by a score, one row each.
+
+    The top-variants list of a rare-disease run, the outlier genes of one
+    sample, any "rank these by a metric" table where the order is the point.
+    Rows are sorted by ``score_col`` and numbered (a medal on the first three,
+    a stripe on their rows), then drawn with a bold title, an optional
+    monospace subtitle and the ``columns`` in order: text, monospace, badges
+    coloured by value, numbers, and bars for a score. Hovering a row opens a
+    popover with ``popover_columns`` as a label / value list and, beside it,
+    ``popover_grid_columns`` as a small grid (the genotype of each family
+    member). A click selects the row.
+
+    Ranks are dense: rows with the same score share a rank and the next
+    distinct score follows without a gap. ``rank_col`` replaces that with a
+    precomputed rank (shown as stored; the order is still ``score_col``).
+    """
+
+    viz_kind: Literal["ranked_table"] = "ranked_table"
+
+    title_col: str = Field(
+        default="title",
+        description="Column drawn bold as the row's name (a gene, a sample, a variant)",
+    )
+    score_col: str = Field(
+        default="score",
+        description="Numeric column the rows are ordered by; the ranking metric",
+    )
+    subtitle_col: str | None = Field(
+        default=None,
+        description="Optional column drawn in monospace beside the title (a protein change)",
+    )
+    rank_col: str | None = Field(
+        default=None,
+        description=(
+            "Optional precomputed rank shown in the medal instead of the "
+            "position derived from ``score_col``"
+        ),
+    )
+    descending: bool = Field(
+        default=True,
+        description="Largest score first. Set false when a small value ranks first (a p-value)",
+    )
+
+    columns: list[RankedTableColumn] = Field(
+        default_factory=list,
+        description=(
+            "Columns drawn after the title, in order. Empty draws one bar of ``score_col``"
+        ),
+    )
+    labels: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Display label per column, used by the popover and by any column "
+            "that sets none; unlisted columns show their name"
+        ),
+    )
+    popover_columns: list[str] = Field(
+        default_factory=list,
+        description="Columns listed as label / value pairs in the hover popover",
+    )
+    popover_grid_columns: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Columns of the same row drawn as a small grid of labelled cells in "
+            "the popover (e.g. the genotype of the proband, mother and father), "
+            "labelled from ``labels``"
+        ),
+    )
+
+    top_n: int = Field(
+        default=50,
+        ge=1,
+        le=1000,
+        description="Rows drawn, after ordering; the rest are counted, never drawn",
+    )
+    medals: bool = Field(
+        default=True,
+        description="Gold, silver and bronze rank cells and a stripe on the first three rows",
+    )
+
+    # --- Family section of the pinned popover -------------------------------
+    # Optional. A click on a row (or its chevron) pins the popover; with a
+    # family bound, a collapsible section draws the family's pedigree with the
+    # carriers of the row's variant filled by genotype. The pedigree comes from
+    # another data collection and the genotypes from columns of the row or from
+    # a long table, both read lazily when the section is first opened. Flat
+    # ``<x>_dc_tag`` fields, not a nested block: the dashboard import resolves a
+    # top-level ``<x>_dc_tag`` of a config to ``<x>_dc_id`` / ``<x>_wf_id``.
+    family_dc_id: str | None = Field(
+        default=None, description="Data-collection id of the pedigree table (resolved from the tag)"
+    )
+    family_wf_id: str | None = Field(
+        default=None, description="Workflow id of the pedigree table (resolved from the tag)"
+    )
+    family_dc_tag: str | None = Field(
+        default=None,
+        description=(
+            "Data-collection tag of a PED-like table, one row per individual "
+            "(resolved to ids at import). Set it to get the Family section"
+        ),
+    )
+    family_individual_col: str = Field(
+        default="individual", description="Pedigree table: individual identifier"
+    )
+    family_father_col: str = Field(
+        default="father", description="Pedigree table: father's identifier (0 or empty: founder)"
+    )
+    family_mother_col: str = Field(
+        default="mother", description="Pedigree table: mother's identifier (0 or empty: founder)"
+    )
+    family_sex_col: str = Field(
+        default="sex", description="Pedigree table: sex (1 / 2 / 0 or words)"
+    )
+    family_status_col: str = Field(
+        default="status", description="Pedigree table: affected status (2 / 1 / 0 or words)"
+    )
+    family_proband_col: str | None = Field(
+        default=None,
+        description=(
+            "Pedigree table: flag marking the proband (1, true, yes, proband). "
+            "Null marks the affected child instead"
+        ),
+    )
+    family_label_col: str | None = Field(
+        default=None,
+        description="Pedigree table: text under each symbol; null writes the identifier",
+    )
+    family_family_col: str | None = Field(
+        default=None,
+        description=(
+            "Pedigree table: family (case) identifier. With ``family_row_col``, only "
+            "the row's family is read; null draws every individual of the table"
+        ),
+    )
+    family_row_col: str | None = Field(
+        default=None,
+        description="Column of this table holding the row's family identifier (matched to ``family_family_col``)",
+    )
+    genotype_columns: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Genotype of each family member read from columns of the row: an "
+            "individual identifier, or one of ``proband`` / ``father`` / ``mother`` "
+            "(the proband's parents), to the column holding the call. Alleles "
+            "(0/1, 1|1), the classes hom_alt / het / ref / missing, or a 0 / 1 / 2 dosage"
+        ),
+    )
+    genotypes_dc_id: str | None = Field(
+        default=None,
+        description="Data-collection id of the long genotype table (resolved from the tag)",
+    )
+    genotypes_wf_id: str | None = Field(
+        default=None, description="Workflow id of the long genotype table (resolved from the tag)"
+    )
+    genotypes_dc_tag: str | None = Field(
+        default=None,
+        description=(
+            "Data-collection tag of a long table with one row per variant and "
+            "individual, as an alternative to ``genotype_columns``"
+        ),
+    )
+    genotypes_key_col: str = Field(
+        default="variant_key", description="Genotype table: column naming the variant"
+    )
+    genotypes_row_col: str | None = Field(
+        default=None,
+        description=(
+            "Column of this table holding the variant's key, matched to "
+            "``genotypes_key_col``. Null uses ``selection_column``, else ``title_col``"
+        ),
+    )
+    genotypes_individual_col: str = Field(
+        default="sample", description="Genotype table: individual identifier"
+    )
+    genotypes_genotype_col: str = Field(
+        default="gt_class", description="Genotype table: the call (alleles, class or dosage)"
+    )
+    genotypes_missing_as: Literal["ref", "missing"] = Field(
+        default="missing",
+        description=(
+            "What a family member with no genotype for the variant is drawn as: "
+            "``missing`` (the default, a grey symbol: no call) or ``ref`` (reference, an "
+            "open symbol). Set ``ref`` for a table that lists carriers only, where a "
+            "person with no row does not carry the variant. A call that says missing "
+            "(``./.``) stays missing; for ``genotype_columns`` an empty cell is read the same way"
+        ),
+    )
+    family_open: bool = Field(
+        default=False, description="Open the Family section as soon as the popover is pinned"
+    )
+
+    # --- Selection as a cross-filter ---------------------------------------
+    # Off by default, as for the other non-protein kinds.
+    selection_enabled: bool = Field(
+        default=False,
+        description="Let a click on a row filter the dashboard to it",
+    )
+    selection_column: str | None = Field(
+        default=None,
+        description=(
+            "Column a click selects on. Null uses ``title_col``; name a unique "
+            "key (a variant id) when the title repeats across rows"
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _family_is_consistent(self) -> RankedTableConfig:
+        has_family = bool(self.family_dc_tag or self.family_dc_id)
+        has_long = bool(self.genotypes_dc_tag or self.genotypes_dc_id)
+        if self.genotype_columns and has_long:
+            raise ValueError(
+                "genotype_columns and genotypes_dc_tag are two sources of the same "
+                "genotypes: set one"
+            )
+        if (self.genotype_columns or has_long) and not has_family:
+            raise ValueError("genotypes are drawn on a family: set family_dc_tag too")
+        if self.family_row_col and not self.family_family_col:
+            raise ValueError("family_row_col needs family_family_col to match against")
+        if self.genotypes_missing_as != "missing" and not (self.genotype_columns or has_long):
+            raise ValueError(
+                "genotypes_missing_as reads people with no genotype: set genotypes_dc_tag "
+                "or genotype_columns, or drop it"
+            )
+        return self
+
+
+# ---------------------------------------------------------------------------
 # Retired kinds, kept alive as views of the kind that survived
 # ---------------------------------------------------------------------------
 
@@ -5259,7 +5704,9 @@ _VizConfigUnion = Annotated[
     | PaeMatrixConfig
     | RamachandranConfig
     | SpatialCellsConfig
-    | AlleleGridConfig,
+    | AlleleGridConfig
+    | PedigreeConfig
+    | RankedTableConfig,
     Field(discriminator="viz_kind"),
 ]
 

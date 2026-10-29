@@ -307,7 +307,9 @@
                 "ideogram",
                 "ranked_distribution",
                 "spatial_cells",
-                "allele_grid"
+                "allele_grid",
+                "pedigree",
+                "ranked_table"
               ],
               "type": "string"
             },

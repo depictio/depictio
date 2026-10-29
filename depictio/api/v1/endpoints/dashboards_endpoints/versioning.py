@@ -99,6 +99,12 @@ SNAPSHOT_DERIVED_FIELDS: frozenset[str] = frozenset(
     }
 )
 
+#: Where a dashboard came from, not what it shows. The template import stamps
+#: ``template_origin`` (template id, revision, date) on every import, so hashing it
+#: would turn a re-import of unchanged content into a fake version. Restore and
+#: preview leave it live.
+SNAPSHOT_PROVENANCE_FIELDS: frozenset[str] = frozenset({"template_origin"})
+
 #: ``MongoModel`` bookkeeping every model inherits (``id`` is ``_id``). No
 #: dashboard route writes the other three.
 SNAPSHOT_BASE_MODEL_FIELDS: frozenset[str] = frozenset(
@@ -113,6 +119,7 @@ SNAPSHOT_EXCLUDED_FIELDS: frozenset[str] = (
     | SNAPSHOT_FORBIDDEN_FIELDS
     | SNAPSHOT_VOLATILE_FIELDS
     | SNAPSHOT_DERIVED_FIELDS
+    | SNAPSHOT_PROVENANCE_FIELDS
     | SNAPSHOT_BASE_MODEL_FIELDS
 )
 

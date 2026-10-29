@@ -28,6 +28,7 @@ import {
   Z_LAYERS,
 } from 'depictio-react-core';
 import type { BrandTheme, DashboardSummary } from 'depictio-react-core';
+import { paletteVar } from 'depictio-react-core';
 import BrandLogo from './BrandLogo';
 import ThemeToggle from './ThemeToggle';
 import ServerStatusBadge from './ServerStatusBadge';
@@ -247,7 +248,7 @@ export function useTabNav({
             width={18}
             height={18}
             style={{
-              color: `var(--dc-tab-icon, var(--mantine-color-${color}-${isDark ? 4 : 6}))`,
+              color: `var(--dc-tab-icon, ${paletteVar(color, isDark ? 4 : 6)})`,
               flexShrink: 0,
             }}
           />
@@ -478,7 +479,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           // fighting an inline colour.
           color: isFilled
             ? 'var(--dc-tab-icon-active, var(--mantine-color-white))'
-            : `var(--dc-tab-icon, var(--mantine-color-${iconColor}-6))`,
+            : `var(--dc-tab-icon, ${paletteVar(iconColor)})`,
           flexShrink: 0,
         }}
       />

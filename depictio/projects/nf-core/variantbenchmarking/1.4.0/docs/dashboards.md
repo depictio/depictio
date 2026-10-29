@@ -45,53 +45,76 @@ The landing page, at compact width with the filter panel collapsed:
   caller, the caller with most false positives, and the best rtg-tools vcfeval F1. Structural: the
   best Truvari F1 and its caller, the best SVanalyzer F1, and the Wittyer F1 per event against
   per base. Below them, four figures per route in two rows: germline, the precision-recall
-  scatter and hap.py F1 by variant type, then the quality-threshold sweep and the error counts;
-  somatic, the precision-recall scatter and the recall intervals, then the error counts and the
+  scatter and hap.py F1 of the PASS calls by variant type, then the quality-threshold sweep and the errors (false positives and missed calls);
+  somatic, the precision-recall scatter and the recall intervals, then the errors and the
   precision intervals (the allele-fraction strata stay on the tab, since a run can write them
   for some callers only); structural, the Truvari precision-recall scatter and the SVanalyzer
-  F1, then the Truvari error counts and the Wittyer F1. The bar of this section filters by
+  F1, then the Truvari errors and the Wittyer F1. The bar of this section filters by
   caller and callset.
 - **How to read this dashboard**: one tile per tab, by group, each showing its question.
+- **Callsets** (collapsed): the run has no sample sheet, so its callsets are its samples. One
+  table per route (rtg-tools vcfeval, som.py, Truvari) lists each callset with its caller,
+  truth set and score; the tables of the routes the run did not take are dropped at import.
+
+The Overview stays within the 24-row budget of a one-route run: the highlights use the stored
+height of the family rules (4 rows), and the callset tables sit in the collapsed section. A
+data root holding several routes stacks their blocks and is taller, by design.
 
 ## Child tabs
 
 Each tab opens with a short intro (the method, with a link to its tool, and how to read the
 tab), then a strip of four key numbers, each card with its own colour and a secondary that
 reads it, then at most three open sections; tables and the cross-check follow, collapsed. The
-precision-recall scatters colour each callset by its caller and draw no point labels (callset
-ids pile up); the iso-F1 contours read F1 off the plane.
+precision-recall scatters colour each callset by its caller, label each point with its callset and
+draw the iso-F1 contours, so F1 reads off the plane (all points share one size, since a handful of
+callsets gains nothing from a size encoding); a run with many callsets can switch the labels off in
+the tile's controls.
 
 **Germline.** Strip: F1 (box plot), recall against a 0.9 floor, false positives (the callers
 with most) and true positives (split by caller). Then the vcfeval precision-recall scatter
-beside the error counts per callset, and hap.py's F1 by variant type (all calls against PASS
-calls) beside the quality-threshold sweep. Collapsed: a genome browser (Errors on the genome)
-with the false positive, false negative and true positive VCFs of the callsets picked in the
-left panel, and the vcfeval, hap.py and sweep tables. Filters: caller, callset, hap.py variant
-type and hap.py calls (ALL or PASS).
+beside the errors per callset (a stacked bar of false positives and missed calls, true
+positives left out because they dwarf both), hap.py's F1 by variant type (the PASS calls; the
+ALL calls are drawn beside them only where hard-filtered calls change the score, since two
+identical bars say nothing) beside the quality-threshold sweep (one point per cut-off the run
+swept, so a run that swept two draws two operating points), and a genome browser (Errors on
+the genome) with the false positive, missed call and true positive VCFs of the callsets picked
+in the left panel, the best callset first, under UCSC's common dbSNP and ClinVar tracks
+(human data). Collapsed: the vcfeval, hap.py and sweep tables. Filters: caller, callset, hap.py
+variant type and hap.py calls (ALL or PASS). The intro says what a callset's `caller` is: the
+name its samplesheet row gives it, a tool or a version of the calls being compared (a test
+profile compares versions of one truth set).
 
 **Somatic.** Strip: F1 (box plot), precision against a 0.5 floor, false positives (the callers
 with most) and true positives (split by caller). Then the som.py precision-recall
-scatter beside the error counts, the precision and recall with their binomial 95% intervals,
-and the false positives per allele-fraction bin, by bin and by caller. som.py bins a false
-positive by the caller's allele fraction but a true positive or a miss by the truth set's, so
-with a truth set that carries none, recall and F1 per bin stay empty and only the false
-positives are defined per bin. Collapsed: the rtg-tools vcfeval cross-check (scatter and
-table) and the som.py summary and strata tables. Filters: caller and allele-fraction bin; the
-caller reaches the strata and the cross-check through the links.
+scatter beside the errors per caller and variant type (the same stacked bar), and the precision
+and recall with their binomial 95% intervals. The intro notes that recall counts every truth
+variant, also those outside the regions the run called, so a partial run scores low by design.
+Collapsed: the false positives per allele-fraction bin (one bar per caller and bin; a run whose
+strata hold a single populated bin draws one bar, which is why the section is a detail), the
+rtg-tools vcfeval cross-check (scatter and table) and the som.py summary and strata tables.
+som.py bins a false positive by the caller's allele fraction but a true positive or a miss by
+the truth set's, so with a truth set that carries none, recall and F1 per bin stay empty and
+only the false positives are defined per bin. The cross-check is labelled with its scope:
+vcfeval scores every variant of a callset while som.py scores one variant type, so the counts
+and the precision differ, and the reader compares how the callers rank. Filters: caller and
+allele-fraction bin; the caller reaches the strata and the cross-check through the links.
 
 **Structural & CNV.** Strip: true positives (split by caller), F1 (box plot), recall against a
 0.8 floor and precision (distribution), all from Truvari. Then the Truvari precision-recall
-scatter beside its error counts, and the SVanalyzer F1 per callset beside the Wittyer F1 per
-event and per base. Collapsed: a genome browser (Errors on the genome) with the Truvari false
-positive, false negative and true positive VCFs of the picked callsets, and the Truvari,
-SVanalyzer and Wittyer tables. Filters: callset, caller and Wittyer level; the callset reaches
+scatter beside its errors per callset (the same stacked bar), the SVanalyzer F1 per callset
+beside the Wittyer F1 per event and per base, and a genome browser (Errors on the genome) with
+the Truvari false positive, missed call and true positive VCFs of the picked callsets, the best
+callset first. Collapsed: the Truvari, SVanalyzer and Wittyer tables. The open sections of
+each tab stay within the 20-row budget (browser at 7 rows). Filters: callset, caller and Wittyer level; the callset reaches
 SVanalyzer and Wittyer through the links.
 
 ## Genome tracks
 
 The `tracks` collection lists the files the genome browser reads: per benchmarked callset, the
-false positives and the false negatives (the first two tracks it opens) and the true positives,
-as small VCFs the pipeline publishes next to its summary tables. `recipes/tracks.py` spells
+false positives, the missed calls (false negatives) and the true positives,
+as small VCFs the pipeline publishes next to its summary tables (the callsets are listed best
+first, by F1 then fewest errors, so the browser opens on the three files of the best one).
+`recipes/tracks.py` spells
 them out from the rtg-tools summary (germline, `small/<id>/benchmarks/rtgtools/`) and the
 Truvari summary (structural, `structural/<id>/benchmarks/truvari/`); the file names carry the
 callset id, the truth set and the caller. Picking a callset in the filter panel or in a table
@@ -101,9 +124,14 @@ and the import drops the browser with it.
 
 The build is the `GENOME` variable (UCSC name, default hg38): pass `--var GENOME=hg19` for a
 GRCh37 run. With `--var TRACKS_URI=<results folder>` the VCFs are read in place; without it the
-VCFs, with their `.tbi`, that DATA_ROOT holds are uploaded. The browser has no `locus_from`: no
-collection of this template carries per-call coordinates, so the view opens on its default
-window and the reader moves along the chromosome. The use cases are in
+VCFs, with their `.tbi`, that DATA_ROOT holds are uploaded. The browser has no `locus_from`, hence no
+`sort_by` or call stepper: no collection of this template carries per-call coordinates (the
+errors are VCF records read by the browser itself), so the view opens on its default window
+and the reader moves along the chromosome. The manifest holds no colour: the browser colours
+the files by `error_type` (False positives, Missed calls, True positives), the column
+`category_colors` also keys for the error bars, so one hue stands for one kind of error in the
+bars and the tracks. The germline browser adds UCSC's common dbSNP and ClinVar tracks
+(`ucsc_tracks`); both browsers keep the assembly's gene track. The use cases are in
 `docs/design/jbrowse/variantbenchmarking.md`.
 
 ## Undefined metrics
@@ -133,7 +161,9 @@ both blocks, stacked.
 
 `category_colors` is declared once, on the Overview, and read by every tab: callers take `auto`
 (a colour-blind-safe colour each at import), hap.py's SNP and INDEL and its ALL and PASS calls
-are written out, and Wittyer's Event and Base levels too.
+are written out, and Wittyer's Event and Base levels too. The error types of the stacked bars
+and of the genome-browser tracks (False positives, Missed calls, True positives) are written
+out once, so the bars and the tracks share their hues.
 
 ## Cross-selection
 
@@ -165,7 +195,9 @@ Visualisations showcase dashboard.
 - **ROC / PR curve** (`roc_pr_curve`): threshold-sweep curves with their AUC; the view switch
   draws the PR curve, the ROC or precision and recall against the threshold.
 - **Confusion matrix** (`confusion_matrix`): TP, FP and FN per callset, the shade normalised
-  per callset, the label the raw count.
+  per callset, the label the raw count. Not used on the tabs of this dashboard: it normalises by
+  TP + FP + FN, so true positives dominate every row and the error counts that matter fade out.
+  The tabs draw a stacked bar of false positives and missed calls instead.
 - **Metric with its interval** (`metric_ci_bars`): a point estimate and its 95% interval per
   caller, the axis zoomed so tight intervals stay readable.
 

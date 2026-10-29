@@ -71,12 +71,35 @@ def test_germline_callsets_list_fp_fn_tp_each(tmp_path: Path) -> None:
     assert df["kind"].to_list()[:3] == ["fp", "fn", "tp"]
     assert df["name"].to_list()[:3] == [
         "cs2 false positives",
-        "cs2 false negatives",
+        "cs2 missed calls",
         "cs2 true positives",
     ]
+    # The dashboard's bars and the browser colour by the same column; the manifest
+    # holds no colour of its own (it would win over the dashboard's palette).
+    assert "color" not in df.columns
+    assert df["error_type"].to_list()[:3] == ["False positives", "Missed calls", "True positives"]
     assert df["format"].unique().to_list() == ["vcf"]
     assert df["order"].to_list() == list(range(1, 7))
     assert df["track_id"].n_unique() == df.height
+
+
+def test_callsets_are_ranked_best_first_so_the_browser_opens_on_the_best(tmp_path: Path) -> None:
+    # The summary lists the weaker callset first, and two callsets tie on F1: the
+    # fewer errors win the tie; a blank F1 ranks last.
+    sheet = (
+        "Tool,File,Caller,Threshold,TP_base,TP_comp,FP,FN,Precision,Recall,F1\n"
+        "weak,weak.TRUTH.callera.summary.txt,callera,None,10,10,1,5,0.9,0.7,0.8\n"
+        "blank,blank.TRUTH.callerc.summary.txt,callerc,None,0,0,0,0,,,\n"
+        "tie_more,tie_more.TRUTH.callerb.summary.txt,callerb,None,10,10,4,4,0.9,0.9,0.9\n"
+        "tie_less,tie_less.TRUTH.callerd.summary.txt,callerd,None,10,10,1,1,0.9,0.9,0.9\n"
+    )
+    _stage(tmp_path, _RTG_PATH, sheet)
+    df = execute_recipe(RECIPE, tmp_path)
+    assert df["sample_id"].to_list()[::3] == ["tie_less", "tie_more", "weak", "blank"]
+    # The first three rows, the ones the browser opens, are the best callset's own files.
+    assert df["sample_id"].to_list()[:3] == ["tie_less"] * 3
+    assert df["kind"].to_list()[:3] == ["fp", "fn", "tp"]
+    assert df["order"].to_list() == list(range(1, 13))
 
 
 def test_structural_callsets_use_truvari_names(tmp_path: Path) -> None:
@@ -149,6 +172,9 @@ def test_the_template_tracks_collection_validates() -> None:
     config = DCGenomicTracksConfig(**_tracks_properties({"GENOME": "hg19"}))
     assert config.assembly == "hg19"
     assert config.order_column == "order"
+    # No manifest colour: the browser colours by `error_type`, like the dashboard's bars.
+    assert config.color_column is None
+    assert config.category_column == "error_type"
     assert set(config.display_defaults) == {"vcf"}
     assert config.remote_base_uri is None
 

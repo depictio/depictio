@@ -39,7 +39,9 @@ import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
 import { ActiveHighlight } from '../highlight';
 import { useHighlight, usePublishHighlight } from '../highlight/bus';
-import { rowMatcher, type RowMatcher } from '../highlight/genomicHover';
+import { genomicFromRowByName, rowMatcher, type RowMatcher } from '../highlight/genomicHover';
+import { useGenomeBrowserTarget } from './jbrowse/browserTarget';
+import { centreGenomeBrowser } from './jbrowse/openAction';
 import { useUiScale } from '../uiScale';
 import { rowsForHeight, useContentDemand } from './autofit';
 import RefetchOverlay from './RefetchOverlay';
@@ -882,7 +884,15 @@ const TableRenderer: React.FC<TableRendererProps> = ({
     if (api && !api.isDestroyed()) api.redrawRows();
   }, [annotating]);
 
+  // A click on a row that names a contig and a position (the usual column
+  // names) centres the genome browser of this tab on it. The pending-locus
+  // event is what "Open in genome browser" uses on the same tab: no filter,
+  // nothing refetched, and a browser on another tab is left alone.
+  const browserTarget = useGenomeBrowserTarget();
   const onRowClicked = (event: RowClickedEvent) => {
+    if (event.data && !annotatingRef.current) {
+      centreGenomeBrowser(browserTarget, genomicFromRowByName(event.data as Record<string, unknown>));
+    }
     if (!annotatingRef.current || !annotationColumn || !event.data || pendingHere) return;
     // The checkbox keeps toggling the dashboard selection, as outside annotate mode.
     const target = event.event?.target as Element | null | undefined;

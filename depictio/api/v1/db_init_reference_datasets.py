@@ -268,6 +268,15 @@ STATIC_IDS = {
             # epitope predictions an allele pick narrows. 8da0 is the dashboard.
             "allele_grid_demo": "646b0f3c1e4a2d7f8e5b8da1",
             "epitope_predictions_demo": "646b0f3c1e4a2d7f8e5b8da2",
+            # Pedigree tab (the 8f6x block): three families in the PED coding.
+            # 8f60 is the dashboard.
+            "pedigree_demo": "646b0f3c1e4a2d7f8e5b8f61",
+            # Ranked table tab (the 8f7x block): 8f70 is the dashboard. The family
+            # and genotype collections are the ones a variant's popover reads.
+            "ranked_variants_demo": "646b0f3c1e4a2d7f8e5b8f71",
+            "ranked_family_demo": "646b0f3c1e4a2d7f8e5b8f72",
+            "ranked_genotypes_demo": "646b0f3c1e4a2d7f8e5b8f73",
+            "ranked_outliers_demo": "646b0f3c1e4a2d7f8e5b8f74",
         },
         "dashboards": {
             # Main tab reuses the project_id so get_child_tabs(main_id) finds
@@ -332,6 +341,8 @@ STATIC_IDS = {
             # The spatial cells tab opens the 8e7x block; 8e71 is its collection.
             "advanced_viz_spatial_cells": "646b0f3c1e4a2d7f8e5b8e70",
             "advanced_viz_allele_grid": "646b0f3c1e4a2d7f8e5b8da0",
+            "advanced_viz_pedigree": "646b0f3c1e4a2d7f8e5b8f60",
+            "advanced_viz_ranked_table": "646b0f3c1e4a2d7f8e5b8f70",
             "advanced_viz_benchmark_pr": "646b0f3c1e4a2d7f8e5b8d62",
             "advanced_viz_benchmark_confusion": "646b0f3c1e4a2d7f8e5b8d63",
             "advanced_viz_benchmark_ci": "646b0f3c1e4a2d7f8e5b8d64",

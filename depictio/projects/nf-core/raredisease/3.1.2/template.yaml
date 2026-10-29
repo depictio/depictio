@@ -1,0 +1,906 @@
+# nf-core/raredisease Template v3.1.2 - rare disease analysis on a family: alignment QC, the
+# family callset, the GENMOD-ranked variants, mitochondrial, repeat and mobile element calls
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/raredisease/3.1.2 --data-root /path/to/results \
+#     [--var GENOME=hg19] [--var TRACKS_URI=s3://bucket/results]
+#
+# Validated against a whole-genome run of nf-core/raredisease 3.1.2 (the test_full
+# profile: a trio on a reduced GRCh37 reference), run on the EMBL cluster. megatest.yaml
+# says why that run and not an AWS megatest. Nothing below is specific to it.
+#
+# What the run publishes, and so what this template reads (paths under DATA_ROOT):
+#   pedigree/<family>.ped                    family, sample, parents, sex, phenotype (samples.py)
+#   qc_bam/<S>_multiplemetrics.*             Picard alignment summary and insert size (alignment_qc.py)
+#   qc_bam/<S>_wgsmetrics.*, <S>_hsmetrics.* Picard coverage metrics, genome or capture (alignment_qc.py)
+#   alignment/<S>_sorted_md.metrics.txt      MarkDuplicates (alignment_qc.py)
+#   qc_bam/<S>_mosdepth.mosdepth.*           depth per contig (contig_depth.py)
+#   call_snv/genome/<F>_snv.vcf.gz           joint small-variant callset (variants.py, family_checks.py)
+#   rank_and_filter/<F>_snv_ranked_*.vcf.gz  VEP-annotated, GENMOD-ranked variants (ranked_variants.py)
+#   rank_and_filter/<F>_mt_ranked_*.vcf.gz   the mitochondrial branch (mt_variants.py)
+#   repeat_expansions/<F>_repeat_expansion_stranger.vcf.gz   ExpansionHunter + Stranger (repeat_expansions.py)
+#   call_mobile_elements/<F>_mobile_elements.vcf.gz          mobile element insertions (mobile_elements.py)
+#   smncopynumbercaller/out/<F>_smncopynumbercaller.tsv      SMN1 / SMN2 copy numbers (smn.py)
+#   multiqc/multiqc_data/multiqc.parquet     native MultiQC 1.35 report
+# The alignments, ranked VCFs and signal tracks are read by the genome browser through
+# their indexes (tracks.py); the tables above never load a BAM.
+#
+# Routes (RULES.md section 13), each pruned at import with what it feeds:
+#   - the mitochondrial analysis, repeat expansion calling, mobile element calling and SMN
+#     calling are optional branches: mt_variants, repeat_expansions, mobile_elements and smn
+#     are optional collections, and the import removes their tabs or sections, their pipeline
+#     steps and the findings that cite them;
+#   - a run without the pedigree (a hand-built input) keys the hub on the QC and callset
+#     samples: the role filter then reads Other for everyone;
+#   - sv_calling, gens, germlinecnvcaller and peddy are not read (no collection of this
+#     template depends on them): their outputs are neither required nor shown;
+#   - a target capture (exome) run has hybrid-selection metrics instead of whole-genome
+#     ones: the coverage columns the other analysis writes stay empty and the tiles that read
+#     them draw a dash.
+# ============================================================================
+template:
+  template_id: "nf-core/raredisease/3.1.2"
+  description: "nf-core/raredisease template for rare disease analysis on a family: alignment and coverage QC, pedigree and relatedness checks, the callset, the GENMOD-ranked variants with their inheritance models, mitochondrial heteroplasmy, repeat expansions and mobile elements, and a genome browser over the ranked VCFs and alignments."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory of one raredisease run (alignment/, call_snv/, rank_and_filter/, qc_bam/, pedigree/, pipeline_info/)."
+      required: true
+    - name: "GENOME"
+      description: "UCSC name of the assembly the run was aligned to (hg19 for GRCh37, hg38 for GRCh38): the axis of the Locus tab and the gene track of the browser."
+      required: false
+      default: "hg19"
+    - name: "TRACKS_URI"
+      description: "s3:// or https:// folder holding the run's results (the one that holds alignment/, rank_and_filter/ and qc_bam/), to read the genome-browser tracks (the ranked VCFs and the alignments) in place instead of uploading them from DATA_ROOT. Without it the `tracks` collection uploads whichever of those files DATA_ROOT holds."
+      required: false
+  # The bundled reference dataset needs no variable beyond DATA_ROOT: the run is on
+  # GRCh37, whose default is hg19.
+  reference:
+    vars: {}
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "genomes"   # the whole iGenomes catalogue, identical every run
+          - "hook_url"  # nf-core runs put a live Slack webhook here
+          - "email*"
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      # The pipeline's own parameter groups (nextflow_schema.json at 3.1.2); institutional and
+      # generic options are folded into Run context.
+      - group: "Input/output"
+        key_patterns: ["input", "outdir", "multiqc_title", "multiqc_config", "multiqc_logo", "multiqc_methods_description", "multiqc_samples"]
+      - group: "Analysis"
+        key_patterns: ["analysis_type", "variant_type", "variant_caller", "skip_tools", "skip_subworkflows", "platform", "bait_padding", "run_mt_for_wes", "concatenate_snv_calls", "skip_split_multiallelics", "restrict_to_contigs", "run_rtgvcfeval", "run_vcfanno_db_sanity_check", "extract_alignments", "exclude_alt", "scatter_count", "ngsbits_samplegender_method"]
+      - group: "Alignment"
+        key_patterns: ["aligner", "mt_aligner", "min_trimmed_length", "rmdup", "samtools_sort_threads", "mbuffer_mem", "save_all_mapped_as_cram", "save_noalt_mapped_as_cram", "sentieon_dnascope_pcr_indel_model", "cnvnator_binsize"]
+      - group: "Mitochondria"
+        key_patterns: ["mito_name", "mito_length", "mt_subsample_*", "heavy_strand_origin_*", "light_strand_origin_*", "homoplasmy_af_threshold", "mitosalt_*", "saltshaker_*", "score_config_mt", "mt_fasta"]
+      - group: "Annotation and ranking"
+        key_patterns: ["vep_*", "cadd_*", "vcfanno_*", "score_config_*", "reduced_penetrance", "variant_catalog", "variant_consequences_*", "gnomad_af*", "svdb_*", "mobile_element_*", "vcf2cytosure_blacklist"]
+      - group: "Reference genome"
+        key_patterns: ["genome", "fasta", "fai", "bwa", "bwafastalign", "bwamem2", "bwameme", "hisat2*", "sequence_dictionary", "known_dbsnp*", "intervals_*", "target_bed", "call_interval", "par_bed", "sambamba_regions", "readcount_intervals", "manta_call_regions*", "gcnvcaller_model", "ploidy_model", "gens_*", "ml_model", "sdf", "rtg_truthvcfs", "verifybamid_*", "sample_id_map", "igenomes_base", "igenomes_ignore", "local_genomes", "save_reference", "genomes"]
+      - group: "Run context"
+        key_patterns: ["version", "publish_dir_mode", "email", "email_on_fail", "plaintext_email", "max_multiqc_email_size", "monochrome_logs", "validate_params", "modules_testdata_base_path", "pipelines_testdata_base_path", "trace_report_suffix", "help", "help_full", "show_hidden", "config_profile_*", "custom_config_*"]
+    highlight:
+      - "genome"
+      - "analysis_type"
+      - "variant_caller"
+      - "aligner"
+      - "skip_tools"
+      - "skip_subworkflows"
+      - "variant_type"
+      - "vep_cache_version"
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    # Genome tracks: read in place when TRACKS_URI names the results folder, uploaded
+    # from DATA_ROOT otherwise (the `tracks` recipe keeps only the files it finds there).
+    - if_var_present: "TRACKS_URI"
+      override_dcs:
+        - data_collection_tag: "tracks"
+          dc_properties:
+            remote_base_uri: "{TRACKS_URI}"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Rare Disease Family Analysis"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "raredisease"
+    version: "3.1.2"
+    engine:
+      name: "nextflow"
+      version: "25.10.7"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/raredisease"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # MultiQC. Native 1.35 parquet (not reprocessed). Module and plot names
+      # come from multiqc.list_plots() on the pinned run. The run is whole
+      # genome: the report holds FastQC, fastp, Picard (alignment summary,
+      # insert size, duplicates, WGS coverage) and mosdepth sections.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "multiqc_data"
+        description: "Native MultiQC report: FastQC, fastp, Picard alignment, duplicate and coverage metrics, and mosdepth"
+        config:
+          type: "MultiQC"
+          scan:
+            mode: "recursive"
+            scan_parameters:
+              regex_config:
+                pattern: "(?:.*/)?multiqc(?:/[^/]+)?/multiqc_data/multiqc\\.parquet$"
+          dc_specific_properties:
+            s3_location: null
+            modules:
+              - "fastqc"
+              - "fastp"
+              - "picard"
+              - "mosdepth"
+            plots:
+              fastqc:
+                - "Sequence Counts"
+                - "Sequence Quality Histograms"
+                - "Adapter Content"
+              fastp:
+                - "Filtered Reads"
+                - "Insert Sizes"
+              picard:
+                - "Alignment Summary":
+                    - "Aligned Reads"
+                    - "Aligned Bases"
+                - "Insert Size":
+                    - "Counts"
+                    - "Percentages"
+                - "Mark Duplicates"
+                - "WGS Coverage":
+                    - "Percentage Drop-Off"
+                    - "Counts Histogram"
+              mosdepth:
+                - "Cumulative coverage distribution"
+                - "Average coverage per contig"
+
+      # ----------------------------------------------------------------
+      # Alignment and coverage QC, read off the Picard and mosdepth reports under
+      # qc_bam/ and alignment/ (recipes/alignment_qc.py, contig_depth.py).
+      # ----------------------------------------------------------------
+      - data_collection_tag: "alignment_qc"
+        description: "Alignment QC per sample: reads, alignment rate, duplication, insert size, coverage and mitochondrial depth, from the Picard and mosdepth reports"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/raredisease/alignment_qc.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id, as the pipeline names its files"
+              "total_reads": "Reads in the alignment summary"
+              "aligned_pct": "Reads aligned, percent"
+              "mismatch_rate_pct": "Mismatches per aligned base, percent"
+              "mean_read_length": "Mean read length"
+              "chimera_pct": "Chimeric reads, percent"
+              "softclip_pct": "Soft-clipped bases, percent"
+              "duplication_pct": "Picard MarkDuplicates PERCENT_DUPLICATION, percent"
+              "median_insert": "Median insert size of the read pairs"
+              "mean_insert": "Mean insert size of the read pairs"
+              "insert_sd": "Standard deviation of the insert size"
+              "mean_coverage": "Picard CollectWgsMetrics mean coverage"
+              "median_coverage": "Picard CollectWgsMetrics median coverage"
+              "bases_1x_pct": "Genome covered at 1x or deeper, percent"
+              "bases_10x_pct": "Genome covered at 10x or deeper, percent"
+              "bases_20x_pct": "Genome covered at 20x or deeper, percent"
+              "bases_30x_pct": "Genome covered at 30x or deeper, percent"
+              "excluded_pct": "Bases the coverage metrics excluded (mapping quality, overlap, duplicates), percent"
+              "nuclear_depth": "Length-weighted mean depth of the nuclear contigs (mosdepth)"
+              "mito_depth": "Mean depth of the mitochondrion (mosdepth)"
+              "mito_to_nuclear": "Mitochondrial over nuclear depth, a proxy for the mitochondrial copy number"
+              "hs_fold_enrichment": "Hybrid-selection fold enrichment (target capture runs only)"
+              "hs_mean_target_coverage": "Mean coverage of the capture targets (target capture runs only)"
+              "hs_target_20x_pct": "Target bases at 20x or deeper, percent (target capture runs only)"
+
+      - data_collection_tag: "contig_depth"
+        description: "Mean depth per contig and sample, classed autosome, X, Y, mitochondrion or other, with the depth relative to the autosomes (mosdepth)"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/raredisease/contig_depth.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "contig": "Contig name as the reference spells it"
+              "contig_class": "autosome, X, Y, mitochondrion or other (alt, unplaced, decoy)"
+              "class_order": "1 to 5, the order above"
+              "length": "Contig length"
+              "bases": "Bases covered by reads, summed over positions"
+              "mean_depth": "Mean depth of the contig"
+              "min_depth": "Lowest depth on the contig"
+              "max_depth": "Highest depth on the contig"
+              "relative_depth": "Mean depth over the sample's autosomal mean"
+
+      # ----------------------------------------------------------------
+      # The family callset. The joint VCF is read through a glob inside the recipe
+      # (its sample columns are named in its header), one row per carried call.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "vcf_variants"
+        description: "One row per small-variant call a sample carries, from the family's joint callset: locus, alleles, quality, FILTER, genotype, depth and allele fraction"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/raredisease/variants.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample carrying the call"
+              "caller": "Variant caller named in the VCF (FOUND_IN)"
+              "chrom": "Contig"
+              "pos": "Position, 1-based"
+              "variant_key": "Contig, position and alleles joined, the key a call is matched on across samples"
+              "ref": "Reference allele"
+              "alt": "Alternate allele"
+              "variant_type": "SNP, MNP, INDEL or SV, from the alternate allele"
+              "qual": "Caller QUAL"
+              "filter_status": "The call's FILTER field, verbatim"
+              "is_pass": "True when no filter failed"
+              "gt": "Genotype"
+              "dp": "Read depth of the sample at the call"
+              "vaf": "Variant allele fraction, from the allele depths"
+
+      - data_collection_tag: "vcf_callset_summary"
+        description: "One row per sample's callset: calls, PASS share, SNVs, indels, Ts/Tv, het/hom ratio, median quality, depth and heterozygous allele fraction"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "vcf/callset_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the callset belongs to"
+              "caller": "Variant caller"
+              "calls": "Every record of the VCF"
+              "pass_calls": "Records that failed no filter"
+              "pass_pct": "PASS calls over all calls, percent"
+              "snvs": "PASS SNVs"
+              "indels": "PASS indels"
+              "mnps": "PASS multi-nucleotide calls"
+              "multiallelic": "PASS calls with more than one ALT allele"
+              "transitions": "PASS SNVs that are A to G, G to A, C to T or T to C"
+              "transversions": "The other PASS SNVs"
+              "ts_tv": "Transitions over transversions of the PASS SNVs"
+              "het": "Heterozygous PASS calls"
+              "hom_alt": "Homozygous-alternate PASS calls"
+              "het_hom_ratio": "Heterozygous over homozygous-alternate PASS calls"
+              "median_qual": "Median QUAL of the PASS calls"
+              "median_dp": "Median read depth at the PASS calls"
+              "median_het_vaf": "Median allele fraction of the heterozygous PASS calls"
+
+      - data_collection_tag: "vcf_substitution_spectrum"
+        description: "PASS SNVs per sample folded onto the six pyrimidine substitution classes, counted and as a share"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "vcf/substitution_spectrum.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the callset belongs to"
+              "caller": "Variant caller"
+              "callset": "Sample and caller together"
+              "substitution_class": "Substitution folded onto its pyrimidine reference (C to A ... T to G)"
+              "mutation_class": "transition (C to T, T to C) or transversion"
+              "count": "PASS SNVs of the class"
+              "fraction": "Share of the callset's PASS SNVs in the class"
+
+      - data_collection_tag: "vcf_filter_breakdown"
+        description: "How the caller's FILTER column partitions each sample's calls: one row per FILTER value with its calls and share"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "vcf/filter_breakdown.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the callset belongs to"
+              "caller": "Variant caller"
+              "filter_label": "FILTER value, verbatim; PASS for the kept calls"
+              "is_pass": "True on the PASS row"
+              "failed_filters": "Filters named in the value (0 on PASS)"
+              "calls": "Calls carrying the value"
+              "calls_pct": "Their share of the callset, percent"
+              "snvs": "Of which SNVs"
+              "indels": "Of which indels"
+
+      - data_collection_tag: "vcf_variant_density"
+        description: "Distinct PASS variants per sample in 1 Mb windows along the primary contigs; the Callset tab's karyotype"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "vcf/variant_density.py"
+            params: {bin_size: "1000000"}
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "chrom": "Primary contig"
+              "start": "Window start, 0-based"
+              "end": "Window end, exclusive"
+              "value": "Distinct PASS variants of the sample in the window"
+              "sample": "Sample the calls were made on"
+
+      # ----------------------------------------------------------------
+      # The ranked variants: the research and clinical VCFs of rank_and_filter/,
+      # one row per variant, the clinical subset flagged.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "ranked_variants"
+        description: "One row per ranked small variant: GENMOD rank score and inheritance models, VEP consequence, gene, frequencies, the ten rank-model components and who carries it"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/raredisease/ranked_variants.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "variant_key": "Contig, position and alleles joined; the key a variant is matched on"
+              "chrom": "Contig"
+              "pos": "Position, 1-based"
+              "end": "End of the reference allele"
+              "ref": "Reference allele"
+              "alt": "Alternate allele"
+              "variant_type": "SNP, MNP, INDEL or SV"
+              "variant_set": "Clinical when the clinical VCF holds the variant, Research only otherwise"
+              "is_clinical": "The clinical VCF holds the variant"
+              "qual": "Caller QUAL"
+              "filter_status": "The call's FILTER field"
+              "rank_score": "GENMOD rank score of the family, higher is more likely causal; null when not scored"
+              "rank_score_norm": "The rank score scaled to 0..1 by the rank model's bounds"
+              "rank_score_min": "Lowest rank score the rank model can give the family (the sum of its category scores at their lowest)"
+              "rank_score_max": "Highest rank score the rank model can give the family (the sum of its category scores at their highest)"
+              "genetic_models": "Inheritance models the genotypes fit, comma-separated (AD, AR_hom, AR_comp, each with a _dn variant)"
+              "model_class": "Compound heterozygous, Recessive, Dominant, X-linked or No model fits, the strictest model first"
+              "de_novo": "The variant fits a model with the de novo (_dn) allowance"
+              "gene": "First gene symbol the variant belongs to"
+              "genes": "All gene symbols, comma-separated"
+              "consequence": "Most severe VEP consequence term"
+              "impact": "VEP impact of that consequence: HIGH, MODERATE, LOW or MODIFIER"
+              "hgvs_c": "Coding change of the VEP entry the variant is read on"
+              "hgvs_p": "Protein change of that entry"
+              "sift": "SIFT prediction of that entry"
+              "polyphen": "PolyPhen prediction of that entry"
+              "pli": "Probability of loss-of-function intolerance of the gene"
+              "cadd": "CADD score, null when the run was given no CADD resources"
+              "gnomad_af": "gnomAD allele frequency"
+              "gnomad_af_popmax": "gnomAD maximum allele frequency across populations"
+              "score_allele_frequency": "Rank-model component: allele frequency"
+              "score_protein": "Rank-model component: protein prediction"
+              "score_gene_intolerance": "Rank-model component: gene intolerance prediction"
+              "score_inheritance": "Rank-model component: inheritance models"
+              "score_consequence": "Rank-model component: consequence"
+              "score_conservation": "Rank-model component: conservation"
+              "score_call_quality": "Rank-model component: variant call quality and filter"
+              "score_deleteriousness": "Rank-model component: deleteriousness"
+              "score_clinical": "Rank-model component: clinical significance"
+              "score_splicing": "Rank-model component: splicing"
+              "n_carriers": "Samples carrying the alternate allele"
+              "carriers": "Their ids, comma-separated"
+              "calls": "sample|GT|DP|GQ|VAF of every carrier, semicolon-separated (unpacked into ranked_genotypes)"
+              "genotypes": "sample|GT of every sample of the VCF, carrier or not, semicolon-separated"
+              "call_label": "Gene and protein or coding change, the label the browser shows"
+
+      - data_collection_tag: "ranked_genotypes"
+        description: "One row per ranked variant and carrying sample: genotype, depth, genotype quality and allele fraction, with the variant's rank score, model class and impact"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/raredisease/ranked_genotypes.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "variant_key": "The ranked variant (links to ranked_variants)"
+              "gene": "The variant's gene symbol"
+              "call_label": "Gene and protein change, or locus, as the ranking labels the variant"
+              "sample": "The carrying sample"
+              "gt": "Genotype as written"
+              "gt_class": "Hom alt, Het, or Half call (one allele missing)"
+              "dp": "Read depth of the sample at the variant"
+              "gq": "Genotype quality"
+              "vaf": "Alternate allele fraction from the allele depths"
+              "rank_score": "The variant's family rank score"
+              "model_class": "The variant's inheritance model class"
+              "de_novo": "The variant fits a model with the de novo allowance"
+              "impact": "The variant's VEP impact"
+              "is_clinical": "The clinical VCF holds the variant"
+
+      # ----------------------------------------------------------------
+      # Family and sample checks, computed from the joint callset and the pedigree.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "family_checks"
+        description: "Pairwise checks of the samples of a family: opposite homozygotes, identical genotypes and relatedness, judged against the declared parent-child pairs"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/raredisease/family_checks.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "One sample of the pair (every pair appears in both directions)"
+              "partner": "The other sample"
+              "relation": "Declared in the pedigree: Parent-child, Siblings, Unrelated, or Not declared"
+              "shared_sites": "Autosomal sites both samples are called at with at least one read"
+              "ibs0": "Sites where one is homozygous reference and the other homozygous alternate"
+              "ibs0_pct": "Opposite-homozygote sites over shared sites, percent"
+              "identical_pct": "Sites with the same genotype, percent"
+              "relatedness": "Peddy-style estimate: (shared hets - 2 x IBS0) over the geometric mean of the hets"
+              "check_status": "Consistent or Check for a parent and child, Too few sites, Not checked for other relations"
+
+      # ----------------------------------------------------------------
+      # Optional routes (RULES.md section 13): each is published only when its
+      # branch ran, and the import prunes the tab, the steps and the findings
+      # that cite it.
+      #   - mitochondrial analysis (Mutect2 branch, not skipped)
+      #   - repeat expansion calling (ExpansionHunter and Stranger)
+      #   - mobile element calling
+      #   - SMN copy number calling (SMNCopyNumberCaller)
+      # ----------------------------------------------------------------
+      - data_collection_tag: "mt_variants"
+        description: "One row per mitochondrial variant and sample with a heteroplasmy: level, depth, VEP consequence, MitoTip and gnomAD mitochondrial frequencies"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/raredisease/mt_variants.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "variant_key": "Contig, position and alleles joined"
+              "sample": "Sample with a heteroplasmy at the variant"
+              "chrom": "Mitochondrial contig"
+              "pos": "Position, 1-based"
+              "end": "End of the reference allele"
+              "ref": "Reference allele"
+              "alt": "Alternate allele"
+              "variant_type": "SNP, MNP or INDEL"
+              "filter_status": "The call's FILTER field"
+              "gt": "Genotype as the caller wrote it"
+              "heteroplasmy": "Share of the sample's mitochondrial copies carrying the variant (Mutect2 AF)"
+              "heteroplasmy_class": "Homoplasmic (0.95 and above), Heteroplasmic (0.10 and above) or Low level"
+              "dp": "Read depth of the sample at the variant"
+              "alt_depth": "Reads supporting the alternate allele"
+              "gene": "Gene or tRNA the variant lies in; null in the control region or an intergenic call"
+              "consequence": "Most severe VEP consequence term"
+              "impact": "VEP impact of that consequence"
+              "rank_score": "GENMOD rank score of the family"
+              "model_class": "Inheritance model class"
+              "mitotip_score": "MitoTip raw score of a tRNA variant"
+              "mitotip_prediction": "MitoTip interpretation of the score"
+              "gnomad_mt_het": "gnomAD mitochondrial frequency among heteroplasmic carriers"
+              "gnomad_mt_hom": "gnomAD mitochondrial frequency among homoplasmic carriers"
+              "is_clinical": "The clinical VCF holds the variant"
+              "call_label": "Gene and position, the label the browser shows"
+
+      - data_collection_tag: "repeat_expansions"
+        description: "One row per catalog repeat locus and sample: repeat count against the locus thresholds, spanning reads, disease and inheritance"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/raredisease/repeat_expansions.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "variant_key": "Contig, start and locus joined"
+              "locus": "The variant catalog's locus name"
+              "chrom": "Contig"
+              "start": "Locus start"
+              "end": "Locus end"
+              "repeat_unit": "Repeat unit, in the reference orientation"
+              "disease": "Disorder the catalog associates with the locus"
+              "inheritance": "Main mode of inheritance of the disorder"
+              "sample": "Sample genotyped at the locus"
+              "gt": "Genotype as written"
+              "repeat_count": "Larger allele, in repeat units; null without a call"
+              "repeat_counts": "Both alleles as written"
+              "spanning_reads": "Reads spanning the larger allele"
+              "locus_coverage": "Coverage at the locus"
+              "filter_status": "The record's FILTER (PASS or LowDepth)"
+              "str_status": "Stranger's status for the locus: normal, pre_mutation or full_mutation"
+              "normal_max": "Repeats still counted normal"
+              "pathologic_min": "Repeats from which the locus is pathogenic"
+              "repeat_status": "Pathogenic range, Intermediate, Normal or No call, from the larger allele against the thresholds"
+              "rank_score": "Stranger's rank score of the locus"
+              "pop_mean": "Population mean repeat count"
+              "pop_sd": "Population standard deviation of the repeat count"
+
+      - data_collection_tag: "mobile_elements"
+        description: "One row per mobile element insertion and carrying sample: element type, genotype quality and the reads that support the breakpoint"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/raredisease/mobile_elements.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "variant_key": "Contig, position and element type joined"
+              "chrom": "Contig"
+              "pos": "Insertion site, 1-based"
+              "end": "End of the insertion site as MEINFO gives it"
+              "me_type": "ALU, L1, SVA, HERV or Other"
+              "sample": "Sample carrying the insertion"
+              "gt": "Genotype as written"
+              "qual": "The record's QUAL"
+              "gq": "The sample's genotype quality"
+              "flag": "The caller's call status flag (FL)"
+              "spanning_pairs": "Read pairs spanning the breakpoint (SP)"
+              "clipped_5p": "Soft-clipped reads upstream of the breakpoint"
+              "clipped_3p": "Soft-clipped reads downstream of the breakpoint"
+              "filter_status": "The record's FILTER"
+              "samples_sharing": "Samples of the family carrying the insertion"
+
+      - data_collection_tag: "smn"
+        description: "SMN1 and SMN2 copy numbers per sample and the SMA or carrier call, from SMNCopyNumberCaller"
+        optional: true
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/raredisease/smn.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "smn_status": "SMA, Carrier, Not a carrier, or No call"
+              "smn1_cn": "SMN1 copy number"
+              "smn2_cn": "SMN2 copy number"
+              "smn2_delta78_cn": "SMN2 copies lacking exons 7 and 8"
+              "total_cn_raw": "Raw SMN1 plus SMN2 copy number estimate"
+              "full_length_cn_raw": "Raw full-length SMN copy number estimate"
+
+      # ----------------------------------------------------------------
+      # Genome tracks. Family-level VCFs (ranked variants, mobile elements, repeat
+      # expansions) and per-sample alignments and signal tracks, read by range.
+      # Family-level rows carry no sample; the hub reaches them on family_id.
+      # Optional: a run fetched without the index sidecars has nothing for the
+      # browser to read.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "tracks"
+        description: "Genome-browser tracks of the run: the ranked, mobile element and repeat expansion VCFs of the family, and the alignment and coverage tracks of every sample, one row per file"
+        optional: true
+        config:
+          type: "genomic_tracks"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/raredisease/tracks.py"
+          dc_specific_properties:
+            format: "TSV"
+            uri_column: "uri"
+            track_id_column: "track_id"
+            sample_column: "sample"
+            format_column: "format"
+            name_column: "name"
+            category_column: "category"
+            order_column: "order"
+            assembly: "{GENOME}"
+            display_defaults:
+              vcf:
+                displays:
+                  - type: "LinearVariantDisplay"
+                    height: 90
+              bam:
+                displays:
+                  - type: "LinearPileupDisplay"
+                    height: 100
+              bigwig:
+                displays:
+                  - type: "LinearWiggleDisplay"
+                    height: 40
+            columns_description:
+              "track_id": "<family or sample>.<track>, unique per file"
+              "sample": "Sample the file belongs to; empty on a family-level file"
+              "family_id": "Family the file belongs to"
+              "format": "Track file format: vcf, bam or bigwig"
+              "uri": "Path relative to the results folder"
+              "name": "Track label shown in the browser"
+              "category": "Track-selector folder"
+              "order": "Row order the browser opens with"
+
+      # ----------------------------------------------------------------
+      # Hub: one row per sample, declared last because it reads the collections
+      # above (see recipes/samples.py). The pedigree is its backbone; a run that
+      # lost it keys the hub on the QC and callset samples instead.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "Per-sample hub: family, role in the pedigree, sex and its check, alignment QC, callset numbers and the ranked variants each sample carries"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/raredisease/samples.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id, the key every other collection is linked on"
+              "family_id": "Family id from the pedigree"
+              "father": "Declared father, empty when none"
+              "mother": "Declared mother, empty when none"
+              "role": "Proband, Father, Mother, Sibling or Other, from the pedigree"
+              "status": "Affected, Unaffected or Unknown, from the pedigree phenotype"
+              "sex": "Declared sex: Male, Female or Unknown"
+              "inferred_sex": "Sex read off the relative depth of X and Y; empty without those contigs"
+              "sex_check": "Match, Mismatch, or Not tested"
+              "total_reads": "Reads in the alignment summary"
+              "aligned_pct": "Reads aligned, percent"
+              "mismatch_rate_pct": "Mismatches per aligned base, percent"
+              "duplication_pct": "Duplicate reads, percent"
+              "median_insert": "Median insert size"
+              "mean_coverage": "Mean genome coverage"
+              "bases_10x_pct": "Genome at 10x or deeper, percent"
+              "bases_20x_pct": "Genome at 20x or deeper, percent"
+              "mito_depth": "Mean depth of the mitochondrion"
+              "pass_calls": "PASS small-variant calls of the sample"
+              "snvs": "PASS SNVs"
+              "indels": "PASS indels"
+              "ts_tv": "Transitions over transversions of the PASS SNVs"
+              "het_hom_ratio": "Heterozygous over homozygous-alternate PASS calls"
+              "median_dp": "Median read depth at the PASS calls"
+              "ranked_carried": "Ranked variants the sample carries"
+              "clinical_carried": "Of those, in the clinical set"
+              "de_novo_carried": "Of those, fitting a de novo model"
+              "high_impact_carried": "Of those, with a HIGH or MODERATE VEP impact"
+              "parent_check": "Worst status over the sample's declared parent-child pairs"
+
+links:
+  # Hub -> MultiQC. MultiQC names a sample in several ways (`<s>`, `<s>_1`, `<s> (R1)`, `<s>_R1`);
+  # the resolver attaches each name to the hub id it starts with at a token boundary.
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+      target_field: "sample_name"
+    description: "Filter every MultiQC panel by the samples picked in the left panel"
+    enabled: true
+
+  # Hub -> every per-sample collection: the persistent role and sample filters reach each tab through these.
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "alignment_qc"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the alignment QC by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "contig_depth"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the depth per contig by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "vcf_variants"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the calls by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "vcf_callset_summary"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the callset summary by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "vcf_substitution_spectrum"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the substitution spectrum by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "vcf_filter_breakdown"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the FILTER breakdown by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "vcf_variant_density"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the variant karyotype by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "ranked_genotypes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the ranked genotypes by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "family_checks"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the family checks by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "mt_variants"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the mitochondrial variants by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "repeat_expansions"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the repeat expansions by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "mobile_elements"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the mobile element insertions by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "smn"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the SMN copy numbers by the samples picked in the left panel"
+    enabled: true
+
+  # The variants a sample carries: the sample filter narrows its genotype rows, and these
+  # carry the variants left to the ranked table (hub -> ranked_genotypes -> ranked_variants).
+  - source_dc_tag: "ranked_genotypes"
+    source_column: "variant_key"
+    target_dc_tag: "ranked_variants"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "variant_key"}
+    description: "Narrow the ranked variants to the ones the picked samples carry"
+    enabled: true
+
+  - source_dc_tag: "ranked_variants"
+    source_column: "variant_key"
+    target_dc_tag: "ranked_genotypes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "variant_key"}
+    description: "Narrow the carrying genotypes by the filters picked on the Ranked tab"
+    enabled: true
+
+  # A FILTER value picked on the Callset tab narrows the calls too.
+  - source_dc_tag: "vcf_filter_breakdown"
+    source_column: "filter_label"
+    target_dc_tag: "vcf_variants"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "filter_status"}
+    description: "Carry the FILTER value picked on the Callset tab over to the calls"
+    enabled: true
+
+  # ----------------------------------------------------------------
+  # Locus tab and Callset karyotype. The Locus navigator (a genome_view on ranked_variants)
+  # and the karyotype (vcf_variant_density) emit a chromosome and a position filter on their
+  # own chrom / pos columns; this carries that pair to every table drawn on the genome axis,
+  # each naming its coordinates its own way. No data is read to resolve it (resolver:
+  # region), and the resolver compares contig names without their chr prefix. The
+  # file-backed tracks need no link: they follow the region filter themselves and read only
+  # the window in view.
+  # ----------------------------------------------------------------
+  - source_dc_tag: "ranked_variants"
+    source_column: "chrom"
+    target_dc_tag: "vcf_variants"
+    target_type: "table"
+    link_config: {resolver: "region", columns: {chrom: "chrom", pos: "pos"}}
+    description: "A region typed or brushed on the navigator narrows the calls and the region cards"
+    enabled: true
+
+  - source_dc_tag: "ranked_variants"
+    source_column: "chrom"
+    target_dc_tag: "repeat_expansions"
+    target_type: "table"
+    link_config: {resolver: "region", columns: {chrom: "chrom", pos: "start"}}
+    description: "A region typed or brushed on the navigator narrows the repeat loci"
+    enabled: true
+
+  - source_dc_tag: "ranked_variants"
+    source_column: "chrom"
+    target_dc_tag: "mobile_elements"
+    target_type: "table"
+    link_config: {resolver: "region", columns: {chrom: "chrom", pos: "pos"}}
+    description: "A region typed or brushed on the navigator narrows the mobile element insertions"
+    enabled: true
+
+  - source_dc_tag: "vcf_variant_density"
+    source_column: "chrom"
+    target_dc_tag: "vcf_variants"
+    target_type: "table"
+    link_config: {resolver: "region", columns: {chrom: "chrom", pos: "pos"}}
+    description: "A region brushed on the karyotype narrows the calls"
+    enabled: true
+
+  - source_dc_tag: "vcf_variant_density"
+    source_column: "chrom"
+    target_dc_tag: "ranked_variants"
+    target_type: "table"
+    link_config: {resolver: "region", columns: {chrom: "chrom", pos: "pos"}}
+    description: "A region brushed on the karyotype narrows the ranked variants"
+    enabled: true
+
+  # The genome browser: the hub's family picks its tracks (family-level files have no sample),
+  # and a sample picked in its menu comes back to the hub.
+  - source_dc_tag: "samples"
+    source_column: "family_id"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config: {resolver: "direct", target_field: "family_id"}
+    description: "Show the genome tracks of the families picked"
+    enabled: true
+
+  - source_dc_tag: "tracks"
+    source_column: "sample"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Narrow the sample hub to the samples picked in the genome browser"
+    enabled: true

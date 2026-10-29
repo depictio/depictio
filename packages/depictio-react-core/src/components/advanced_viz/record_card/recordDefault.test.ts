@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { InteractiveFilter } from '../../../api';
 import {
+  bestRecordId,
   defaultRecordFilter,
   recordEcho,
   resolveRecordTarget,
@@ -83,5 +84,19 @@ describe('recordEcho', () => {
 
   it('says nothing when the card is empty', () => {
     expect(recordEcho(null, null)).toBeUndefined();
+  });
+});
+
+describe('bestRecordId', () => {
+  const rows = { id: ['a', 'b', 'c', 'd'], score: [3, null, 9, 9] };
+  it('takes the highest value, first on a tie', () => {
+    expect(bestRecordId(rows, 'id', 'score')).toBe('c');
+  });
+  it('takes the lowest when ascending', () => {
+    expect(bestRecordId(rows, 'id', 'score', true)).toBe('a');
+  });
+  it('is null without a value', () => {
+    expect(bestRecordId({ id: ['a'], score: [null] }, 'id', 'score')).toBeNull();
+    expect(bestRecordId(null, 'id', 'score')).toBeNull();
   });
 });

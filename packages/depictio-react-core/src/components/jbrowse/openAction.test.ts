@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { GenomeBrowserTarget } from './browserTarget';
-import { openActionState, openInGenomeBrowser } from './openAction';
+import { centreGenomeBrowser, openActionState, openInGenomeBrowser } from './openAction';
 import { PENDING_LOCUS_EVENT, takePendingLocus } from './pendingLocus';
 
 const target: GenomeBrowserTarget = {
@@ -64,5 +64,29 @@ describe('openInGenomeBrowser', () => {
     expect(visited).toEqual([]);
     expect(events.map((e) => e.type)).toEqual([PENDING_LOCUS_EVENT]);
     expect(takePendingLocus('fam', 'tab-locus', 'jb1')).toBeNull();
+  });
+
+  describe('centreGenomeBrowser', () => {
+    it('sends the locus of the interval as an event, without scrolling the page', () => {
+      expect(
+        centreGenomeBrowser({ ...target, here: true }, { refName: 'chr8', start: 1000, end: 1000 }),
+      ).toBe(true);
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe(PENDING_LOCUS_EVENT);
+      expect((events[0] as CustomEvent).detail).toMatchObject({
+        index: 'jb1',
+        dashboardId: 'tab-locus',
+        locus: 'chr8:500-1500',
+        scroll: false,
+      });
+    });
+
+    it('leaves a browser on another tab, a missing target and an empty interval alone', () => {
+      expect(centreGenomeBrowser(target, { refName: 'chr8', start: 1, end: 1 })).toBe(false);
+      expect(centreGenomeBrowser(null, { refName: 'chr8', start: 1, end: 1 })).toBe(false);
+      expect(centreGenomeBrowser({ ...target, here: true }, null)).toBe(false);
+      expect(events).toHaveLength(0);
+      expect(takePendingLocus('fam', 'tab-locus', 'jb1')).toBeNull();
+    });
   });
 });

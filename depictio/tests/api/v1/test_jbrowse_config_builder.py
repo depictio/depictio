@@ -9,22 +9,27 @@ Delta table.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from depictio.api.v1.services.jbrowse import render
+from depictio.api.v1.services.jbrowse import config_builder, render
 from depictio.api.v1.services.jbrowse.assemblies import get_assembly_preset
 from depictio.api.v1.services.jbrowse.config_builder import (
     BUILTIN_PRESETS,
+    DEFAULT_FETCH_SIZE_LIMIT_MB,
     NARROWPEAK_COLUMNS,
     apply_fetch_size_limit,
     build_assembly_config,
     build_track_config,
+    cached_index_exists,
+    clear_index_exists_cache,
     deep_merge,
     resolve_preset,
     variant_color_jexl,
+    variant_label_jexl,
 )
 from depictio.api.v1.services.jbrowse.tracks import (
     TrackRow,
@@ -40,6 +45,16 @@ from depictio.models.models.data_collections_types.genomic_tracks import (
 )
 
 DC_ID = "646b0f3c1e4a2d7f8e5b8ca9"
+_REAL_PROBE = config_builder._probe_index  # the autouse fixture below replaces the module's
+
+
+@pytest.fixture(autouse=True)
+def _no_storage_probe(monkeypatch):
+    """Payload tests use fake locations: never probe storage for an index."""
+    clear_index_exists_cache()
+    monkeypatch.setattr(config_builder, "_probe_index", lambda uri, base: True)
+    yield
+    clear_index_exists_cache()
 
 
 def _track(
@@ -222,7 +237,11 @@ class TestDisplays:
         assert "'goldenrod'" in color1
 
     def test_variant_track_has_no_color_display(self):
-        assert "displays" not in _build(_track("sv.vcf.gz", color="red"))
+        # Only the default download and density limits: no renderer / colour.
+        conf = _build(_track("sv.vcf.gz", color="red"))
+        assert [set(d) for d in conf.get("displays", [])] <= [
+            {"type", "fetchSizeLimit", "maxFeatureScreenDensity", "displayId"}
+        ]
 
     def test_format_layers_merge_by_display_type(self):
         layers = [
@@ -308,6 +327,23 @@ class TestVariantColor:
         (display,) = conf["displays"]
         assert display["height"] == 40
         assert display["renderer"]["color1"] == jexl
+
+    def test_a_label_names_the_variant_by_an_info_part(self):
+        label = variant_label_jexl({"info_field": "CSQ", "part": 3})
+        assert label == (
+            "jexl:split(join('|', get(feature,'INFO').CSQ), '|')[3]"
+            " || get(feature,'name') || get(feature,'id')"
+        )
+        conf = build_track_config(
+            _track("s.vcf.gz"), "hg38", _url_for, [], None, None, variant_label=label
+        )
+        (display,) = conf["displays"]
+        assert display["renderer"] == {"type": "CanvasFeatureRenderer", "labels": {"name": label}}
+
+    def test_a_label_field_is_checked(self):
+        assert variant_label_jexl(None) is None
+        with pytest.raises(ValueError):
+            variant_label_jexl({"info_field": "A') || ('", "part": 0})
 
     def test_only_variant_tracks_are_colored(self):
         jexl = variant_color_jexl(BY_EFFECT, EFFECT_COLORS)
@@ -630,6 +666,7 @@ class TestPayloadSelection:
             "uri": "cells/c00.bw",
             "index_uri": None,
             "storage": "depictio",
+            "group": None,
         }
         assert payload["selection_column"] == "cell"
 
@@ -977,8 +1014,28 @@ class TestFetchSizeLimit:
         }
         out = apply_fetch_size_limit(conf, 123)
         assert out["displays"] == [
-            {"type": "LinearVariantDisplay", "height": 30, "fetchSizeLimit": 123}
+            {
+                "type": "LinearVariantDisplay",
+                "height": 30,
+                "fetchSizeLimit": 123,
+                "maxFeatureScreenDensity": config_builder.DENSE_SCREEN_DENSITY,
+            }
         ]
+
+    def test_density_limit_kept_when_set(self):
+        conf = {
+            "type": "FeatureTrack",
+            "trackId": "t",
+            "displays": [{"type": "LinearBasicDisplay", "maxFeatureScreenDensity": 1}],
+        }
+        (display,) = apply_fetch_size_limit(conf, 123)["displays"]
+        assert display["maxFeatureScreenDensity"] == 1
+
+    def test_wiggle_gets_no_density_limit(self):
+        (display,) = apply_fetch_size_limit({"type": "QuantitativeTrack", "trackId": "t"}, 9)[
+            "displays"
+        ]
+        assert "maxFeatureScreenDensity" not in display
 
     def test_alignments_limit_sits_on_sub_displays(self):
         out = apply_fetch_size_limit({"type": "AlignmentsTrack", "trackId": "t"}, 9)
@@ -998,3 +1055,170 @@ class TestFetchSizeLimit:
         (display,) = conf["displays"]
         assert display["displayId"] == "r-LinearAlignmentsDisplay"
         assert display["pileupDisplay"]["fetchSizeLimit"] == 7
+
+
+MB = 1024 * 1024
+
+
+class TestIndexFallback:
+    """A declared index that is not in storage falls back to the plain adapter."""
+
+    @staticmethod
+    def _build_checked(track: TrackRow, exists) -> dict[str, Any]:
+        return build_track_config(track, "hg38", _url_for, [], index_exists=exists)
+
+    @pytest.mark.parametrize(
+        ("uri", "indexed", "plain"),
+        [
+            ("c.vcf.gz", "VcfTabixAdapter", "VcfAdapter"),
+            ("c.bed.gz", "BedTabixAdapter", "BedAdapter"),
+            ("c.bedgraph.gz", "BedGraphTabixAdapter", "BedGraphAdapter"),
+            ("c.gff3.gz", "Gff3TabixAdapter", "Gff3Adapter"),
+        ],
+    )
+    def test_index_present_keeps_indexed_adapter(self, uri, indexed, plain):
+        conf = self._build_checked(_track(uri), lambda t: True)
+        assert conf["adapter"]["type"] == indexed
+        assert "index" in conf["adapter"]
+
+    @pytest.mark.parametrize(
+        ("uri", "indexed", "plain"),
+        [
+            ("c.vcf.gz", "VcfTabixAdapter", "VcfAdapter"),
+            ("c.bed.gz", "BedTabixAdapter", "BedAdapter"),
+            ("c.bedgraph.gz", "BedGraphTabixAdapter", "BedGraphAdapter"),
+            ("c.gff3.gz", "Gff3TabixAdapter", "Gff3Adapter"),
+        ],
+    )
+    def test_index_missing_falls_back_and_warns(self, uri, indexed, plain, caplog):
+        track = _track(uri)
+        assert track.index_uri
+        # The depictio logger may not propagate to the root: attach caplog to it.
+        config_builder.logger.addHandler(caplog.handler)
+        try:
+            with caplog.at_level(logging.WARNING, logger=config_builder.logger.name):
+                conf = self._build_checked(track, lambda t: False)
+        finally:
+            config_builder.logger.removeHandler(caplog.handler)
+        assert conf["adapter"]["type"] == plain
+        assert "index" not in conf["adapter"]
+        assert all(loc["uri"].endswith("/data") for loc in _all_locations(conf["adapter"]))
+        assert any(
+            r.levelno == logging.WARNING and track.index_uri in r.getMessage()
+            for r in caplog.records
+        )
+
+    def test_not_checked_without_a_checker(self):
+        assert _build(_track("c.vcf.gz"))["adapter"]["type"] == "VcfTabixAdapter"
+
+    def test_bam_keeps_its_index(self):
+        assert self._build_checked(_track("r.bam"), lambda t: False)["adapter"]["type"] == (
+            "BamAdapter"
+        )
+
+    def test_unindexed_track_is_not_checked(self):
+        calls: list[str] = []
+        self._build_checked(_track("c.bed"), lambda t: calls.append(t.uri) or True)
+        assert calls == []
+
+    def test_check_error_keeps_the_index(self):
+        def boom(uri, base):
+            raise OSError("no route to storage")
+
+        conf = self._build_checked(
+            _track("c.vcf.gz"),
+            config_builder.storage_index_checker("s3://b/p/", probe=boom),
+        )
+        assert conf["adapter"]["type"] == "VcfTabixAdapter"
+
+    def test_checker_result_is_cached_per_uri(self):
+        calls: list[str] = []
+
+        def probe(uri, base):
+            calls.append(uri)
+            return False
+
+        assert cached_index_exists("s3://b/p/x.tbi", "s3://b/p/", probe) is False
+        assert cached_index_exists("s3://b/p/x.tbi", "s3://b/p/", probe) is False
+        assert cached_index_exists("s3://b/p/y.tbi", "s3://b/p/", probe) is False
+        assert calls == ["s3://b/p/x.tbi", "s3://b/p/y.tbi"]
+        clear_index_exists_cache()
+        cached_index_exists("s3://b/p/x.tbi", "s3://b/p/", probe)
+        assert len(calls) == 3
+
+    def test_check_errors_are_not_treated_as_missing_and_expire_soon(self, monkeypatch):
+        calls = []
+
+        def boom(uri, base):
+            calls.append(uri)
+            raise OSError("down")
+
+        assert cached_index_exists("s3://b/x.tbi", "", boom) is True
+        assert cached_index_exists("s3://b/x.tbi", "", boom) is True
+        assert len(calls) == 1  # remembered briefly: no stall on every render
+
+    def test_local_path_uses_the_filesystem(self, tmp_path):
+        here = tmp_path / "a.vcf.gz.tbi"
+        here.write_text("x")
+        assert _REAL_PROBE(str(here), "s3://b/p/") is True
+        assert _REAL_PROBE(str(tmp_path / "gone.tbi"), "s3://b/p/") is False
+
+    def test_storage_404_is_missing_other_errors_raise(self, monkeypatch):
+        from depictio.api.v1.services import remote_read
+
+        monkeypatch.setattr(remote_read, "resolve_location", lambda uri, base: object())
+
+        def size(src):
+            raise remote_read.RemoteReadError(404, "nope")
+
+        monkeypatch.setattr(remote_read, "source_size", size)
+        assert _REAL_PROBE("s3://b/x.tbi", "s3://b/") is False
+
+        def refused(src):
+            raise remote_read.RemoteReadError(502, "refused")
+
+        monkeypatch.setattr(remote_read, "source_size", refused)
+        with pytest.raises(remote_read.RemoteReadError):
+            _REAL_PROBE("s3://b/x.tbi", "s3://b/")
+
+
+class TestDefaultFetchSizeLimit:
+    DEFAULT = int(DEFAULT_FETCH_SIZE_LIMIT_MB * MB)
+
+    @staticmethod
+    def _limits(conf: dict[str, Any]) -> list[Any]:
+        return [d.get("fetchSizeLimit") for d in conf.get("displays", [])]
+
+    def test_default_is_20_mb(self):
+        assert DEFAULT_FETCH_SIZE_LIMIT_MB == 20
+
+    @pytest.mark.parametrize(
+        "uri",
+        ["c.vcf.gz", "c.vcf", "c.bed", "c.bed.gz", "c.bedgraph", "c.bedgraph.gz", "c.gff3"],
+    )
+    def test_applied_to_vcf_bed_bedgraph_gff(self, uri):
+        assert self._limits(_build(_track(uri))) == [self.DEFAULT]
+
+    @pytest.mark.parametrize("uri", ["c.bw", "r.bam", "r.cram"])
+    def test_not_applied_to_bigwig_bam_cram(self, uri):
+        conf = _build(_track(uri))
+        assert all(v is None for v in self._limits(conf))
+        assert "fetchSizeLimit" not in str(conf)
+
+    def test_explicit_value_wins(self):
+        conf = build_track_config(_track("c.vcf.gz"), "hg38", _url_for, [], 5 * MB)
+        assert self._limits(conf) == [5 * MB]
+
+    def test_explicit_value_applies_to_bigwig_too(self):
+        conf = build_track_config(_track("c.bw"), "hg38", _url_for, [], 3 * MB)
+        assert self._limits(conf) == [3 * MB]
+
+    def test_override_layer_limit_beats_the_default(self):
+        layers = [{"vcf": {"displays": [{"type": "LinearVariantDisplay", "fetchSizeLimit": 99}]}}]
+        conf = _build(_track("c.vcf.gz"), layers)
+        assert self._limits(conf) == [99]
+
+    def test_payload_without_component_limit_gets_the_default(self):
+        track = _track("c.vcf.gz", track_id="v")
+        confs = build_track_config(track, "hg38", _url_for, [], None)
+        assert self._limits(confs) == [self.DEFAULT]

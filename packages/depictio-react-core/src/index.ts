@@ -71,6 +71,17 @@ export { default as ImageRenderer } from './components/ImageRenderer';
 export { default as MapRenderer } from './components/MapRenderer';
 export { default as TextRenderer } from './components/TextRenderer';
 export { default as Glyph, glyphColorVar, isImagePath, isMultiqcIcon, themedIconSrc } from './components/Glyph';
+export {
+  DEFAULT_PALETTE_SHADE,
+  paletteHex,
+  paletteName,
+  paletteShade,
+  paletteVar,
+  parsePaletteColor,
+} from './paletteColor';
+export type { ParsedPalette } from './paletteColor';
+export { TabColorContext, tabHueHex, useTabHue } from './tabColor';
+export { tintSingleSeries } from './figureTint';
 export { TabLinkContext, tabLinkKey, useTabLinkResolver } from './components/tabLinks';
 export type { TabLinkResolver, TabLinkTarget } from './components/tabLinks';
 export { GenomeBrowserTargetContext, useGenomeBrowserTarget } from './components/jbrowse/browserTarget';
@@ -1192,11 +1203,18 @@ export { catalogToolUrl } from './catalogLinks';
 // Shareable listing views: the /dashboards and /projects pages encode their
 // filters into the URL, and both narrow on the template a project came from.
 export {
+  describeRevisionMismatch,
   matchesTemplateFilter,
   parseTemplateOrigin,
+  readTemplateRevision,
   templateFilterValues,
+  templateRevisionMismatch,
 } from './templateFilter';
-export type { ParsedTemplate } from './templateFilter';
+export type {
+  ParsedTemplate,
+  TemplateRevision,
+  TemplateRevisionMismatch,
+} from './templateFilter';
 // "From a run folder": locations, the template catalog per pipeline, and the
 // reading of a run-folder plan.
 export {

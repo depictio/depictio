@@ -22,9 +22,10 @@ main_dashboard:
   content_width_default: compact
   show_tab_header: false
   # Declared once here, read by every tab of the family. The run has no design
-  # metadata (no GROUP_COL), so the colours are the pipeline's own vocabularies.
+  # metadata (no GROUP_COL), so the colours are the pipeline's own vocabularies;
+  # `sample` is the one data-driven key: the genome browser colours its tracks by it.
   category_colors:
-    strandedness: auto
+    sample: auto
     # More callers agreeing reads darker; a single-caller call stays grey.
     tool_support:
       '*': auto
@@ -120,7 +121,8 @@ main_dashboard:
     - Overview
   components:
   # First in component order on purpose: the Guide demos the first categorical
-  # filter that shares a data collection with the first card (Samples, below).
+  # filter that shares a data collection with the first card (Fusion calls, below),
+  # which is the caller agreement one.
   - component_type: interactive
     workflow_tag: rnafusion
     data_collection_tag: samplesheet
@@ -210,25 +212,6 @@ main_dashboard:
   # explains it. The icon colour is that tab's colour.
   - component_type: card
     workflow_tag: rnafusion
-    data_collection_tag: samplesheet
-    aggregation: count
-    column_name: sample
-    column_type: object
-    secondary_layout: composition
-    breakdown_col: strandedness
-    display:
-      icon_name: mdi:flask-outline
-      icon_color: orange
-      caption: in the sample sheet, by strandedness
-      link: tab:MultiQC
-    section: Key figures
-    tag: rf-ov-kf-samples
-    index: ov-kf-samples
-    title: Samples
-    description: Samples in the sample sheet. The bar splits them by declared library strandedness.
-    layout: {x: 0, y: 0, w: 2, h: 2}
-  - component_type: card
-    workflow_tag: rnafusion
     data_collection_tag: fusion_consensus
     use: fusionreport/fusions
     aggregation: count
@@ -246,6 +229,29 @@ main_dashboard:
     index: ov-kf-calls
     title: Fusion calls
     description: Fusions in the fusion-report consensus, one per fusion and sample. The bar splits them by how many callers agree.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  # The second stage of the funnel: of those calls, the ones a knowledge base
+  # already lists. It says more than a sample count, which one run makes a 1.
+  - component_type: card
+    workflow_tag: rnafusion
+    data_collection_tag: fusion_consensus
+    use: fusionreport/fusions
+    aggregation: count
+    column_name: fusion
+    column_type: object
+    filter_expr: col('n_databases') > 0
+    secondary_layout: composition
+    breakdown_col: databases
+    display:
+      icon_name: mdi:book-open-variant
+      icon_color: indigo
+      caption: calls, by the bases listing them
+      link: tab:Caller Agreement
+    section: Key figures
+    tag: rf-ov-kf-known
+    index: ov-kf-known
+    title: Known fusions
+    description: Calls at least one fusion knowledge base already lists. The bar splits them by the bases that list them.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: rnafusion
@@ -336,7 +342,7 @@ main_dashboard:
       n_dom: {dc: fusion_protein_domains, column: domain, aggregation: count, format: integer}
     body: |
       - **{{n_multi}}** of {{n_fusions}} fusions are found by two callers or more – caller agreement [Agreement](tab:Caller Agreement)
-      - **{{n_trans}}** Arriba calls join two chromosomes – translocations [Breakpoints](tab:Breakpoints)
+      - **{{n_trans}}** Arriba calls join two chromosomes – translocations; click one to read its reads in the genome browser [Breakpoints](tab:Breakpoints)
       - **{{n_inframe}}** of {{n_valid}} validated fusions keep the reading frame – FusionInspector [Validation](tab:Validation)
       - **{{n_cut}}** of {{n_dom}} Pfam domain hits are cut by the breakpoint – partner domains [Domains](tab:Protein Domains)
     section: Findings
@@ -364,8 +370,8 @@ main_dashboard:
   - component_type: highlight
     section: Findings
     source_tab: Validation
-    source_component: valid-far-scatter
-    caption: One point per validated breakpoint; high on both axes, little wild-type competition on either side.
+    source_component: valid-far-bars
+    caption: One bar per validated breakpoint, the balance of its 5' and 3' allelic ratios; a bar inside the grey band is supported evenly on both sides.
     tag: rf-ov-hl-far
     index: ov-hl-far
     layout: {x: 0, y: 7, w: 4, h: 5}
@@ -398,7 +404,8 @@ main_dashboard:
     tag: rf-ov-how-to-read
     index: ov-how-to-read
     layout: {x: 0, y: 0, w: 8, h: 2}
-  # Persistent sample filters: the sample, then the declared strandedness.
+  # Persistent sample filter. The declared strandedness is a run setting, one
+  # value on nearly every run, so it gets no filter of its own.
   - component_type: interactive
     workflow_tag: rnafusion
     data_collection_tag: samplesheet
@@ -414,21 +421,6 @@ main_dashboard:
     index: sample-filters-sample
     title: Sample
     layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    workflow_tag: rnafusion
-    data_collection_tag: samplesheet
-    interactive_component_type: MultiSelect
-    column_name: strandedness
-    column_type: object
-    display:
-      icon_name: mdi:swap-vertical
-      custom_color: cyan
-    section: Sample filters
-    group: Sample scope
-    tag: rf-filter-strandedness
-    index: sample-filters-strandedness
-    title: Strandedness
-    layout: {x: 0, y: 3, w: 1, h: 2}
   # Persistent fusion filters, on the hub every caller table is linked to.
   - component_type: interactive
     workflow_tag: rnafusion
@@ -655,8 +647,8 @@ tabs:
       every caller into one table per sample and ranks them by the Fusion Indication Index,
       which weighs caller agreement against how many knowledge bases already list the pair.
       The UpSet counts the fusions each combination of callers found, and the ranked view
-      puts them in fusion-report's order. A fusion several callers agree on is the first to
-      trust.
+      puts the highest index first; many fusions tie at the top, so those follow by the
+      reads behind them. A fusion several callers agree on is the first to trust.
     tag: rf-agree-intro
     index: agree-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -749,7 +741,7 @@ tabs:
     top_n_count: 3
     display:
       icon_name: mdi:dna
-      icon_color: indigo
+      icon_color: violet.4
       caption: distinct, the 5' partners in most fusions
     section: Agreement at a glance
     tag: rf-agree-card-fusions
@@ -768,7 +760,7 @@ tabs:
     breakdown_col: tool_support
     display:
       icon_name: mdi:set-merge
-      icon_color: violet
+      icon_color: violet.6
       caption: calls, by callers agreeing
     section: Agreement at a glance
     tag: rf-agree-card-agreement
@@ -783,18 +775,19 @@ tabs:
     aggregation: median
     column_name: fii
     column_type: float64
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
+    # A histogram, not a box: most fusions sit at the top of the scale, so the
+    # box collapses to a line there while the bars still show the low tail.
+    secondary_layout: histogram
     display:
       icon_name: mdi:trophy
-      icon_color: grape
-      caption: median, with its spread
+      icon_color: violet.8
+      caption: median, with its distribution
       decimals: 2
     section: Agreement at a glance
     tag: rf-agree-card-fii
     index: agree-card-fii
     title: Fusion Indication Index
-    description: Median score fusion-report ranks by, from 0 to 1.
+    description: Median score fusion-report ranks by, from 0 to 1; the bars show how the fusions spread along it.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: rnafusion
@@ -808,7 +801,7 @@ tabs:
     breakdown_col: databases
     display:
       icon_name: mdi:book-open-variant
-      icon_color: orange
+      icon_color: violet.9
       caption: calls, by the bases listing them
     section: Agreement at a glance
     tag: rf-agree-card-known
@@ -837,22 +830,25 @@ tabs:
     layout: {x: 0, y: 0, w: 8, h: 5}
   # The ranking as bars, the fusion names on the axis. The lollipop it
   # replaced drew one fusion per lane, so past six fusions it showed a single
-  # stem behind a fusion picker.
+  # stem behind a fusion picker. Read from the evidence rows (they carry the
+  # index too) so the fusions tied on the index, often most of a run, are
+  # ordered by the reads behind them rather than by name.
   - component_type: figure
     workflow_tag: rnafusion
-    data_collection_tag: fusion_consensus
-    use: fusionreport/fusions
+    data_collection_tag: caller_evidence
+    use: fusionreport/caller_evidence
     visu_type: bar
     mode: code
     code_content: |-
-      # Each fusion at its highest index over the samples in view, the 30 highest
-      # first, coloured by how many callers agree (by the groups in Analysis mode).
+      # Each fusion at its highest index over the samples in view, the 30 highest first (fusions tied on the index: most supporting reads first), coloured by how many callers agree (by the groups in Analysis mode).
       keys = [*depictio_group_by, 'fusion']
-      d = df.group_by(keys).agg(pl.col('fii').max().alias('fii'), pl.col('tool_support').sort_by('n_tools').last().alias('tool_support'), pl.col('sample').n_unique().alias('samples'))
-      order = d.group_by('fusion').agg(pl.col('fii').max()).sort(['fii', 'fusion'], descending=[True, False]).head(30)['fusion'].to_list()
+      per_sample = df.group_by([*keys, 'sample']).agg(pl.col('fii').max().alias('fii'), pl.col('caller').n_unique().alias('callers'), pl.col('supporting_reads').sum().alias('reads'))
+      d = per_sample.group_by(keys).agg(pl.col('fii').max().alias('fii'), pl.col('callers').max().alias('callers'), pl.col('reads').sum().alias('reads'), pl.col('sample').n_unique().alias('samples'))
+      d = d.with_columns(pl.when(pl.col('callers') == 1).then(pl.lit('1 caller')).otherwise(pl.col('callers').cast(pl.Utf8) + pl.lit(' callers')).alias('tool_support'))
+      order = d.group_by('fusion').agg(pl.col('fii').max().alias('fii'), pl.col('reads').sum().alias('reads')).sort(['fii', 'reads', 'fusion'], descending=[True, True, False]).head(30)['fusion'].to_list()
       d = d.filter(pl.col('fusion').is_in(order))
       colour = depictio_group_kwargs or {'color': 'tool_support', 'color_discrete_map': depictio_category_colors.get('tool_support') or {}, 'category_orders': {'tool_support': ['3 callers', '2 callers', '1 caller']}}
-      fig = px.bar(d.to_pandas(), x='fusion', y='fii', hover_data=['samples'], custom_data=['fusion'], labels={'fusion': 'Fusion', 'fii': 'Fusion Indication Index', 'tool_support': 'Callers agreeing', 'samples': 'Samples'}, **colour)
+      fig = px.bar(d.to_pandas(), x='fusion', y='fii', hover_data=['reads', 'samples'], custom_data=['fusion'], labels={'fusion': 'Fusion', 'fii': 'Fusion Indication Index', 'tool_support': 'Callers agreeing', 'reads': 'Supporting reads', 'samples': 'Samples'}, **colour)
       fig.update_layout(barmode='group', margin=dict(t=10))
       fig.update_xaxes(categoryorder='array', categoryarray=order, tickangle=-40, automargin=True)
     selection_enabled: true
@@ -861,7 +857,7 @@ tabs:
     tag: rf-agree-ranked
     index: agree-ranked
     title: Fusions by the index, highest first
-    description: The 30 highest-ranked fusions, coloured by how many callers agree. Select bars to filter the dashboard.
+    description: The 30 highest-ranked fusions, coloured by how many callers agree; fusions tied on the index follow by supporting reads. Select bars to filter the dashboard.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: rnafusion
@@ -898,15 +894,6 @@ tabs:
     icon: mdi:chart-scatter-plot
     color: teal
     description: Read support per fusion and caller, on one comparable scale
-  - name: Arriba against STAR-Fusion
-    icon: mdi:chart-scatter-plot
-    color: teal
-    description: The two split-read callers face to face, one point per fusion
-  - name: Per caller detail
-    icon: mdi:dna
-    color: gray
-    description: Each caller's own evidence, on its own terms
-    collapsed: true
   - name: Caller tables
     icon: mdi:table
     color: gray
@@ -922,9 +909,7 @@ tabs:
       [FusionCatcher](https://github.com/ndaniel/fusioncatcher) count reads their own way,
       so each caller's evidence is summed into one supporting-read figure per fusion. In the
       dot plot, colour is that figure on a log scale and size the caller's share of the
-      fusion's support; an empty cell is a fusion the caller never reported. The scatter sets
-      Arriba against STAR-Fusion: a point far off the diagonal is a fusion the two weigh
-      differently.
+      fusion's support; an empty cell is a fusion the caller never reported.
     tag: rf-evid-intro
     index: evid-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -986,7 +971,7 @@ tabs:
     breakdown_col: caller
     display:
       icon_name: mdi:account-group-outline
-      icon_color: teal
+      icon_color: teal.4
       caption: reports, by caller
     section: Evidence at a glance
     tag: rf-evid-card-reports
@@ -1005,7 +990,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:counter
-      icon_color: blue
+      icon_color: teal.6
       caption: median per report, with its spread
       decimals: 0
     section: Evidence at a glance
@@ -1027,7 +1012,7 @@ tabs:
     breakdown_col: caller
     display:
       icon_name: mdi:sigma
-      icon_color: cyan
+      icon_color: teal.8
       caption: reads, by caller
     section: Evidence at a glance
     tag: rf-evid-card-total
@@ -1048,7 +1033,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:scale-balance
-      icon_color: orange
+      icon_color: teal.9
       caption: median share of a fusion's reads, with its distribution
       format: percent
     section: Evidence at a glance
@@ -1072,81 +1057,6 @@ tabs:
     index: evid-dotplot
     title: Read support per fusion and caller
     layout: {x: 0, y: 0, w: 8, h: 6}
-  # Spreads the group kwargs when Analysis mode has groups (the keys keep the
-  # group column through the pivot), else colours by the index.
-  - component_type: figure
-    workflow_tag: rnafusion
-    data_collection_tag: caller_evidence
-    use: fusionreport/caller_evidence
-    visu_type: scatter
-    mode: code
-    code_content: |-
-      # The two split-read callers face each other on log axes, reads + 1 so a
-      # fusion one caller missed sits on the other's edge; FusionCatcher is the
-      # marker size, the dotted diagonal equal support.
-      keys = [*depictio_group_by, 'sample', 'fusion']
-      wide = df.pivot(on='caller', index=keys, values='supporting_reads', aggregate_function='sum').fill_null(0)
-      for caller in ('arriba', 'starfusion', 'fusioncatcher'):
-          if caller not in wide.columns:
-              wide = wide.with_columns(pl.lit(0).alias(caller))
-      fii = df.group_by(keys).agg(pl.col('fii').max().alias('fii'))
-      wide = wide.join(fii, on=keys, how='left').with_columns(pl.col('fii').fill_null(0.0), (pl.col('arriba') + 1).alias('arriba_1'), (pl.col('starfusion') + 1).alias('starfusion_1'))
-      colour = depictio_group_kwargs or {'color': 'fii', 'color_continuous_scale': 'Tealgrn'}
-      size = 'fusioncatcher' if wide['fusioncatcher'].sum() > 0 else None
-      fig = px.scatter(wide.to_pandas(), x='arriba_1', y='starfusion_1', size=size, size_max=28, log_x=True, log_y=True, hover_name='fusion', hover_data=['sample', 'arriba', 'starfusion'], custom_data=['fusion'], labels={'arriba_1': 'Arriba supporting reads + 1', 'starfusion_1': 'STAR-Fusion supporting reads + 1', 'arriba': 'Arriba reads', 'starfusion': 'STAR-Fusion reads', 'fusioncatcher': 'FusionCatcher reads', 'fii': 'FII'}, **colour)
-      top = max(wide['arriba_1'].max(), wide['starfusion_1'].max())
-      fig.add_scatter(x=[1, top], y=[1, top], mode='lines', line=dict(dash='dot', width=1), hoverinfo='skip', showlegend=False)
-      fig.update_layout(margin=dict(t=10))
-    selection_enabled: true
-    selection_column: fusion
-    section: Arriba against STAR-Fusion
-    tag: rf-evid-scatter
-    index: evid-scatter
-    title: Arriba against STAR-Fusion
-    description: One point per fusion and sample on log axes, sized by FusionCatcher's support. Select points to filter the dashboard.
-    layout: {x: 0, y: 0, w: 8, h: 4}
-  - component_type: advanced_viz
-    workflow_tag: rnafusion
-    data_collection_tag: arriba_fusions
-    use: arriba/evidence_dot_plot
-    config:
-      colour_scale: Plasma
-      gene_sort: mean
-      max_dot_size: 22
-      max_genes: 30
-    section: Per caller detail
-    tag: rf-evid-arriba-dot
-    index: evid-arriba-dot
-    title: Arriba, by confidence
-    layout: {x: 0, y: 0, w: 8, h: 6}
-  - component_type: advanced_viz
-    workflow_tag: rnafusion
-    data_collection_tag: starfusion_fusions
-    use: starfusion/evidence_dot_plot
-    config:
-      colour_scale: Cividis
-      gene_sort: mean
-      max_dot_size: 22
-      max_genes: 30
-    section: Per caller detail
-    tag: rf-evid-starfusion-dot
-    index: evid-starfusion-dot
-    title: STAR-Fusion, by splice type
-    layout: {x: 0, y: 6, w: 8, h: 6}
-  - component_type: advanced_viz
-    workflow_tag: rnafusion
-    data_collection_tag: fusioncatcher_fusions
-    use: fusioncatcher/evidence_dot_plot
-    config:
-      colour_scale: Magma
-      gene_sort: mean
-      max_dot_size: 22
-      max_genes: 30
-    section: Per caller detail
-    tag: rf-evid-fusioncatcher-dot
-    index: evid-fusioncatcher-dot
-    title: FusionCatcher, by predicted effect
-    layout: {x: 0, y: 12, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnafusion
     data_collection_tag: caller_evidence
@@ -1193,7 +1103,7 @@ tabs:
     layout: {x: 0, y: 18, w: 8, h: 6}
 
 - title: Breakpoints
-  subtitle: Where on the genome do the two fusion partners sit?
+  subtitle: Where do the fusion partners sit, and what do the reads show?
   tab_group: Fusion calls
   tab_order: 4
   tab_icon: mdi:vector-link
@@ -1218,16 +1128,15 @@ tabs:
     icon: mdi:relation-many-to-many
     color: cyan
     description: From the contig of the 5' partner to that of the 3' partner
-  - name: Event classes
-    icon: mdi:chart-bar
-    color: cyan
-    description: Read support by event class, and by the feature each breakpoint fell in
   - name: Breakpoints and reads
     icon: mdi:dna
     color: cyan
-    description: Click a link on the ring and the browser beside it frames that fusion's 5' breakpoint; its Breakpoint view shows both sides.
-    # One screen: the ring and the browser it drives, side by side.
-    display: linked
+    description: Click a link on the ring, read its record beside it and its reads in the browser below.
+  - name: Event classes
+    icon: mdi:chart-bar
+    color: gray
+    description: Read support by event class, and by the feature each breakpoint fell in
+    collapsed: true
   components:
   # The tab's intro: the method, with its link, and how to read the tab.
   - component_type: text
@@ -1238,7 +1147,7 @@ tabs:
       the 5' partner to that of the 3' partner and the ring draws each call between its two
       breakpoints: a link that stays on one contig is a local rearrangement, one that
       crosses is a translocation. The bars sum the read support by event class and by the
-      transcript feature each breakpoint fell in.
+      transcript feature each breakpoint fell in; a click on the ring opens the call's reads.
     tag: rf-bp-intro
     index: bp-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1298,7 +1207,7 @@ tabs:
     breakdown_col: fusion_type
     display:
       icon_name: mdi:vector-link
-      icon_color: cyan
+      icon_color: cyan.4
       caption: calls, by event class
     section: Breakpoints at a glance
     tag: rf-bp-card-calls
@@ -1320,7 +1229,7 @@ tabs:
     breakdown_col: confidence
     display:
       icon_name: mdi:arrow-left-right
-      icon_color: red
+      icon_color: cyan.6
       caption: calls, by Arriba confidence
     section: Breakpoints at a glance
     tag: rf-bp-card-inter
@@ -1342,7 +1251,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:percent-outline
-      icon_color: green
+      icon_color: cyan.8
       caption: median share of the local reads, with its distribution
       format: percent
     section: Breakpoints at a glance
@@ -1362,7 +1271,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:call-split
-      icon_color: orange
+      icon_color: cyan.9
       caption: median per call, with its spread
       decimals: 0
     section: Breakpoints at a glance
@@ -1397,8 +1306,10 @@ tabs:
       show_labels: true
       intra_chromosomal: true
       max_links: 200
-    # A click picks the call: the browser beside it reads the same collection
-    # and frames the call's 5' breakpoint.
+      selection_enabled: true
+      selection_column: label
+    # A click picks the call: the record card beside it and the browser under it
+    # read the same collection, and the browser frames the call's 5' breakpoint.
     selection_enabled: true
     selection_column: label
     section: Breakpoints and reads
@@ -1406,7 +1317,28 @@ tabs:
     index: bp-chord
     title: Breakpoints on the genome
     description: Each call between its two breakpoints; click one to read it in the browser.
-    layout: {x: 0, y: 0, w: 3, h: 7}
+    layout: {x: 0, y: 0, w: 4, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: rnafusion
+    data_collection_tag: arriba_fusion_links
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: label
+      title_col: label
+      selection_source: any
+      linked_component: rf-bp-chord
+      sections:
+        Call: [label, sample, category, confidence]
+        5' breakpoint: [chrom_a, pos_a]
+        3' breakpoint: [chrom_b, pos_b]
+        Evidence: [fii, weight]
+    section: Breakpoints and reads
+    tag: rf-bp-record
+    index: bp-record
+    title: Call record
+    description: The call picked on the ring, its two breakpoints and the reads that support it.
+    layout: {x: 4, y: 0, w: 4, h: 5}
   - component_type: figure
     workflow_tag: rnafusion
     data_collection_tag: arriba_fusions
@@ -1441,9 +1373,12 @@ tabs:
     layout: {x: 4, y: 0, w: 4, h: 4, fit: auto}
   # The reads behind a call: a link clicked on the ring, or a fusion picked in
   # the left panel, narrows arriba_fusion_links to its call, and the view frames the 5'
-  # breakpoint. Unpicked, it opens on the best supported call (most reads), and
-  # the stepper walks the others; the mate columns give the 3' side for the
-  # Breakpoint view.
+  # breakpoint. The same pick opens the call's own sample (a link on `sample`
+  # to the tracks), so the alignments are the ones that called it. Unpicked, it
+  # opens on the call fusion-report ranks highest (the bars of the Caller
+  # Agreement tab), the one with the most reads among fusions tied on the index
+  # (`rank_score` folds both into one number), and the stepper walks the others;
+  # the mate columns give the 3' side for the Breakpoint view.
   - component_type: jbrowse
     workflow_tag: rnafusion
     data_collection_tag: tracks
@@ -1456,23 +1391,30 @@ tabs:
     show_junctions: true
     views: [breakpoint]
     read_pairs_display: arcs
+    # One hue per sample, the key `category_colors` declares on the main tab.
+    color_by: sample
+    # The assembly's gene track draws every transcript; MANE Select adds the one
+    # clean exon structure per gene to read a breakpoint against.
+    ucsc_tracks: [mane]
     locus_from:
       data_collection_tag: arriba_fusion_links
       chrom_column: chrom_a
       start_column: pos_a
       padding: 400
       max_rows: 20
-      sort_by: weight
+      sort_by: rank_score
       descending: true
       label_column: label
+      sample_column: sample
+      columns: [fii, weight, confidence]
       mate:
         chrom_column: chrom_b
         start_column: pos_b
     tag: rf-bp-browser
     index: bp-browser
     title: Genome browser
-    description: The reads of the samples in view around the 5' breakpoint of the fusion picked on the ring.
-    layout: {x: 3, y: 0, w: 5, h: 7}
+    description: The reads of the call's sample around its 5' breakpoint, both sides in the Breakpoint view, opening on the highest-ranked call.
+    layout: {x: 0, y: 5, w: 8, h: 8}
 
 - title: Validation
   subtitle: Which calls hold up when the reads are re-aligned?
@@ -1500,7 +1442,7 @@ tabs:
   - name: Allelic ratio
     icon: mdi:scale-balance
     color: grape
-    description: Fusion reads against wild-type reads on each side, and the call picked
+    description: How evenly each validated call is supported on its two sides, and the call picked
   - name: Validated rows
     icon: mdi:table
     color: gray
@@ -1515,8 +1457,8 @@ tabs:
       for every candidate fusion and re-aligns the reads to it, so a call that survives rests
       on reads re-counted against the fusion itself. The fusion allelic ratio weighs the
       fusion reads against the wild-type reads competing on each side: a call supported on
-      one side only falls off the diagonal of the scatter. Pick a point to read the call in
-      the record beside it.
+      one side only sits far from the middle of the bars. Pick a bar to read the call in the
+      record beside it.
     tag: rf-valid-intro
     index: valid-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1562,7 +1504,7 @@ tabs:
     top_n_count: 3
     display:
       icon_name: mdi:check-decagram
-      icon_color: grape
+      icon_color: grape.4
       caption: fusions, by predicted protein
     section: Validation at a glance
     tag: rf-valid-card-fusions
@@ -1570,26 +1512,27 @@ tabs:
     title: Validated fusions
     description: Distinct fusions FusionInspector re-quantified.
     layout: {x: 0, y: 0, w: 2, h: 2}
+  # FFPM spans orders of magnitude and sits far above any floor on a real run, so
+  # a threshold always passes and a box is a line: the card reads the log scale
+  # the recipe derived and shows its distribution.
   - component_type: card
     workflow_tag: rnafusion
     data_collection_tag: fusioninspector_fusions
     use: fusioninspector/fusions
     aggregation: median
-    column_name: ffpm
+    column_name: log_ffpm
     column_type: float64
-    secondary_layout: threshold
-    threshold_value: 0.1
-    threshold_direction: min
+    secondary_layout: histogram
     display:
       icon_name: mdi:chart-bell-curve
-      icon_color: pink
-      caption: median; at or above 0.1, STAR-Fusion's default floor
+      icon_color: grape.6
+      caption: median log10 (FFPM + 1), with its distribution
       decimals: 1
     section: Validation at a glance
     tag: rf-valid-card-ffpm
     index: valid-card-ffpm
-    title: Fragments per million
-    description: Median fusion fragments per million reads, after re-alignment.
+    title: Abundance
+    description: Median fusion fragments per million reads after re-alignment, on a log10 (FFPM + 1) scale.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: rnafusion
@@ -1603,7 +1546,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:bullseye-arrow
-      icon_color: violet
+      icon_color: grape.8
       caption: median, with its distribution
       format: percent
     section: Validation at a glance
@@ -1623,7 +1566,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:counter
-      icon_color: orange
+      icon_color: grape.9
       caption: median per breakpoint, with its spread
       decimals: 0
     section: Validation at a glance
@@ -1647,27 +1590,36 @@ tabs:
     index: valid-dotplot
     title: Abundance by predicted protein
     layout: {x: 0, y: 0, w: 8, h: 6}
+  # A scatter of the two ratios would hold a handful of points. What it showed
+  # is the imbalance between the sides, so the bars draw that: log2 of the 5'
+  # ratio over the 3' one, one bar per validated breakpoint.
   - component_type: figure
     workflow_tag: rnafusion
     data_collection_tag: fusioninspector_fusions
     use: fusioninspector/fusions
-    visu_type: scatter
+    visu_type: bar
     mode: code
     code_content: |-
-      # Fusion allelic ratio, 5' against 3', on log axes: a call supported on one
-      # side only falls off the diagonal. A ratio of 0 has no place on a log axis,
-      # so both are floored first.
+      # Imbalance of the fusion allelic ratio per validated breakpoint: log2 of the 5' ratio over the 3' one, so a bar to the right is better supported on the 5' side; the grey band is a two-fold balance. A ratio of 0 is floored first. A fusion seen at several breakpoints repeats on the axis, so its label carries the two coordinates (and the sample when several are in view), which keeps one bar per category.
       floor = 0.01
-      d = df.with_columns(pl.max_horizontal(pl.col('far_left'), pl.lit(floor)).alias('far_5p'), pl.max_horizontal(pl.col('far_right'), pl.lit(floor)).alias('far_3p'))
-      fig = px.scatter(d.to_pandas(), x='far_5p', y='far_3p', color='prot_fusion_type', size='supporting_reads', size_max=26, log_x=True, log_y=True, hover_name='fusion', custom_data=['fusion'], color_discrete_map=depictio_category_colors.get('prot_fusion_type') or {}, labels={'far_5p': "5' fusion allelic ratio", 'far_3p': "3' fusion allelic ratio", 'prot_fusion_type': 'Predicted protein', 'supporting_reads': 'Supporting reads'})
-      fig.update_layout(margin=dict(t=10))
+      many = df['sample'].n_unique() > 1
+      d = df.filter(pl.col('far_left').is_not_null() & pl.col('far_right').is_not_null()).with_columns(pl.max_horizontal(pl.col('far_left'), pl.lit(floor)).alias('far_5p'), pl.max_horizontal(pl.col('far_right'), pl.lit(floor)).alias('far_3p'), pl.col('breakpoint_5p').str.split(':').alias('p5'), pl.col('breakpoint_3p').str.split(':').alias('p3'))
+      d = d.with_columns((pl.col('far_5p') / pl.col('far_3p')).log(2).alias('imbalance'), pl.col('fusion').is_duplicated().alias('repeated'), (pl.col('p5').list.get(0, null_on_oob=True).fill_null('') + pl.lit(':') + pl.col('p5').list.get(1, null_on_oob=True).fill_null('')).alias('at_5p'), pl.when(pl.col('p5').list.get(0, null_on_oob=True) == pl.col('p3').list.get(0, null_on_oob=True)).then(pl.col('p3').list.get(1, null_on_oob=True).fill_null('')).otherwise(pl.col('p3').list.get(0, null_on_oob=True).fill_null('') + pl.lit(':') + pl.col('p3').list.get(1, null_on_oob=True).fill_null('')).alias('at_3p'))
+      d = d.with_columns(pl.when(pl.col('repeated')).then(pl.col('fusion') + pl.lit(' (') + pl.col('at_5p') + pl.lit(' > ') + pl.col('at_3p') + pl.lit(')')).otherwise(pl.col('fusion')).alias('label'))
+      d = d.with_columns((pl.col('label') + pl.lit(' · ') + pl.col('sample') if many else pl.col('label')).alias('label'))
+      d = d.with_columns(pl.when(pl.col('label').is_duplicated()).then(pl.col('label') + pl.lit(' #') + (pl.int_range(pl.len()).over('label') + 1).cast(pl.Utf8)).otherwise(pl.col('label')).alias('label')).sort(['imbalance', 'label'])
+      fig = px.bar(d.to_pandas(), x='imbalance', y='label', color='prot_fusion_type', color_discrete_map=depictio_category_colors.get('prot_fusion_type') or {}, custom_data=['fusion'], category_orders={'label': d.get_column('label').to_list()}, labels={'imbalance': "log2 (5' ratio / 3' ratio)", 'label': '', 'prot_fusion_type': 'Predicted protein'})
+      fig.add_vrect(x0=-1, x1=1, fillcolor='rgba(128, 128, 128, 0.15)', line_width=0, layer='below', annotation_text='balanced', annotation_position='top left')
+      fig.add_vline(x=0, line_width=1, opacity=0.5)
+      fig.update_yaxes(automargin=True)
+      fig.update_layout(margin=dict(t=10), legend_title_text='', legend=dict(orientation='h', y=-0.2))
     selection_enabled: true
     selection_column: fusion
     section: Allelic ratio
-    tag: rf-valid-far-scatter
-    index: valid-far-scatter
-    title: Fusion allelic ratio, both sides
-    description: One point per validated breakpoint, sized by its read support. Pick one to read it beside.
+    tag: rf-valid-far-bars
+    index: valid-far-bars
+    title: Allelic ratio balance per fusion
+    description: One bar per validated breakpoint, sorted by the imbalance between its 5' and 3' sides; a fusion seen at several breakpoints is named by its coordinates. Pick one to read it beside.
     layout: {x: 0, y: 0, w: 5, h: 5}
   - component_type: advanced_viz
     workflow_tag: rnafusion
@@ -1678,7 +1630,7 @@ tabs:
       id_col: fusion
       title_col: fusion
       selection_source: any
-      linked_component: rf-valid-far-scatter
+      linked_component: rf-valid-far-bars
       sections:
         Fusion: [fusion, sample, gene_5p, gene_3p, breakpoint_5p, breakpoint_3p, splice_type]
         Support: [junction_reads, spanning_frags, supporting_reads, ffpm, junction_fraction]
@@ -1787,7 +1739,7 @@ tabs:
     breakdown_col: partner
     display:
       icon_name: mdi:shape-outline
-      icon_color: pink
+      icon_color: pink.4
       caption: hits, by partner side
     section: Domains at a glance
     tag: rf-dom-card-hits
@@ -1809,7 +1761,7 @@ tabs:
     breakdown_col: prot_fusion_type
     display:
       icon_name: mdi:content-cut
-      icon_color: red
+      icon_color: pink.6
       caption: truncated domains, by predicted protein
     section: Domains at a glance
     tag: rf-dom-card-cut
@@ -1828,7 +1780,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:ruler
-      icon_color: blue
+      icon_color: pink.8
       caption: median, in amino acids
       decimals: 0
     section: Domains at a glance
@@ -1847,7 +1799,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:target
-      icon_color: orange
+      icon_color: pink.9
       caption: median -log10 e-value, with its distribution
       decimals: 1
     section: Domains at a glance
@@ -1983,7 +1935,7 @@ tabs:
     top_n_count: 3
     display:
       icon_name: mdi:waves
-      icon_color: blue
+      icon_color: blue.4
       caption: distinct, the busiest genes
     section: Junctions at a glance
     tag: rf-splice-card-junctions
@@ -2002,7 +1954,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:counter
-      icon_color: cyan
+      icon_color: blue.6
       caption: median per junction, with its spread
       decimals: 0
     section: Junctions at a glance
@@ -2022,7 +1974,7 @@ tabs:
     breakdown_col: chrom
     display:
       icon_name: mdi:chart-donut
-      icon_color: teal
+      icon_color: blue.8
       caption: reads, by chromosome
     section: Junctions at a glance
     tag: rf-splice-card-total
@@ -2040,7 +1992,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:ruler
-      icon_color: orange
+      icon_color: blue.9
       caption: median, with its distribution
       decimals: 0
     section: Junctions at a glance

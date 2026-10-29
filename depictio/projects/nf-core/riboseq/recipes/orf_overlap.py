@@ -13,6 +13,13 @@ Membership columns (0/1, the UpSet sets):
     annotated_cds  either caller classed it as the annotated CDS, so the
                    intersections separate known coding sequences from new ORFs
 
+``support_score`` orders the ORFs for the genome browser, which opens on the
+highest: the ORFs outside the annotated CDS that both callers report come first,
+then the new ORFs one caller reports, then the annotated CDSs both callers
+report, then the rest. Inside a tier, the more libraries report an ORF (summed
+over the two callers) the higher it ranks, and the longer protein breaks a tie. One
+number, since the browser sorts on a single column.
+
 Sources: the ``ribotish_orfs`` and ``ribocode_orfs`` data collections; either
 may be absent.
 
@@ -80,7 +87,13 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "annotated_cds": pl.Int64,
     "ribotish_libraries": pl.Int64,
     "ribocode_libraries": pl.Int64,
+    "support_score": pl.Int64,
 }
+
+#: Weights of the score's parts: a tier outweighs any library count, which outweighs a length.
+_TIER = 1_000_000_000
+_LIBRARIES = 100_000
+_MAX_LENGTH = 99_999
 
 # `<chrom>:<strand>:<stop>`, the key the two callers' recipes build. The contig
 # may itself hold a colon (an HLA allele), so it is everything before the last two.
@@ -147,5 +160,16 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("ribotish_libraries").fill_null(0).cast(pl.Int64),
         pl.col("ribocode_libraries").fill_null(0).cast(pl.Int64),
     )
-    out = out.with_columns(_locus(pl.col("orf_id"), pl.col("aa_length")))
+    both = (pl.col("ribotish") == 1) & (pl.col("ribocode") == 1)
+    new = pl.col("annotated_cds") == 0
+    tier = pl.when(new & both).then(3).when(new).then(2).when(both).then(1).otherwise(0)
+    out = out.with_columns(_locus(pl.col("orf_id"), pl.col("aa_length"))).with_columns(
+        (
+            tier.cast(pl.Int64) * _TIER
+            + (pl.col("ribotish_libraries") + pl.col("ribocode_libraries")) * _LIBRARIES
+            + pl.col("aa_length").fill_null(0).clip(upper_bound=_MAX_LENGTH)
+        )
+        .cast(pl.Int64)
+        .alias("support_score")
+    )
     return out.sort("orf_id").select(list(OUTPUT_SCHEMA))

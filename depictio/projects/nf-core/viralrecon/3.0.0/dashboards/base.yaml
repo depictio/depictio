@@ -111,7 +111,7 @@ main_dashboard:
   - name: Sample sheet
     icon: mdi:table-account
     color: gray
-    description: The run summary behind every tab, narrowed by the sample filters
+    description: The run summary behind every tab, narrowed by the sample filters. Sample names come from the samplesheet; a suffix such as _PE or _SE, where a run uses one, marks paired-end or single-end reads.
     collapsed: true
     persistent: true
     pin: bottom
@@ -367,42 +367,28 @@ main_dashboard:
     tag: vr-ov-findings
     index: ov-findings
     layout: {x: 0, y: 0, w: 8, h: 2}
-  # One figure per analysis tab, in the order of the rows above. The tiles of a
-  # row share a stored height.
+  # Four figures, one per question of the rows above: coverage, consensus quality,
+  # variants by position and by gene. The tiles of a row share a stored height.
   - component_type: highlight
     section: Findings
     source_tab: Sample QC
     source_component: qc-depth-breadth
-    caption: One point per sample, median depth against the share of the genome at 10x, coloured by lineage. Low and left is a thin sample; deep but low lost amplicons.
+    caption: One point per sample, median depth against the share of the genome at 10x, coloured pass or fail. The shaded corners are the fail zones; a sample in one is the one to check. It judges coverage only, so read it with the Nextclade scores beside it.
     hide_legend: true
     tag: vr-ov-hl-depth-breadth
     index: ov-hl-depth-breadth
     layout: {x: 0, y: 2, w: 4, h: 5}
-  # A summary of the Coverage tab's amplicon track: one line for the samples in
-  # view rather than one lane per sample.
-  - component_type: figure
-    workflow_tag: viralrecon
-    data_collection_tag: mosdepth_amplicon_coverage
-    use: mosdepth/amplicon_coverage
-    visu_type: line
-    mode: code
-    code_content: |-
-      # Median depth of each amplicon over the samples in view, along the genome,
-      # one line per Analysis mode group when it has some. Floored at 1x for the
-      # log axis; the dashed line is the 10x the consensus needs.
-      d = df.group_by([*depictio_group_by, 'region', 'start']).agg(pl.col('coverage').median().alias('depth')).sort('start')
-      d = d.with_columns(pl.col('depth').clip(lower_bound=1))
-      fig = px.line(d.to_pandas(), x='start', y='depth', hover_data=['region'], markers=True, log_y=True, labels={'start': 'Genome position', 'depth': 'Median depth', 'region': 'Amplicon'}, **depictio_group_kwargs)
-      fig.add_hline(y=10, line_dash='dash')
-      # One tick per power of ten: a log axis otherwise labels 2 and 5 between.
-      fig.update_yaxes(dtick=1)
-      fig.update_layout(margin=dict(t=10))
-    title: Depth per amplicon
-    link: tab:Coverage & Depth
-    caption: Median depth of each amplicon along the genome, on a log axis; a dip under the dashed 10x line is a dropout.
+  # Typing's figure: the consensus quality the lineages were called from. Beside
+  # the depth-breadth scatter it shows what coverage alone does not (a sample can
+  # pass there and still be rated bad by Nextclade).
+  - component_type: highlight
     section: Findings
-    tag: vr-ov-amplicon-depth
-    index: ov-amplicon-depth
+    source_tab: Lineage & Clustering
+    source_component: lin-qc-score
+    caption: Nextclade's QC score of each consensus genome, worst first, coloured by its verdict. The dashed lines mark 30 (good below) and 100 (bad above).
+    hide_legend: true
+    tag: vr-ov-hl-qc-score
+    index: ov-hl-qc-score
     layout: {x: 4, y: 2, w: 4, h: 5}
   # top_n_labels is 0 on the source: mutation labels pile up over the points.
   - component_type: highlight
@@ -416,11 +402,11 @@ main_dashboard:
     layout: {x: 0, y: 7, w: 4, h: 5}
   - component_type: highlight
     section: Findings
-    source_tab: Lineage & Clustering
-    source_component: lin-sankey
-    caption: Each sample from its Pangolin QC verdict to its lineage and its Nextclade clade; a thin ribbon is a rare or mismatched call.
-    tag: vr-ov-hl-sankey
-    index: ov-hl-sankey
+    source_tab: Variants
+    source_component: var-by-gene
+    caption: Calls per gene, the busiest first, by functional class; a gene dense in calls is the one to open in the Gene tab.
+    tag: vr-ov-hl-genes
+    index: ov-hl-genes
     layout: {x: 4, y: 7, w: 4, h: 5}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tab the run does not have is left out, and a heading whose
@@ -823,7 +809,9 @@ tabs:
       Each sample's alignment and consensus, from the pipeline's
       [variant summary](https://nf-co.re/viralrecon/3.0.0/docs/output) and the
       [Nextclade](https://clades.nextstrain.org) QC of its consensus. The first scatter tells a
-      thin sample from one that lost amplicons; lasso a point to read its record beside it.
+      thin sample from one that lost amplicons; lasso a point to read its record beside it. It
+      judges coverage only: a sample can pass it and still be rated mediocre or bad below, where
+      Nextclade also counts the bases the consensus could not read.
     tag: vr-qc-intro
     index: qc-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -885,7 +873,7 @@ tabs:
     threshold_direction: min
     display:
       icon_name: mdi:target
-      icon_color: indigo
+      icon_color: indigo.4
       caption: samples against the 1,000-read floor
       decimals: 0
     section: QC at a glance
@@ -906,7 +894,7 @@ tabs:
     coverage_max: 100
     display:
       icon_name: mdi:percent-outline
-      icon_color: blue
+      icon_color: indigo.6
       caption: median share of each sample's reads
       decimals: 1
     section: QC at a glance
@@ -926,7 +914,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:chart-line
-      icon_color: cyan
+      icon_color: indigo.8
       caption: median per sample, with its spread
       decimals: 0
     section: QC at a glance
@@ -946,7 +934,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:chart-areaspline
-      icon_color: teal
+      icon_color: indigo.9
       caption: median, with its distribution
       decimals: 1
     section: QC at a glance
@@ -966,23 +954,30 @@ tabs:
     visu_type: scatter
     mode: code
     code_content: |-
-      # Depth against 10x breadth, one point per sample: by lineage, or by
-      # Analysis mode's groups when it has some. Depth on a log axis: samples
-      # of one run span orders of magnitude. The dashed line is the 80% breadth
-      # floor of the bars below.
-      kw = depictio_group_kwargs or {'color': 'lineage', 'color_discrete_map': depictio_category_colors.get('lineage') or {}}
-      fig = px.scatter(df.to_pandas(), x='coverage_median', y='pct_genome_covered_10x', log_x=True, hover_data=['sample', 'num_variants_total'], labels={'coverage_median': 'Median depth', 'pct_genome_covered_10x': 'Genome at 10x (%)', 'lineage': 'Lineage', 'num_variants_total': 'Variants called'}, **kw)
-      fig.update_traces(marker=dict(size=10))
-      fig.add_hline(y=80, line_dash='dash')
+      # Depth against 10x breadth, one point per sample, coloured by verdict: a
+      # sample passes with 80% of the genome at 10x and a median depth of 10x or
+      # more, and the shaded corners are where it fails. Depth on a log axis:
+      # samples of one run span orders of magnitude. A failing sample carries its name.
+      d = df.filter(pl.col('coverage_median').is_not_null() & (pl.col('coverage_median') > 0) & pl.col('pct_genome_covered_10x').is_not_null())
+      d = d.with_columns(pl.when((pl.col('pct_genome_covered_10x') >= 80) & (pl.col('coverage_median') >= 10)).then(pl.lit('pass')).otherwise(pl.lit('fail')).alias('qc_status')).with_columns(pl.when(pl.col('qc_status') == 'fail').then(pl.col('sample')).otherwise(pl.lit('')).alias('flag'))
+      low = min(d['coverage_median'].min() or 10, 10) / 2
+      top = max(d['coverage_median'].max() or 10, 10) * 2
+      fig = px.scatter(d.to_pandas(), x='coverage_median', y='pct_genome_covered_10x', color='qc_status', color_discrete_map=depictio_category_colors.get('qc_status') or {}, category_orders={'qc_status': ['pass', 'fail']}, log_x=True, text='flag', hover_data=['sample', 'num_variants_total'], labels={'coverage_median': 'Median depth', 'pct_genome_covered_10x': 'Genome at 10x (%)', 'qc_status': 'Verdict', 'num_variants_total': 'Variants called'})
+      fig.add_hrect(y0=0, y1=80, fillcolor='rgba(224, 49, 49, 0.08)', line_width=0, layer='below')
+      fig.add_vrect(x0=low, x1=10, fillcolor='rgba(224, 49, 49, 0.08)', line_width=0, layer='below')
+      fig.add_hline(y=80, line_dash='dash', line_width=1, opacity=0.6, annotation_text='80%')
+      fig.add_vline(x=10, line_dash='dash', line_width=1, opacity=0.6, annotation_text='10x')
+      fig.update_traces(marker=dict(size=14), textposition='top center')
+      fig.update_xaxes(range=[np.log10(low), np.log10(top)])
       fig.update_yaxes(range=[0, 105])
-      fig.update_layout(margin=dict(t=10))
+      fig.update_layout(margin=dict(t=10), legend_title_text='')
     selection_enabled: true
     selection_column: sample
     section: Diagnostics
     tag: vr-qc-depth-breadth
     index: qc-depth-breadth
     title: Median depth against genome covered at 10x
-    description: A thin sample sits low and left; a deep one under the line lost amplicons.
+    description: A thin sample sits low and left; a deep one under the line lost amplicons. Coverage only, the consensus is rated below.
     layout: {x: 0, y: 0, w: 5, h: 5}
   # No default_record: the card waits for a pick rather than opening on a
   # sample of the reference run.
@@ -1020,26 +1015,39 @@ tabs:
     workflow_tag: viralrecon
     data_collection_tag: nextclade_results
     use: nextclade/report
-    visu_type: scatter
+    visu_type: bar
     mode: code
     code_content: |-
-      # Substitutions against deletions per consensus genome: by clade, or by
-      # Analysis mode's groups when it has some.
-      kw = depictio_group_kwargs or {'color': 'clade', 'color_discrete_map': depictio_category_colors.get('clade') or {}}
-      fig = px.scatter(df.to_pandas(), x='totalSubstitutions', y='totalDeletions', hover_data=['sample', 'qc_overallStatus', 'totalMissing'], opacity=0.8, labels={'totalSubstitutions': 'Substitutions', 'totalDeletions': 'Deleted bases', 'clade': 'Clade', 'qc_overallStatus': 'Nextclade QC', 'totalMissing': 'Missing bases'}, **kw)
-      fig.update_traces(marker=dict(size=10))
-      # Counts: from zero, in whole steps (a narrow range otherwise ticks 0.5).
-      fig.update_xaxes(rangemode='tozero', dtick=max(1, round((df['totalSubstitutions'].max() or 0) / 5)))
-      fig.update_yaxes(rangemode='tozero', dtick=max(1, round((df['totalDeletions'].max() or 0) / 5)))
-      fig.update_layout(margin=dict(t=10))
+      # Nextclade's reading of each consensus genome, in two panels because the counts differ by
+      # orders of magnitude: the substitutions and deleted bases it finds against the reference
+      # (top) and the bases it could not read (bottom, log axis), the most missing bases first.
+      # The dot above each bottom bar is the sample's Nextclade QC verdict.
+      colors = depictio_category_colors.get('qc_overallStatus') or {}
+      names = {'totalSubstitutions': 'Substitutions', 'totalDeletions': 'Deleted bases', 'totalMissing': 'Missing bases'}
+      d = df.with_columns(pl.col('totalMissing').fill_null(0)).sort(['totalMissing', 'sample'], descending=[True, False])
+      long = d.select(['sample', *names.keys()]).unpivot(index='sample', variable_name='kind', value_name='n').with_columns(pl.col('n').fill_null(0), pl.col('kind').replace(names))
+      fig = px.bar(long.to_pandas(), x='sample', y='n', color='kind', custom_data=['sample'], category_orders={'sample': d.get_column('sample').to_list(), 'kind': list(names.values())}, labels={'sample': '', 'n': '', 'kind': ''})
+      bars = fig
+      fig = go.Figure()
+      fig.set_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.5, 0.5], vertical_spacing=0.08)
+      for trace in bars.data:
+          fig.add_trace(trace, row=2 if trace.name == 'Missing bases' else 1, col=1)
+      for status in ['good', 'mediocre', 'bad']:
+          sub = d.filter(pl.col('qc_overallStatus') == status)
+          if not sub.is_empty():
+              fig.add_scatter(x=sub.get_column('sample').to_list(), y=[max(m, 1) * 1.5 for m in sub.get_column('totalMissing').to_list()], mode='markers', name='Nextclade QC ' + status, marker=dict(color=colors.get(status), size=10), customdata=[[s] for s in sub.get_column('sample').to_list()], hovertemplate='%{x}: ' + status + '<extra></extra>', row=2, col=1)
+      fig.update_yaxes(title_text='Differences', row=1, col=1)
+      fig.update_yaxes(title_text='Missing bases', type='log', row=2, col=1)
+      fig.update_xaxes(tickangle=-45, tickfont={'size': 9})
+      fig.update_layout(barmode='stack', margin=dict(t=10), legend=dict(orientation='h', y=-0.3))
     selection_enabled: true
     selection_column: sample
     section: Diagnostics
-    tag: vr-qc-nextclade-scatter
-    index: qc-nextclade-scatter
-    title: Substitutions against deletions (Nextclade)
-    description: Each consensus genome's mutation load; a point far from its clade is worth a look.
-    layout: {x: 0, y: 5, w: 8, h: 4}
+    tag: vr-qc-nextclade-load
+    index: qc-nextclade-load
+    title: Differences and missing bases per consensus genome (Nextclade)
+    description: Substitutions and deleted bases above, bases it could not read below (log axis); a tall green bar or a red dot is worth a look.
+    layout: {x: 0, y: 5, w: 8, h: 6}
   - component_type: figure
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
@@ -1163,7 +1171,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:chart-line
-      icon_color: blue
+      icon_color: teal.4
       caption: per window, with its distribution
       decimals: 0
     section: Coverage at a glance
@@ -1186,7 +1194,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:chart-timeline-variant
-      icon_color: orange
+      icon_color: teal.6
       caption: their depth, from no reads to just under 10x
       decimals: 0
     section: Coverage at a glance
@@ -1207,7 +1215,7 @@ tabs:
     threshold_direction: min
     display:
       icon_name: mdi:chart-areaspline
-      icon_color: teal
+      icon_color: teal.8
       caption: sample and amplicon pairs against 10x
       decimals: 0
     section: Coverage at a glance
@@ -1227,7 +1235,7 @@ tabs:
     secondary_layout: uniqueness
     display:
       icon_name: mdi:alert-outline
-      icon_color: red
+      icon_color: teal.9
       caption: and the one that drops out most often
       decimals: 0
     section: Coverage at a glance
@@ -1314,7 +1322,7 @@ tabs:
   # without touching the calls above it.
   - name: Matrix filter
     icon: mdi:relation-many-to-many
-    color: violet
+    color: grape
     description: Narrows the mutation matrix only
     collapsed: true
   grid_sections:
@@ -1329,7 +1337,7 @@ tabs:
   - name: Support
     icon: mdi:chart-bell-curve
     color: grape
-    description: Allele frequency and read depth behind each call
+    description: Allele frequency of the calls against the cut-off the consensus takes
   - name: Co-occurrence
     icon: mdi:relation-many-to-many
     color: grape
@@ -1456,7 +1464,7 @@ tabs:
     breakdown_col: FUNCLASS
     display:
       icon_name: mdi:dna
-      icon_color: grape
+      icon_color: grape.4
       caption: calls, by functional class
       decimals: 0
     section: Calls at a glance
@@ -1475,7 +1483,7 @@ tabs:
     secondary_layout: uniqueness
     display:
       icon_name: mdi:map-marker-outline
-      icon_color: orange
+      icon_color: grape.6
       caption: and the one most samples share
       decimals: 0
     section: Calls at a glance
@@ -1497,7 +1505,7 @@ tabs:
     threshold_direction: min
     display:
       icon_name: mdi:percent-outline
-      icon_color: pink
+      icon_color: grape.8
       caption: calls against the 0.75 consensus cut-off
       decimals: 2
     section: Calls at a glance
@@ -1517,7 +1525,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:layers-outline
-      icon_color: teal
+      icon_color: grape.9
       caption: median per call, with its spread
       decimals: 0
     section: Calls at a glance
@@ -1568,29 +1576,7 @@ tabs:
     index: var-af-histogram
     title: Allele frequency of the calls
     description: Fixed calls pile up near 1; sub-consensus calls sit left of the line.
-    layout: {x: 0, y: 0, w: 4, h: 4}
-  - component_type: figure
-    workflow_tag: viralrecon
-    data_collection_tag: variants_long
-    use: ivar/variants_long
-    visu_type: scatter
-    mode: code
-    code_content: |-
-      # Reference against alternate depth per call: by functional class, or by
-      # Analysis mode's groups when it has some. custom_data carries the sample
-      # the selection reads.
-      d = df.filter(pl.col('REF_DP').is_not_null() & pl.col('ALT_DP').is_not_null())
-      kw = depictio_group_kwargs or {'color': 'FUNCLASS', 'color_discrete_map': depictio_category_colors.get('FUNCLASS') or {}}
-      fig = px.scatter(d.to_pandas(), x='REF_DP', y='ALT_DP', hover_name='mutation_label', custom_data=['sample'], opacity=0.8, labels={'REF_DP': 'Reference depth', 'ALT_DP': 'Alternate depth', 'FUNCLASS': 'Functional class'}, **kw)
-      fig.update_layout(margin=dict(t=10))
-    selection_enabled: true
-    selection_column: sample
-    section: Support
-    tag: vr-var-read-support
-    index: var-read-support
-    title: Read support per call
-    description: A high frequency with few reads behind it sits near the origin.
-    layout: {x: 4, y: 0, w: 4, h: 4}
+    layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: viralrecon
     data_collection_tag: oncoplot_canonical
@@ -1691,23 +1677,35 @@ tabs:
     icon: mdi:counter
     color: red
     description: Lineages, clades and the quality of the consensus they were called from
+  - name: Consensus quality
+    icon: mdi:shield-check-outline
+    color: red
+    description: Nextclade's QC score of each consensus genome, the worst first
+  - name: Typing per sample
+    icon: mdi:table
+    color: red
+    description: Each sample's Pangolin call, with a record of the one ticked
+  # Collapsed: the next three compare samples with each other, so on a run of a
+  # few samples they draw a handful of one-to-one ribbons and points.
   - name: Classification flow
     icon: mdi:relation-many-to-many
-    color: red
-    description: Each sample from its QC verdict to its lineage and its clade
+    color: gray
+    description: Each sample from its QC verdict to its lineage and its clade; reads best with several samples
+    collapsed: true
   - name: Variant profiles
     icon: mdi:set-merge
-    color: red
-    description: Samples placed by the mutations they share, and the mutations each lineage holds
+    color: gray
+    description: Samples placed by the mutations they share, and the mutations each lineage holds; reads best with several samples
+    collapsed: true
   - name: Calls per lineage and clade
     icon: mdi:chart-bar
     color: gray
     description: Samples per Pangolin lineage and per Nextclade clade
     collapsed: true
-  - name: Typing tables
+  - name: Nextclade table
     icon: mdi:table
     color: gray
-    description: The Pangolin and Nextclade reports, with a record of the picked call
+    description: The Nextclade report, every column
     collapsed: true
   components:
   # The tab's intro: the method, with its link, and how to read the tab.
@@ -1715,9 +1713,11 @@ tabs:
     order: 1
     body: >
       [Pangolin](https://github.com/cov-lineages/pangolin) names each consensus genome's
-      lineage and [Nextclade](https://clades.nextstrain.org) its clade, each with a QC verdict.
-      The Sankey follows every sample from its verdict to both calls; the PCA and the UpSet group
-      samples by the mutations they share.
+      lineage and [Nextclade](https://clades.nextstrain.org) its clade, each with a QC verdict: the
+      bars rate the consensus, the table lists each sample's call. Collapsed below, the Sankey
+      follows every sample from its verdict to both calls, and the PCA and the UpSet group samples
+      by the mutations they share. Those three compare samples with each other, so they say little
+      on a run of a few.
     tag: vr-lin-intro
     index: lin-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1793,7 +1793,7 @@ tabs:
     breakdown_col: lineage
     display:
       icon_name: mdi:virus
-      icon_color: red
+      icon_color: red.4
       caption: samples per assigned lineage
       decimals: 0
     section: Typing at a glance
@@ -1813,7 +1813,7 @@ tabs:
     breakdown_col: clade
     display:
       icon_name: mdi:family-tree
-      icon_color: grape
+      icon_color: red.6
       caption: samples per clade
       decimals: 0
     section: Typing at a glance
@@ -1836,14 +1836,14 @@ tabs:
     threshold_warn: 100
     display:
       icon_name: mdi:shield-check-outline
-      icon_color: green
-      caption: genomes against Nextclade's good and bad marks
+      icon_color: red.8
+      caption: genomes against 30 (good) and 100 (bad)
       decimals: 1
     section: Typing at a glance
     tag: vr-lin-card-qc-score
     index: lin-card-qc-score
     title: Nextclade QC score
-    description: Median overall QC score of the consensus genomes; lower is better.
+    description: Median overall QC score of the consensus genomes, Nextclade's own scale. Under 30 is good, 30 to 100 mediocre, 100 or more bad, and a clean genome scores 0.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: viralrecon
@@ -1856,7 +1856,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:alert-outline
-      icon_color: orange
+      icon_color: red.9
       caption: median per genome, with its spread
       decimals: 0
     section: Typing at a glance
@@ -1865,6 +1865,35 @@ tabs:
     title: Missing bases
     description: Median count of N bases in the consensus genomes, the bases a call cannot read.
     layout: {x: 6, y: 0, w: 2, h: 2}
+  # The consensus quality the lineages were called from: Nextclade's overall QC
+  # score per genome, sorted, with its own good and bad marks. A figure that reads
+  # the same on three samples and on a hundred, unlike a Sankey or a PCA.
+  - component_type: figure
+    workflow_tag: viralrecon
+    data_collection_tag: nextclade_results
+    use: nextclade/report
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Nextclade's overall QC score of each consensus genome, the worst first (at most 40) on a log
+      # axis. A clean genome scores 0, drawn as a sliver. The dashed lines are Nextclade's own marks:
+      # under 30 is good, 100 or more is bad.
+      colors = depictio_category_colors.get('qc_overallStatus') or {}
+      d = df.filter(pl.col('qc_overallScore').is_not_null()).sort(['qc_overallScore', 'sample'], descending=[True, False]).head(40).with_columns(pl.col('qc_overallScore').clip(lower_bound=0.1).alias('score'))
+      fig = px.bar(d.to_pandas(), x='sample', y='score', color='qc_overallStatus', color_discrete_map=colors, category_orders={'sample': d.get_column('sample').to_list(), 'qc_overallStatus': ['good', 'mediocre', 'bad']}, custom_data=['sample'], hover_data={'qc_overallScore': ':.1f', 'score': False}, log_y=True, labels={'sample': '', 'score': 'Nextclade QC score', 'qc_overallScore': 'QC score', 'qc_overallStatus': ''})
+      fig.add_hline(y=30, line_dash='dash', line_width=1, opacity=0.6)
+      fig.add_hline(y=100, line_dash='dash', line_width=1, opacity=0.6)
+      fig.update_yaxes(range=[np.log10(0.05), np.log10(max(d['score'].max() or 100, 100) * 2)], dtick=1)
+      fig.update_xaxes(tickangle=-45, tickfont={'size': 9})
+      fig.update_layout(margin=dict(t=10), legend=dict(orientation='h', y=-0.35))
+    selection_enabled: true
+    selection_column: sample
+    section: Consensus quality
+    tag: vr-lin-qc-score
+    index: lin-qc-score
+    title: Nextclade QC score per consensus genome
+    description: Worst first, on a log axis; under the lower dashed line (30) is good, above the upper (100) is bad.
+    layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: viralrecon
     data_collection_tag: sankey_canonical
@@ -1981,7 +2010,7 @@ tabs:
     use: pangolin/report
     row_selection_enabled: true
     row_selection_column: sample
-    section: Typing tables
+    section: Typing per sample
     tag: vr-lin-pangolin-table
     index: lin-pangolin-table
     title: Pangolin lineage calls
@@ -2012,7 +2041,7 @@ tabs:
         scorpio_conflict: Scorpio conflict
         scorpio_notes: Scorpio notes
         pangolin_version: Pangolin version
-    section: Typing tables
+    section: Typing per sample
     tag: vr-lin-pangolin-record
     index: lin-pangolin-record
     title: Lineage record
@@ -2024,8 +2053,8 @@ tabs:
     use: nextclade/report
     row_selection_enabled: true
     row_selection_column: sample
-    section: Typing tables
+    section: Nextclade table
     tag: vr-lin-nextclade-table
     index: lin-nextclade-table
     title: Nextclade clade calls
-    layout: {x: 0, y: 6, w: 8, h: 6}
+    layout: {x: 0, y: 0, w: 8, h: 6}

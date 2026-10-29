@@ -315,3 +315,31 @@ class TestSigning:
     )
     def test_missing_or_malformed_parts(self, uid, exp, sig):
         assert not signing.verify("track", DC_ID, "k", "data", uid, exp, sig)
+
+
+class TestHttpsRetry:
+    """A remote host closing a pooled connection costs one retry, not a 500."""
+
+    def test_a_dropped_connection_is_retried_once(self):
+        import httpx
+
+        calls = []
+
+        def flaky():
+            calls.append(1)
+            if len(calls) == 1:
+                raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
+            return "ok"
+
+        assert remote_read._https_call(flaky) == "ok"
+        assert len(calls) == 2
+
+    def test_a_second_drop_is_a_502(self):
+        import httpx
+
+        def down():
+            raise httpx.ConnectError("refused")
+
+        with pytest.raises(RemoteReadError) as info:
+            remote_read._https_call(down)
+        assert info.value.status == 502

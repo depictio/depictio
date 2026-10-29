@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { JBrowseTrackRow } from '../../api';
-import { trackLegend } from './trackLegend';
+import { legendRamp, trackLegend } from './trackLegend';
 
 const row = (track_id: string, over: Partial<JBrowseTrackRow> = {}): JBrowseTrackRow => ({
   track_id,
@@ -50,5 +50,31 @@ describe('trackLegend', () => {
 
   it('is empty when no open track wears a colour', () => {
     expect(trackLegend(rows, ['genes', 'gone'], colourOf)).toEqual([]);
+  });
+});
+
+describe('legendRamp', () => {
+  const rows = [
+    row('a', { group: 'early' }),
+    row('b', { group: 'late' }),
+    row('c', { group: 'mid' }),
+    row('genes', { source: 'annotation' }),
+  ];
+  const scale = new Map([
+    ['early', '#000001'],
+    ['mid', '#000002'],
+    ['late', '#000003'],
+  ]);
+
+  it('spans the extreme open values, in scale order', () => {
+    const ramp = legendRamp(rows, ['b', 'genes', 'a', 'c'], scale, 'blues');
+    expect(ramp).toMatchObject({ from: 'early', to: 'late', values: ['early', 'mid', 'late'] });
+    expect(ramp?.stops).toHaveLength(7);
+  });
+
+  it('follows what is open, and is absent for a single value', () => {
+    expect(legendRamp(rows, ['a', 'c'], scale, 'blues')).toMatchObject({ from: 'early', to: 'mid' });
+    expect(legendRamp(rows, ['a'], scale, 'blues')).toBeNull();
+    expect(legendRamp(rows, ['genes'], scale, 'blues')).toBeNull();
   });
 });

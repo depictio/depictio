@@ -68,6 +68,8 @@ main_dashboard:
     scope:
       region: '#1c7ed6'
       genome: '#868e96'
+    # The browser colours a sample's tracks by it and the depth lanes wear the same colour.
+    sample_id: auto
   # Persistent: drawn in every tab's filter panel, picks kept across tabs.
   # Bound to the sample hub, which links to every per-sample collection.
   filter_sections:
@@ -169,11 +171,12 @@ main_dashboard:
     surface: card
     values:
       samples: {dc: samples, column: sample_id, aggregation: nunique, format: integer}
+      patients: {dc: samples, column: patient, aggregation: nunique, format: integer}
       callsets: {dc: bcftools_stats_summary, column: sample, aggregation: count, format: integer}
       callers: {dc: bcftools_stats_summary, column: caller, aggregation: nunique, format: integer}
     body: |
       ### The run
-      - ![](icon:mdi:test-tube) **Samples** {{samples}}
+      - ![](icon:mdi:test-tube) **Samples** {{samples}} from {{patients}} patients
       - ![](icon:mdi:layers-triple-outline) **Callsets** {{callsets}} from {{callers}} callers
       - ![](icon:mdi:map-marker-outline) **Genome** {{param:genome}}
       - ![](icon:mdi:content-cut) **Aligner** {{param:aligner}}
@@ -331,9 +334,7 @@ main_dashboard:
       depth: {dc: mosdepth_summary, column: mean_depth, aggregation: median, filter_expr: "(col('scope') == 'region') & (col('chrom') == 'total')",
         format: 'decimals:1'}
       tstv: {dc: bcftools_stats_tstv, column: ts_tv, aggregation: median, filter_expr: "col('ts_tv') > 0", format: 'decimals:2'}
-      top_caller: {dc: vcf_variants, column: caller, aggregation: top, filter_expr: "col('is_pass') == True"}
-      caller_share: {dc: vcf_variants, column: caller, aggregation: top_share, filter_expr: "col('is_pass') == True",
-        format: percent}
+      shared: {dc: snpeff_variant_upset, column: sample_shared_pct, aggregation: median, format: 'decimals:0'}
       n_high: {dc: snpeff_ann_variants, column: variant_key, aggregation: count, filter_expr: "col('impact') == 'HIGH'",
         format: integer}
       n_hgenes: {dc: snpeff_ann_variants, column: gene, aggregation: nunique, filter_expr: "(col('impact') == 'HIGH') & (col('gene') != '')",
@@ -341,7 +342,7 @@ main_dashboard:
     body: |
       - **{{depth}}x** median depth over the intervals – one value per sample [Coverage](tab:Coverage)
       - **{{tstv}}** median Ts/Tv of the callsets with SNPs – transitions over transversions [Quality](tab:Call quality)
-      - **{{caller_share}}** of the PASS calls come from {{top_caller}} – the caller that keeps most [Concordance](tab:Caller concordance)
+      - **{{shared}}%** of a sample's PASS calls are made by two callers or more – agreement is not truth [Concordance](tab:Caller concordance)
       - **{{n_high}}** HIGH-impact calls on {{n_hgenes}} genes – SnpEff's most severe class [Consequences](tab:Consequences)
     section: Findings
     tag: sk-ov-findings
@@ -371,8 +372,8 @@ main_dashboard:
   - component_type: highlight
     section: Findings
     source_tab: Caller concordance
-    source_component: cc-vaf-density
-    caption: Calls binned on depth and allele fraction; a clean diploid callset forms ridges at 0.5 and 1.
+    source_component: cc-vaf-dist
+    caption: Share of each caller's calls per allele fraction; a clean diploid callset peaks near 0.5 (heterozygous) and near 1 (homozygous alternate).
     tag: sk-ov-hl-vaf
     index: ov-hl-vaf
     layout: {x: 0, y: 7, w: 4, h: 5}
@@ -463,7 +464,7 @@ main_dashboard:
     tag: sk-sample-sheet
     index: sample-sheet
     title: Sample sheet
-    description: One row per sample, with its patient, sex, status and the callers run on it.
+    description: One row per sample, with its patient, sex, status and the callers run on it. A sex of NA means the samplesheet did not state it; the Coverage tab infers it from the sex chromosomes.
     layout: {x: 0, y: 0, w: 8, h: 6}
 tabs:
 # ============================================================================
@@ -485,23 +486,18 @@ tabs:
     description: Reads kept, mapping rate, duplication and coverage, per sample
   - name: Read quality
     icon: mdi:chart-bell-curve
-    color: gray
+    color: orange
     description: FastQC counts, base quality and GC content of the raw libraries
     collapsed: true
   - name: Alignment details
     icon: mdi:chart-bar
-    color: gray
+    color: orange
     description: Base-quality recalibration fit and insert sizes
-    collapsed: true
-  - name: Variant-call panels
-    icon: mdi:check-decagram
-    color: gray
-    description: bcftools and VCFtools summaries, every caller pooled
     collapsed: true
   - name: Annotation panels
     icon: mdi:dna
-    color: gray
-    description: SnpEff and VEP summaries of the annotated calls
+    color: orange
+    description: Where the annotated calls fall, and VEP's own summaries
     collapsed: true
   components:
   - component_type: text
@@ -510,7 +506,8 @@ tabs:
       [MultiQC](https://multiqc.info) gathers the per-sample reports of FastQC, fastp, Samtools,
       GATK, mosdepth, bcftools, VCFtools, SnpEff and VEP. Read whether every sample kept its
       reads, mapped well and reached a usable depth before reading any call. A library carries
-      a lane and a read suffix, so a sample can appear once per read.
+      a lane and a read suffix, so a sample can appear once per read; the per-caller summaries
+      of the calls are on the Variant yield, Call quality and Consequences tabs.
     tag: sk-mqc-intro
     index: mqc-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -607,57 +604,12 @@ tabs:
   - component_type: multiqc
     workflow_tag: sarek
     data_collection_tag: multiqc_data
-    use: multiqc/bcftools
-    selected_module: bcftools
-    selected_plot: Variant Substitution Types
-    section: Variant-call panels
-    tag: sk-mqc-bcftools-subs
-    layout: {x: 0, y: 0, w: 4, h: 4}
-  - component_type: multiqc
-    workflow_tag: sarek
-    data_collection_tag: multiqc_data
-    use: multiqc/bcftools
-    selected_module: bcftools
-    selected_plot: Indel Distribution
-    section: Variant-call panels
-    tag: sk-mqc-bcftools-indels
-    layout: {x: 4, y: 0, w: 4, h: 4}
-  - component_type: multiqc
-    workflow_tag: sarek
-    data_collection_tag: multiqc_data
-    use: multiqc/bcftools
-    selected_module: bcftools
-    selected_plot: Variant depths
-    section: Variant-call panels
-    tag: sk-mqc-bcftools-depths
-    layout: {x: 0, y: 4, w: 4, h: 4}
-  - component_type: multiqc
-    workflow_tag: sarek
-    data_collection_tag: multiqc_data
-    use: multiqc/vcftools
-    selected_module: vcftools
-    selected_plot: TsTv by Count
-    section: Variant-call panels
-    tag: sk-mqc-vcftools-count
-    layout: {x: 4, y: 4, w: 4, h: 4}
-  - component_type: multiqc
-    workflow_tag: sarek
-    data_collection_tag: multiqc_data
-    use: multiqc/snpeff
-    selected_module: snpeff
-    selected_plot: Variant Effects by Impact
-    section: Annotation panels
-    tag: sk-mqc-snpeff-impact
-    layout: {x: 0, y: 0, w: 4, h: 4}
-  - component_type: multiqc
-    workflow_tag: sarek
-    data_collection_tag: multiqc_data
     use: multiqc/snpeff
     selected_module: snpeff
     selected_plot: Variants by Genomic Region
     section: Annotation panels
     tag: sk-mqc-snpeff-region
-    layout: {x: 4, y: 0, w: 4, h: 4}
+    layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: sarek
     data_collection_tag: multiqc_data
@@ -666,7 +618,7 @@ tabs:
     selected_plot: General Statistics
     section: Annotation panels
     tag: sk-mqc-vep-general
-    layout: {x: 0, y: 4, w: 4, h: 4}
+    layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: multiqc
     workflow_tag: sarek
     data_collection_tag: multiqc_data
@@ -675,7 +627,7 @@ tabs:
     selected_plot: SIFT summary
     section: Annotation panels
     tag: sk-mqc-vep-sift
-    layout: {x: 4, y: 4, w: 4, h: 4}
+    layout: {x: 0, y: 4, w: 4, h: 4}
 # The coverage recipes keep one mosdepth pass per sample (the recalibrated one
 # when present): the duplicate-marked and recalibrated passes carry the same
 # depth. mosdepth_summary reports each contig twice on a run with intervals:
@@ -710,8 +662,8 @@ tabs:
     description: Mean depth per contig and sample; the bar picks the intervals or whole contigs
   - name: Sex check
     icon: mdi:chart-scatter-plot
-    color: grape
-    description: X against Y depth per sample, and the sex the ratio implies
+    color: blue
+    description: X against Y depth per sample, with the XX and XY zones shaded
   - name: Coverage tables
     icon: mdi:table
     color: gray
@@ -754,7 +706,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:layers-outline
-      icon_color: blue
+      icon_color: blue.4
       caption: median per sample, with its spread
       decimals: 1
     section: Coverage at a glance
@@ -775,7 +727,7 @@ tabs:
     threshold_warn: 10
     display:
       icon_name: mdi:target
-      icon_color: teal
+      icon_color: blue.6
       caption: median per interval, floor 20x
       decimals: 1
     section: Coverage at a glance
@@ -795,7 +747,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:chart-histogram
-      icon_color: cyan
+      icon_color: blue.8
       caption: median per contig, with its distribution
       decimals: 1
     section: Coverage at a glance
@@ -816,7 +768,7 @@ tabs:
     top_n_count: 4
     display:
       icon_name: mdi:alert-outline
-      icon_color: orange
+      icon_color: blue.9
       caption: intervals under 20x, the contigs with most
       decimals: 0
     section: Coverage at a glance
@@ -859,23 +811,36 @@ tabs:
     title: Mean depth per contig
     description: One bar per sample and contig. The total is mosdepth's own roll-up over the scope.
     layout: {x: 0, y: 0, w: 8, h: 4}
-  - component_type: advanced_viz
+  - component_type: figure
     workflow_tag: sarek
     data_collection_tag: mosdepth_xy_sex_check
-    use: mosdepth/sex_check_scatter
-    config:
-      x_title: chromosome X mean depth
-      y_title: chromosome Y mean depth
-      reference_line: diagonal
-      marker_size: 14
-      selection_enabled: true
-      selection_column: sample
+    visu_type: scatter
+    mode: code
+    code_content: |-
+      # X against Y depth per library. The wedges are the two karyotypes the X/Y depth ratio separates at 10; a library near the line between them is worth a second look.
+      colors = depictio_category_colors.get('inferred_sex') or {}
+      d = df.filter(pl.col('x_coverage').is_not_null() & pl.col('y_coverage').is_not_null())
+      top_x = max(1.0, float(d.get_column('x_coverage').max() or 0) * 1.15)
+      top_y = max(top_x / 10 * 2.0, float(d.get_column('y_coverage').max() or 0) * 1.15)
+      d = d.with_columns(pl.when((d.height <= 12) | pl.col('xy_ratio').is_null() | ((pl.col('xy_ratio') > 5) & (pl.col('xy_ratio') < 20))).then(pl.col('sample')).otherwise(pl.lit('')).alias('flag'))
+      fig = px.scatter(d.to_pandas(), x='x_coverage', y='y_coverage', color='inferred_sex', color_discrete_map=colors, text='flag', custom_data=['sample'], hover_data={'sample': True, 'xy_ratio': ':.1f', 'flag': False}, category_orders={'inferred_sex': ['XX', 'XY']}, labels={'x_coverage': 'Chromosome X mean depth', 'y_coverage': 'Chromosome Y mean depth', 'inferred_sex': 'Inferred sex'})
+      fig.update_traces(marker=dict(size=14, line=dict(width=1, color='white')), textposition='top center')
+      fig.add_shape(type='path', path='M 0,0 L ' + str(top_x) + ',0 L ' + str(top_x) + ',' + str(top_x / 10) + ' Z', fillcolor='rgba(194,37,92,0.10)', line_width=0, layer='below')
+      fig.add_shape(type='path', path='M 0,0 L ' + str(top_x) + ',' + str(top_x / 10) + ' L ' + str(top_x) + ',' + str(top_y) + ' L 0,' + str(top_y) + ' Z', fillcolor='rgba(28,126,214,0.10)', line_width=0, layer='below')
+      fig.add_annotation(x=top_x * 0.97, y=top_x / 10 * 0.35, text='XX zone', showarrow=False, xanchor='right', font=dict(size=11))
+      fig.add_annotation(x=top_x * 0.97, y=top_y * 0.9, text='XY zone', showarrow=False, xanchor='right', font=dict(size=11))
+      fig.update_xaxes(range=[0, top_x])
+      fig.update_yaxes(range=[0, top_y])
+      fig.update_layout(margin=dict(t=10), legend_title_text='', legend=dict(orientation='h', y=-0.2))
+    selection_enabled: true
+    selection_column: sample
     section: Sex check
-    tag: sk-cov-av-sex
+    tag: sk-cov-fig-sex
     index: cov-sex-scatter
     title: X depth against Y depth
-    description: One point per sample. Two X and no Y push a point far from the diagonal; the label is a heuristic, not a genotype.
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: One point per library, coloured by the sex its X/Y depth ratio implies. The pink wedge is
+      the XX zone (ratio of 10 or more), the blue one the XY zone; the label is a heuristic, not a genotype.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: sarek
     data_collection_tag: mosdepth_summary
@@ -995,7 +960,7 @@ tabs:
     top_n_count: 3
     display:
       icon_name: mdi:chart-bar
-      icon_color: violet
+      icon_color: violet.4
       caption: median per callset, the callers that call most
       decimals: 0
     section: Yield at a glance
@@ -1015,7 +980,7 @@ tabs:
     breakdown_col: caller
     display:
       icon_name: mdi:dna
-      icon_color: blue
+      icon_color: violet.6
       caption: SNPs over all callsets, by caller
       decimals: 0
     section: Yield at a glance
@@ -1035,7 +1000,7 @@ tabs:
     breakdown_col: caller
     display:
       icon_name: mdi:arrow-expand-horizontal
-      icon_color: grape
+      icon_color: violet.8
       caption: indels over all callsets, by caller
       decimals: 0
     section: Yield at a glance
@@ -1051,11 +1016,12 @@ tabs:
     aggregation: sum
     column_name: n_multiallelic_sites
     column_type: int64
-    secondary_layout: histogram
+    secondary_layout: composition
+    breakdown_col: caller
     display:
       icon_name: mdi:call-split
-      icon_color: pink
-      caption: sum, with the per-callset distribution
+      icon_color: violet.9
+      caption: sites over all callsets, by caller
       decimals: 0
     section: Yield at a glance
     tag: sk-vy-card-multi
@@ -1068,35 +1034,19 @@ tabs:
     data_collection_tag: bcftools_stats_summary
     use: bcftools/stats_summary
     visu_type: bar
-    dict_kwargs:
-      x: caller
-      y: n_snps
-      color: sample
-      barmode: group
-      labels: {caller: '', n_snps: SNPs, sample: Sample}
+    mode: code
+    code_content: |-
+      # SNPs and indels per caller, stacked, one panel per sample; the colours are the variant-type colours of every other tab.
+      d = df.select('sample', 'caller', pl.col('n_snps').alias('SNP'), pl.col('n_indels').alias('INDEL')).unpivot(index=['sample', 'caller'], on=['SNP', 'INDEL'], variable_name='variant_type', value_name='records')
+      fig = px.bar(d.to_pandas(), x='caller', y='records', color='variant_type', facet_col='sample', facet_col_wrap=4, barmode='stack', color_discrete_map=depictio_category_colors.get('variant_type') or {}, labels={'caller': '', 'records': 'Records', 'variant_type': 'Variant type', 'sample': 'Sample'})
+      fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))
+      fig.update_layout(margin=dict(t=30))
     section: Calls per caller
-    tag: sk-vy-fig-snps
-    index: vy-snps-per-caller
-    title: SNPs per caller
-    description: One bar per sample.
-    layout: {x: 0, y: 0, w: 4, h: 4}
-  - component_type: figure
-    workflow_tag: sarek
-    data_collection_tag: bcftools_stats_summary
-    use: bcftools/stats_summary
-    visu_type: bar
-    dict_kwargs:
-      x: caller
-      y: n_indels
-      color: sample
-      barmode: group
-      labels: {caller: '', n_indels: Indels, sample: Sample}
-    section: Calls per caller
-    tag: sk-vy-fig-indels
-    index: vy-indels-per-caller
-    title: Indels per caller
-    description: One bar per sample. MNPs are counted apart from indels.
-    layout: {x: 4, y: 0, w: 4, h: 4}
+    tag: sk-vy-fig-calls
+    index: vy-calls-per-caller
+    title: SNPs and indels per caller
+    description: One panel per sample, one stacked bar per caller. MNPs are counted apart from indels.
+    layout: {x: 0, y: 0, w: 8, h: 4}
   # One bar per caller, its callsets' shares averaged: the legend lists the
   # callers, not every sample and caller pair.
   - component_type: figure
@@ -1112,7 +1062,7 @@ tabs:
     section: Mutation spectra
     tag: sk-vy-fig-sbs
     index: vy-spectrum-sbs
-    title: Substitution spectrum
+    title: Substitution spectrum per caller
     description: Six strand-folded classes, one bar per caller averaged over the samples in view; C>T and T>C are transitions.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: figure
@@ -1128,7 +1078,7 @@ tabs:
     section: Mutation spectra
     tag: sk-vy-fig-indel-length
     index: vy-spectrum-indel
-    title: Indel length spectrum
+    title: Indel length spectrum per caller
     description: Indels within 20 bp, one bar per caller averaged over the samples in view; deletions left of zero.
     layout: {x: 0, y: 4, w: 8, h: 4}
   - component_type: figure
@@ -1196,7 +1146,7 @@ tabs:
   - name: Callset QC profile
     icon: mdi:chart-timeline-variant
     color: cyan
-    description: Six QC numbers per callset on one plot, one line per callset
+    description: Five QC numbers per callset on one plot, one line per callset
   - name: FILTER partitions
     icon: mdi:filter-variant
     color: cyan
@@ -1204,7 +1154,7 @@ tabs:
   - name: Quality calibration
     icon: mdi:chart-line
     color: cyan
-    description: Ts/Tv of the calls above a rising quality floor
+    description: Ts/Tv of each callset against the 1.8 floor, then of the calls above a rising quality floor
   - name: Quality tables
     icon: mdi:table
     color: gray
@@ -1278,14 +1228,14 @@ tabs:
     threshold_warn: 1.5
     display:
       icon_name: mdi:scale-balance
-      icon_color: cyan
+      icon_color: cyan.4
       caption: median per callset, floor 1.8
       decimals: 2
     section: Quality at a glance
     tag: sk-cq-card-tstv
     index: cq-card-tstv
     title: Ts/Tv
-    description: Median transition to transversion ratio of the callsets with SNPs.
+    description: Median transition to transversion ratio of the callsets with SNPs. A germline SNP callset sits near 2 on a genome and higher on an exome; under 1.8 the callset is mixing in noise calls, under 1.5 it is mostly noise.
     layout: {x: 0, y: 0, w: 2, h: 2}
   # pass_pct is per callset, so the median is of callsets; the filter leaves
   # out a callset with no records.
@@ -1300,14 +1250,14 @@ tabs:
     coverage_max: 100
     display:
       icon_name: mdi:check-circle-outline
-      icon_color: green
+      icon_color: cyan.6
       caption: median share of each callset's calls
       decimals: 1
     section: Quality at a glance
     tag: sk-cq-card-pass
     index: cq-card-pass
     title: PASS calls (%)
-    description: Median share of a callset's calls the caller kept (FILTER PASS or unset).
+    description: Median share of a callset's calls the caller kept (FILTER PASS or unset). A caller that writes no FILTER values reads 100 here, which says nothing about its quality.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: sarek
@@ -1319,14 +1269,14 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:arrow-left-right
-      icon_color: violet
+      icon_color: cyan.8
       caption: median per callset, with its spread
       decimals: 2
     section: Quality at a glance
     tag: sk-cq-card-hethom
     index: cq-card-hethom
     title: Het to hom ratio
-    description: Heterozygous over homozygous-alternate PASS calls of a callset.
+    description: Heterozygous over homozygous-alternate PASS calls of a callset. A human germline callset reads about 1.5 to 2; far above hints at contamination or mapping noise, far below at a loss of heterozygosity or a small, inbred cohort.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: sarek
@@ -1337,14 +1287,14 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:chart-bell-curve
-      icon_color: orange
+      icon_color: cyan.9
       caption: median per callset, with its distribution
       decimals: 3
     section: Quality at a glance
     tag: sk-cq-card-hetvaf
     index: cq-card-hetvaf
     title: Het allele fraction
-    description: Median allele fraction of a callset's heterozygous PASS calls; 0.5 is the diploid expectation.
+    description: Median allele fraction of a callset's heterozygous PASS calls; 0.5 is the diploid expectation. A value well under 0.5 means the alternate allele is under-sampled, which reference bias or contamination produce.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: sarek
@@ -1355,8 +1305,9 @@ tabs:
       sample_col: callset
       group_col: caller
       scale: minmax
-      # Six axes every SNP callset fills; the record count lives on Variant yield.
-      metric_cols: [ts_tv, snp_fraction, pass_pct, het_hom_ratio, median_dp, median_het_vaf]
+      # Five axes every SNP callset fills; the record count lives on Variant yield, and the
+      # het allele fraction sits within 0.01 of 0.5 on every callset, so it has its card instead.
+      metric_cols: [ts_tv, snp_fraction, pass_pct, het_hom_ratio, median_dp]
     section: Callset QC profile
     tag: sk-cq-av-profile
     index: cq-qc-profile
@@ -1394,9 +1345,27 @@ tabs:
     section: Quality calibration
     tag: sk-cq-av-qual
     index: cq-quality-sweep
-    title: Ts/Tv against the quality floor
-    description: One curve per sample and caller; callers use different quality scales, so read the shape.
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    title: Ts/Tv against the quality floor, per caller
+    description: One curve per sample and caller; callers use different quality scales, so read the shape. A curve that climbs toward 2 as the floor rises shows the low-quality calls were the noisy ones.
+    layout: {x: 4, y: 0, w: 4, h: 6}
+  - component_type: figure
+    workflow_tag: sarek
+    data_collection_tag: callset_qc
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Ts/Tv of every callset with SNPs, lowest first, in its caller's colour; the dashed line is the 1.8 floor and the dotted one the 1.5 warning level of the Ts/Tv card.
+      d = df.filter(pl.col('ts_tv') > 0).sort('ts_tv', descending=True)
+      fig = px.bar(d.to_pandas(), x='ts_tv', y='callset', color='caller', orientation='h', color_discrete_map=depictio_category_colors.get('caller') or {}, category_orders={'callset': d['callset'].to_list()}, labels={'ts_tv': 'Ts/Tv', 'callset': '', 'caller': 'Caller'})
+      fig.add_vline(x=1.8, line_dash='dash', line_color='gray', annotation_text='floor 1.8', annotation_position='top')
+      fig.add_vline(x=1.5, line_dash='dot', line_color='gray')
+      fig.update_layout(margin=dict(t=30), legend=dict(orientation='h', y=-0.15))
+    section: Quality calibration
+    tag: sk-cq-fig-tstv
+    index: cq-tstv-bars
+    title: Ts/Tv per callset
+    description: One bar per sample and caller, in the caller's colour. A bar left of the dashed line is under the 1.8 floor.
+    layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: table
     workflow_tag: sarek
     data_collection_tag: vcftools_filter_summary
@@ -1445,15 +1414,11 @@ tabs:
   - name: Shared calls
     icon: mdi:set-merge
     color: teal
-    description: PASS calls matching on locus and allele, set by set
-  - name: Depth sensitivity
-    icon: mdi:chart-scatter-plot
+    description: PASS calls matching on locus and allele, caller by caller
+  - name: Allele fraction
+    icon: mdi:chart-bell-curve
     color: teal
-    description: Allele fraction against depth, and its distribution per caller
-  - name: Calls along the genome
-    icon: mdi:chart-line
-    color: teal
-    description: Each call at its position, height the distance to the previous call
+    description: Where each caller's calls sit between 0 and 1
   - name: Call table
     icon: mdi:table
     color: gray
@@ -1463,8 +1428,8 @@ tabs:
   - component_type: text
     order: 1
     body: >
-      One row per call, read from the VCFs: which callsets claim the same locus and allele, and
-      how the calls sit on depth and allele fraction. Agreement between callers is not truth;
+      One row per call, read from the VCFs: which callers claim the same locus and allele, and
+      where their calls sit on allele fraction. Agreement between callers is not truth;
       for a benchmark against a truth set, run
       [nf-core/variantbenchmarking](https://nf-co.re/variantbenchmarking).
     tag: sk-cc-intro
@@ -1539,7 +1504,7 @@ tabs:
     top_n_count: 3
     display:
       icon_name: mdi:counter
-      icon_color: teal
+      icon_color: teal.4
       caption: calls, the callers that call most
       decimals: 0
     section: Concordance at a glance
@@ -1559,7 +1524,7 @@ tabs:
     breakdown_col: variant_type
     display:
       icon_name: mdi:chart-donut
-      icon_color: green
+      icon_color: teal.6
       caption: calls, by variant type
       decimals: 0
     section: Concordance at a glance
@@ -1579,7 +1544,7 @@ tabs:
     secondary_layout: box_plot
     display:
       icon_name: mdi:chart-box-outline
-      icon_color: cyan
+      icon_color: teal.8
       caption: median per call, with its spread
       decimals: 2
     section: Concordance at a glance
@@ -1598,7 +1563,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:layers-outline
-      icon_color: indigo
+      icon_color: teal.9
       caption: median per call, with its distribution
       decimals: 0
     section: Concordance at a glance
@@ -1615,66 +1580,33 @@ tabs:
       sort_by: cardinality
       sort_order: descending
       min_size: 50
+      set_columns_pattern: '^(?!n_callers$|sample_shared_pct$)'
     section: Shared calls
     tag: sk-cc-av-variant-upset
     index: cc-variant-upset
-    title: PASS calls shared between callsets
-    description: One set per caller and sample; the pickers on this tab do not narrow it.
+    title: PASS calls shared between callers
+    description: One set per caller; an element is a PASS call in one sample, so a bar is the calls that exact combination of callers made. Pick a sample in the left panel to read one library; the pickers on this tab do not narrow it.
     layout: {x: 0, y: 0, w: 8, h: 5}
-  - component_type: advanced_viz
-    workflow_tag: sarek
-    data_collection_tag: vcf_variants
-    use: vcf/vaf_against_depth
-    config:
-      x_title: read depth at the call
-      y_title: variant allele fraction
-      log_x: true
-      marker_size: 4
-      reference_line: horizontal
-      reference_value: 0.5
-      density: true
-      density_bins: 40
-    section: Depth sensitivity
-    tag: sk-cc-av-vaf
-    index: cc-vaf-density
-    title: Allele fraction against depth
-    description: Calls binned on depth (log axis) and allele fraction; the line marks 0.5.
-    layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: figure
     workflow_tag: sarek
     data_collection_tag: vcf_variants
     use: vcf/variants
-    visu_type: histogram
-    # Homozygous calls pile at 1: a log count axis keeps the heterozygous hump readable.
-    dict_kwargs:
-      x: vaf
-      color: caller
-      nbins: 50
-      log_y: true
-      labels: {vaf: Variant allele fraction, caller: Caller, count: Calls}
-    section: Depth sensitivity
+    visu_type: line
+    mode: code
+    code_content: |-
+      # Share of each caller's calls in 40 allele-fraction bins, so callers with different numbers of calls compare. The shaded bands are the two expected peaks: heterozygous near 0.5, homozygous alternate near 1.
+      d = df.filter(pl.col('vaf').is_not_null()).with_columns((pl.col('vaf').clip(0, 1) * 40).floor().clip(0, 39).cast(pl.Int64).alias('b'))
+      g = d.group_by(['caller', 'b']).len().with_columns((pl.col('len') / pl.col('len').sum().over('caller') * 100).alias('share')).with_columns(((pl.col('b') + 0.5) / 40).alias('vaf_bin')).sort(['caller', 'b'])
+      fig = px.line(g.to_pandas(), x='vaf_bin', y='share', color='caller', color_discrete_map=depictio_category_colors.get('caller') or {}, labels={'vaf_bin': 'Variant allele fraction', 'share': "Share of the caller's calls (%)", 'caller': 'Caller'})
+      fig.add_vrect(x0=0.35, x1=0.65, fillcolor='gray', opacity=0.12, line_width=0, layer='below', annotation_text='heterozygous', annotation_position='top left')
+      fig.add_vrect(x0=0.9, x1=1.0, fillcolor='gray', opacity=0.12, line_width=0, layer='below', annotation_text='homozygous alt', annotation_position='top left')
+      fig.update_layout(margin=dict(t=10))
+    section: Allele fraction
     tag: sk-cc-fig-vaf
-    index: cc-vaf-histogram
+    index: cc-vaf-dist
     title: Allele fraction per caller
-    description: Log count axis; homozygous calls pile at 1, and a heavy left tail is a caller keeping low-fraction calls.
-    layout: {x: 4, y: 0, w: 4, h: 6}
-  - component_type: advanced_viz
-    workflow_tag: sarek
-    data_collection_tag: vcf_variants
-    use: vcf/variant_rainfall
-    config:
-      mode: rainfall
-      rainfall_class_col: variant_type
-      marker_size_below: 3
-      top_n_labels: 0
-      selection_enabled: true
-      selection_column: variant_key
-    section: Calls along the genome
-    tag: sk-cc-av-rainfall
-    index: cc-rainfall
-    title: Rainfall, distance to the previous call
-    description: Clusters of short distances on a germline callset are gene-dense intervals, not kataegis. Click a call, then Open in genome browser to read the reads under it.
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: Share of each caller's calls per allele-fraction bin. A germline callset peaks near 0.5 (heterozygous) and near 1 (homozygous alternate); a heterozygous peak off 0.5 or a shoulder of low fractions flags contamination or noise calls.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
     workflow_tag: sarek
     data_collection_tag: vcf_variants
@@ -1723,11 +1655,11 @@ tabs:
     color: red
     filter_bar: true
     visible_filters: 2
-    description: Impact recomputed on the calls; pick a call in the scatter to read it
+    description: Impact recomputed on the calls, by caller and by allele fraction
   - name: Consequence tables
     icon: mdi:table
     color: gray
-    description: SnpEff's summary sections and the annotated calls
+    description: SnpEff's summary sections, and the annotated calls with the record of a picked one
     collapsed: true
   components:
   - component_type: text
@@ -1736,7 +1668,7 @@ tabs:
       [SnpEff](https://pcingola.github.io/SnpEff/) gives each call its most severe effect on a
       transcript, in four impact classes from HIGH to MODIFIER. The first section reads
       SnpEff's own summary; the next recomputes the impact on the calls, with a bar for the
-      impact class and consequence, and a call picked in the scatter opens beside it.
+      impact class and consequence; a call picked in the table opens its record.
     tag: sk-cs-intro
     index: cs-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1780,7 +1712,7 @@ tabs:
     breakdown_col: impact
     display:
       icon_name: mdi:chart-donut
-      icon_color: red
+      icon_color: red.4
       caption: calls, by impact class
       decimals: 0
     section: Consequences at a glance
@@ -1801,7 +1733,7 @@ tabs:
     breakdown_col: variant_type
     display:
       icon_name: mdi:alert-outline
-      icon_color: orange
+      icon_color: red.6
       caption: HIGH-impact calls, by variant type
       decimals: 0
     section: Consequences at a glance
@@ -1823,7 +1755,7 @@ tabs:
     top_n_count: 3
     display:
       icon_name: mdi:dna
-      icon_color: grape
+      icon_color: red.8
       caption: genes, the callers that hit most
       decimals: 0
     section: Consequences at a glance
@@ -1843,7 +1775,7 @@ tabs:
     secondary_layout: histogram
     display:
       icon_name: mdi:layers-outline
-      icon_color: cyan
+      icon_color: red.9
       caption: median per HIGH call, with its distribution
       decimals: 0
     section: Consequences at a glance
@@ -1921,47 +1853,28 @@ tabs:
     index: cs-impact-by-caller
     title: Impact classes per caller
     description: HIGH, MODERATE and LOW calls as shares of each caller's coding calls.
-    layout: {x: 0, y: 0, w: 8, h: 4}
-  - component_type: advanced_viz
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: figure
     workflow_tag: sarek
     data_collection_tag: snpeff_ann_variants
-    use: snpeff/annotated_vaf_against_depth
-    config:
-      x_title: read depth at the call
-      y_title: variant allele fraction
-      log_x: true
-      marker_size: 4
-      selection_enabled: true
-      selection_column: variant_key
-      legend_pos: bottom
+    visu_type: box
+    mode: code
+    code_content: |-
+      # Allele fraction of every annotated call per impact class: the box spans the middle half, the whiskers the 5th to the 95th percentile. Summarised before plotting, so the browser gets four rows.
+      order = ['HIGH', 'MODERATE', 'LOW', 'MODIFIER']
+      colors = depictio_category_colors.get('impact') or {}
+      stats = df.filter(pl.col('impact').is_in(order) & pl.col('vaf').is_not_null()).group_by('impact').agg(pl.col('vaf').quantile(0.05).alias('lo'), pl.col('vaf').quantile(0.25).alias('q1'), pl.col('vaf').median().alias('med'), pl.col('vaf').quantile(0.75).alias('q3'), pl.col('vaf').quantile(0.95).alias('hi'), pl.len().alias('n'))
+      rows = {r['impact']: r for r in stats.iter_rows(named=True)}
+      boxes = [go.Box(x=[k], q1=[rows[k]['q1']], median=[rows[k]['med']], q3=[rows[k]['q3']], lowerfence=[rows[k]['lo']], upperfence=[rows[k]['hi']], name=k, marker_color=colors.get(k), customdata=[[rows[k]['n']]], hovertemplate='%{x}<br>median %{median:.2f}<br>%{customdata[0]:,} calls<extra></extra>', showlegend=False) for k in order if k in rows]
+      fig = go.Figure(boxes)
+      fig.update_layout(margin=dict(t=10), yaxis_title='Variant allele fraction', xaxis_title='')
     section: Impact per call
-    tag: sk-cs-av-impact
-    index: cs-impact-scatter
-    title: Allele fraction against depth, by impact
-    description: One point per annotated call. Click or lasso a point to read it beside.
-    layout: {x: 0, y: 4, w: 5, h: 6}
-  - component_type: advanced_viz
-    workflow_tag: sarek
-    data_collection_tag: snpeff_ann_variants
-    viz_kind: record_card
-    config:
-      viz_kind: record_card
-      linked_component: sk-cs-av-impact
-      id_col: variant_key
-      title_col: gene
-      selection_source: any
-      sections:
-        Locus: [chrom, pos, ref, alt, variant_type]
-        Call: [sample, caller, filter_status, gt, qual, dp, vaf]
-        Consequence: [gene, gene_id, impact, consequence, hgvs_p, aa_pos]
-      link_templates:
-        gene_id: "https://www.ensembl.org/id/{value}"
-    section: Impact per call
-    tag: sk-cs-av-record
-    index: cs-variant-record
-    title: Variant record
-    description: The picked call, one card per callset that made it. Empty until a call is picked.
-    layout: {x: 5, y: 4, w: 3, h: 6}
+    tag: sk-cs-fig-impact-vaf
+    index: cs-impact-vaf
+    title: Allele fraction per impact class
+    description: Heterozygous calls band near 0.5 and homozygous ones near 1; a class that sits lower than
+      the rest carries more doubtful calls.
+    layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: table
     workflow_tag: sarek
     data_collection_tag: snpeff_csv_stats
@@ -1984,8 +1897,30 @@ tabs:
     tag: sk-cs-table-calls
     index: cs-table-calls
     title: Annotated variant calls
-    description: Locus, allele, depth, allele fraction, gene, impact, consequence and protein change.
-    layout: {x: 0, y: 6, w: 8, h: 6}
+    description: Locus, allele, depth, allele fraction, gene, impact, consequence and protein change. Select a row to open its record.
+    layout: {x: 0, y: 6, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: sarek
+    data_collection_tag: snpeff_ann_variants
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: sk-cs-table-calls
+      id_col: variant_key
+      title_col: gene
+      selection_source: table_selection
+      sections:
+        Locus: [chrom, pos, ref, alt, variant_type]
+        Call: [sample, caller, filter_status, gt, qual, dp, vaf]
+        Consequence: [gene, gene_id, impact, consequence, hgvs_p, aa_pos]
+      link_templates:
+        gene_id: "https://www.ensembl.org/id/{value}"
+    section: Consequence tables
+    tag: sk-cs-av-record
+    index: cs-variant-record
+    title: Variant record
+    description: The picked call, one card per callset that made it. Empty until a call is picked.
+    layout: {x: 5, y: 6, w: 3, h: 6}
 # The gene-level view, from SnpEff's per-gene table and from the protein
 # coordinates in the annotated VCF.
 - title: Genes
@@ -2027,7 +1962,7 @@ tabs:
       [SnpEff](https://pcingola.github.io/SnpEff/) counts, for each gene and callset, the
       variants of each impact class. A high burden is often a long, repetitive or poorly
       mappable gene before it is a biological signal. The [Protein](tab:Protein) tab places
-      the coding variants on the protein and its predicted structure.
+      the coding variants along the protein.
     tag: sk-gn-intro
     index: gn-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -2072,7 +2007,7 @@ tabs:
     top_n_count: 3
     display:
       icon_name: mdi:dna
-      icon_color: pink
+      icon_color: pink.4
       caption: genes, the commonest biotypes
       decimals: 0
     section: Genes at a glance
@@ -2092,7 +2027,7 @@ tabs:
     breakdown_col: caller
     display:
       icon_name: mdi:alert-outline
-      icon_color: red
+      icon_color: pink.6
       caption: HIGH-impact variants on genes, by caller
       decimals: 0
     section: Genes at a glance
@@ -2105,22 +2040,22 @@ tabs:
     workflow_tag: sarek
     data_collection_tag: snpeff_genes
     use: snpeff/genes
-    aggregation: max
+    aggregation: median
     column_name: n_coding
     column_type: int64
-    secondary_layout: top_n
-    breakdown_col: caller
-    top_n_count: 3
+    filter_expr: "col('n_coding') > 0"
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     display:
       icon_name: mdi:chart-histogram
-      icon_color: violet
-      caption: coding variants on one gene, the callers' maxima
+      icon_color: pink.8
+      caption: median per gene and callset, with its spread
       decimals: 0
     section: Genes at a glance
     tag: sk-gn-card-coding
     index: gn-card-coding
-    title: Top gene burden
-    description: The most HIGH or MODERATE variants one gene carries in a callset, by caller. A long, repetitive gene tops it before a biological one does.
+    title: Coding variants per gene
+    description: Median number of HIGH or MODERATE variants on a gene that carries any, per callset. The box shows the spread; a long, repetitive gene sits at its top before a biological one does.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: sarek
@@ -2133,7 +2068,7 @@ tabs:
     breakdown_col: impact
     display:
       icon_name: mdi:chart-timeline-variant
-      icon_color: indigo
+      icon_color: pink.9
       caption: variants on a protein, by impact class
       decimals: 0
     section: Genes at a glance
@@ -2183,37 +2118,37 @@ tabs:
     description: Gene, biotype and the HIGH, MODERATE, LOW and MODIFIER counts per gene and callset.
     layout: {x: 0, y: 0, w: 8, h: 6}
 # The coding variants on the protein: a scatter of the lollipop's genes picks
-# one, its predicted structure loads beside it and the lollipop narrows to it.
-# The structure comes from the server's structure resolver, off by default
-# (DEPICTIO_STRUCTURE_RESOLVER_ENABLED): the tile then says so and the rest of
-# the tab works. A click on a stem or a residue selects `gene` and `aa_pos`,
-# which the lollipop, the structure and the table follow.
+# one and the lollipop, the main figure of the tab, narrows to it. A click on a
+# stem or a residue selects `gene` and `aa_pos`, which the table follows. The 3D
+# structure tile is not on this tab: it needs the server's structure resolver
+# (off by default), and a tab that opens on a message for most deployments is
+# not a tab to lead with.
 - title: Protein
   subtitle: Where on the protein do the coding variants sit?
   tab_group: Annotation
   tab_order: 8
   tab_icon: mdi:molecule
-  tab_icon_color: violet
+  tab_icon_color: grape
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
   filter_sections:
   - name: Protein filters
     icon: mdi:filter-variant
-    color: violet
+    color: grape
     description: The callers and impact classes of the coding variants
   grid_sections:
   - name: Protein at a glance
     icon: mdi:counter
-    color: violet
+    color: grape
     description: Genes on the protein view, their calls and how far the callers agree
-  - name: Genes and structure
+  - name: Genes on the protein view
     icon: mdi:chart-scatter-plot
-    color: violet
-    description: Pick a gene on the scatter; its predicted structure loads beside it
+    color: grape
+    description: Pick a gene on the scatter; the lollipop below narrows to it
   - name: Along the protein
     icon: mdi:chart-timeline-variant
-    color: violet
+    color: grape
     description: Coding variants at their amino-acid position, one lane per gene
   - name: Coding variant table
     icon: mdi:table
@@ -2225,10 +2160,9 @@ tabs:
     order: 1
     body: >
       Only variants whose protein change [SnpEff](https://pcingola.github.io/SnpEff/) could compute
-      appear here. Click a gene on the scatter to load its [AlphaFold DB](https://alphafold.ebi.ac.uk/)
-      structure, then a stem or a residue to mark it in the structure, the lollipop and the table below.
-      The structure is fetched only when an administrator sets `DEPICTIO_STRUCTURE_RESOLVER_ENABLED`,
-      and a protein past about 2,700 residues has no model of its own.
+      appear here. Click a gene on the scatter to narrow the lollipop to it, then a stem to mark that
+      variant in the table below. A gene low on the scatter carries variants one caller sees, often a
+      mapping artefact.
     tag: sk-pr-intro
     index: pr-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -2273,7 +2207,7 @@ tabs:
     breakdown_col: worst_impact
     display:
       icon_name: mdi:dna
-      icon_color: pink
+      icon_color: grape.4
       caption: genes, by their worst impact class
       decimals: 0
     section: Protein at a glance
@@ -2293,7 +2227,7 @@ tabs:
     breakdown_col: caller
     display:
       icon_name: mdi:map-marker-radius-outline
-      icon_color: cyan
+      icon_color: grape.6
       caption: coding calls, by caller
       decimals: 0
     section: Protein at a glance
@@ -2313,7 +2247,7 @@ tabs:
     coverage_max: 100
     display:
       icon_name: mdi:set-merge
-      icon_color: indigo
+      icon_color: grape.8
       caption: median share of a gene's calls two callers made
       decimals: 0
     section: Protein at a glance
@@ -2333,7 +2267,7 @@ tabs:
     column_type: float64
     display:
       icon_name: mdi:chart-bell-curve
-      icon_color: orange
+      icon_color: grape.9
       caption: median, with its spread
       decimals: 2
     section: Protein at a glance
@@ -2355,37 +2289,19 @@ tabs:
       log_x: true
       x_title: Distinct coding variants
       y_title: Calls made by two or more callers (%)
-      top_n_labels: 0
+      marker_size: 10
+      # The six genes the callers agree on least carry the names.
+      top_n_labels: 6
+      label_order_col: shared_pct
       legend_pos: bottom
       selection_enabled: true
       selection_column: gene
-    section: Genes and structure
+    section: Genes on the protein view
     tag: sk-pr-av-genes
     index: pr-genes
     title: Genes with coding variants
-    description: One point per gene of the lollipop, coloured by its worst impact class, over the whole run. A gene low on the axis carries variants one caller sees, often a mapping artefact.
-    layout: {x: 0, y: 0, w: 4, h: 6}
-  - component_type: advanced_viz
-    workflow_tag: sarek
-    data_collection_tag: snpeff_protein_lollipop
-    use: snpeff/coding_variant_structure
-    config:
-      structure_source: resolve
-      gene_col: gene
-      entity_col: gene
-      color_mode: plddt
-      representations: [cartoon]
-      show_variants: true
-      highlight_site: true
-      layout: structure_text
-      selection_enabled: true
-      follow_selection: true
-    section: Genes and structure
-    tag: sk-pr-av-structure
-    index: pr-structure
-    title: Coding variants on the predicted structure
-    description: The picked gene's structure over its written sequence, fetched by gene symbol from AlphaFold DB when the server's structure resolver is on. A sphere marks each variant by impact class and the picked residue turns red. A protein past about 2,700 residues has no model of its own, so the tile says none was found or draws a shorter isoform and lists the variants it cannot place.
-    layout: {x: 4, y: 0, w: 4, h: 6}
+    description: One point per gene of the lollipop, coloured by its worst impact class, over the whole run; the six genes the callers agree on least are named. A gene low on the axis carries variants one caller sees, often a mapping artefact.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: sarek
     data_collection_tag: snpeff_protein_lollipop
@@ -2399,7 +2315,7 @@ tabs:
     tag: sk-pr-av-lolli
     index: pr-lollipop
     title: Coding variants along the protein
-    description: One lane per gene, one stem per variant, head colour by impact class and head size by allele fraction. Past four genes the tile switches to a picker.
+    description: One lane per gene, one stem per variant, head colour by impact class and head size by allele fraction. Narrowed to the gene picked on the scatter; past four genes the tile switches to a picker.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: sarek
@@ -2419,8 +2335,7 @@ tabs:
 # links in template.yaml still carry the region onto the per-target depth card
 # and the calls. The cards opt in to the region with
 # follow_region_filter, so they recount what the region holds. This is the only
-# browser of the template: the Caller concordance rainfall reaches it through
-# the Open in genome browser action.
+# browser of the template.
 - title: Locus
   subtitle: What do depth and calls show at one region?
   tab_group: Annotation
@@ -2443,7 +2358,7 @@ tabs:
   - name: Depth and reads on one axis
     icon: mdi:dna
     color: indigo
-    description: The lanes drive the browser below. A brush or a locus on the lanes moves it, and its view comes back on the lanes as a dashed band, in the colour of the two tiles' link tags.
+    description: Brush the lanes and the browser follows; its window shows as a band on the lanes
     # One screen: the depth lanes and the browser they drive, as on atacseq.
     display: linked
   components:
@@ -2451,7 +2366,7 @@ tabs:
     order: 1
     body: >
       The navigator draws the mean depth of every sample in 1 Mb windows over the genome;
-      the genome browser below shows every caller's calls and the reads at its region. Type a
+      the genome browser below shows every caller's calls, in the caller's colour of the other tabs, and the reads at its region. Type a
       locus or a gene in its header, or brush its axis, and the browser and cards follow.
     tag: sk-loc-intro
     index: loc-intro
@@ -2496,7 +2411,7 @@ tabs:
     follow_region_filter: true
     display:
       icon_name: mdi:counter
-      icon_color: teal
+      icon_color: indigo.4
       caption: calls in the region, by caller
       decimals: 0
     section: Region at a glance
@@ -2518,7 +2433,7 @@ tabs:
     follow_region_filter: true
     display:
       icon_name: mdi:target
-      icon_color: blue
+      icon_color: indigo.6
       caption: median per interval, floor 20x
       decimals: 1
     section: Region at a glance
@@ -2539,7 +2454,7 @@ tabs:
     follow_region_filter: true
     display:
       icon_name: mdi:chart-box-outline
-      icon_color: cyan
+      icon_color: indigo.8
       caption: median per call, with its spread
       decimals: 2
     section: Region at a glance
@@ -2559,7 +2474,7 @@ tabs:
     follow_region_filter: true
     display:
       icon_name: mdi:layers-outline
-      icon_color: grape
+      icon_color: indigo.9
       caption: median per call, with its distribution
       decimals: 0
     section: Region at a glance
@@ -2588,7 +2503,9 @@ tabs:
       assembly: '{GENOME}'
       score_title: mean depth
       opacity: 0.8
-      default_region: "chr1:1,000,000-2,000,000"
+      # No default_region: a contig-wide region would filter the whole contig, the
+      # browser would follow it and every track would ask to be force-loaded. The
+      # browser opens on its locus_from top call instead.
       region_filter_enabled: true
     section: Depth and reads on one axis
     tag: sk-loc-av-genome
@@ -2603,8 +2520,13 @@ tabs:
     workflow_tag: sarek
     data_collection_tag: tracks
     section: Depth and reads on one axis
-    initial_tracks: 3
-    max_tracks: 8
+    # Opens on every small-variant caller of the first sample and its reads, with
+    # dbSNP and ClinVar under them, so a call is read against what it is known as.
+    initial_tracks: 5
+    max_tracks: 12
+    ucsc_tracks: [dbSnp155Common, clinvarMain]
+    follow_window: true
+    color_by: caller
     show_overview: false
     # The lanes above already say where the browser is: its locus bar only
     # costs height here, and the tile's menu brings it back.
@@ -2622,11 +2544,8 @@ tabs:
       sort_by: qual
       descending: true
       label_column: variant_key
-    # Calls take the colour of their snpEff impact, as in the figures.
-    variant_color_by:
-      column: impact
     tag: sk-loc-browser
     index: loc-reads-browser
     title: Genome browser
-    description: Each caller's VCF and the CRAM of the samples in scope, framed on the region of the navigator above.
+    description: Each caller's VCF in its colour, the reads of the samples in scope, and the dbSNP and ClinVar tracks, framed on the region of the navigator above.
     layout: {x: 0, y: 4, w: 8, h: 8}

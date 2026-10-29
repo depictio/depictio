@@ -12,12 +12,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import polars as pl
+import pytest
 import yaml
 
 from depictio.api.v1.services.jbrowse.assemblies import get_assembly_preset
 from depictio.cli.cli.utils.templates import substitute_template_variables
 from depictio.models.models.data_collections_types.genomic_tracks import DCGenomicTracksConfig
-from depictio.recipes import execute_recipe, load_recipe
+from depictio.recipes import execute_recipe, load_recipe, validate_schema
 
 TEMPLATE = Path(__file__).parents[2] / "projects/nf-core/riboseq/2.0.0/template.yaml"
 
@@ -114,14 +115,80 @@ def test_read_in_place_keeps_every_row(tmp_path: Path) -> None:
     assert df["track_id"].to_list()[-1] == "F2.alignments"
 
 
-def test_colours_follow_the_assay_and_the_reverse_strand_is_lighter(tmp_path: Path) -> None:
+def test_the_manifest_carries_no_colour_and_names_the_assay(tmp_path: Path) -> None:
+    # A colour column would win over the dashboard's colours; the tile colours by
+    # the design group instead.
     df = _run(tmp_path)
-    colour = dict(zip(df["track_id"].to_list(), df["color"].to_list(), strict=True))
-    assert colour["F1.coverage.forward"] == colour["F2.coverage.forward"]
-    assert colour["F1.coverage.forward"] != colour["R1.coverage"]
-    assert colour["F1.coverage.forward"] != colour["F1.coverage.reverse"]
-    assert all(c.startswith("rgb(") for c in colour.values())
+    assert "color" not in df.columns
     assert set(df["assay"].to_list()) == {"RNA-seq", "Ribo-seq"}
+
+
+_DESIGN_SHEET = (
+    "sample,fastq_1,fastq_2,strandedness,type,sample_description,treatment\n"
+    "R1,r1_1.fq.gz,r1_2.fq.gz,auto,rnaseq,rna_c1,control\n"
+    "R2,r2_1.fq.gz,r2_2.fq.gz,auto,rnaseq,rna_c2,control\n"
+    "R3,r3_1.fq.gz,r3_2.fq.gz,auto,rnaseq,rna_t1,treated\n"
+    "F1,f1_1.fq.gz,,auto,riboseq,ribo_c1,control\n"
+    "F2,f2_1.fq.gz,,auto,riboseq,ribo_c2,control\n"
+    "F3,f3_1.fq.gz,,auto,riboseq,ribo_t1,treated\n"
+)
+
+
+def test_the_group_column_is_named_by_group_col_and_opening_tracks_cover_the_design(
+    tmp_path: Path,
+) -> None:
+    df = _run(tmp_path, sheet=_DESIGN_SHEET, params={"group_col": "treatment"})
+    assert "treatment" in df.columns
+    by_sample = dict(zip(df["sample"].to_list(), df["treatment"].to_list(), strict=True))
+    assert by_sample == {
+        "R1": "control",
+        "R2": "control",
+        "R3": "treated",
+        "F1": "control",
+        "F2": "control",
+        "F3": "treated",
+    }
+    # One control and one treated library of each assay open first (coverage: one
+    # track for total mRNA, a forward / reverse pair for the footprints).
+    opening = df.head(6)
+    assert opening["sample"].to_list() == ["R1", "R3", "F1", "F1", "F3", "F3"]
+    assert set(opening["kind"].to_list()) == {"coverage"}
+    # The second control library comes after the representatives.
+    assert df["sample"].to_list().index("R2") > 5
+
+
+def test_the_group_comes_from_the_design_table_when_it_has_the_column(tmp_path: Path) -> None:
+    design = pl.DataFrame(
+        {
+            "sample": ["R1", "R2", "F1", "F2"],
+            "condition": ["a", "b", "a", "b"],
+            "sample_description": ["lib_r1", "lib_r2", "lib_f1", "lib_f2"],
+        }
+    )
+    df = _run(tmp_path, params={"group_col": "condition"}, extra_sources={"metadata": design})
+    assert dict(zip(df["sample"].to_list(), df["condition"].to_list(), strict=True)) == {
+        "R1": "a",
+        "R2": "b",
+        "F1": "a",
+        "F2": "b",
+    }
+    # The library's description names its tracks.
+    assert df.filter(pl.col("track_id") == "R1.coverage")["name"].item() == "lib_r1 coverage"
+
+
+def test_without_a_design_group_the_column_is_constant(tmp_path: Path) -> None:
+    df = _run(tmp_path, params={"group_col": "__no_group__"})
+    assert df["__no_group__"].unique().to_list() == ["All libraries"]
+    # A group column the run does not hold still gets its column, so color_by matches.
+    other = _run(tmp_path, params={"group_col": "missing"})
+    assert other["missing"].unique().to_list() == ["All libraries"]
+
+
+def test_track_names_use_the_description_of_the_sheet(tmp_path: Path) -> None:
+    df = _run(tmp_path, sheet=_DESIGN_SHEET, params={"group_col": "treatment"})
+    row = df.filter(pl.col("track_id") == "F1.psites.forward").row(0, named=True)
+    assert row["name"] == "ribo_c1 P-sites forward"
+    assert row["sample"] == "F1"
 
 
 def test_orf_overlap_carries_the_contig_and_a_span_to_frame() -> None:
@@ -169,6 +236,9 @@ def test_template_tracks_dc_validates_with_the_model() -> None:
     assert config.assembly == "hg38"
     assert get_assembly_preset("hg38") is not None
     assert set(config.display_defaults) == {"bedgraph", "bigwig", "bam"}
+    # The manifest colour would win over the dashboard's: the tile colours by the group.
+    assert config.color_column is None
+    assert tracks["config"]["transform"]["params"]["group_col"]
     assert (
         DCGenomicTracksConfig(
             **{**props, "remote_base_uri": "https://host/results"}
@@ -199,3 +269,91 @@ def test_template_wires_the_genome_variable_the_override_and_the_links() -> None
 
     tags = [dc["data_collection_tag"] for wf in raw["workflows"] for dc in wf["data_collections"]]
     assert "tracks" in tags
+
+
+def test_orf_overlap_ranks_new_orfs_both_callers_report_first() -> None:
+    def orfs(rows: list[tuple[str, str, int, str]]) -> pl.DataFrame:
+        return pl.DataFrame(
+            {
+                "sample": [r[3] for r in rows],
+                "orf_id": [r[0] for r in rows],
+                "gene_id": ["G"] * len(rows),
+                "gene_name": ["S"] * len(rows),
+                "gene_type": ["protein_coding"] * len(rows),
+                "orf_class": [r[1] for r in rows],
+                "aa_length": [r[2] for r in rows],
+            }
+        )
+
+    # annotated: both callers, longest protein; new_both: both callers; new_one: one caller
+    # in two libraries; new_short: both callers, shorter than new_both.
+    tish = orfs(
+        [
+            ("1:+:900", "Annotated CDS", 900, "l1"),
+            ("1:+:500", "Novel ORF", 100, "l1"),
+            ("1:+:600", "Novel ORF", 300, "l1"),
+            ("1:+:600", "Novel ORF", 300, "l2"),
+            ("1:+:700", "Novel ORF", 50, "l1"),
+        ]
+    )
+    code = orfs(
+        [
+            ("1:+:900", "Annotated CDS", 900, "l1"),
+            ("1:+:500", "Novel ORF", 100, "l1"),
+            ("1:+:700", "Novel ORF", 50, "l1"),
+        ]
+    )
+    module = load_recipe("nf-core/riboseq/orf_overlap.py")
+    out = module.transform({"ribotish": tish, "ribocode": code})
+    validate_schema(out, module.OUTPUT_SCHEMA, "orf_overlap", None)
+    ranked = out.sort("support_score", descending=True)["orf_id"].to_list()
+    assert ranked == ["1:+:500", "1:+:700", "1:+:600", "1:+:900"]
+    assert out["support_score"].dtype == pl.Int64
+    # A skipped caller leaves every ORF a one-caller ORF, still ranked.
+    only = module.transform({"ribotish": tish})
+    assert only.sort("support_score", descending=True)["orf_id"].to_list()[0] == "1:+:600"
+
+
+def test_library_summary_adds_the_group_and_the_description() -> None:
+    module = load_recipe("nf-core/riboseq/library_summary.py")
+    frames = pl.DataFrame(
+        {
+            "sample": ["F1.ribowaltz", "F1.ribowaltz", "F2.ribowaltz", "F2.ribowaltz"],
+            "region": ["CDS", "CDS", "CDS", "CDS"],
+            "frame": [0, 1, 0, 1],
+            "count": [70, 30, 40, 60],
+        }
+    )
+    regions = pl.DataFrame(
+        {
+            "sample": ["F1.ribowaltz", "F1.ribowaltz", "RNAs", "F2.ribowaltz", "F2.ribowaltz"],
+            "region": ["CDS", "3' UTR", "CDS", "CDS", "3' UTR"],
+            "count": [80.0, 20.0, 50.0, 60.0, 40.0],
+            "source_path": ["a", "a", "a", "b", "b"],
+        }
+    )
+    lengths = pl.DataFrame(
+        {
+            "sample": ["F1.ribowaltz", "F1.ribowaltz", "F2.ribowaltz", "F2.ribowaltz"],
+            "length": [27, 28, 27, 28],
+            "count": [10, 90, 50, 50],
+        }
+    )
+    sheet = pl.DataFrame(
+        {
+            "sample": ["F1", "F2"],
+            "treatment": ["control", "treated"],
+            "sample_description": ["ribo_c1", "ribo_t1"],
+        }
+    )
+    sources = {"frames": frames, "regions": regions, "lengths": lengths, "samplesheet": sheet}
+    out = module.transform({**sources, "metadata": None}, params={"group_col": "treatment"})
+    validate_schema(out, module.OUTPUT_SCHEMA, "library_summary", module.OPTIONAL_OUTPUT_SCHEMA)
+    rows = {r["sample"]: r for r in out.to_dicts()}
+    assert rows["F1"]["treatment"] == "control"
+    assert rows["F2"]["sample_description"] == "ribo_t1"
+    # The catalog's own columns are untouched.
+    assert rows["F1"]["frame0_cds_pct"] == pytest.approx(70.0)
+
+    plain = module.transform({**sources, "metadata": None}, params={"group_col": "__no_group__"})
+    assert "treatment" not in plain.columns and "__no_group__" not in plain.columns

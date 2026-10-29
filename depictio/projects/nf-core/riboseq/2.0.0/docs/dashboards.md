@@ -42,11 +42,12 @@ The landing page, at compact width with the filter panel collapsed:
 - **Findings**: result rows whose values are computed under the filters, each with a link
   to its tab: the median frame-0 share, the genes with a translational efficiency of 2 or
   more (pooled over the run, so no sample filter changes it), the genes anota2seq calls
-  translation and buffering for the contrasts in view, and the ORFs outside the annotated
-  CDS that both callers report. Below them, four figures in two rows, each linking its tab:
-  the start-codon metagene profile (its legend hidden) beside the efficiency plane, then the
-  fold-change plane beside the caller UpSet. The bar of this section filters by group and
-  contrast.
+  translation among those regulated in any mode for the contrasts in view, and the ORFs
+  outside the annotated CDS that both callers report. Below them, three figures from the
+  Translation and ORF tabs, each linking its tab: the efficiency plane beside the fold-change
+  plane, then the caller UpSet across the full width. The Ribo-seq QC result is the first
+  row and the frame-0 card; its metagene profiles stay on their own tab. The bar of this
+  section filters by group and contrast.
 - **How to read this dashboard**: one tile per tab, by group, each showing its question.
 
 The persistent `Sample filters` (group, library, assay) sit in the collapsed left panel and
@@ -62,37 +63,43 @@ that reads it (a box plot, a distribution, a gauge, a threshold, a ranking or a 
 at most three open sections; tables and details follow, collapsed.
 
 **MultiQC.** MultiQC panels only. Open: FastQC sequence counts and adapter content on the raw
-reads, counts and lengths after rRNA removal, the SortMeRNA rRNA share, the STAR summary and
-the Ribo-TISH frame and length panels. Collapsed: the Salmon fragment lengths, the raw
-quality histograms, lengths after trimming, the status checks after rRNA removal and the
-samtools mapping rate. The pinned sample filters narrow its panels, and its own read-layout filter
+reads, counts and lengths after rRNA removal, the SortMeRNA rRNA share and the STAR summary.
+Collapsed: the Salmon fragment lengths, the raw quality histograms, lengths after trimming,
+the status checks after rRNA removal, the samtools mapping rate and Ribo-TISH's frame and
+length panels (the Ribo-seq QC tab draws the same two readings from riboWaltz). The pinned sample filters narrow its panels, and its own read-layout filter
 reads the sample sheet, so both work on a run without a design table.
 
 **Ribo-seq QC.** Strip: P-sites assigned (a distribution over libraries), the median frame-0
 share in the CDS (a box plot), the lowest frame margin (a threshold at 20 points, warning
 under 10) and the median CDS share of P-sites (a gauge). Then the frame composition per
 library (opening on the CDS, a UTR one switch away), the start and stop metagene profiles
-side by side, and the phasing plane beside the footprint length profiles. Collapsed: the
+side by side, and the phasing bars beside the footprint length profiles. The phasing bars
+show each library's frame margin and CDS share, sorted, coloured by design group and named
+by the library's description; their dashed and dotted lines are the pass (20) and warning
+(10) levels of the Frame margin card. Collapsed: the
 region composition, the library table with its record card, and the region table with the
 share each region would get from its length alone. Filters: frame-0 and CDS-share ranges.
 
-**Sample space.** Strip: the libraries placed (a ring by the sheet's leading factor), the
-median genes detected per library (a distribution), and the median genes expressed and median
-TPM per library (box plots). Then the PCA on Salmon TPMs, coloured by the leading factor, any
-sheet column one switch away, without centroid marks; a lasso becomes an analysis group. Collapsed: the PCA table
+**Sample space.** Strip: the libraries placed (a plain count: the leading factor splits them
+evenly by design, so no ring), the median genes detected per library (a distribution), and
+the median genes expressed and median TPM per library (box plots). Then the PCA on Salmon
+TPMs, coloured by the leading factor, any sheet column one switch away, without centroid
+marks; the first component usually splits the two assays, so the design shows on the next
+ones. A lasso becomes an analysis group. Collapsed: the PCA table
 with the library record beside it. Filter: a genes-expressed range.
 
 **Translational efficiency.** Pooled over every library of the run, so it needs no
 contrast. Strip: the genes both assays reach (spread by the Ribo-seq libraries that see
-them), the median log2 efficiency (a box plot) and the median Ribo-seq and RNA-seq abundance
-(distributions). Then the plane of Ribo-seq against RNA-seq abundance, coloured by
+them), the median log2 efficiency (a box plot), and the genes with an efficiency of 2 or
+more and of 0.5 or less (each spread by its own efficiency). Then the plane of Ribo-seq against RNA-seq abundance, coloured by
 efficiency, with the diagonal of equal efficiency; it carries no point labels (the top-ranked
 genes are the most abundant, piled at the top of the diagonal), and hover names a gene. Collapsed: the per-gene table with the gene record beside it. Filters:
 an efficiency range and the gene.
 
 **Translational regulation.** Pick a contrast first. Strip: the regulated calls (a ring by
-mode), the translation calls (a share by direction), the median translation effect (a box
-plot) and the smallest translation adjusted p-value (a threshold at anota2seq's 0.15). Then
+mode), the translation calls (a share by direction), the median translation effect over the
+translation-regulated genes (a box plot; over every gene it would sit at 0) and the genes
+tested (their raw p-values as a distribution: a spike near 0 is signal). Then
 the fold-change plane (ribosome-bound against total mRNA, coloured by mode, the five
 strongest genes labelled), then the translation volcano (unlabelled, since its adjusted p
 plateaus and the top genes share one height) beside a volcano of any one of the four
@@ -102,19 +109,25 @@ gene record beside it, across the four analyses. Filters: contrast, mode, gene a
 **ORF discovery.** Strip: the pooled ORFs (a ring by class), the ORFs Ribo-TISH and the ORFs
 RiboCode report (each spread by the libraries reporting an ORF) and the median protein length
 (a box plot). All four read the pooled table, so a skipped caller keeps its card and reads 0.
-Then the ORF classes per library, one caller at a time (opening on the first caller the run
-has), and the UpSet of Ribo-TISH, RiboCode and the annotated CDS. Collapsed: the pooled
-table with the ORF record beside it and the genome browser under them (a picked ORF frames its
-approximate genomic span, from the contig and stop codon of its key and its protein length; the
-P-sites and coverage of the libraries in view open beneath), then each caller's calls per
-library. Filters: ORF class, gene and a protein-length range.
+Then the UpSet of Ribo-TISH, RiboCode and the annotated CDS. Then the ORF detail, open:
+the pooled table with the ORF record beside it and the genome browser under them (a picked ORF
+frames its approximate genomic span, from the contig and stop codon of its key and its protein
+length; unpicked, the browser opens on the best supported new ORF, ranked by `support_score`:
+new ORFs both callers report first, then new ORFs one caller reports, more libraries and a
+longer protein first inside a tier; its stepper walks the others). Six tracks open: the
+coverage of one library per assay and design group (one control and one treated library of
+each assay), coloured by the design group like every other tile, under the assembly's gene
+track. The P-sites and the reads are in the track menu: the P-site bedGraphs are read whole
+and the BAMs run to gigabytes. Collapsed: the ORF classes per
+library, one caller at a time (opening on the first caller the run has), and each caller's
+calls per library; the open rows were 26 against a budget of 20. Filters: ORF class, gene and a protein-length range.
 
 ## Routes and pruning
 
 | Route | What changes |
 |---|---|
 | No `METADATA_FILE` | No design table, group filters or group breakdowns; the assay and library filters remain. |
-| `--skip_ribowaltz` | No Ribo-seq QC tab, frame-0 card, frame-0 row or start-profile highlight; the Key figures keep three cards. |
+| `--skip_ribowaltz` | No Ribo-seq QC tab, frame-0 card or frame-0 row; the Key figures keep three cards. |
 | No `--contrasts` | No Translational regulation tab, contrast filter, regulation row or fold-change highlight. The Key figures keep four cards. |
 | `--skip_ribotish` or `--skip_ribocode` | That caller's per-library table goes and its card reads 0; the pooled ORF table, the UpSet and the tab stay. |
 | Both ORF callers skipped | No ORF discovery tab, ORFs card, ORF row or UpSet highlight; the Key figures keep three cards. |
@@ -128,17 +141,20 @@ is coloured `auto` (each value takes a colour-blind-safe colour at import, kept 
 re-import), and the known vocabularies are written out: the assay, the reading frame (frame 0
 red, the two background frames grey), the transcript region, the regulatory mode (not
 regulated grey), the direction and the six ORF classes. Stacked figures draw at most eight
-categories, so they share the palette with the cards and rings.
+categories, so they share the palette with the cards and rings. The genome browser colours
+its tracks by the design group (`color_by`), so a treatment has one hue on the phasing bars
+and on the tracks; the track manifest carries no colour of its own, which would win over
+the dashboard's.
 
 ## Cross-selection
 
-Tables select rows, and the phasing plane, the PCA and the efficiency and fold-change planes
+Tables select rows, and the phasing bars, the PCA and the efficiency and fold-change planes
 select points; a pick becomes a dashboard filter that narrows the other tiles of the same
 collection and, through the project links, the collections downstream of it. Row selection
 is on `sample` in the sample sheet and the riboWaltz tables, `sample_id` in the PCA table,
 `gene_id` in the regulation and efficiency tables and `orf_id` in the pooled ORF table. Each
-record card sits beside the table that drives it, in its collapsed section, and waits for a
-picked row or point.
+record card sits beside the table that drives it and waits for a picked row or point; the
+section is collapsed on every tab but ORF discovery, whose browser it holds.
 
 ## Controls
 
@@ -153,11 +169,12 @@ a narrower one. Nothing is set per tab or per tile.
 | samples | sample sheet | `recipes/samplesheet.py` |
 | metadata (optional) | `METADATA_FILE` | none (table scan) |
 | gene_counts, sample_pca | Salmon merged gene matrices | `salmon/*` via `use:` |
-| ribowaltz_* (6 DCs, optional) | `psites/ribowaltz/ribowaltz_qc/*.tsv` | `ribowaltz/*` |
+| ribowaltz_* (6 DCs, optional) | `psites/ribowaltz/ribowaltz_qc/*.tsv` | `ribowaltz/*`; the summary adds the design group and the library description through `recipes/library_summary.py` |
 | anota2seq_results, anota2seq_regulation (optional) | `translational_efficiency/anota2seq/*.anota2seq.results.tsv` | `anota2seq/*` |
 | translational_efficiency (optional) | `quantification/inframe_psite/gene_counts.tsv` and the sample sheet | `recipes/translational_efficiency.py` |
 | ribotish_orfs, ribocode_orfs (optional) | `orf_predictions/ribotish/*_pred.txt`, `orf_predictions/ribocode/*_collapsed.txt` | `ribotish/orfs.py`, `ribocode/orfs.py` |
-| orf_calls, orf_overlap (optional) | the two ORF DCs | `recipes/orf_calls.py`, `recipes/orf_overlap.py` |
+| orf_calls, orf_overlap (optional) | the two ORF DCs | `recipes/orf_calls.py`, `recipes/orf_overlap.py` (with the browser's `support_score`) |
+| tracks | the sample sheet, the design table and the track files | `recipes/tracks.py`: one row per file, the design group under its own name (`color_by`), no colour column; coverage, then P-sites, then BAMs, one library per assay and group first |
 
 ## Method notes
 

@@ -4,6 +4,7 @@
  * `color_by` value or the manifest's group), else by the samples wearing it.
  */
 import type { JBrowseTrackRow } from '../../api';
+import { sequentialRamp } from '../../categoryColors';
 
 export interface LegendEntry {
   color: string;
@@ -54,4 +55,42 @@ export function trackLegend(
     const more = names.length - MAX_NAMES;
     return { color, names, label: more > 0 ? `${shown} +${more}` : shown };
   });
+}
+
+/** A sequential scale's legend: a gradient between its first and last value. */
+export interface LegendRamp {
+  /** Colours of the gradient, first value to last. */
+  stops: string[];
+  /** Label of the gradient's start and end (the extreme values open). */
+  from: string;
+  to: string;
+  /** Every value the open tracks carry, in scale order, for the tooltip. */
+  values: string[];
+}
+
+/**
+ * The ramp legend of a `color_scale`, over the values the open tracks carry
+ * (their `group`, the scale column's value). `scale` is the condition → colour
+ * map in scale order (`conditionSequentialMap`). Null when fewer than two
+ * values are open: a lone value is a swatch, which `trackLegend` already
+ * draws.
+ */
+export function legendRamp(
+  rows: readonly JBrowseTrackRow[],
+  openIds: readonly string[],
+  scale: ReadonlyMap<string, string>,
+  scheme: string | null | undefined,
+): LegendRamp | null {
+  const byId = new Map(rows.map((r) => [r.track_id, r]));
+  const used = new Set(
+    openIds.map((id) => byId.get(id)?.group).filter((g): g is string => !!g && scale.has(g)),
+  );
+  const values = [...scale.keys()].filter((v) => used.has(v));
+  if (values.length < 2) return null;
+  return {
+    stops: sequentialRamp(scheme, 7),
+    from: values[0],
+    to: values[values.length - 1],
+    values,
+  };
 }

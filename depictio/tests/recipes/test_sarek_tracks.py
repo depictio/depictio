@@ -56,18 +56,19 @@ def test_missing_files_are_dropped(tmp_path: Path) -> None:
         "preprocessing/recalibrated/S1/S1.recal.cram",
     )
     df = _run(tmp_path)
-    assert df["track_id"].to_list() == ["S1.deepvariant", "S2.haplotypecaller", "S1.alignments"]
-    assert df["sample_id"].to_list() == ["S1", "S2", "S1"]
-    assert df["format"].to_list() == ["vcf", "vcf", "cram"]
+    # The first sample's caller and its reads lead, then the rest.
+    assert df["track_id"].to_list() == ["S1.deepvariant", "S1.alignments", "S2.haplotypecaller"]
+    assert df["sample_id"].to_list() == ["S1", "S1", "S2"]
+    assert df["format"].to_list() == ["vcf", "cram", "vcf"]
     assert df["uri"].to_list() == [
         "variant_calling/deepvariant/S1/S1.deepvariant.vcf.gz",
-        "variant_calling/haplotypecaller/S2/S2.haplotypecaller.vcf.gz",
         "preprocessing/recalibrated/S1/S1.recal.cram",
+        "variant_calling/haplotypecaller/S2/S2.haplotypecaller.vcf.gz",
     ]
     assert df["order"].to_list() == [1, 2, 3]
-    assert df["caller"].to_list() == ["deepvariant", "haplotypecaller", None]
-    assert df["category"].to_list() == ["Small variants", "Small variants", "Alignments"]
-    assert df["name"].to_list() == ["S1 deepvariant", "S2 haplotypecaller", "S1 reads"]
+    assert df["caller"].to_list() == ["deepvariant", None, "haplotypecaller"]
+    assert df["category"].to_list() == ["Small variants", "Alignments", "Small variants"]
+    assert df["name"].to_list() == ["S1 deepvariant", "S1 reads", "S2 haplotypecaller"]
 
 
 def test_a_file_without_its_index_is_left_out_of_an_upload(tmp_path: Path) -> None:
@@ -98,9 +99,9 @@ def test_a_run_holding_none_lists_every_expected_file(tmp_path: Path) -> None:
     assert df["uri"].to_list() == [
         "annotation/haplotypecaller/S1/S1.haplotypecaller.filtered_snpEff.ann.vcf.gz",
         "annotation/deepvariant/S1/S1.deepvariant_snpEff.ann.vcf.gz",
+        "preprocessing/recalibrated/S1/S1.recal.cram",
         "annotation/manta/S1/S1.manta.diploid_sv_snpEff.ann.vcf.gz",
         "annotation/haplotypecaller/S2/S2.haplotypecaller.filtered_snpEff.ann.vcf.gz",
-        "preprocessing/recalibrated/S1/S1.recal.cram",
         "preprocessing/recalibrated/S2/S2.recal.cram",
     ]
 
@@ -112,14 +113,29 @@ def test_read_in_place_keeps_every_row(tmp_path: Path) -> None:
     assert df["track_id"].to_list()[-1] == "S2.alignments"
 
 
-def test_light_variants_come_first_and_the_crams_last(tmp_path: Path) -> None:
+def test_the_opening_tracks_are_every_caller_of_the_first_sample_and_its_reads(
+    tmp_path: Path,
+) -> None:
     df = _run(tmp_path)
-    assert df["format"].to_list() == ["vcf"] * 4 + ["cram"] * 2
-    # Per sample: small-variant callers (haplotypecaller before deepvariant),
-    # then the structural-variant caller.
-    assert df["caller"].to_list()[:3] == ["haplotypecaller", "deepvariant", "manta"]
-    assert df["kind"].to_list()[:4] == ["variants", "variants", "sv", "variants"]
-    assert df["category"].to_list()[2] == "Structural variants"
+    # A caller comparison with the reads under it, then the structural-variant caller of
+    # the first sample, the other samples' callers and their CRAMs.
+    assert df["track_id"].to_list() == [
+        "S1.haplotypecaller",
+        "S1.deepvariant",
+        "S1.alignments",
+        "S1.manta",
+        "S2.haplotypecaller",
+        "S2.alignments",
+    ]
+    assert df["kind"].to_list() == [
+        "variants",
+        "variants",
+        "alignments",
+        "sv",
+        "variants",
+        "alignments",
+    ]
+    assert df["category"].to_list()[3] == "Structural variants"
     assert df["order"].to_list() == list(range(1, 7))
     assert df["track_id"].n_unique() == df.height
 

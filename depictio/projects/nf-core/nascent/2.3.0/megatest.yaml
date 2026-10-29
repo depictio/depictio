@@ -50,7 +50,7 @@ keys:
   # subread/gene_counts.py). Anchored on gene/: a run that identified
   # transcripts writes a second matrix under quantification/nascent/.
   - "*gene/*.featureCounts.txt"
-  # Strand coverage. The bigWigs are uploaded as files (indexed_file); the
+  # Strand coverage. The bigWigs are read in place by the browser; the
   # bedGraphs are streamed into 250 kb windows (catalog bedtools/*).
   - "*coverage_graphs/*.plus.bigWig"
   - "*coverage_graphs/*.minus.bigWig"

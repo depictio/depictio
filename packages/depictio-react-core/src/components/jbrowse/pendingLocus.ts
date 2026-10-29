@@ -32,6 +32,9 @@ interface StoredPendingLocus extends PendingLocus {
 /** The detail of the window event: the family it belongs to, and the locus. */
 export interface PendingLocusEventDetail extends PendingLocus {
   familyId: string;
+  /** False: move the view without scrolling the page to the browser (a table
+   *  row click, where the reader is looking at the table). Default true. */
+  scroll?: boolean;
 }
 
 function storage(): Storage | null {

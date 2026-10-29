@@ -17,6 +17,7 @@ import { Icon } from '@iconify/react';
 
 import { StoredMetadata } from '../../api';
 import { componentTypeVisual } from '../../componentTypeMeta';
+import { paletteVar } from '../../paletteColor';
 import { useGenomeTracks } from '../jbrowse/genomeTracksStore';
 import {
   buildGenomeTracksSummary,
@@ -120,7 +121,7 @@ const SectionTitle: React.FC<{ icon: string; children: React.ReactNode; color?: 
   color = 'dimmed',
 }) => (
   <Group gap={6} mb={6} wrap="nowrap">
-    <Icon icon={icon} width={13} color={`var(--mantine-color-${color === 'dimmed' ? 'gray-6' : `${color}-6`})`} />
+    <Icon icon={icon} width={13} color={color === 'dimmed' ? 'var(--mantine-color-gray-6)' : paletteVar(color)} />
     <Text size="xs" fw={700} c={color} tt="uppercase">
       {children}
     </Text>

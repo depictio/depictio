@@ -12,6 +12,15 @@ import { useCallback, useRef, useSyncExternalStore } from 'react';
 
 import type { JBrowseSessionResponse } from '../../api';
 
+/** The colours a tile resolved for its tracks beyond the manifest's own: the
+ *  ones `color_by` / `color_scale` computed. */
+export interface GenomeTracksColours {
+  /** Sample → the colour its track wears. */
+  samples: Record<string, string>;
+  /** Value of the `color_by` / `color_scale` column → colour. */
+  groups: Record<string, string>;
+}
+
 export interface GenomeTracksEntry {
   dashboardId: string;
   index: string;
@@ -19,6 +28,8 @@ export interface GenomeTracksEntry {
   payload: JBrowseSessionResponse | null;
   /** The visible locus ("chr8:1..2"), null before the view has blocks. */
   locus: string | null;
+  /** What `color_by` / `color_scale` resolved, null when the tile has neither. */
+  colours: GenomeTracksColours | null;
   /** Write order, so an index-only read picks the latest tile. */
   seq: number;
 }
@@ -34,7 +45,7 @@ function keyOf(dashboardId: string, index: string): string {
 function write(
   dashboardId: string,
   index: string,
-  patch: Partial<Pick<GenomeTracksEntry, 'payload' | 'locus'>>,
+  patch: Partial<Pick<GenomeTracksEntry, 'payload' | 'locus' | 'colours'>>,
 ): void {
   const key = keyOf(dashboardId, index);
   const prev = entries.get(key);
@@ -46,6 +57,7 @@ function write(
     index,
     payload: prev?.payload ?? null,
     locus: prev?.locus ?? null,
+    colours: prev?.colours ?? null,
     ...patch,
     seq: ++seq,
   });
@@ -66,6 +78,34 @@ export function setGenomeTracksLocus(
   locus: string | null,
 ): void {
   write(dashboardId, index, { locus });
+}
+
+const sameRecord = (a: Record<string, string>, b: Record<string, string>): boolean => {
+  const ak = Object.keys(a);
+  return ak.length === Object.keys(b).length && ak.every((k) => a[k] === b[k]);
+};
+
+/**
+ * Publish the colours a tile resolved from `color_by` / `color_scale`, which
+ * the payload does not carry (the manifest's `color` column is the only colour
+ * it holds). Another tile drawing the same samples reads them back through
+ * `trackSampleColours` and `trackGroupColours`. Rewritten only when they
+ * change; `null` withdraws them.
+ */
+export function setGenomeTracksColours(
+  dashboardId: string,
+  index: string,
+  colours: GenomeTracksColours | null,
+): void {
+  const prev = entries.get(keyOf(dashboardId, index))?.colours ?? null;
+  const same =
+    prev === colours ||
+    (prev !== null &&
+      colours !== null &&
+      sameRecord(prev.samples, colours.samples) &&
+      sameRecord(prev.groups, colours.groups));
+  if (same) return;
+  write(dashboardId, index, { colours });
 }
 
 /** The entry of a tile. Without `dashboardId` (the panel only knows the
@@ -114,8 +154,40 @@ export function trackSampleColours(dashboardId?: string): Record<string, string>
     .filter((e) => e.dashboardId === dashboard && e.payload)
     .sort((a, b) => a.seq - b.seq);
   for (const entry of ordered) {
+    // The manifest's own colour is the author's choice and wins over what the
+    // tile computed from `color_by` / `color_scale`.
     for (const row of entry.payload?.track_rows ?? []) {
       if (row.sample && row.color && !(row.sample in out)) out[row.sample] = row.color;
+    }
+    for (const [sample, colour] of Object.entries(entry.colours?.samples ?? {})) {
+      if (!(sample in out)) out[sample] = colour;
+    }
+  }
+  return out;
+}
+
+/**
+ * Value → colour of the `color_by` / `color_scale` column over every genome
+ * browser tile of a dashboard (the first tile written wins a value two tiles
+ * colour differently). Another tile whose rows carry the same values (a genome
+ * view's category column) wears the same colours. Same dashboard rule as
+ * `trackSampleColours`.
+ */
+export function trackGroupColours(dashboardId?: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  let dashboard = dashboardId;
+  if (dashboard === undefined) {
+    let latest: GenomeTracksEntry | null = null;
+    for (const e of entries.values()) if (e.colours && (!latest || e.seq > latest.seq)) latest = e;
+    if (!latest) return out;
+    dashboard = latest.dashboardId;
+  }
+  const ordered = [...entries.values()]
+    .filter((e) => e.dashboardId === dashboard && e.colours)
+    .sort((a, b) => a.seq - b.seq);
+  for (const entry of ordered) {
+    for (const [value, colour] of Object.entries(entry.colours?.groups ?? {})) {
+      if (!(value in out)) out[value] = colour;
     }
   }
   return out;
@@ -127,6 +199,18 @@ export function useTrackSampleColours(dashboardId?: string): Record<string, stri
   const cache = useRef<{ key: string; value: Record<string, string> }>({ key: '{}', value: {} });
   const snapshot = useCallback(() => {
     const value = trackSampleColours(dashboardId);
+    const key = JSON.stringify(value);
+    if (key !== cache.current.key) cache.current = { key, value };
+    return cache.current.value;
+  }, [dashboardId]);
+  return useSyncExternalStore(subscribe, snapshot, snapshot);
+}
+
+/** `trackGroupColours`, re-read when a tile writes; stable while unchanged. */
+export function useTrackGroupColours(dashboardId?: string): Record<string, string> {
+  const cache = useRef<{ key: string; value: Record<string, string> }>({ key: '{}', value: {} });
+  const snapshot = useCallback(() => {
+    const value = trackGroupColours(dashboardId);
     const key = JSON.stringify(value);
     if (key !== cache.current.key) cache.current = { key, value };
     return cache.current.value;

@@ -35,7 +35,7 @@
 template:
   template_id: "nf-core/sarek/3.10.0"
   description: "nf-core/sarek template: variant calling compared caller by caller, from coverage and bcftools statistics down to the annotated variant, on top of the native MultiQC report."
-  version: "1.0.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory of the sarek output (csv/, reports/, variant_calling/, annotation/, multiqc/, pipeline_info/)."
@@ -167,7 +167,6 @@ workflows:
             sample_column: "sample_id"
             format_column: "format"
             name_column: "name"
-            color_column: "color"
             category_column: "category"
             order_column: "order"
             assembly: "{GENOME}"
@@ -188,7 +187,6 @@ workflows:
               "format": "Track file format"
               "uri": "Path relative to the results folder"
               "name": "Track label shown in the browser"
-              "color": "Track colour"
               "category": "Track-selector folder"
               "order": "Row order the browser opens with"
 
@@ -788,18 +786,21 @@ workflows:
               "aa_pos": "Amino-acid position parsed from the protein change; null for a non-coding call"
 
       - data_collection_tag: "snpeff_variant_upset"
-        description: "One row per PASS variant and one membership column per caller-and-sample pair, for the variant-level overlap"
+        description: "One row per PASS call in a sample and one membership column per caller, for the variant-level overlap"
         optional: true
         config:
           type: "Table"
           metatype: "Aggregate"
           source: "transformed"
           transform:
-            recipe: "snpeff/variant_upset.py"
+            recipe: "nf-core/sarek/caller_overlap.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
+              "sample": "Sample the call was made in; the left-panel sample filter narrows the overlap to it"
               "variant_key": "Contig, position and alleles joined; the element the sets are counted over"
+              "n_callers": "How many callers made the call in this sample"
+              "sample_shared_pct": "Share of the sample's PASS calls that two callers or more made, in percent"
 
       - data_collection_tag: "snpeff_protein_lollipop"
         description: "Coding variants placed at their amino-acid position, on the genes carrying the most of them"
@@ -820,12 +821,12 @@ workflows:
               "impact": "Impact class, the colour of the lollipop head"
               "consequence": "Consequence term"
               "hgvs_p": "Protein change in HGVS notation, the label of the stem"
-              "ref_aa": "Reference residue of the protein change (three-letter code), which the structure tile checks against its model; null for a stop codon"
+              "ref_aa": "Reference residue of the protein change (three-letter code); null for a stop codon"
               "variant_key": "Contig, position and alleles joined"
               "vaf": "Variant allele fraction, the size of the lollipop head"
 
       # One row per gene of the lollipop: the Protein tab's scatter, whose click
-      # emits `gene` and so moves the lollipop and the 3D structure to it.
+      # emits `gene` and so narrows the lollipop to it.
       - data_collection_tag: "protein_genes"
         description: "One row per gene of the coding-variant lollipop: its variants, how many callers agree on them and its worst impact class"
         optional: true
@@ -1187,6 +1188,16 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Filter the sex check by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample_id"
+    target_dc_tag: "snpeff_variant_upset"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Narrow the caller overlap to the samples picked in the left panel"
     enabled: true
 
   - source_dc_tag: "samples"

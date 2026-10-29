@@ -3505,6 +3505,233 @@
     },
     {
       "category": "plot",
+      "description": "A family tree from a PED table: generations top to bottom, couple and sibship lines, square / circle / diamond by sex, filled when affected. Click an individual to filter the dashboard to it.",
+      "heavy": false,
+      "icon": "mdi:family-tree",
+      "label": "Pedigree",
+      "legacy": false,
+      "required_roles": [
+        "individual",
+        "father",
+        "mother",
+        "sex",
+        "status"
+      ],
+      "role_names": {
+        "deceased": [
+          "dead",
+          "deceased",
+          "is_deceased",
+          "vital_status"
+        ],
+        "family": [
+          "family",
+          "family_id",
+          "fid",
+          "kindred",
+          "pedigree"
+        ],
+        "father": [
+          "dad",
+          "father",
+          "father_id",
+          "pat",
+          "paternal",
+          "paternal_id"
+        ],
+        "individual": [
+          "id",
+          "iid",
+          "individual",
+          "individual_id",
+          "person",
+          "sample",
+          "sample_id"
+        ],
+        "label": [
+          "display_name",
+          "label",
+          "name",
+          "sample_name"
+        ],
+        "mother": [
+          "mat",
+          "maternal",
+          "maternal_id",
+          "mom",
+          "mother",
+          "mother_id"
+        ],
+        "proband": [
+          "index",
+          "index_case",
+          "is_proband",
+          "proband",
+          "propositus"
+        ],
+        "sex": [
+          "gender",
+          "inferred_sex",
+          "reported_sex",
+          "sex"
+        ],
+        "status": [
+          "affected",
+          "affected_status",
+          "affection",
+          "disease_status",
+          "phenotype",
+          "status"
+        ]
+      },
+      "roles": {
+        "deceased": {
+          "description": "Optional flag drawn as a diagonal slash across the symbol.",
+          "dtypes": [
+            "Boolean",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "String",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "family": {
+          "description": "Optional family identifier: one tree per value, drawn side by side.",
+          "dtypes": [
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "String",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "father": {
+          "description": "Identifier of the person's father; 0, empty or null for a founder.",
+          "dtypes": [
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "String",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "individual": {
+          "description": "One symbol per distinct value: the person a row describes.",
+          "dtypes": [
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "String",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "label": {
+          "description": "Optional text under each symbol; the individual identifier when unbound.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "mother": {
+          "description": "Identifier of the person's mother; 0, empty or null for a founder.",
+          "dtypes": [
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "String",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "proband": {
+          "description": "Optional flag (1 / true / yes / proband) marking the proband with an arrow.",
+          "dtypes": [
+            "Boolean",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "String",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "sex": {
+          "description": "Sex as 1 / 2 / 0 or male / female / unknown: square, circle or diamond.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "String",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "status": {
+          "description": "Affected status as 2 / 1 / 0 (or -9) or the words: filled, open or hatched.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "String",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8",
+            "Utf8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "pedigree"
+    },
+    {
+      "category": "plot",
       "description": "Newick tree + tip metadata (Microreact-style): 5 layouts, tip search, subtree highlight.",
       "heavy": false,
       "icon": "tabler:hierarchy-3",
@@ -4221,6 +4448,114 @@
         }
       },
       "viz_kind": "ranked_distribution"
+    },
+    {
+      "category": "plot",
+      "description": "A leaderboard of candidates ordered by a score: medals on the first three, badges coloured by value and bars in the cells, the fields behind a row in a hover popover. Click a row to filter the dashboard to it.",
+      "heavy": false,
+      "icon": "mdi:podium",
+      "label": "Ranked table",
+      "legacy": false,
+      "required_roles": [
+        "title",
+        "score"
+      ],
+      "role_names": {
+        "rank": [
+          "position_in_rank",
+          "rank",
+          "rank_position",
+          "ranking"
+        ],
+        "score": [
+          "combined_score",
+          "priority",
+          "priority_score",
+          "rank_score",
+          "ranking_score",
+          "score",
+          "weighted_score"
+        ],
+        "subtitle": [
+          "change",
+          "hgvs",
+          "hgvs_c",
+          "hgvs_p",
+          "hgvsp",
+          "protein_change",
+          "subtitle"
+        ],
+        "title": [
+          "candidate",
+          "gene",
+          "gene_name",
+          "gene_symbol",
+          "hgnc_symbol",
+          "symbol",
+          "title",
+          "variant",
+          "variant_id"
+        ]
+      },
+      "roles": {
+        "rank": {
+          "description": "Optional precomputed rank shown in the medal; else the position by score.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "score": {
+          "description": "Numeric column the rows are ordered by (the ranking metric).",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "subtitle": {
+          "description": "Optional text in monospace beside the title (a protein change).",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "title": {
+          "description": "Row name, drawn bold: a gene, a sample or a variant.",
+          "dtypes": [
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "String",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8",
+            "Utf8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "ranked_table"
     },
     {
       "category": "plot",

@@ -105,6 +105,7 @@ from depictio.models.models.dashboards import (
 )
 from depictio.models.models.deltatables import latest_complete_aggregation
 from depictio.models.models.multiqc_reports import general_stats_available
+from depictio.models.models.templates import DashboardTemplateOrigin
 from depictio.models.models.users import User
 from depictio.models.timestamps import preserved_creation_time, utc_now_str
 
@@ -1093,6 +1094,9 @@ async def save_dashboard(
     # save None over it, and a duplicate round-trips its source's key, which would
     # make the next refresh of that source pick either copy.
     save_payload.pop("source_key", None)
+    # `template_origin` is provenance the template import writes; a client that
+    # never loaded it would blank it, and one that did could forge it.
+    save_payload.pop("template_origin", None)
 
     if existing_dashboard:
         project_id = existing_dashboard.get("project_id")
@@ -5384,17 +5388,24 @@ def _jbrowse_first_call(
 ) -> dict[str, str | None] | None:
     """``{"locus", "mate_locus"}`` of the first call (best ``sort_by`` row), if any.
 
-    Among the rows left by the dashboard filters when there are some, so a
+    With ``span_top`` it frames the first N calls together when they sit close
+    (``opening_rows``). Among the rows left by the dashboard filters when there are some, so a
     filtered view still opens on a call. Any failure (a column the collection
     lacks, an unreadable table) is not the view's: it opens at the next level.
     """
-    from depictio.api.v1.services.jbrowse.render import locus_from_rows, mate_locus_from_rows
+    from depictio.api.v1.services.jbrowse.render import (
+        locus_from_rows,
+        mate_locus_from_rows,
+        opening_rows,
+    )
 
     try:
         source = _jbrowse_calls_source(component, filters, project_id, access_token)
         if source is None:
             return None
-        rows = _jbrowse_calls_page(source, pins, 0, 1)
+        rows = opening_rows(
+            _jbrowse_calls_page(source, pins, 0, int(source[0].get("span_top") or 1)), source[0]
+        )
     except Exception as e:  # noqa: BLE001
         logger.warning(f"render_jbrowse: first call lookup failed: {e}")
         return None
@@ -7980,6 +7991,20 @@ def _import_title(
     return yaml_title
 
 
+def _stamp_template_origin(
+    dashboard_dict: dict[str, Any], template_origin: DashboardTemplateOrigin | None
+) -> None:
+    """Record on an imported dashboard which template revision it came from.
+
+    Written on every import that writes the dashboard, so a replace by a plain
+    file clears a stamp it no longer deserves. A dashboard the import keeps as it
+    is is not stamped: it was not imported from this revision.
+    """
+    dashboard_dict["template_origin"] = (
+        template_origin.model_dump() if template_origin is not None else None
+    )
+
+
 def _family_main_id(doc: dict) -> Any:
     """The main tab's id of the family ``doc`` belongs to: its versions' subject."""
     if doc.get("is_main_tab", True) is False and doc.get("parent_dashboard_id"):
@@ -8057,6 +8082,7 @@ def _import_multi_tab_dashboard(
     keep_titles: bool = False,
     main_title: str | None = None,
     keep_existing: bool = False,
+    template_origin: DashboardTemplateOrigin | None = None,
 ) -> dict[str, Any]:
     """
     Import a multi-tab dashboard from YAML data with main_dashboard and tabs structure.
@@ -8076,6 +8102,8 @@ def _import_multi_tab_dashboard(
         keep_existing: A main dashboard the project has (same source_key, else
             same title) is left as it is, its tabs too, and gains the tabs of
             the YAML it lacks; main_title still renames it
+        template_origin: The template revision the YAML comes from, stamped on
+            the main dashboard and on every tab this import writes
 
     Returns:
         Import result with main dashboard ID and child tab IDs
@@ -8113,6 +8141,7 @@ def _import_multi_tab_dashboard(
             family_filter,
             keep=True,
             before_write=before_write,
+            template_origin=template_origin,
         )
         _prune_family_highlights(
             existing_main["dashboard_id"], {tab["dashboard_id"] for tab in added}
@@ -8132,6 +8161,7 @@ def _import_multi_tab_dashboard(
         main_lite.title, existing_main, keep_titles, main_title
     )
     main_dashboard_dict["source_key"] = source_key or (existing_main or {}).get("source_key")
+    _stamp_template_origin(main_dashboard_dict, template_origin)
     main_dashboard_dict["is_main_tab"] = True  # Ensure it's marked as main tab
     main_dashboard_dict["is_public"] = project_is_public
 
@@ -8205,6 +8235,7 @@ def _import_multi_tab_dashboard(
         family_filter,
         overwrite=overwrite,
         keep_titles=keep_titles,
+        template_origin=template_origin,
     )
     # Now that every tab is in: a highlight whose tab or figure did not make it.
     _prune_family_highlights(
@@ -8244,6 +8275,7 @@ def _import_family_tabs(
     keep_titles: bool = False,
     keep: bool = False,
     before_write: Callable[[], None] | None = None,
+    template_origin: DashboardTemplateOrigin | None = None,
 ) -> list[dict[str, str]]:
     """Import the tabs of a multi-tab YAML under its main dashboard.
 
@@ -8316,6 +8348,7 @@ def _import_family_tabs(
         tab_dashboard_dict = tab_lite.to_full()
         tab_dashboard_dict["title"] = _import_title(tab_lite.title, existing_tab, keep_titles)
         tab_dashboard_dict["source_key"] = tab_source_key or (existing_tab or {}).get("source_key")
+        _stamp_template_origin(tab_dashboard_dict, template_origin)
         tab_dashboard_dict["is_public"] = project_is_public
         tab_dashboard_dict["is_main_tab"] = False
         tab_dashboard_dict["parent_dashboard_id"] = main_dashboard_id
@@ -8490,6 +8523,7 @@ def import_dashboard_yaml_content(
     main_title: str | None = None,
     parent_source_key: str | None = None,
     existing: Literal["keep", "replace"] | None = None,
+    template_origin: DashboardTemplateOrigin | None = None,
 ) -> dict:
     """Parse and import dashboard YAML (single or multi-tab format).
 
@@ -8555,6 +8589,7 @@ def import_dashboard_yaml_content(
             keep_titles=keep_titles,
             main_title=main_title,
             keep_existing=keep_existing,
+            template_origin=template_origin,
         )
 
     # Single dashboard format
@@ -8616,6 +8651,7 @@ def import_dashboard_yaml_content(
     dashboard_dict = lite.to_full()
     dashboard_dict["title"] = _import_title(lite.title, existing_dashboard, keep_titles, main_title)
     dashboard_dict["source_key"] = source_key or (existing_dashboard or {}).get("source_key")
+    _stamp_template_origin(dashboard_dict, template_origin)
     # Visibility is project-driven; `to_full()` defaults to private, which
     # would also reset an existing public dashboard on --overwrite.
     dashboard_dict["is_public"] = get_project_visibility(project_id)
@@ -8728,6 +8764,8 @@ async def import_dashboard_from_yaml(
     main_title: str | None = None,
     parent_source_key: str | None = None,
     existing: Literal["keep", "replace"] | None = None,
+    template_id: str | None = None,
+    template_version: str | None = None,
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -8771,6 +8809,12 @@ async def import_dashboard_from_yaml(
     match by key or by title, the tab imported from the same `source_key` stays
     under its current parent.
 
+    `template_id` and `template_version` (both or neither, else a 400) say the YAML
+    is a template's dashboard: every dashboard this import writes records them,
+    with the import date, as its `template_origin`. A dashboard left as it is
+    (`existing=keep`) keeps the stamp it had. The stamp is provenance, not content:
+    it is not in the dashboard's versions, nor in its YAML export.
+
     Project identification:
     - If `project_id` is provided, uses that project directly (404 if it does not exist)
     - If `project_id` is not provided, extracts `project_tag` from YAML and
@@ -8790,6 +8834,8 @@ async def import_dashboard_from_yaml(
         parent_source_key: Optional source_key of a child tab's parent dashboard
         existing: Optional "keep" or "replace", for a dashboard the project
             already has; without it, `overwrite` decides
+        template_id: Optional id of the template the YAML belongs to
+        template_version: Optional revision (`template.version`) of that template
         current_user: The authenticated user (will be set as owner)
 
     Returns:
@@ -8812,6 +8858,12 @@ async def import_dashboard_from_yaml(
                 detail="Anonymous users cannot import dashboards. Please login to continue.",
             )
 
+    if bool(template_id) != bool(template_version):
+        raise HTTPException(
+            status_code=400,
+            detail="template_id and template_version go together: send both or neither.",
+        )
+
     return import_dashboard_yaml_content(
         yaml_content,
         project_id,
@@ -8822,6 +8874,11 @@ async def import_dashboard_from_yaml(
         main_title=main_title,
         parent_source_key=parent_source_key,
         existing=existing,
+        template_origin=(
+            DashboardTemplateOrigin(template_id=template_id, template_version=template_version)
+            if template_id and template_version
+            else None
+        ),
     )
 
 
@@ -10194,6 +10251,7 @@ def _computed_filter_options(
     filter_expr: str | None,
     limit: int,
     delta_version: int | None,
+    order_by: str | None = None,
 ) -> dict[str, Any]:
     """Filter options read from the collection itself, at ``delta_version``.
 
@@ -10214,7 +10272,10 @@ def _computed_filter_options(
     from depictio.models.components.filter_expr import build_filter_expr, validate_filter_expr
 
     salt = _version_salt_for(dc_id, delta_version)
-    cache_key = f"filter_options_{kind}_{dc_id}_{column}_{limit}_{filter_expr or 'nofilter'}_{salt}"
+    cache_key = (
+        f"filter_options_{kind}_{dc_id}_{column}_{limit}_{filter_expr or 'nofilter'}_{salt}"
+        + (f"_by_{order_by}" if order_by else "")
+    )
     try:
         cached = get_cache().get(cache_key)
         if cached is not None:
@@ -10263,10 +10324,40 @@ def _computed_filter_options(
                 raise HTTPException(status_code=400, detail=f"Invalid filter_expr: {exc}")
 
         if kind == "unique":
-            values = scan.select(column).unique().limit(limit).collect()[column]
+            from depictio.models.components.value_order import order_values
+
+            keys: dict[str, Any] | None = None
+            if order_by and order_by != column:
+                if order_by not in schema.names():
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Column '{order_by}' not found in data collection {dc_id}.",
+                    )
+                pairs = (
+                    scan.select(column, order_by)
+                    .group_by(column)
+                    .agg(pl.col(order_by).min().alias("_order_key"))
+                    .limit(limit)
+                    .collect()
+                )
+                keys = {
+                    str(v): k
+                    for v, k in zip(pairs[column].to_list(), pairs["_order_key"].to_list())
+                    if v is not None
+                }
+                unique_values = list(keys)
+            else:
+                unique_values = (
+                    scan.select(column)
+                    .unique()
+                    .limit(limit)
+                    .collect()[column]
+                    .drop_nulls()
+                    .to_list()
+                )
             result: dict[str, Any] = {
                 "column": column,
-                "values": sorted({str(v) for v in values.drop_nulls().to_list()}),
+                "values": order_values(unique_values, keys),
             }
         else:
             dtype = schema[column]
@@ -10322,7 +10413,7 @@ async def filter_options_endpoint(
 
     Request body:
         {"dc_id": str, "column": str, "kind": "unique" | "range",
-         "filter_expr": str (optional),
+         "filter_expr": str (optional), "order_by": str (optional, unique only),
          "as_of_version": str, "data_versions": {"<dc_id>": int | null}}
 
     Response, the shapes ``GET /deltatables/unique_values/{dc}`` and a column's
@@ -10340,12 +10431,15 @@ async def filter_options_endpoint(
     column = request.get("column")
     kind = request.get("kind")
     filter_expr = request.get("filter_expr") or None
+    order_by = request.get("order_by") or None
     if not isinstance(dc_id, str) or not dc_id or not isinstance(column, str) or not column:
         raise HTTPException(status_code=400, detail="dc_id and column are required.")
     if kind not in ("unique", "range"):
         raise HTTPException(status_code=400, detail="kind must be 'unique' or 'range'.")
     if filter_expr is not None and not isinstance(filter_expr, str):
         raise HTTPException(status_code=400, detail="filter_expr must be a string.")
+    if order_by is not None and not isinstance(order_by, str):
+        raise HTTPException(status_code=400, detail="order_by must be a string.")
 
     def _resolve() -> tuple[dict[str, Any], int | None]:
         dashboard_data = _viewable_dashboard(dashboard_id, current_user)
@@ -10367,6 +10461,7 @@ async def filter_options_endpoint(
             column=column,
             limit=_FILTER_OPTIONS_LIMIT,
             filter_expr=filter_expr,
+            order_by=order_by,
             current_user=current_user,
         )
     if delta_version is None and not filter_expr:
@@ -10381,6 +10476,7 @@ async def filter_options_endpoint(
             filter_expr=filter_expr,
             limit=_FILTER_OPTIONS_LIMIT,
             delta_version=delta_version,
+            order_by=order_by if kind == "unique" else None,
         )
     )
 

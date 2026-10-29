@@ -1574,12 +1574,9 @@ def compute_complex_heatmap(payload: dict) -> dict:
     # subset leaves one column; pick a single Phylum and the row filter leaves
     # one row — so this is a click away, not an edge case. Clustering is a
     # presentation choice, so drop it rather than failing the tile.
-    if len(value_columns) < 2 and cluster_cols:
-        logger.info("not clustering heatmap columns: %d column(s) left", len(value_columns))
-        cluster_cols = False
-    if len(pdf) < 2 and cluster_rows:
-        logger.info("not clustering heatmap rows: %d row(s) left", len(pdf))
-        cluster_rows = False
+    cluster_rows, cluster_cols = _heatmap_clustering_flags(
+        len(pdf), len(value_columns), cluster_rows, cluster_cols, cluster_metric
+    )
 
     hm_kwargs: dict = {
         "index_column": index_column,
@@ -1711,8 +1708,40 @@ def compute_complex_heatmap(payload: dict) -> dict:
     if colorscale:
         hm_kwargs["colorscale"] = colorscale
 
-    hm = ComplexHeatmap.from_dataframe(pdf, **hm_kwargs)
-    fig = hm.to_plotly()
+    if pdf.empty:
+        # Filters can leave no row at all (a pick on a time point no feature
+        # peaks at); the library divides by the row count, so say so instead.
+        import plotly.graph_objects as _go
+
+        fig = _go.Figure()
+        fig.update_layout(
+            xaxis={"visible": False},
+            yaxis={"visible": False},
+            annotations=[
+                {
+                    "text": "No rows in scope: the filters leave nothing to draw",
+                    "showarrow": False,
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x": 0.5,
+                    "y": 0.5,
+                }
+            ],
+        )
+    else:
+        try:
+            fig = ComplexHeatmap.from_dataframe(pdf, **hm_kwargs).to_plotly()
+        except (ValueError, ZeroDivisionError) as exc:
+            if not (hm_kwargs["cluster_rows"] or hm_kwargs["cluster_cols"]):
+                raise
+            # A constant row or column has no correlation, and a matrix with
+            # one such axis has no finite distances to link: draw it unordered.
+            logger.warning(
+                "compute_complex_heatmap: clustering failed (%s); drawing unclustered", exc
+            )
+            hm_kwargs["cluster_rows"] = False
+            hm_kwargs["cluster_cols"] = False
+            fig = ComplexHeatmap.from_dataframe(pdf, **hm_kwargs).to_plotly()
     # Margin tweak for the React viewer: b=110 so the x-tick labels, which the
     # library sizes from a 6px-per-char approximation, aren't clipped when a
     # rotated sample id runs longer than that estimate (~14 chars @10pt).
@@ -1763,6 +1792,34 @@ def compute_complex_heatmap(payload: dict) -> dict:
         "available_col_annotations": available_col_annotations,
         "constant_col_annotations": constant_col_annotations,
     }
+
+
+def _heatmap_clustering_flags(
+    n_rows: int, n_cols: int, cluster_rows: bool, cluster_cols: bool, metric: str
+) -> tuple[bool, bool]:
+    """Which axes of an ``n_rows`` x ``n_cols`` matrix can still carry a dendrogram.
+
+    A dendrogram needs two leaves on its own axis. A correlation distance also
+    needs two values per leaf, so with a single column the rows have no
+    distance to each other (and a single row leaves the columns none): that
+    axis is left unclustered rather than failing the tile. Both axes can be
+    narrowed this far by an ordinary filter, so this is a click away, not an
+    edge case. Clustering is a presentation choice.
+    """
+    if n_cols < 2 and cluster_cols:
+        logger.info("not clustering heatmap columns: %d column(s) left", n_cols)
+        cluster_cols = False
+    if n_rows < 2 and cluster_rows:
+        logger.info("not clustering heatmap rows: %d row(s) left", n_rows)
+        cluster_rows = False
+    if metric == "correlation":
+        if n_cols < 2 and cluster_rows:
+            logger.info("not clustering heatmap rows by correlation: %d column(s) left", n_cols)
+            cluster_rows = False
+        if n_rows < 2 and cluster_cols:
+            logger.info("not clustering heatmap columns by correlation: %d row(s) left", n_rows)
+            cluster_cols = False
+    return cluster_rows, cluster_cols
 
 
 def _narrow_wide_matrix_columns(

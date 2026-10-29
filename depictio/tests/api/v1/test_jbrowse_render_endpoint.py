@@ -250,6 +250,32 @@ def test_without_a_sort_the_first_call_is_the_first_row_in_delta_order(calls, mo
     assert "sorted" not in calls
 
 
+def test_span_top_opens_on_the_span_of_the_best_calls_when_they_sit_together(calls, monkeypatch):
+    monkeypatch.setitem(COMPONENT["locus_from"], "span_top", 3)
+    monkeypatch.setitem(COMPONENT["locus_from"], "sort_by", "score")
+    calls["calls"] = _frame(
+        chrom=["21"] * 3, start=[1_000, 50_000, 20_000], end=[1_000, 50_001, 20_000]
+    )
+    _render({})
+    assert calls["first_call"]["locus"] == "21:990-50011"
+    assert calls["sorted"]["page"] == (0, 3)
+
+
+def test_span_top_falls_back_to_the_first_call_when_they_are_far_apart(calls, monkeypatch):
+    monkeypatch.setitem(COMPONENT["locus_from"], "span_top", 3)
+    monkeypatch.setitem(COMPONENT["locus_from"], "max_span", 1_000_000)
+    calls["calls"] = _frame(chrom=["21"] * 3, start=[1_000, 5_000_000, 20_000], end=[1_000] * 3)
+    _render({})
+    assert calls["first_call"]["locus"] == "21:990-1010"
+
+
+def test_span_top_falls_back_to_the_first_call_across_chromosomes(calls, monkeypatch):
+    monkeypatch.setitem(COMPONENT["locus_from"], "span_top", 2)
+    calls["calls"] = _frame(chrom=["21", "MT"], start=[1_000, 10], end=[1_000, 10])
+    _render({})
+    assert calls["first_call"]["locus"] == "21:990-1010"
+
+
 def test_a_yaml_location_wins_over_the_first_call(calls, monkeypatch):
     monkeypatch.setitem(COMPONENT, "location", "chr5:1-100")
     _render({})

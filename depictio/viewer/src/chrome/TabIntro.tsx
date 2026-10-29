@@ -3,6 +3,7 @@ import { Box, Divider, Group, Text, Title, useMantineColorScheme } from '@mantin
 import { Icon } from '@iconify/react';
 
 import { isImagePath, themedIconSrc } from 'depictio-react-core';
+import { paletteVar } from 'depictio-react-core';
 import type { DashboardData, DashboardSummary } from 'depictio-react-core';
 
 interface TabIntroProps {
@@ -68,7 +69,7 @@ const TabIntro: React.FC<TabIntroProps> = ({ dashboard, activeTab }) => {
               icon={iconRaw}
               width={24}
               height={24}
-              color={`var(--mantine-color-${iconColor}-6)`}
+              color={paletteVar(iconColor)}
               style={{ flexShrink: 0 }}
             />
           )

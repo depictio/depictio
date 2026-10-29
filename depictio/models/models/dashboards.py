@@ -50,6 +50,7 @@ from depictio.models.components.types import CardVariant, FigureStyle
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel, PyObjectId, convert_objectid_to_str
 from depictio.models.models.branding import BrandTheme
+from depictio.models.models.templates import DashboardTemplateOrigin
 from depictio.models.models.users import Permission
 
 # JBrowse component fields carried between the lite (YAML) and full (stored)
@@ -73,11 +74,14 @@ _JBROWSE_FIELDS: tuple[str, ...] = (
     "track_labels",
     "display",
     "variant_color_by",
+    "variant_label_by",
     "color_by",
+    "color_scale",
     "show_junctions",
     "read_pairs_display",
     "call_stepper",
     "follow_window",
+    "auto_height",
     "views",
     "circular_categories",
     "force_load",
@@ -503,7 +507,11 @@ class DashboardDataLite(BaseModel):
     tab_icon: str | None = Field(
         default=None, description="Icon for child tabs (e.g., 'mdi:chart-bar')"
     )
-    tab_icon_color: str | None = Field(default=None, description="Color for tab icon")
+    tab_icon_color: str | None = Field(
+        default=None,
+        description="Colour of the tab icon, also the hue of the tab's single-series plots: a "
+        "Mantine palette name, optionally with a shade 0-9 (`teal`, `teal.4`), or a CSS colour.",
+    )
     # A dashboard with a dozen tabs reads better in categories (context, then
     # analysis, then QC) than as one flat list. Tabs naming the same group are
     # listed together under it in the sidebar; the main tab is never grouped.
@@ -1683,6 +1691,8 @@ class DashboardDataLite(BaseModel):
                     lite_comp["default_value"] = default_state["default_value"]
                 if comp.get("option_cards"):
                     lite_comp["option_cards"] = _option_cards_payload(comp["option_cards"])
+                if comp.get("order_by"):
+                    lite_comp["order_by"] = comp["order_by"]
                 if comp.get("always_selected"):
                     lite_comp["always_selected"] = True
                     if comp.get("default_by"):
@@ -1734,6 +1744,8 @@ class DashboardDataLite(BaseModel):
                     value = comp.get(f)
                     if value is None or value == _JBROWSE_DEFAULTS.get(f):
                         continue
+                    if f == "color_scale":
+                        value = _without_nulls(value)
                     if f == "locus_from":
                         # One source or a list; the model dump carries every unset key.
                         value = (
@@ -2183,6 +2195,8 @@ class DashboardDataLite(BaseModel):
                 # keep their shape (and their snapshot hash).
                 if comp_dict.get("option_cards"):
                     full_comp["option_cards"] = _option_cards_payload(comp_dict["option_cards"])
+                if comp_dict.get("order_by"):
+                    full_comp["order_by"] = comp_dict["order_by"]
                 if comp_dict.get("always_selected"):
                     full_comp["always_selected"] = True
                     if comp_dict.get("default_by"):
@@ -2239,6 +2253,8 @@ class DashboardDataLite(BaseModel):
                     full_comp[f] = comp_dict.get(f, _JBROWSE_DEFAULTS.get(f))
                 # Only the settings the YAML sets: the model dump carries every
                 # unset one as null.
+                if isinstance(full_comp.get("color_scale"), dict):
+                    full_comp["color_scale"] = _without_nulls(full_comp["color_scale"]) or None
                 if isinstance(full_comp.get("display"), dict):
                     full_comp["display"] = {
                         k: v for k, v in full_comp["display"].items() if v is not None
@@ -2597,6 +2613,13 @@ class DashboardData(MongoModel):
     # exports never carry it, and a save from the viewer cannot change it. None for
     # dashboards built in the viewer and for those imported before it existed.
     source_key: Optional[str] = None
+    # The template revision this dashboard was last imported from (id, version,
+    # date). Server-owned like `source_key`: not in DashboardDataLite, so YAML
+    # files and exports never carry it, and a viewer save cannot change it.
+    # Provenance rather than content, so it is in SNAPSHOT_PROVENANCE_FIELDS and a
+    # re-import that only moves it records no version. None for dashboards built
+    # in the viewer, imported from a plain file, or imported before it existed.
+    template_origin: Optional[DashboardTemplateOrigin] = None
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,

@@ -1,0 +1,1674 @@
+version: 1
+# nf-core/drop 1.0.0: which samples carry RNA outliers (genes expressed or spliced
+# far from the cohort, variants read from one allele only), and where on the genome?
+# Every rule it follows is written out in depictio/projects/nf-core/RULES.md;
+# ampliseq 2.18.0 is the reference.
+#
+# Funnel: the Overview (who is in the run, does a sample carry an unusual number of
+# outliers?) -> Candidates (which genes does more than one analysis call in a sample?)
+# -> Expression (OUTRIDER) -> Splicing (FRASER) -> Mono-allelic (MAE) -> Locus (the
+# called genes on the genome).
+#
+# The volcanoes and the per-gene views need the background of the tests, not only the
+# significant rows: run the pipeline with --ae_padj_cutoff 1 --ae_z_score_cutoff 0
+# --as_padj_cutoff 1 --as_delta_psi_cutoff 0 so the result tables hold every tested
+# gene and junction (the recipes trim the near-null bulk, see the template notes).
+#
+# DROP renders its own report from R, not from MultiQC modules, so there is no
+# MultiQC tab: the same answers are rebuilt from the result tables. Each analysis
+# is optional (--ae_skip, --as_skip, --mae_skip): a skipped one prunes its tiles and,
+# when nothing is left, its tab. The per-sample table (sample_outliers) is always
+# built, so the Overview's four key figures never lose a card.
+main_dashboard:
+  title: nf-core/drop
+  subtitle: RNA-seq outliers for rare-disease diagnosis, from reads to the genes that stand out
+  project_tag: RNA Outlier Detection (DROP)
+  main_tab_name: Overview
+  tab_icon: mdi:compass-outline
+  tab_icon_color: brandPrimary
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_panel_default: collapsed
+  content_width_default: compact
+  show_tab_header: false
+  # Declared once here, read by every tab. The vocabularies below are known and
+  # written out; the group takes its colours from the server.
+  category_colors:
+    '{GROUP_COL}': auto
+    drop_group: auto
+    kind:
+      Expression: '#2a78d6'
+      Splicing: '#eb6834'
+      Mono-allelic: '#1baf7a'
+    count_source:
+      Alignment: '#2a78d6'
+      External counts: '#eda100'
+    direction:
+      over-expressed: '#e34948'
+      under-expressed: '#2a78d6'
+      more usage: '#e34948'
+      less usage: '#2a78d6'
+      not significant: '#adb5bd'
+    status:
+      called (adjusted p): '#e34948'
+      nominal p only: '#eda100'
+      not significant: '#adb5bd'
+    call:
+      alternative allele: '#e34948'
+      reference allele: '#2a78d6'
+      biallelic: '#adb5bd'
+    support:
+      not called: '#adb5bd'
+      1 analysis: '#74a9e6'
+      2 analyses: '#eda100'
+      3 analyses: '#e34948'
+    phenotype:
+      Phenotype match: '#1baf7a'
+      No match: '#adb5bd'
+  # Persistent: drawn in every tab's filter panel, picks kept across tabs. The sample
+  # filters read the sample hub; the gene filter reads the expression calls, whose links
+  # reach the other analyses by gene symbol.
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab
+    persistent: true
+    pin: top
+  - name: Gene filters
+    icon: mdi:dna
+    color: violet
+    description: Applies to every tab that reads gene calls
+    persistent: true
+    pin: top
+  grid_sections:
+  - name: Key figures
+    icon: mdi:counter
+    color: gray
+    appearance: plain
+    card_variant: headline
+    filter_bar: true
+    visible_filters: 2
+    description: The run in four numbers. The filters here narrow these four only.
+  - name: Findings
+    icon: mdi:star-outline
+    color: gray
+    appearance: plain
+    figure_style: minimal
+    filter_bar: true
+    visible_filters: 2
+    description: What the data says, each with the tab that shows it, then the figures behind it.
+  - name: How to read this dashboard
+    icon: mdi:information-outline
+    color: gray
+    appearance: plain
+    description: The tabs by group, each with the question it answers.
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: gray
+    description: The samples of the run, with their groups and counting set-up
+    collapsed: true
+    persistent: true
+    pin: bottom
+    exclude_tabs:
+    - Overview
+  components:
+  # First in component order on purpose: the Guide demos the first categorical
+  # filter that shares a data collection with the first card (Samples, below).
+  - component_type: interactive
+    workflow_tag: drop
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:account-group-outline
+      custom_color: violet
+      strip_label: Group
+    section: Key figures
+    tag: dr-ov-kf-group
+    index: ov-kf-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: drop
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: teal
+      strip_label: Sample
+    section: Key figures
+    tag: dr-ov-kf-sample
+    index: ov-kf-sample
+    title: Sample ID
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  - component_type: text
+    title: nf-core/drop
+    logo: https://raw.githubusercontent.com/nf-core/drop/master/docs/images/nf-core-drop_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/drop/master/docs/images/nf-core-drop_logo_dark.png
+    order: 1
+    body: >
+      RNA-seq samples tested for outliers against their cohort: genes expressed far from what
+      the other samples predict, junctions spliced differently, variants read from one allele.
+      [Run parameters](params:)
+    tag: dr-ov-hero
+    index: ov-hero
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/drop is the Nextflow port of DROP. It counts the reads of each RNA sample, then asks of every gene, junction and heterozygous variant whether the sample departs from the others of its group: OUTRIDER for expression, FRASER for splicing, an allelic test for mono-allelic expression.
+
+      The sample filters in the left panel apply to every tab, the gene filter to every tab that reads gene calls. A bar above a section narrows that section only.
+    tag: dr-ov-about
+    index: ov-about
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's own settings, read from its params.json: a key the run did not set
+  # prints a dash.
+  - component_type: text
+    surface: card
+    values:
+      samples: {dc: samples, column: sample, aggregation: nunique, format: integer}
+      groups: {dc: group_membership, column: drop_group, aggregation: nunique, format: integer}
+      n_dna: {dc: samples, column: sample, aggregation: nunique, filter_expr: "col('has_dna') == 'Genotyped'", format: integer}
+    body: |
+      ### The run
+      - ![](icon:mdi:flask-outline) **Samples** {{samples}}
+      - ![](icon:mdi:account-group-outline) **Groups** {{groups}}
+      - ![](icon:mdi:dna) **Genotyped** {{n_dna}}
+      - ![](icon:mdi:chart-bell-curve) **Expression fit** {{param:ae_implementation}}
+      - ![](icon:mdi:content-cut) **Splicing** {{param:as_fraser_version}}
+    tag: dr-ov-run
+    index: ov-run
+    layout: {x: 5, y: 1, w: 3, h: 3}
+  - component_type: text
+    surface: card
+    accent: green
+    body: |
+      ### Six steps from reads to outliers
+      Each step names its settings and the tab that shows its result.
+
+      ::: steps
+      1. ![](icon:mdi:account-group-outline) **Group** Samples sorted by analysis group · [Settings](params:genome)
+      2. ![](icon:mdi:counter) **Count** Gene and split-read counts per sample · [Settings](params:gene_annotation)
+      3. ![](icon:mdi:chart-bell-curve) **Expression** OUTRIDER, a {{param:ae_implementation}} fit · [Settings](params:ae_) · [Expression](tab:Expression)
+      4. ![](icon:mdi:content-cut) **Splicing** {{param:as_fraser_version}} on split reads · [Settings](params:as_) · [Splicing](tab:Splicing)
+      5. ![](icon:mdi:set-split) **Alleles** Balance of heterozygous variants · [Settings](params:mae_) · [Mono-allelic](tab:Mono-allelic)
+      6. ![](icon:mdi:account-search-outline) **Triage** Genes called by several analyses · [Candidates](tab:Candidates) · [Locus](tab:Locus)
+      :::
+    tag: dr-ov-steps
+    index: ov-steps
+    layout: {x: 0, y: 4, w: 8, h: 3}
+  # Key figures: one card per stage of the funnel, each opening the tab that
+  # explains it. All four read the per-sample table, which every route writes.
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: samples
+    aggregation: max
+    column_name: group_size
+    column_type: int64
+    secondary_layout: threshold
+    threshold_value: 30
+    threshold_direction: min
+    threshold_warn: 20
+    display:
+      icon_name: mdi:flask-outline
+      icon_color: orange
+      caption: in the largest group, 30 or more wanted
+      link: tab:Candidates
+      decimals: 0
+    section: Key figures
+    tag: dr-ov-kf-samples
+    index: ov-kf-samples
+    title: Cohort size
+    description: Samples in the largest analysis group, the set of samples one analysis (outrider, fraser, mae or a batch of the sample sheet) fits together. OUTRIDER and FRASER learn what is normal from that cohort, so under about 30 samples their expected counts are poor and few adjusted p-values pass; the strip counts the samples whose group reaches 30.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: sample_outliers
+    aggregation: sum
+    column_name: total_outliers
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: drop_group
+    top_n_count: 4
+    display:
+      icon_name: mdi:target
+      icon_color: red
+      caption: outliers, by group, most first
+      link: tab:Candidates
+      decimals: 0
+    section: Key figures
+    tag: dr-ov-kf-outliers
+    index: ov-kf-outliers
+    title: Outliers called
+    description: Expression and splicing outlier genes plus mono-allelic variants, summed over the samples in view.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: sample_outliers
+    aggregation: max
+    column_name: nominal_hits
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:account-alert-outline
+      icon_color: violet
+      caption: raw-p hits in one sample, with the spread
+      link: tab:Candidates
+      decimals: 0
+    section: Key figures
+    tag: dr-ov-kf-burden
+    index: ov-kf-burden
+    title: Heaviest sample
+    description: The most expression and splicing genes at a raw p-value of {NOMINAL_P} or less in one sample. A share {NOMINAL_P} of the tests passes by chance alone, so a sample stands out only when it sits far above the others, and one far above is usually a quality or batch problem, not a patient.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: sample_outliers
+    aggregation: sum
+    column_name: phenotype_matches
+    column_type: int64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:stethoscope
+      icon_color: teal
+      caption: calls on a phenotype gene, with the spread
+      link: tab:Candidates
+      decimals: 0
+    section: Key figures
+    tag: dr-ov-kf-phenotype
+    index: ov-kf-phenotype
+    title: Phenotype matches
+    description: Expression and splicing calls whose gene matches a phenotype (HPO) term of the sample.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Findings filter bar: the call of each analysis.
+  - component_type: interactive
+    workflow_tag: drop
+    data_collection_tag: expression_outliers
+    interactive_component_type: MultiSelect
+    column_name: direction
+    column_type: object
+    display:
+      icon_name: mdi:swap-vertical
+      custom_color: blue
+      strip_label: Expression call
+    section: Findings
+    tag: dr-ov-findings-expression
+    index: ov-findings-expression
+    title: Expression call
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: drop
+    data_collection_tag: splicing_outliers
+    interactive_component_type: MultiSelect
+    column_name: direction
+    column_type: object
+    display:
+      icon_name: mdi:content-cut
+      custom_color: orange
+      strip_label: Splicing call
+    section: Findings
+    tag: dr-ov-findings-splicing
+    index: ov-findings-splicing
+    title: Splicing call
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # One result row per finding, each citing one data collection, so the import
+  # removes a row with its analysis.
+  - component_type: text
+    surface: card
+    values:
+      n_ae: {dc: expression_outliers, column: call_id, aggregation: nunique, filter_expr: "col('significant')", format: integer}
+      s_ae: {dc: expression_outliers, column: sample, aggregation: nunique, filter_expr: "col('significant')", format: integer}
+      n_as: {dc: splicing_outliers, column: gene_name, aggregation: nunique, filter_expr: "col('significant')", format: integer}
+      n_mae: {dc: mae_variants, column: call_id, aggregation: nunique, filter_expr: "col('mono_allelic')", format: integer}
+      n_multi: {dc: outlier_genes, column: call_id, aggregation: nunique, filter_expr: "col('n_analyses') >= 2", format: integer}
+      nom_ae: {dc: expression_outliers, column: call_id, aggregation: nunique, filter_expr: "col('nominal')", format: integer}
+      nom_as: {dc: splicing_outliers, column: call_id, aggregation: nunique, filter_expr: "col('nominal')", format: integer}
+    body: |
+      - **{{n_ae}}** expression outliers in **{{s_ae}}** samples – genes far from the count the cohort predicts [Expression](tab:Expression)
+      - **{{n_as}}** genes with a splicing outlier – a junction used far more or less than in the cohort [Splicing](tab:Splicing)
+      - **{{n_mae}}** mono-allelic variants – one allele carries nearly all the RNA reads [Mono-allelic](tab:Mono-allelic)
+      - **{{n_multi}}** genes called by two or more analyses in a sample – the strongest leads [Candidates](tab:Candidates)
+      - **{{nom_ae}}** expression and **{{nom_as}}** splicing hits at the raw p-value, before correction – leads to check when a small run calls few or none (a share {NOMINAL_P} of tests passes by chance)
+    section: Findings
+    tag: dr-ov-findings
+    index: ov-findings
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Two even halves per row (a volcano reads poorly at a third of the row). The first
+  # tile answers the sample-level quality question, the three others the analyses.
+  - component_type: figure
+    workflow_tag: drop
+    data_collection_tag: sample_outliers
+    visu_type: bar
+    mode: code
+    code_content: |-
+      top = df.with_columns((pl.col('expression_nominal') + pl.col('splicing_nominal') + pl.col('mae_calls')).alias('hits')).sort(['hits', 'sample'], descending=[True, False]).head(15)
+      long = top.select('sample', 'expression_nominal', 'splicing_nominal', 'mae_calls').unpivot(index='sample', variable_name='kind', value_name='hits').with_columns(pl.col('kind').replace({'expression_nominal': 'Expression', 'splicing_nominal': 'Splicing', 'mae_calls': 'Mono-allelic'}))
+      fig = px.bar(long.to_pandas(), y='sample', x='hits', color='kind', orientation='h', color_discrete_map=depictio_category_colors.get('kind') or {}, category_orders={'kind': ['Expression', 'Splicing', 'Mono-allelic'], 'sample': top['sample'].to_list()}, labels={'sample': 'Sample', 'hits': 'Genes at the raw p-value, and mono-allelic calls', 'kind': 'Analysis'})
+      fig.update_yaxes(autorange='reversed', automargin=True)
+      fig.update_xaxes(dtick=1 if top['hits'].max() <= 8 else None)
+      fig.update_layout(margin=dict(t=10), legend_title_text='')
+    section: Findings
+    tag: dr-ov-burden
+    index: ov-burden
+    title: Hits per sample
+    description: Genes at a raw p-value of {NOMINAL_P} or less (expression, splicing) and mono-allelic calls, per sample. A share {NOMINAL_P} of the tests passes by chance, so look for a sample far above the others; that is usually a quality or batch problem, not a patient.
+    layout: {x: 0, y: 2, w: 4, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Expression
+    source_component: dr-ae-volcano
+    title: Expression outliers
+    caption: One point per sample and gene; right of the line the gene is expressed above its expected count, left of it below.
+    tag: dr-ov-hl-expression
+    index: ov-hl-expression
+    layout: {x: 4, y: 2, w: 4, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Splicing
+    source_component: dr-as-volcano
+    title: Splicing outliers
+    caption: One point per sample and gene, at its most significant junction; right of the line the junction is used more than in the cohort.
+    tag: dr-ov-hl-splicing
+    index: ov-hl-splicing
+    layout: {x: 0, y: 7, w: 4, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Mono-allelic
+    source_component: dr-mae-volcano
+    title: Allelic imbalance
+    caption: One point per heterozygous variant; far left or right of the line, one allele carries most of the reads.
+    tag: dr-ov-hl-mae
+    index: ov-hl-mae
+    layout: {x: 4, y: 7, w: 4, h: 5}
+  # Link-only tab tiles: each tile prints its tab's subtitle. A tab the run does
+  # not have is left out, and a heading whose tabs are all missing is hidden.
+  - component_type: text
+    body: |
+      ### Triage
+      - [Candidates](tab:Candidates)
+
+      ### Analyses
+      - [Expression](tab:Expression)
+      - [Splicing](tab:Splicing)
+      - [Mono-allelic](tab:Mono-allelic)
+      - [Locus](tab:Locus)
+    section: How to read this dashboard
+    tag: dr-ov-how-to-read
+    index: ov-how-to-read
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Persistent sample filters, the group first.
+  - component_type: interactive
+    workflow_tag: drop
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:account-group-outline
+      custom_color: violet
+    section: Sample filters
+    group: Sample scope
+    tag: dr-filter-group
+    index: sample-filters-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: drop
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: teal
+    section: Sample filters
+    group: Sample scope
+    tag: dr-filter-sample
+    index: sample-filters-sample
+    title: Sample ID
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  # A gene pick reaches the splicing, mono-allelic and locus tables through the
+  # gene_name links.
+  - component_type: interactive
+    workflow_tag: drop
+    data_collection_tag: expression_outliers
+    interactive_component_type: MultiSelect
+    column_name: gene_name
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: violet
+    section: Gene filters
+    group: Gene
+    tag: dr-filter-gene
+    index: gene-filters-gene
+    title: Gene
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: table
+    workflow_tag: drop
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Sample sheet
+    tag: dr-sheet-samples
+    index: sheet-samples
+    title: Samples
+    description: One row per sample, with its groups, counting set-up and phenotype terms.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+tabs:
+# ============================================================================
+# Triage
+# ============================================================================
+- title: Candidates
+  subtitle: Which genes stand out in a sample, and in how many analyses?
+  tab_group: Triage
+  tab_order: 1
+  tab_icon: mdi:account-search-outline
+  tab_icon_color: red
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Candidate filters
+    icon: mdi:filter-variant
+    color: red
+    description: How many analyses call the gene, and whether it matches a phenotype
+  grid_sections:
+  - name: Candidates at a glance
+    icon: mdi:counter
+    color: red
+    description: Genes called, in how many samples, and by how many analyses at once
+  - name: Ranked per sample
+    icon: mdi:table
+    color: red
+    description: Each sample's genes, the strongest evidence first, with the analyses that call them
+  - name: Genes across analyses
+    icon: mdi:relation-many-to-many
+    color: red
+    description: The best-supported genes of the cohort, and what each analysis says of them
+  components:
+  # The tab's intro: the method, with its link, and how to read the tab.
+  - component_type: text
+    order: 1
+    body: >
+      [OUTRIDER](https://github.com/gagneurlab/OUTRIDER),
+      [FRASER](https://github.com/gagneurlab/FRASER) and the allelic test each judge a different
+      thing about a gene, so a gene that more than one calls in a sample is the strongest lead.
+      Pick a sample in the left panel to read its list, ranked by the evidence, with the analyses
+      that call each gene as badges. A gene that lights up in many samples of the grid is
+      more often a technical artefact than a diagnosis.
+    tag: dr-cand-intro
+    index: cand-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: drop
+    data_collection_tag: outlier_genes
+    interactive_component_type: MultiSelect
+    column_name: support
+    column_type: object
+    display:
+      icon_name: mdi:layers-triple-outline
+      custom_color: red
+    section: Candidate filters
+    tag: dr-cand-filter-support
+    index: cand-support-filter
+    title: Called by
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: drop
+    data_collection_tag: outlier_genes
+    interactive_component_type: MultiSelect
+    column_name: phenotype
+    column_type: object
+    display:
+      icon_name: mdi:stethoscope
+      custom_color: teal
+    section: Candidate filters
+    tag: dr-cand-filter-phenotype
+    index: cand-phenotype-filter
+    title: Phenotype
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: outlier_genes
+    aggregation: count
+    column_name: call_id
+    column_type: object
+    filter_expr: col('n_analyses') >= 1
+    secondary_layout: composition
+    breakdown_col: support
+    display:
+      icon_name: mdi:target
+      icon_color: red.4
+      caption: genes in a sample, by analyses that call them
+      decimals: 0
+    section: Candidates at a glance
+    tag: dr-cand-card-called
+    index: cand-card-called
+    title: Genes called
+    description: One per sample and gene that at least one analysis calls, split by how many analyses agree.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: outlier_genes
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    filter_expr: col('n_analyses') >= 1
+    secondary_layout: composition
+    breakdown_col: '{GROUP_COL}'
+    display:
+      icon_name: mdi:flask-outline
+      icon_color: red.6
+      caption: samples with a called gene, by group
+    section: Candidates at a glance
+    tag: dr-cand-card-samples
+    index: cand-card-samples
+    title: Samples with a call
+    description: Samples in which at least one gene is called by an analysis.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: outlier_genes
+    aggregation: count
+    column_name: call_id
+    column_type: object
+    filter_expr: col('n_analyses') >= 2
+    secondary_layout: composition
+    breakdown_col: called_in
+    display:
+      icon_name: mdi:set-merge
+      icon_color: red.8
+      caption: genes called twice or more, by analyses
+      decimals: 0
+    section: Candidates at a glance
+    tag: dr-cand-card-multi
+    index: cand-card-multi
+    title: Called by several
+    description: Genes that two or three analyses call in the same sample, the strongest leads.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: outlier_genes
+    aggregation: count
+    column_name: call_id
+    column_type: object
+    filter_expr: (col('n_analyses') >= 1) & col('phenotype_gene')
+    secondary_layout: composition
+    breakdown_col: called_in
+    display:
+      icon_name: mdi:stethoscope
+      icon_color: red.9
+      caption: phenotype genes, by analyses that call them
+      decimals: 0
+    section: Candidates at a glance
+    tag: dr-cand-card-phenotype
+    index: cand-card-phenotype
+    title: Phenotype matches
+    description: Called genes that match a phenotype (HPO) term of the sample.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: drop
+    data_collection_tag: outlier_genes
+    viz_kind: ranked_table
+    config:
+      viz_kind: ranked_table
+      title_col: gene_name
+      subtitle_col: sample
+      score_col: significance
+      descending: true
+      columns:
+      - {column: called_in, label: Called in, display: badge}
+      - {column: support, label: Support, display: badge}
+      - {column: phenotype, label: Phenotype, display: badge}
+      - {column: significance, label: '-log10 p', display: bar, decimals: 1}
+      labels:
+        z_score: z-score
+        l2fc: Log2 fold change
+        expression_padj: OUTRIDER adjusted p
+        delta_psi: Delta PSI
+        splicing_padj: FRASER adjusted p
+        alt_ratio: Alternative allele share
+        mae_padj: Allelic adjusted p
+        locus: Locus
+        expression_score: Expression
+        splicing_score: Splicing
+        mae_score: Mono-allelic
+      popover_columns: [z_score, l2fc, expression_padj, delta_psi, splicing_padj, alt_ratio, mae_padj, locus]
+      popover_grid_columns: [expression_score, splicing_score, mae_score]
+      top_n: 50
+      medals: true
+      selection_enabled: true
+      selection_column: call_id
+    section: Ranked per sample
+    tag: dr-cand-ranked
+    index: cand-ranked-genes
+    title: Genes ranked per sample
+    description: The best-supported genes first, with the analyses that call each one. The -log10 p bar adds up the raw p-values of the analyses that tested the gene (2 is p = 0.01 for one analysis), so a longer bar is more or stronger evidence. Hover a row for its statistics; a click picks the gene for the record beside it.
+    layout: {x: 0, y: 0, w: 5, h: 7}
+  - component_type: advanced_viz
+    workflow_tag: drop
+    data_collection_tag: outlier_genes
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: call_id
+      title_col: gene_name
+      selection_source: any
+      linked_component: dr-cand-ranked
+      sections:
+        Call: [gene_name, sample, called_in, phenotype, sample_rank]
+        Expression: [z_score, l2fc, expression_padj, expression_score]
+        Splicing: [delta_psi, splicing_padj, splicing_score]
+        Mono-allelic: [alt_ratio, mae_padj, mae_score]
+        Position: [locus]
+      link_templates:
+        gene_name: https://www.genecards.org/cgi-bin/carddisp.pl?gene={value}
+        locus: https://genome.ucsc.edu/cgi-bin/hgTracks?db={GENOME}&position={value}
+    section: Ranked per sample
+    tag: dr-cand-record
+    index: dr-cand-record
+    title: Gene record
+    layout: {x: 5, y: 0, w: 3, h: 7}
+  - component_type: advanced_viz
+    workflow_tag: drop
+    data_collection_tag: gene_evidence
+    viz_kind: complex_heatmap
+    config:
+      viz_kind: complex_heatmap
+      index_column: gene_name
+      value_columns: [Expression, Splicing, Mono-allelic]
+      cluster_rows: false
+      cluster_cols: false
+      normalize: none
+    section: Genes across analyses
+    tag: dr-cand-grid
+    index: dr-cand-grid
+    title: Strongest evidence per gene and analysis
+    description: The strongest -log10 p-value each analysis gave the gene in any sample. A gene lit in several columns is supported by several analyses.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+# ============================================================================
+# Analyses
+# ============================================================================
+- title: Expression
+  subtitle: Which genes are expressed far from what the cohort predicts?
+  tab_group: Analyses
+  tab_order: 2
+  tab_icon: mdi:chart-bell-curve
+  tab_icon_color: blue
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Expression filters
+    icon: mdi:filter-variant
+    color: blue
+    description: Direction and size of the departure from the expected count
+  grid_sections:
+  - name: Calls at a glance
+    icon: mdi:counter
+    color: blue
+    description: Outlier calls, the samples that carry them, and how far they sit from the fit
+  - name: Volcano
+    icon: mdi:chart-scatter-plot
+    color: blue
+    description: Fold change against significance, one point per sample and gene
+  - name: Samples and genes
+    icon: mdi:chart-bar
+    color: blue
+    description: Which samples carry the calls, and which genes are called again and again
+  - name: Gene detail
+    icon: mdi:information-outline
+    color: gray
+    description: One row per sample and gene; pick one to read its counts and its phenotype match
+    collapsed: true
+  components:
+  # The tab's intro: the method, with its link, and how to read the tab.
+  - component_type: text
+    order: 1
+    body: >
+      [OUTRIDER](https://github.com/gagneurlab/OUTRIDER) fits an autoencoder to the gene counts of a
+      group and calls a gene an outlier in a sample when its count sits far from the one the fit
+      expects, in either direction: an adjusted p-value of {AE_PADJ} or less and an absolute z-score
+      of {AE_MIN_Z} or more. The fit learns what is normal from the cohort, so it needs tens of
+      samples (the Overview's cohort-size card checks it); a small run has too little power for any
+      adjusted p-value to pass, so the tab also counts the nominal hits (raw p-value of {NOMINAL_P}
+      or less), leads to check and not calls, since a share {NOMINAL_P} of tests passes by chance.
+      Read the volcano first, then the samples with the most hits and the genes hit in several
+      samples, and pick a gene to follow it through the other analyses.
+    tag: dr-ae-intro
+    index: ae-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: drop
+    data_collection_tag: expression_outliers
+    interactive_component_type: MultiSelect
+    column_name: direction
+    column_type: object
+    display:
+      icon_name: mdi:swap-vertical
+      custom_color: blue
+    section: Expression filters
+    tag: dr-ae-filter-direction
+    index: ae-direction-filter
+    title: Call
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: drop
+    data_collection_tag: expression_outliers
+    interactive_component_type: RangeSlider
+    column_name: abs_z_score
+    column_type: float64
+    display:
+      icon_name: mdi:ruler
+      custom_color: blue
+    section: Expression filters
+    tag: dr-ae-filter-z
+    index: ae-z-filter
+    title: Absolute z-score
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: expression_outliers
+    aggregation: count
+    column_name: call_id
+    column_type: object
+    filter_expr: col('significant')
+    secondary_layout: composition
+    breakdown_col: direction
+    display:
+      icon_name: mdi:target
+      icon_color: blue.4
+      caption: calls (adjusted p), by direction
+      decimals: 0
+    section: Calls at a glance
+    tag: dr-ae-card-calls
+    index: ae-card-calls
+    title: Outlier calls
+    description: Genes with an adjusted p-value of {AE_PADJ} or less and an absolute z-score of {AE_MIN_Z} or more in a sample (0 keeps every gene the run reported), one per sample and gene. A small run calls none, so read the nominal hits beside it.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: expression_outliers
+    aggregation: count
+    column_name: call_id
+    column_type: object
+    filter_expr: col('nominal')
+    secondary_layout: composition
+    breakdown_col: direction
+    display:
+      icon_name: mdi:magnify-scan
+      icon_color: blue.6
+      caption: hits at the raw p-value, by direction
+      decimals: 0
+    section: Calls at a glance
+    tag: dr-ae-card-nominal
+    index: ae-card-nominal
+    title: Nominal hits
+    description: Genes whose raw p-value is {NOMINAL_P} or less in a sample, the calls included. Not corrected for the number of genes tested, since a share {NOMINAL_P} of the tests passes by chance alone, so a count near that share of the genes tested is what chance gives. A lead to check, not a finding.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: expression_outliers
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    filter_expr: col('nominal')
+    secondary_layout: composition
+    breakdown_col: '{GROUP_COL}'
+    display:
+      icon_name: mdi:flask-outline
+      icon_color: blue.8
+      caption: samples with a hit, by group
+    section: Calls at a glance
+    tag: dr-ae-card-samples
+    index: ae-card-samples
+    title: Samples with a nominal hit
+    description: Samples that carry at least one expression hit at the raw p-value.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: expression_outliers
+    aggregation: max
+    column_name: neg_log10_p
+    column_type: float64
+    filter_expr: col('nominal')
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:trending-up
+      icon_color: blue.9
+      caption: highest -log10 p, with the spread
+      decimals: 1
+    section: Calls at a glance
+    tag: dr-ae-card-signal
+    index: ae-card-signal
+    title: Strongest signal
+    description: The most extreme raw p-value of the genes in view, as -log10 p (2 is p = 0.01, 3 is p = 0.001).
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Gene symbols label the strongest points. The MA view needs the average
+  # abundance. No QQ view: the recipe keeps the called rows and the most significant
+  # rows of each sample, so the p-values are not a full sample of the tests.
+  - component_type: advanced_viz
+    workflow_tag: drop
+    data_collection_tag: expression_outliers
+    viz_kind: volcano
+    config:
+      viz_kind: volcano
+      feature_id_col: call_id
+      label_col: gene_name
+      hover_col: sample
+      category_col: status
+      effect_size_col: l2fc
+      significance_col: p_value
+      p_value_col: p_value
+      avg_log_intensity_col: avg_log_count
+      significance_threshold: 0.05
+      effect_threshold: 0.5
+      top_n_labels: 8
+      show_labels: true
+      effect_label: Log2 fold change vs expected count
+      significance_label: -log10 p-value (raw)
+      view: volcano
+      views: [volcano, ma]
+    section: Volcano
+    tag: dr-ae-volcano
+    index: dr-ae-volcano
+    title: 'OUTRIDER: p-value against fold change'
+    description: The raw p-value, since a small run has no adjusted one under the cut-off. The dashed line is p = 0.05; a red point is a call (adjusted p), an orange one a nominal hit that corrected testing does not support.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: figure
+    workflow_tag: drop
+    data_collection_tag: expression_outliers
+    visu_type: bar
+    mode: code
+    code_content: |-
+      hits = df.filter(pl.col('nominal'))
+      per = hits.group_by('sample', 'status').len().rename({'len': 'hits'})
+      order = per.group_by('sample').agg(pl.col('hits').sum().alias('total')).sort(['total', 'sample'], descending=[True, False]).head(15)['sample'].to_list()
+      per = per.filter(pl.col('sample').is_in(order))
+      fig = px.bar(per.to_pandas(), y='sample', x='hits', color='status', orientation='h', color_discrete_map=depictio_category_colors.get('status') or {}, category_orders={'sample': order, 'status': ['called (adjusted p)', 'nominal p only']}, labels={'sample': 'Sample', 'hits': 'Genes at the raw p-value', 'status': 'Status'})
+      fig.update_yaxes(autorange='reversed', automargin=True)
+      fig.update_xaxes(dtick=1 if per['hits'].sum() <= 8 else None)
+      fig.update_layout(margin=dict(t=10), legend_title_text='')
+    section: Samples and genes
+    tag: dr-ae-per-sample
+    index: ae-per-sample
+    title: Samples with the most hits
+    description: Genes at a raw p-value of {NOMINAL_P} or less per sample; the red part is called after correction, the orange part is not.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: figure
+    workflow_tag: drop
+    data_collection_tag: expression_outliers
+    visu_type: bar
+    mode: code
+    code_content: |-
+      hits = df.filter(pl.col('nominal'))
+      per = hits.group_by('gene_name', 'status').agg(pl.col('sample').n_unique().alias('samples'))
+      order = per.group_by('gene_name').agg(pl.col('samples').sum().alias('total')).sort(['total', 'gene_name'], descending=[True, False]).head(15)['gene_name'].to_list()
+      per = per.filter(pl.col('gene_name').is_in(order))
+      fig = px.bar(per.to_pandas(), y='gene_name', x='samples', color='status', orientation='h', color_discrete_map=depictio_category_colors.get('status') or {}, category_orders={'gene_name': order, 'status': ['called (adjusted p)', 'nominal p only']}, labels={'gene_name': 'Gene', 'samples': 'Samples with a hit', 'status': 'Status'})
+      fig.update_yaxes(autorange='reversed', automargin=True)
+      fig.update_xaxes(dtick=1 if per['samples'].sum() <= 8 else None)
+      fig.update_layout(margin=dict(t=10), legend_title_text='')
+    section: Samples and genes
+    tag: dr-ae-recurrent
+    index: ae-recurrent-genes
+    title: Genes hit in several samples
+    description: A gene hit in many samples of a group is more often a technical artefact than a diagnosis.
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: table
+    workflow_tag: drop
+    data_collection_tag: expression_outliers
+    row_selection_enabled: true
+    row_selection_column: call_id
+    section: Gene detail
+    tag: dr-ae-table
+    index: ae-table-calls
+    title: OUTRIDER results, strongest first
+    description: One row per sample and gene, the calls and the nominal hits first, sorted by raw p-value.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: drop
+    data_collection_tag: expression_outliers
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: call_id
+      title_col: gene_name
+      selection_source: any
+      linked_component: dr-ae-table
+      sections:
+        Call: [gene_name, sample, direction, drop_group]
+        Evidence: [z_score, l2fc, padj, p_value]
+        Counts: [raw_count, expected_count, mean_count]
+        Phenotype: [hpo_match, hpo_label_overlap]
+        Position: [locus]
+      link_templates:
+        gene_name: https://www.genecards.org/cgi-bin/carddisp.pl?gene={value}
+        locus: https://genome.ucsc.edu/cgi-bin/hgTracks?db={GENOME}&position={value}
+    section: Gene detail
+    tag: dr-ae-record
+    index: dr-ae-record
+    title: Call record
+    layout: {x: 5, y: 0, w: 3, h: 6}
+- title: Splicing
+  subtitle: Which junctions are used far more or less than in the cohort?
+  tab_group: Analyses
+  tab_order: 3
+  tab_icon: mdi:content-cut
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Splicing filters
+    icon: mdi:filter-variant
+    color: orange
+    description: Direction, size and metric of the change in junction usage
+  grid_sections:
+  - name: Calls at a glance
+    icon: mdi:counter
+    color: orange
+    description: Outlier genes, the samples that carry them, and what FRASER makes of the junctions
+  - name: Volcano
+    icon: mdi:chart-scatter-plot
+    color: orange
+    description: Change in usage against significance, one point per sample and gene
+  - name: Samples and effects
+    icon: mdi:chart-bar
+    color: orange
+    description: Which samples carry the calls, and what FRASER makes of the called junctions
+  - name: Junction detail
+    icon: mdi:information-outline
+    color: gray
+    description: One row per sample and gene, at its most significant junction; pick one to read it
+    collapsed: true
+  components:
+  # The tab's intro: the method, with its link, and how to read the tab.
+  - component_type: text
+    order: 1
+    body: >
+      [FRASER](https://github.com/gagneurlab/FRASER) fits a model to the split-read counts of a group
+      and calls a gene an outlier in a sample when one of its junctions is used far more or less than
+      expected: a gene-level adjusted p-value of {AS_PADJ} or less and a delta PSI (the sample's usage
+      minus the cohort's, from -1 to 1) of {AS_MIN_DPSI} or more at one junction. Like OUTRIDER it needs
+      tens of samples, so a small run calls nothing after correction and the tab counts the nominal hits
+      too (raw p-value of {NOMINAL_P} or less), leads and not calls, since a share {NOMINAL_P} of tests
+      passes by chance. Each row is a gene at its most significant junction; read the volcano first, then
+      the samples with the most hits and the effect of the hit junctions.
+    tag: dr-as-intro
+    index: as-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: drop
+    data_collection_tag: splicing_outliers
+    interactive_component_type: MultiSelect
+    column_name: direction
+    column_type: object
+    display:
+      icon_name: mdi:swap-vertical
+      custom_color: orange
+    section: Splicing filters
+    tag: dr-as-filter-direction
+    index: as-direction-filter
+    title: Call
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: drop
+    data_collection_tag: splicing_outliers
+    interactive_component_type: RangeSlider
+    column_name: abs_delta_psi
+    column_type: float64
+    display:
+      icon_name: mdi:ruler
+      custom_color: orange
+    section: Splicing filters
+    tag: dr-as-filter-dpsi
+    index: as-dpsi-filter
+    title: Absolute delta PSI
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: drop
+    data_collection_tag: splicing_outliers
+    interactive_component_type: MultiSelect
+    column_name: psi_type
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: grape
+    section: Splicing filters
+    tag: dr-as-filter-type
+    index: as-type-filter
+    title: Splicing metric
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: splicing_outliers
+    aggregation: nunique
+    column_name: gene_name
+    column_type: object
+    filter_expr: col('significant')
+    secondary_layout: composition
+    breakdown_col: direction
+    display:
+      icon_name: mdi:target
+      icon_color: orange.4
+      caption: genes (adjusted p), by direction of the change
+      decimals: 0
+    section: Calls at a glance
+    tag: dr-as-card-genes
+    index: as-card-genes
+    title: Outlier genes
+    description: Genes with a gene-level adjusted p-value of {AS_PADJ} or less and a junction whose usage differs by {AS_MIN_DPSI} or more (delta PSI) in a sample, counted once. A small run calls none, so read the nominal hits beside it.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: splicing_outliers
+    aggregation: nunique
+    column_name: gene_name
+    column_type: object
+    filter_expr: col('nominal')
+    secondary_layout: composition
+    breakdown_col: direction
+    display:
+      icon_name: mdi:magnify-scan
+      icon_color: orange.6
+      caption: hits at the raw p-value, by direction
+      decimals: 0
+    section: Calls at a glance
+    tag: dr-as-card-nominal
+    index: as-card-nominal
+    title: Nominal hits
+    description: Genes with a junction whose raw p-value is {NOMINAL_P} or less in a sample, the calls included, counted once. Not corrected for the number of junctions tested, since a share {NOMINAL_P} of the tests passes by chance alone. A lead, not a finding.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: splicing_outliers
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    filter_expr: col('nominal')
+    secondary_layout: composition
+    breakdown_col: '{GROUP_COL}'
+    display:
+      icon_name: mdi:flask-outline
+      icon_color: orange.8
+      caption: samples with a hit, by group
+    section: Calls at a glance
+    tag: dr-as-card-samples
+    index: as-card-samples
+    title: Samples with a nominal hit
+    description: Samples that carry at least one splicing hit at the raw p-value.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: splicing_outliers
+    aggregation: max
+    column_name: neg_log10_p
+    column_type: float64
+    filter_expr: col('nominal')
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:trending-up
+      icon_color: orange.9
+      caption: highest -log10 p, with the spread
+      decimals: 1
+    section: Calls at a glance
+    tag: dr-as-card-signal
+    index: as-card-signal
+    title: Strongest signal
+    description: The most extreme raw p-value of the junctions in view, as -log10 p (2 is p = 0.01, 3 is p = 0.001).
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: drop
+    data_collection_tag: splicing_outliers
+    viz_kind: volcano
+    config:
+      viz_kind: volcano
+      feature_id_col: call_id
+      label_col: gene_name
+      hover_col: sample
+      category_col: status
+      effect_size_col: delta_psi
+      significance_col: p_value
+      p_value_col: p_value
+      avg_log_intensity_col: avg_log_reads
+      significance_threshold: 0.05
+      effect_threshold: 0.1
+      top_n_labels: 8
+      show_labels: true
+      effect_label: Change in junction usage (delta PSI)
+      significance_label: -log10 p-value (raw)
+      view: volcano
+      views: [volcano, ma]
+    section: Volcano
+    tag: dr-as-volcano
+    index: dr-as-volcano
+    title: 'FRASER: p-value against delta PSI'
+    description: The raw p-value of each junction, since a small run has no adjusted one under the cut-off. The dashed line is p = 0.05; a red point is a call (adjusted p), an orange one a nominal hit that corrected testing does not support.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: figure
+    workflow_tag: drop
+    data_collection_tag: splicing_outliers
+    visu_type: bar
+    mode: code
+    code_content: |-
+      hits = df.filter(pl.col('nominal'))
+      per = hits.group_by('sample', 'status').agg(pl.col('gene_name').n_unique().alias('genes'))
+      order = per.group_by('sample').agg(pl.col('genes').sum().alias('total')).sort(['total', 'sample'], descending=[True, False]).head(15)['sample'].to_list()
+      per = per.filter(pl.col('sample').is_in(order))
+      fig = px.bar(per.to_pandas(), y='sample', x='genes', color='status', orientation='h', color_discrete_map=depictio_category_colors.get('status') or {}, category_orders={'sample': order, 'status': ['called (adjusted p)', 'nominal p only']}, labels={'sample': 'Sample', 'genes': 'Genes at the raw p-value', 'status': 'Status'})
+      fig.update_yaxes(autorange='reversed', automargin=True)
+      fig.update_xaxes(dtick=1 if per['genes'].sum() <= 8 else None)
+      fig.update_layout(margin=dict(t=10), legend_title_text='')
+    section: Samples and effects
+    tag: dr-as-per-sample
+    index: as-per-sample
+    title: Samples with the most hits
+    description: Genes at a raw p-value of {NOMINAL_P} or less per sample; the red part is called after correction, the orange part is not.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: figure
+    workflow_tag: drop
+    data_collection_tag: splicing_outliers
+    visu_type: histogram
+    mode: code
+    code_content: |-
+      calls = df.filter(pl.col('nominal') & pl.col('potential_impact').is_not_null())
+      calls = calls.with_columns(pl.col('potential_impact').replace({'annotatedIntron_reducedUsage': 'intron used less', 'annotatedIntron_increasedUsage': 'intron used more', 'exonElongation': 'exon extended', 'exonTruncation': 'exon shortened'}).str.replace_all(r'([a-z])([A-Z])', '$1 $2').str.replace_all('_', ' ').str.to_lowercase().alias('effect'))
+      fig = px.histogram(calls.to_pandas(), y='effect', color='status', barmode='stack', color_discrete_map=depictio_category_colors.get('status') or {}, category_orders={'status': ['called (adjusted p)', 'nominal p only']}, labels={'effect': 'Effect', 'status': 'Status'})
+      fig.update_yaxes(categoryorder='total ascending', automargin=True, title_text='')
+      top = calls.group_by('effect').len()['len'].max() or 0
+      fig.update_xaxes(title='Genes at the raw p-value', dtick=1 if top <= 8 else None)
+      fig.update_layout(margin=dict(t=10), legend_title_text='')
+    section: Samples and effects
+    tag: dr-as-impact
+    index: as-impact
+    title: What the hit junctions do
+    description: FRASER's reading of each hit junction against the transcript annotation. An annotated intron used less or more than in the cohort is the commonest effect; an extended or shortened exon moves the exon boundary.
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: table
+    workflow_tag: drop
+    data_collection_tag: splicing_outliers
+    row_selection_enabled: true
+    row_selection_column: call_id
+    section: Junction detail
+    tag: dr-as-table
+    index: as-table-calls
+    title: FRASER results, strongest first
+    description: One row per sample and gene at its most significant junction, sorted by raw p-value.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: drop
+    data_collection_tag: splicing_outliers
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: call_id
+      title_col: gene_name
+      selection_source: any
+      linked_component: dr-as-table
+      sections:
+        Call: [gene_name, sample, direction, drop_group]
+        Junction: [locus, strand, psi_type, annotated_junction]
+        Usage: [psi_value, delta_psi, split_reads, total_reads]
+        Test: [p_value, padj, padj_gene]
+        Effect: [potential_impact, causes_frameshift, hpo_match]
+      link_templates:
+        gene_name: https://www.genecards.org/cgi-bin/carddisp.pl?gene={value}
+        locus: https://genome.ucsc.edu/cgi-bin/hgTracks?db={GENOME}&position={value}
+    section: Junction detail
+    tag: dr-as-record
+    index: dr-as-record
+    title: Junction record
+    layout: {x: 5, y: 0, w: 3, h: 6}
+- title: Mono-allelic
+  subtitle: Which variants are read from one allele only?
+  tab_group: Analyses
+  tab_order: 4
+  tab_icon: mdi:set-split
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Mono-allelic filters
+    icon: mdi:filter-variant
+    color: teal
+    description: The call, and how unbalanced the reads are
+  grid_sections:
+  - name: Calls at a glance
+    icon: mdi:counter
+    color: teal
+    description: Heterozygous variants tested, called mono-allelic, and how deep their reads are
+  - name: Allelic imbalance
+    icon: mdi:chart-scatter-plot
+    color: teal
+    description: Each variant's allelic ratio against the significance of the test for balanced expression
+  - name: Variant detail
+    icon: mdi:information-outline
+    color: gray
+    description: One row per sample and variant; pick one to read its counts and its test
+    collapsed: true
+  components:
+  # The tab's intro: the method, with its link, and how to read the tab.
+  - component_type: text
+    order: 1
+    body: >
+      A heterozygous variant should be read from both alleles about equally. DROP counts the RNA reads
+      that carry each allele and tests the split against balanced expression, so a variant with nearly
+      all its reads on one allele may mark a silenced or imprinted copy. Only samples with a DNA genotype
+      take part, and a call needs an adjusted p-value of {MAE_PADJ} or less with at least {MAE_MIN_RATIO}
+      of the reads on one allele.
+    tag: dr-mae-intro
+    index: mae-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: drop
+    data_collection_tag: mae_variants
+    interactive_component_type: MultiSelect
+    column_name: call
+    column_type: object
+    display:
+      icon_name: mdi:set-split
+      custom_color: teal
+    section: Mono-allelic filters
+    tag: dr-mae-filter-call
+    index: mae-call-filter
+    title: Call
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: drop
+    data_collection_tag: mae_variants
+    interactive_component_type: RangeSlider
+    column_name: alt_ratio
+    column_type: float64
+    display:
+      icon_name: mdi:ruler
+      custom_color: teal
+    section: Mono-allelic filters
+    tag: dr-mae-filter-ratio
+    index: mae-ratio-filter
+    title: Alternative allele share
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: mae_variants
+    aggregation: count
+    column_name: call_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: call
+    display:
+      icon_name: mdi:dna
+      icon_color: teal.4
+      caption: variants, by call
+      decimals: 0
+    section: Calls at a glance
+    tag: dr-mae-card-tested
+    index: mae-card-tested
+    title: Variants tested
+    description: Heterozygous SNVs with enough reads to test, one per sample and variant. The ring splits them by call.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: mae_variants
+    aggregation: count
+    column_name: call_id
+    column_type: object
+    filter_expr: col('mono_allelic')
+    secondary_layout: composition
+    breakdown_col: call
+    display:
+      icon_name: mdi:target
+      icon_color: teal.6
+      caption: calls, by the allele that is read
+      decimals: 0
+    section: Calls at a glance
+    tag: dr-mae-card-calls
+    index: mae-card-calls
+    title: Mono-allelic calls
+    description: Variants with an adjusted p-value of {MAE_PADJ} or less and one allele carrying {MAE_MIN_RATIO} or more of the reads.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: mae_variants
+    aggregation: count
+    column_name: call_id
+    column_type: object
+    filter_expr: col('mono_allelic') & col('rare')
+    secondary_layout: composition
+    breakdown_col: call
+    display:
+      icon_name: mdi:diamond-stone
+      icon_color: teal.8
+      caption: rare calls, by the allele that is read
+      decimals: 0
+    section: Calls at a glance
+    tag: dr-mae-card-rare
+    index: mae-card-rare
+    title: Rare calls
+    description: Mono-allelic variants that pass the run's population-frequency cut-offs, the ones worth reading first.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: mae_variants
+    aggregation: median
+    column_name: total_count
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:layers-outline
+      icon_color: teal.9
+      caption: median per variant, with its spread
+      decimals: 0
+    section: Calls at a glance
+    tag: dr-mae-card-depth
+    index: mae-card-depth
+    title: Read depth
+    description: RNA reads covering each variant. Thin coverage makes a call weak whatever its ratio.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: drop
+    data_collection_tag: mae_variants
+    viz_kind: volcano
+    config:
+      viz_kind: volcano
+      feature_id_col: call_id
+      label_col: gene_name
+      hover_col: sample
+      category_col: call
+      effect_size_col: log2fc
+      significance_col: p_value
+      p_value_col: p_value
+      avg_log_intensity_col: avg_log_count
+      significance_threshold: 0.05
+      effect_threshold: 2.0
+      point_size: 12
+      top_n_labels: 6
+      show_labels: true
+      effect_label: Log2 alternative over reference reads
+      significance_label: -log10 p-value (raw)
+      view: volcano
+      views: [volcano, ma, qq]
+    section: Allelic imbalance
+    tag: dr-mae-volcano
+    index: dr-mae-volcano
+    title: 'MAE: p-value against allelic ratio'
+    description: The raw p-value of each heterozygous variant, since a small run shares one adjusted p-value among most of them. The dashed line is p = 0.05; the dotted lines are at log2 of -2 and 2, where one allele is read four times as often as the other (80% of the reads). A red point leans to the alternative allele, a blue one to the reference.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: drop
+    data_collection_tag: mae_variants
+    row_selection_enabled: true
+    row_selection_column: call_id
+    section: Variant detail
+    tag: dr-mae-table
+    index: mae-table-variants
+    title: Heterozygous variants
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: drop
+    data_collection_tag: mae_variants
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: call_id
+      title_col: gene_name
+      selection_source: any
+      linked_component: dr-mae-table
+      sections:
+        Variant: [gene_name, sample, locus, variant_id, ref_allele, alt_allele]
+        Reads: [ref_count, alt_count, total_count, alt_ratio]
+        Test: [p_value, padj, log2fc, call]
+        Frequency: [rare, allele_frequency, max_population_af, cohort_frequency]
+      link_templates:
+        gene_name: https://www.genecards.org/cgi-bin/carddisp.pl?gene={value}
+        locus: https://genome.ucsc.edu/cgi-bin/hgTracks?db={GENOME}&position={value}
+    section: Variant detail
+    tag: dr-mae-record
+    index: dr-mae-record
+    title: Variant record
+    layout: {x: 5, y: 0, w: 3, h: 6}
+# The navigator and the browser it drives share one screen. The lanes carry the genes
+# of every sample's triage list on one axis, the browser shows the alignments and
+# genotypes of the samples in view on the locus the lanes frame. It is the only
+# browser of the template; the volcanoes reach it through the Open in genome browser
+# action.
+- title: Locus
+  subtitle: Where on the genome do the called genes sit, and what do the reads show?
+  tab_group: Analyses
+  tab_order: 5
+  tab_icon: mdi:map-search-outline
+  tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Locus filters
+    icon: mdi:filter-variant
+    color: indigo
+    description: How many analyses call the gene, and how strong the evidence is
+  grid_sections:
+  - name: Region at a glance
+    icon: mdi:counter
+    color: indigo
+    description: What the region in view holds, recounted on every brush or locus entry
+  - name: Genes on one axis
+    icon: mdi:dna
+    color: indigo
+    description: The lanes drive the browser below. A brush or a locus on the lanes moves it, and its view comes back on the lanes as a dashed band.
+    # One screen: the lanes and the browser they drive, compact headers with each
+    # tile's kind, as the protein templates' linked views.
+    display: linked
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      The genes of every sample's triage list on one genome axis, one lane per sample and coloured by
+      its analysis group like the tracks under it, with the reads and the genotypes of the samples in
+      a genome browser. The tab opens on the best-supported gene and on the reads of its sample; type
+      a locus in the lanes' header or brush their axis, and the browser and the cards follow. The
+      number of analyses that call a gene is the filter on the left and the badge in the Candidates
+      tab.
+    tag: dr-loc-intro
+    index: loc-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: drop
+    data_collection_tag: outlier_genes
+    interactive_component_type: MultiSelect
+    column_name: support
+    column_type: object
+    display:
+      icon_name: mdi:layers-triple-outline
+      custom_color: indigo
+    section: Locus filters
+    group: Region
+    tag: dr-loc-filter-support
+    index: loc-support-filter
+    title: Called by
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: drop
+    data_collection_tag: outlier_genes
+    interactive_component_type: MultiSelect
+    column_name: phenotype
+    column_type: object
+    display:
+      icon_name: mdi:stethoscope
+      custom_color: teal
+    section: Locus filters
+    group: Region
+    tag: dr-loc-filter-phenotype
+    index: loc-phenotype-filter
+    title: Phenotype
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: drop
+    data_collection_tag: outlier_genes
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: significance
+    column_type: float64
+    display:
+      icon_name: mdi:check-decagram
+      custom_color: red
+    section: Locus filters
+    group: Region
+    tag: dr-loc-filter-score
+    index: loc-score-range
+    title: Evidence
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: outlier_genes
+    aggregation: count
+    column_name: call_id
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: support
+    follow_region_filter: true
+    display:
+      icon_name: mdi:target
+      icon_color: indigo.4
+      caption: genes in a sample, by analyses that call them
+      decimals: 0
+    section: Region at a glance
+    tag: dr-loc-card-genes-listed
+    index: loc-card-listed
+    title: Genes in the region
+    description: Genes of the triage lists on the region in view, one per sample and gene.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: outlier_genes
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: '{GROUP_COL}'
+    follow_region_filter: true
+    display:
+      icon_name: mdi:flask-outline
+      icon_color: indigo.6
+      caption: samples, by group
+    section: Region at a glance
+    tag: dr-loc-card-samples
+    index: loc-card-samples
+    title: Samples
+    description: Samples with a listed gene on the region.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: outlier_genes
+    aggregation: count
+    column_name: call_id
+    column_type: object
+    filter_expr: col('n_analyses') >= 1
+    secondary_layout: composition
+    breakdown_col: called_in
+    follow_region_filter: true
+    display:
+      icon_name: mdi:set-merge
+      icon_color: indigo.8
+      caption: called genes, by analyses
+      decimals: 0
+    section: Region at a glance
+    tag: dr-loc-card-called
+    index: loc-card-called
+    title: Called genes
+    description: Genes on the region that at least one analysis calls.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: drop
+    data_collection_tag: outlier_genes
+    aggregation: max
+    column_name: significance
+    column_type: float64
+    secondary_layout: histogram
+    follow_region_filter: true
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: indigo.9
+      caption: strongest evidence, with the spread
+      decimals: 1
+    section: Region at a glance
+    tag: dr-loc-card-score
+    index: loc-card-score
+    title: Strongest evidence
+    description: Highest summed -log10 p-value of a gene on the region.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: drop
+    data_collection_tag: outlier_genes
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      chr_col: chrom
+      pos_col: start
+      end_col: end
+      score_col: significance
+      feature_col: gene_name
+      sample_col: sample
+      category_col: drop_group
+      mark: rect
+      score_title: Summed -log10 p-value of the analyses
+      opacity: 0.8
+      assembly: '{GENOME}'
+      # No default_region: `first` filters the whole first contig on load, the browser
+      # follows it and every track shows "Force load". The browser opens on its locus_from.
+      region_filter_enabled: true
+    section: Genes on one axis
+    tag: dr-loc-navigator
+    index: loc-navigator
+    title: Genes on the genome
+    description: Every gene of the triage lists with a position, one lane per sample, coloured by the sample's analysis group as in the browser below. The locus field and a brush on this axis move the browser.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  # No fixed location: the browser opens on the best-supported gene, and a brush on
+  # the navigator moves it without filtering. No selection write-back here: a picked
+  # track would narrow the genes to one sample and reframe the view.
+  - component_type: jbrowse
+    workflow_tag: drop
+    data_collection_tag: tracks
+    section: Genes on one axis
+    # The reads and the genotypes of the strongest call's sample, then the reads of
+    # one sample of each other group (the order of tracks.py).
+    initial_tracks: 4
+    max_tracks: 12
+    show_overview: false
+    # Splice arcs over the coverage of the BAMs.
+    show_junctions: true
+    # The samples of a group share a hue, as in the navigator's lanes.
+    color_by: drop_group
+    # Common dbSNP sites and ClinVar under the genotypes, from UCSC.
+    ucsc_tracks: [dbSnp155Common, clinvarMain]
+    locus_from:
+      data_collection_tag: outlier_genes
+      chrom_column: chrom
+      start_column: start
+      end_column: end
+      padding: 2000
+      max_rows: 2000
+      sort_by: significance
+      descending: true
+      label_column: gene_name
+      sample_column: sample
+      columns: [called_in, significance]
+      search_columns: [gene_name]
+    tag: dr-loc-browser
+    index: loc-browser
+    # The lanes above already say where the browser is: its locus bar only costs
+    # height here, and the tile's menu brings it back.
+    show_header: false
+    title: Genome browser
+    description: The reads (with splice-junction arcs) and genotypes of the samples in view on the region of the lanes above, opening on the sample of the strongest gene; common dbSNP sites and ClinVar come from UCSC.
+    layout: {x: 0, y: 6, w: 8, h: 7}

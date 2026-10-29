@@ -44,6 +44,8 @@ import {
   genomeRegionFilters,
   regionFromFilters,
 } from '../../selection';
+import { usePublishHighlight } from '../../highlight/bus';
+import { contigSpellings } from '../../highlight/genomicHover';
 import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
 import { isZoomWheel } from '../zoomGate';
 import { useZoomGate } from '../zoomGateDom';
@@ -213,6 +215,14 @@ interface HoverContent {
 interface HoverCardHandle {
   show: (content: HoverContent, x: number, y: number) => void;
   hide: () => void;
+}
+
+/** The genomic interval a hover points at, for the highlight bus. */
+interface HoverGenomic {
+  refName: string;
+  start: number;
+  end: number;
+  color?: string;
 }
 
 const HoverCard = forwardRef<HoverCardHandle, { bounds: { w: number; h: number } }>(({ bounds }, ref) => {
@@ -866,7 +876,48 @@ const IdeogramRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
     return box ? { x: e.clientX - box.left, y: e.clientY - box.top } : { x: 0, y: 0 };
   };
 
-  const showHover = (content: HoverContent | null, mark: HoverMark | null, x: number, y: number, cursor: string) => {
+  // What the pointer is on, as a genomic interval, goes out on the highlight
+  // bus: a genome browser draws a band there, wearing the mark's colour. Never
+  // a filter. The bus coalesces and drops repeats, so every move may publish.
+  const publishHighlight = usePublishHighlight(String(metadata.index));
+  useEffect(() => () => publishHighlight(null), [publishHighlight]);
+  const publishGenomic = (g: HoverGenomic | null) => {
+    if (!g || !g.refName || !Number.isFinite(g.start) || !Number.isFinite(g.end)) {
+      publishHighlight(null);
+      return;
+    }
+    const aliases = contigSpellings(g.refName);
+    publishHighlight({
+      entity: g.refName,
+      start: Math.min(g.start, g.end),
+      end: Math.max(g.start, g.end),
+      ...(aliases ? { entityAliases: aliases } : {}),
+      positionColumn: config.start_col,
+      ...(g.color ? { color: g.color } : {}),
+      genomic: {
+        refName: g.refName,
+        start: Math.min(g.start, g.end),
+        end: Math.max(g.start, g.end),
+        ...(aliases ? { aliases } : {}),
+      },
+    });
+  };
+  const featureGenomic = (f: IdeogramFeature): HoverGenomic => ({
+    refName: f.chrom,
+    start: f.start,
+    end: Math.max(f.start, f.end),
+    color: markColour(f),
+  });
+
+  const showHover = (
+    content: HoverContent | null,
+    mark: HoverMark | null,
+    x: number,
+    y: number,
+    cursor: string,
+    genomic: HoverGenomic | null = null,
+  ) => {
+    publishGenomic(genomic);
     if (content) hoverRef.current?.show(content, x, y);
     else hoverRef.current?.hide();
     hoverMarkRef.current = mark;
@@ -890,7 +941,7 @@ const IdeogramRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
         if (fi >= 0) {
           const f = features[fi];
           const r = spanRect(panel, g, f.start, f.end, { minPx: 2, overhang: 3 });
-          return showHover({ ...featureContent(f), hint: chromHint }, { rect: r, guideX: null, guideTop: 0, guideBottom: 0 }, x, y, 'pointer');
+          return showHover({ ...featureContent(f), hint: chromHint }, { rect: r, guideX: null, guideTop: 0, guideBottom: 0 }, x, y, 'pointer', featureGenomic(f));
         }
       } else {
         const bins = overviewBins[hit.panel]?.get(g.bar.key);
@@ -899,11 +950,16 @@ const IdeogramRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
           if (at.kind === 'wide') {
             const f = features[at.feature];
             const r = spanRect(panel, g, f.start, f.end, { minPx: 1 });
-            return showHover({ ...featureContent(f), hint: chromHint }, { rect: r, guideX: null, guideTop: 0, guideBottom: 0 }, x, y, 'pointer');
+            return showHover({ ...featureContent(f), hint: chromHint }, { rect: r, guideX: null, guideTop: 0, guideBottom: 0 }, x, y, 'pointer', featureGenomic(f));
           }
           const [s, e] = binSpan(bins, at.bin);
           const r = spanRect(panel, g, s, Math.min(g.bar.length, e), { minPx: 2 });
-          return showHover({ ...binContent(g.bar, bins, at.bin), hint: chromHint }, { rect: r, guideX: null, guideTop: 0, guideBottom: 0 }, x, y, 'pointer');
+          return showHover({ ...binContent(g.bar, bins, at.bin), hint: chromHint }, { rect: r, guideX: null, guideTop: 0, guideBottom: 0 }, x, y, 'pointer', {
+            refName: g.bar.name,
+            start: s,
+            end: Math.min(g.bar.length, e),
+            color: primary,
+          });
         }
       }
     }
@@ -943,17 +999,22 @@ const IdeogramRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
       const fi = nearestFeature(features, detailIdx, pos, tol);
       if (fi >= 0) {
         const f = features[fi];
-        return showHover(featureContent(f), { ...guide, rect: toRect(f.start, Math.max(f.end, f.start)) }, x, y, 'grab');
+        return showHover(featureContent(f), { ...guide, rect: toRect(f.start, Math.max(f.end, f.start)) }, x, y, 'grab', featureGenomic(f));
       }
     } else if (detailBins) {
       const at = binAt(detailBins, features, pos, tol);
       if (at?.kind === 'wide') {
         const f = features[at.feature];
-        return showHover(featureContent(f), { ...guide, rect: toRect(f.start, f.end) }, x, y, 'grab');
+        return showHover(featureContent(f), { ...guide, rect: toRect(f.start, f.end) }, x, y, 'grab', featureGenomic(f));
       }
       if (at) {
         const [s, e] = binSpan(detailBins, at.bin);
-        return showHover(binContent(detailBar, detailBins, at.bin), { ...guide, rect: toRect(s, e) }, x, y, 'grab');
+        return showHover(binContent(detailBar, detailBins, at.bin), { ...guide, rect: toRect(s, e) }, x, y, 'grab', {
+          refName: detailBar.name,
+          start: s,
+          end: Math.min(L, e),
+          color: primary,
+        });
       }
     }
     return showHover(
@@ -962,6 +1023,8 @@ const IdeogramRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onF
       x,
       y,
       'grab',
+      // The base under the pointer: a cursor on the genome browser.
+      { refName: detailBar.name, start: Math.round(pos), end: Math.round(pos), color: primary },
     );
   };
 

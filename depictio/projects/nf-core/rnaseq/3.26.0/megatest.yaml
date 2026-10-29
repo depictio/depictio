@@ -60,6 +60,10 @@ keys:
   # run` works on this DATA_ROOT without overrides.
   - salmon/salmon.merged.gene_tpm.tsv
   - salmon/salmon.merged.gene_counts.tsv
+  # StringTie's per-library gene tables (about 4 MB each): the only gene-level
+  # table of the run with coordinates, which the genome browser frames a gene on.
+  # The transcript GTFs beside them (200 MB each) are never fetched.
+  - star_salmon/stringtie/*.gene.abundance.txt
   # Per-sample Salmon quant metadata (mapping rate, library type) - small JSON.
   - star_salmon/*/aux_info/meta_info.json
   - salmon/*/aux_info/meta_info.json

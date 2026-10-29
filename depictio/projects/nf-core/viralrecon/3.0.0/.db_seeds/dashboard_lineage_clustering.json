@@ -30,7 +30,7 @@
       "order": 1,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "[Pangolin](https://github.com/cov-lineages/pangolin) names each consensus genome's lineage and [Nextclade](https://clades.nextstrain.org) its clade, each with a QC verdict. The Sankey follows every sample from its verdict to both calls; the PCA and the UpSet group samples by the mutations they share.\n",
+      "body": "[Pangolin](https://github.com/cov-lineages/pangolin) names each consensus genome's lineage and [Nextclade](https://clades.nextstrain.org) its clade, each with a QC verdict: the bars rate the consensus, the table lists each sample's call. Collapsed below, the Sankey follows every sample from its verdict to both calls, and the PCA and the UpSet group samples by the mutations they share. Those three compare samples with each other, so they say little on a run of a few.\n",
       "surface": "none",
       "accent": null,
       "logo": null,
@@ -73,6 +73,7 @@
       "group": "Calls",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "red",
@@ -116,6 +117,7 @@
       "group": "Calls",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "grape",
@@ -159,6 +161,7 @@
       "group": "QC verdicts",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "pink",
@@ -202,6 +205,7 @@
       "group": "QC verdicts",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "green",
@@ -262,7 +266,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:virus",
-      "icon_color": "red",
+      "icon_color": "red.4",
       "caption": "samples per assigned lineage",
       "decimals": 0,
       "wf_tag": "nextflow/viralrecon"
@@ -321,7 +325,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:family-tree",
-      "icon_color": "grape",
+      "icon_color": "red.6",
       "caption": "samples per clade",
       "decimals": 0,
       "wf_tag": "nextflow/viralrecon"
@@ -351,7 +355,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "Median overall QC score of the consensus genomes; lower is better.",
+      "description": "Median overall QC score of the consensus genomes, Nextclade's own scale. Under 30 is good, 30 to 100 mediocre, 100 or more bad, and a clean genome scores 0.",
       "title_size": "sm",
       "title_align": "left",
       "use": "nextclade/report",
@@ -380,8 +384,8 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:shield-check-outline",
-      "icon_color": "green",
-      "caption": "genomes against Nextclade's good and bad marks",
+      "icon_color": "red.8",
+      "caption": "genomes against 30 (good) and 100 (bad)",
       "decimals": 1,
       "wf_tag": "nextflow/viralrecon"
     },
@@ -441,9 +445,60 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:alert-outline",
-      "icon_color": "orange",
+      "icon_color": "red.9",
       "caption": "median per genome, with its spread",
       "decimals": 0,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "lin-qc-score",
+      "component_type": "figure",
+      "title": "Nextclade QC score per consensus genome",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "nextclade_results",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c15"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nextclade clade assignments and sequence quality metrics",
+        "data_collection_tag": "nextclade_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c15"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Worst first, on a log axis; under the lower dashed line (30) is good, above the upper (100) is bad.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "nextclade/report",
+      "catalog_source": {
+        "toolId": "nextclade",
+        "toolName": "Nextclade",
+        "outputId": "nextclade_report",
+        "use": "nextclade/report",
+        "description": "Per-sample clade assignment + sequence QC."
+      },
+      "section": "Consensus quality",
+      "visu_type": "bar",
+      "dict_kwargs": {},
+      "mode": "code",
+      "code_content": "# Nextclade's overall QC score of each consensus genome, the worst first (at most 40) on a log\n# axis. A clean genome scores 0, drawn as a sliver. The dashed lines are Nextclade's own marks:\n# under 30 is good, 100 or more is bad.\ncolors = depictio_category_colors.get('qc_overallStatus') or {}\nd = df.filter(pl.col('qc_overallScore').is_not_null()).sort(['qc_overallScore', 'sample'], descending=[True, False]).head(40).with_columns(pl.col('qc_overallScore').clip(lower_bound=0.1).alias('score'))\nfig = px.bar(d.to_pandas(), x='sample', y='score', color='qc_overallStatus', color_discrete_map=colors, category_orders={'sample': d.get_column('sample').to_list(), 'qc_overallStatus': ['good', 'mediocre', 'bad']}, custom_data=['sample'], hover_data={'qc_overallScore': ':.1f', 'score': False}, log_y=True, labels={'sample': '', 'score': 'Nextclade QC score', 'qc_overallScore': 'QC score', 'qc_overallStatus': ''})\nfig.add_hline(y=30, line_dash='dash', line_width=1, opacity=0.6)\nfig.add_hline(y=100, line_dash='dash', line_width=1, opacity=0.6)\nfig.update_yaxes(range=[np.log10(0.05), np.log10(max(d['score'].max() or 100, 100) * 2)], dtick=1)\nfig.update_xaxes(tickangle=-45, tickfont={'size': 9})\nfig.update_layout(margin=dict(t=10), legend=dict(orientation='h', y=-0.35))",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": true,
+      "selection_column": "sample",
+      "font_scale": null,
       "wf_tag": "nextflow/viralrecon"
     },
     {
@@ -757,7 +812,7 @@
         "use": "pangolin/report",
         "description": "Per-sample PANGO lineage report."
       },
-      "section": "Typing tables",
+      "section": "Typing per sample",
       "columns": [],
       "page_size": 100,
       "sortable": true,
@@ -795,7 +850,7 @@
       "description": "The ticked sample's Pangolin call, with the Scorpio notes a cell cuts short.",
       "title_size": "sm",
       "title_align": "left",
-      "section": "Typing tables",
+      "section": "Typing per sample",
       "viz_kind": "record_card",
       "config": {
         "controls_placement": "popover",
@@ -873,7 +928,7 @@
         "use": "nextclade/report",
         "description": "Per-sample clade assignment + sequence QC."
       },
-      "section": "Typing tables",
+      "section": "Nextclade table",
       "columns": [],
       "page_size": 100,
       "sortable": true,
@@ -966,6 +1021,21 @@
       "w": 2,
       "h": 2,
       "static": true
+    },
+    {
+      "i": "box-lin-qc-score",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
     },
     {
       "i": "box-lin-sankey",
@@ -1075,7 +1145,7 @@
     {
       "i": "box-lin-nextclade-table",
       "x": 0,
-      "y": 6,
+      "y": 0,
       "w": 8,
       "h": 6,
       "static": false,
@@ -1124,11 +1194,43 @@
       "figure_style": null
     },
     {
+      "name": "Consensus quality",
+      "icon": "mdi:shield-check-outline",
+      "color": "red",
+      "description": "Nextclade's QC score of each consensus genome, the worst first",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Typing per sample",
+      "icon": "mdi:table",
+      "color": "red",
+      "description": "Each sample's Pangolin call, with a record of the one ticked",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
       "name": "Classification flow",
       "icon": "mdi:relation-many-to-many",
-      "color": "red",
-      "description": "Each sample from its QC verdict to its lineage and its clade",
-      "collapsed": false,
+      "color": "gray",
+      "description": "Each sample from its QC verdict to its lineage and its clade; reads best with several samples",
+      "collapsed": true,
       "persistent": false,
       "pin": "top",
       "appearance": "box",
@@ -1142,9 +1244,9 @@
     {
       "name": "Variant profiles",
       "icon": "mdi:set-merge",
-      "color": "red",
-      "description": "Samples placed by the mutations they share, and the mutations each lineage holds",
-      "collapsed": false,
+      "color": "gray",
+      "description": "Samples placed by the mutations they share, and the mutations each lineage holds; reads best with several samples",
+      "collapsed": true,
       "persistent": false,
       "pin": "top",
       "appearance": "box",
@@ -1172,10 +1274,10 @@
       "figure_style": null
     },
     {
-      "name": "Typing tables",
+      "name": "Nextclade table",
       "icon": "mdi:table",
       "color": "gray",
-      "description": "The Pangolin and Nextclade reports, with a record of the picked call",
+      "description": "The Nextclade report, every column",
       "collapsed": true,
       "persistent": false,
       "pin": "top",
@@ -1193,6 +1295,7 @@
   "filter_panel_default": "open",
   "content_width_default": "full",
   "show_tab_header": true,
+  "open_with_defaults": false,
   "show_guide": true,
   "guide_intro": "",
   "advanced_viz_controls": "popover",
@@ -1231,11 +1334,14 @@
       }
     ],
     "editors": [],
-    "viewers": []
+    "viewers": [],
+    "group_owners": [],
+    "group_editors": [],
+    "group_viewers": []
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-10-08 21:52:39",
+  "creation_time": "2026-10-22 10:02:20",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
@@ -1253,5 +1359,10 @@
   "project_realtime": null,
   "inherited_brand_theme": null,
   "inherited_category_colors": null,
-  "source_key": "nf-core/viralrecon:dashboards/base.yaml#Lineage & Clustering"
+  "source_key": "nf-core/viralrecon:dashboards/base.yaml#Lineage & Clustering",
+  "template_origin": {
+    "template_id": "nf-core/viralrecon/3.0.0",
+    "template_version": "2.0.0",
+    "imported_at": "2026-10-29 11:02:02"
+  }
 }

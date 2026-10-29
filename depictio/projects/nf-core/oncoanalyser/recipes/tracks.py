@@ -21,9 +21,15 @@ every collection of this template links on, so picking a tumor opens its VCFs
 and both of its alignments. ``source_sample`` names the sample a file belongs
 to (the normal's own id on the normal's alignment).
 
+No colour is written here: the browsers colour a track by its ``kind``, a
+category the dashboard declares once (``category_colors``) like every other.
+
 Row order is what the browser opens on (``initial_tracks`` shows the first
-rows): one block per group, its somatic variants, somatic SVs, germline variants
-and germline SVs, then the alignments of every group, tumor before normal.
+rows). The first group leads with everything the evidence needs: its somatic
+variants, somatic SVs, germline variants and germline SVs, then its tumor and
+normal alignments, so a call is opened with the reads under it. The other
+groups follow, their VCFs first and the alignments (the largest files of the
+run) last, tumor before normal.
 
 Two ways the files are read:
 - ``TRACKS_URI`` is set (the template turns it into ``remote_base_uri``): every
@@ -42,7 +48,6 @@ Output schema:
     format : Utf8         vcf / bam
     uri : Utf8            path relative to the results folder
     name : Utf8           track label shown in the browser
-    color : Utf8          per-kind colour
     category : Utf8       track-selector folder
     order : Int64         row order the browser opens with (``order_column``)
 """
@@ -78,14 +83,13 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "format": pl.Utf8,
     "uri": pl.Utf8,
     "name": pl.Utf8,
-    "color": pl.Utf8,
     "category": pl.Utf8,
     "order": pl.Int64,
 }
 
 _REQUIRED = ("group_id", "sample_id", "sample_type", "sequence_type")
 
-# kind -> (format, path template, category, name, colour). `{g}` is the group, `{t}` the
+# kind -> (format, path template, category, name). `{g}` is the group, `{t}` the
 # tumor DNA sample, `{n}` the normal DNA sample, `{s}` the sample the file belongs to.
 _SOMATIC = (
     "somatic",
@@ -93,7 +97,6 @@ _SOMATIC = (
     "{g}/purple/{t}.purple.somatic.vcf.gz",
     "Small variants",
     "{t} somatic",
-    "rgb(213,94,0)",
 )
 _SV = (
     "sv",
@@ -101,7 +104,6 @@ _SV = (
     "{g}/purple/{t}.purple.sv.vcf.gz",
     "Structural variants",
     "{t} somatic SV",
-    "rgb(230,159,0)",
 )
 _GERMLINE = (
     "germline",
@@ -109,7 +111,6 @@ _GERMLINE = (
     "{g}/purple/{t}.purple.germline.vcf.gz",
     "Small variants",
     "{t} germline",
-    "rgb(0,114,178)",
 )
 _SV_GERMLINE = (
     "sv_germline",
@@ -117,7 +118,6 @@ _SV_GERMLINE = (
     "{g}/purple/{t}.purple.sv.germline.vcf.gz",
     "Structural variants",
     "{t} germline SV",
-    "rgb(86,180,233)",
 )
 _TUMOR_READS = (
     "tumor_reads",
@@ -125,7 +125,6 @@ _TUMOR_READS = (
     "{g}/alignments/{s}/{s}.redux.bam",
     "Alignments",
     "{s} tumor reads",
-    "rgb(204,121,167)",
 )
 _NORMAL_READS = (
     "normal_reads",
@@ -133,7 +132,6 @@ _NORMAL_READS = (
     "{g}/alignments/{s}/{s}.redux.bam",
     "Alignments",
     "{s} normal reads",
-    "rgb(140,140,140)",
 )
 
 
@@ -181,7 +179,7 @@ def transform(sources: dict[str, pl.DataFrame], context=None) -> pl.DataFrame:
         )
 
     def row_for(spec: tuple[str, ...], group: str, tumor: str, sample: str) -> dict:
-        kind, fmt, template, category, name, color = spec
+        kind, fmt, template, category, name = spec
         fields = {"g": group, "t": tumor, "s": sample}
         return {
             "track_id": f"{tumor}.{kind}",
@@ -192,27 +190,43 @@ def transform(sources: dict[str, pl.DataFrame], context=None) -> pl.DataFrame:
             "format": fmt,
             "uri": template.format(**fields),
             "name": name.format(**fields),
-            "color": color,
             "category": category,
         }
 
-    rows: list[dict] = []
+    vcf_rows: dict[str, list[dict]] = {}
+    read_rows: dict[str, list[dict]] = {}
     for group, roles in groups.items():
         tumor = roles["tumor"]
         specs = [_SOMATIC, _SV] + ([_GERMLINE, _SV_GERMLINE] if "normal" in roles else [])
-        rows += [row_for(spec, group, tumor, tumor) for spec in specs]
-    for group, roles in groups.items():
-        tumor = roles["tumor"]
-        rows.append(row_for(_TUMOR_READS, group, tumor, tumor))
+        vcf_rows[group] = [row_for(spec, group, tumor, tumor) for spec in specs]
+        reads = [row_for(_TUMOR_READS, group, tumor, tumor)]
         if "normal" in roles:
-            rows.append(row_for(_NORMAL_READS, group, tumor, roles["normal"]))
+            reads.append(row_for(_NORMAL_READS, group, tumor, roles["normal"]))
+        read_rows[group] = reads
 
     def present(path: str) -> bool:
         """The file and its index are under the data root (an upload needs both)."""
         return context is not None and context.exists(path) and context.exists(_index_of(path))
 
-    if context is not None and not context.reads_in_place and any(present(r["uri"]) for r in rows):
-        rows = [r for r in rows if present(r["uri"])]
+    all_rows = [r for g in groups for r in (*vcf_rows[g], *read_rows[g])]
+    if (
+        context is not None
+        and not context.reads_in_place
+        and any(present(r["uri"]) for r in all_rows)
+    ):
+        vcf_rows = {g: [r for r in rows if present(r["uri"])] for g, rows in vcf_rows.items()}
+        read_rows = {g: [r for r in rows if present(r["uri"])] for g, rows in read_rows.items()}
+
+    # The first group that holds any file leads with its VCFs and its reads; the
+    # others follow, VCFs before reads.
+    present_groups = [g for g in groups if vcf_rows[g] or read_rows[g]]
+    rows: list[dict] = []
+    for i, group in enumerate(present_groups):
+        rows += vcf_rows[group]
+        if i == 0:
+            rows += read_rows[group]
+    for group in present_groups[1:]:
+        rows += read_rows[group]
     # Ingestion reorders rows (clustering on link columns): keep the intended
     # order explicit, the browser opens on the first `initial_tracks`.
     for i, row in enumerate(rows, start=1):

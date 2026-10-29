@@ -59,7 +59,9 @@ export function locusWithinRegion(
  * 1. a locus another tile handed over (`pending`, see pendingLocus.ts);
  * 2. the genome region in force (`region`, a navigator's brush or default
  *    region), so the browser opens where the navigator above shows, unless
- *    what the reader left the view at lies inside it (a zoom into it);
+ *    what the reader left the view at, or else the payload's location (a
+ *    `locus_from` row), lies inside it: a zoom into it, not a whole contig
+ *    where coverage reads as a few spikes;
  * 3. what the reader left the view at;
  * 4. the payload's location.
  * `undefined` lets JBrowse show the whole assembly. The pending one is never
@@ -76,8 +78,9 @@ export function initialLocus(args: {
 }): string | undefined {
   if (args.pending) return args.pending;
   if (args.region && args.regionLocus) {
-    const inside = args.persisted && locusWithinRegion(args.persisted, args.region);
-    return inside ? (args.persisted as string) : args.regionLocus;
+    if (args.persisted && locusWithinRegion(args.persisted, args.region)) return args.persisted;
+    if (args.location && locusWithinRegion(args.location, args.region)) return args.location;
+    return args.regionLocus;
   }
   return (
     args.persisted || sidesLocus(args.location, args.mateLocation, args.bothSides) || undefined
@@ -99,4 +102,21 @@ export function shouldRenavigate(
 ): boolean {
   if (!location || location === lastLocation) return false;
   return opening === undefined || opening === 'filter' || opening === 'yaml';
+}
+
+/**
+ * Where a followed region should take an open view when it is too wide to
+ * read: a whole contig, or more than `maxSpan`, holds the payload's location
+ * (the best `locus_from` row), so the view goes there instead of to the whole
+ * region, where every feature track asks for a force load. Null when the
+ * region is narrow enough to show as is, or the location is not inside it.
+ */
+export function wideRegionTarget(
+  region: { chrom: string; start: number; end: number },
+  location: string | null | undefined,
+  maxSpan: number,
+): string | null {
+  const wide = !Number.isFinite(region.end) || region.end - region.start > maxSpan;
+  if (!wide || !location) return null;
+  return locusWithinRegion(location, region) ? location : null;
 }

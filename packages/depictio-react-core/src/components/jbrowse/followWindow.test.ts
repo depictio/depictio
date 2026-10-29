@@ -41,3 +41,29 @@ describe('followTarget', () => {
     expect(followTarget({ entity: 'chr8', start: NaN, end: 10 }, null, canonical)).toBeNull();
   });
 });
+
+describe('following a GenomeSpy window', () => {
+  // GenomeSpy names the contig the way its data does, and sends the other
+  // chr spelling as an alias; the assembly resolves either.
+  it('resolves the contig through the alias GenomeSpy sends', () => {
+    expect(
+      followTarget({ entity: 'chr8', entityAliases: ['8'], start: 120, end: 4800 }, null, canonical),
+    ).toBe('chr8:120-4800');
+    expect(
+      followTarget({ entity: 'MN908947.3', entityAliases: ['chrMN908947.3'], start: 1, end: 90 }, null, canonical),
+    ).toBe('NC_045512v2:1-90');
+  });
+  it('does not move for the window the browser itself reported back', () => {
+    const current = { entity: 'chr8', start: 1000, end: 5000 };
+    expect(followTarget({ entity: 'chr8', entityAliases: ['8'], start: 1002, end: 4998 }, current, canonical)).toBeNull();
+  });
+  // A navigator zoomed out on a whole contig publishes tens of megabases; the
+  // alignment tracks refuse anything over 1 Mb, so the browser takes the centre.
+  it('follows a whole-contig window on its centre, at most 1 Mb wide', () => {
+    expect(followTarget({ entity: 'chr8', entityAliases: ['8'], start: 0, end: 30_000_000 }, null, canonical)).toBe(
+      'chr8:14500000-15500000',
+    );
+    const current = { entity: 'chr8', start: 14_500_000, end: 15_500_000 };
+    expect(followTarget({ entity: 'chr8', start: 0, end: 30_000_000 }, current, canonical)).toBeNull();
+  });
+});

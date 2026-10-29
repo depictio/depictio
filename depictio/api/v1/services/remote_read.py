@@ -235,6 +235,24 @@ def _http_client():
     return client
 
 
+def _https_call(call):
+    """Run one upstream call, retried once when the connection drops.
+
+    A pooled keep-alive connection the remote host has already closed fails
+    with a transport error on first use; the retry opens a fresh one. A second
+    failure is the host being unreachable, a 502 rather than a traceback.
+    """
+    import httpx
+
+    for attempt in (1, 2):
+        try:
+            return call()
+        except httpx.TransportError as exc:
+            if attempt == 2:
+                raise RemoteReadError(502, f"Remote host unreachable: {type(exc).__name__}") from exc
+    raise AssertionError("unreachable")
+
+
 # --------------------------------------------------------------------------
 # Size (cached: JBrowse reads the same file block by block)
 # --------------------------------------------------------------------------
@@ -264,13 +282,13 @@ def source_size(src: ByteSource) -> int:
     if src.kind == "https":
         assert src.url
         client = _http_client()
-        resp = client.head(src.url)
+        resp = _https_call(lambda: client.head(src.url))
         size: int | None = None
         if resp.status_code < 300 and resp.headers.get("content-length"):
             size = int(resp.headers["content-length"])
         else:
             # Some servers do not answer HEAD: ask for one byte and read the total.
-            resp = client.get(src.url, headers={"Range": "bytes=0-0"})
+            resp = _https_call(lambda: client.get(src.url, headers={"Range": "bytes=0-0"}))
             _check_https_status(resp.status_code, src.url)
             total = resp.headers.get("content-range", "").rpartition("/")[2]
             if total.isdigit():
@@ -349,7 +367,7 @@ def open_range(src: ByteSource, rng: ByteRange) -> Iterator[bytes]:
         request = client.build_request(
             "GET", src.url, headers={"Range": f"bytes={rng.start}-{rng.end}"}
         )
-        resp = client.send(request, stream=True)
+        resp = _https_call(lambda: client.send(request, stream=True))
         try:
             _check_https_status(resp.status_code, src.url)
             if resp.status_code == 200 and rng.start != 0:

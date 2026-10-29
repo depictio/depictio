@@ -58,6 +58,10 @@ SELECTION_EMITTING_KINDS: dict[str, tuple[str, ...]] = {
     # An allele half picks the allele (a sample label picks the sample, on the
     # same filter key). Opt-in, like the other non-protein kinds.
     "allele_grid": ("selection_column", "allele_col", "=allele"),
+    # A symbol is one individual, which is what a sample-keyed table joins on.
+    "pedigree": ("selection_column", "individual_col", "=individual"),
+    # A row is one candidate: its key when it has one (a variant id), else its title.
+    "ranked_table": ("selection_column", "title_col", "=title"),
 }
 
 # Kinds whose pick reaches a record card as a `residue_selection` pair (an

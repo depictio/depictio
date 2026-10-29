@@ -97,6 +97,7 @@ class TestComponent:
         assert comp.placement == "grid" and comp.floating_initial_state == "compact"
         assert comp.color_by is None and comp.show_junctions is False
         assert comp.call_stepper is True and comp.follow_window is True
+        assert comp.auto_height is False
         assert comp.views == [] and comp.circular_categories == ["sv"]
         assert comp.read_pairs_display == "pileup"
 
@@ -196,6 +197,33 @@ class TestLiteToFull:
         assert stored["locus_from"]["mate"]["chrom_column"] == "chrom_b"
 
 
+class TestColorScale:
+    def test_a_scale_is_stored_and_survives_a_round_trip(self):
+        scale = {"column": "timepoint", "order_by": "day", "scheme": "magma"}
+        lite = _dashboard({**_BROWSER, "color_scale": scale})
+        full = lite.to_full()
+        assert _stored(full)["color_scale"] == scale
+        back = DashboardDataLite.from_full(full).components[0]
+        back = back if isinstance(back, dict) else back.model_dump()
+        assert back["color_scale"] == scale
+
+    def test_the_scheme_defaults_to_viridis_and_unset_fields_are_not_written(self):
+        stored = _stored(_dashboard({**_BROWSER, "color_scale": {"column": "t"}}).to_full())
+        assert stored["color_scale"] == {"column": "t", "scheme": "viridis"}
+
+    def test_no_scale_stays_absent(self):
+        stored = _stored(_dashboard(_BROWSER).to_full())
+        assert not stored.get("color_scale")
+
+    def test_an_unknown_scheme_or_key_is_refused(self):
+        with pytest.raises(ValidationError):
+            JBrowseLiteComponent(**{**_BROWSER, "color_scale": {"column": "t", "scheme": "jet"}})
+        with pytest.raises(ValidationError):
+            JBrowseLiteComponent(**{**_BROWSER, "color_scale": {"column": "t", "bogus": 1}})
+        with pytest.raises(ValidationError):
+            JBrowseLiteComponent(**{**_BROWSER, "color_scale": {"scheme": "viridis"}})
+
+
 class TestRoundTrip:
     def _back(self, **extra: Any) -> dict[str, Any]:
         lite = _dashboard({**_BROWSER, **extra})
@@ -237,12 +265,18 @@ class TestRoundTrip:
             "show_junctions",
             "call_stepper",
             "follow_window",
+            "auto_height",
             "read_pairs_display",
             "circular_categories",
             "placement",
             "floating_initial_state",
         ):
             assert key not in exported
+
+    def test_auto_height_is_stored_for_the_viewer_and_survives_an_export(self):
+        lite = _dashboard({**_BROWSER, "auto_height": True})
+        assert _stored(lite.to_full())["auto_height"] is True
+        assert _exported({**_BROWSER, "auto_height": True})["auto_height"] is True
 
     def test_a_default_opening_state_is_not_exported(self):
         exported = _exported({**_BROWSER, "placement": "floating"})

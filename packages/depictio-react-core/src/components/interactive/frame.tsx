@@ -4,6 +4,7 @@ import { Icon } from '@iconify/react';
 
 import type { StoredMetadata } from '../../api';
 import { defaultInteractiveTitle, interactiveTitle } from './titles';
+import { paletteVar } from '../../paletteColor';
 // Loaded here rather than beside either slider: `DepictioRangeSlider` lives in
 // another package and cannot import from this one, and both sliders need the
 // same rule. This module is what every interactive renderer already imports.
@@ -88,9 +89,7 @@ export function interactiveIcon(metadata: StoredMetadata): string {
 /** Resolve a metadata colour that can be a Mantine token name ("blue") or a raw
  *  CSS colour (#hex, rgb(...), var(...)). */
 export function resolveColor(c?: string | null): string | undefined {
-  if (!c) return undefined;
-  if (c.startsWith('#') || c.startsWith('rgb') || c.startsWith('var(')) return c;
-  return `var(--mantine-color-${c}-6)`;
+  return paletteVar(c);
 }
 
 /** The component's accent, as authored: `icon_color` first, then the two names

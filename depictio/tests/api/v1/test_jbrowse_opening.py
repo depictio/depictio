@@ -11,8 +11,11 @@ from typing import Any
 
 import pytest
 
-from depictio.api.v1.services.jbrowse import probe, render
-from depictio.api.v1.services.jbrowse.config_builder import build_track_config
+from depictio.api.v1.services.jbrowse import config_builder, probe, render
+from depictio.api.v1.services.jbrowse.config_builder import (
+    build_track_config,
+    clear_index_exists_cache,
+)
 from depictio.api.v1.services.jbrowse.tracks import TrackRow, TracksDC, track_key
 from depictio.models.models.data_collections_types.genomic_tracks import DCGenomicTracksConfig
 
@@ -31,6 +34,13 @@ def _row(uri: str, fmt: str, category: str | None = None, index: str | None = No
         category=category,
         row={"uri": uri},
     )
+
+
+@pytest.fixture(autouse=True)
+def _no_storage_probe(monkeypatch):
+    """The manifest's locations are fake: never probe storage for an index."""
+    monkeypatch.setattr(config_builder, "_probe_index", lambda uri, base: True)
+    clear_index_exists_cache()
 
 
 @pytest.fixture

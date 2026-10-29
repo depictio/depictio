@@ -6,9 +6,12 @@ import {
   colourTracksBy,
   conditionColourMap,
   conditionOf,
+  conditionSequentialMap,
   sampleColourColumn,
   sampleColourMap,
+  trackColoursBy,
 } from './sampleColors';
+import { sequentialColor } from '../../categoryColors';
 
 const row = (track_id: string, sample: string | null, selection_value = sample): JBrowseTrackRow => ({
   track_id,
@@ -159,5 +162,49 @@ describe('colour by condition', () => {
     ];
     const out = colourAlignmentTracks(byCondition, sampleRows, new Map([['S1', '#123456']]));
     expect(out[2]).toBe(byCondition[2]);
+  });
+});
+
+describe('color_scale over the tracks', () => {
+  const sig = (trackId: string, timepoint: string, day: number, type = 'QuantitativeTrack') => ({
+    type,
+    trackId,
+    metadata: { timepoint, day },
+  });
+  const tracks = [sig('a', 'late', 14), sig('b', 'early', 0), sig('c', 'mid', 3), sig('d', 'early', 0)];
+
+  it('orders the values by order_by and spreads them over the ramp', () => {
+    const map = conditionSequentialMap({ column: 'timepoint', order_by: 'day', scheme: 'blues' }, tracks);
+    expect([...map.keys()]).toEqual(['early', 'mid', 'late']);
+    expect(map.get('early')).toBe(sequentialColor('blues', 0));
+    expect(map.get('mid')).toBe(sequentialColor('blues', 0.5));
+    expect(map.get('late')).toBe(sequentialColor('blues', 1));
+  });
+
+  it('falls back to the natural order of the values without order_by', () => {
+    const map = conditionSequentialMap({ column: 'timepoint' }, tracks);
+    expect([...map.keys()]).toEqual(['early', 'late', 'mid']);
+  });
+
+  it('paints the signal tracks through colourTracksBy like a categorical map', () => {
+    const map = conditionSequentialMap({ column: 'timepoint', order_by: 'day', scheme: 'blues' }, tracks);
+    const [late] = colourTracksBy(tracks, 'timepoint', map);
+    const renderers = ((late as any).displays as any[])[0].renderers;
+    expect(renderers.XYPlotRenderer.color).toBe(sequentialColor('blues', 1));
+  });
+
+  it('reports the group and sample colours to share, skipping a manifest colour', () => {
+    const map = conditionSequentialMap({ column: 'timepoint', order_by: 'day' }, tracks);
+    const trackRows: JBrowseTrackRow[] = [
+      { ...row('a', 'S1'), color: null },
+      { ...row('b', 'S2'), color: '#123456' },
+      row('c', 'S3'),
+    ];
+    const shared = trackColoursBy(tracks, trackRows, 'timepoint', map);
+    expect(Object.keys(shared.groups).sort()).toEqual(['early', 'late', 'mid']);
+    expect(shared.samples).toEqual({
+      S1: map.get('late'),
+      S3: map.get('mid'),
+    });
   });
 });

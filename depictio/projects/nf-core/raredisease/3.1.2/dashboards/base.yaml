@@ -1,0 +1,2587 @@
+version: 1
+# nf-core/raredisease 3.1.2, on the family rules of depictio/projects/nf-core/RULES.md
+# (ampliseq/2.18.0 is the reference implementation).
+#
+# Funnel: the MultiQC report, the per-sample alignment numbers MultiQC does not join
+# (Alignment), whether the samples are the family the pedigree says (Family), all in
+# Data & QC -> how many calls each sample yields (Callset) -> which variants the
+# ranking puts first and which inheritance model they fit (Ranked) -> the
+# mitochondrial calls (Mitochondria) -> repeat expansions, mobile elements and SMN
+# copy number (Repeats) -> what the calls and alignments show at one locus (Locus).
+# The Overview leads with the ranking: the top candidate, the rank order of the best
+# variants and who carries them.
+# The sample hub (`samples`, one row per sample) is what every filter starts from: the
+# template's links carry a pick on a sample, a role or a family to every per-sample
+# collection. The group column of this template is `role` (proband, father, mother),
+# read from the pedigree, so no group variable appears below.
+#
+# Routes: the pedigree is optional (without it the hub keys on the QC and callset
+# samples and every role reads Other); the mitochondrial, repeat expansion, mobile
+# element and SMN collections are optional, so the Mitochondria and Repeats tabs, their
+# pipeline steps and the sections that read them are pruned at import when a run took
+# none of those branches; the genome browser reads the files it finds (or TRACKS_URI).
+main_dashboard:
+  title: nf-core/raredisease
+  subtitle: Rare disease analysis of a family, from the alignment to the ranked variants
+  project_tag: Rare Disease Family Analysis
+  main_tab_name: Overview
+  tab_icon: mdi:compass-outline
+  tab_icon_color: brandPrimary
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_panel_default: collapsed
+  content_width_default: compact
+  show_tab_header: false
+  category_colors:
+    role: auto
+    status:
+      Affected: '#e03131'
+      Unaffected: '#1c7ed6'
+      Unknown: '#adb5bd'
+    sample: auto
+    variant_type:
+      SNP: '#1c7ed6'
+      INDEL: '#7048e8'
+      MNP: '#0ca678'
+      SV: '#f08c00'
+    mutation_class:
+      transition: '#1c7ed6'
+      transversion: '#e8590c'
+    impact:
+      HIGH: '#e03131'
+      MODERATE: '#f08c00'
+      LOW: '#1c7ed6'
+      MODIFIER: '#adb5bd'
+    model_class:
+      Compound heterozygous: '#7048e8'
+      Recessive: '#f08c00'
+      Dominant: '#1c7ed6'
+      X-linked: '#0ca678'
+      No model fits: '#adb5bd'
+    variant_set:
+      Clinical: '#e03131'
+      Research only: '#868e96'
+    gt_class:
+      Hom ref: '#ced4da'
+      Het: '#1c7ed6'
+      Hom alt: '#e03131'
+      Half call: '#f08c00'
+      No call: '#868e96'
+    genetic_model:
+      AR_comp: '#7048e8'
+      AR_hom: '#f08c00'
+      AD: '#1c7ed6'
+      XR: '#0ca678'
+      XD: '#0ca678'
+    contig_class:
+      autosome: '#1c7ed6'
+      X: '#7048e8'
+      Y: '#0ca678'
+      mitochondrion: '#f08c00'
+      other: '#adb5bd'
+    heteroplasmy_class:
+      Homoplasmic: '#1c7ed6'
+      Heteroplasmic: '#f08c00'
+      Low level: '#adb5bd'
+    repeat_status:
+      Pathogenic range: '#e03131'
+      Intermediate: '#f08c00'
+      Normal: '#2f9e44'
+      No call: '#adb5bd'
+    me_type:
+      ALU: '#1c7ed6'
+      L1: '#7048e8'
+      SVA: '#0ca678'
+      HERV: '#f08c00'
+      Other: '#adb5bd'
+    check_status:
+      Consistent: '#2f9e44'
+      Check: '#e03131'
+      Too few sites: '#f08c00'
+      Not checked: '#adb5bd'
+    sex_check:
+      Match: '#2f9e44'
+      Mismatch: '#e03131'
+      Not tested: '#adb5bd'
+    smn_status:
+      No call: '#adb5bd'
+      Not a carrier: '#2f9e44'
+      Carrier: '#f08c00'
+      SMA: '#e03131'
+    filter_label:
+      '*': auto
+      PASS: '#2f9e44'
+    filter_status:
+      '*': auto
+      PASS: '#2f9e44'
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab
+    persistent: true
+    pin: top
+  grid_sections:
+  - name: Key figures
+    icon: mdi:counter
+    color: gray
+    description: The run in four numbers. The filters here narrow these four only.
+    appearance: plain
+    card_variant: headline
+    filter_bar: true
+    visible_filters: 2
+  - name: Findings
+    icon: mdi:star-outline
+    color: gray
+    description: What the data says, each with the tab that shows it, then the figures behind it.
+    appearance: plain
+    figure_style: minimal
+    filter_bar: true
+    visible_filters: 2
+  - name: How to read this dashboard
+    icon: mdi:information-outline
+    color: gray
+    description: The tabs by group, each with the question it answers.
+    appearance: plain
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: gray
+    description: One row per sample, narrowed by the sample filters
+    collapsed: true
+    persistent: true
+    pin: bottom
+    exclude_tabs: [Overview]
+  components:
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: role
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: Role
+    section: Key figures
+    tag: rd-ov-kf-role
+    index: ov-kf-role
+    title: Role
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+      strip_label: Sample
+    section: Key figures
+    tag: rd-ov-kf-sample
+    index: ov-kf-sample
+    title: Sample
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  - component_type: text
+    title: nf-core/raredisease
+    logo: https://raw.githubusercontent.com/nf-core/raredisease/master/docs/images/nf-core-raredisease_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/raredisease/master/docs/images/nf-core-raredisease_logo_dark.png
+    order: 1
+    body: >
+      Rare disease analysis of a family: how the reads aligned, whether the samples fit the pedigree,
+      and which ranked variants fit an inheritance model. [Run parameters](params:)
+    tag: rd-ov-hero
+    index: ov-hero
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/raredisease aligns the reads of a family, calls small variants, annotates them with VEP and ranks them with GENMOD against the pedigree. Mitochondrial, repeat expansion and mobile element calls follow their own branches. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The sample filters in the left panel apply to every tab: narrow the samples, the role or the family once and the whole dashboard follows. A bar above a section narrows that section only.
+
+      The pedigree and the family findings below name each individual of the run by its role (the proband is the affected child the family is analysed for), with its sex and whether it is affected.
+    tag: rd-ov-about
+    index: ov-about
+    layout: {x: 0, y: 1, w: 5, h: 4}
+  - component_type: text
+    surface: card
+    values:
+      n_samples: {dc: samples, column: sample, aggregation: nunique, format: integer}
+      n_family: {dc: samples, column: family_id, aggregation: nunique, format: integer}
+    body: |
+      ### The run
+      - ![](icon:mdi:test-tube) **Samples** {{n_samples}} on {{param:genome}}
+      - ![](icon:mdi:family-tree) **Families** {{n_family}}, {{param:analysis_type}}
+      - ![](icon:mdi:align-horizontal-left) **Aligner** {{param:aligner}}
+      - ![](icon:mdi:magnify-scan) **Calling** {{param:variant_caller}}
+      - ![](icon:mdi:tag-outline) **VEP cache** {{param:vep_cache_version}}
+      - ![](icon:mdi:skip-next-outline) **Skipped** {{param:skip_tools}}
+    tag: rd-ov-run
+    index: ov-run
+    layout: {x: 5, y: 1, w: 3, h: 4}
+  - component_type: text
+    surface: card
+    accent: teal
+    values:
+      n_reads: {dc: alignment_qc, column: total_reads, aggregation: sum, format: si}
+      n_pass: {dc: vcf_callset_summary, column: pass_calls, aggregation: sum, format: si}
+      n_ranked: {dc: ranked_variants, column: variant_key, aggregation: count, format: si}
+      n_mt: {dc: mt_variants, column: variant_key, aggregation: count, format: integer}
+      n_rep: {dc: repeat_expansions, column: variant_key, aggregation: count, format: integer}
+    body: |
+      ### Six steps from reads to ranked variants
+      Each step names its settings and the tab that shows its result.
+
+      ::: steps
+      1. ![](icon:mdi:align-horizontal-left) **Align** {{param:aligner}} maps {{n_reads}} reads and Picard marks the duplicates · [Settings](params:aligner) · [Alignment](tab:Alignment)
+      2. ![](icon:mdi:magnify-scan) **Call** each sample is called, then the family is genotyped together, {{n_pass}} PASS calls · [Settings](params:variant_caller) · [Callset](tab:Callset)
+      3. ![](icon:mdi:sort-numeric-descending) **Rank** VEP annotates and GENMOD ranks {{n_ranked}} variants against the pedigree · [Settings](params:vep_cache_version) · [Ranked](tab:Ranked)
+      4. ![](icon:mdi:atom) **Mitochondria** the mitochondrial branch calls {{n_mt}} variants with their heteroplasmy · [Settings](params:mt_aligner) · [Mitochondria](tab:Mitochondria)
+      5. ![](icon:mdi:repeat) **Repeats** ExpansionHunter genotypes {{n_rep}} repeat calls against the disease catalogue · [Settings](params:variant_catalog) · [Repeats](tab:Repeats)
+      6. ![](icon:mdi:file-document-outline) **Report** MultiQC gathers FastQC, fastp, Picard and mosdepth · [Settings](params:skip_tools) · [MultiQC](tab:MultiQC)
+      :::
+    tag: rd-ov-steps
+    index: ov-steps
+    layout: {x: 0, y: 5, w: 8, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: samples
+    aggregation: nunique
+    column_name: sample
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: role
+    display:
+      icon_name: mdi:account-group
+      icon_color: orange
+      caption: sequenced, by role
+      link: tab:Family
+    section: Key figures
+    tag: rd-ov-kf-samples
+    index: ov-kf-samples
+    title: Samples
+    description: Samples of the family. The bar splits them by role.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: samples
+    aggregation: median
+    column_name: mean_coverage
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:layers-outline
+      icon_color: blue
+      caption: median per sample, with the spread (x)
+      link: tab:Alignment
+      decimals: 1
+    section: Key figures
+    tag: rd-ov-kf-coverage
+    index: ov-kf-coverage
+    title: Mean coverage
+    description: Mean depth over the reference, per sample. The box shows the spread across samples.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    aggregation: max
+    column_name: rank_score
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:trophy-outline
+      icon_color: yellow
+      caption: rank scores, how they spread
+      link: tab:Ranked
+      decimals: 0
+    section: Key figures
+    tag: rd-ov-kf-top
+    index: ov-kf-top
+    title: Top rank score
+    description: The highest GENMOD rank score among the variants in scope. The histogram shows how the
+      other scores spread.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: model_class
+    filter_expr: col('is_clinical') == True
+    display:
+      icon_name: mdi:alert-decagram-outline
+      icon_color: red
+      caption: clinical variants, by inheritance model
+      link: tab:Ranked
+      format: integer
+    section: Key figures
+    tag: rd-ov-kf-clinical
+    index: ov-kf-clinical
+    title: Clinical variants
+    description: Ranked variants in the clinical set, the gene list the run was given. The bar splits
+      them by inheritance model.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: role
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: Role
+    section: Findings
+    tag: rd-ov-findings-role
+    index: ov-findings-role
+    title: Role
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+      strip_label: Sample
+    section: Findings
+    tag: rd-ov-findings-sample
+    index: ov-findings-sample
+    title: Sample
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  - component_type: text
+    surface: card
+    values:
+      top_label: {dc: ranked_variants, column: call_label, aggregation: top, weight: rank_score}
+      top_score: {dc: ranked_variants, column: rank_score, aggregation: max, format: 'decimals:0'}
+      score_max: {dc: ranked_variants, column: rank_score_max, aggregation: max, format: 'decimals:0'}
+      n_fit: {dc: ranked_variants, column: variant_key, aggregation: count, filter_expr: col('model_class')
+          != 'No model fits', format: si}
+      n_clin: {dc: ranked_variants, column: variant_key, aggregation: count, filter_expr: col('is_clinical')
+          == True, format: integer}
+      ibs0: {dc: family_checks, column: ibs0_pct, aggregation: median, filter_expr: col('relation') ==
+          'Parent-child', format: 'decimals:2'}
+      cov: {dc: samples, column: mean_coverage, aggregation: median, format: 'decimals:1'}
+      n_pass: {dc: samples, column: pass_calls, aggregation: median, format: si}
+      tstv: {dc: samples, column: ts_tv, aggregation: median, format: 'decimals:2'}
+    body: |
+      - **{{top_label}}** leads the ranking with a rank score of {{top_score}} out of {{score_max}} – the table below lists the next ones [Ranked](tab:Ranked)
+      - **{{n_fit}}** ranked variants fit an inheritance model – the clinical set holds {{n_clin}} [Ranked](tab:Ranked)
+      - **{{ibs0}}%** of the shared sites are opposite homozygous between parent and child at the median – a low value fits the pedigree [Family](tab:Family)
+      - **{{n_pass}}** PASS calls per sample at the median – Ts/Tv {{tstv}} (about 2.0 to 2.1 is expected for a genome, 2.8 to 3.0 for an exome), {{cov}}x median mean coverage [Callset](tab:Callset)
+    section: Findings
+    tag: rd-ov-findings
+    index: ov-findings
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: highlight
+    section: Findings
+    source_tab: Ranked
+    source_component: rk-genotype-grid
+    caption: The genotype each individual has at the 20 best-scoring variants, coloured by zygosity; grey is homozygous reference.
+    tag: rd-ov-hl-genotypes
+    index: ov-hl-genotypes
+    layout: {x: 4, y: 8, w: 4, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Family
+    source_component: fam-pedigree
+    caption: The family as the sample sheet states it; squares are males, circles females, filled marks affected.
+    tag: rd-ov-hl-family
+    index: ov-hl-family
+    layout: {x: 0, y: 8, w: 4, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    viz_kind: ranked_table
+    config:
+      viz_kind: ranked_table
+      title_col: gene
+      subtitle_col: hgvs_p
+      score_col: rank_score
+      descending: true
+      columns:
+      - {column: model_class, label: Model, display: badge}
+      - {column: impact, label: Impact, display: badge}
+      - {column: rank_score, label: Rank score, display: bar, decimals: 0}
+      labels:
+        consequence: Consequence
+        hgvs_c: Coding change
+        gnomad_af: gnomAD AF
+        cadd: CADD
+        pli: pLI
+        chrom: Chromosome
+        pos: Position
+        ref: Ref
+        alt: Alt
+        n_carriers: Carriers
+        variant_set: Variant set
+      popover_columns: [consequence, hgvs_c, variant_set, gnomad_af, cadd, pli, chrom, pos, ref, alt, n_carriers]
+      top_n: 8
+      medals: true
+      selection_enabled: true
+      selection_column: variant_key
+      family_dc_tag: samples
+      family_individual_col: sample
+      family_father_col: father
+      family_mother_col: mother
+      family_sex_col: sex
+      family_status_col: status
+      family_proband_col: role
+      family_label_col: role
+      genotypes_dc_tag: ranked_genotypes
+      genotypes_key_col: variant_key
+      genotypes_row_col: variant_key
+      genotypes_individual_col: sample
+      genotypes_genotype_col: gt_class
+      genotypes_missing_as: ref
+      family_open: false
+    link: tab:Ranked
+    section: Findings
+    tag: rd-ov-top-candidates
+    index: ov-top-candidates
+    title: Top candidates
+    description: The eight best-ranked variants. Hover a row for its annotation; the Ranked tab holds the full list, why each one ranks and the record of a picked variant.
+    layout: {x: 0, y: 2, w: 8, h: 6}
+  - component_type: text
+    body: |
+      ### Data & QC
+      - [MultiQC](tab:MultiQC)
+      - [Alignment](tab:Alignment)
+      - [Family](tab:Family)
+
+      ### Variants
+      - [Callset](tab:Callset)
+      - [Ranked](tab:Ranked)
+      - [Mitochondria](tab:Mitochondria)
+      - [Repeats](tab:Repeats)
+      - [Locus](tab:Locus)
+    section: How to read this dashboard
+    tag: rd-ov-how-to-read
+    index: ov-how-to-read
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: role
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+    section: Sample filters
+    group: Sample scope
+    tag: rd-sample-filters-role
+    index: sample-filters-role
+    title: Role
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+    section: Sample filters
+    group: Sample scope
+    tag: rd-sample-filters-sample
+    index: sample-filters-sample
+    title: Sample
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: family_id
+    column_type: object
+    display:
+      icon_name: mdi:family-tree
+      custom_color: pink
+    section: Sample filters
+    group: Sample scope
+    tag: rd-sample-filters-family
+    index: sample-filters-family
+    title: Family
+    layout: {x: 0, y: 5, w: 1, h: 2}
+  - component_type: table
+    workflow_tag: raredisease
+    data_collection_tag: samples
+    columns: [sample, family_id, role, status, sex, sex_check, aligned_pct, duplication_pct, mean_coverage,
+      pass_calls, ts_tv, ranked_carried, clinical_carried, parent_check]
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Sample sheet
+    tag: rd-sample-sheet
+    index: sample-sheet
+    title: Samples
+    description: One row per sample, with its pedigree, alignment, coverage and callset numbers.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+tabs:
+- title: MultiQC
+  subtitle: What does the MultiQC report say about reads and alignments?
+  tab_group: Data & QC
+  tab_order: 1
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Report scope
+    icon: mdi:tune
+    color: orange
+    description: Narrow the MultiQC panels to selected report rows
+  grid_sections:
+  - name: Library QC
+    icon: mdi:file-document-outline
+    color: orange
+    description: Library statistics, read counts and filtering
+  - name: Alignment and coverage
+    icon: mdi:chart-box-outline
+    color: orange
+    description: Alignment, duplicates, insert size and the coverage histogram
+  - name: Read quality
+    icon: mdi:chart-line
+    color: orange
+    description: Base quality and adapter content along the reads
+    collapsed: true
+  - name: Depth per contig
+    icon: mdi:chart-bar
+    color: orange
+    description: Cumulative coverage and mean depth per contig, from mosdepth
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      The [MultiQC](https://multiqc.info) report gathers FastQC and fastp for the reads, Picard for the
+      alignments and mosdepth for the depth, one row per sample. A sample that stands out here is worth
+      a look on the Alignment tab. The sample filters reach the report rows through the sample name.
+    tag: rd-mqc-intro
+    index: mqc-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    workflow_tag: raredisease
+    data_collection_tag: multiqc_data
+    use: multiqc/general_stats
+    selected_module: general_stats
+    selected_plot: general_stats
+    section: Library QC
+    tag: rd-mqc-general-stats
+    index: mqc-general-stats
+    title: General statistics
+    description: One row per library, the headline columns of every tool in the report side by side.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: raredisease
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Sequence Counts
+    section: Library QC
+    tag: rd-mqc-fastqc-counts
+    index: mqc-fastqc-counts
+    title: Sequence counts
+    description: Unique and duplicate reads per library, from FastQC.
+    layout: {x: 0, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: raredisease
+    data_collection_tag: multiqc_data
+    use: multiqc/fastp
+    selected_module: fastp
+    selected_plot: Filtered Reads
+    section: Library QC
+    tag: rd-mqc-fastp-filtered
+    index: mqc-fastp-filtered
+    title: Filtered reads
+    description: Reads passing and failing fastp's filters, per library.
+    layout: {x: 4, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: raredisease
+    data_collection_tag: multiqc_data
+    use: multiqc/picard
+    selected_module: picard
+    selected_plot: Alignment Summary
+    section: Alignment and coverage
+    tag: rd-mqc-picard-alignment
+    index: mqc-picard-alignment
+    title: Alignment summary
+    description: Aligned reads and bases per sample, from Picard.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: raredisease
+    data_collection_tag: multiqc_data
+    use: multiqc/picard
+    selected_module: picard
+    selected_plot: Mark Duplicates
+    section: Alignment and coverage
+    tag: rd-mqc-picard-dups
+    index: mqc-picard-dups
+    title: Mark duplicates
+    description: Unique and duplicate reads and pairs per sample, from Picard MarkDuplicates.
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: raredisease
+    data_collection_tag: multiqc_data
+    use: multiqc/picard
+    selected_module: picard
+    selected_plot: Insert Size
+    section: Alignment and coverage
+    tag: rd-mqc-picard-insert
+    index: mqc-picard-insert
+    title: Insert size
+    description: The fragment length distribution of every sample.
+    layout: {x: 0, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: raredisease
+    data_collection_tag: multiqc_data
+    use: multiqc/picard
+    selected_module: picard
+    selected_plot: WGS Coverage
+    section: Alignment and coverage
+    tag: rd-mqc-picard-wgs
+    index: mqc-picard-wgs
+    title: Coverage histogram
+    description: Bases at each depth and the drop-off, from Picard CollectWgsMetrics.
+    layout: {x: 4, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: raredisease
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Sequence Quality Histograms
+    section: Read quality
+    tag: rd-mqc-fastqc-quality
+    index: mqc-fastqc-quality
+    title: Base quality
+    description: Mean quality along the read, per library.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: raredisease
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Adapter Content
+    section: Read quality
+    tag: rd-mqc-fastqc-adapter
+    index: mqc-fastqc-adapter
+    title: Adapter content
+    description: Share of reads carrying adapter along the read, per library.
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: raredisease
+    data_collection_tag: multiqc_data
+    use: multiqc/mosdepth
+    selected_module: mosdepth
+    selected_plot: Cumulative coverage distribution
+    section: Depth per contig
+    tag: rd-mqc-mosdepth-cum
+    index: mqc-mosdepth-cum
+    title: Cumulative coverage
+    description: Share of bases at each depth or more, per sample, from mosdepth.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: raredisease
+    data_collection_tag: multiqc_data
+    use: multiqc/mosdepth
+    selected_module: mosdepth
+    selected_plot: Average coverage per contig
+    section: Depth per contig
+    tag: rd-mqc-mosdepth-contig
+    index: mqc-mosdepth-contig
+    title: Coverage per contig
+    description: Mean depth on each contig, per sample, from mosdepth.
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: multiqc_data
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:file-document-outline
+      custom_color: orange
+    section: Report scope
+    group: Report scope
+    tag: rd-mqc-report-row-filter
+    index: mqc-report-row-filter
+    title: Report row
+    layout: {x: 0, y: 0, w: 1, h: 3}
+- title: Alignment
+  subtitle: What do the alignment, coverage and call numbers say, sample by sample?
+  tab_group: Data & QC
+  tab_order: 2
+  tab_icon: mdi:align-horizontal-left
+  tab_icon_color: blue
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Alignment scope
+    icon: mdi:filter-variant
+    color: blue
+    description: The contig class narrows the contig table; the duplication slider narrows the samples
+  grid_sections:
+  - name: Alignment at a glance
+    icon: mdi:counter
+    color: blue
+    description: Reads, aligned share, depth and the mitochondrial depth ratio across the samples
+  - name: Sample record
+    icon: mdi:table-account
+    color: blue
+    description: One row per sample, alignment and calls together, with the record of the picked one
+  - name: Alignment tables
+    icon: mdi:table
+    color: gray
+    description: Mosdepth depth per sample and contig
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [Picard](https://broadinstitute.github.io/picard/) and [mosdepth](https://github.com/brentp/mosdepth)
+      read the duplicate-marked alignment of every sample, and the MultiQC tab draws their reports. This tab
+      adds what MultiQC does not join: the alignment, coverage and call numbers of each sample in one row.
+      Click a row to open the record of its sample.
+    tag: rd-aln-intro
+    index: aln-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: contig_depth
+    interactive_component_type: MultiSelect
+    column_name: contig_class
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: cyan
+    section: Alignment scope
+    group: Alignment
+    tag: rd-aln-class-filter
+    index: aln-class-filter
+    title: Contig class
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: alignment_qc
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: duplication_pct
+    column_type: float64
+    display:
+      icon_name: mdi:content-copy
+      custom_color: pink
+    section: Alignment scope
+    group: Alignment
+    tag: rd-aln-dup-range
+    index: aln-dup-range
+    title: Duplication (%)
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: alignment_qc
+    aggregation: sum
+    column_name: total_reads
+    column_type: int64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:counter
+      icon_color: blue.4
+      caption: reads per sample, how they spread
+      format: si
+    section: Alignment at a glance
+    tag: rd-aln-card-reads
+    index: aln-card-reads
+    title: Reads
+    description: Reads Picard counted, summed over the samples in scope.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: alignment_qc
+    aggregation: median
+    column_name: aligned_pct
+    column_type: float64
+    secondary_layout: gauge
+    coverage_max: 100
+    display:
+      icon_name: mdi:align-horizontal-left
+      icon_color: blue.6
+      caption: median share of the reads (%)
+      decimals: 1
+    section: Alignment at a glance
+    tag: rd-aln-card-aligned
+    index: aln-card-aligned
+    title: Aligned reads
+    description: Reads the aligner placed on the reference, in percent of all reads.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: alignment_qc
+    aggregation: median
+    column_name: mean_coverage
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:layers-outline
+      icon_color: blue.8
+      caption: median per sample, with the spread (x)
+      decimals: 1
+    section: Alignment at a glance
+    tag: rd-aln-card-coverage
+    index: aln-card-coverage
+    title: Mean coverage
+    description: Mean depth over the reference, per sample.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: alignment_qc
+    aggregation: median
+    column_name: mito_to_nuclear
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:atom
+      icon_color: blue.9
+      caption: median per sample, with the spread (x)
+      decimals: 0
+    section: Alignment at a glance
+    tag: rd-aln-card-mito
+    index: aln-card-mito
+    title: Mitochondrial depth ratio
+    description: Mitochondrial over nuclear depth, a proxy for the mitochondrial copy number.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: raredisease
+    data_collection_tag: samples
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: rd-aln-table-qc
+      id_col: sample
+      title_col: sample
+      selection_source: table_selection
+      sections:
+        Alignment:
+        - total_reads
+        - aligned_pct
+        - mismatch_rate_pct
+        - median_insert
+        Coverage:
+        - mean_coverage
+        - bases_10x_pct
+        - bases_20x_pct
+        - mito_depth
+        Duplication:
+        - duplication_pct
+        Calls:
+        - pass_calls
+        - snvs
+        - indels
+        - ts_tv
+        - het_hom_ratio
+        - median_dp
+    section: Sample record
+    tag: rd-aln-sample-record
+    index: aln-sample-record
+    title: Picked sample
+    description: The sample picked in the table, from its reads to its calls.
+    layout: {x: 5, y: 0, w: 3, h: 6}
+  - component_type: table
+    workflow_tag: raredisease
+    data_collection_tag: alignment_qc
+    columns: [sample, total_reads, aligned_pct, duplication_pct, mean_coverage, median_insert, mito_to_nuclear]
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Sample record
+    tag: rd-aln-table-qc
+    index: aln-table-qc
+    title: Alignment metrics per sample
+    description: Reads, alignment and duplication rates, depth and insert size; a picked row opens its record.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: table
+    workflow_tag: raredisease
+    data_collection_tag: contig_depth
+    columns: [sample, contig, contig_class, length, mean_depth, min_depth, max_depth, relative_depth]
+    row_selection_enabled: true
+    row_selection_column: contig
+    section: Alignment tables
+    tag: rd-aln-table-contigs
+    index: aln-table-contigs
+    title: Depth per contig
+    description: Mean, minimum and maximum depth of each contig, and its depth relative to the nuclear
+      mean.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Family
+  subtitle: Are the samples the family the pedigree says they are?
+  tab_group: Data & QC
+  tab_order: 3
+  tab_icon: mdi:family-tree
+  tab_icon_color: pink
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Family scope
+    icon: mdi:filter-variant
+    color: pink
+    description: These picks narrow the pair checks; the pedigree draws every
+      sample in scope
+  grid_sections:
+  - name: Family at a glance
+    icon: mdi:counter
+    color: pink
+    description: Samples, the parent-child check, the sex check and the relatedness estimates
+  - name: Pedigree and pair checks
+    icon: mdi:family-tree
+    color: pink
+    description: The family as the sample sheet states it, beside how far apart every pair sits
+  - name: Family tables
+    icon: mdi:table
+    color: gray
+    description: The pair checks behind the chart
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      The pedigree comes from the sample sheet; the pair checks come from the family callset itself. IBS0
+      is the share of shared sites where two samples carry opposite homozygous genotypes: close to zero
+      between a parent and child, higher between unrelated people. Read the estimates with care at low
+      depth.
+    tag: rd-fam-intro
+    index: fam-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: family_checks
+    interactive_component_type: MultiSelect
+    column_name: relation
+    column_type: object
+    display:
+      icon_name: mdi:link-variant
+      custom_color: lime
+    section: Family scope
+    group: Family
+    tag: rd-fam-relation-filter
+    index: fam-relation-filter
+    title: Relation
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: family_checks
+    interactive_component_type: MultiSelect
+    column_name: check_status
+    column_type: object
+    display:
+      icon_name: mdi:check-decagram-outline
+      custom_color: green
+    section: Family scope
+    group: Family
+    tag: rd-fam-status-filter
+    index: fam-status-filter
+    title: Pair check
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: samples
+    aggregation: count
+    column_name: sample
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: status
+    display:
+      icon_name: mdi:account-group
+      icon_color: pink.4
+      caption: samples, by affected status
+      format: integer
+    section: Family at a glance
+    tag: rd-fam-card-samples
+    index: fam-card-samples
+    title: Samples
+    description: Samples in scope, one row each. The bar splits them by affected status.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: family_checks
+    aggregation: median
+    column_name: ibs0_pct
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    filter_expr: col('relation') == 'Parent-child'
+    display:
+      icon_name: mdi:swap-horizontal
+      icon_color: pink.6
+      caption: median per pair, with the spread (%)
+      decimals: 2
+    section: Family at a glance
+    tag: rd-fam-card-ibs0
+    index: fam-card-ibs0
+    title: Parent-child IBS0
+    description: Opposite homozygous sites between a parent and child, in percent of the shared sites.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: samples
+    aggregation: count
+    column_name: sample
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: sex_check
+    display:
+      icon_name: mdi:gender-male-female
+      icon_color: pink.8
+      caption: samples, by sex check result
+      format: integer
+    section: Family at a glance
+    tag: rd-fam-card-sex
+    index: fam-card-sex
+    title: Sex check
+    description: Samples whose stated sex was compared with the sex inferred from the X and Y depth.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: family_checks
+    aggregation: median
+    column_name: relatedness
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:vector-link
+      icon_color: pink.9
+      caption: pair estimates, how they spread
+      decimals: 2
+    section: Family at a glance
+    tag: rd-fam-card-relatedness
+    index: fam-card-relatedness
+    title: Relatedness
+    description: Pairwise relatedness estimated from the callset, one value per pair and direction.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: raredisease
+    data_collection_tag: samples
+    viz_kind: pedigree
+    config:
+      viz_kind: pedigree
+      individual_col: sample
+      father_col: father
+      mother_col: mother
+      sex_col: sex
+      status_col: status
+      family_col: family_id
+      label_col: role
+      selection_enabled: true
+      selection_column: sample
+    section: Pedigree and pair checks
+    tag: rd-fam-pedigree
+    index: fam-pedigree
+    title: Pedigree
+    description: Squares are males, circles females; a filled mark is an affected sample, an open one
+      unaffected. A click on a sample narrows the dashboard to it.
+    layout: {x: 0, y: 0, w: 4, h: 6}
+  - component_type: figure
+    workflow_tag: raredisease
+    data_collection_tag: family_checks
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # One bar per pair of samples: the share of shared sites with opposite homozygous genotypes.
+      colors = depictio_category_colors.get('check_status') or {}
+      d = df.filter(pl.col('sample') < pl.col('partner')).with_columns((pl.col('sample').str.slice(0, 10) + pl.lit(' / ') + pl.col('partner').str.slice(0, 10)).alias('pair'))
+      fig = px.bar(d.to_pandas(), x='ibs0_pct', y='pair', color='check_status', orientation='h', color_discrete_map=colors, hover_data=['sample', 'partner', 'relation', 'shared_sites'], labels={'ibs0_pct': 'Opposite homozygous sites (% of shared)', 'pair': '', 'check_status': ''})
+      fig.update_layout(margin=dict(t=10), legend_title_text='', legend=dict(orientation='h', y=-0.3))
+      fig.update_yaxes(automargin=True)
+    section: Pedigree and pair checks
+    tag: rd-fam-pair-checks
+    index: fam-pair-checks
+    title: Opposite homozygous sites per pair
+    description: One bar per pair of samples, coloured by the verdict of its parent-child check. A parent
+      and child sit near zero.
+    layout: {x: 4, y: 0, w: 4, h: 6}
+  - component_type: table
+    workflow_tag: raredisease
+    data_collection_tag: family_checks
+    columns: [sample, partner, relation, shared_sites, ibs0, ibs0_pct, identical_pct, relatedness, check_status]
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Family tables
+    tag: rd-fam-table-checks
+    index: fam-table-checks
+    title: Pair checks
+    description: Shared sites, opposite homozygous sites and relatedness for every pair, in both directions.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Callset
+  subtitle: How many calls does each sample yield, and how clean are they?
+  tab_group: Variants
+  tab_order: 4
+  tab_icon: mdi:magnify-scan
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Callset scope
+    icon: mdi:filter-variant
+    color: teal
+    description: These picks narrow the FILTER breakdown and the per-call plot; the summary counts every
+      PASS call
+  grid_sections:
+  - name: Callset at a glance
+    icon: mdi:counter
+    color: teal
+    description: PASS calls, Ts/Tv, het/hom ratio and what the filters removed
+  - name: Callset quality
+    icon: mdi:chart-bar
+    color: teal
+    description: Ts/Tv and het/hom ratio of every sample, against the range they usually fall in
+  - name: Substitution spectrum
+    icon: mdi:chart-bar
+    color: teal
+    description: The PASS SNVs of each sample folded onto six substitution classes
+  - name: Karyotype
+    icon: mdi:chart-timeline-variant
+    color: teal
+    description: PASS variants per 1 Mb along each contig that has calls; "Filter dashboard" narrows the calls below
+    collapsed: true
+  - name: Allele fraction
+    icon: mdi:chart-bell-curve
+    color: teal
+    description: The allele fraction of every sample's PASS calls, with the germline peaks marked
+    collapsed: true
+  - name: Callset tables
+    icon: mdi:table
+    color: gray
+    description: The callset summary and the FILTER breakdown per sample
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      The default caller, [DeepVariant](https://github.com/google/deepvariant), calls each sample and
+      [GLnexus](https://github.com/dnanexus-rnd/GLnexus) joins them into one family callset; this tab
+      counts the calls each sample carries. A sample far from the others in Ts/Tv or het/hom ratio is
+      worth a look. Pick a FILTER value on the left to see what it removed.
+    tag: rd-cs-intro
+    index: cs-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: vcf_filter_breakdown
+    interactive_component_type: MultiSelect
+    column_name: filter_label
+    column_type: object
+    display:
+      icon_name: mdi:filter-outline
+      custom_color: green
+    section: Callset scope
+    group: Calls
+    tag: rd-cs-filter-filter
+    index: cs-filter-filter
+    title: FILTER value
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: vcf_variants
+    interactive_component_type: MultiSelect
+    column_name: variant_type
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: indigo
+    section: Callset scope
+    group: Calls
+    tag: rd-cs-type-filter
+    index: cs-type-filter
+    title: Variant type
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: vcf_callset_summary
+    use: vcf/pass_calls
+    aggregation: median
+    column_name: pass_calls
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:magnify-scan
+      icon_color: teal.4
+      caption: median per sample, with the spread
+      format: si
+    section: Callset at a glance
+    tag: rd-cs-card-pass
+    index: cs-card-pass
+    title: PASS calls
+    description: Calls that failed none of the filters, per sample.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: vcf_callset_summary
+    use: vcf/ts_tv
+    aggregation: median
+    column_name: ts_tv
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:scale-balance
+      icon_color: teal.6
+      caption: median per sample, with the spread
+      decimals: 2
+    section: Callset at a glance
+    tag: rd-cs-card-tstv
+    index: cs-card-tstv
+    title: Transitions over transversions
+    description: Ts/Tv of the PASS SNVs, first ALT allele; a lower value than the genome or exome range points to false positives.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: vcf_callset_summary
+    use: vcf/het_hom
+    aggregation: median
+    column_name: het_hom_ratio
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:set-merge
+      icon_color: teal.8
+      caption: median per sample, with the spread
+      decimals: 2
+    section: Callset at a glance
+    tag: rd-cs-card-hethom
+    index: cs-card-hethom
+    title: Het over hom-alt
+    description: Heterozygous over homozygous-alternate PASS calls. A sample with long runs of homozygosity
+      reads lower.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: vcf_filter_breakdown
+    use: vcf/calls_by_filter
+    aggregation: sum
+    column_name: calls
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: filter_label
+    top_n_count: 4
+    display:
+      icon_name: mdi:filter-outline
+      icon_color: teal.9
+      caption: calls by FILTER value, the largest four
+      format: si
+    section: Callset at a glance
+    tag: rd-cs-card-filters
+    index: cs-card-filters
+    title: Calls by FILTER
+    description: Every call of the samples in scope, PASS and each set of failed filters.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: raredisease
+    data_collection_tag: samples
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Ts/Tv of each sample's PASS SNVs, highest first. The bands are what whole genomes (2.0 to 2.1) and exomes (2.8 to 3.0) give.
+      grp = depictio_group_by[0] if depictio_group_by else 'role'
+      colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('role') or {}
+      d = df.filter(pl.col('ts_tv').is_not_null())
+      top = max(3.3, float(d.get_column('ts_tv').max() or 0) * 1.1)
+      fig = px.bar(d.to_pandas(), x='ts_tv', y='sample', color=grp, orientation='h', color_discrete_map=colors, custom_data=['sample'], hover_data={'pass_calls': ':,', 'ts_tv': ':.2f'}, labels={'ts_tv': 'Transitions over transversions', 'sample': '', 'pass_calls': 'PASS calls'})
+      fig.add_vrect(x0=2.0, x1=2.1, fillcolor='rgba(47,158,68,0.25)', line_width=0, layer='above', annotation_text='Genome', annotation_position='top left', annotation_font_size=10)
+      fig.add_vrect(x0=2.8, x1=3.0, fillcolor='rgba(47,158,68,0.25)', line_width=0, layer='above', annotation_text='Exome', annotation_position='top left', annotation_font_size=10)
+      fig.update_xaxes(range=[0, top])
+      fig.update_yaxes(categoryorder='total ascending', automargin=True)
+      fig.update_layout(margin=dict(t=10), legend_title_text='', legend=dict(orientation='h', y=-0.3))
+    selection_enabled: true
+    selection_column: sample
+    section: Callset quality
+    tag: rd-cs-tstv-bar
+    index: cs-tstv-bar
+    title: Ts/Tv per sample
+    description: Transitions over transversions of the PASS SNVs, highest first and coloured by role. A human
+      genome sits near 2.0 to 2.1 and an exome near 2.8 to 3.0 (the green bands); a lower value points to false
+      positives. A click narrows the dashboard to the sample.
+    layout: {x: 0, y: 0, w: 4, h: 5}
+  - component_type: figure
+    workflow_tag: raredisease
+    data_collection_tag: samples
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Het over hom-alt of each sample's PASS calls, highest first. The band is the usual range of an outbred sample (1.5 to 2).
+      grp = depictio_group_by[0] if depictio_group_by else 'role'
+      colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('role') or {}
+      d = df.filter(pl.col('het_hom_ratio').is_not_null())
+      top = max(2.5, float(d.get_column('het_hom_ratio').max() or 0) * 1.1)
+      fig = px.bar(d.to_pandas(), x='het_hom_ratio', y='sample', color=grp, orientation='h', color_discrete_map=colors, custom_data=['sample'], hover_data={'pass_calls': ':,', 'het_hom_ratio': ':.2f'}, labels={'het_hom_ratio': 'Heterozygous over homozygous-alternate calls', 'sample': '', 'pass_calls': 'PASS calls'})
+      fig.add_vrect(x0=1.5, x1=2.0, fillcolor='rgba(47,158,68,0.25)', line_width=0, layer='above', annotation_text='Outbred', annotation_position='top left', annotation_font_size=10)
+      fig.update_xaxes(range=[0, top])
+      fig.update_yaxes(categoryorder='total ascending', automargin=True)
+      fig.update_layout(margin=dict(t=10), legend_title_text='', legend=dict(orientation='h', y=-0.3))
+    selection_enabled: true
+    selection_column: sample
+    section: Callset quality
+    tag: rd-cs-hethom-bar
+    index: cs-hethom-bar
+    title: Het over hom-alt per sample
+    description: Heterozygous over homozygous-alternate PASS calls, highest first and coloured by role. An
+      outbred sample sits near 1.5 to 2 (the green band); a low value fits consanguinity or long runs of
+      homozygosity, a high one contamination. A click narrows the dashboard to the sample.
+    layout: {x: 4, y: 0, w: 4, h: 5}
+  - component_type: figure
+    workflow_tag: raredisease
+    data_collection_tag: vcf_substitution_spectrum
+    use: vcf/spectrum_bars
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Share of each sample's PASS SNVs per folded class, transitions first.
+      colors = depictio_category_colors.get('sample') or {}
+      order = ['C to T', 'T to C', 'C to A', 'C to G', 'T to A', 'T to G']
+      d = df.with_columns((pl.col('fraction') * 100).alias('share')).sort(['sample', 'substitution_class'])
+      fig = px.bar(d.to_pandas(), x='substitution_class', y='share', color='sample', barmode='group', color_discrete_map=colors, category_orders={'substitution_class': order}, labels={'substitution_class': '', 'share': 'Share of the PASS SNVs (%)', 'sample': 'Sample'})
+      fig.update_layout(margin=dict(t=10), legend_title_text='')
+    section: Substitution spectrum
+    tag: rd-cs-spectrum
+    index: cs-spectrum
+    title: Substitution spectrum per sample
+    description: The six pyrimidine-folded classes as shares of each sample's PASS SNVs.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: figure
+    workflow_tag: raredisease
+    data_collection_tag: vcf_variants
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Each sample's PASS calls read at least 10 times over the allele fraction, as the share of its calls in each 0.05 bin; the green band is where a heterozygous germline call sits (0.3 to 0.7), the blue one where a homozygous-alternate call sits (0.9 to 1).
+      colors = depictio_category_colors.get('variant_type') or {}
+      d = df.filter(pl.col('is_pass') & (pl.col('dp') >= 10) & pl.col('vaf').is_not_null())
+      many = df['caller'].n_unique() > 1
+      panel = (pl.col('sample') + pl.lit(' / ') + pl.col('caller')) if many else pl.col('sample')
+      d = d.with_columns(panel.alias('panel'), (((pl.col('vaf') * 20).floor().clip(0, 19) + 0.5) / 20).round(3).alias('bin'))
+      d = d.group_by(['panel', 'variant_type', 'bin']).agg(pl.len().alias('calls'))
+      d = d.with_columns((pl.col('calls') * 100 / pl.col('calls').sum().over('panel')).alias('share')).sort(['panel', 'variant_type', 'bin'])
+      order = d.get_column('panel').unique(maintain_order=True).to_list()
+      fig = px.bar(d.to_pandas(), x='bin', y='share', color='variant_type', color_discrete_map=colors, facet_col='panel', facet_col_wrap=4, custom_data=['panel', 'calls'], category_orders={'panel': order}, labels={'variant_type': '', 'bin': '', 'share': ''})
+      fig.update_traces(width=0.05, hovertemplate='<b>%{customdata[0]}</b><br>allele fraction %{x:.2f}<br>%{y:.1f}% of its calls (%{customdata[1]:,})<extra></extra>')
+      fig.update_xaxes(range=[0, 1], tickvals=[0, 0.5, 1], title_text='')
+      top = d.group_by(['panel', 'bin']).agg(pl.col('share').sum()).get_column('share').max() * 1.1
+      fig.update_yaxes(title_text='', automargin=True, range=[0, top])
+      fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))
+      fig.add_shape(type='rect', x0=0.3, x1=0.7, y0=0, y1=top, fillcolor='rgba(47,158,68,0.15)', line_width=0, layer='below', row='all', col='all')
+      fig.add_shape(type='rect', x0=0.9, x1=1, y0=0, y1=top, fillcolor='rgba(28,126,214,0.15)', line_width=0, layer='below', row='all', col='all')
+      fig.add_annotation(text='Allele fraction', xref='paper', yref='paper', x=0.5, y=-0.1, showarrow=False)
+      fig.add_annotation(text="Share of the sample's calls (%)", xref='paper', yref='paper', x=-0.05, y=0.5, showarrow=False, textangle=-90)
+      fig.update_layout(margin=dict(t=30, l=50, b=50), bargap=0, legend_title_text='', legend=dict(orientation='h', y=-0.2))
+    section: Allele fraction
+    tag: rd-cs-vaf-vs-depth
+    index: cs-vaf-vs-depth
+    title: Allele fraction per sample
+    description: Share of each sample's PASS calls (read at least 10 times) in each 0.05 bin of allele fraction, split by variant type. A germline sample peaks in the green band at 0.5 (heterozygous) and in the blue one near 1 (homozygous-alternate). A heterozygous peak off 0.5, or a broad shoulder of low fractions, flags contamination, mosaicism or artefacts.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: raredisease
+    data_collection_tag: vcf_variant_density
+    use: vcf/density_karyotype
+    config:
+      assembly: '{GENOME}'
+      mode: density
+      orientation: vertical
+      facet_by_sample: false
+      colour_scale: Viridis
+      region_filter_enabled: true
+    section: Karyotype
+    tag: rd-cs-karyotype
+    index: cs-karyotype
+    title: PASS variants per 1 Mb on the karyotype
+    description: Each chromosome drawn to its length, banded by one sample's distinct PASS variants per
+      1 Mb. Only contigs that carry calls are drawn, so a callset on one chromosome shows that one and the
+      rest of the genome stays empty. Open a chromosome and use Filter dashboard to narrow the per-call plot to it.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    workflow_tag: raredisease
+    data_collection_tag: vcf_callset_summary
+    use: vcf/callset_summary
+    columns: [sample, calls, pass_calls, pass_pct, snvs, indels, multiallelic, ts_tv, het, hom_alt, het_hom_ratio,
+      median_qual, median_dp, median_het_vaf]
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Callset tables
+    tag: rd-cs-table-summary
+    index: cs-table-summary
+    title: Callset summary per sample
+    description: Calls, PASS share, SNVs, indels, Ts/Tv, zygosity and the median quality, depth and allele
+      fraction.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: raredisease
+    data_collection_tag: vcf_filter_breakdown
+    use: vcf/filter_breakdown
+    columns: [sample, filter_label, failed_filters, calls, calls_pct, snvs, indels]
+    row_selection_enabled: true
+    row_selection_column: filter_label
+    section: Callset tables
+    tag: rd-cs-table-filters
+    index: cs-table-filters
+    title: FILTER breakdown per sample
+    description: Each FILTER value with its calls, their share of the sample's callset and the SNVs and
+      indels among them.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+- title: Ranked
+  subtitle: Which variants rank first, and which inheritance model do they fit?
+  tab_group: Variants
+  tab_order: 5
+  tab_icon: mdi:sort-numeric-descending
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Ranking scope
+    icon: mdi:filter-variant
+    color: grape
+    description: These picks narrow the ranked variants and their carriers; a sample pick keeps the variants
+      it carries
+  grid_sections:
+  - name: Ranking at a glance
+    icon: mdi:counter
+    color: grape
+    description: Ranked variants, those that fit a model, high impact ones and the top score
+  - name: Top candidates
+    icon: mdi:star-outline
+    color: grape
+    description: The ranked variants, best first, with the record of the one picked
+  - name: Why they rank, and who carries them
+    icon: mdi:chart-timeline-variant
+    color: grape
+    description: The ten score parts of the 20 best variants, and who carries them
+  - name: Rank by model
+    icon: mdi:chart-box-outline
+    color: grape
+    description: The rank score of every variant, by the inheritance model it fits
+    collapsed: true
+  - name: Carriers
+    icon: mdi:account-group-outline
+    color: grape
+    description: Ranked variants each sample carries, by zygosity
+    collapsed: true
+  - name: Variant table
+    icon: mdi:table
+    color: gray
+    description: Every ranked variant, to sort, search and export
+    collapsed: true
+  - name: Genotype table
+    icon: mdi:table
+    color: gray
+    description: The genotypes behind the ranked variants
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [VEP](https://www.ensembl.org/info/docs/tools/vep/) annotates the variants and [GENMOD](https://github.com/Clinical-Genomics/genmod)
+      scores each one by its annotation and the inheritance model it fits, so a higher rank score is a
+      stronger candidate. The clinical set is the part of the research set in the gene list the run was
+      given. Click a bar of the score parts to narrow the table to that variant, then its row to open its record.
+    tag: rd-rk-intro
+    index: rk-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    interactive_component_type: MultiSelect
+    column_name: variant_set
+    column_type: object
+    display:
+      icon_name: mdi:format-list-bulleted
+      custom_color: orange
+    section: Ranking scope
+    group: Ranking
+    tag: rd-rk-set-filter
+    index: rk-set-filter
+    title: Variant set
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    interactive_component_type: MultiSelect
+    column_name: model_class
+    column_type: object
+    display:
+      icon_name: mdi:family-tree
+      custom_color: grape
+    section: Ranking scope
+    group: Ranking
+    tag: rd-rk-model-filter
+    index: rk-model-filter
+    title: Inheritance model
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    interactive_component_type: MultiSelect
+    column_name: impact
+    column_type: object
+    display:
+      icon_name: mdi:alert-outline
+      custom_color: red
+    section: Ranking scope
+    group: Ranking
+    tag: rd-rk-impact-filter
+    index: rk-impact-filter
+    title: Impact
+    layout: {x: 0, y: 5, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: rank_score
+    column_type: float64
+    display:
+      icon_name: mdi:sort-numeric-descending
+      custom_color: cyan
+    section: Ranking scope
+    group: Ranking
+    tag: rd-rk-score-range
+    index: rk-score-range
+    title: Rank score
+    layout: {x: 0, y: 8, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: variant_set
+    display:
+      icon_name: mdi:sort-numeric-descending
+      icon_color: grape.4
+      caption: ranked variants, by set
+      format: si
+    section: Ranking at a glance
+    tag: rd-rk-card-ranked
+    index: rk-card-ranked
+    title: Ranked variants
+    description: Variants GENMOD scored, one row each. The bar splits them by variant set.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: model_class
+    filter_expr: col('model_class') != 'No model fits'
+    display:
+      icon_name: mdi:family-tree
+      icon_color: grape.6
+      caption: variants, by inheritance model
+      format: si
+    section: Ranking at a glance
+    tag: rd-rk-card-fit
+    index: rk-card-fit
+    title: Fit a model
+    description: Variants that fit at least one inheritance model of the pedigree. The bar splits them
+      by model.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: impact
+    filter_expr: col('impact').is_in(['HIGH', 'MODERATE'])
+    display:
+      icon_name: mdi:alert-outline
+      icon_color: grape.8
+      caption: variants, by impact
+      format: integer
+    section: Ranking at a glance
+    tag: rd-rk-card-impact
+    index: rk-card-impact
+    title: High or moderate impact
+    description: Variants VEP predicts to be HIGH (a lost stop, a frameshift) or MODERATE (a missense
+      change).
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    aggregation: max
+    column_name: rank_score
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:trophy-outline
+      icon_color: grape.9
+      caption: rank scores, how they spread
+      decimals: 0
+    section: Ranking at a glance
+    tag: rd-rk-card-top
+    index: rk-card-top
+    title: Top rank score
+    description: The highest rank score among the variants in scope.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    visu_type: box
+    mode: code
+    code_content: |-
+      # The rank score of every variant, by the inheritance model it fits.
+      colors = depictio_category_colors.get('model_class') or {}
+      order = ['Compound heterozygous', 'Recessive', 'Dominant', 'X-linked', 'No model fits']
+      d = df.filter(pl.col('rank_score').is_not_null())
+      fig = px.box(d.to_pandas(), x='model_class', y='rank_score', color='model_class', color_discrete_map=colors, category_orders={'model_class': order}, points=False, labels={'model_class': '', 'rank_score': 'Rank score'})
+      fig.update_layout(margin=dict(t=10), showlegend=False)
+      fig.update_xaxes(automargin=True)
+    section: Rank by model
+    tag: rd-rk-rank-by-model
+    index: rk-rank-by-model
+    title: Rank score by inheritance model
+    description: A variant that fits a model scores above the rest; the box spans the middle half of each
+      model's variants.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: figure
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # The ten rank-model components behind the 20 best-scoring variants, one stacked bar each, best at the top; the family's bounds frame the axis.
+      names = {'score_allele_frequency': 'Allele frequency', 'score_protein': 'Protein', 'score_gene_intolerance': 'Gene intolerance', 'score_inheritance': 'Inheritance', 'score_consequence': 'Consequence', 'score_conservation': 'Conservation', 'score_call_quality': 'Call quality', 'score_deleteriousness': 'Deleteriousness', 'score_clinical': 'Clinical', 'score_splicing': 'Splicing'}
+      top = df.filter(pl.col('rank_score').is_not_null()).sort(['rank_score', 'variant_key'], descending=[True, False]).head(20).with_row_index('rank', offset=1).with_columns(pl.concat_str([pl.col('rank').cast(pl.Utf8), pl.lit('. '), pl.col('call_label')]).alias('label'))
+      labels = top.get_column('label').to_list()
+      totals = top.get_column('rank_score').to_list()
+      bounds = top.get_column('rank_score_max').drop_nulls()
+      top_bound = float(bounds.max()) if bounds.len() > 0 else float(max(totals))
+      long = top.select(['label', 'variant_key'] + list(names.keys())).unpivot(index=['label', 'variant_key'], variable_name='component', value_name='points').with_columns(pl.col('component').replace(names))
+      fig = px.bar(long.to_pandas(), x='points', y='label', color='component', orientation='h', custom_data=['variant_key'], category_orders={'label': labels, 'component': list(names.values())}, labels={'points': 'Rank score points, out of ' + str(int(top_bound)), 'label': '', 'component': ''})
+      fig.update_traces(hovertemplate='%{y}<br>%{fullData.name}: %{x}<extra></extra>')
+      for lab, tot in zip(labels, totals):
+          fig.add_annotation(x=tot, y=lab, text=str(int(tot)), showarrow=False, xanchor='left', xshift=4, font=dict(size=10))
+      fig.update_xaxes(range=[min(0, float(long.get_column('points').min() or 0)) - 0.5, top_bound + 0.5])
+      fig.update_yaxes(automargin=True)
+      fig.update_layout(margin=dict(t=10), barmode='relative', legend_title_text='', legend=dict(orientation='h', y=-0.12, font=dict(size=9)))
+    selection_enabled: true
+    selection_column: variant_key
+    section: Why they rank, and who carries them
+    tag: rd-rk-score-parts
+    index: rk-score-parts
+    title: Rank score parts of the 20 best variants
+    description: GENMOD's rank model adds a score for each of ten categories, and the family's pedigree sets
+      the bounds of the total (the axis ends at the highest score the family can reach). Each bar is one
+      variant, best first, split into its ten parts, with its total at the end. A click narrows the table,
+      the record and the genotypes to that variant.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: figure
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    visu_type: scatter
+    mode: code
+    code_content: |-
+      # The genotype of each sample at the 20 best-scoring variants, in the order of the ranking, coloured by zygosity; grey is homozygous reference.
+      colors = depictio_category_colors.get('gt_class') or {}
+      classes = ['Hom ref', 'Het', 'Hom alt', 'Half call', 'No call']
+      top = df.filter(pl.col('rank_score').is_not_null() & pl.col('genotypes').is_not_null()).sort(['rank_score', 'variant_key'], descending=[True, False]).head(20).with_row_index('rank', offset=1)
+      labels = [str(r) + '. ' + str(lab) for r, lab in zip(top.get_column('rank').to_list(), top.get_column('call_label').to_list())]
+      cells = [[g.split('|', 1) for g in row.split(';')] for row in top.get_column('genotypes').to_list()]
+      samples = list(dict.fromkeys([c[0] for row in cells for c in row]))
+      def zygosity(gt):
+          alleles = gt.replace('|', '/').split('/')
+          known = [a for a in alleles if a not in ('.', '')]
+          if not known:
+              return 'No call'
+          if len(known) < len(alleles):
+              return 'Half call'
+          if all(a == '0' for a in known):
+              return 'Hom ref'
+          return 'Hom alt' if len(set(known)) == 1 else 'Het'
+      code = {c: i for i, c in enumerate(classes)}
+      z = []
+      text = []
+      for row in cells:
+          call = {c[0]: zygosity(c[1]) for c in row}
+          z.append([code[call.get(s, 'No call')] for s in samples])
+          text.append([call.get(s, 'No call') for s in samples])
+      palette = [colors.get(c, 'rgba(128,128,128,0.5)') for c in classes]
+      scale = []
+      for i, c in enumerate(palette):
+          scale.append([i / len(palette), c])
+          scale.append([(i + 1) / len(palette), c])
+      fig = go.Figure(go.Heatmap(z=z, x=samples, y=labels, text=text, zmin=0, zmax=len(classes) - 1, colorscale=scale, showscale=False, xgap=3, ygap=3, hovertemplate='%{y}<br>%{x}: %{text}<extra></extra>'))
+      for c in classes:
+          fig.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(size=10, symbol='square', color=colors.get(c)), name=c))
+      fig.update_yaxes(autorange='reversed', automargin=True)
+      fig.update_xaxes(side='top', automargin=True)
+      fig.update_layout(margin=dict(t=10), legend_title_text='', legend=dict(orientation='h', y=-0.08))
+    section: Why they rank, and who carries them
+    tag: rd-rk-genotype-grid
+    index: rk-genotype-grid
+    title: Genotypes of the 20 best variants
+    description: One row per variant in rank order, one column per sample, coloured by zygosity (homozygous
+      reference, heterozygous, homozygous alternate, half call, no call).
+    layout: {x: 5, y: 0, w: 3, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      linked_component: rd-rk-top-candidates
+      default_record_by: rank_score
+      id_col: variant_key
+      title_col: variant_key
+      selection_source: table_selection
+      sections:
+        Variant:
+        - gene
+        - consequence
+        - impact
+        - hgvs_c
+        - hgvs_p
+        - variant_type
+        Ranking:
+        - rank_score
+        - rank_score_norm
+        - model_class
+        - genetic_models
+        - de_novo
+        - variant_set
+        Frequency and scores:
+        - gnomad_af
+        - gnomad_af_popmax
+        - cadd
+        - pli
+        - sift
+        - polyphen
+        Carriers:
+        - n_carriers
+        - carriers
+        - qual
+        - filter_status
+      link_templates:
+        gene: https://www.genecards.org/cgi-bin/carddisp.pl?gene={value}
+    section: Top candidates
+    tag: rd-rk-variant-record
+    index: rk-variant-record
+    title: Picked variant
+    description: The variant picked in the table, from its annotation to its carriers; the top-ranked one until a row is picked.
+    layout: {x: 5, y: 0, w: 3, h: 7}
+  - component_type: figure
+    workflow_tag: raredisease
+    data_collection_tag: ranked_genotypes
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Ranked variants each sample carries, by zygosity.
+      colors = depictio_category_colors.get('gt_class') or {}
+      d = df.group_by(['sample', 'gt_class']).agg(pl.len().alias('n')).sort(['sample', 'gt_class'])
+      fig = px.bar(d.to_pandas(), x='sample', y='n', color='gt_class', color_discrete_map=colors, category_orders={'gt_class': ['Het', 'Hom alt', 'Half call']}, labels={'sample': '', 'n': 'Ranked variants carried', 'gt_class': ''})
+      fig.update_layout(margin=dict(t=10), legend_title_text='')
+    section: Carriers
+    tag: rd-rk-carriers
+    index: rk-carriers
+    title: Ranked variants carried per sample
+    description: Heterozygous, homozygous-alternate and half calls among the ranked variants of each sample.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: advanced_viz
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    viz_kind: ranked_table
+    config:
+      viz_kind: ranked_table
+      title_col: gene
+      subtitle_col: hgvs_p
+      score_col: rank_score
+      descending: true
+      columns:
+      - {column: model_class, label: Model, display: badge}
+      - {column: impact, label: Impact, display: badge}
+      - {column: rank_score, label: Rank score, display: bar, decimals: 0}
+      labels:
+        consequence: Consequence
+        hgvs_c: Coding change
+        gnomad_af: gnomAD AF
+        cadd: CADD
+        pli: pLI
+        chrom: Chromosome
+        pos: Position
+        ref: Ref
+        alt: Alt
+        n_carriers: Carriers
+        variant_set: Variant set
+      popover_columns: [consequence, hgvs_c, variant_set, gnomad_af, cadd, pli, chrom, pos, ref, alt, n_carriers]
+      top_n: 50
+      medals: true
+      selection_enabled: true
+      selection_column: variant_key
+      family_dc_tag: samples
+      family_individual_col: sample
+      family_father_col: father
+      family_mother_col: mother
+      family_sex_col: sex
+      family_status_col: status
+      family_proband_col: role
+      family_label_col: role
+      genotypes_dc_tag: ranked_genotypes
+      genotypes_key_col: variant_key
+      genotypes_row_col: variant_key
+      genotypes_individual_col: sample
+      genotypes_genotype_col: gt_class
+      genotypes_missing_as: ref
+      family_open: false
+    controls_placement: popover
+    section: Top candidates
+    tag: rd-rk-top-candidates
+    index: rk-top-candidates
+    title: Top candidates
+    description: The 50 best-ranked variants, best first. Hover a row for its annotation and frequencies; a click pins it, picks the variant for the record beside it and opens the family with its carriers.
+    layout: {x: 0, y: 0, w: 5, h: 7}
+  - component_type: table
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    columns: [rank_score, gene, hgvs_p, consequence, impact, model_class, variant_set, n_carriers, gnomad_af,
+      chrom, pos, ref, alt]
+    row_selection_enabled: true
+    row_selection_column: variant_key
+    section: Variant table
+    tag: rd-rk-table-variants
+    index: rk-table-variants
+    title: Ranked variants
+    description: Every ranked variant, best first, to sort, search and export. A picked row opens its
+      record.
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: table
+    workflow_tag: raredisease
+    data_collection_tag: ranked_genotypes
+    columns: [variant_key, sample, gt, gt_class, dp, gq, vaf, rank_score, model_class, impact]
+    row_selection_enabled: true
+    row_selection_column: variant_key
+    section: Genotype table
+    tag: rd-rk-table-genotypes
+    index: rk-table-genotypes
+    title: Genotypes of the ranked variants
+    description: The genotype, depth and quality each sample has at each ranked variant.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Mitochondria
+  subtitle: How heteroplasmic are the mitochondrial calls, and how rare?
+  tab_group: Variants
+  tab_order: 6
+  tab_icon: mdi:atom
+  tab_icon_color: yellow
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Mitochondria scope
+    icon: mdi:filter-variant
+    color: yellow
+    description: These picks narrow every mitochondrial tile
+  grid_sections:
+  - name: Mitochondria at a glance
+    icon: mdi:counter
+    color: yellow
+    description: Calls, heteroplasmy, impact and depth of the mitochondrial calls
+  - name: Heteroplasmy
+    icon: mdi:chart-scatter-plot
+    color: yellow
+    description: Every call by its position and the share of copies carrying it
+  - name: Population frequency
+    icon: mdi:chart-bell-curve
+    color: yellow
+    description: Heteroplasmy against how common the variant is in gnomAD
+  - name: Mitochondrial tables
+    icon: mdi:table
+    color: gray
+    description: Every mitochondrial call with its annotation
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      The mitochondrial genome is called apart from the nuclear one, so the allele fraction of a call
+      is its heteroplasmy: the share of mitochondrial copies carrying the variant. Calls near 1 are homoplasmic
+      and the rest are mixtures. A variant that is rare in the gnomAD mitochondrial frequencies and heteroplasmic
+      is the one to look at.
+    tag: rd-mt-intro
+    index: mt-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: mt_variants
+    interactive_component_type: MultiSelect
+    column_name: heteroplasmy_class
+    column_type: object
+    display:
+      icon_name: mdi:atom
+      custom_color: yellow
+    section: Mitochondria scope
+    group: Mitochondria
+    tag: rd-mt-class-filter
+    index: mt-class-filter
+    title: Heteroplasmy class
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: mt_variants
+    interactive_component_type: MultiSelect
+    column_name: impact
+    column_type: object
+    display:
+      icon_name: mdi:alert-outline
+      custom_color: red
+    section: Mitochondria scope
+    group: Mitochondria
+    tag: rd-mt-impact-filter
+    index: mt-impact-filter
+    title: Impact
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: mt_variants
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: heteroplasmy_class
+    display:
+      icon_name: mdi:atom
+      icon_color: yellow.4
+      caption: calls, by heteroplasmy class
+      format: integer
+    section: Mitochondria at a glance
+    tag: rd-mt-card-calls
+    index: mt-card-calls
+    title: Mitochondrial calls
+    description: Calls on the mitochondrial genome, one per sample carrying them. The bar splits them
+      by heteroplasmy class.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: mt_variants
+    aggregation: median
+    column_name: heteroplasmy
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: yellow.6
+      caption: median per call, with the spread
+      format: percent
+    section: Mitochondria at a glance
+    tag: rd-mt-card-het
+    index: mt-card-het
+    title: Heteroplasmy
+    description: Allele fraction of the calls in scope, the share of copies carrying the variant.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: mt_variants
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: impact
+    filter_expr: col('impact').is_in(['HIGH', 'MODERATE'])
+    display:
+      icon_name: mdi:alert-outline
+      icon_color: yellow.8
+      caption: calls, by impact
+      format: integer
+    section: Mitochondria at a glance
+    tag: rd-mt-card-impact
+    index: mt-card-impact
+    title: High or moderate impact
+    description: Calls VEP predicts to be HIGH or MODERATE.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: mt_variants
+    aggregation: median
+    column_name: dp
+    column_type: int64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:layers-outline
+      icon_color: yellow.9
+      caption: median per call, how it spreads
+      format: si
+    section: Mitochondria at a glance
+    tag: rd-mt-card-dp
+    index: mt-card-dp
+    title: Depth at the call
+    description: Read depth at the calls in scope.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: raredisease
+    data_collection_tag: mt_variants
+    viz_kind: scatter_xy
+    config:
+      viz_kind: scatter_xy
+      x_col: pos
+      y_col: heteroplasmy
+      label_col: variant_key
+      color_col: heteroplasmy_class
+      x_title: Position on the mitochondrial genome (bp)
+      y_title: Heteroplasmy
+      legend_pos: bottom
+      marker_size: 14
+      opacity: 0.9
+    section: Heteroplasmy
+    tag: rd-mt-het-by-pos
+    index: mt-het-by-pos
+    title: Heteroplasmy along the mitochondrial genome
+    description: One point per call, by its position and the share of copies carrying it.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: figure
+    workflow_tag: raredisease
+    data_collection_tag: mt_variants
+    visu_type: scatter
+    mode: code
+    code_content: |-
+      # Heteroplasmy against how often gnomAD sees the variant heteroplasmic.
+      colors = depictio_category_colors.get('heteroplasmy_class') or {}
+      d = df.filter(pl.col('gnomad_mt_het').is_not_null() & pl.col('heteroplasmy').is_not_null() & (pl.col('gnomad_mt_het') > 0))
+      fig = px.scatter(d.to_pandas(), x='gnomad_mt_het', y='heteroplasmy', color='heteroplasmy_class', color_discrete_map=colors, hover_name='variant_key', log_x=True, labels={'gnomad_mt_het': 'gnomAD heteroplasmic frequency (log)', 'heteroplasmy': 'Heteroplasmy', 'heteroplasmy_class': ''})
+      fig.update_traces(marker=dict(size=14, line=dict(width=1.2, color='rgba(128,128,128,0.9)')))
+      fig.update_layout(margin=dict(t=10), legend_title_text='')
+    section: Population frequency
+    tag: rd-mt-het-vs-gnomad
+    index: mt-het-vs-gnomad
+    title: Heteroplasmy against gnomAD frequency
+    description: Calls with a gnomAD frequency; the rare, heteroplasmic ones sit at the top left.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: table
+    workflow_tag: raredisease
+    data_collection_tag: mt_variants
+    columns: [sample, chrom, pos, ref, alt, gene, consequence, impact, heteroplasmy, heteroplasmy_class,
+      dp, mitotip_score, mitotip_prediction, gnomad_mt_het, gnomad_mt_hom, filter_status]
+    row_selection_enabled: true
+    row_selection_column: variant_key
+    section: Mitochondrial tables
+    tag: rd-mt-table-calls
+    index: mt-table-calls
+    title: Mitochondrial calls
+    description: Position, alleles, gene, consequence, heteroplasmy, depth, MitoTip and gnomAD frequencies
+      of each call.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Repeats
+  subtitle: Do any repeat expansions or mobile element insertions stand out?
+  tab_group: Variants
+  tab_order: 7
+  tab_icon: mdi:repeat
+  tab_icon_color: red
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Repeats scope
+    icon: mdi:filter-variant
+    color: red
+    description: These picks narrow the repeat calls and the mobile elements
+  grid_sections:
+  - name: Repeats at a glance
+    icon: mdi:counter
+    color: red
+    description: Repeat calls, pathogenic-range calls, mobile element insertions and SMN calls
+  - name: Repeat counts
+    icon: mdi:chart-scatter-plot
+    color: red
+    description: Each call as a share of the threshold that defines its disease
+  - name: Mobile elements
+    icon: mdi:relation-many-to-many
+    color: red
+    description: Insertions of mobile elements, by family and sample
+  - name: Repeat tables
+    icon: mdi:table
+    color: gray
+    description: Repeat, mobile element and SMN calls
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [ExpansionHunter](https://github.com/Illumina/ExpansionHunter) genotypes the repeat loci of a catalogue
+      and [Stranger](https://github.com/Clinical-Genomics/stranger) compares each count with the thresholds
+      of its disease. The mobile element caller reports insertions of ALU, L1, SVA and HERV elements,
+      and SMNCopyNumberCaller counts the SMN1 and SMN2 copies. A locus with no call had too few reads
+      to genotype.
+    tag: rd-rp-intro
+    index: rp-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: repeat_expansions
+    interactive_component_type: MultiSelect
+    column_name: repeat_status
+    column_type: object
+    display:
+      icon_name: mdi:repeat
+      custom_color: red
+    section: Repeats scope
+    group: Repeats
+    tag: rd-rp-status-filter
+    index: rp-status-filter
+    title: Repeat status
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: mobile_elements
+    interactive_component_type: MultiSelect
+    column_name: me_type
+    column_type: object
+    display:
+      icon_name: mdi:content-duplicate
+      custom_color: cyan
+    section: Repeats scope
+    group: Repeats
+    tag: rd-rp-me-filter
+    index: rp-me-filter
+    title: Element family
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: repeat_expansions
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: repeat_status
+    display:
+      icon_name: mdi:repeat
+      icon_color: red.4
+      caption: calls, by status
+      format: integer
+    section: Repeats at a glance
+    tag: rd-rp-card-calls
+    index: rp-card-calls
+    title: Repeat calls
+    description: Repeat locus calls, one per locus and sample. The bar splits them by status against the
+      disease thresholds.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: repeat_expansions
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: inheritance
+    filter_expr: col('repeat_status') == 'Pathogenic range'
+    display:
+      icon_name: mdi:alert-circle-outline
+      icon_color: red.6
+      caption: calls, by inheritance
+      format: integer
+    section: Repeats at a glance
+    tag: rd-rp-card-pathogenic
+    index: rp-card-pathogenic
+    title: Pathogenic-range calls
+    description: Calls at or above the pathogenic threshold of their locus. The bar splits them by inheritance.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: mobile_elements
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: me_type
+    display:
+      icon_name: mdi:content-duplicate
+      icon_color: red.8
+      caption: insertions, by element family
+      format: integer
+    section: Repeats at a glance
+    tag: rd-rp-card-me
+    index: rp-card-me
+    title: Mobile element insertions
+    description: Insertions of mobile elements, one per sample carrying them. The bar splits them by element
+      family.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: smn
+    aggregation: count
+    column_name: sample
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: smn_status
+    display:
+      icon_name: mdi:dna
+      icon_color: red.9
+      caption: samples, by SMN call status
+      format: integer
+    section: Repeats at a glance
+    tag: rd-rp-card-smn
+    index: rp-card-smn
+    title: SMN calls
+    description: Samples with an SMN copy number call. The bar splits them by call status.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: raredisease
+    data_collection_tag: repeat_expansions
+    visu_type: scatter
+    mode: code
+    code_content: |-
+      # Each genotyped repeat call as a share of its locus's pathogenic threshold, one row per locus: left of the first mark is the normal range, between the marks intermediate, from 1 on pathogenic. Markers are coloured by Stranger's verdict and set apart by sample.
+      colors = depictio_category_colors.get('repeat_status') or {}
+      d = df.filter(pl.col('repeat_count').is_not_null() & (pl.col('pathologic_min') > 0)).with_columns((pl.col('repeat_count') / pl.col('pathologic_min')).alias('ratio'), (pl.col('normal_max') / pl.col('pathologic_min')).clip(0, 1).alias('normal_ratio'), pl.concat_str([pl.col('locus'), pl.lit(' ('), pl.col('disease').fill_null('no disease listed'), pl.lit(')')]).alias('row'))
+      order = d.group_by('row').agg(pl.col('ratio').max().alias('top'), pl.col('normal_ratio').first().alias('normal_ratio')).sort(['top', 'row'], descending=[False, False]).tail(25)
+      rows = order.get_column('row').to_list()
+      pos = {r: i for i, r in enumerate(rows)}
+      samples = sorted(d.get_column('sample').unique().to_list())
+      shift = {s: (i - (len(samples) - 1) / 2) * 0.22 for i, s in enumerate(samples)}
+      d = d.filter(pl.col('row').is_in(rows)).with_columns(pl.col('row').replace_strict(pos, return_dtype=pl.Float64).alias('y')).with_columns((pl.col('y') + pl.col('sample').replace_strict(shift, return_dtype=pl.Float64)).alias('y_shift'))
+      right = max(1.5, float(d.get_column('ratio').max()) * 1.1)
+      def tint(hex_color, alpha):
+          h = hex_color.lstrip('#')
+          return 'rgba(' + str(int(h[0:2], 16)) + ',' + str(int(h[2:4], 16)) + ',' + str(int(h[4:6], 16)) + ',' + str(alpha) + ')'
+      fig = px.scatter(d.to_pandas(), x='ratio', y='y_shift', color='repeat_status', color_discrete_map=colors, custom_data=['sample', 'repeat_count', 'normal_max', 'pathologic_min', 'spanning_reads'], labels={'ratio': 'Repeat count as a share of the pathogenic threshold (1 = threshold)', 'y_shift': '', 'repeat_status': ''})
+      fig.update_traces(marker=dict(size=13, line=dict(width=1.2, color='rgba(128,128,128,0.9)')), hovertemplate='%{customdata[0]}<br>%{customdata[1]} repeats (normal up to %{customdata[2]}, pathogenic from %{customdata[3]})<br>%{customdata[4]} spanning reads<extra>%{fullData.name}</extra>')
+      for r, n in zip(order.get_column('row').to_list(), order.get_column('normal_ratio').to_list()):
+          i = pos[r]
+          for x0, x1, status in ((0, n, 'Normal'), (n, 1, 'Intermediate'), (1, right, 'Pathogenic range')):
+              if x1 > x0:
+                  fig.add_shape(type='rect', x0=x0, x1=x1, y0=i - 0.45, y1=i + 0.45, fillcolor=tint(colors.get(status, '#adb5bd'), 0.16), line_width=0, layer='below')
+      fig.add_vline(x=1, line_dash='dot', line_width=1)
+      fig.update_xaxes(range=[0, right])
+      fig.update_yaxes(tickmode='array', tickvals=list(range(len(rows))), ticktext=rows, range=[-0.6, len(rows) - 0.4], automargin=True)
+      fig.update_layout(margin=dict(t=10), legend_title_text='', legend=dict(orientation='h', y=-0.3))
+    section: Repeat counts
+    tag: rd-rp-counts
+    index: rp-counts
+    title: Repeat counts against the thresholds
+    description: One row per locus with its disease, one marker per sample, placed by its repeat count as a
+      share of the locus's pathogenic threshold. Green is the normal range, amber intermediate and red
+      pathogenic (1 and above); the marker colour is Stranger's verdict. Loci with no call are left out.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: figure
+    workflow_tag: raredisease
+    data_collection_tag: mobile_elements
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Insertions per sample, by element family.
+      colors = depictio_category_colors.get('me_type') or {}
+      d = df.group_by(['sample', 'me_type']).agg(pl.len().alias('n')).sort(['sample', 'me_type'])
+      fig = px.bar(d.to_pandas(), x='sample', y='n', color='me_type', color_discrete_map=colors, labels={'sample': '', 'n': 'Insertions', 'me_type': ''})
+      fig.update_layout(margin=dict(t=10), legend_title_text='')
+    section: Mobile elements
+    tag: rd-rp-mobile
+    index: rp-mobile
+    title: Mobile element insertions per sample
+    description: Insertions of ALU, L1, SVA and HERV elements each sample carries.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: table
+    workflow_tag: raredisease
+    data_collection_tag: repeat_expansions
+    columns: [sample, locus, chrom, start, end, repeat_unit, disease, inheritance, repeat_count, spanning_reads,
+      normal_max, pathologic_min, repeat_status, filter_status]
+    row_selection_enabled: true
+    row_selection_column: variant_key
+    section: Repeat tables
+    tag: rd-rp-table-repeats
+    index: rp-table-repeats
+    title: Repeat expansion calls
+    description: Locus, disease, repeat count against its thresholds and the reads that span the repeat.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: raredisease
+    data_collection_tag: mobile_elements
+    columns: [sample, chrom, pos, me_type, gt, qual, filter_status, spanning_pairs, clipped_5p, clipped_3p,
+      samples_sharing]
+    row_selection_enabled: true
+    row_selection_column: variant_key
+    section: Repeat tables
+    tag: rd-rp-table-mobile
+    index: rp-table-mobile
+    title: Mobile element calls
+    description: Position, element family, genotype and the read evidence of each insertion.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: raredisease
+    data_collection_tag: smn
+    columns: [sample, smn_status, smn1_cn, smn2_cn, smn2_delta78_cn, total_cn_raw, full_length_cn_raw]
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Repeat tables
+    tag: rd-rp-table-smn
+    index: rp-table-smn
+    title: SMN copy number
+    description: SMN1 and SMN2 copy numbers and the raw counts behind them, per sample.
+    layout: {x: 0, y: 12, w: 8, h: 6}
+- title: Locus
+  subtitle: What do the calls and alignments show at one locus?
+  tab_group: Variants
+  tab_order: 8
+  tab_icon: mdi:map-marker-outline
+  tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Locus filters
+    icon: mdi:filter-variant
+    color: indigo
+    description: These picks narrow the cards, the table and the ranked points of the navigator; the
+      browser reads every variant
+  grid_sections:
+  - name: Region at a glance
+    icon: mdi:counter
+    color: indigo
+    description: What the region in view holds, recounted on every brush or locus entry
+  - name: Variants on one axis
+    icon: mdi:dna
+    color: indigo
+    description: Brush the navigator and the browser follows; its window shows as a band on the navigator
+    display: linked
+  - name: Ranked variants in the region
+    icon: mdi:table
+    color: indigo
+    description: The ranked variants inside the region in view
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      The navigator draws every ranked variant at its position, higher for a higher rank score, in the colour of its inheritance model. A brush,
+      or a locus typed in its header, moves the browser and recounts the cards. The browser opens on the
+      span of the three best-ranked variants when they lie within a megabase, else on the best one, with the ranked VCF,
+      the proband's alignment and coverage, the parents' alignments and the ClinVar and common dbSNP sites; the other
+      tracks of the family are in its track menu.
+    tag: rd-loc-intro
+    index: loc-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    interactive_component_type: MultiSelect
+    column_name: variant_set
+    column_type: object
+    display:
+      icon_name: mdi:format-list-bulleted
+      custom_color: orange
+    section: Locus filters
+    group: Locus
+    tag: rd-loc-set-filter
+    index: loc-set-filter
+    title: Variant set
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: raredisease
+    data_collection_tag: vcf_variants
+    interactive_component_type: MultiSelect
+    column_name: variant_type
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: indigo
+    section: Locus filters
+    group: Locus
+    tag: rd-loc-type-filter
+    index: loc-type-filter
+    title: Variant type
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: model_class
+    follow_region_filter: true
+    display:
+      icon_name: mdi:sort-numeric-descending
+      icon_color: indigo.4
+      caption: variants in the region, by model
+      format: si
+    section: Region at a glance
+    tag: rd-loc-card-ranked
+    index: loc-card-ranked
+    title: Ranked variants
+    description: Ranked variants inside the region in view. The bar splits them by inheritance model.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: vcf_variants
+    aggregation: count
+    column_name: variant_key
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: variant_type
+    follow_region_filter: true
+    display:
+      icon_name: mdi:counter
+      icon_color: indigo.6
+      caption: calls in the region, by variant type
+      format: si
+    section: Region at a glance
+    tag: rd-loc-card-calls
+    index: loc-card-calls
+    title: Calls
+    description: Calls inside the region in view, one per sample carrying them.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    aggregation: max
+    column_name: rank_score
+    column_type: float64
+    secondary_layout: histogram
+    follow_region_filter: true
+    display:
+      icon_name: mdi:podium-gold
+      icon_color: indigo.8
+      caption: best rank score in the region
+    section: Region at a glance
+    tag: rd-loc-card-variants
+    index: loc-card-variants
+    title: Top rank score
+    description: The highest rank score of the variants inside the region in view.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: raredisease
+    data_collection_tag: vcf_variants
+    aggregation: median
+    column_name: dp
+    column_type: int64
+    secondary_layout: histogram
+    follow_region_filter: true
+    display:
+      icon_name: mdi:layers-outline
+      icon_color: indigo.9
+      caption: median per call, with its distribution
+      decimals: 0
+    section: Region at a glance
+    tag: rd-loc-card-dp
+    index: loc-card-dp
+    title: Depth at the call
+    description: Median read depth at the calls inside the region in view.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    viz_kind: genome_view
+    config:
+      viz_kind: genome_view
+      chr_col: chrom
+      pos_col: pos
+      score_col: rank_score
+      feature_col: gene
+      category_col: model_class
+      mark: point
+      point_size: 9
+      assembly: '{GENOME}'
+      score_title: Rank score
+      # No default region: a whole contig as the opening filter sends the
+      # browser below to the whole contig, where every track asks for a force
+      # load. The navigator opens on the genome, the browser on the best variants.
+      region_filter_enabled: true
+      # Opens on the chromosome the browser shows (the best variants), not the genome.
+      open_on_view_window: true
+    section: Variants on one axis
+    tag: rd-loc-navigator
+    index: loc-navigator
+    title: Ranked variants along the genome
+    description: Each point is a ranked variant, coloured by the inheritance model it fits like the ranked
+      table and the variant track below. A locus or gene in the header, or a brush, moves the browser.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: jbrowse
+    workflow_tag: raredisease
+    data_collection_tag: tracks
+    section: Variants on one axis
+    initial_tracks: 5
+    max_tracks: 12
+    follow_window: true
+    fetch_size_limit_mb: 20
+    show_overview: false
+    show_header: false
+    selection_enabled: true
+    selection_column: sample
+    locus_from:
+    - data_collection_tag: ranked_variants
+      name: Ranked variants
+      color: orange
+      chrom_column: chrom
+      start_column: pos
+      end_column: end
+      padding: 150
+      max_rows: 20
+      sort_by: rank_score
+      span_top: 3
+      max_span: 1000000
+      descending: true
+      label_column: call_label
+      columns: [gene, consequence, model_class]
+    - data_collection_tag: repeat_expansions
+      name: Repeat expansions
+      color: red
+      chrom_column: chrom
+      start_column: start
+      end_column: end
+      padding: 500
+      max_rows: 20
+      sort_by: spanning_reads
+      descending: true
+      label_column: locus
+      sample_column: sample
+      columns: [disease, repeat_status]
+    - data_collection_tag: mobile_elements
+      name: Mobile elements
+      color: cyan
+      chrom_column: chrom
+      start_column: pos
+      end_column: end
+      padding: 500
+      max_rows: 20
+      sort_by: qual
+      descending: true
+      label_column: me_type
+      sample_column: sample
+      columns: [gt, filter_status]
+    ucsc_tracks: [clinvarMain, dbSnp155Common]
+    variant_color_by:
+      column: genetic_model
+      info_field: GeneticModels
+    # The gene (VEP CSQ SYMBOL), not the 21_10950631_T_A key, names each variant.
+    variant_label_by:
+      info_field: CSQ
+      part: 3
+    tag: rd-loc-browser
+    index: loc-browser
+    title: Genome browser
+    description: The ranked VCFs, the alignments, ClinVar and common dbSNP sites at the region of the navigator.
+    layout: {x: 0, y: 4, w: 8, h: 7}
+  - component_type: table
+    workflow_tag: raredisease
+    data_collection_tag: ranked_variants
+    columns: [chrom, pos, ref, alt, gene, consequence, impact, hgvs_p, rank_score, model_class, variant_set,
+      n_carriers]
+    row_selection_enabled: true
+    row_selection_column: variant_key
+    section: Ranked variants in the region
+    tag: rd-loc-table-ranked
+    index: loc-table-ranked
+    title: Ranked variants in the region
+    description: The ranked variants inside the region in view, with their gene, consequence and rank
+      score.
+    layout: {x: 0, y: 0, w: 8, h: 6}

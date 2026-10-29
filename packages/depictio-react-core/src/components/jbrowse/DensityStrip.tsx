@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { SegmentedControl, Text, Tooltip, UnstyledButton, useMantineTheme } from '@mantine/core';
 
 import type { JBrowseCallDensity } from '../../api';
+import { paletteHex } from '../../paletteColor';
 import {
   availableGroups,
   binAt,
@@ -107,7 +108,7 @@ const DensityStrip: React.FC<DensityStripProps> = ({
     () =>
       rows.map((r) => {
         const name = sources.find((s) => s.name === r.track.source)?.color;
-        return (name && theme.colors[name]?.[6]) || primary || 'currentColor';
+        return paletteHex(theme, name) || primary || 'currentColor';
       }),
     [rows, sources, theme, primary],
   );

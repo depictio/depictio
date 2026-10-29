@@ -241,6 +241,10 @@ const KIND_CONTENT_SELECTOR: Record<string, string> = {
   ideogram: '.depictio-ideogram canvas[role="img"]',
   // Hand-drawn SVG: a sample-by-locus genotype grid.
   allele_grid: 'svg[role="img"]',
+  // Hand-drawn SVG: a family tree (symbols, couple and sibship lines).
+  pedigree: 'svg[role="img"]',
+  // A styled HTML table: sticky header, one row per candidate.
+  ranked_table: 'table.dpx-rt__table',
   record_card: '.mantine-Card-root, [data-testid="advanced-viz-empty"]',
   group_compare: '.js-plotly-plot, [data-testid="group-compare-empty"]',
   // A 3D tile placed alone has no structure collection bound and CI runs with

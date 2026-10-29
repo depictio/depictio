@@ -1,5 +1,11 @@
 import type { JBrowseTrackRow } from '../../api';
-import { type CategoryColorSource, categoryColorMap } from '../../categoryColors';
+import {
+  type CategoryColorSource,
+  type ColorScaleSpec,
+  categoryColorMap,
+  sequentialColorMap,
+} from '../../categoryColors';
+import type { GenomeTracksColours } from './genomeTracksStore';
 
 type TrackConf = Record<string, unknown> & { trackId: string };
 
@@ -115,6 +121,57 @@ export function conditionColourMap(
     tracks.map((t) => conditionOf(t, column)),
     palette,
   );
+}
+
+/**
+ * Condition → colour along a sequential ramp (`color_scale`): the distinct
+ * values of `scale.column` among the tracks, in the order of `scale.order_by`
+ * (a value takes the key of the first track that carries it) or naturally.
+ * Same shape as `conditionColourMap`, so `colourTracksBy` takes either.
+ */
+export function conditionSequentialMap(
+  scale: ColorScaleSpec,
+  tracks: readonly TrackConf[],
+): Map<string, string> {
+  const keys = new Map<string, string | number>();
+  if (scale.order_by) {
+    for (const t of tracks) {
+      const value = conditionOf(t, scale.column);
+      const key = conditionOf(t, scale.order_by);
+      if (value !== null && key !== null && !keys.has(value)) keys.set(value, key);
+    }
+  }
+  return sequentialColorMap(
+    tracks.map((t) => conditionOf(t, scale.column)),
+    scale.order_by ? keys : null,
+    scale.scheme,
+  );
+}
+
+/**
+ * What `colourTracksBy` painted, for the other tiles of the dashboard: the
+ * colour of every value of `column` that a track carries, and of every sample
+ * whose track carries one. A sample whose manifest row sets its own `color` is
+ * left out (that colour is already published with the payload and wins).
+ */
+export function trackColoursBy(
+  tracks: readonly TrackConf[],
+  rows: readonly JBrowseTrackRow[],
+  column: string,
+  colours: ReadonlyMap<string, string>,
+): GenomeTracksColours {
+  const groups: Record<string, string> = {};
+  const samples: Record<string, string> = {};
+  const rowOf = new Map(rows.map((r) => [r.track_id, r]));
+  for (const t of tracks) {
+    const value = conditionOf(t, column);
+    const colour = value === null ? undefined : colours.get(value);
+    if (value === null || !colour) continue;
+    groups[value] = colour;
+    const row = rowOf.get(t.trackId);
+    if (row?.sample && !row.color && !(row.sample in samples)) samples[row.sample] = colour;
+  }
+  return { samples, groups };
 }
 
 /**

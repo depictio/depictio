@@ -17,6 +17,7 @@
 #   reports/picard/<s>/<s>.md.metrics.txt MarkDuplicates (picard/markduplicates_metrics)
 #   reports/samtools/<s>/<s>.md.stats     samtools stats (samtools/stats_sections)
 #   reports/samtools/<s>/<s>.*.idxstats   reads per contig (samtools/idxstats)
+#   preprocessing/<s>/<s>.md.bam[.bai]   duplicate-marked alignments (the browser's tracks.py)
 #   variant_calling/<s>/<s>.haplotypecaller[.filtered].vcf.gz[.tbi]
 #                                         HaplotypeCaller calls, before and after
 #                                         VariantFiltration (vcf/*, this template's variants.py)
@@ -24,9 +25,11 @@
 #   reports/snpeff/<s>/*_snpEff.{csv,genes.txt}
 #                                         snpEff, only with --tools snpeff (snpeff/*)
 #   reports/multiqc/multiqc_data/multiqc.parquet   native MultiQC 1.35 report
-# The BAMs under preprocessing/ (14 to 21 GB each) are never read. rnavar runs
-# no bcftools stats and no mosdepth on a FASTQ start, so callset numbers come
-# from the VCF rows and coverage from samtools stats and idxstats.
+# The BAMs under preprocessing/ (14 to 21 GB each) are never ingested as
+# tables: only the genome browser opens them, in place (--var TRACKS_URI) or
+# uploaded. rnavar runs no bcftools stats and no mosdepth on a FASTQ start, so
+# callset numbers come from the VCF rows and coverage from samtools stats and
+# idxstats.
 #
 # Design. The pipeline does not publish its samplesheet, and the samplesheet
 # carries no design column anyway (sample, fastq_1, fastq_2), so the design is
@@ -48,8 +51,12 @@
 #     --tools, so this route is validated on the same subworkflow's snpEff
 #     output from the sarek 3.10.0 megatest (VALIDATION_REPORT.md);
 #   - --skip_tools variantfiltration: only the unfiltered VCF is published;
-#     variants.py reads it instead and vcf_files (filtered VCFs) is pruned;
-#   - the design table (METADATA_FILE): the group filter, colours and splits;
+#     variants.py and the browser's tracks read it instead;
+#   - the design table (METADATA_FILE): the group filter, colours and splits,
+#     and the replicate agreement (replicate_sharing); a run without it has one
+#     constant group, so that collection is removed and the Overview's
+#     replicate-agreement card gives its slot to a Ts/Tv card on
+#     vcf_callset_nodesign, which a run with a design drops;
 #   - a run started from BAM, CRAM or VCF (samplesheet bam/cram/vcf columns)
 #     skips STAR and MarkDuplicates (and, from VCF, every alignment report):
 #     star_*, picard_* and samtools_* are optional, the Alignment and Coverage
@@ -82,6 +89,9 @@ template:
       description: "UCSC name of the assembly the run was aligned to (hg38, mm10): the axis and gene lane of the Genome tab. Use none for an assembly without chr-prefixed contigs."
       required: false
       default: "hg38"
+    - name: "TRACKS_URI"
+      description: "s3:// or https:// folder holding the run's results (the folder DATA_ROOT mirrors), to read the genome-browser tracks (VCF, BAM) in place instead of uploading them from DATA_ROOT."
+      required: false
   # Variables for the BUNDLED reference dataset: the megatest run with the
   # design table vendored in input/ (download_test_data.sh copies it there).
   reference:
@@ -138,9 +148,23 @@ template:
   dashboards:
     - "dashboards/base.yaml"
   conditional:
+    # No design table: no groups to compare replicates in, so the replicate
+    # agreement goes and its Overview slot takes the Ts/Tv card (below).
     - if_var_absent: "METADATA_FILE"
-      remove_dc_tags: ["metadata"]
+      remove_dc_tags: ["metadata", "replicate_sharing"]
       dashboards: ["dashboards/base.yaml"]
+    # With a design: the Ts/Tv alternate of that slot goes.
+    - if_var_present: "METADATA_FILE"
+      remove_dc_tags: ["vcf_callset_nodesign"]
+      dashboards: ["dashboards/base.yaml"]
+    # Genome tracks: read in place when TRACKS_URI names the results folder,
+    # uploaded from DATA_ROOT otherwise (the `tracks` recipe keeps only the
+    # files it finds there).
+    - if_var_present: "TRACKS_URI"
+      override_dcs:
+        - data_collection_tag: "tracks"
+          dc_properties:
+            remote_base_uri: "{TRACKS_URI}"
 
 # ============================================================================
 # PROJECT CONFIGURATION
@@ -259,24 +283,6 @@ workflows:
               "deletion_rate_pct": "Deletions per aligned base, percent"
               "insertion_rate_pct": "Insertions per aligned base, percent"
               "chimeric_pct": "Chimeric reads, percent of the input"
-
-      - data_collection_tag: "star_read_fate"
-        description: "Where each sample's input reads went: uniquely mapped, multi-mapped, too many loci, or unmapped and why"
-        optional: true  # as star_log_final
-        config:
-          type: "Table"
-          metatype: "Aggregate"
-          source: "transformed"
-          transform:
-            recipe: "star/read_fate.py"
-          dc_specific_properties:
-            format: "TSV"
-            columns_description:
-              "sample": "Sample id"
-              "fate": "Read fate as STAR reports it"
-              "fate_order": "1 to 6, mapped fates first"
-              "reads": "Reads with that fate"
-              "reads_pct": "Of the sample's input, percent"
 
       - data_collection_tag: "star_junctions"
         description: "STAR splice junctions per sample, by intron motif class and annotated or novel"
@@ -565,69 +571,23 @@ workflows:
               "snvs": "Of which SNVs"
               "indels": "Of which indels"
 
-      # The Genome tab's navigator: the cohort's PASS variants in 1 Mb windows
-      # over the primary contigs, named chrom / pos like the call track.
-      - data_collection_tag: "variant_windows"
-        description: "PASS variants of the cohort in 1 Mb windows along the primary contigs; the Genome tab's navigator"
+      # The Overview's Ts/Tv card on a run with no design table: the slot of
+      # the replicate agreement, which needs groups to compare. The same
+      # callset summary under its own tag, removed whenever a design is given.
+      - data_collection_tag: "vcf_callset_nodesign"
+        description: "The callset summary again, for the Overview card that takes the place of the replicate agreement on a run with no design table"
         config:
           type: "Table"
           metatype: "Aggregate"
           source: "transformed"
           transform:
-            recipe: "nf-core/rnavar/variant_windows.py"
+            recipe: "vcf/callset_summary.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
-              "chrom": "Primary contig"
-              "pos": "Window start, 0-based"
-              "end": "Window end, exclusive"
-              "variants": "Distinct PASS variants in the window, over every sample"
-              "calls": "PASS calls in the window, a variant counted once per sample carrying it"
-              "samples": "Samples with at least one PASS call in the window"
-              "snv_pct": "Share of the window's distinct variants that are SNVs, percent"
-
-      # The Genome tab's karyotype: each sample's distinct PASS variants in
-      # 1 Mb windows over the primary contigs (catalog vcf/variant_density).
-      # Declared after vcf_variants, which it reads through dc_ref.
-      - data_collection_tag: "vcf_variant_density"
-        description: "Distinct PASS variants per sample in 1 Mb windows along the primary contigs; the Genome tab's karyotype"
-        config:
-          type: "Table"
-          metatype: "Aggregate"
-          source: "transformed"
-          transform:
-            recipe: "vcf/variant_density.py"
-            params: {bin_size: "1000000"}
-          dc_specific_properties:
-            format: "TSV"
-            columns_description:
-              "chrom": "Primary contig"
-              "start": "Window start, 0-based"
-              "end": "Window end, exclusive"
-              "value": "Distinct PASS variants of the sample in the window"
-              "sample": "Sample the calls were made on"
-
-      # TODO(jbrowse): swap indexed_file+genome_view for a JBrowse2 DC once jbrowse.py is rebuilt
-      # The filtered VCFs as files, not rows: copied to object storage with
-      # their tabix index and range-read by the browser for the window in
-      # view, one lane per sample. Optional: a run fetched without the .tbi
-      # sidecars, or one that skipped VariantFiltration, has nothing to upload.
-      - data_collection_tag: "vcf_files"
-        description: "Filtered HaplotypeCaller VCF per sample with its tabix index, read by the browser for the region in view"
-        optional: true
-        config:
-          type: "indexed_file"
-          metatype: "Metadata"
-          scan:
-            mode: "recursive"
-            scan_parameters:
-              regex_config:
-                pattern: "^(?!.*_(?:snpEff|VEP|BCF)).*\\.haplotypecaller\\.filtered\\.vcf\\.gz$"
-          dc_specific_properties:
-            format: "vcf"
-            assembly: "{GENOME}"
-            sample_regex: "(?P<sample>[^/]+?)\\.haplotypecaller\\.filtered\\.vcf\\.gz$"
-            max_file_size_mb: 32
+              "sample": "Sample the callset belongs to"
+              "caller": "Variant caller"
+              "ts_tv": "Transitions over transversions of the PASS SNVs"
 
       # ----------------------------------------------------------------
       # snpEff (--tools snpeff). None of these exists on the megatest, which
@@ -817,9 +777,139 @@ workflows:
               "snvs": "PASS SNVs"
               "indels": "PASS indels"
               "pass_pct": "PASS calls over all calls, percent"
+              "filtered_pct": "Calls that failed a filter over all calls, percent"
               "ts_tv": "Transitions over transversions of the PASS SNVs"
               "het_hom_ratio": "Heterozygous over homozygous-alternate PASS calls"
               "median_dp": "Median read depth at the PASS calls"
+
+      # The Genome tab's navigator: the PASS variants of each design group in
+      # 1 Mb windows over the primary contigs, named chrom / pos like the call
+      # track. Declared after the hub, which names each sample's group.
+      - data_collection_tag: "variant_windows"
+        description: "PASS variants per design group in 1 Mb windows along the primary contigs; the Genome tab's navigator, one lane per group"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/rnavar/variant_windows.py"
+            params:
+              group_col: "{GROUP_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "chrom": "Primary contig"
+              "pos": "Window start, 0-based"
+              "end": "Window end, exclusive"
+              "{GROUP_COL}": "Design group (GROUP_COL of the design table) the window's counts belong to; one navigator lane per group"
+              "variants": "Distinct PASS variants of the group in the window"
+              "calls": "PASS calls in the window, a variant counted once per sample carrying it"
+              "samples": "Samples of the group with at least one PASS call in the window"
+              "snv_pct": "Share of the window's distinct variants that are SNVs, percent"
+
+      # The Overview's reproducibility measure: per design group, the PASS
+      # sites its samples call and the ones every sample of the group calls.
+      - data_collection_tag: "replicate_sharing"
+        description: "Per design group: the distinct PASS sites called in any of its samples, and the share called in every one of them"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/rnavar/replicate_sharing.py"
+            params:
+              group_col: "{GROUP_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "{GROUP_COL}": "Design group (GROUP_COL of the design table)"
+              "samples": "Samples of the group that have a callset"
+              "sites": "Distinct PASS sites called in at least one sample of the group"
+              "shared_sites": "Distinct PASS sites called in every sample of the group"
+              "shared_pct": "Shared sites over sites, percent; empty for a group of one sample"
+
+      # The Callset tab's allele-fraction distribution: per sample, variant type
+      # and read-depth class, the PASS calls read at least 10 times over 20 bins
+      # of allele fraction. Declared after the hub, which names each sample's
+      # design group.
+      - data_collection_tag: "vcf_allele_fractions"
+        description: "Per sample, variant type and read-depth class: the PASS calls (read at least 10 times) in each 0.05 bin of allele fraction; the germline peaks at 0.5 and 1"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/rnavar/allele_fractions.py"
+            params:
+              group_col: "{GROUP_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample the calls were made on"
+              "{GROUP_COL}": "Design group (GROUP_COL of the design table) of the sample"
+              "variant_type": "SNP, INDEL, MNP or SV, from the first alternate allele"
+              "depth_class": "Read depth at the call: 10-19, 20-49, 50-99 or 100+"
+              "vaf_bin": "Lower edge of the allele-fraction bin, 0 to 0.95 in steps of 0.05"
+              "vaf": "Middle of the bin"
+              "calls": "PASS calls of the sample, type and depth class in the bin"
+
+      # Genotype concordance: the square sample-by-sample matrix behind the
+      # Callset tab's heatmap, one column per sample of the run.
+      - data_collection_tag: "sample_concordance"
+        description: "Share of PASS genotype calls every pair of samples has in common, a square matrix"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/rnavar/sample_concordance.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Row label: the sample the concordances are measured from. The remaining columns are one per sample, each the percentage of PASS genotype calls the two samples share (site and genotype), over the calls either makes."
+
+      # The genome browser's tracks: the HaplotypeCaller VCF and the
+      # duplicate-marked BAM of every sample. JBrowse range-reads each file
+      # through its tabix or BAM index for the region in view; --var TRACKS_URI
+      # reads them in place instead of uploading them. Optional: a run fetched
+      # without the index sidecars has nothing for the browser to read.
+      - data_collection_tag: "tracks"
+        description: "Genome-browser tracks of the run: the HaplotypeCaller VCF and the BAM of every sample, one row per file"
+        optional: true
+        config:
+          type: "genomic_tracks"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/rnavar/tracks.py"
+            params:
+              group_col: "{GROUP_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            uri_column: "uri"
+            track_id_column: "track_id"
+            sample_column: "sample"
+            format_column: "format"
+            name_column: "name"
+            category_column: "category"
+            order_column: "order"
+            assembly: "{GENOME}"
+            display_defaults:
+              # One single-sample VCF per library: one lane each, tall enough
+              # to tell a SNP from an indel at a glance.
+              vcf:
+                displays:
+                  - type: "LinearVariantDisplay"
+                    height: 56
+            columns_description:
+              "track_id": "<sample>.haplotypecaller or <sample>.alignments, unique per file"
+              "sample": "Sample the file belongs to"
+              "{GROUP_COL}": "Design group of the sample (GROUP_COL of the design table); the browser colours and groups the tracks by it"
+              "format": "Track file format (vcf, bam)"
+              "uri": "Path relative to the results folder"
+              "name": "Track label shown in the browser"
+              "category": "Track-selector folder"
+              "order": "Row order the browser opens with"
 
 links:
   # Hub -> MultiQC. MultiQC names a sample twice (`GM12878_REP1` for STAR,
@@ -844,14 +934,6 @@ links:
     target_type: "table"
     link_config: {resolver: "direct", target_field: "sample"}
     description: "Filter the STAR alignment summary by the samples picked in the left panel"
-    enabled: true
-
-  - source_dc_tag: "samples"
-    source_column: "sample"
-    target_dc_tag: "star_read_fate"
-    target_type: "table"
-    link_config: {resolver: "direct", target_field: "sample"}
-    description: "Filter the read fate by the samples picked in the left panel"
     enabled: true
 
   - source_dc_tag: "samples"
@@ -904,6 +986,14 @@ links:
 
   - source_dc_tag: "samples"
     source_column: "sample"
+    target_dc_tag: "vcf_callset_nodesign"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the Ts/Tv card of a run with no design table by the samples picked in the left panel"
+    enabled: true
+
+  - source_dc_tag: "samples"
+    source_column: "sample"
     target_dc_tag: "vcf_substitution_spectrum"
     target_type: "table"
     link_config: {resolver: "direct", target_field: "sample"}
@@ -916,14 +1006,6 @@ links:
     target_type: "table"
     link_config: {resolver: "direct", target_field: "sample"}
     description: "Filter the FILTER breakdown by the samples picked in the left panel"
-    enabled: true
-
-  - source_dc_tag: "samples"
-    source_column: "sample"
-    target_dc_tag: "vcf_variant_density"
-    target_type: "table"
-    link_config: {resolver: "direct", target_field: "sample"}
-    description: "Filter the variant karyotype by the samples picked in the left panel"
     enabled: true
 
   - source_dc_tag: "samples"
@@ -998,4 +1080,51 @@ links:
     target_type: "table"
     link_config: {resolver: "direct", target_field: "sample"}
     description: "Carry the samples kept by the Alignment tab's STAR sliders to the hub and on to every per-sample tile"
+    enabled: true
+  # The genome browser: the hub's samples pick its tracks, and a sample picked
+  # in its menu comes back to the hub.
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Show the genome tracks of the samples picked"
+    enabled: true
+  - source_dc_tag: "tracks"
+    source_column: "sample"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Narrow the sample hub to the samples picked in the genome browser"
+    enabled: true
+
+  # Hub -> the design-group tables: a group picked in the left panel narrows
+  # the replicate agreement and the navigator's lanes.
+  - source_dc_tag: "samples"
+    source_column: "{GROUP_COL}"
+    target_dc_tag: "replicate_sharing"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "{GROUP_COL}"}
+    description: "Filter the replicate agreement by the design groups picked in the left panel"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "{GROUP_COL}"
+    target_dc_tag: "variant_windows"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "{GROUP_COL}"}
+    description: "Draw only the navigator lanes of the design groups picked in the left panel"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "vcf_allele_fractions"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the allele-fraction distribution by the samples picked in the left panel"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "sample_concordance"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the genotype concordance matrix by the samples picked in the left panel"
     enabled: true

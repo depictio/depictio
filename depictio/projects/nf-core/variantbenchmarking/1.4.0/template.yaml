@@ -21,9 +21,10 @@
 # GENOME TRACKS.
 # The germline and the structural routes publish each callset's false positives,
 # false negatives and true positives as small VCFs next to the summary tables.
-# The `tracks` collection lists them (one row per file) for the genome browser on
-# the Germline and Structural & CNV tabs. The build is the GENOME variable (UCSC
-# name, default hg38): pass `--var GENOME=hg19` for a GRCh37 run. Pass
+# The `tracks` collection lists them (one row per file, the best callset first) for the
+# genome browser on the Germline and Structural & CNV tabs. The files wear the
+# dashboard's `error_type` colours, as the bars do: the manifest holds no colour.
+# The build is the GENOME variable (UCSC name, default hg38): pass `--var GENOME=hg19` for a GRCh37 run. Pass
 # `--var TRACKS_URI=<results folder>` to read the VCFs in place; without it the
 # collection uploads whichever of them DATA_ROOT holds, with their index.
 # ============================================================================
@@ -32,7 +33,7 @@
 template:
   template_id: "nf-core/variantbenchmarking/1.4.0"
   description: "nf-core/variantbenchmarking template: benchmark variant callers (germline and somatic SNP/INDEL, SV, CNV) against truth sets, with precision, recall and F1 per callset and stratum."
-  version: "1.0.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing variantbenchmarking output (small/, indel/, and optionally sv/, cnv/)."
@@ -319,8 +320,7 @@ workflows:
             sample_column: "sample_id"
             format_column: "format"
             name_column: "name"
-            color_column: "color"
-            category_column: "category"
+            category_column: "error_type"
             order_column: "order"
             assembly: "{GENOME}"
             display_defaults:
@@ -338,8 +338,7 @@ workflows:
               "format": "Track file format"
               "uri": "Path relative to the outdir"
               "name": "Track label shown in the browser"
-              "color": "Track colour"
-              "category": "Track-selector folder"
+              "error_type": "False positives, Missed calls or True positives: the colour key shared with the dashboard's bars, and the track-selector folder"
               "order": "Row order the browser opens with"
 
 # ============================================================================

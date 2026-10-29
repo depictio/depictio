@@ -30,6 +30,7 @@ Output schema (the design columns inserted after ``sample``):
     assigned_reads, genes_detected : Int64
     genes_detected_pct, top100_share_pct : Float64
     total_read_bases, plus_share_pct, mito_pct, off_main_pct, hotspot_share_pct : Float64
+    strand_skew_pct : Float64   points the plus-strand share sits from an even split, |plus - 50|
 """
 
 from __future__ import annotations
@@ -87,6 +88,7 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "mito_pct": pl.Float64,
     "off_main_pct": pl.Float64,
     "hotspot_share_pct": pl.Float64,
+    "strand_skew_pct": pl.Float64,
 }
 # Design columns are run-dependent and pass through unvalidated.
 OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
@@ -138,6 +140,13 @@ def transform(sources: dict[str, pl.DataFrame | None], params: dict | None = Non
     )
     if _present(signal):
         hub = hub.join(signal.select("sample", *SIGNAL_COLUMNS), on="sample", how="left")
+    hub = hub.with_columns(
+        # How far a library sits from an even split between the strands, the number a
+        # cut-off can read (a share of 62% and one of 38% are the same departure).
+        (pl.col("plus_share_pct") - 50.0).abs().alias("strand_skew_pct")
+        if "plus_share_pct" in hub.columns
+        else pl.lit(None, dtype=pl.Float64).alias("strand_skew_pct")
+    )
     hub = hub.with_columns(
         [pl.lit(None, dtype=t).alias(c) for c, t in OUTPUT_SCHEMA.items() if c not in hub.columns]
     ).select([pl.col(c).cast(t) for c, t in OUTPUT_SCHEMA.items()])

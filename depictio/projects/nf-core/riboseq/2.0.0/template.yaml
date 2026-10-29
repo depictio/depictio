@@ -31,7 +31,7 @@
 template:
   template_id: "nf-core/riboseq/2.0.0"
   description: "nf-core/riboseq template: MultiQC funnel, Ribo-seq periodicity QC, sample space, anota2seq translational regulation, translational efficiency and ORF discovery"
-  version: "1.0.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing riboseq pipeline output (multiqc/, psites/, quantification/, translational_efficiency/, orf_predictions/)"
@@ -304,11 +304,18 @@ workflows:
           type: "Table"
           source: "transformed"
           transform:
-            recipe: "ribowaltz/library_summary.py"
+            recipe: "nf-core/riboseq/library_summary.py"
+            source_overrides:
+              samplesheet:
+                path: "{SAMPLESHEET_FILE}"
+            params:
+              group_col: "{GROUP_COL}"
           dc_specific_properties:
             format: "TSV"
             columns_description:
               "sample": "Ribo-seq library identifier"
+              "{GROUP_COL}": "Design group of the library (GROUP_COL of the design table), when the run has one"
+              "sample_description": "Readable library name from the sample sheet or the design table, when either has one"
               "psites": "P-sites riboWaltz assigned to a transcript region"
               "frame0_cds_pct": "Share of CDS P-sites in frame 0, the annotated reading frame, in percent"
               "frame_bias": "Frame-0 share minus the larger of the two other frames, in percentage points"
@@ -574,6 +581,7 @@ workflows:
               "annotated_cds": "1 when either caller classed the ORF as the annotated CDS"
               "ribotish_libraries": "Libraries in which Ribo-TISH reported the ORF"
               "ribocode_libraries": "Libraries in which RiboCode reported the ORF"
+              "support_score": "Ranking the genome browser opens on: new ORFs both callers report first, then new ORFs one caller reports, then annotated CDSs both report; more libraries, then a longer protein, rank higher inside a tier"
 
       # ----------------------------------------------------------------
       # Genome tracks. A manifest of the run's track files (Plastid P-sites,
@@ -594,6 +602,8 @@ workflows:
             source_overrides:
               samplesheet:
                 path: "{SAMPLESHEET_FILE}"
+            params:
+              group_col: "{GROUP_COL}"
           dc_specific_properties:
             format: "TSV"
             uri_column: "uri"
@@ -601,7 +611,6 @@ workflows:
             sample_column: "sample"
             format_column: "format"
             name_column: "name"
-            color_column: "color"
             category_column: "category"
             order_column: "order"
             assembly: "{GENOME}"
@@ -624,14 +633,14 @@ workflows:
               "track_id": "<sample>.<kind>[.<strand>], unique per file"
               "sample": "Library the file belongs to"
               "assay": "RNA-seq, Ribo-seq or TI-seq, from the sheet's type column"
+              "{GROUP_COL}": "Design group of the library (GROUP_COL of the design table); the browser colours and groups the tracks by it"
               "strand": "Genomic strand of a stranded track, empty otherwise"
               "kind": "psites, coverage or alignments"
               "format": "Track file format"
               "uri": "Path relative to the results folder"
-              "name": "Track label shown in the browser"
-              "color": "Track colour"
+              "name": "Track label shown in the browser: the library's description when the sheet has one, then what the file is"
               "category": "Track-selector folder"
-              "order": "Row order the browser opens with"
+              "order": "Row order the browser opens with: coverage, then P-sites, then reads, one library per assay and design group first"
 
 # ============================================================================
 # LINKS

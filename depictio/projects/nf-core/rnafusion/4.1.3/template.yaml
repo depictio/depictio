@@ -29,7 +29,7 @@
 template:
   template_id: "nf-core/rnafusion/4.1.3"
   description: "nf-core/rnafusion gene-fusion template: caller consensus, per-caller evidence, in-silico validation and splice-junction analysis"
-  version: "1.0.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing rnafusion pipeline output (multiqc/, fusionreport/, arriba/, starfusion/, fusioncatcher/, fusioninspector/, ctatsplicing/)"
@@ -355,14 +355,17 @@ workflows:
       # breakpoints split into chromosome and position, which is the row shape a
       # chord diagram binds. Kept as its own collection rather than as more
       # columns on `arriba_fusions` because the two answer different questions
-      # and the chord needs integer positions, not the "chr:pos" strings.
+      # and the chord needs integer positions, not the "chr:pos" strings. The
+      # template's own recipe adds the fusion-report index and a `rank_score`
+      # (index first, read weight as tie-break) so the genome browser opens on the
+      # call the ranked bars put first.
       - data_collection_tag: "arriba_fusion_links"
         description: "Arriba calls as breakpoint pairs: both loci split into contig and position, with the summed read evidence as the link weight"
         config:
           type: "Table"
           source: "transformed"
           transform:
-            recipe: "arriba/fusion_links.py"
+            recipe: "nf-core/rnafusion/breakpoint_links.py"
           dc_specific_properties:
             format: "TSV"
             columns_description:
@@ -375,6 +378,8 @@ workflows:
               "weight": "Split reads on both sides plus discordant mates, the width of the chord"
               "category": "Structural class Arriba assigned, which colours the chord"
               "confidence": "Arriba's own confidence class for the call"
+              "fii": "Fusion Indication Index of the call's fusion in the sample, from the fusion-report consensus (0 when the consensus does not list it)"
+              "rank_score": "The index in thousandths, then the read weight: the order the genome browser opens its calls in (highest first)"
 
       - data_collection_tag: "starfusion_fusions"
         description: "STAR-Fusion calls with junction and spanning read counts, splice type and normalised abundance"
@@ -541,7 +546,6 @@ workflows:
             sample_column: "sample"
             format_column: "format"
             name_column: "name"
-            color_column: "color"
             category_column: "category"
             order_column: "order"
             assembly: "{GENOME}"
@@ -561,7 +565,6 @@ workflows:
               "format": "Track file format (bam, or cram with --cram)"
               "uri": "Path relative to the results folder"
               "name": "Track label shown in the browser"
-              "color": "Track colour"
               "category": "Track-selector folder"
               "order": "Row order the browser opens with"
 
@@ -794,6 +797,18 @@ links:
       resolver: "direct"
       target_field: "sample"
     description: "Show the genome tracks of the samples picked in the left panel"
+    enabled: true
+
+  # A call picked on the Breakpoints tab (the ring, or the persistent fusion
+  # filter) opens the alignments of the sample that called it.
+  - source_dc_tag: "arriba_fusion_links"
+    source_column: "sample"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config:
+      resolver: "direct"
+      target_field: "sample"
+    description: "Show the genome tracks of the sample that called the fusion picked on the ring"
     enabled: true
 
   - source_dc_tag: "tracks"

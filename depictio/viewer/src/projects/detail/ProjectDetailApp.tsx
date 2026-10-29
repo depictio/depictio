@@ -84,7 +84,7 @@ import ProjectIngestionHistoryPanel from './ProjectIngestionHistoryPanel';
 import ProjectIngestionTrigger from './ProjectIngestionTrigger';
 import { DeltaVersionHistory } from './DeltaVersionHistory';
 import ProjectSettingsModal from './ProjectSettingsModal';
-import { parseTemplate, TemplateChip, templateDocsUrl } from '../template';
+import { parseTemplate, TemplateChip, TemplateRevisionBadge, templateDocsUrl } from '../template';
 import {
   DcTypeBadges,
   DcTypeIcon,
@@ -2270,6 +2270,7 @@ const ProjectHeader: React.FC<{
                 Template
               </Text>
               <TemplateChip parsed={tmpl} verbose plain />
+              <TemplateRevisionBadge origin={(project as Record<string, unknown>).template_origin} />
               <Anchor href={templateDocsUrl(tmpl)} target="_blank" rel="noreferrer" size="sm" fw={600}>
                 Documentation
               </Anchor>
@@ -2331,6 +2332,7 @@ const ProjectHeader: React.FC<{
               Template:
             </Text>
             <TemplateChip parsed={tmpl} verbose />
+            <TemplateRevisionBadge origin={(project as Record<string, unknown>).template_origin} />
             <Anchor
               href={templateDocsUrl(tmpl)}
               target="_blank"

@@ -8,6 +8,7 @@ that spikes at a single time point (noise, not a response) and stable genes.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import polars as pl
@@ -99,6 +100,7 @@ def test_hub_carries_time_design_and_qc(frames):
     assert hub["assigned_reads"].null_count() == 0
     # No strand coverage on this run: its columns are present and empty.
     assert hub["plus_share_pct"].null_count() == len(LIBRARIES)
+    assert hub["strand_skew_pct"].null_count() == len(LIBRARIES)
 
 
 def test_hub_without_a_design_reads_the_time_off_the_library_ids(root, frames):
@@ -219,8 +221,63 @@ def test_window_dynamics_series_and_heatmap(root, frames, bins):
     shares = chroms.group_by("time_point").agg(pl.col("share_pct").sum())["share_pct"].to_list()
     assert shares == pytest.approx([100.0] * 4)
     assert chroms.filter(pl.col("chromosome") == "chr1")["contig_order"].unique().to_list() == [1]
+    # Each chromosome's move is its share over its own baseline share: 0 at the baseline,
+    # and the absolute value ranks the chromosomes by how far they move.
+    base = chroms.filter(pl.col("time_order") == 1)
+    assert base["log2_ratio"].drop_nulls().abs().max() == pytest.approx(0.0)
+    assert (chroms["abs_log2_ratio"].drop_nulls() >= 0).all()
+    moved = chroms.filter(pl.col("time_order") == 4)
+    for row in moved.iter_rows(named=True):
+        base_share = base.filter(pl.col("chromosome") == row["chromosome"])["share_pct"][0]
+        assert row["log2_ratio"] == pytest.approx(math.log2(row["share_pct"] / base_share))
 
 
 def test_hub_reads_every_collection_it_names():
     refs = {s.dc_ref for s in load_recipe("nf-core/nascent/samples.py", V).SOURCES}
     assert refs == {"subread_library_summary", "bedtools_strand_summary", "metadata"}
+
+
+def test_binned_windows_list_libraries_in_time_order(root, frames, bins):
+    # The catalog recipe lists libraries by name: 24h, 2h, 30min, 0h sort as
+    # L_0h, L_24h, L_2h, L_30min, which is the order the lanes stack in.
+    by_name = bins.sort(["sample", "start"])
+    assert by_name["sample"].unique(maintain_order=True).to_list() == [
+        "L_0h",
+        "L_24h",
+        "L_2h",
+        "L_30min",
+    ]
+    ordered = run(
+        "nf-core/nascent/strand_bins.py", root, windows=by_name, samples=frames["samples"]
+    )
+    assert ordered["sample"].unique(maintain_order=True).to_list() == LIBRARIES
+    assert ordered.height == by_name.height
+    # A library keeps its windows in their original order.
+    first = ordered.filter(pl.col("sample") == "L_0h")["start"].to_list()
+    assert first == sorted(first)
+    assert list(load_recipe("nf-core/nascent/strand_bins.py", V).OUTPUT_SCHEMA) == list(
+        load_recipe("bedtools/strand_bins.py", V).OUTPUT_SCHEMA
+    )
+
+
+def test_hub_measures_how_far_a_library_sits_from_an_even_strand_split(root, frames):
+    signal = pl.DataFrame(
+        {
+            "sample": LIBRARIES,
+            "total_read_bases": [1.0e6] * 4,
+            "plus_share_pct": [50.0, 62.0, 38.0, 55.0],
+            "mito_pct": [1.0] * 4,
+            "off_main_pct": [1.0] * 4,
+            "hotspot_share_pct": [20.0] * 4,
+        }
+    )
+    hub = run(
+        "nf-core/nascent/samples.py",
+        root,
+        {"time_col": "time_h"},
+        library=frames["library"],
+        signal=signal,
+        metadata=frames["metadata"],
+    )
+    skew = dict(zip(hub["sample"], hub["strand_skew_pct"], strict=True))
+    assert skew == pytest.approx({"L_0h": 0.0, "L_30min": 12.0, "L_2h": 12.0, "L_24h": 5.0})

@@ -5,7 +5,9 @@ chromosomes splits between them (``bedtools_strand_bins``, both strands, per
 million of the library), per time point, libraries of one time point averaged.
 A chromosome whose share moves over time carries a large response, or a
 hotspot (the ribosomal DNA arrays on the acrocentric chromosomes) whose share
-follows how well each library was depleted.
+follows how well each library was depleted. A raw share mostly says how long
+the chromosome is, so the move is also written as the log2 ratio of the share
+to the same chromosome's share at the baseline (the earliest time point).
 
 Sources:
     bins     ``bedtools_strand_bins`` (catalog ``bedtools/strand_bins.py``)
@@ -17,6 +19,9 @@ Output schema:
     share_pct : Float64        the chromosome's share of the signal on the chromosomes, in percent
     plus_share_pct : Float64   the plus strand's share of the chromosome's signal, in percent
     contig_order : Int64       chromosome rank in karyotype order, chr1 first
+    log2_ratio : Float64       log2 of the share over the chromosome's baseline share (0 at the
+                               baseline; null where either share is 0)
+    abs_log2_ratio : Float64   its absolute value, for ranking the chromosomes by how far they move
 """
 
 from __future__ import annotations
@@ -64,6 +69,8 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "share_pct": pl.Float64,
     "plus_share_pct": pl.Float64,
     "contig_order": pl.Int64,
+    "log2_ratio": pl.Float64,
+    "abs_log2_ratio": pl.Float64,
 }
 
 
@@ -86,6 +93,19 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         per_library.join(times, on="sample", how="inner")
         .group_by("chromosome", *tc.TIME_POINT_COLUMNS)
         .agg(pl.col("share_pct").mean(), pl.col("plus_share_pct").mean())
+    )
+    baseline = per_point.filter(pl.col("time_order") == pl.col("time_order").min()).select(
+        "chromosome", pl.col("share_pct").alias("baseline_share")
+    )
+    per_point = (
+        per_point.join(baseline, on="chromosome", how="left")
+        .with_columns(
+            pl.when((pl.col("share_pct") > 0) & (pl.col("baseline_share") > 0))
+            .then((pl.col("share_pct") / pl.col("baseline_share")).log(2))
+            .otherwise(None)
+            .alias("log2_ratio")
+        )
+        .with_columns(pl.col("log2_ratio").abs().alias("abs_log2_ratio"))
     )
     contigs = (
         per_point.select("chromosome")

@@ -23,7 +23,7 @@ version: 1
 # Routes: without the design table the metadata collection goes, and with it the
 # group filter and colours. A run without its strand bedGraphs loses the binned
 # collections, and with them the Genome signal and Signal dynamics tabs, their
-# steps and their Findings rows; without the bigWigs the strand lanes go.
+# steps and their Findings rows; without the bigWigs the browser goes.
 main_dashboard:
   title: nf-core/nascent
   subtitle: Nascent transcription over a time course, from run-on reads to responding genes
@@ -40,7 +40,16 @@ main_dashboard:
   # Declared once here, read by every tab of the family: figures, advanced viz
   # and filter chips all colour a value the same way.
   category_colors:
-    '{GROUP_COL}': auto
+    # The groups of a time course are its phases. They are pinned on the viridis ramp
+    # the browser and the binned lanes colour a library by (the later, the darker), so
+    # a group, a phase and a library share one time scale; any other group value takes
+    # the palette.
+    '{GROUP_COL}':
+      '*': auto
+      Baseline: '#440154'
+      Early: '#3b528b'
+      Mid: '#27a882'
+      Late: '#bdde2e'
     # Response classes of a gene: warm when induced, cool when repressed, darker
     # the later the peak.
     response:
@@ -59,16 +68,17 @@ main_dashboard:
       Rising: '#e8590c'
       Falling: '#1971c2'
       Stable: '#868e96'
-    # The phase of a time point (and of a peak), from the baseline on.
+    # The phase of a time point (and of a peak), from the baseline on: the viridis
+    # ramp of the browser and the lanes, one stop per phase.
     phase:
-      Baseline: '#868e96'
-      Early: '#fab005'
-      Mid: '#12b886'
-      Late: '#7048e8'
+      Baseline: '#440154'
+      Early: '#3b528b'
+      Mid: '#27a882'
+      Late: '#bdde2e'
     peak_phase:
-      Early: '#fab005'
-      Mid: '#12b886'
-      Late: '#7048e8'
+      Early: '#3b528b'
+      Mid: '#27a882'
+      Late: '#bdde2e'
     comparison:
       Against the baseline: '#7048e8'
       Against the previous time point: '#12b886'
@@ -137,6 +147,7 @@ main_dashboard:
     interactive_component_type: MultiSelect
     column_name: sample
     column_type: object
+    order_by: time_order
     display:
       icon_name: mdi:test-tube
       custom_color: teal
@@ -166,7 +177,7 @@ main_dashboard:
       ### About this dashboard
       nf-core/nascent aligns each run-on library, counts its reads over every gene body and writes its coverage strand by strand. Each tab behind this page answers one question about the time course, against the earliest time point as the baseline.
 
-      The sample filters in the left panel apply to every tab. A bar above a section narrows that section only.
+      The sample filters in the left panel apply to every tab. A bar above a section narrows that section only. A library id is the sample name and its time point; the sheet of libraries, with their QC, is at the bottom of every tab.
     tag: nc-ov-about
     index: nc-ov-about
     layout: {x: 0, y: 1, w: 5, h: 3}
@@ -276,22 +287,24 @@ main_dashboard:
     workflow_tag: nascent
     data_collection_tag: samples
     aggregation: median
-    column_name: plus_share_pct
+    column_name: strand_skew_pct
     column_type: float64
     filter_expr: col('total_read_bases') > 0
-    secondary_layout: gauge
-    coverage_max: 100
+    secondary_layout: threshold
+    threshold_value: 10
+    threshold_direction: max
+    threshold_warn: 15
     display:
       icon_name: mdi:scale-balance
       icon_color: indigo
-      caption: median share of the signal on the plus strand
+      caption: libraries within 10 points of an even strand split
       link: tab:Library QC
       decimals: 1
     section: Key figures
     tag: nc-ov-kf-strand
     index: nc-ov-kf-strand
-    title: Plus-strand share (%)
-    description: Share of a library's coverage on the plus strand, median over the libraries in view; genes sit on both strands, so a library far from half has lost one.
+    title: Strand skew (points)
+    description: How far a library's plus-strand share sits from half, median over the libraries in view. Genes sit on both strands, so within 10 points (40 to 60%) reads as balanced, and past 15 a library has lost one strand.
     layout: {x: 6, y: 0, w: 2, h: 2}
   # Findings filter bar: the group, then the library.
   - component_type: interactive
@@ -315,6 +328,7 @@ main_dashboard:
     interactive_component_type: MultiSelect
     column_name: sample
     column_type: object
+    order_by: time_order
     display:
       icon_name: mdi:test-tube
       custom_color: teal
@@ -333,13 +347,13 @@ main_dashboard:
       n_up: {dc: gene_dynamics, column: gene_id, aggregation: count, filter_expr: "col('direction') == 'Induced'", format: integer}
       n_down: {dc: gene_dynamics, column: gene_id, aggregation: count, filter_expr: "col('direction') == 'Repressed'", format: integer}
       pc1_var: {dc: sample_similarity, column: pc1_variance, aggregation: max, format: 'decimals:0'}
-      top_chr: {dc: chromosome_signal, column: chromosome, aggregation: top, weight: share_pct}
+      top_chr: {dc: chromosome_signal, column: chromosome, aggregation: top, weight: abs_log2_ratio}
       n_rise: {dc: signal_window_dynamics, column: window_id, aggregation: count, filter_expr: "col('trend') == 'Rising'", format: integer}
       n_fall: {dc: signal_window_dynamics, column: window_id, aggregation: count, filter_expr: "col('trend') == 'Falling'", format: integer}
     body: |
       - **{{n_up}}** genes induced and **{{n_down}}** repressed – a log2 fold change of 1 against the baseline at two time points or more [Gene dynamics](tab:Gene dynamics)
       - **{{pc1_var}}%** of the variance between libraries lies on the first component – in a time course, usually the time axis itself [Sample similarity](tab:Sample similarity)
-      - **{{top_chr}}** holds the largest share of the nascent signal – a share that moves over time marks a large response or a hotspot [Genome signal](tab:Genome signal)
+      - **{{top_chr}}** moves its share of the nascent signal most over the time course – a chromosome that gains or loses share against its baseline carries a large response or a hotspot [Genome signal](tab:Genome signal)
       - **{{n_rise}}** windows rise and **{{n_fall}}** fall – the same rule on the strand coverage, without a gene annotation [Signal dynamics](tab:Signal dynamics)
     section: Findings
     tag: nc-ov-findings
@@ -360,7 +374,7 @@ main_dashboard:
     section: Findings
     source_tab: Sample similarity
     source_component: ss-av-embedding
-    caption: One point per library on the first two components, coloured by its group; a time course draws a path.
+    caption: PCA of the libraries (PC1 against PC2), one point per library, coloured by its phase of the time course; the points move along the first component with time.
     hide_legend: true
     tag: nc-ov-hl-embedding
     index: nc-ov-hl-embedding
@@ -369,7 +383,7 @@ main_dashboard:
     section: Findings
     source_tab: Genome signal
     source_component: gs-fig-chromosomes
-    caption: Each chromosome's share of the signal per time point; a row that changes colour carries a response or a hotspot.
+    caption: Each chromosome's share of the signal against its own baseline share, per time point; red rows gain share, blue rows lose it, and a row that moves carries a response or a hotspot.
     tag: nc-ov-hl-chromosomes
     index: nc-ov-hl-chromosomes
     layout: {x: 0, y: 7, w: 4, h: 5}
@@ -420,6 +434,7 @@ main_dashboard:
     interactive_component_type: MultiSelect
     column_name: sample
     column_type: object
+    order_by: time_order
     display:
       icon_name: mdi:test-tube
       custom_color: teal
@@ -435,6 +450,7 @@ main_dashboard:
     interactive_component_type: MultiSelect
     column_name: time_point
     column_type: object
+    order_by: time_order
     display:
       icon_name: mdi:chart-timeline-variant
       custom_color: cyan
@@ -483,7 +499,7 @@ tabs:
   - name: Depth and complexity
     icon: mdi:chart-bar
     color: blue
-    description: Reads in genes per time point, and depth against genes detected
+    description: Reads in genes per library, and the genes detected in each
   - name: Strand and hotspots
     icon: mdi:scale-balance
     color: blue
@@ -532,8 +548,10 @@ tabs:
       Each library is checked on what the run publishes: the reads [featureCounts](https://subread.sourceforge.net/featureCounts.html)
       counted over gene bodies, and the strand coverage
       [bedtools genomecov](https://bedtools.readthedocs.io/en/latest/content/tools/genomecov.html) wrote. A
-      library short of reads, far from an even strand split, or holding much of its signal in a few
-      hotspot windows (ribosomal DNA, poor depletion) reads its genes from what is left.
+      library short of reads, far from an even strand split (more than 10 points from half), or holding
+      much of its signal in a few hotspot windows (the busiest 1% of 250 kb windows: ribosomal DNA, poor
+      depletion) reads its genes from what is left. Bars wear the colour of their time point, as the
+      browser's tracks and the lanes do.
     tag: nc-qc-intro
     index: nc-qc-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -547,7 +565,7 @@ tabs:
     column_type: int64
     display:
       icon_name: mdi:counter
-      icon_color: blue
+      icon_color: blue.4
       caption: median reads, with their spread
       format: si
     section: Libraries at a glance
@@ -566,7 +584,7 @@ tabs:
     column_type: int64
     display:
       icon_name: mdi:dna
-      icon_color: teal
+      icon_color: blue.6
       caption: libraries by genes detected
     section: Libraries at a glance
     tag: nc-qc-card-genes
@@ -578,21 +596,21 @@ tabs:
     workflow_tag: nascent
     data_collection_tag: samples
     aggregation: median
-    column_name: plus_share_pct
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: top100_share_pct
     column_type: float64
-    filter_expr: col('total_read_bases') > 0
-    secondary_layout: gauge
-    coverage_max: 100
+    filter_expr: col('assigned_reads') > 0
     display:
-      icon_name: mdi:scale-balance
-      icon_color: indigo
-      caption: median share on the plus strand
+      icon_name: mdi:format-list-numbered
+      icon_color: blue.8
+      caption: median share held by the 100 most counted genes, with its spread
       decimals: 1
     section: Libraries at a glance
-    tag: nc-qc-card-strand
-    index: nc-qc-card-strand
-    title: Plus-strand share (%)
-    description: Share of a library's strand coverage on the plus strand, median over the libraries in view.
+    tag: nc-qc-card-top100
+    index: nc-qc-card-top100
+    title: Top-100 genes share (%)
+    description: Share of a library's gene reads held by its 100 most counted genes, median over the libraries in view. A high share means a few genes (histones, ribosomal proteins) swamp the library.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: nascent
@@ -605,14 +623,14 @@ tabs:
     filter_expr: col('total_read_bases') > 0
     display:
       icon_name: mdi:alert-outline
-      icon_color: orange
+      icon_color: blue.9
       caption: median share in the top 1% of windows, with its spread
       decimals: 1
     section: Libraries at a glance
     tag: nc-qc-card-hotspot
     index: nc-qc-card-hotspot
     title: Signal in hotspots (%)
-    description: Share of a library's chromosome signal held by its busiest 1% of 250 kb windows, median over the libraries in view.
+    description: Share of a library's chromosome signal held by its busiest 1% of 250 kb windows (hotspot windows, where the ribosomal DNA arrays sit), median over the libraries in view.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: figure
     workflow_tag: nascent
@@ -620,42 +638,54 @@ tabs:
     visu_type: bar
     mode: code
     code_content: |-
-      # Reads in genes per library, in time order, coloured by the group: Analysis
-      # mode's groups when it has some, else the design's group column.
-      grp = depictio_group_by[0] if depictio_group_by else '{GROUP_COL}'
-      colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('{GROUP_COL}') or {}
-      d = df if grp in df.columns else df.with_columns(pl.lit('All libraries').alias(grp))
-      d = d.filter(pl.col('assigned_reads').is_not_null()).sort(['time_order', 'sample'], nulls_last=True)
-      fig = px.bar(d.to_pandas(), x='sample', y='assigned_reads', color=grp, color_discrete_map=colors, category_orders={'sample': d['sample'].to_list()}, hover_data=['time_point'], labels={'sample': '', 'assigned_reads': 'Reads in genes', grp: ''})
-      fig.update_layout(margin=dict(t=10))
+      # Reads in genes per library, in time order. Each bar wears the colour the browser
+      # and the binned lanes give its time point along the viridis ramp; Analysis mode's
+      # groups take over when it has some. The median is dashed, half of it dotted.
+      stops = ['#440154', '#472d7b', '#3b528b', '#2c728e', '#21918c', '#28ae80', '#5ec962', '#addc30', '#fde725']
+      d = df.filter(pl.col('assigned_reads').is_not_null()).sort(['time_order', 'sample'], nulls_last=True)
+      pts = d.select('time_point', 'time_order').unique().sort('time_order', nulls_last=True)['time_point'].to_list()
+      ts = [i / (len(pts) - 1) for i in range(len(pts))] if len(pts) > 1 else [0.5]
+      colors = dict(zip(pts, px.colors.sample_colorscale(stops, ts)))
+      by = 'time_point'
+      if depictio_group_by and depictio_group_by[0] in d.columns:
+          by = depictio_group_by[0]
+          colors = depictio_group_kwargs.get('color_discrete_map') or {}
+      fig = px.bar(d.to_pandas(), x='sample', y='assigned_reads', color=by, color_discrete_map=colors, category_orders={'sample': d['sample'].to_list()}, hover_data=['time_point'], labels={'sample': '', 'assigned_reads': 'Reads in genes', 'time_point': 'Time point', by: ''})
+      if not d.is_empty():
+          med = d['assigned_reads'].median()
+          fig.add_hline(y=med, line_dash='dash', line_color='gray', annotation_text='median', annotation_position='top left')
+          fig.add_hline(y=med / 2, line_dash='dot', line_color='gray', annotation_text='half the median', annotation_position='bottom left')
+      fig.update_layout(margin=dict(t=10), showlegend=(by != 'time_point'))
       fig.update_xaxes(tickangle=-45, automargin=True)
     section: Depth and complexity
     tag: nc-qc-fig-reads
     index: nc-qc-fig-reads
     title: Reads in genes per library
-    description: One bar per library, in time order. A short bar reads its genes from fewer reads.
+    description: One bar per library, in time order and in the colour of its time point, against the median and half of it. A bar under the dotted line reads its genes from under half the typical depth.
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: nascent
     data_collection_tag: samples
-    visu_type: scatter
+    visu_type: bar
     mode: code
     selection_enabled: true
     selection_column: sample
     code_content: |-
-      # Depth against genes detected, one point per library, in the group's colours.
-      grp = depictio_group_by[0] if depictio_group_by else '{GROUP_COL}'
-      colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('{GROUP_COL}') or {}
-      d = df if grp in df.columns else df.with_columns(pl.lit('All libraries').alias(grp))
-      d = d.filter(pl.col('assigned_reads').is_not_null())
-      fig = px.scatter(d.to_pandas(), x='assigned_reads', y='genes_detected', color=grp, color_discrete_map=colors, hover_name='sample', hover_data=['time_point', 'top100_share_pct'], custom_data=['sample'], log_x=True, labels={'assigned_reads': 'Reads in genes', 'genes_detected': 'Genes detected (10 reads)', grp: ''})
-      fig.update_traces(marker=dict(size=11))
-      fig.update_layout(margin=dict(t=10))
+      # Genes detected per library, one bar per library in time order and in the colour of its time point (the ramp of the browser and the lanes), with the median as a dashed line; the reads in genes are in the hover.
+      stops = ['#440154', '#472d7b', '#3b528b', '#2c728e', '#21918c', '#28ae80', '#5ec962', '#addc30', '#fde725']
+      d = df.filter(pl.col('genes_detected').is_not_null()).sort(['time_order', 'sample'], nulls_last=True)
+      pts = d.select('time_point', 'time_order').unique().sort('time_order', nulls_last=True)['time_point'].to_list()
+      ts = [i / (len(pts) - 1) for i in range(len(pts))] if len(pts) > 1 else [0.5]
+      fig = px.bar(d.to_pandas(), x='sample', y='genes_detected', color='time_point', color_discrete_map=dict(zip(pts, px.colors.sample_colorscale(stops, ts))), category_orders={'sample': d['sample'].to_list()}, hover_data=['time_point', 'assigned_reads'], custom_data=['sample'], labels={'genes_detected': 'Genes detected (10 reads)', 'sample': '', 'assigned_reads': 'Reads in genes', 'time_point': 'Time point'})
+      if not d.is_empty():
+          fig.add_hline(y=d['genes_detected'].median(), line_dash='dash', line_color='gray', annotation_text='median', annotation_position='top left')
+      fig.update_xaxes(tickangle=-45, automargin=True)
+      fig.update_layout(margin=dict(t=10), showlegend=False)
     section: Depth and complexity
     tag: nc-qc-fig-depth-genes
     index: nc-qc-fig-depth-genes
-    title: Depth against genes detected
-    description: One point per library. Lasso a group of libraries to narrow the other tiles.
+    title: Genes detected per library
+    description: One bar per library in time order, against the median of the libraries in view. A bar well below the line reads fewer genes. The reads in genes are in the hover; click a bar to narrow the other tiles.
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: nascent
@@ -663,20 +693,27 @@ tabs:
     visu_type: bar
     mode: code
     code_content: |-
-      # Plus-strand share per library, in time order, with the even split marked.
-      grp = depictio_group_by[0] if depictio_group_by else '{GROUP_COL}'
-      colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('{GROUP_COL}') or {}
-      d = df if grp in df.columns else df.with_columns(pl.lit('All libraries').alias(grp))
-      d = d.filter(pl.col('plus_share_pct').is_not_null()).sort(['time_order', 'sample'], nulls_last=True)
-      fig = px.bar(d.to_pandas(), x='sample', y='plus_share_pct', color=grp, color_discrete_map=colors, category_orders={'sample': d['sample'].to_list()}, hover_data=['time_point'], labels={'sample': '', 'plus_share_pct': 'Plus-strand share (%)', grp: ''})
-      fig.add_hline(y=50, line_dash='dot', annotation_text='Even split, 50%', annotation_position='top left')
-      fig.update_layout(yaxis_range=[0, 100], margin=dict(t=10))
+      # Plus-strand share per library, in time order and in the colour of its time point (Analysis mode's groups take over when it has some), with the balanced band (40 to 60%) shaded and the even split marked.
+      stops = ['#440154', '#472d7b', '#3b528b', '#2c728e', '#21918c', '#28ae80', '#5ec962', '#addc30', '#fde725']
+      d = df.filter(pl.col('plus_share_pct').is_not_null()).sort(['time_order', 'sample'], nulls_last=True)
+      pts = d.select('time_point', 'time_order').unique().sort('time_order', nulls_last=True)['time_point'].to_list()
+      ts = [i / (len(pts) - 1) for i in range(len(pts))] if len(pts) > 1 else [0.5]
+      colors = dict(zip(pts, px.colors.sample_colorscale(stops, ts)))
+      by = 'time_point'
+      if depictio_group_by and depictio_group_by[0] in d.columns:
+          by = depictio_group_by[0]
+          colors = depictio_group_kwargs.get('color_discrete_map') or {}
+      fig = px.bar(d.to_pandas(), x='sample', y='plus_share_pct', color=by, color_discrete_map=colors, category_orders={'sample': d['sample'].to_list()}, hover_data=['time_point'], labels={'sample': '', 'plus_share_pct': 'Plus-strand share (%)', 'time_point': 'Time point', by: ''})
+      fig.add_hrect(y0=40, y1=60, fillcolor='gray', opacity=0.14, line_width=0, layer='below')
+      fig.add_hline(y=50, line_dash='dot', line_color='gray')
+      fig.add_annotation(x=0, y=96, xref='paper', yref='y', text='shaded: balanced split, 40 to 60%', showarrow=False, xanchor='left', yanchor='top')
+      fig.update_layout(yaxis_range=[0, 100], margin=dict(t=10), showlegend=(by != 'time_point'))
       fig.update_xaxes(tickangle=-45, automargin=True)
     section: Strand and hotspots
     tag: nc-qc-fig-strand
     index: nc-qc-fig-strand
     title: Plus-strand share per library
-    description: One bar per library, in time order; the dotted line marks the even split between strands.
+    description: One bar per library, in time order and in the colour of its time point; the shaded band is a balanced split (within 10 points of half, 40 to 60%), the dotted line the even split. A bar outside the band has lost a strand.
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: nascent
@@ -696,7 +733,7 @@ tabs:
     tag: nc-qc-fig-hotspots
     index: nc-qc-fig-hotspots
     title: Signal in hotspots and off the chromosomes
-    description: Three shares per library, in time order. A tall first bar is a library dominated by a few windows.
+    description: Three shares per library, in time order. A tall first bar is a library dominated by a few hotspot windows (the busiest 1% of 250 kb windows, where the ribosomal DNA sits).
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: table
     workflow_tag: nascent
@@ -798,7 +835,8 @@ tabs:
       [featureCounts](https://nf-co.re/nascent/2.3.0/docs/output) count at a time point is its rate then.
       Each expressed gene is compared with the baseline, the earliest time point: induced or repressed
       when its log2 fold change reaches 1 at two time points or more, and classed by the phase of its
-      peak. The curves are drawn on log2 of one plus the hours, so the first minutes keep their room.
+      peak. The curves are drawn on log2 of one plus the hours, so the first minutes keep their room, and without
+      replicates the calls are a fold-change rule rather than a test: read a gene's curve before trusting its class.
     tag: nc-gd-intro
     index: nc-gd-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -812,7 +850,7 @@ tabs:
     breakdown_col: direction
     display:
       icon_name: mdi:dna
-      icon_color: teal
+      icon_color: grape.4
       caption: genes, by the direction of their change
     section: Genes at a glance
     tag: nc-gd-card-tested
@@ -831,7 +869,7 @@ tabs:
     breakdown_col: peak_phase
     display:
       icon_name: mdi:trending-up
-      icon_color: orange
+      icon_color: grape.6
       caption: induced genes, by the phase of their peak
     section: Genes at a glance
     tag: nc-gd-card-induced
@@ -850,7 +888,7 @@ tabs:
     breakdown_col: peak_phase
     display:
       icon_name: mdi:trending-down
-      icon_color: blue
+      icon_color: grape.8
       caption: repressed genes, by the phase of their dip
     section: Genes at a glance
     tag: nc-gd-card-repressed
@@ -869,7 +907,7 @@ tabs:
     filter_expr: col('direction') != 'Stable'
     display:
       icon_name: mdi:chart-bell-curve
-      icon_color: grape
+      icon_color: grape.9
       caption: median over the responsive genes, with its spread
       decimals: 2
     section: Genes at a glance
@@ -902,25 +940,32 @@ tabs:
     title: Response classes over time
     description: Median log2 fold change of each class's genes in scope at each time point, with the band from the first to the third quartile.
     layout: {x: 0, y: 0, w: 4, h: 6}
-  - component_type: advanced_viz
+  - component_type: figure
     workflow_tag: nascent
     data_collection_tag: top_gene_trajectories
-    viz_kind: profile
-    config:
-      viz_kind: profile
-      series_col: gene_id
-      x_col: time_axis
-      y_col: log2fc
-      reference_x: 0
-      reference_label: Baseline
-      x_title: Time, log2(1 + hours)
-      y_title: log2 fold change against the baseline
-      legend_pos: bottom
+    visu_type: line
+    mode: code
+    code_content: |-
+      # The responsive genes with the largest change at their peak, one curve each, in the
+      # colour of their response class (the one every other tile of the tab uses); the gene is
+      # named at the end of its curve and in the hover. Time is log-spaced, labelled by time point.
+      colors = depictio_category_colors.get('response') or {}
+      d = df.sort(['gene_id', 'time_order'])
+      pts = d.select('time_point', 'time_axis', 'time_order').unique().sort('time_order')
+      last = d.sort('time_order').group_by('gene_id', maintain_order=True).last()
+      fig = px.line(d.to_pandas(), x='time_axis', y='log2fc', color='response', line_group='gene_id', hover_name='gene_id', hover_data={'time_point': True, 'time_axis': False}, markers=True, color_discrete_map=colors, labels={'time_axis': 'Time', 'log2fc': 'log2 fold change against the baseline', 'time_point': 'Time point', 'response': ''})
+      fig.update_traces(showlegend=False)
+      for r in d.select('response').unique().sort('response')['response'].to_list():
+          fig.add_trace(go.Scatter(x=[None], y=[None], mode='lines', name=r, legendgroup=r, line=dict(color=colors.get(r))))
+      fig.add_trace(go.Scatter(x=last['time_axis'].to_list(), y=last['log2fc'].to_list(), mode='text', text=last['gene_id'].to_list(), textposition='middle right', showlegend=False, hoverinfo='skip'))
+      fig.add_hline(y=0, line_dash='dot', line_color='gray', annotation_text='Baseline', annotation_position='bottom left')
+      fig.update_xaxes(tickmode='array', tickvals=pts['time_axis'].to_list(), ticktext=pts['time_point'].to_list(), title_text='Time point (log-spaced)', range=[-0.3, pts['time_axis'].max() + 1.3])
+      fig.update_layout(margin=dict(t=10), legend=dict(orientation='h', y=-0.25))
     section: Response over time
     tag: nc-gd-av-top-genes
     index: gd-av-top-genes
     title: The ten genes that move most
-    description: One curve per gene, the ten responsive genes with the largest change at their peak; the gene filters keep those of the ten in scope.
+    description: One curve per gene, the ten responsive genes with the largest change at their peak, coloured by response class as the median curves beside it; the gene filters keep those of the ten in scope.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: nascent
@@ -990,7 +1035,7 @@ tabs:
   - name: Libraries over time
     icon: mdi:chart-scatter-plot
     color: pink
-    description: The libraries on the first two components, and the drift from the baseline
+    description: A PCA of the libraries (PC1 against PC2), and the drift from the baseline
   - name: Similarity table
     icon: mdi:table
     color: gray
@@ -1003,6 +1048,7 @@ tabs:
     interactive_component_type: MultiSelect
     column_name: phase
     column_type: object
+    order_by: time_order
     display:
       icon_name: mdi:chart-timeline-variant
       custom_color: yellow
@@ -1034,8 +1080,9 @@ tabs:
     body: >
       Libraries compared over the genes detected in half of them, on log2 CPM: a Spearman correlation
       for every pair, and a [PCA](https://en.wikipedia.org/wiki/Principal_component_analysis) over the
-      2,000 most variable genes. A time course draws a path on the first components, and its correlation
-      with the baseline falls as the response unfolds. Lasso libraries on the embedding to narrow the other tiles.
+      2,000 most variable genes. In a time course the libraries move along the first component with time, and
+      their correlation with the baseline falls as the response unfolds; points are coloured by phase, on the
+      ramp of the browser's tracks. Lasso libraries on the embedding to narrow the other tiles.
     tag: nc-ss-intro
     index: nc-ss-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1049,7 +1096,7 @@ tabs:
     breakdown_col: phase
     display:
       icon_name: mdi:test-tube
-      icon_color: teal
+      icon_color: pink.4
       caption: libraries, by phase of the time course
     section: Similarity at a glance
     tag: nc-ss-card-libraries
@@ -1067,7 +1114,7 @@ tabs:
     coverage_max: 100
     display:
       icon_name: mdi:chart-scatter-plot
-      icon_color: pink
+      icon_color: pink.6
       caption: share of the variance on the first component
       decimals: 1
     section: Similarity at a glance
@@ -1087,7 +1134,7 @@ tabs:
     filter_expr: col('time_order') > 1
     display:
       icon_name: mdi:relation-many-to-many
-      icon_color: violet
+      icon_color: pink.8
       caption: median after the baseline, with its spread
       decimals: 3
     section: Similarity at a glance
@@ -1107,7 +1154,7 @@ tabs:
     filter_expr: col('time_order') > 1
     display:
       icon_name: mdi:chart-timeline-variant
-      icon_color: green
+      icon_color: pink.9
       caption: lowest step correlation, and how the steps spread
       decimals: 3
     section: Similarity at a glance
@@ -1143,8 +1190,10 @@ tabs:
       sample_id_col: sample
       dim_1_col: pc1
       dim_2_col: pc2
-      color_col: '{GROUP_COL}'
-      default_color_by: '{GROUP_COL}'
+      # The phase of the time course, on the ramp the browser and the lanes use; the
+      # group is one choice away in the colour menu.
+      color_col: phase
+      default_color_by: phase
       axis_prefix: PC
       point_size: 14
       marker_outline: true
@@ -1155,8 +1204,8 @@ tabs:
     section: Libraries over time
     tag: nc-ss-av-embedding
     index: ss-av-embedding
-    title: Libraries on the first two components
-    description: One point per library over the 2,000 most variable genes; the time course draws a path.
+    title: PCA of libraries (PC1 vs PC2)
+    description: Principal component analysis of the libraries over the 2,000 most variable genes, one point per library, coloured by phase; the points move along the first component with time.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: nascent
@@ -1203,20 +1252,16 @@ tabs:
   - name: Signal scope
     icon: mdi:tune
     color: teal
-    description: Narrow the binned signal to chromosomes or a signal band; brush the binned lanes to move the bigWig lanes
+    description: Narrow the binned signal to chromosomes or a signal band; brush the binned lanes to move the browser
   grid_sections:
   - name: Signal at a glance
     icon: mdi:counter
     color: teal
     description: Window signal, strand balance, silent windows and the busiest window
-  - name: Binned signal along the genome
+  - name: Binned signal and the bigWigs
     icon: mdi:waves
     color: teal
-    description: Both strands in 250 kb windows, one lane per library; brush a region
-  - name: Strand coverage
-    icon: mdi:dna
-    color: teal
-    description: The plus and minus bigWigs of each library over the region in view
+    description: The binned lanes drive the browser below. A brush or a locus on them moves the browser, and the browser's view comes back on them as a dashed band.
   - name: Signal by chromosome
     icon: mdi:chart-box-outline
     color: teal
@@ -1263,9 +1308,11 @@ tabs:
     order: 1
     body: >
       The strand coverage [bedtools genomecov](https://nf-co.re/nascent/2.3.0/docs/output) writes is
-      binned into 250 kb windows, per million of each library's signal, one lane per library. Brush a
-      region on the binned lanes and the bigWig lanes below zoom to it, strand by strand. Hotspot windows
-      (ribosomal DNA) tower over the rest, so the lanes are drawn on log2 of one plus the signal.
+      binned into 250 kb windows, per million of each library's signal, one lane per library, coloured
+      along the time course (the later, the darker) as the browser's tracks are. Pick Select in the lanes' header
+      and brush a region: the browser below zooms to it, strand by strand; zoom the browser and its window comes
+      back as a band on the lanes. Hotspot windows (ribosomal DNA) tower over the rest, so the lanes
+      are drawn on log2 of one plus the signal.
     tag: nc-gs-intro
     index: nc-gs-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1280,7 +1327,7 @@ tabs:
     follow_region_filter: true
     display:
       icon_name: mdi:waves
-      icon_color: teal
+      icon_color: teal.4
       caption: median per window and library, with its spread
       decimals: 1
     section: Signal at a glance
@@ -1301,7 +1348,7 @@ tabs:
     follow_region_filter: true
     display:
       icon_name: mdi:scale-balance
-      icon_color: indigo
+      icon_color: teal.6
       caption: median plus-strand share of a window
       decimals: 1
     section: Signal at a glance
@@ -1323,7 +1370,7 @@ tabs:
     follow_region_filter: true
     display:
       icon_name: mdi:alert-outline
-      icon_color: orange
+      icon_color: teal.8
       caption: the 3 chromosomes holding most
     section: Signal at a glance
     tag: nc-gs-card-silent
@@ -1342,7 +1389,7 @@ tabs:
     follow_region_filter: true
     display:
       icon_name: mdi:chart-bell-curve
-      icon_color: grape
+      icon_color: teal.9
       caption: how the windows spread on the log2 scale
       decimals: 1
     section: Signal at a glance
@@ -1351,8 +1398,8 @@ tabs:
     title: Busiest window (log2)
     description: The highest log2 signal of any window in view; a hotspot sits far right of the rest.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  # The navigator: its brush emits the chromosome + position filters the
-  # bigWig lanes below follow (a file-backed tile needs no link for it).
+  # The navigator: a brush (Select mode) moves the browser below, in the same
+  # linked section.
   - component_type: advanced_viz
     workflow_tag: nascent
     data_collection_tag: bedtools_strand_bins
@@ -1367,68 +1414,99 @@ tabs:
       mark: bar
       facet_by_sample: true
       max_facets: 12
+      # Thin lanes: the axis stays in view while they scroll, and each lane
+      # wears the colour the browser below gives the same library.
+      lane_height: 18
       score_title: log2 signal
       assembly: '{GENOME}'
       annotation: '{GENOME}'
+      # No default region: the lanes open on the whole genome, the browser below
+      # on the most responsive gene, and its window shows here as a band.
       region_filter_enabled: true
-      default_region: first
-    section: Binned signal along the genome
+      # The tile is as tall as its lanes.
+      auto_height: true
+    section: Binned signal and the bigWigs
     tag: nc-gs-av-binned
     index: gs-av-binned
     title: Binned signal, one lane per library
     description: >-
-      Nascent transcription along the genome, one lane per library (time point): the reads of both
-      strands summed in 250 kb windows, as log2(1 + signal per million of the library). Brush or type a region to
-      move the bigWig lanes below to it.
-    layout: {x: 0, y: 0, w: 8, h: 6}
-  # TODO(jbrowse): swap indexed_file+genome_view for a JBrowse2 DC once jbrowse.py is rebuilt
-  - component_type: advanced_viz
+      Nascent transcription along the genome, one lane per library, coloured along the time course
+      as the browser's tracks are: the reads of both strands summed in 250 kb windows, as log2(1 +
+      signal per million of the library). Pick Select in the header and brush, or type a region, to move the browser below to it.
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: jbrowse
     workflow_tag: nascent
-    data_collection_tag: coverage_bigwigs
-    viz_kind: genome_view
-    config:
-      viz_kind: genome_view
-      source: file
-      chr_col: chrom
-      pos_col: pos
-      assembly: '{GENOME}'
-      annotation: '{GENOME}'
-      # 22 lanes: the plus and minus bigWig of every library of the megatest.
-      file_max_lanes: 24
-      # 250 Mb, the size of the largest human chromosome: a bigWig carries its
-      # own zoom levels, so the lanes draw on the whole contig the navigator
-      # opens on rather than waiting for a zoom under the 1 Mb default.
-      file_window_size: 250000000
-      region_filter_enabled: false
-      follow_region_filter: true
-    section: Strand coverage
-    tag: nc-gs-av-bigwig
-    index: gs-av-bigwig
+    data_collection_tag: tracks
+    section: Binned signal and the bigWigs
+    # Both strands of the first, a middle and the last time point: the manifest lists
+    # those six first, then the other plus strands in time order, then the other minus
+    # strands, so a gene on either strand shows signal on open and the track selector
+    # offers the rest.
+    initial_tracks: 6
+    max_tracks: 24
+    # Opens on the gene whose nascent transcription changes most over the time
+    # course, not on a whole chromosome where the bigWigs read as a few spikes.
+    locus_from:
+      data_collection_tag: gene_dynamics
+      chrom_column: chromosome
+      start_column: start
+      end_column: end
+      padding: 20000
+      sort_by: abs_peak_log2fc
+      descending: true
+      # The header's Previous / Next walk the genes by response.
+      name: responsive gene
+      label_column: gene_id
+    show_overview: false
+    # The binned lanes above already say where the browser is.
+    show_header: false
+    # The libraries along the time course wear one ramp, the later the darker.
+    # The binned lanes above take the same colours from the browser's tracks.
+    color_scale:
+      column: time_point
+      order_by: time_order
+      scheme: viridis
+    # Follows a region brushed or typed on the binned lanes (panning them does not move it)
+    # and publishes its own window back to them.
+    follow_window: true
+    # The tile is as tall as the tracks it has open.
+    auto_height: true
+    display:
+      y_scale: shared
+    selection_enabled: true
+    selection_column: sample
+    tag: nc-gs-browser
+    index: gs-browser
     title: Strand coverage from the bigWigs
-    description: The plus and minus bigWig of each library, range-read for the region in view, over the gene lane.
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: The plus (+) and minus (-) strand bigWig of the first, a middle and the last time point, on one signal scale and coloured along the time course; the other libraries are in the track selector.
+    layout: {x: 0, y: 7, w: 8, h: 9}
   - component_type: figure
     workflow_tag: nascent
     data_collection_tag: chromosome_signal
     visu_type: heatmap
     mode: code
     code_content: |-
-      # Each chromosome's share of the signal per time point: chromosomes in
-      # karyotype order down, time points in time order across.
+      # Each chromosome's share of the signal against its own share at the baseline, as a
+      # log2 ratio on a diverging scale (a raw share only says how long the chromosome is):
+      # chromosomes in karyotype order down, time points in time order across. The share
+      # itself is in the hover.
       d = df.sort(['contig_order', 'time_order'])
       rows = d.select('chromosome', 'contig_order').unique().sort('contig_order')['chromosome'].to_list()
       cols = d.select('time_point', 'time_order').unique().sort('time_order')['time_point'].to_list()
-      m = d.pivot(on='time_point', index='chromosome', values='share_pct', aggregate_function='first')
-      m = m.select('chromosome', *[c for c in cols if c in m.columns])
-      z = [[m.filter(pl.col('chromosome') == r)[c].item() if c in m.columns else None for c in cols] for r in rows]
-      fig = go.Figure(go.Heatmap(z=z, x=cols, y=rows, colorscale='Viridis', colorbar=dict(title='Share (%)'), hovertemplate='%{y} at %{x}: %{z:.2f}%<extra></extra>'))
+      ratio = d.pivot(on='time_point', index='chromosome', values='log2_ratio', aggregate_function='first')
+      share = d.pivot(on='time_point', index='chromosome', values='share_pct', aggregate_function='first')
+      z = [[ratio.filter(pl.col('chromosome') == r)[c].item() if c in ratio.columns else None for c in cols] for r in rows]
+      s = [[share.filter(pl.col('chromosome') == r)[c].item() if c in share.columns else None for c in cols] for r in rows]
+      top = d['abs_log2_ratio'].drop_nulls().quantile(0.95) if d['abs_log2_ratio'].drop_nulls().len() else 0.5
+      lim = max(0.5, round(2 * top, 1))
+      fig = go.Figure(go.Heatmap(z=z, customdata=s, x=cols, y=rows, colorscale='RdBu_r', zmid=0, zmin=-lim, zmax=lim, colorbar=dict(title='log2 ratio'), hovertemplate='%{y} at %{x}: %{z:+.2f} log2 against the baseline<br>%{customdata:.2f}% of the signal<extra></extra>'))
       fig.update_yaxes(autorange='reversed', automargin=True)
       fig.update_layout(margin=dict(t=10), xaxis_title='Time point', yaxis_title='')
     section: Signal by chromosome
     tag: nc-gs-fig-chromosomes
     index: gs-fig-chromosomes
-    title: Share of the signal per chromosome and time point
-    description: Each chromosome's share of the signal on the chromosomes, per time point; libraries of a time point averaged.
+    title: Share of the signal per chromosome, against its baseline
+    description: log2 of each chromosome's share of the signal over its own share at the baseline, per time point (libraries of a time point averaged). Red gains share, blue loses it; a row that stays white follows the genome, one that moves carries a response or a hotspot.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: nascent
@@ -1438,7 +1516,7 @@ tabs:
     tag: nc-gs-table-bins
     index: nc-gs-table-bins
     title: Binned strand signal per library and window
-    description: Plus, minus and total signal per million of the library, and the plus-strand share, for every 250 kb window.
+    description: Plus, minus and total signal per million of the library, and the plus-strand share, for every 250 kb window; a click centres the browser on the window.
     layout: {x: 0, y: 0, w: 8, h: 6}
 
 - title: Signal dynamics
@@ -1522,17 +1600,18 @@ tabs:
     aggregation: count
     column_name: window_id
     column_type: object
+    filter_expr: col('trend') != 'Stable'
     secondary_layout: donut
     breakdown_col: trend
     display:
       icon_name: mdi:waves
-      icon_color: teal
-      caption: windows, by trend
+      icon_color: orange.4
+      caption: windows that change, rising or falling
     section: Windows at a glance
     tag: nc-sd-card-windows
     index: nc-sd-card-windows
-    title: Windows compared
-    description: Transcribed 250 kb windows without the hotspots, the windows the time course is read on.
+    title: Windows that change
+    description: Windows that rise or fall by a log2 fold change of 1 against the baseline at two time points or more, among the transcribed 250 kb windows without the hotspots that the time course is read on. Most windows are stable.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: nascent
@@ -1545,7 +1624,7 @@ tabs:
     breakdown_col: peak_phase
     display:
       icon_name: mdi:trending-up
-      icon_color: orange
+      icon_color: orange.6
       caption: rising windows, by the phase of their peak
     section: Windows at a glance
     tag: nc-sd-card-rising
@@ -1564,7 +1643,7 @@ tabs:
     breakdown_col: peak_phase
     display:
       icon_name: mdi:trending-down
-      icon_color: blue
+      icon_color: orange.8
       caption: falling windows, by the phase of their dip
     section: Windows at a glance
     tag: nc-sd-card-falling
@@ -1583,7 +1662,7 @@ tabs:
     filter_expr: col('trend') != 'Stable'
     display:
       icon_name: mdi:chart-bell-curve
-      icon_color: grape
+      icon_color: orange.9
       caption: median over the changing windows, with its spread
       decimals: 2
     section: Windows at a glance

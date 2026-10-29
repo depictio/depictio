@@ -27,6 +27,9 @@ export interface WindowRow {
 export interface HoverRow {
   chrom: string;
   pos: number;
+  /** CSS colour of the tile that hovered, so the rule wears it. Absent: the
+   *  theme's hover colour. */
+  color?: string;
 }
 
 /** The band for a genome browser's window: one row, or none when the window is
@@ -121,17 +124,23 @@ export function windowIsRegion(
 
 /** The rule(s) for a hovered interval: one at a position, two (its edges) at a
  *  span, so a feature reads as its outline. None on a contig the view does not
- *  draw. */
+ *  draw. `color` is the hovering tile's own colour (`HighlightEvent.color`);
+ *  `fallbackColor` fills the rows that have none, since an encoding reading a
+ *  `color` field needs the field on every row. */
 export function hoverRows(
   interval: GenomicInterval | null,
   contigNames: readonly string[],
+  color?: string | null,
+  fallbackColor?: string,
 ): HoverRow[] {
   if (!interval) return [];
   const chrom = matchChromosome(interval.refName, contigNames, interval.aliases);
   if (chrom === null) return [];
   const { start, end } = interval;
   if (!Number.isFinite(start) || !Number.isFinite(end)) return [];
-  return end > start ? [{ chrom, pos: start }, { chrom, pos: end }] : [{ chrom, pos: start }];
+  const wear = color || fallbackColor;
+  const row = (pos: number): HoverRow => ({ chrom, pos, ...(wear ? { color: wear } : {}) });
+  return end > start ? [row(start), row(end)] : [row(start)];
 }
 
 /** Position on the linearised genome axis (contigs laid end to end, in the
@@ -162,6 +171,8 @@ export function fractionOfDomain(
 
 export interface OverlayBox {
   kind: 'window' | 'hover';
+  /** The hovering tile's colour, for a hover box. */
+  color?: string;
   /** Left edge and width as fractions of the plot width. */
   left: number;
   width: number;
@@ -181,12 +192,17 @@ export function fallbackBoxes(
 ): OverlayBox[] {
   if (!domain) return [];
   const boxes: OverlayBox[] = [];
-  const clip = (kind: OverlayBox['kind'], from: number | null, to: number | null) => {
+  const clip = (
+    kind: OverlayBox['kind'],
+    from: number | null,
+    to: number | null,
+    color?: string,
+  ) => {
     if (from === null || to === null) return;
     const lo = Math.max(0, Math.min(from, to));
     const hi = Math.min(1, Math.max(from, to));
     if (hi < 0 || lo > 1 || hi < lo) return;
-    boxes.push({ kind, left: lo, width: Math.max(minWidth, hi - lo) });
+    boxes.push({ kind, left: lo, width: Math.max(minWidth, hi - lo), ...(color ? { color } : {}) });
   };
   for (const w of win) {
     const a = toLinear(contigs, w.chrom, w.start);
@@ -200,7 +216,7 @@ export function fallbackBoxes(
   for (const h of hover) {
     const a = toLinear(contigs, h.chrom, h.pos);
     const f = a === null ? null : fractionOfDomain(a, domain);
-    clip('hover', f, f);
+    clip('hover', f, f, h.color);
   }
   return boxes;
 }
@@ -215,6 +231,7 @@ export function windowInDomain(
   domain: unknown[] | null,
   win: WindowRow,
   contigNames: readonly string[],
+  tolerance = 0.02,
 ): boolean {
   if (!domain || domain.length < 2) return true;
   const locus = (x: unknown) => x as { chrom?: unknown; pos?: unknown };
@@ -222,7 +239,13 @@ export function windowInDomain(
   const rank = (c: unknown) => contigNames.indexOf(String(c));
   const [loRank, hiRank, winRank] = [rank(lo.chrom), rank(hi.chrom), rank(win.chrom)];
   if (loRank < 0 || hiRank < 0 || winRank < 0) return true;
-  const after = winRank > loRank || (winRank === loRank && win.start >= Number(lo.pos));
-  const before = winRank < hiRank || (winRank === hiRank && win.end <= Number(hi.pos));
+  // A browser that followed this axis reports its window rounded outwards to
+  // whole bases and its own block edges: a window a hair past the edge is the
+  // same window coming back, not the browser leaving. Only a single-contig
+  // domain has a span to take a fraction of.
+  const span = loRank === hiRank ? Math.abs(Number(hi.pos) - Number(lo.pos)) : 0;
+  const slack = Math.max(2, span * tolerance);
+  const after = winRank > loRank || (winRank === loRank && win.start >= Number(lo.pos) - slack);
+  const before = winRank < hiRank || (winRank === hiRank && win.end <= Number(hi.pos) + slack);
   return after && before;
 }

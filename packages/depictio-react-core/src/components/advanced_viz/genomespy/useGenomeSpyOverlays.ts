@@ -24,8 +24,9 @@ import type { EmbedResult } from '@genome-spy/core/types/embedApi.js';
 
 import { fallbackBoxes } from './overlayRows';
 import type { HoverRow, SelectionRow, WindowRow } from './overlayRows';
+import { HOVER_COLOR_PARAM } from './genomeSpySpec';
 import type { Contig, OverlayColors, OverlaySources } from './genomeSpySpec';
-import { onScaleDomainChange, pushOverlayRows, readScaleDomain } from './useGenomeSpy';
+import { onScaleDomainChange, pushOverlayRows, readScaleDomain, setSpecParam } from './useGenomeSpy';
 
 const FALLBACK_ATTR = 'data-depictio-genomespy-overlay';
 
@@ -58,8 +59,8 @@ function paintFallback(
       left: `${box.left * 100}%`,
       width: `${box.width * 100}%`,
       minWidth: hover ? '2px' : '1px',
-      background: hover ? colors.hoverColor : colors.windowColor,
-      opacity: hover ? '0.9' : '0.18',
+      background: hover ? (box.color ?? colors.hoverColor) : colors.windowColor,
+      opacity: hover ? '0.9' : String(Math.min(1, (colors.windowOpacity ?? 0.16) + 0.04)),
     });
     layer.appendChild(mark);
   }
@@ -97,6 +98,10 @@ export function useGenomeSpyOverlays({
       const h = pushOverlayRows(api, o.hover, hoverRows as HoverRow[]);
       const s = pushOverlayRows(api, o.selection, selectionRows as SelectionRow[]);
       if (w === null || h === null || s === null) named = false;
+    }
+    // The hover rule's colour is a param, not a column of its rows.
+    if (overlays.length) {
+      setSpecParam(api, HOVER_COLOR_PARAM, hoverRows.find((h) => h.color)?.color ?? colors.hoverColor);
     }
     if (named) {
       clearFallback(el);

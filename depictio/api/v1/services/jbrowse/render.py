@@ -19,8 +19,11 @@ from depictio.api.v1.services.jbrowse.config_builder import (
     build_assembly_config,
     build_track_config,
     deep_merge,
+    prefetch_index_checks,
     resolve_preset,
+    storage_index_checker,
     variant_color_jexl,
+    variant_label_jexl,
 )
 from depictio.api.v1.services.jbrowse.tracks import (
     TrackRow,
@@ -28,6 +31,7 @@ from depictio.api.v1.services.jbrowse.tracks import (
     display_base_uri,
     display_uri,
     manifest_rows,
+    s3_base_folder,
     tracks_by_key,
 )
 from depictio.models.models.data_collections_types.genomic_tracks import CustomAssembly
@@ -201,6 +205,34 @@ def locus_from_rows(rows: list[dict[str, Any]], spec: dict[str, Any]) -> str | N
     return f"{chrom}:{max(lo - pad, 1)}-{hi + pad}"
 
 
+def opening_rows(rows: list[dict[str, Any]], spec: dict[str, Any]) -> list[dict[str, Any]]:
+    """The calls the view opens on: the first one, or the first ``span_top`` when they sit together.
+
+    ``rows`` are the first calls in ``sort_by`` order. With ``span_top`` set they
+    are all kept when they lie on one chromosome and their span (smallest start to
+    largest end) is at most ``max_span`` bases; otherwise only the first call is
+    kept, so a far-apart second call never drags the view away from the best one.
+    """
+    if not rows or not spec.get("span_top") or len(rows) < 2:
+        return rows[:1]
+    end_column = spec.get("end_column") or spec["start_column"]
+    chroms = set()
+    starts: list[int] = []
+    ends: list[int] = []
+    for row in rows:
+        try:
+            lo = int(float(row.get(spec["start_column"])))  # type: ignore[arg-type]
+            hi = int(float(row.get(end_column)))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return rows[:1]
+        chroms.add(str(row.get(spec["chrom_column"])))
+        starts.append(min(lo, hi))
+        ends.append(max(lo, hi))
+    if len(chroms) > 1 or max(ends) - min(starts) > int(spec.get("max_span", 1_000_000)):
+        return rows[:1]
+    return rows
+
+
 def mate_locus_from_rows(rows: list[dict[str, Any]], spec: dict[str, Any]) -> str | None:
     """Locus of the second side of the ``rows`` framed by ``locus_from_rows``.
 
@@ -304,6 +336,16 @@ def build_jbrowse_payload(
     ]
     per_track = overrides.get("tracks") or {}
     variant_color = variant_color_jexl(component.get("variant_color_by"), category_colors)
+    variant_label = variant_label_jexl(component.get("variant_label_by"))
+
+    # Indexes the manifest declares but storage lacks fall back to plain adapters.
+    index_exists = None
+    try:
+        index_exists = storage_index_checker(s3_base_folder(tdc.dc_id, props))
+    except Exception as exc:  # noqa: BLE001 - a refused base folder is reported by the proxy
+        logger.debug(f"jbrowse: index check skipped: {exc}")
+    if index_exists is not None:
+        prefetch_index_checks(config_tracks, index_exists)
 
     tracks_conf: list[dict[str, Any]] = []
     for track in config_tracks:
@@ -317,6 +359,8 @@ def build_jbrowse_payload(
                 variant_color,
                 display=lambda uri: _shown_uri(uri, props, anonymous)[0],
                 show_junctions=show_junctions,
+                index_exists=index_exists,
+                variant_label=variant_label,
             )
         except ValueError as exc:
             logger.info(f"jbrowse: skipping track {track.track_id}: {exc}")
@@ -327,8 +371,10 @@ def build_jbrowse_payload(
 
     built = {c["trackId"] for c in tracks_conf}
     shown_ids = [t.track_id for t in shown if t.track_id in built]
+    # A ``color_scale`` column plays the legend/group role ``color_by`` does.
+    group_column = component.get("color_by") or (component.get("color_scale") or {}).get("column")
     track_rows = [
-        _track_summary(t, selection_column, props, anonymous, component.get("color_by"))
+        _track_summary(t, selection_column, props, anonymous, group_column)
         for t in config_tracks
         if t.track_id in built
     ]

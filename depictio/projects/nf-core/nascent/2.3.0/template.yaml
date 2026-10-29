@@ -19,8 +19,8 @@
 #     (catalog bedtools/*), never ingested whole. The <sample>.dreg.bedGraph
 #     beside them (dREG input) is not read.
 #   - coverage_graphs/<sample>.plus.bigWig and .minus.bigWig: the same coverage
-#     from deepTools bamCoverage, uploaded as files and range-read by the
-#     browser (an indexed_file collection) for the strand lanes of one region.
+#     from deepTools bamCoverage, read in place by the genome browser (a
+#     genomic_tracks collection) for the region in view.
 #
 # Not read: the BAMs; the transcript identification outputs (groHMM, PINTS,
 # HOMER under transcript_identification/, and the counts over identified
@@ -78,6 +78,9 @@ template:
       description: "UCSC name of the assembly the run aligned to (--genome; hg38, mm10): the axis and gene lane of the genome tracks."
       required: false
       default: "hg38"
+    - name: "TRACKS_URI"
+      description: "s3:// or https:// folder holding the run's results (the folder DATA_ROOT mirrors), to read the genome-browser bigWigs in place instead of uploading them from DATA_ROOT."
+      required: false
   # Variables for the BUNDLED reference dataset: the megatest run with its
   # design table vendored in input/ (see megatest.yaml).
   reference:
@@ -130,6 +133,14 @@ template:
     - if_var_absent: "METADATA_FILE"
       remove_dc_tags: ["metadata"]
       dashboards: ["dashboards/base.yaml"]
+    # Genome tracks: read in place when TRACKS_URI names the results folder,
+    # uploaded from DATA_ROOT otherwise (the `tracks` recipe keeps only the
+    # files it finds there).
+    - if_var_present: "TRACKS_URI"
+      override_dcs:
+        - data_collection_tag: "tracks"
+          dc_properties:
+            remote_base_uri: "{TRACKS_URI}"
 
 # ============================================================================
 # PROJECT CONFIGURATION
@@ -268,9 +279,9 @@ workflows:
               "depth": "Depth of the file's first interval"
               "source_path": "The bedGraph this row indexes; the library, the strand and every window are derived from it"
 
-      - data_collection_tag: "bedtools_strand_bins"
+      - data_collection_tag: "bedtools_strand_windows"
         optional: true
-        description: "Strand coverage in 250 kb windows, one row per library per window, in parts per million of the library's signal"
+        description: "Strand coverage in 250 kb windows, one row per library per window, in parts per million of the library's signal, in library name order (the collection the time-ordered bedtools_strand_bins is made from)"
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -345,6 +356,38 @@ workflows:
               "mito_pct": "Coverage on the mitochondrial contig, in percent"
               "off_main_pct": "Coverage outside the chromosomes, in percent"
               "hotspot_share_pct": "Share of the chromosome coverage in the top 1% of 250 kb windows, in percent"
+              "strand_skew_pct": "Points the plus strand's share sits from an even split (absolute value of plus minus 50); within 10 reads as balanced"
+
+      # ----------------------------------------------------------------
+      # The binned windows in time order. The catalog recipe lists libraries by
+      # name (GM_0h, GM_12h, GM_18h, GM_1h, ...), which is the order the
+      # lanes of the binned view stack in; this collection is the same rows
+      # sorted by the hub's time points, so the lanes read 0h, 30min, 1h, ...
+      # Declared after the hub it reads, and the one every tile and recipe
+      # below names.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "bedtools_strand_bins"
+        optional: true
+        description: "Strand coverage in 250 kb windows, one row per library per window, in parts per million of the library's signal, libraries in time order"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nascent/strand_bins.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Library (samplesheet sample)"
+              "chromosome": "Chromosome of the window"
+              "start": "Window start, 0-based, a multiple of 250 kb"
+              "end": "Window end, exclusive"
+              "position": "Window centre, where the genome tracks draw it"
+              "plus_rpm": "Plus-strand read bases in the window, per million of the library's read bases"
+              "minus_rpm": "Minus-strand read bases in the window, per million of the library's read bases"
+              "signal_rpm": "Both strands, per million of the library's read bases"
+              "log2_signal": "log2(signal_rpm + 1)"
+              "plus_share_pct": "Plus strand's share of the window's signal, in percent (empty without signal)"
 
       # ----------------------------------------------------------------
       # Gene time course (project recipes, depictio/recipes/lib/time_course.py)
@@ -572,30 +615,50 @@ workflows:
               "share_pct": "Share of the signal on the chromosomes, in percent"
               "plus_share_pct": "Plus strand's share of the chromosome's signal, in percent"
               "contig_order": "Chromosome rank in karyotype order"
+              "log2_ratio": "log2 of the share over the chromosome's share at the baseline (0 at the baseline, empty where either share is 0)"
+              "abs_log2_ratio": "Absolute value of log2_ratio, to rank the chromosomes by how far they move"
 
       # ----------------------------------------------------------------
-      # The strand bigWigs as files, not rows: uploaded with their built-in
-      # index and range-read by the browser for the region in view, one lane
-      # per library and strand (<sample>.plus / <sample>.minus). 15 to 30 MB
-      # each on the megatest. Optional, for a run fetched without them.
-      # TODO(jbrowse): swap indexed_file+genome_view for a JBrowse2 DC once jbrowse.py is rebuilt
+      # The genome browser's tracks: one row per strand bigWig
+      # (<sample>.plus / <sample>.minus), range-read by JBrowse through the
+      # bigWig's own index for the region in view. Optional, for a run fetched
+      # without them.
       # ----------------------------------------------------------------
-      - data_collection_tag: "coverage_bigwigs"
+      - data_collection_tag: "tracks"
         optional: true
-        description: "Strand coverage bigWig per library and strand (deepTools bamCoverage), read by the browser for the region in view"
+        description: "Genome-browser tracks of the run: the plus and minus bigWig of every library, one row per file"
         config:
-          type: "indexed_file"
+          type: "genomic_tracks"
           metatype: "Metadata"
-          scan:
-            mode: "recursive"
-            scan_parameters:
-              regex_config:
-                pattern: ".*\\.(?:plus|minus)\\.bigWig$"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/nascent/tracks.py"
           dc_specific_properties:
-            format: "bigwig"
+            format: "TSV"
+            uri_column: "uri"
+            track_id_column: "track_id"
+            sample_column: "sample"
+            format_column: "format"
+            name_column: "name"
+            category_column: "category"
+            order_column: "order"
             assembly: "{GENOME}"
-            sample_regex: "(?P<sample>[^/]+\\.(?:plus|minus))\\.bigWig$"
-            max_file_size_mb: 64
+            display_defaults:
+              bigwig:
+                displays:
+                  - type: "LinearWiggleDisplay"
+                    height: 50
+                    autoscale: "local"
+            columns_description:
+              "track_id": "<sample>.<strand>, unique per file"
+              "sample": "Library the file belongs to"
+              "time_point": "The library's time point label; the browser colours its tracks along a ramp by it (the manifest carries no colour column, which would win over the ramp)"
+              "time_order": "The time point's rank, earliest first; orders the ramp"
+              "format": "Track file format"
+              "uri": "Path relative to the results folder"
+              "name": "Track label shown in the browser"
+              "category": "Track-selector folder"
+              "order": "Row order the browser opens with"
 
 # ============================================================================
 # LINKS: the sample hub filters every per-library and per-time-point collection
@@ -644,36 +707,19 @@ links:
     link_config: {resolver: "direct", target_field: "sample"}
     description: "Filter the library PCA and correlations by the libraries picked"
     enabled: true
-  # By time point: the time-course collections hold one row per time point,
-  # libraries of a time point averaged, so the libraries picked reach them
-  # through the time points they belong to.
-  - source_dc_tag: "samples"
-    source_column: "time_point"
-    target_dc_tag: "gene_trajectories"
-    target_type: "table"
-    link_config: {resolver: "direct", target_field: "time_point"}
-    description: "Filter the gene trajectories to the time points of the libraries picked"
-    enabled: true
-  - source_dc_tag: "samples"
-    source_column: "time_point"
-    target_dc_tag: "top_gene_trajectories"
-    target_type: "table"
-    link_config: {resolver: "direct", target_field: "time_point"}
-    description: "Filter the top gene curves to the time points of the libraries picked"
-    enabled: true
+  # By time point: the correlation curves and the per-chromosome shares hold one
+  # row per time point, libraries of a time point averaged, so the libraries
+  # picked reach them through the time points they belong to. The gene and window
+  # trajectories do not take this link: a curve cut down to the picked time
+  # points is a point (or nothing, for the baseline), so they follow the genes
+  # and windows in scope instead (the peak-time links below) and keep the whole
+  # time course on the x axis.
   - source_dc_tag: "samples"
     source_column: "time_point"
     target_dc_tag: "sample_drift"
     target_type: "table"
     link_config: {resolver: "direct", target_field: "time_point"}
     description: "Filter the correlation curves to the time points of the libraries picked"
-    enabled: true
-  - source_dc_tag: "samples"
-    source_column: "time_point"
-    target_dc_tag: "signal_window_series"
-    target_type: "table"
-    link_config: {resolver: "direct", target_field: "time_point"}
-    description: "Filter the window trend curves to the time points of the libraries picked"
     enabled: true
   - source_dc_tag: "samples"
     source_column: "time_point"
@@ -743,6 +789,13 @@ links:
     link_config: {resolver: "direct", target_field: "chromosome"}
     description: "Narrow the per-chromosome shares to the chromosomes picked"
     enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Show the genome tracks of the libraries picked"
+    enabled: true
   # Reverse links: a selection made on a tab's own scatter or table narrows the
   # hub, and through it every other tab.
   - source_dc_tag: "sample_similarity"
@@ -758,4 +811,11 @@ links:
     target_type: "table"
     link_config: {resolver: "direct", target_field: "sample"}
     description: "Narrow the sample hub to the libraries selected on the library summary"
+    enabled: true
+  - source_dc_tag: "tracks"
+    source_column: "sample"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Narrow the sample hub to the libraries picked in the genome browser"
     enabled: true

@@ -73,6 +73,7 @@
       "group": "Call properties",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "lime",
@@ -116,6 +117,7 @@
       "group": "Call properties",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "violet",
@@ -159,6 +161,7 @@
       "group": "Call properties",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "indigo",
@@ -202,6 +205,7 @@
       "group": "Support",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "pink",
@@ -245,6 +249,7 @@
       "group": "Support",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "orange",
@@ -288,6 +293,7 @@
       "group": null,
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
       "slider_mode": null,
       "custom_color": "violet",
@@ -348,7 +354,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:dna",
-      "icon_color": "grape",
+      "icon_color": "grape.4",
       "caption": "calls, by functional class",
       "decimals": 0,
       "wf_tag": "nextflow/viralrecon"
@@ -407,7 +413,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:map-marker-outline",
-      "icon_color": "orange",
+      "icon_color": "grape.6",
       "caption": "and the one most samples share",
       "decimals": 0,
       "wf_tag": "nextflow/viralrecon"
@@ -466,7 +472,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:percent-outline",
-      "icon_color": "pink",
+      "icon_color": "grape.8",
       "caption": "calls against the 0.75 consensus cut-off",
       "decimals": 2,
       "wf_tag": "nextflow/viralrecon"
@@ -527,7 +533,7 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:layers-outline",
-      "icon_color": "teal",
+      "icon_color": "grape.9",
       "caption": "median per call, with its spread",
       "decimals": 0,
       "wf_tag": "nextflow/viralrecon"
@@ -588,6 +594,7 @@
           "EFFECT",
           "FUNCLASS"
         ],
+        "hover_cols": [],
         "default_color_by": "EFFECT",
         "top_n_labels": 0,
         "selection_enabled": true,
@@ -645,57 +652,6 @@
       "max_points": null,
       "selection_enabled": false,
       "selection_column": null,
-      "font_scale": null,
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "var-read-support",
-      "component_type": "figure",
-      "title": "Read support per call",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "variants_long",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c12"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Per-sample variant calls with functional annotations",
-        "data_collection_tag": "variants_long",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c12"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "A high frequency with few reads behind it sits near the origin.",
-      "title_size": "sm",
-      "title_align": "left",
-      "use": "ivar/variants_long",
-      "catalog_source": {
-        "toolId": "ivar",
-        "toolName": "iVar",
-        "outputId": "ivar_variants_long",
-        "use": "ivar/variants_long",
-        "description": "Per-sample annotated variant calls (long table)."
-      },
-      "section": "Support",
-      "visu_type": "scatter",
-      "dict_kwargs": {},
-      "mode": "code",
-      "code_content": "# Reference against alternate depth per call: by functional class, or by\n# Analysis mode's groups when it has some. custom_data carries the sample\n# the selection reads.\nd = df.filter(pl.col('REF_DP').is_not_null() & pl.col('ALT_DP').is_not_null())\nkw = depictio_group_kwargs or {'color': 'FUNCLASS', 'color_discrete_map': depictio_category_colors.get('FUNCLASS') or {}}\nfig = px.scatter(d.to_pandas(), x='REF_DP', y='ALT_DP', hover_name='mutation_label', custom_data=['sample'], opacity=0.8, labels={'REF_DP': 'Reference depth', 'ALT_DP': 'Alternate depth', 'FUNCLASS': 'Functional class'}, **kw)\nfig.update_layout(margin=dict(t=10))",
-      "displayed_data_count": 0,
-      "total_data_count": 0,
-      "was_sampled": false,
-      "filter_applied": false,
-      "max_points": null,
-      "selection_enabled": true,
-      "selection_column": "sample",
       "font_scale": null,
       "wf_tag": "nextflow/viralrecon"
     },
@@ -801,7 +757,9 @@
         "marker_outline": false,
         "palette": "tab10",
         "gene_sort": "count",
-        "top_n_labels": 0
+        "top_n_labels": 0,
+        "selection_enabled": false,
+        "selection_column": null
       },
       "wf_tag": "nextflow/viralrecon"
     },
@@ -1071,22 +1029,7 @@
       "i": "box-var-af-histogram",
       "x": 0,
       "y": 0,
-      "w": 4,
-      "h": 4,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-var-read-support",
-      "x": 4,
-      "y": 0,
-      "w": 4,
+      "w": 8,
       "h": 4,
       "static": false,
       "resizeHandles": [
@@ -1193,7 +1136,7 @@
     {
       "name": "Matrix filter",
       "icon": "mdi:relation-many-to-many",
-      "color": "violet",
+      "color": "grape",
       "description": "Narrows the mutation matrix only",
       "collapsed": true,
       "persistent": false,
@@ -1244,7 +1187,7 @@
       "name": "Support",
       "icon": "mdi:chart-bell-curve",
       "color": "grape",
-      "description": "Allele frequency and read depth behind each call",
+      "description": "Allele frequency of the calls against the cut-off the consensus takes",
       "collapsed": false,
       "persistent": false,
       "pin": "top",
@@ -1310,6 +1253,7 @@
   "filter_panel_default": "open",
   "content_width_default": "full",
   "show_tab_header": true,
+  "open_with_defaults": false,
   "show_guide": true,
   "guide_intro": "",
   "advanced_viz_controls": "popover",
@@ -1348,11 +1292,14 @@
       }
     ],
     "editors": [],
-    "viewers": []
+    "viewers": [],
+    "group_owners": [],
+    "group_editors": [],
+    "group_viewers": []
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-10-08 21:52:39",
+  "creation_time": "2026-10-22 10:02:20",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
@@ -1370,5 +1317,10 @@
   "project_realtime": null,
   "inherited_brand_theme": null,
   "inherited_category_colors": null,
-  "source_key": "nf-core/viralrecon:dashboards/base.yaml#Variants"
+  "source_key": "nf-core/viralrecon:dashboards/base.yaml#Variants",
+  "template_origin": {
+    "template_id": "nf-core/viralrecon/3.0.0",
+    "template_version": "2.0.0",
+    "imported_at": "2026-10-29 11:02:02"
+  }
 }

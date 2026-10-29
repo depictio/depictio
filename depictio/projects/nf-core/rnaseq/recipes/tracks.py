@@ -8,8 +8,11 @@ the duplicate-marked BAM of the default STAR + Salmon route, all relative to
 DATA_ROOT (the ``aligner_star_salmon/`` directory of a multi-route run).
 
 Row order is what the browser opens on (``initial_tracks`` shows the first
-rows): the bigWig pairs first, replicate 1 of every condition before
-replicate 2, the BAMs last (10 to 16 GB each in the megatest).
+rows): replicate 1 of every condition before replicate 2, and for each sample its
+forward and reverse coverage followed by its BAM (10 to 16 GB each in the
+megatest, read by range). The opening tracks thus hold one representative library
+per condition, in the design's order, with the reads whose splice arcs
+(``show_junctions``) the browser draws over the coverage.
 
 Two ways the files are read:
 - ``TRACKS_URI`` is set (the template turns it into ``remote_base_uri``): every
@@ -21,13 +24,13 @@ Two ways the files are read:
 Output schema:
     track_id : Utf8     `<sample>.<kind>`, unique per file
     sample : Utf8       the sample the file belongs to (links to `samplesheet`)
-    condition : Utf8    read off the `<condition>_REP<n>` sample name
+    condition : Utf8    read off the `<condition>_REP<n>` sample name; the tile colours by it
+                        (``color_by``), in the colours the dashboard declares for it
     strand : Utf8       forward / reverse for the coverage, empty for the BAM
     kind : Utf8         coverage_forward / coverage_reverse / alignments
     format : Utf8       bigwig / bam
     uri : Utf8          path relative to the results folder
     name : Utf8         track label shown in the browser
-    color : Utf8        per-condition colour, the reverse strand a lighter shade
     category : Utf8     track-selector folder
     order : Int64       row order the browser opens with (``order_column``)
 """
@@ -60,7 +63,6 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "format": pl.Utf8,
     "uri": pl.Utf8,
     "name": pl.Utf8,
-    "color": pl.Utf8,
     "category": pl.Utf8,
     "order": pl.Int64,
 }
@@ -72,16 +74,6 @@ _COVERAGE = [
     ("coverage_reverse", "reverse", "bigwig", f"{_ROOT}/bigwig/{{s}}.reverse.bigWig", "Coverage"),
 ]
 _BAM = ("alignments", "", "bam", f"{_ROOT}/{{s}}.markdup.sorted.bam", "Alignments")
-
-# (forward / BAM, reverse) shade per condition, assigned in sorted order.
-_PALETTE = [
-    ("rgb(31,119,180)", "rgb(140,186,222)"),
-    ("rgb(214,39,40)", "rgb(237,146,146)"),
-    ("rgb(44,160,44)", "rgb(150,212,150)"),
-    ("rgb(148,103,189)", "rgb(199,175,222)"),
-    ("rgb(255,127,14)", "rgb(255,187,125)"),
-    ("rgb(23,190,207)", "rgb(155,222,230)"),
-]
 
 # `GM12878_REP1`, `treated_rep2`, `ctrl_R3`: the same split the samplesheet
 # recipe makes, so `condition` agrees with the hub.
@@ -110,8 +102,6 @@ def transform(sources: dict[str, pl.DataFrame], context=None) -> pl.DataFrame:
         {str(s).strip() for s in sheet[sample_col].to_list() if s},
         key=lambda s: (_split(s)[1], s),
     )
-    conditions = sorted({_split(s)[0] for s in samples})
-    colors = {c: _PALETTE[i % len(_PALETTE)] for i, c in enumerate(conditions)}
 
     def row_for(sample: str, spec: tuple[str, str, str, str, str]) -> dict[str, str]:
         kind, strand, fmt, template, category = spec
@@ -125,12 +115,12 @@ def transform(sources: dict[str, pl.DataFrame], context=None) -> pl.DataFrame:
             "format": fmt,
             "uri": template.format(s=sample),
             "name": f"{sample} {strand}" if strand else f"{sample} alignments",
-            "color": colors[condition][1 if strand == "reverse" else 0],
             "category": category,
         }
 
-    rows = [row_for(s, spec) for s in samples for spec in _COVERAGE]
-    rows += [row_for(s, _BAM) for s in samples]
+    # Per sample: both strands, then the reads. Stranded libraries put a gene's
+    # signal on one strand only, so the pair opens together.
+    rows = [row_for(s, spec) for s in samples for spec in (*_COVERAGE, _BAM)]
 
     if (
         context is not None

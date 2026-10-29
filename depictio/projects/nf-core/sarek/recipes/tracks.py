@@ -18,7 +18,10 @@ Each file has a few homes. The first one the run holds is used:
 Row order is what the browser opens on (``initial_tracks`` shows the first
 rows): the light VCFs first, one block per sample (the small-variant callers,
 then the structural-variant callers), and the CRAMs, which are gigabytes each,
-close the manifest.
+close the manifest. The leading rows are a caller comparison with the reads under
+it, though: every small-variant caller of the first sample, then that sample's
+CRAM, so the browser opens on what the callers agree on and the evidence for it,
+not on the first N rows of one block.
 
 Germline runs only: a somatic pair (``<tumour>_vs_<normal>``) names its caller
 rows after the pair, not a sample, and is left out as it is on the hub. A CRAM
@@ -42,7 +45,6 @@ Output schema:
     format : Utf8       vcf / cram
     uri : Utf8          path relative to the results folder
     name : Utf8         track label shown in the browser
-    color : Utf8        per-caller colour, grey for the CRAMs
     category : Utf8     track-selector folder
     order : Int64       row order the browser opens with (``order_column``)
 """
@@ -90,7 +92,6 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "format": pl.Utf8,
     "uri": pl.Utf8,
     "name": pl.Utf8,
-    "color": pl.Utf8,
     "category": pl.Utf8,
     "order": pl.Int64,
 }
@@ -99,18 +100,6 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
 # the structural-variant callers, then any other by name.
 _CALLER_ORDER = ("haplotypecaller", "deepvariant", "strelka", "freebayes", "manta", "tiddit")
 _SV_CALLERS = frozenset({"manta", "tiddit"})
-
-# Okabe-Ito-like fixed colours; a caller outside the list takes the next of _PALETTE.
-_CALLER_COLORS = {
-    "haplotypecaller": "rgb(0,114,178)",
-    "deepvariant": "rgb(213,94,0)",
-    "strelka": "rgb(0,158,115)",
-    "freebayes": "rgb(204,121,167)",
-    "manta": "rgb(230,159,0)",
-    "tiddit": "rgb(86,180,233)",
-}
-_PALETTE = ["rgb(240,228,66)", "rgb(120,94,240)", "rgb(100,143,255)", "rgb(220,38,127)"]
-_CRAM_COLOR = "rgb(140,140,140)"
 
 # caller -> the file names it writes, preferred first (a filtered VCF before the raw one).
 _VCF_NAMES = {
@@ -181,14 +170,6 @@ def transform(sources: dict[str, pl.DataFrame | None], context=None) -> pl.DataF
         known = _CALLER_ORDER.index(caller) if caller in _CALLER_ORDER else len(_CALLER_ORDER)
         return (known, caller)
 
-    palette = iter(_PALETTE * 4)
-    colors: dict[str, str] = {}
-
-    def color_of(caller: str) -> str:
-        if caller not in colors:
-            colors[caller] = _CALLER_COLORS.get(caller) or next(palette)
-        return colors[caller]
-
     in_place = context is None or context.reads_in_place
 
     def present(path: str) -> bool:
@@ -215,7 +196,6 @@ def transform(sources: dict[str, pl.DataFrame | None], context=None) -> pl.DataF
                     "format": "vcf",
                     "uri": uri_for(_vcf_candidates(sample_id, caller)),
                     "name": f"{sample_id} {caller}",
-                    "color": color_of(caller),
                     "category": "Structural variants" if sv else "Small variants",
                 }
             )
@@ -229,7 +209,6 @@ def transform(sources: dict[str, pl.DataFrame | None], context=None) -> pl.DataF
                     "format": "cram",
                     "uri": uri_for(_cram_candidates(sample_id, stage[sample_id])),
                     "name": f"{sample_id} reads",
-                    "color": _CRAM_COLOR,
                     "category": "Alignments",
                 }
             )
@@ -237,6 +216,13 @@ def transform(sources: dict[str, pl.DataFrame | None], context=None) -> pl.DataF
     rows = [*variants, *alignments]
     if not in_place and any(present(r["uri"]) for r in rows):
         rows = [r for r in rows if present(r["uri"])]
+    # Every small-variant caller of the first sample leads, then its CRAM: a caller
+    # comparison with the reads under it (a row dropped above leaves the next in line).
+    first = next((r["sample_id"] for r in rows if r["kind"] == "variants"), None)
+    lead = [r for r in rows if r["sample_id"] == first and r["kind"] == "variants"]
+    lead += [r for r in rows if r["sample_id"] == first and r["kind"] == "alignments"]
+    lead_ids = {row["track_id"] for row in lead}
+    rows = [*lead, *(r for r in rows if r["track_id"] not in lead_ids)]
     # Ingestion reorders rows (clustering on link columns): keep the intended
     # order explicit, the browser opens on the first `initial_tracks`.
     for i, row in enumerate(rows, start=1):

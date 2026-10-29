@@ -71,7 +71,7 @@
 template:
   template_id: "nf-core/atacseq/1.2.2"
   description: "nf-core/atacseq template: ataqv library quality, MACS2 broad peaks, HOMER peak annotation, the consensus peak set and DESeq2 differential accessibility, on top of the reprocessed MultiQC report."
-  version: "1.0.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing atacseq output (bwa/, fastqc/, trim_galore/, multiqc/, pipeline_info/) plus the reprocessed multiqc/multiqc_data/multiqc.parquet."

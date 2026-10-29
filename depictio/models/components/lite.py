@@ -22,6 +22,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from depictio.models.components.color_scale import ColorScale
 from depictio.models.components.constants import (
     AGGREGATION_COMPATIBILITY,
     COLUMN_TYPES,
@@ -217,8 +218,8 @@ class FigureLiteComponent(BaseLiteComponent):
     )
     icon_color: str | None = Field(
         default=None,
-        description="Colour of the header badge: a Mantine palette name or a CSS colour. "
-        "Unset uses the brand's primary colour.",
+        description="Colour of the header badge: a Mantine palette name, optionally with a "
+        "shade 0-9 (`orange`, `orange.4`), or a CSS colour. Unset uses the brand's primary colour.",
     )
     hide_legend: bool | None = Field(
         default=None,
@@ -685,6 +686,8 @@ class CardLiteComponent(BaseLiteComponent):
 
 # Controls whose initial state is a ``[low, high]`` pair.
 _RANGE_DEFAULT_TYPES: tuple[str, ...] = ("RangeSlider", "DateRangePicker", "DatePicker")
+#: Controls that list the distinct values of a column, so ``order_by`` can order them.
+_ORDERABLE_TYPES: tuple[str, ...] = ("Select", "MultiSelect", "SegmentedControl")
 
 
 class OptionCard(BaseModel):
@@ -868,6 +871,16 @@ class InteractiveLiteComponent(BaseLiteComponent):
         description="With ``default_by``: ``desc`` starts on the largest value, ``asc`` on "
         "the smallest.",
     )
+    order_by: str | None = Field(
+        default=None,
+        description="Select / MultiSelect / SegmentedControl: a column of the same data "
+        "collection that orders the options, e.g. a ``time_order`` next to a "
+        "``time_point``. Each option follows the smallest value of this column it "
+        "carries (numerically when every one is a number, else naturally). Unset, "
+        "options sort naturally, and options that all end in a duration (``30min``, "
+        "``2h``, ``GM_1d``) sort by that duration, so ``30min`` comes before ``1h`` "
+        "and ``18h`` after ``2h``.",
+    )
     banner_facts: list[BannerFact] | None = Field(
         default=None,
         description="always_selected Select only: facts shown in the scope banner of a tab "
@@ -963,6 +976,10 @@ class InteractiveLiteComponent(BaseLiteComponent):
             raise ValueError(
                 "option_cards is only valid for a SegmentedControl, or for an always_selected "
                 f"Select (its scope banner reads the labels), not {kind}."
+            )
+        if self.order_by is not None and kind not in _ORDERABLE_TYPES:
+            raise ValueError(
+                f"order_by orders the options of {', '.join(_ORDERABLE_TYPES)}, not a {kind}."
             )
         if self.default_by is not None and not self.always_selected:
             raise ValueError(
@@ -1446,7 +1463,9 @@ class JBrowseLocusSource(BaseModel):
     on the first call: the first row (of the filtered rows, if any) ordered by
     ``sort_by``, else in the collection's own order. The same order drives the
     region picker (sortable, searchable), the next / previous step runs over the
-    regions by position, and the density strip counts them per genome bin.
+    regions by position, and the density strip counts them per genome bin. With
+    ``span_top`` the view opens on the span of the first N calls when they sit within
+    ``max_span`` bases of each other, so the best few variants of one locus show together.
 
     A tile lists several sources when its regions come from several collections
     (peaks, DE genes, variants), possibly of several workflows (``workflow_tag``);
@@ -1473,6 +1492,20 @@ class JBrowseLocusSource(BaseModel):
     )
     descending: bool = Field(
         default=True, description="Order calls from the highest sort_by value down"
+    )
+    span_top: int | None = Field(
+        default=None,
+        ge=2,
+        le=50,
+        description="Open the view on the span of the first N calls (in sort_by order) "
+        "instead of the first one, when they all lie on one chromosome within max_span "
+        "bases of each other; otherwise it opens on the first call alone",
+    )
+    max_span: int = Field(
+        default=1_000_000,
+        ge=1,
+        description="With span_top: the widest span (bases, first start to last end) the "
+        "opening view may cover",
     )
     label_column: str | None = Field(
         default=None, description="Column shown as the name of a call in the stepper"
@@ -1532,6 +1565,29 @@ class JBrowseVariantColor(BaseModel):
         default="ANN",
         pattern=r"^[A-Za-z_][A-Za-z0-9_]*$",
         description="VCF INFO field read from each variant (snpEff: 'ANN')",
+    )
+
+
+class JBrowseVariantLabel(BaseModel):
+    """Name variant (VCF) features by one ``|``-separated part of an INFO field.
+
+    A VCF's own ID is often a key such as ``21_10950631_T_A``; the gene reads
+    better. VEP's ``CSQ`` puts the gene symbol at part 3. A variant with an
+    empty part (an intergenic call) keeps its ID.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    info_field: str = Field(
+        default="CSQ",
+        pattern=r"^[A-Za-z_][A-Za-z0-9_]*$",
+        description="VCF INFO field read from each variant (VEP: 'CSQ', snpEff: 'ANN')",
+    )
+    part: int = Field(
+        default=3,
+        ge=0,
+        le=200,
+        description="Index of the '|'-separated part shown (VEP CSQ SYMBOL: 3, snpEff ANN gene: 3)",
     )
 
 
@@ -1752,11 +1808,23 @@ class JBrowseLiteComponent(BaseLiteComponent):
         description="Colour variant tracks by a category of the dashboard's "
         "category_colors (e.g. the snpEff effect); unset = the track colour",
     )
+    variant_label_by: JBrowseVariantLabel | None = Field(
+        default=None,
+        description="Name variant features by a part of an INFO field (e.g. the "
+        "gene of VEP's CSQ) instead of the VCF ID; unset = the ID",
+    )
 
     color_by: str | None = Field(
         default=None,
         description="Column of the tracks manifest whose value colours (from the "
         "dashboard's category_colors) and groups the tracks, e.g. the condition",
+    )
+    color_scale: ColorScale | None = Field(
+        default=None,
+        description="Colour the tracks along a sequential ramp instead of one hue per "
+        "value: ``{column, order_by, scheme}`` over a column of the tracks manifest "
+        "(e.g. the timepoint, ordered by its day). Replaces ``color_by``; the "
+        "genome view tiles of the dashboard wear the same colours",
     )
     show_junctions: bool = Field(
         default=False,
@@ -1776,6 +1844,13 @@ class JBrowseLiteComponent(BaseLiteComponent):
     follow_window: bool = Field(
         default=True,
         description="Follow the genomic window published by the other genome tiles",
+    )
+    auto_height: bool = Field(
+        default=False,
+        description="Let the tile's height follow the open tracks (their heights plus the "
+        "header) instead of the stored grid height: it grows and shrinks between 3 and 16 "
+        "grid rows, and a tile on the same grid row takes the tallest answer given on that "
+        "row. A tile the reader has resized by hand keeps their height",
     )
     views: list[Literal["breakpoint", "circular"]] = Field(
         default_factory=list,

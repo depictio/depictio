@@ -2664,6 +2664,9 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
                     template_id=(
                         template_metadata.template_id if template_metadata is not None else None
                     ),
+                    template_version=(
+                        template_metadata.version if template_metadata is not None else None
+                    ),
                     base_dir=Path(project_config_path).parent if project_config_path else None,
                 )
 

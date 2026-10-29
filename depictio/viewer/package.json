@@ -6,6 +6,7 @@
   "description": "Depictio React viewer SPA — read-only dashboard rendering using shared depictio-components.",
   "scripts": {
     "icons": "node scripts/generate-icon-subset.mjs",
+    "check:icons": "node scripts/check-icons.mjs",
     "dev": "pnpm run icons && vite",
     "build": "pnpm run icons && tsc && vite build",
     "build:catalog-preview": "pnpm run icons && vite build --config vite.catalog-preview.config.ts",

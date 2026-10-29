@@ -1,0 +1,673 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f70"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f70"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "rank-text",
+      "component_type": "text",
+      "title": "Ranked tables",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "Top variants",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "One row per candidate, ordered by a score. The rank sits in a medal (gold, silver and bronze for the first three), the gene is bold, the protein change monospace, the model and impact are badges and the score is a bar. Hover a row for the fields behind it. Click a row to pin its popover and pick the variant: the table below narrows to it, and the Family section draws the case with the proband marked and each member filled by genotype (solid homozygous alternate, half heterozygous, open reference, grey no call). Input: the ranked variants of nf-core/raredisease.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null,
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "rank-variants",
+      "component_type": "advanced_viz",
+      "title": "Top candidates",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ranked_variants_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f71"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Thirteen candidate variants of two cases, ranked by a rank score, with the genotypes of the proband and both parents",
+        "data_collection_tag": "ranked_variants_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f71"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Sorted by rank score; ties share a rank. Click a row to pin its popover.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Top variants",
+      "viz_kind": "ranked_table",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "ranked_table",
+        "title_col": "gene",
+        "score_col": "rank_score",
+        "subtitle_col": "hgvs_p",
+        "rank_col": null,
+        "descending": true,
+        "columns": [
+          {
+            "column": "model_class",
+            "label": "Model",
+            "display": "badge",
+            "decimals": null,
+            "min": null,
+            "max": null
+          },
+          {
+            "column": "impact",
+            "label": "Impact",
+            "display": "badge",
+            "decimals": null,
+            "min": null,
+            "max": null
+          },
+          {
+            "column": "clinvar",
+            "label": "ClinVar",
+            "display": "badge",
+            "decimals": null,
+            "min": null,
+            "max": null
+          },
+          {
+            "column": "rank_score",
+            "label": "Rank score",
+            "display": "bar",
+            "decimals": null,
+            "min": null,
+            "max": 25.0
+          }
+        ],
+        "labels": {
+          "cadd": "CADD",
+          "gnomad_af": "gnomAD AF",
+          "chrom": "Chromosome",
+          "pos": "Position",
+          "gt_proband": "Proband",
+          "gt_mother": "Mother",
+          "gt_father": "Father"
+        },
+        "popover_columns": [
+          "cadd",
+          "gnomad_af",
+          "chrom",
+          "pos"
+        ],
+        "popover_grid_columns": [
+          "gt_proband",
+          "gt_mother",
+          "gt_father"
+        ],
+        "top_n": 50,
+        "medals": true,
+        "family_dc_id": "646b0f3c1e4a2d7f8e5b8f72",
+        "family_wf_id": "646b0f3c1e4a2d7f8e5b8d01",
+        "family_dc_tag": "ranked_family_demo",
+        "family_individual_col": "individual",
+        "family_father_col": "father",
+        "family_mother_col": "mother",
+        "family_sex_col": "sex",
+        "family_status_col": "status",
+        "family_proband_col": "proband",
+        "family_label_col": null,
+        "family_family_col": "case_id",
+        "family_row_col": "case_id",
+        "genotype_columns": null,
+        "genotypes_dc_id": "646b0f3c1e4a2d7f8e5b8f73",
+        "genotypes_wf_id": "646b0f3c1e4a2d7f8e5b8d01",
+        "genotypes_dc_tag": "ranked_genotypes_demo",
+        "genotypes_key_col": "variant_key",
+        "genotypes_row_col": "variant_key",
+        "genotypes_individual_col": "sample",
+        "genotypes_genotype_col": "gt_class",
+        "family_open": true,
+        "selection_enabled": true,
+        "selection_column": "variant_key"
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "rank-variants-table",
+      "component_type": "table",
+      "title": "Variants",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ranked_variants_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f71"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Thirteen candidate variants of two cases, ranked by a rank score, with the genotypes of the proband and both parents",
+        "data_collection_tag": "ranked_variants_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f71"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Top variants",
+      "columns": [],
+      "page_size": 100,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "rank-outliers",
+      "component_type": "advanced_viz",
+      "title": "Outlier genes",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ranked_outliers_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f74"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Outlier genes of three samples, ranked by significance, with the analyses that flagged each",
+        "data_collection_tag": "ranked_outliers_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f74"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Ranked by minus log10 p; hover for the statistics and the three analyses.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Outlier genes",
+      "viz_kind": "ranked_table",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "ranked_table",
+        "title_col": "gene",
+        "score_col": "neg_log10_p",
+        "subtitle_col": "sample",
+        "rank_col": null,
+        "descending": true,
+        "columns": [
+          {
+            "column": "signal",
+            "label": "Signal",
+            "display": "badge",
+            "decimals": null,
+            "min": null,
+            "max": null
+          },
+          {
+            "column": "status",
+            "label": "Status",
+            "display": "badge",
+            "decimals": null,
+            "min": null,
+            "max": null
+          },
+          {
+            "column": "neg_log10_p",
+            "label": "-log10 p",
+            "display": "bar",
+            "decimals": 1,
+            "min": null,
+            "max": 8.0
+          }
+        ],
+        "labels": {
+          "pvalue": "p-value",
+          "padj": "Adjusted p",
+          "z_score": "z-score",
+          "delta_psi": "Delta PSI",
+          "expression": "Expression",
+          "splicing": "Splicing",
+          "mae": "MAE"
+        },
+        "popover_columns": [
+          "pvalue",
+          "padj",
+          "z_score",
+          "delta_psi"
+        ],
+        "popover_grid_columns": [
+          "expression",
+          "splicing",
+          "mae"
+        ],
+        "top_n": 8,
+        "medals": true,
+        "family_dc_id": null,
+        "family_wf_id": null,
+        "family_dc_tag": null,
+        "family_individual_col": "individual",
+        "family_father_col": "father",
+        "family_mother_col": "mother",
+        "family_sex_col": "sex",
+        "family_status_col": "status",
+        "family_proband_col": null,
+        "family_label_col": null,
+        "family_family_col": null,
+        "family_row_col": null,
+        "genotype_columns": null,
+        "genotypes_dc_id": null,
+        "genotypes_wf_id": null,
+        "genotypes_dc_tag": null,
+        "genotypes_key_col": "variant_key",
+        "genotypes_row_col": null,
+        "genotypes_individual_col": "sample",
+        "genotypes_genotype_col": "gt_class",
+        "family_open": false,
+        "selection_enabled": true,
+        "selection_column": "gene"
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "rank-outliers-table",
+      "component_type": "table",
+      "title": "Outliers",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ranked_outliers_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f74"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Outlier genes of three samples, ranked by significance, with the analyses that flagged each",
+        "data_collection_tag": "ranked_outliers_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f74"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Outlier genes",
+      "columns": [],
+      "page_size": 100,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "rank-f-case",
+      "component_type": "interactive",
+      "title": "Case",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ranked_variants_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f71"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Thirteen candidate variants of two cases, ranked by a rank score, with the genotypes of the proband and both parents",
+        "data_collection_tag": "ranked_variants_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f71"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Case scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "case_id",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Case filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "icon_name": "mdi:family-tree",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "rank-f-sample",
+      "component_type": "interactive",
+      "title": "Sample",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "ranked_outliers_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f74"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Outlier genes of three samples, ranked by significance, with the analyses that flagged each",
+        "data_collection_tag": "ranked_outliers_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f74"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Sample scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Sample filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "icon_name": "mdi:test-tube",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-rank-f-case",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-rank-f-sample",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-rank-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-rank-variants",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-rank-variants-table",
+      "x": 0,
+      "y": 10,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-rank-outliers",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 7,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-rank-outliers-table",
+      "x": 0,
+      "y": 7,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Ranked tables",
+  "subtitle": "Candidates as a leaderboard: medals on the first three, badges and bars in the cells, the fields behind a row in a popover, and the family of a variant drawn with its carriers.",
+  "icon": "mdi:podium",
+  "icon_color": "grape",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 54,
+  "main_tab_name": null,
+  "tab_icon": "mdi:podium",
+  "tab_icon_color": "grape",
+  "tab_group": null,
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Case scope",
+      "icon": "mdi:filter-variant",
+      "color": "grape",
+      "description": "Restricts which cases the variants are ranked from",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Sample scope",
+      "icon": "mdi:filter-variant",
+      "color": "grape",
+      "description": "Restricts which samples the outlier genes are ranked from",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Top variants",
+      "icon": "mdi:family-tree",
+      "color": "grape",
+      "description": "Candidate variants of two cases, ranked by rank score; click one to see its family",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Outlier genes",
+      "icon": "mdi:table",
+      "color": "grape",
+      "description": "Genes of three samples ranked by significance, with the analyses that flagged them",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "category_colors": {
+    "impact": {
+      "HIGH": "#e03131",
+      "MODERATE": "#e8590c",
+      "LOW": "#2f9e44"
+    },
+    "status": {
+      "Called": "#2f9e44",
+      "Candidate": "#e8590c",
+      "Not called": "#868e96"
+    }
+  },
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "open_with_defaults": false,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

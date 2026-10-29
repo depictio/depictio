@@ -21,6 +21,17 @@ that token lives in the backend pod, in the per-admin config under
 admin account (<username>_config.yaml), not admin_config.yaml, so glob for
 *_config.yaml rather than assuming a fixed name.
 
+A 2xx is not proof of a render, so figure probes also read the payload: an error
+figure (a code-mode figure the sandbox rejected comes back as HTTP 200 with the
+message in ``metadata.error`` and in an annotation) is FIGURE_ERROR, and a figure
+that carries traces but no plotted point is EMPTY_RESULT, with the counts.
+
+Async advanced-viz compute jobs (complex heatmap, upset, embedding in live mode,
+sankey, coverage track) only fail inside a Celery worker, so the default run cannot
+see them. Pass --dispatch-compute to enqueue each one through the endpoints the
+viewer uses, poll it to completion and report COMPUTE_FAILED with the worker's
+error (for example a ZeroDivisionError). It needs a running worker.
+
 Exit code is 0 unless the deployment is unreachable or preflight fails. Pass
 --strict to also exit 1 when any component fails.
 """
@@ -197,7 +208,12 @@ class Check:
     body: dict | None = None
     validate: str = ""
     column: str = ""
+    # Base path of the GET endpoint that reports a dispatched job, for compute probes.
+    poll_path: str = ""
     verdict: str = ""
+    # Why the verdict is what it is, when the reply alone does not say (an error
+    # carried inside a 200 payload, the trace counts of an empty figure).
+    note: str = ""
     reply: Reply = field(default_factory=Reply)
 
     @property
@@ -208,6 +224,11 @@ class Check:
     @property
     def label(self) -> str:
         return f"{self.component_type}/{self.subtype}" if self.subtype else self.component_type
+
+    @property
+    def reason(self) -> str:
+        """The most specific explanation available for the verdict."""
+        return self.note or self.reply.detail or self.reply.error
 
     @property
     def dc_label(self) -> str:
@@ -243,8 +264,12 @@ def harvest_columns(config: dict) -> list[str]:
     return [c for c in columns if c and not (c in seen or seen.add(c))][:12]
 
 
-def plan_checks(dash: dict, family_title: str) -> list[Check]:
-    """Build the probe list for one dashboard from its stored_metadata."""
+def plan_checks(dash: dict, family_title: str, dispatch_compute: bool = False) -> list[Check]:
+    """Build the probe list for one dashboard from its stored_metadata.
+
+    With ``dispatch_compute`` the async advanced-viz compute kinds also get a probe
+    that enqueues the job and polls it to completion (see ``compute_probe``).
+    """
     did = dash["dashboard_id"]
     title = dash.get("title") or did
     checks: list[Check] = []
@@ -427,9 +452,12 @@ def plan_checks(dash: dict, family_title: str) -> list[Check]:
                 )
             secondary = _plan_secondary(new, meta, config, columns)
             checks.extend(secondary)
-            if kind in NO_DATA_LEG and not secondary:
+            compute = compute_probe(kind, meta, config) if dispatch_compute else None
+            if compute:
+                checks.append(new(meta, subtype=kind, **compute))
+            elif kind in NO_DATA_LEG and not secondary:
                 # coverage_track only reaches the API through an async compute job,
-                # which this script does not dispatch. Say so rather than let the
+                # which only --dispatch-compute runs. Say so rather than let the
                 # component's absence from the report read as a pass.
                 checks.append(new(meta, subtype=kind, probe="none", verdict="NOT_PROBED"))
 
@@ -437,6 +465,153 @@ def plan_checks(dash: dict, family_title: str) -> list[Check]:
             checks.append(new(meta, probe="none", validate="none", verdict="UNSUPPORTED_TYPE"))
 
     return checks
+
+
+# Advanced-viz kinds computed by a Celery job: kind -> endpoint under /advanced_viz.
+COMPUTE_ENDPOINTS = {
+    "complex_heatmap": "compute_complex_heatmap",
+    "upset_plot": "compute_upset",
+    "embedding": "compute_embedding",
+    "sankey": "compute_sankey",
+    "coverage_track": "compute_coverage_track",
+}
+# Not dispatched, because the viewer only issues them from a user action or a
+# viewport: compute_group_compare needs two selected groups, compute_contact_map a
+# region and a pixel width.
+
+
+def compute_payload(kind: str, meta: dict, config: dict) -> dict | None:
+    """The body the viewer's renderer sends to dispatch this kind, at its defaults.
+
+    Mirrors the ``payload`` built in the matching ``advanced_viz/*Renderer.tsx``
+    (ComplexHeatmapRenderer, UpsetRenderer, EmbeddingRenderer, SankeyRenderer,
+    CoverageTrackRenderer) with every user control left at the saved config.
+    Returns None when the component cannot dispatch in the viewer either.
+    """
+    wf_id, dc_id = meta.get("wf_id"), meta.get("dc_id")
+    if not wf_id or not dc_id:
+        return None
+    base: dict[str, Any] = {"wf_id": wf_id, "dc_id": dc_id}
+
+    if kind == "complex_heatmap":
+        body = {
+            **base,
+            "index_column": config.get("index_column") or "sample_id",
+            "value_columns": config.get("value_columns"),
+            "row_annotation_cols": config.get("row_annotation_cols") or [],
+            "col_annotations": config.get("col_annotations"),
+            "col_annotation_cols": config.get("col_annotation_cols") or [],
+            "annotation_source_dc_tag": config.get("annotation_source_dc_tag"),
+            "col_annotation_colors": config.get("col_annotation_colors"),
+            "cluster_rows": config.get("cluster_rows", True),
+            "cluster_cols": config.get("cluster_cols", True),
+            "cluster_method": config.get("cluster_method") or "ward",
+            "cluster_metric": config.get("cluster_metric") or "euclidean",
+            "normalize": config.get("normalize") or "none",
+            "colorscale": config.get("colorscale"),
+            "filter_metadata": [],
+        }
+        if config.get("value_columns_pattern"):
+            body["value_columns_pattern"] = config["value_columns_pattern"]
+        return body
+
+    if kind == "upset_plot":
+        annotation_cols = config.get("default_annotation_cols") or []
+        body = {
+            **base,
+            "set_columns": config.get("set_columns"),
+            "set_colors": config.get("set_colors"),
+            "annotation_cols": annotation_cols or None,
+            "sort_by": config.get("sort_by") or "cardinality",
+            "sort_order": config.get("sort_order") or "descending",
+            "min_size": config.get("min_size", 1),
+            "max_degree": config.get("max_degree"),
+            "show_set_sizes": config.get("show_set_sizes", True),
+            "show_values": config.get("show_values", False),
+            "color_intersections_by": config.get("color_intersections_by") or "none",
+            "filter_metadata": [],
+        }
+        if config.get("set_columns_pattern"):
+            body["set_columns_pattern"] = config["set_columns_pattern"]
+        return body
+
+    if kind == "embedding":
+        method = config.get("compute_method")
+        if not method:
+            return None  # precomputed coordinates: the data leg is the whole render
+        params: dict[str, Any] = {"n_components": 3 if config.get("view_3d") else 2}
+        if method == "umap":
+            params["n_neighbors"] = config.get("umap_n_neighbors", 15)
+            params["min_dist"] = config.get("umap_min_dist", 0.1)
+        elif method == "tsne":
+            params["perplexity"] = config.get("tsne_perplexity", 30)
+            params["n_iter"] = config.get("tsne_n_iter", 1000)
+        elif method == "pcoa":
+            params["distance"] = config.get("pcoa_distance") or "bray_curtis"
+        extra = [c for c in (config.get("cluster_col"), config.get("color_col")) if c]
+        extra += [c for c in (config.get("hover_cols") or []) if c and c not in extra]
+        return {
+            **base,
+            "feature_id_col": config.get("sample_id_col") or "sample_id",
+            "method": method,
+            "params": params,
+            "filter_metadata": [],
+            "extra_cols": list(dict.fromkeys(extra)),
+        }
+
+    if kind == "sankey":
+        steps = [c for c in (config.get("step_cols") or []) if isinstance(c, str)]
+        depth = config.get("depth")
+        if isinstance(depth, int) and depth >= 2:
+            steps = steps[:depth]
+        if len(steps) < 2:
+            return None
+        return {
+            **base,
+            "step_cols": steps,
+            "value_col": config.get("value_col"),
+            "sort_mode": config.get("sort_mode") or "total_flow",
+            "min_link_value": config.get("min_link_value", 0),
+            "step_filters": {},
+            "option_cols": [c for c in (config.get("available_step_cols") or steps) if c],
+            "filter_metadata": [],
+        }
+
+    if kind == "coverage_track":
+        needed = ("chromosome_col", "position_col", "value_col")
+        if not all(config.get(k) for k in needed):
+            return None
+        return {
+            **base,
+            "chromosome_col": config["chromosome_col"],
+            "position_col": config["position_col"],
+            "value_col": config["value_col"],
+            "end_col": config.get("end_col"),
+            "sample_col": config.get("sample_col"),
+            "category_col": config.get("category_col"),
+            "chromosomes_filter": config.get("chromosomes_filter") or None,
+            "samples_filter": config.get("samples_filter") or None,
+            "smoothing_window": config.get("smoothing_window") or 1,
+            "max_bins_per_track": 4000,
+            "filter_metadata": [],
+        }
+    return None
+
+
+def compute_probe(kind: str, meta: dict, config: dict) -> dict | None:
+    """Request fields that dispatch one compute job, or None for a kind that has none."""
+    endpoint = COMPUTE_ENDPOINTS.get(kind)
+    body = compute_payload(kind, meta, config) if endpoint else None
+    if not endpoint or body is None:
+        return None
+    return {
+        "probe": f"advanced_viz/{endpoint}",
+        "method": "POST",
+        "path": f"/advanced_viz/{endpoint}",
+        "body": body,
+        "validate": "compute",
+        "poll_path": f"/advanced_viz/{endpoint}",
+    }
 
 
 def _data_probe(wf_id: Any, dc_id: Any, columns: list[str], label: str = "") -> dict:
@@ -539,7 +714,140 @@ def fetch_project_context(client: Client, dashboard_id: str) -> ProjectContext:
 # Verdicts that mean the component is fine.
 PASSING = {"OK"}
 # Verdicts that are worth surfacing but are not hard failures.
-WARNING = {"EMPTY_RESULT", "PREPARING", "UNSUPPORTED_TYPE", "UNKNOWN_SUBTYPE", "NOT_PROBED"}
+WARNING = {
+    "EMPTY_RESULT",
+    "PREPARING",
+    "UNSUPPORTED_TYPE",
+    "UNKNOWN_SUBTYPE",
+    "NOT_PROBED",
+    "COMPUTE_TIMEOUT",
+}
+# A figure payload whose annotation reads like one of these is an error figure,
+# not a chart: create_error_figure() prefixes its message with a warning sign, and
+# the map renderer writes "Map error: ...".
+ERROR_ANNOTATION_MARKERS = (
+    "\u26a0",
+    "code execution error",
+    "code validation failed",
+    "execution error",
+    "syntax error",
+    "map error",
+)
+# Trace keys that hold plotted values, whatever the trace type.
+POINT_KEYS = (
+    "x", "y", "z", "values", "lat", "lon", "locations", "r", "theta", "labels",
+    "a", "b", "c", "open", "high", "low", "close", "u", "v", "w",
+)  # fmt: skip
+
+
+def _size(value: Any) -> int:
+    """Number of non-null leaf values in a (possibly nested) trace array."""
+    if value is None:
+        return 0
+    if isinstance(value, (list, tuple)):
+        return sum(_size(v) for v in value)
+    if isinstance(value, dict):
+        # Plotly 6 ships typed arrays as {"dtype": ..., "bdata": "<base64>"}.
+        return 1 if value.get("bdata") else 0
+    return 1
+
+
+def trace_points(trace: dict) -> int:
+    """How many values one trace plots; a trace of an unknown shape counts as 1."""
+    kind = trace.get("type")
+    if kind == "sankey":
+        return _size((trace.get("link") or {}).get("value"))
+    if kind == "table":
+        return _size((trace.get("cells") or {}).get("values"))
+    if kind in ("parcats", "parcoords", "splom"):
+        dims = trace.get("dimensions") or []
+        return sum(_size(d.get("values")) for d in dims if isinstance(d, dict))
+    if kind == "indicator":
+        return 1
+    present = [k for k in POINT_KEYS if k in trace]
+    if not present:
+        return 1
+    return max(_size(trace[k]) for k in present)
+
+
+def figure_stats(figure: Any) -> tuple[int, int]:
+    """(traces, plotted values) of a Plotly figure dict."""
+    traces = [t for t in ((figure or {}).get("data") or []) if isinstance(t, dict)]
+    return len(traces), sum(trace_points(t) for t in traces)
+
+
+def figure_annotations(figure: Any) -> list[str]:
+    layout = (figure or {}).get("layout") or {}
+    annotations = layout.get("annotations") or []
+    return [str(a.get("text") or "") for a in annotations if isinstance(a, dict)]
+
+
+def figure_error(payload: dict) -> str:
+    """The error a figure render carries inside an HTTP 200, or an empty string.
+
+    render_figure answers a failed code-mode figure with status 200: the figure is a
+    blank chart with the message as an annotation, and the same text in
+    ``metadata.error``. The UI-mode and map paths write only the annotation.
+    """
+    error = (payload.get("metadata") or {}).get("error")
+    if error:
+        return str(error)
+    for text in figure_annotations(payload.get("figure")):
+        if any(marker in text.lower() for marker in ERROR_ANNOTATION_MARKERS):
+            return text.strip()
+    return ""
+
+
+def validate_figure(check: Check, payload: dict) -> str:
+    error = figure_error(payload)
+    if error:
+        check.note = error[:300]
+        return "FIGURE_ERROR"
+    figure = payload.get("figure") or {}
+    traces, points = figure_stats(figure)
+    if traces and points:
+        return "OK"
+    notes = [t.strip() for t in figure_annotations(figure) if t.strip()]
+    counts = "no traces" if not traces else f"{traces} trace(s), 0 plotted points"
+    check.note = f"{counts}" + (f" ({'; '.join(notes)[:120]})" if notes else "")
+    return "EMPTY_RESULT"
+
+
+def validate_compute(check: Check, payload: dict) -> str:
+    """Judge a polled compute job: did the worker finish, and did it produce anything."""
+    status = payload.get("status")
+    if status == "failed":
+        check.note = str(payload.get("error") or "compute task failed")[:300]
+        return "COMPUTE_FAILED"
+    if status != "done":
+        check.note = f"job still {status or 'unknown'} when polling stopped"
+        return "COMPUTE_TIMEOUT"
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        check.note = "job finished with no result"
+        return "EMPTY_RESULT"
+    figure = result.get("figure")
+    if figure is not None:
+        error = figure_error({"figure": figure})
+        if error:
+            check.note = error[:300]
+            return "FIGURE_ERROR"
+        traces, points = figure_stats(figure)
+        if not (traces and points):
+            check.note = "no traces" if not traces else f"{traces} trace(s), 0 plotted points"
+            return "EMPTY_RESULT"
+    emptiness = {
+        "embedding": len(result.get("sample_ids") or []),
+        "sankey": result.get("link_count"),
+        "coverage_track": result.get("row_count"),
+        "complex_heatmap": result.get("row_count"),
+        "upset_plot": result.get("row_count"),
+    }
+    count = emptiness.get(check.subtype)
+    if count is not None and not count:
+        check.note = f"{check.subtype} computed over 0 rows"
+        return "EMPTY_RESULT"
+    return "OK"
 
 
 def validate_payload(check: Check, payload: Any) -> str:
@@ -554,7 +862,9 @@ def validate_payload(check: Check, payload: Any) -> str:
         values = payload.get("values") or {}
         return "OK" if values.get(check.index) is not None else "CARD_NO_VALUE"
     if kind == "figure":
-        return "OK" if ((payload.get("figure") or {}).get("data") or []) else "EMPTY_RESULT"
+        return validate_figure(check, payload)
+    if kind == "compute":
+        return validate_compute(check, payload)
     if kind == "table":
         return "OK" if payload.get("rows") else "EMPTY_RESULT"
     if kind == "advviz":
@@ -741,7 +1051,36 @@ def group_families(dashboards: list[dict]) -> list[tuple[dict, list[dict]]]:
     return families
 
 
-def run_checks(client: Client, checks: list[Check], concurrency: int, multiqc_retries: int) -> None:
+def poll_job(
+    client: Client, poll_path: str, reply: Reply, timeout: float, interval: float = 2.0
+) -> Reply:
+    """Follow a dispatched compute job until it is done, failed or the budget runs out.
+
+    The dispatch reply names the job (``job_id``) and may already be terminal, when an
+    identical computation is cached. Any other answer is returned unchanged so the
+    classifier reports the HTTP error itself.
+    """
+    job = reply.payload
+    if not reply.ok or not isinstance(job, dict) or not job.get("job_id"):
+        return reply
+    job_id = job["job_id"]
+    deadline = time.monotonic() + timeout
+    while job.get("status") not in ("done", "failed") and time.monotonic() < deadline:
+        time.sleep(interval)
+        polled = client.call("GET", f"{poll_path}/{job_id}")
+        if not polled.ok or not isinstance(polled.payload, dict):
+            return polled
+        reply, job = polled, polled.payload
+    return reply
+
+
+def run_checks(
+    client: Client,
+    checks: list[Check],
+    concurrency: int,
+    multiqc_retries: int,
+    compute_timeout: float = 120.0,
+) -> None:
     """Issue every distinct request once, then hand the reply to each check sharing it."""
     pending = [c for c in checks if c.method]
     grouped: dict[tuple, list[Check]] = defaultdict(list)
@@ -759,6 +1098,8 @@ def run_checks(client: Client, checks: list[Check], concurrency: int, multiqc_re
             time.sleep(5)
             reply = client.call(method, path, body)
             attempts -= 1
+        if group[0].poll_path:
+            reply = poll_job(client, group[0].poll_path, reply, compute_timeout)
         return key, reply
 
     if not grouped:
@@ -789,7 +1130,7 @@ def component_rows(checks: list[Check]) -> list[dict]:
             "method": c.method,
             "path": c.path,
             "status": c.reply.status,
-            "detail": c.reply.detail or c.reply.error,
+            "detail": c.reason,
             "verdict": c.verdict,
         }
         for c in checks
@@ -863,7 +1204,7 @@ def print_report(
                 vcol = STYLE[_severity(check.verdict)]
                 http = check.reply.status
                 request = check.probe + (f" -> {http}" if http is not None else "")
-                reason = (check.reply.detail or check.reply.error)[:150]
+                reason = check.reason[:150]
                 table.add_row(
                     check.index,
                     check.label,
@@ -879,7 +1220,9 @@ def print_report(
         console.print(table)
 
 
-def print_summary(checks: list[Check], contexts: dict[str, ProjectContext]) -> int:
+def print_summary(
+    checks: list[Check], contexts: dict[str, ProjectContext], dispatched: bool = False
+) -> int:
     failed = [c for c in checks if c.verdict not in PASSING]
     buckets = Counter(c.verdict for c in failed)
     dashboards = {c.dashboard_id for c in checks}
@@ -929,11 +1272,19 @@ def print_summary(checks: list[Check], contexts: dict[str, ProjectContext]) -> i
     console.print(Panel(headline, title="Result", title_align="left", border_style="dim"))
     if buckets:
         console.print(table)
-    console.print(
-        "[dim]Async advanced-viz compute jobs (embedding, upset, complex heatmap, coverage "
-        "track, sankey) are not dispatched. For most kinds the /advanced_viz/data leg is still "
-        "checked; coverage_track has no such leg and is reported NOT_PROBED.[/dim]"
-    )
+    if dispatched:
+        console.print(
+            "[dim]Async advanced-viz compute jobs (embedding in live mode, upset, complex "
+            "heatmap, coverage track, sankey) were dispatched and polled. Group comparison and "
+            "windowed contact maps need a user action and are not.[/dim]"
+        )
+    else:
+        console.print(
+            "[dim]Async advanced-viz compute jobs (embedding, upset, complex heatmap, coverage "
+            "track, sankey) are not dispatched; re-run with --dispatch-compute to run them. For "
+            "most kinds the /advanced_viz/data leg is still checked; coverage_track has no such "
+            "leg and is reported NOT_PROBED.[/dim]"
+        )
     return len(broken)
 
 
@@ -982,11 +1333,27 @@ def main() -> int:
     ap.add_argument("--host", required=True, help="Viewer or API host, with or without scheme")
     ap.add_argument("--scheme", default="https", choices=["https", "http"])
     ap.add_argument("--token-file", help="File holding an admin bearer token (one line)")
-    ap.add_argument("--only", nargs="*", help="Restrict to these dashboard ids")
+    ap.add_argument(
+        "--only",
+        nargs="*",
+        help="Restrict to these dashboard ids (a main tab id includes its child tabs)",
+    )
     ap.add_argument("--concurrency", type=int, default=4, help="Parallel in-flight requests")
     ap.add_argument("--timeout", type=float, default=60.0, help="Per-request timeout in seconds")
     ap.add_argument(
         "--multiqc-retries", type=int, default=3, help="Re-polls for a 202 MultiQC render"
+    )
+    ap.add_argument(
+        "--dispatch-compute",
+        action="store_true",
+        help="Also enqueue the async advanced-viz compute jobs (complex heatmap, upset, "
+        "embedding, sankey, coverage track) and report the errors their worker raises",
+    )
+    ap.add_argument(
+        "--compute-timeout",
+        type=float,
+        default=120.0,
+        help="Seconds to wait for each compute job before reporting COMPUTE_TIMEOUT",
     )
     ap.add_argument("--insecure", action="store_true", help="Skip TLS verification")
     ap.add_argument("--json", dest="json_out", help="Write the per-component report as JSON")
@@ -1008,8 +1375,14 @@ def main() -> int:
     info = preflight(client)
     dashboards = enumerate_dashboards(client)
     if args.only:
+        # A main tab id selects its whole family: the child tabs hold most of the
+        # components, and have ids of their own that nobody copies from a URL.
         wanted = set(args.only)
-        dashboards = [d for d in dashboards if str(d.get("dashboard_id")) in wanted]
+        dashboards = [
+            d
+            for d in dashboards
+            if str(d.get("dashboard_id")) in wanted or str(d.get("parent_dashboard_id")) in wanted
+        ]
     families = group_families(dashboards)
 
     if args.dry_run:
@@ -1058,7 +1431,7 @@ def main() -> int:
                 by_dashboard[did] = [check]
                 continue
 
-            checks = plan_checks(reply.payload, family_title)
+            checks = plan_checks(reply.payload, family_title, args.dispatch_compute)
             by_dashboard[did] = checks
             all_checks.extend(checks)
 
@@ -1070,7 +1443,7 @@ def main() -> int:
     with console.status(
         f"Probing {len(all_checks)} components (concurrency {args.concurrency})..."
     ):
-        run_checks(client, all_checks, args.concurrency, args.multiqc_retries)
+        run_checks(client, all_checks, args.concurrency, args.multiqc_retries, args.compute_timeout)
 
     for check in all_checks:
         ctx = ctx_by_dashboard.get(check.dashboard_id)
@@ -1088,7 +1461,7 @@ def main() -> int:
             check.dc_tag = tag_by_dc.get(check.dc_id, "")
 
     print_report(families, by_dashboard)
-    failures = print_summary(all_checks, contexts)
+    failures = print_summary(all_checks, contexts, args.dispatch_compute)
 
     rows = component_rows(all_checks)
     if args.json_out:

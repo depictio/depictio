@@ -13,6 +13,7 @@ import type {
   JBrowseNearQuery,
 } from '../../api';
 import type { NamedLocusSource } from './locusSources';
+import { paletteVar } from '../../paletteColor';
 
 /** A stretch of one contig as JBrowse reports the visible span (0-based, end-exclusive). */
 export interface VisibleRegion {
@@ -133,8 +134,7 @@ export function sourcesBody(
 
 /** The Mantine CSS variable of a source's palette colour, null without one. */
 export function sourceColorVar(color: string | null | undefined): string | null {
-  const c = color?.trim();
-  return c ? `var(--mantine-color-${c}-6)` : null;
+  return paletteVar(color) ?? null;
 }
 
 /** Extra columns a source shows in the picker (`locus_from.columns`). */

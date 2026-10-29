@@ -4,14 +4,21 @@ import {
   BRUSH_PARAM,
   DATASET_NAME,
   DATA_ASSEMBLY,
+  FACET_LANE_HEIGHT,
+  FACET_LANE_MAX_HEIGHT,
   GENES_DATASET_NAME,
   GENOME_SCALE_NAME,
+  HOVER_COLOR_PARAM,
   PICK_PARAM,
   buildGenomeSpySpec,
   contigsFromRows,
   effectiveMark,
   facetValues,
   facetingEnabled,
+  markColourOf,
+  resolveColorScale,
+  DEFAULT_WINDOW_OPACITY,
+  STICKY_AXIS_NAME,
   latchSeedRows,
   regionFromInterval,
   requiredColumns,
@@ -19,6 +26,7 @@ import {
   sortChromosomes,
 } from './genomeSpySpec';
 import type { GenomeViewConfig } from './genomeSpySpec';
+import { sequentialColor } from '../../../categoryColors';
 
 const colors = {
   textColor: 'text',
@@ -38,6 +46,12 @@ const base: GenomeViewConfig = { chr_col: 'chr', pos_col: 'pos', score_col: 'sco
 
 /** The one data lane of a non-faceted spec. */
 const lane = (spec: any) => spec.vconcat[0];
+/** The data lanes and the gene lane, in order, whether or not the lanes sit in
+ *  GenomeSpy's scrolling viewport (stacked lanes always do). */
+const stack = (spec: any): any[] =>
+  spec.vconcat[0]?.name === 'lanes'
+    ? [...spec.vconcat[0].vconcat, ...spec.vconcat.filter((v: any) => v.name === 'annotation')]
+    : spec.vconcat;
 const marks = (spec: any) => lane(spec).layer[0];
 
 describe('sortChromosomes', () => {
@@ -100,6 +114,46 @@ describe('latchSeedRows', () => {
     expect(latchSeedRows(seed, later, 'chr', 'pos')).toBe(rows);
     expect(latchSeedRows(seed, empty, 'chr', 'pos')).toBe(rows);
     expect(latchSeedRows(seed, null, 'chr', 'pos')).toBe(rows);
+  });
+});
+
+describe('latchSeedRows on a faceted tile', () => {
+  const faceted: GenomeViewConfig = { ...base, sample_col: 's', facet_by_sample: true, max_facets: 3 };
+  const rowsOf = (samples: string[]) => ({
+    chr: samples.map(() => 'chr1'),
+    pos: samples.map((_, i) => i + 1),
+    score: samples.map(() => 1),
+    s: samples,
+  });
+
+  it('keeps the seed while the libraries drawn stay the same', () => {
+    const seed = rowsOf(['A', 'B']);
+    expect(latchSeedRows(seed, rowsOf(['B', 'A', 'B']), 'chr', 'pos', faceted)).toBe(seed);
+    expect(latchSeedRows(seed, seed, 'chr', 'pos', faceted)).toBe(seed);
+  });
+
+  it('seeds again when a filter narrows or widens the lanes', () => {
+    const seed = rowsOf(['A', 'B', 'C']);
+    const narrowed = rowsOf(['B']);
+    expect(latchSeedRows(seed, narrowed, 'chr', 'pos', faceted)).toBe(narrowed);
+    const widened = rowsOf(['A', 'B']);
+    expect(latchSeedRows(narrowed, widened, 'chr', 'pos', faceted)).toBe(widened);
+    // The lanes of the new seed are the ones the spec draws.
+    const built = buildGenomeSpySpec({ rows: narrowed, config: faceted, colors });
+    expect(built.facets).toEqual(['B']);
+  });
+
+  it('ignores lanes past max_facets and fetches with nothing to draw', () => {
+    const seed = rowsOf(['A', 'B', 'C']);
+    expect(latchSeedRows(seed, rowsOf(['A', 'B', 'C', 'D']), 'chr', 'pos', faceted)).toBe(seed);
+    expect(latchSeedRows(seed, rowsOf([]), 'chr', 'pos', faceted)).toBe(seed);
+    expect(latchSeedRows(seed, null, 'chr', 'pos', faceted)).toBe(seed);
+  });
+
+  it('never re-seeds a tile that is not faceted', () => {
+    const seed = rowsOf(['A']);
+    expect(latchSeedRows(seed, rowsOf(['B']), 'chr', 'pos', { ...faceted, facet_by_sample: false })).toBe(seed);
+    expect(latchSeedRows(seed, rowsOf(['B']), 'chr', 'pos', null)).toBe(seed);
   });
 });
 
@@ -235,7 +289,7 @@ describe('buildGenomeSpySpec', () => {
       config: { ...base, sample_col: 's', facet_by_sample: true },
       colors: { ...colors, laneColors, neutral: 'grey' },
     }).spec as any;
-    const laneColours = faceted.vconcat
+    const laneColours = stack(faceted)
       .filter((l: any) => l.name?.startsWith('track'))
       .map((l: any) => l.layer[0].encoding.color);
     expect(laneColours).toEqual([{ value: '#aa0000' }, { value: 'grey' }]);
@@ -278,6 +332,31 @@ describe('buildGenomeSpySpec', () => {
     const { spec } = buildGenomeSpySpec({ rows, config: { ...base, drag_mode: 'pan' }, colors });
     expect((spec as any).params[0].select.on).toEqual({ type: 'mousedown', filter: 'event.shiftKey' });
     expect((spec as any).vconcat?.[0]?.cursor ?? (spec as any).cursor).toBe('grab');
+  });
+
+  it('takes the brush trigger and the cursor from the interaction mode', () => {
+    const built = (config: Partial<GenomeViewConfig>) =>
+      buildGenomeSpySpec({ rows, config: { ...base, ...config }, colors }).spec as any;
+    const select = built({ interaction_mode: 'select' });
+    expect(select.params[0].select.on).toBe('mousedown');
+    expect(select.vconcat[0].cursor).toBe('crosshair');
+    const pan = built({ interaction_mode: 'pan' });
+    expect(pan.params[0].select.on).toEqual({ type: 'mousedown', filter: 'event.shiftKey' });
+    expect(pan.vconcat[0].cursor).toBe('grab');
+    // The pointer brushes on nothing and leaves the arrow.
+    const pointer = built({ interaction_mode: 'pointer' });
+    expect(pointer.params[0].select.on).toEqual({ type: 'mousedown', filter: 'false' });
+    expect(pointer.vconcat[0].cursor).toBeUndefined();
+  });
+
+  it('lets the mode win over the older drag_mode, which still decides without one', () => {
+    const built = (config: Partial<GenomeViewConfig>) =>
+      buildGenomeSpySpec({ rows, config: { ...base, ...config }, colors }).spec as any;
+    expect(built({ drag_mode: 'pan', interaction_mode: 'select' }).params[0].select.on).toBe('mousedown');
+    expect(built({ drag_mode: 'pan', interaction_mode: null }).params[0].select.on).toEqual({
+      type: 'mousedown',
+      filter: 'event.shiftKey',
+    });
   });
 
   it('omits the brush param when the region filter is off', () => {
@@ -336,7 +415,9 @@ describe('buildGenomeSpySpec', () => {
     const track = marks(spec);
     expect(track.mark.type).toBe('rect');
     expect(track.encoding.x2).toEqual({ chrom: 'chrom', pos: 'end' });
-    expect(track.encoding.y2).toBeUndefined();
+    // A level segment at the score, not a bar from the baseline.
+    expect(track.encoding.y2).toEqual({ field: 'cov' });
+    expect(track.mark.minHeight).toBe(2);
   });
 
   it('anchors a bar at the baseline, because GenomeSpy has no area mark', () => {
@@ -402,39 +483,43 @@ describe('buildGenomeSpySpec', () => {
       const s = spec as any;
       expect(facets).toEqual(['S1', 'S2']);
       expect(droppedFacets).toBe(0);
-      expect(s.vconcat).toHaveLength(2);
-      expect(s.vconcat[0].transform).toEqual([{ type: 'filter', expr: 'datum["s"] === "S1"' }]);
-      expect(s.vconcat[1].transform).toEqual([{ type: 'filter', expr: 'datum["s"] === "S2"' }]);
+      const lanes = stack(s);
+      expect(lanes).toHaveLength(2);
+      expect(lanes[0].transform).toEqual([{ type: 'filter', expr: 'datum["s"] === "S1"' }]);
+      expect(lanes[1].transform).toEqual([{ type: 'filter', expr: 'datum["s"] === "S2"' }]);
       // Lane names sit above each lane, horizontal; the score is named once.
-      expect(s.vconcat[0].title).toMatchObject({ text: 'S1 | score', orient: 'top' });
-      expect(s.vconcat[1].title.text).toBe('S2');
-      expect(s.vconcat[1].layer[0].encoding.y.title).toBeNull();
-      // Lanes share the tile's height above a floor, so fullscreen draws them taller.
-      expect(s.vconcat[0].height).toEqual({ grow: 1, minPx: 26 });
-      // A set lane height fixes the lanes; the tile scrolls past them.
+      expect(lanes[0].title).toMatchObject({ text: 'S1 | score', orient: 'top' });
+      expect(lanes[1].title.text).toBe('S2');
+      expect(lanes[1].layer[0].encoding.y.title).toBeNull();
+      // Lanes share the tile's height between a floor and a cap, so fullscreen
+      // draws them taller and a few lanes in a tall tile do not turn into slabs.
+      expect(lanes[0].height).toEqual({ grow: 1, minPx: 26, maxPx: FACET_LANE_MAX_HEIGHT });
+      // A set lane height fixes the lanes; they scroll in the same viewport.
       const tall = buildGenomeSpySpec({ rows: r, config: { ...faceted, lane_height: 64 }, colors });
-      expect((tall.spec as any).vconcat[1].height).toBe(64);
+      expect(stack(tall.spec)[1].height).toBe(64);
       // One dataset, N lanes: the rows are not copied per lane.
       expect(Object.keys(s.datasets)).toEqual([DATASET_NAME]);
       expect(s.datasets[DATASET_NAME]).toHaveLength(4);
       // The x scale is shared so every lane pans and zooms together.
-      expect(s.resolve).toMatchObject({ scale: { x: 'shared' }, axis: { x: 'shared' } });
+      expect(s.resolve.scale.x).toBe('shared');
+      expect(s.vconcat[0].resolve).toMatchObject({ scale: { x: 'shared' }, axis: { x: 'shared' } });
     });
 
     it('shares one y ruler by default and scales each lane with facet_y_scale', () => {
+      // The lanes' own viewport resolves their y; the root one stays apart.
       const shared = buildGenomeSpySpec({ rows: r, config: faceted, colors }).spec as any;
-      expect(shared.resolve.scale.y).toBe('shared');
+      expect(shared.vconcat[0].resolve.scale.y).toBe('shared');
       const own = buildGenomeSpySpec({
         rows: r,
         config: { ...faceted, facet_y_scale: 'independent' },
         colors,
       }).spec as any;
-      expect(own.resolve.scale.y).toBe('independent');
+      expect(own.vconcat[0].resolve.scale.y).toBe('independent');
     });
 
     it('gives every lane its own pick param, because names must be unique', () => {
       const { spec } = buildGenomeSpySpec({ rows: r, config: faceted, colors });
-      const names = (spec as any).vconcat.map((v: any) => v.layer[0].params[0].name);
+      const names = stack(spec).map((v: any) => v.layer[0].params[0].name);
       expect(names).toEqual([`${PICK_PARAM}_0`, `${PICK_PARAM}_1`]);
       expect(new Set(names).size).toBe(names.length);
     });
@@ -504,8 +589,229 @@ describe('buildGenomeSpySpec', () => {
         colors,
         genes,
       });
-      const names = (spec as any).vconcat.map((v: any) => v.name);
+      const names = stack(spec).map((v: any) => v.name);
       expect(names).toEqual(['track_0', 'track_1', 'annotation']);
     });
+  });
+});
+
+describe('color_scale', () => {
+  const sampled = {
+    chr: ['chr1', 'chr1', 'chr1', 'chr1'],
+    pos: [1, 2, 3, 4],
+    score: [1, 2, 3, 4],
+    tp: ['late', 'early', 'mid', 'early'],
+    day: [14, 0, 3, 0],
+  };
+  const cfg: GenomeViewConfig = {
+    chr_col: 'chr',
+    pos_col: 'pos',
+    score_col: 'score',
+    color_scale: { column: 'tp', order_by: 'day', scheme: 'blues' },
+  };
+  const marksOf = (spec: any) => spec.vconcat[0].layer[0];
+
+  it('asks for the scale column and its order column', () => {
+    expect(requiredColumns(cfg)).toEqual(['chr', 'pos', 'score', 'tp', 'day']);
+  });
+
+  it('resolves the colour of each value along the ramp, in the order of order_by', () => {
+    const data = [
+      { tp: 'late', day: 14 },
+      { tp: 'early', day: 0 },
+      { tp: 'mid', day: 3 },
+    ];
+    const resolved = resolveColorScale(data, cfg.color_scale);
+    expect(resolved?.domain).toEqual(['early', 'mid', 'late']);
+    expect(resolved?.colours).toEqual({
+      early: sequentialColor('blues', 0),
+      mid: sequentialColor('blues', 0.5),
+      late: sequentialColor('blues', 1),
+    });
+    expect(resolveColorScale([], cfg.color_scale)).toBeNull();
+    expect(resolveColorScale(data, null)).toBeNull();
+  });
+
+  it('colours the marks by the scale column with the ramp as the range', () => {
+    const { spec } = buildGenomeSpySpec({ rows: sampled, config: cfg, colors });
+    expect(marksOf(spec).encoding.color).toMatchObject({
+      field: 'tp',
+      scale: {
+        domain: ['early', 'mid', 'late'],
+        range: [sequentialColor('blues', 0), sequentialColor('blues', 0.5), sequentialColor('blues', 1)],
+      },
+    });
+  });
+
+  it('lets the genome browser colour of a value win over the ramp', () => {
+    const { spec } = buildGenomeSpySpec({
+      rows: sampled,
+      config: cfg,
+      colors: { ...colors, groupColors: { mid: '#123456' } },
+    });
+    expect(marksOf(spec).encoding.color.scale.range[1]).toBe('#123456');
+  });
+
+  it('gives a lane of the sample column the sample colour of the scale', () => {
+    const { spec } = buildGenomeSpySpec({
+      rows: { ...sampled, s: ['late', 'early', 'mid', 'early'] },
+      config: { ...cfg, color_scale: { column: 's', scheme: 'viridis' }, sample_col: 's', facet_by_sample: true },
+      colors: { ...colors, laneColors: { mid: '#abcdef' } },
+    });
+    const lanes = stack(spec)
+      .filter((l: any) => l.name?.startsWith('track'))
+      .map((l: any) => l.layer[0].encoding.color);
+    // Sorted naturally: early, late, mid. The browser's colour for mid wins.
+    expect(lanes).toEqual([
+      { value: sequentialColor('viridis', 0) },
+      { value: sequentialColor('viridis', 0.5) },
+      { value: '#abcdef' },
+    ]);
+  });
+});
+
+describe('group colours of the genome browser', () => {
+  const cat = {
+    chr: ['chr1', 'chr1', 'chr1'],
+    pos: [1, 2, 3],
+    score: [1, 2, 3],
+    cls: ['x', 'y', 'z'],
+  };
+  const cfg: GenomeViewConfig = { ...base, category_col: 'cls' };
+
+  it('colours a category the browser colours, under the dashboard pins', () => {
+    const { spec } = buildGenomeSpySpec({
+      rows: cat,
+      config: cfg,
+      colors: { ...colors, groupColors: { x: '#111111', y: '#222222' }, pinned: { cls: { y: '#999999' } } },
+    });
+    expect((spec as any).vconcat[0].layer[0].encoding.color.scale.range).toEqual([
+      '#111111',
+      '#999999',
+      'c2',
+    ]);
+  });
+
+  it('reports the colour of a hovered mark, null for the neutral one', () => {
+    const { colorOf } = buildGenomeSpySpec({
+      rows: cat,
+      config: cfg,
+      colors: { ...colors, groupColors: { x: '#111111' } },
+    });
+    expect(colorOf({ cls: 'x' })).toBe('#111111');
+    expect(colorOf({ cls: 'y' })).toBe('c1');
+    expect(colorOf({ cls: null })).toBeNull();
+    expect(colorOf({ cls: 'unseen' })).toBeNull();
+  });
+
+  it('reports the sample colour of a mark without categories, as a lane wears it', () => {
+    const of = markColourOf(
+      { ...base, sample_col: 's' },
+      { ...colors, laneColors: { A: '#aa0000' } },
+      [],
+    );
+    expect(of({ s: 'A' })).toBe('#aa0000');
+    expect(of({ s: 'B' })).toBeNull();
+  });
+});
+
+describe('the overlays of a lane', () => {
+  const lane0 = (overlay: any) =>
+    (buildGenomeSpySpec({ rows, config: base, colors: { ...colors, overlay } }).spec as any).vconcat[0].layer;
+
+  it('fills the window band clearly, from the theme when it says', () => {
+    const band = lane0({ windowColor: 'w', hoverColor: 'h' }).find((l: any) => l.name === 'track-window');
+    expect(band.mark.opacity).toBe(DEFAULT_WINDOW_OPACITY);
+    expect(DEFAULT_WINDOW_OPACITY).toBeGreaterThan(0.1);
+    expect(DEFAULT_WINDOW_OPACITY).toBeLessThan(0.3);
+    const dark = lane0({ windowColor: 'w', hoverColor: 'h', windowOpacity: 0.24 }).find(
+      (l: any) => l.name === 'track-window',
+    );
+    expect(dark.mark.opacity).toBe(0.24);
+  });
+
+  it('draws the hover rule in the colour of a param, the renderer setting it from the hovering tile', () => {
+    const hover = lane0({ windowColor: 'w', hoverColor: 'h' }).find((l: any) => l.name === 'track-hover');
+    expect(hover.mark.color).toEqual({ expr: HOVER_COLOR_PARAM });
+    expect(hover.encoding.color).toBeUndefined();
+  });
+});
+
+describe('the hover rule next to a coloured mark', () => {
+  // GenomeSpy 0.88: a `scale: null` colour channel has no range for the WebGL
+  // range texture ("o.range is not a function"), and merged into the marks'
+  // colour scale it throws "Cannot merge objects with nulls!" (the embed never
+  // builds). The rule's colour must not be a colour channel at all.
+  const coloured: GenomeViewConfig = { ...base, category_col: 'feature' };
+  const overlay = { windowColor: 'w', hoverColor: 'h' };
+
+  it('takes its colour from a param, with no colour channel of its own', () => {
+    const built = buildGenomeSpySpec({ rows, config: coloured, colors: { ...colors, overlay } });
+    const lane0 = (built.spec as any).vconcat[0];
+    const hover = lane0.layer.find((l: any) => l.name === 'track-hover');
+    expect(lane0.layer[0].encoding.color.scale).toBeTruthy();
+    expect(hover.encoding.color).toBeUndefined();
+    expect(hover.mark.color).toEqual({ expr: HOVER_COLOR_PARAM });
+    expect((built.spec as any).params).toContainEqual({ name: HOVER_COLOR_PARAM, value: 'h' });
+  });
+
+  it('keeps the brush param next to it', () => {
+    const built = buildGenomeSpySpec({ rows, config: coloured, colors: { ...colors, overlay } });
+    const names = ((built.spec as any).params as any[]).map((p) => p.name);
+    expect(names).toEqual([BRUSH_PARAM, HOVER_COLOR_PARAM]);
+  });
+
+  it('declares no param without overlays', () => {
+    const built = buildGenomeSpySpec({ rows, config: coloured, colors });
+    expect(((built.spec as any).params as any[]).map((p) => p.name)).toEqual([BRUSH_PARAM]);
+  });
+});
+
+describe('the sticky genome axis of scrolling lanes', () => {
+  const sampled = { ...rows, s: ['A', 'B', 'A', 'B', 'A', 'B'] };
+  const faceted: GenomeViewConfig = { ...base, sample_col: 's', facet_by_sample: true };
+  const genes = [{ name: 'G', chrom: 'chr1', start: 1, end: 100, strand: '+' }];
+
+  it('fits the lanes to the tile between a floor and a cap, the axis still sticky (no lane_height)', () => {
+    const built = buildGenomeSpySpec({ rows: sampled, config: faceted, colors });
+    expect(built.scrolls).toBe(true);
+    const spec = built.spec as any;
+    expect(spec.vconcat.map((v: any) => v.name)).toEqual(['lanes', STICKY_AXIS_NAME]);
+    const lanes = spec.vconcat[0].vconcat;
+    expect(lanes.map((l: any) => l.name)).toEqual(['track_0', 'track_1']);
+    // Lanes that fit the tile fill it; lanes that do not scroll in the viewport.
+    expect(lanes[0].height).toEqual({ grow: 1, minPx: FACET_LANE_HEIGHT, maxPx: FACET_LANE_MAX_HEIGHT });
+    expect(spec.vconcat[0].viewportHeight).toEqual({ grow: 1 });
+    expect(spec.resolve.axis.x).toBe('independent');
+    expect(lanes[0].layer[0].encoding.x.axis).toMatchObject({ chromGrid: true, labels: false });
+  });
+
+  it('puts fixed lanes in a scrolling viewport with an axis view of its own', () => {
+    const built = buildGenomeSpySpec({
+      rows: sampled,
+      config: { ...faceted, lane_height: 60, facet_y_scale: 'independent' },
+      colors,
+      genes,
+    });
+    expect(built.scrolls).toBe(true);
+    const spec = built.spec as any;
+    expect(spec.vconcat.map((v: any) => v.name)).toEqual(['lanes', 'annotation', STICKY_AXIS_NAME]);
+    const [lanes, annotation, axis] = spec.vconcat;
+    expect(lanes.viewportHeight).toEqual({ grow: 1 });
+    expect(lanes.vconcat.map((l: any) => l.name)).toEqual(['track_0', 'track_1']);
+    expect(lanes.resolve.scale.y).toBe('independent');
+    // The lanes keep the chromosome grid and draw no axis of their own.
+    const x = lanes.vconcat[0].layer[0].encoding.x;
+    expect(x.axis).toMatchObject({ chromGrid: true, labels: false, ticks: false, domain: false });
+    expect(annotation.layer[0].encoding.x.axis).toBeNull();
+    // One scale shared by the lanes and the axis view, which draws the axis.
+    expect(axis.encoding.x.scale.name).toBe(GENOME_SCALE_NAME);
+    expect(axis.encoding.x.axis.title).toBeNull();
+    expect(spec.resolve.axis.x).toBe('independent');
+  });
+
+  it('does not nest a single lane or an unfaceted tile', () => {
+    expect(buildGenomeSpySpec({ rows, config: { ...base, lane_height: 60 }, colors }).scrolls).toBe(false);
+    expect(buildGenomeSpySpec({ rows, config: base, colors }).scrolls).toBe(false);
   });
 });

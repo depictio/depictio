@@ -16,7 +16,7 @@
 template:
   template_id: "nf-core/viralrecon/3.0.0"
   description: "nf-core/viralrecon viral genome analysis template for amplicon sequencing (ivar variant caller)"
-  version: "1.1.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing viralrecon pipeline output (multiqc/, variants/)"
@@ -257,11 +257,42 @@ workflows:
               "num_variants_total": "Total number of variants called"
               "lineage": "Pangolin lineage assignment"
 
+      - data_collection_tag: "variants_long"
+        optional: true  # ivar variants_long_table.csv absent when consensus is empty / --skip_variants_long_table
+        description: "Per-sample variant calls with functional annotations"
+        config:
+          type: "Table"
+          metatype: "Aggregated"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/viralrecon/variants_long.py"
+          dc_specific_properties:
+            format: "CSV"
+            columns_description:
+              "sample": "Sample identifier"
+              "CHROM": "Chromosome/reference sequence"
+              "POS": "Variant position on reference"
+              "REF": "Reference allele"
+              "ALT": "Alternative allele"
+              "FILTER": "Variant filter status"
+              "DP": "Read depth at position"
+              "REF_DP": "Reference allele read depth"
+              "ALT_DP": "Alternative allele read depth"
+              "AF": "Allele frequency (0-1)"
+              "GENE": "Gene annotation"
+              "AA": "Amino acid change"
+              "EFFECT": "Variant effect (e.g., missense, synonymous)"
+              "FUNCLASS": "Functional class (SILENT, MISSENSE, NONSENSE)"
+              "mutation_label": "Formatted mutation label (GENE:REFposALT)"
+              "call_score": "Support rank of the call, higher is better: allele frequency, then depth, intergenic calls last"
+
       # ----------------------------------------------------------------
       # Genome tracks. A manifest of the run's track files (called variants
       # and primer-trimmed alignments of every sample) that the genome
       # browser reads by range, through the API. One row per file, keyed on
-      # sample_id like summary_metrics. The reference is SARS-CoV-2.
+      # sample_id like summary_metrics. The reference is SARS-CoV-2. Declared
+      # after variants_long: the recipe reads it (dc_ref) to open the browser on
+      # the sample holding the best supported call.
       # ----------------------------------------------------------------
       - data_collection_tag: "tracks"
         description: "Genome-browser tracks of the run: called variants (VCF) and primer-trimmed alignments (BAM) of every sample, one row per file"
@@ -278,7 +309,6 @@ workflows:
             sample_column: "sample_id"
             format_column: "format"
             name_column: "name"
-            color_column: "color"
             category_column: "category"
             order_column: "order"
             assembly: "wuhCor1"
@@ -298,37 +328,9 @@ workflows:
               "format": "Track file format"
               "uri": "Path relative to the results folder"
               "name": "Track label shown in the browser"
-              "color": "Track colour"
+              "lineage": "Pangolin lineage of the sample, the column the tile colours the tracks by"
               "category": "Track-selector folder"
               "order": "Row order the browser opens with"
-
-      - data_collection_tag: "variants_long"
-        optional: true  # ivar variants_long_table.csv absent when consensus is empty / --skip_variants_long_table
-        description: "Per-sample variant calls with functional annotations"
-        config:
-          type: "Table"
-          metatype: "Aggregated"
-          source: "transformed"
-          transform:
-            recipe: "ivar/variants_long.py"
-          dc_specific_properties:
-            format: "CSV"
-            columns_description:
-              "sample": "Sample identifier"
-              "CHROM": "Chromosome/reference sequence"
-              "POS": "Variant position on reference"
-              "REF": "Reference allele"
-              "ALT": "Alternative allele"
-              "FILTER": "Variant filter status"
-              "DP": "Read depth at position"
-              "REF_DP": "Reference allele read depth"
-              "ALT_DP": "Alternative allele read depth"
-              "AF": "Allele frequency (0-1)"
-              "GENE": "Gene annotation"
-              "AA": "Amino acid change"
-              "EFFECT": "Variant effect (e.g., missense, synonymous)"
-              "FUNCLASS": "Functional class (SILENT, MISSENSE, NONSENSE)"
-              "mutation_label": "Formatted mutation label (GENE:REFposALT)"
 
       - data_collection_tag: "pangolin_lineages"
         optional: true  # no *.pangolin.csv (non-SARS pathogen, --skip_pangolin, or empty consensus)

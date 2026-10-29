@@ -86,7 +86,17 @@ def test_variant_windows_count_the_cohort_on_primary_contigs(tmp_path: Path) -> 
     win = execute_recipe(
         "nf-core/rnavar/variant_windows.py", tmp_path, extra_sources={"variants": calls}
     )
-    assert win.columns == ["chrom", "pos", "end", "variants", "calls", "samples", "snv_pct"]
+    # No hub, no design: one constant group.
+    assert win.columns == [
+        "chrom",
+        "pos",
+        "end",
+        "__no_group__",
+        "variants",
+        "calls",
+        "samples",
+        "snv_pct",
+    ]
     rows = {(r["chrom"], r["pos"]): r for r in win.iter_rows(named=True)}
     assert set(rows) == {("chr1", 0), ("chr1", 1_000_000)}  # the unplaced contig is out
     first = rows[("chr1", 0)]
@@ -170,6 +180,7 @@ def test_hub_joins_every_source_and_the_design(tmp_path: Path, hub_sources: dict
     assert s1["mito_reads_pct"] == pytest.approx(5.0)
     assert s1["other_contig_reads_pct"] == pytest.approx(14.0)
     assert s1["pass_calls"] == 40 and s1["ts_tv"] == pytest.approx(2.6)
+    assert s1["filtered_pct"] == pytest.approx(12.0)
     s2 = df.filter(pl.col("sample") == "S2").row(0, named=True)
     assert s2["pass_calls"] is None and s2["bases_10x_pct"] is None  # missing, not 0
 

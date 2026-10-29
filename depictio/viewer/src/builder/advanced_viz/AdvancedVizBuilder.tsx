@@ -268,6 +268,25 @@ const ROLE_DISPLAY_NAMES: Record<string, Record<string, string>> = {
     value: 'Per-sample score',
     reads: 'Read support',
   },
+  // One row per individual of a PED-like table.
+  pedigree: {
+    individual: 'Individual',
+    father: 'Father',
+    mother: 'Mother',
+    sex: 'Sex',
+    status: 'Affected status',
+    family: 'Family',
+    label: 'Label',
+    deceased: 'Deceased flag',
+    proband: 'Proband flag',
+  },
+  // One row per candidate; the other columns are set under `columns` in YAML.
+  ranked_table: {
+    title: 'Name (bold)',
+    score: 'Score (orders the rows)',
+    subtitle: 'Subtitle (monospace)',
+    rank: 'Precomputed rank',
+  },
   ramachandran: {
     value: 'Colour value',
     category: 'Colour category',

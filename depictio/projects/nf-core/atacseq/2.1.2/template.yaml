@@ -85,7 +85,7 @@
 template:
   template_id: "nf-core/atacseq/2.1.2"
   description: "nf-core/atacseq template: ataqv library quality, deepTools and Picard signal QC, MACS2 broad peaks, HOMER peak annotation, the consensus peak set and its DESeq2 QC, on top of the pipeline's MultiQC report."
-  version: "1.0.0"
+  version: "1.1.0"
   variables:
     - name: "DATA_ROOT"
       description: "The atacseq --outdir: ALIGNER/merged_library/, fastqc/, trimgalore/, multiqc/, pipeline_info/, plus a MultiQC 1.31 or later parquet, either the pipeline's own under multiqc/broad_peak/multiqc_data/ or a reprocessed one under multiqc/multiqc_data/."

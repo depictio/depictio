@@ -1,0 +1,662 @@
+# nf-core/drop Template v1.0.0 - aberrant expression, aberrant splicing and mono-allelic expression
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio ingest --template nf-core/drop/1.0.0 --data-root /path/to/results \
+#     [--var SAMPLESHEET=/path/to/samplesheet.tsv] [--var GENOME=hg38]
+#
+# nf-core/drop is the Nextflow port of DROP (Detection of RNA Outliers Pipeline):
+# for each analysis group it fits OUTRIDER to the gene counts (aberrant
+# expression), FRASER to the split-read counts (aberrant splicing) and tests the
+# allelic balance of heterozygous variants (mono-allelic expression, MAE).
+# OUTRIDER and FRASER are released under CC-BY-NC 4.0: a commercial use needs a
+# licence from their authors (see the pipeline's usage page).
+#
+# What a run publishes, and so what this template reads (paths under the run's
+# outdir):
+#   - processed_results/aberrant_expression/<annotation>/outrider/<group>/
+#     OUTRIDER_results.tsv: the genes OUTRIDER reports for each sample.
+#   - processed_results/aberrant_splicing/results/<annotation>/fraser/<group>/
+#     results.tsv: the junctions FRASER reports for each sample, aggregated per gene.
+#   - processed_results/mae/<group>/MAE_results_all_<annotation>.tsv.gz: every
+#     tested heterozygous SNV with its allelic counts and test.
+#   - processed_results/mae/gene_name_mapping_<annotation>.tsv: the gene table of
+#     the MAE sub-workflow, the only published place that gives OUTRIDER's genes
+#     a position (optional: without it expression outliers have no locus).
+#   - the sample sheet given as --input (not copied into the outdir: point
+#     SAMPLESHEET at it, or leave it at input/samplesheet.tsv under DATA_ROOT).
+#   - pipeline_info/params_*.json: the run's parameters.
+#
+# Not read, on purpose: DROP's own report is custom content rendered from R
+# (counts and OUTRIDER/FRASER summaries as images), not MultiQC tool modules, so
+# the template has no MultiQC tab and rebuilds the same answers from the result
+# tables. The R objects (.Rds, .ods, .fds) and the per-gene count matrices
+# (optional exported_counts/) are not tables a dashboard can read.
+#
+# Each analysis is optional (--ae_skip, --as_skip, --mae_skip): the collection
+# of a skipped one is pruned with its tiles and, when nothing is left, its tab.
+#
+# Genome tracks. The pipeline writes no track file of its own. The genome browser
+# reads what the sample sheet points at: the RNA alignment (RNA_BAM_FILE) and
+# the DNA genotypes (DNA_VCF_FILE) of each sample. https:// and s3:// paths are
+# read in place; a path under DATA_ROOT is uploaded at ingestion, or read in place
+# under TRACKS_URI when that is set. The browser opens on the alignment of the sample
+# holding the strongest gene, then that sample's genotypes, and colours its tracks by
+# drop_group like the rest of the dashboard (the manifest has no colour column).
+#
+# Thresholds are variables with the pipeline's own defaults: AE_PADJ and AE_MIN_Z
+# (OUTRIDER), AS_PADJ and AS_MIN_DPSI (FRASER), MAE_PADJ and MAE_MIN_RATIO.
+#
+# The background of the tests. OUTRIDER_results.tsv and FRASER's results.tsv hold the
+# rows that pass the run's own cut-offs (ae_padj_cutoff, ae_z_score_cutoff,
+# as_padj_cutoff, as_delta_psi_cutoff). With the defaults that is the significant rows
+# only, and a volcano has no cloud behind its hits. To draw one, run the pipeline with
+# --ae_padj_cutoff 1 --ae_z_score_cutoff 0 --as_padj_cutoff 1 --as_delta_psi_cutoff 0:
+# the tables then hold every tested gene and junction. A full table is large (every gene
+# of every sample), so the expression and splicing recipes keep a row when it is called,
+# when its adjusted p-value is at most 0.5, or when it is one of the BACKGROUND_ROWS most
+# significant rows of its sample; the dropped rows are the near-null bulk. The trim
+# shapes the volcano, not the calls, which are read before it. Because of it the tables
+# are not a fair sample of the tests, so no QQ view or p-value histogram is drawn.
+# A run left at the default cut-offs still works: the volcanoes then show the significant
+# rows only, with no background, and the calls are unchanged. The mono-allelic table is
+# always complete.
+#
+# Called and nominal. A call needs an adjusted p-value (multiple testing over the genes
+# or junctions of a sample) under AE_PADJ / AS_PADJ. A small run, such as the nf-core test
+# set of ten samples, has so little power that every adjusted p-value is 1 and nothing is
+# called, though the raw p-values still rank the genes. The expression and splicing tables
+# therefore carry a `status` (called / nominal p only / not significant) and the volcanoes
+# plot the raw p-value (dashed line at NOMINAL_P), the rankings sort by it, and the cards
+# count the nominal hits beside the calls. A nominal hit is a lead, not a call: at 0.05
+# about one test in twenty passes by chance.
+#
+# Triage. The three call tables are joined per sample and gene (outlier_genes): a gene
+# enters a sample's list when an analysis calls it or when it is among the
+# CANDIDATES_PER_SAMPLE best-supported genes of the sample, and gene_evidence collapses
+# that list to the cohort's best genes for the gene by analysis grid. Rows with no gene
+# symbol (unannotated junctions, intergenic variants) have nothing to join on and stay
+# in their own tab. The R objects that would hold the full results (.Rds) are not read.
+# ============================================================================
+template:
+  template_id: "nf-core/drop/1.0.0"
+  description: "nf-core/drop template: outlier burden per sample, genes called by several analyses ranked per sample, OUTRIDER expression outliers, FRASER splicing outliers, mono-allelic expression, and a genome browser on the called genes"
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "Root directory of one DROP run (the outdir: processed_results/, pipeline_info/ ...)"
+      required: true
+    - name: "SAMPLESHEET"
+      description: "The sample sheet the run was given as --input (TSV with RNA_ID, DROP_GROUP and the optional columns). Relative to DATA_ROOT, or an absolute path or URL."
+      required: false
+      default: "input/samplesheet.tsv"
+    - name: "GROUP_COL"
+      description: "Sample-hub column the group filter, cards and colouring read: the sample's most specific DROP_GROUP."
+      required: false
+      default: "drop_group"
+    - name: "GROUP_COL_DISPLAY"
+      description: "Title-cased GROUP_COL for display."
+      required: false
+      default: "DROP group"
+    - name: "GENOME"
+      description: "UCSC assembly name the genome browser opens on (the genome the alignments were made against)."
+      required: false
+      default: "hg38"
+    - name: "TRACKS_URI"
+      description: "s3:// or https:// folder to read relative track paths of the sample sheet under, in place, instead of uploading them from DATA_ROOT. Paths that are already URLs are always read in place."
+      required: false
+    - name: "AE_PADJ"
+      description: "Adjusted p-value at or below which an OUTRIDER gene is called an outlier."
+      required: false
+      default: "0.05"
+    - name: "AE_MIN_Z"
+      description: "Absolute z-score at or above which an OUTRIDER gene is called an outlier (0 keeps every gene the run reported)."
+      required: false
+      default: "0"
+    - name: "AS_PADJ"
+      description: "Gene-level adjusted p-value at or below which a FRASER gene is called an outlier."
+      required: false
+      default: "0.1"
+    - name: "AS_MIN_DPSI"
+      description: "Absolute change in splicing usage (delta PSI, 0 to 1) at or above which a FRASER junction is called."
+      required: false
+      default: "0.3"
+    - name: "NOMINAL_P"
+      description: "Raw (uncorrected) p-value at or below which an OUTRIDER gene or FRASER junction is shown as a nominal hit. A run too small to pass the adjusted cut-offs calls nothing; the nominal hits are then the leads, to be read with care."
+      required: false
+      default: "0.05"
+    - name: "BACKGROUND_ROWS"
+      description: "Rows per sample the expression and splicing tables keep besides the called ones and those with an adjusted p-value of 0.5 or less, taken from the most significant by raw p-value. They are the background of the volcano. A negative value keeps every row."
+      required: false
+      default: "300"
+    - name: "CANDIDATES_PER_SAMPLE"
+      description: "Best-supported genes per sample kept in the triage list besides the genes an analysis calls."
+      required: false
+      default: "25"
+    - name: "MAE_PADJ"
+      description: "Adjusted p-value at or below which a heterozygous variant is called mono-allelic."
+      required: false
+      default: "0.05"
+    - name: "MAE_MIN_RATIO"
+      description: "Share of the reads (0.5 to 1) the dominant allele needs for a mono-allelic call."
+      required: false
+      default: "0.8"
+  # Variables for the BUNDLED reference dataset: the nf-core test run (chr21, ten
+  # samples) with its sample sheet next to the results.
+  reference:
+    vars:
+      SAMPLESHEET: "{DATA_ROOT}/input/samplesheet.tsv"
+      GROUP_COL: "drop_group"
+      GROUP_COL_DISPLAY: "DROP group"
+      GENOME: "hg38"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "genomes"    # the whole iGenomes catalogue
+          - "hook_url"   # nf-core runs may put a live webhook here
+    groups:
+      - group: "Aberrant expression"
+        key_patterns: ["ae_*"]
+      - group: "Aberrant splicing"
+        key_patterns: ["as_*"]
+      - group: "Mono-allelic expression"
+        key_patterns: ["mae_*"]
+      - group: "Annotation & references"
+        key_patterns: ["genome", "gene_annotation", "*_fasta", "*_fai", "*_dict", "igenomes_*", "gtf*"]
+      - group: "Run context"
+        key_patterns: ["input", "outdir", "email*", "multiqc_*", "max_multiqc_email_size", "monochrome_logs", "plaintext_email", "publish_dir_mode", "trace_report_suffix", "validate_params", "version", "help*", "show_hidden*", "config_profile_*", "custom_config_*", "pipelines_testdata_base_path", "modules_testdata_base_path"]
+    highlight:
+      - "genome"
+      - "gene_annotation"
+      - "ae_implementation"
+      - "ae_padj_cutoff"
+      - "as_implementation"
+      - "as_fraser_version"
+      - "as_padj_cutoff"
+      - "as_delta_psi_cutoff"
+      - "mae_padj_cutoff"
+      - "mae_allelic_ratio_cutoff"
+  dashboards:
+    - "dashboards/base.yaml"
+  conditional:
+    # Genome tracks: relative paths of the sheet are read in place when TRACKS_URI
+    # names the folder holding them, uploaded from DATA_ROOT otherwise.
+    - if_var_present: "TRACKS_URI"
+      override_dcs:
+        - data_collection_tag: "tracks"
+          dc_properties:
+            remote_base_uri: "{TRACKS_URI}"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "RNA Outlier Detection (DROP)"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "drop"
+    version: "1.0.0"
+    engine:
+      name: "nextflow"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/drop"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Sample hub and cohort. Both read the sample sheet; a sample is the
+      # sheet's RNA_ID, the name every result file uses.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "One row per RNA sample: its most specific group, how it was counted (alignment or external counts), DNA and phenotype terms"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/drop/samples.py"
+            source_overrides:
+              sheet:
+                path: "{SAMPLESHEET}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "RNA_ID of the sample sheet, the key every link joins on"
+              "drop_group": "The sample's most specific analysis group: the group of its DROP_GROUP list that the fewest samples share"
+              "drop_groups": "Every group of the sample's DROP_GROUP list"
+              "n_groups": "Number of groups the sample belongs to"
+              "group_size": "Samples in the largest group the sample belongs to: the cohort its OUTRIDER and FRASER models are fitted on"
+              "count_source": "Alignment (counted from RNA_BAM_FILE) or External counts (taken from another study's exported counts)"
+              "strandedness": "Library strandedness declared in the sheet"
+              "read_type": "paired-end or single-end"
+              "count_mode": "HTSeq count mode of the gene counts"
+              "has_dna": "Genotyped when the sheet gives a genotype VCF, RNA only otherwise"
+              "n_hpo_terms": "Phenotype (HPO) terms attached to the sample"
+              "annotation": "Gene annotation key of an external-counts sample, empty for a sample counted here"
+              "genome": "Genome key of the sheet (the reference its alignment and genotype use)"
+              "dna_id": "Sample identifier in the DNA VCF"
+              "hpo_terms": "Comma-separated HPO terms of the sample"
+
+      - data_collection_tag: "group_membership"
+        description: "One row per sample and analysis group it belongs to (the DROP_GROUP list exploded)"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/drop/group_membership.py"
+            source_overrides:
+              sheet:
+                path: "{SAMPLESHEET}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "RNA_ID, links to the sample hub"
+              "drop_group": "One group of the sample's DROP_GROUP list"
+              "count_source": "Alignment or External counts"
+              "has_dna": "Genotyped or RNA only"
+
+      # ----------------------------------------------------------------
+      # The three analyses, each optional: a run may skip any of them.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "expression_outliers"
+        optional: true
+        description: "OUTRIDER aberrant expression: one row per sample and tested gene (the called ones and the strongest background), with z-score, fold change, adjusted p-value and the observed and expected counts"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/drop/expression_outliers.py"
+            params:
+              padj: "{AE_PADJ}"
+              min_z: "{AE_MIN_Z}"
+              nominal_p: "{NOMINAL_P}"
+              background: "{BACKGROUND_ROWS}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "call_id": "Sample and gene id: one row, the key a table selection carries"
+              "sample": "RNA_ID of the sample"
+              "gene_id": "Gene id of the annotation the run counted with"
+              "gene_name": "Gene symbol (the gene id when the annotation has none)"
+              "annotation": "Gene annotation key of the OUTRIDER dataset"
+              "drop_group": "Aberrant-expression group the gene was tested in"
+              "status": "called (adjusted p), nominal p only or not significant"
+              "z_score": "Distance of the observed count from the expected count, in standard deviations of the log counts"
+              "abs_z_score": "Absolute value of z_score"
+              "l2fc": "Log2 fold change of the observed count against the expected count"
+              "p_value": "OUTRIDER p-value of the count"
+              "padj": "Adjusted p-value (over the genes of the sample)"
+              "neg_log10_p": "-log10 of p_value (300 when it is 0): the volcano's y"
+              "neg_log10_padj": "-log10 of padj (300 when it is 0)"
+              "avg_log_count": "log2 of the mean expected count plus 1: the average abundance of the MA view"
+              "raw_count": "Observed read count of the gene in the sample"
+              "expected_count": "Count the autoencoder expects for the gene in the sample"
+              "mean_count": "Mean raw count of the gene over the group"
+              "significant": "padj at or below AE_PADJ and absolute z-score at or above AE_MIN_Z (the call)"
+              "nominal": "A call, or p_value at or below NOMINAL_P (raw, uncorrected)"
+              "direction": "over-expressed or under-expressed for a nominal hit, else not significant"
+              "hpo_match": "The gene matches a phenotype (HPO) term of the sample"
+              "chrom": "Chromosome of the gene (from the MAE gene table, null without it)"
+              "start": "Gene start (1-based)"
+              "end": "Gene end"
+              "fold_change": "Fold change, observed over expected"
+              "theta": "Dispersion of the negative binomial fitted to the gene"
+              "aberrant_by_sample": "Outlier genes of this sample, as OUTRIDER counts them"
+              "aberrant_by_gene": "Samples in which this gene is an outlier"
+              "hpo_label_overlap": "Phenotype terms of the sample the gene matches"
+              "locus": "chrom:start-end of the gene"
+
+      - data_collection_tag: "splicing_outliers"
+        optional: true
+        description: "FRASER aberrant splicing: one row per sample and tested junction (the called ones and the strongest background), with usage, change against the cohort and the gene-level adjusted p-value"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/drop/splicing_outliers.py"
+            params:
+              padj: "{AS_PADJ}"
+              min_dpsi: "{AS_MIN_DPSI}"
+              nominal_p: "{NOMINAL_P}"
+              background: "{BACKGROUND_ROWS}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "call_id": "Sample, gene and junction: one row, the key a table selection carries"
+              "sample": "RNA_ID of the sample"
+              "gene_name": "Gene symbol the junction belongs to"
+              "annotation": "Gene annotation key of the FRASER dataset"
+              "drop_group": "Aberrant-splicing group the gene was tested in"
+              "status": "called (adjusted p), nominal p only or not significant"
+              "chrom": "Chromosome of the junction"
+              "start": "Junction start (intron start, 1-based)"
+              "end": "Junction end"
+              "locus": "chrom:start-end of the junction"
+              "strand": "Strand of the junction"
+              "psi_type": "Splicing metric of the call: psi5, psi3, theta or jaccard"
+              "psi_value": "Usage of the junction in the sample (0 to 1)"
+              "delta_psi": "Change in usage against the cohort mean, sample minus cohort"
+              "abs_delta_psi": "Absolute value of delta_psi"
+              "p_value": "FRASER p-value of the junction"
+              "padj": "Adjusted p-value of the junction"
+              "padj_gene": "Gene-level adjusted p-value (the junction's own when the file has none)"
+              "neg_log10_p": "-log10 of p_value (300 when it is 0): the volcano's y"
+              "neg_log10_padj": "-log10 of padj_gene (300 when it is 0)"
+              "avg_log_reads": "log2 of the cohort's mean total reads at the junction plus 1: the average abundance of the MA view"
+              "split_reads": "Reads splitting at the junction in the sample"
+              "total_reads": "Reads of the junction's splice sites in the sample"
+              "significant": "padj_gene at or below AS_PADJ and absolute delta PSI at or above AS_MIN_DPSI"
+              "nominal": "A call, or p_value at or below NOMINAL_P (raw, uncorrected)"
+              "direction": "more usage or less usage for a nominal hit, else not significant"
+              "hpo_match": "The gene matches a phenotype (HPO) term of the sample"
+              "junction_width": "Length of the intron in bases"
+              "mean_split_reads": "Cohort mean of split reads at the junction"
+              "mean_total_reads": "Cohort mean of total reads at the junction"
+              "nonsplit_reads": "Reads overlapping the splice sites without splitting"
+              "nonsplit_proportion": "Share of the splice-site reads that do not split"
+              "annotated_junction": "Which splice sites of the junction the annotation knows: both, start, end or none"
+              "potential_impact": "FRASER's reading of the effect, such as exon elongation or reduced intron usage"
+              "causes_frameshift": "Whether the change leaves the reading frame intact"
+              "utr_overlap": "Whether the junction lies in an untranslated region"
+              "blacklisted": "The junction lies in a blacklisted region"
+              "hpo_label_overlap": "Phenotype terms of the sample the gene matches"
+
+      - data_collection_tag: "mae_variants"
+        optional: true
+        description: "Mono-allelic expression: one row per sample and heterozygous SNV, with the allelic read counts, the test and the call"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/drop/mae_variants.py"
+            params:
+              padj: "{MAE_PADJ}"
+              min_ratio: "{MAE_MIN_RATIO}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "call_id": "Sample, position and alternative allele: one row, the key a table selection carries"
+              "sample": "RNA_ID of the sample the DNA genotype belongs to"
+              "gene_name": "Gene the variant lies in (intergenic when none)"
+              "drop_group": "MAE group of the sample"
+              "annotation": "Gene annotation key of the results file"
+              "chrom": "Chromosome of the variant"
+              "start": "Position of the variant (1-based)"
+              "end": "Position plus one, for the genome browser"
+              "locus": "chrom:position of the variant"
+              "variant_id": "Variant id (rsID or chrom_position_ref_alt)"
+              "ref_allele": "Reference allele"
+              "alt_allele": "Alternative allele"
+              "ref_count": "RNA reads carrying the reference allele"
+              "alt_count": "RNA reads carrying the alternative allele"
+              "total_count": "RNA reads covering the variant"
+              "alt_ratio": "Share of the reads carrying the alternative allele"
+              "p_value": "Binomial test p-value against balanced expression"
+              "padj": "Adjusted p-value over the sample's variants"
+              "neg_log10_padj": "-log10 of padj (300 when it is 0)"
+              "avg_log_count": "log2 of the reads covering the variant plus 1: the average abundance of the MA view"
+              "log2fc": "Log2 of the alternative over the reference read count"
+              "mono_allelic": "padj at or below MAE_PADJ and one allele at or above MAE_MIN_RATIO of the reads"
+              "call": "alternative allele or reference allele when mono-allelic, biallelic otherwise"
+              "rare": "The variant passes the run's population-frequency cut-offs"
+              "gene_type": "Gene biotype"
+              "allele_frequency": "Allele frequency of the variant in the population database"
+              "max_population_af": "Highest allele frequency over the populations"
+              "n_variants_in_gene": "Heterozygous variants of the sample in the gene"
+              "cohort_frequency": "Share of the cohort's samples that carry the variant"
+
+      # ----------------------------------------------------------------
+      # Declared after the collections their recipes read through dc_ref.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "sample_outliers"
+        description: "One row per sample: its outliers in each analysis (zero when it has none), for the sample-level quality read"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/drop/sample_outliers.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "RNA_ID, links to the sample hub"
+              "drop_group": "The sample's most specific group"
+              "count_source": "Alignment or External counts"
+              "expression_outliers": "Genes called an expression outlier in the sample"
+              "over_expressed": "Of those, genes above their expected count"
+              "under_expressed": "Of those, genes below their expected count"
+              "splicing_outliers": "Genes called a splicing outlier in the sample"
+              "mae_calls": "Variants called mono-allelic in the sample"
+              "mae_variants_tested": "Heterozygous variants tested for allelic imbalance in the sample"
+              "total_outliers": "Expression and splicing outlier genes plus mono-allelic variants (calls: adjusted p-value)"
+              "expression_nominal": "Genes at a nominal p-value (raw, NOMINAL_P) in the OUTRIDER table, calls included"
+              "splicing_nominal": "Genes at a nominal p-value in the FRASER table, calls included"
+              "nominal_hits": "expression_nominal plus splicing_nominal"
+              "phenotype_matches": "Expression and splicing calls whose gene matches a phenotype term of the sample"
+              "has_outlier": "with outliers or no outlier"
+
+      - data_collection_tag: "outlier_genes"
+        optional: true
+        description: "The triage list: one row per sample and gene across the three analyses, ranked within the sample by how many analyses call it and by the evidence"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/drop/outlier_genes.py"
+            params:
+              top_n: "{CANDIDATES_PER_SAMPLE}"
+              nominal_p: "{NOMINAL_P}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "call_id": "Sample and gene: one row, the key a table selection carries"
+              "sample": "RNA_ID, links to the sample hub"
+              "drop_group": "The sample's most specific group"
+              "gene_name": "Gene symbol, the key the analyses are joined on"
+              "expression_outlier": "OUTRIDER calls the gene in the sample"
+              "splicing_outlier": "FRASER calls the gene in the sample"
+              "mae_outlier": "A heterozygous variant of the gene is called mono-allelic in the sample"
+              "n_analyses": "Number of analyses that call the gene in the sample (0 to 3)"
+              "n_nominal": "Number of analyses whose raw p-value for the gene is at NOMINAL_P or below, or that call it (0 to 3)"
+              "support": "n_analyses as a label: not called, 1 analysis, 2 analyses, 3 analyses"
+              "called_in": "The analyses that call the gene, joined by plus signs (none when no analysis does)"
+              "phenotype_gene": "The gene matches a phenotype (HPO) term of the sample in the expression or splicing table"
+              "phenotype": "Phenotype match or No match"
+              "significance": "Sum over the analyses that tested the gene of their -log10 p-value, the rank within a call count"
+              "sample_rank": "Rank of the gene in the sample's list (1 is the best supported)"
+              "expression_score": "-log10 p-value of the gene's OUTRIDER row (null when not tested)"
+              "splicing_score": "-log10 p-value of the gene's FRASER junction (null when not tested)"
+              "mae_score": "-log10 p-value of the gene's most unbalanced variant (null when none is tested)"
+              "z_score": "OUTRIDER z-score"
+              "l2fc": "OUTRIDER log2 fold change against the expected count"
+              "expression_padj": "OUTRIDER adjusted p-value"
+              "delta_psi": "FRASER change in junction usage against the cohort"
+              "splicing_padj": "FRASER gene-level adjusted p-value"
+              "alt_ratio": "Share of the RNA reads that carry the alternative allele of the variant"
+              "mae_padj": "Adjusted p-value of the allelic test"
+              "chrom": "Chromosome (gene, else junction, else variant)"
+              "start": "Start of the gene, junction or variant"
+              "end": "End of the gene, junction or variant"
+              "locus": "chrom:start-end"
+              "gene_id": "Gene id of the OUTRIDER annotation (null when expression did not call or test the gene)"
+
+      - data_collection_tag: "gene_evidence"
+        optional: true
+        description: "The cohort's best-supported genes, one row per gene and one column per analysis, for the gene by analysis grid"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/drop/gene_evidence.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "gene_name": "Gene symbol"
+              "Expression": "Strongest -log10 p-value of an OUTRIDER row of the gene in any sample"
+              "Splicing": "Strongest -log10 p-value of a FRASER junction of the gene in any sample"
+              "Mono-allelic": "Strongest -log10 p-value of an allelic test of the gene in any sample"
+              "best_support": "Most analyses that call the gene together in one sample"
+              "samples_called": "Samples in which at least one analysis calls the gene"
+              "samples_listed": "Samples whose triage list holds the gene"
+              "evidence": "Sum of the three analyses' scores, the rank within best_support"
+              "phenotype_gene": "The gene matches a phenotype term of a sample"
+
+      # ----------------------------------------------------------------
+      # Genome tracks. A manifest of the files the sample sheet points at (the
+      # RNA alignment and the DNA genotypes of each sample), read by range
+      # through the API. One row per file, keyed on `sample` like the hub.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "tracks"
+        description: "Genome-browser tracks of the sample sheet: the RNA alignment (BAM) and the DNA genotypes (VCF) of every sample, one row per file"
+        config:
+          type: "genomic_tracks"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/drop/tracks.py"
+            source_overrides:
+              sheet:
+                path: "{SAMPLESHEET}"
+          dc_specific_properties:
+            format: "TSV"
+            uri_column: "uri"
+            index_column: "index_uri"
+            track_id_column: "track_id"
+            sample_column: "sample"
+            format_column: "format"
+            name_column: "name"
+            category_column: "category"
+            order_column: "order"
+            assembly: "{GENOME}"
+            display_defaults:
+              bam:
+                displays:
+                  - type: "LinearPileupDisplay"
+                    height: 120
+              vcf:
+                displays:
+                  - type: "LinearVariantDisplay"
+                    height: 60
+            columns_description:
+              "track_id": "<sample>.<kind>, unique per file"
+              "sample": "Sample the file belongs to"
+              "drop_group": "The sample's most specific group"
+              "kind": "alignments or genotypes"
+              "format": "Track file format"
+              "uri": "The file as the sample sheet names it (a URL is read in place)"
+              "index_uri": "Its index (BAI or TBI), empty when the sheet names none"
+              "name": "Track label shown in the browser"
+              "category": "Track-selector folder"
+              "order": "Row order the browser opens with"
+
+# ============================================================================
+# LINKS
+# The sample hub fans out to every per-sample collection on the sample id, and
+# the tracks send a picked sample back to it. A gene pick on the expression
+# calls reaches the other analyses through the gene symbol.
+# ============================================================================
+links:
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "group_membership"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the group memberships by sample selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "sample_outliers"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the outliers per sample by sample selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "expression_outliers"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the OUTRIDER calls by sample selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "splicing_outliers"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the FRASER calls by sample selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "mae_variants"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the mono-allelic variants by sample selection"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "outlier_genes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the triage list by sample selection"
+    enabled: true
+
+  # A gene pick (the expression calls' gene symbol) carries onto the other
+  # analyses, which name their genes the same way.
+  - source_dc_tag: "expression_outliers"
+    source_column: "gene_name"
+    target_dc_tag: "splicing_outliers"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_name"}
+    description: "Carry a gene selection from the expression calls onto the splicing calls"
+    enabled: true
+  - source_dc_tag: "expression_outliers"
+    source_column: "gene_name"
+    target_dc_tag: "mae_variants"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_name"}
+    description: "Carry a gene selection from the expression calls onto the mono-allelic variants"
+    enabled: true
+  - source_dc_tag: "expression_outliers"
+    source_column: "gene_name"
+    target_dc_tag: "outlier_genes"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_name"}
+    description: "Carry a gene selection from the expression calls onto the triage list"
+    enabled: true
+  - source_dc_tag: "expression_outliers"
+    source_column: "gene_name"
+    target_dc_tag: "gene_evidence"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_name"}
+    description: "Carry a gene selection from the expression calls onto the gene by analysis grid"
+    enabled: true
+
+  # Hub <-> genome tracks: picking samples opens their tracks, and clicking a
+  # track in the browser picks its sample back.
+  - source_dc_tag: "samples"
+    source_column: "sample"
+    target_dc_tag: "tracks"
+    target_type: "genomic_tracks"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Show the genome tracks of the samples picked in the left panel"
+    enabled: true
+  - source_dc_tag: "tracks"
+    source_column: "sample"
+    target_dc_tag: "samples"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "sample"}
+    description: "Filter the dashboard by the samples whose tracks are picked in the genome browser"
+    enabled: true

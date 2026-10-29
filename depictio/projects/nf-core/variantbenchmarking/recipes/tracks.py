@@ -15,9 +15,13 @@ errors are:
 
 Every row is keyed on the callset id (``sample_id``), the key the benchmark
 tables link on, so picking a callset on the dashboard opens its FP, FN and TP
-files side by side. They are small (kilobytes to a few megabytes), so the first
-two rows of a callset (false positives, false negatives) are what the browser
-opens on.
+files side by side. They are small (kilobytes to a few megabytes), so the
+callsets are ranked best first (F1, then fewest errors, then the summary's own
+order) and the browser opens on the three files of the best one.
+
+The files are coloured by ``error_type``, the column the dashboard's bars colour
+by too (``category_colors``): there is no colour column here, which would win
+over the dashboard's palette.
 
 A run writes one variant type, so either source (or, on a data root that holds
 two routes, both) is absent: an absent source contributes no row, and a run that
@@ -41,8 +45,8 @@ Output schema:
     format : Utf8       vcf
     uri : Utf8          path relative to the results folder
     name : Utf8         track label shown in the browser
-    color : Utf8        per-kind colour
-    category : Utf8     track-selector folder
+    error_type : Utf8   False positives / Missed calls / True positives (colour key and
+                        track-selector folder)
     order : Int64       row order the browser opens with (``order_column``)
 """
 
@@ -85,8 +89,7 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "format": pl.Utf8,
     "uri": pl.Utf8,
     "name": pl.Utf8,
-    "color": pl.Utf8,
-    "category": pl.Utf8,
+    "error_type": pl.Utf8,
     "order": pl.Int64,
 }
 
@@ -96,12 +99,13 @@ _ROUTES = {
     "truvari_summary": ("structural", "truvari", ("fp", "fn", "tp-comp")),
 }
 
-# kind -> (label shown in the track name, track-selector folder, Okabe-Ito colour).
+# kind -> (label shown in the track name, error type). The error type is the key of the
+# dashboard's `error_type` colours and the track-selector folder.
 _KINDS = {
-    "fp": ("false positives", "False positives", "rgb(213,94,0)"),
-    "fn": ("false negatives", "False negatives", "rgb(0,114,178)"),
-    "tp": ("true positives", "True positives", "rgb(0,158,115)"),
-    "tp-comp": ("true positives", "True positives", "rgb(0,158,115)"),
+    "fp": ("false positives", "False positives"),
+    "fn": ("missed calls", "Missed calls"),
+    "tp": ("true positives", "True positives"),
+    "tp-comp": ("true positives", "True positives"),
 }
 
 
@@ -121,6 +125,22 @@ def _stem(row: dict, label: str) -> str | None:
     if file_name.startswith(label + ".") and file_name.count(".") >= 3:
         return file_name.rsplit(".", 2)[0]
     return None
+
+
+def _number(value: object) -> float | None:
+    """A summary cell as a number; blank or unreadable is ``None`` (ranked last)."""
+    try:
+        number = float(_text(value))
+    except ValueError:
+        return None
+    return None if number != number else number
+
+
+def _rank(row: dict) -> tuple[float, float]:
+    """Sort key, best callset first: higher F1, then fewer errors (false positives + misses)."""
+    f1 = _number(row.get("F1"))
+    errors = (_number(row.get("FP")) or 0.0) + (_number(row.get("FN")) or 0.0)
+    return (-(f1 if f1 is not None else -1.0), errors)
 
 
 def _truth_of(stem: str, label: str, caller: str) -> str:
@@ -153,7 +173,8 @@ def transform(sources: dict[str, pl.DataFrame | None], context=None) -> pl.DataF
             if (table["Threshold"] == "None").any():
                 table = table.filter(pl.col("Threshold") == "None")
         seen: set[str] = set()
-        for row in table.iter_rows(named=True):
+        # Best callset first (the sort is stable: ties keep the summary's order).
+        for row in sorted(table.iter_rows(named=True), key=_rank):
             label = _text(row.get("Tool"))
             if not label:
                 continue
@@ -164,7 +185,7 @@ def transform(sources: dict[str, pl.DataFrame | None], context=None) -> pl.DataF
             caller = _text(row.get("Caller"))
             truth = _truth_of(stem, label, caller)
             for kind in kinds:
-                phrase, category, color = _KINDS[kind]
+                phrase, error_type = _KINDS[kind]
                 rows.append(
                     {
                         "track_id": f"{tool}.{stem}.{kind}",
@@ -176,8 +197,7 @@ def transform(sources: dict[str, pl.DataFrame | None], context=None) -> pl.DataF
                         "format": "vcf",
                         "uri": f"{route}/{label}/benchmarks/{tool}/{stem}.{kind}.vcf.gz",
                         "name": f"{label} {phrase}",
-                        "color": color,
-                        "category": category,
+                        "error_type": error_type,
                     }
                 )
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Group,
   Paper,
@@ -25,9 +25,20 @@ import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import {
   advancedVizSelectionColumn,
   advancedVizSelectionFilter,
-  filtersExcludingOwn,
+  genomePosFilterIndex,
+  genomeRegionFilters,
   hasOwnSelection,
+  isRegionFilter,
 } from '../../selection';
+import { usePublishHighlight } from '../../highlight/bus';
+import { filtersForGenomeViewFetch } from './genomespy/genomeViewData';
+import {
+  breakpointHighlight,
+  breakpointRegion,
+  nearestSide,
+  sideColumns,
+  type ChordSide,
+} from './genome_chord/chordLinking';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import {
   angleAt,
@@ -113,6 +124,26 @@ const ASSEMBLY_AUTO = 'auto';
 const MAX_LEGEND_ENTRIES = 12;
 
 const SVG_STYLE: React.CSSProperties = { width: '100%', height: '100%', display: 'block' };
+
+/**
+ * The end of a chord the pointer is nearer to, read in the SVG's own
+ * coordinates (the drawing is scaled to its tile, so the screen position goes
+ * through the inverse of the SVG's transform). `a` when the position cannot be
+ * mapped (a jsdom-less test, an SVG without a screen matrix).
+ */
+function sideAt(
+  event: React.MouseEvent<SVGPathElement>,
+  ends: readonly [{ x: number; y: number }, { x: number; y: number }],
+): ChordSide {
+  const svg = event.currentTarget.ownerSVGElement;
+  const matrix = svg?.getScreenCTM?.();
+  if (!svg || !matrix) return 'a';
+  const point = svg.createSVGPoint();
+  point.x = event.clientX;
+  point.y = event.clientY;
+  const at = point.matrixTransform(matrix.inverse());
+  return nearestSide({ x: at.x, y: at.y }, ends[0], ends[1]);
+}
 
 /** Degrees for an SVG `rotate()`, from the module's clockwise-from-noon angle. */
 const degrees = (angle: number): number => (angle * 180) / Math.PI;
@@ -210,8 +241,10 @@ const GenomeChordRenderer: React.FC<Props> = ({
   // This component must not narrow itself by its own selection: clicking a chord
   // would redraw the ring as that one chord and the user could never widen it
   // again. Every other component still narrows.
+  // The same goes for the breakpoint a click sends a genome browser to: that
+  // region filter pair is this tile's own, and must not shrink its own ring.
   const filtersForFetch = useMemo(
-    () => filtersExcludingOwn(filters, metadata.index, 'scatter_selection'),
+    () => filtersForGenomeViewFetch(filters, metadata.index),
     [filters, metadata.index],
   );
 
@@ -353,6 +386,49 @@ const GenomeChordRenderer: React.FC<Props> = ({
     [selectionColumn, config.sample_col],
   );
 
+  // ---- Linking with the genome tiles ----------------------------------------
+  // A hover on a chord puts the breakpoint of the end nearer to the pointer on
+  // the highlight bus (a browser draws a band there); a click also hands the
+  // dashboard that breakpoint as a region, the filter pair a brush emits, so a
+  // genome browser follows it. The value filter of a selection is unchanged.
+  const ownIndex = String(metadata.index);
+  const publishHighlight = usePublishHighlight(ownIndex);
+  const hoverKeyRef = useRef<string | null>(null);
+  // The breakpoint this tile last sent out as a region (`row:side`).
+  const regionRef = useRef<{ key: string; side: ChordSide } | null>(null);
+  const ownRegionActive = useMemo(
+    () =>
+      filters.some(
+        (f) =>
+          isRegionFilter(f) &&
+          (f.index === ownIndex || f.index === genomePosFilterIndex(ownIndex)),
+      ),
+    [filters, ownIndex],
+  );
+  useEffect(() => {
+    // Cleared from outside (the tile's reset, the filter summary).
+    if (!ownRegionActive) regionRef.current = null;
+  }, [ownRegionActive]);
+  useEffect(() => () => publishHighlight(null), [publishHighlight]);
+
+  const emitRegion = useCallback(
+    (link: ChordLink | null, side: ChordSide) => {
+      if (!onFilterChange) return;
+      const cols = sideColumns(config, side);
+      const region = link ? breakpointRegion(link, side) : null;
+      for (const filter of genomeRegionFilters(metadata, cols.chrom, cols.pos, region)) {
+        onFilterChange(filter);
+      }
+    },
+    [onFilterChange, config, metadata],
+  );
+  const clearRegion = useCallback(() => {
+    const sent = regionRef.current;
+    if (!sent) return;
+    regionRef.current = null;
+    emitRegion(null, sent.side);
+  }, [emitRegion]);
+
   const emitSelection = useCallback(
     (values: string[]) => {
       if (!onFilterChange || !selectionColumn) return;
@@ -374,6 +450,21 @@ const GenomeChordRenderer: React.FC<Props> = ({
     [selectionEnabled, selectionValueOf, selected, emitSelection],
   );
 
+  const handleLinkClick = useCallback(
+    (link: ChordLink, side: ChordSide) => {
+      const key = `${link.row}:${side}`;
+      if (regionRef.current?.key === key) {
+        // The same breakpoint again: the region goes, as the selection does.
+        clearRegion();
+      } else if (onFilterChange) {
+        regionRef.current = { key, side };
+        emitRegion(link, side);
+      }
+      toggleLink(link);
+    },
+    [clearRegion, emitRegion, onFilterChange, toggleLink],
+  );
+
   const chords = useMemo(() => {
     if (ring.arcs.length === 0) return [];
     return prepared.kept
@@ -383,6 +474,7 @@ const GenomeChordRenderer: React.FC<Props> = ({
         if (a0 === null || a1 === null) return null;
         return {
           link,
+          ends: [polarPoint(CENTRE, CENTRE, R_CHORD, a0), polarPoint(CENTRE, CENTRE, R_CHORD, a1)] as const,
           d: chordPath(CENTRE, CENTRE, R_CHORD, a0, a1),
           width: chordStrokeWidth(
             link.weight,
@@ -516,6 +608,7 @@ const GenomeChordRenderer: React.FC<Props> = ({
                 // A click that misses every chord clears the selection, the way
                 // a Plotly deselect does on the scatter renderers.
                 if (selectionEnabled) emitSelection([]);
+                clearRegion();
               }}
             >
               <g>
@@ -595,7 +688,7 @@ const GenomeChordRenderer: React.FC<Props> = ({
                 </g>
               ) : null}
               <g fill="none" strokeLinecap="round">
-                {chords.map(({ link, d, width, colour }) => {
+                {chords.map(({ link, ends, d, width, colour }) => {
                   const value = selectionValueOf(link);
                   const isSelected = value !== null && selected.includes(value);
                   const dimmed =
@@ -608,12 +701,29 @@ const GenomeChordRenderer: React.FC<Props> = ({
                       stroke={colour}
                       strokeWidth={hovered?.row === link.row ? width + 2 : width}
                       strokeOpacity={dimmed ? CHORD_DIM_OPACITY : CHORD_OPACITY}
-                      style={{ cursor: selectionEnabled ? 'pointer' : 'default' }}
+                      style={{ cursor: selectionEnabled || onFilterChange ? 'pointer' : 'default' }}
                       onMouseEnter={() => setHovered(link)}
-                      onMouseLeave={() => setHovered(null)}
+                      onMouseMove={(event) => {
+                        const side = sideAt(event, ends);
+                        const key = `${link.row}:${side}`;
+                        if (hoverKeyRef.current === key) return;
+                        hoverKeyRef.current = key;
+                        publishHighlight(
+                          breakpointHighlight(link, side, {
+                            color: colour,
+                            positionColumn: sideColumns(config, side).pos,
+                            rowKey: selectionValueOf(link),
+                          }),
+                        );
+                      }}
+                      onMouseLeave={() => {
+                        setHovered(null);
+                        hoverKeyRef.current = null;
+                        publishHighlight(null);
+                      }}
                       onClick={(event) => {
                         event.stopPropagation();
-                        toggleLink(link);
+                        handleLinkClick(link, sideAt(event, ends));
                       }}
                     >
                       <title>

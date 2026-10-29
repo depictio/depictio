@@ -77,6 +77,20 @@ repos:
         files: ^depictio/api/static/screenshots/.*\.png$
         pass_filenames: false
 
+# A template whose content changed must bump `template.version`: the lock holds the
+# version and content hash of every template (~0.3 s, runs only when a template file,
+# its dashboards, its recipes or the lock itself is staged). To fix a failure, bump
+# the version in the template.yaml, then `python scripts/update_template_lock.py --write`.
+-   repo: local
+    hooks:
+      - id: check-template-versions
+        name: Template version bumped
+        description: 'Fail when a template changed without a template.version bump'
+        entry: uv run --extra dev python scripts/update_template_lock.py --check
+        language: system
+        files: ^depictio/projects/(.+/)?(template\.yaml|dashboards/.+\.ya?ml|recipes/.+)$|^depictio/projects/template_versions\.lock\.json$|^scripts/update_template_lock\.py$
+        pass_filenames: false
+
 # Clean jupyter notebooks
 -   repo: https://github.com/kynan/nbstripout
     rev: 0.9.1

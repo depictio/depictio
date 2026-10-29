@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  contigSpellings,
   genomicFromRecord,
+  genomicFromRowByName,
+  locusOfInterval,
   hoverInterval,
   nearestGenomicPoint,
   pixelsToBp,
@@ -194,5 +197,51 @@ describe('rowMatcher', () => {
     expect(m?.({ chrom: 'chr1', start: 101 })).toBe(false);
     // A table without the record's columns ignores the event.
     expect(m?.({ sample: 's1' })).toBe(false);
+  });
+});
+
+describe('contigSpellings', () => {
+  it('gives the spelling with the other chr prefix', () => {
+    expect(contigSpellings('chr8')).toEqual(['8']);
+    expect(contigSpellings('8')).toEqual(['chr8']);
+    expect(contigSpellings('')).toBeUndefined();
+    expect(contigSpellings(null)).toBeUndefined();
+  });
+});
+
+describe('genomicFromRowByName', () => {
+  it('reads a contig, a position and an optional end by the usual column names', () => {
+    expect(genomicFromRowByName({ gene: 'TP53', chrom: 'chr17', pos: '7675000' })).toEqual({
+      refName: 'chr17',
+      start: 7675000,
+      end: 7675000,
+    });
+    expect(genomicFromRowByName({ Chromosome: '2', Start: 10, End: 50 })).toEqual({
+      refName: '2',
+      start: 10,
+      end: 50,
+    });
+  });
+  it('is null without a contig and a numeric position', () => {
+    expect(genomicFromRowByName({ gene: 'TP53', score: 3 })).toBeNull();
+    expect(genomicFromRowByName({ chrom: 'chr1', pos: 'n/a' })).toBeNull();
+    expect(genomicFromRowByName({ chrom: '', pos: 5 })).toBeNull();
+    expect(genomicFromRowByName(null)).toBeNull();
+  });
+});
+
+describe('locusOfInterval', () => {
+  it('pads a single position on both sides and never goes below 1', () => {
+    expect(locusOfInterval({ refName: 'chr8', start: 1000, end: 1000 })).toBe('chr8:500-1500');
+    expect(locusOfInterval({ refName: 'chr8', start: 100, end: 100 })).toBe('chr8:1-600');
+  });
+  it('gives a span a margin of a tenth of its length, at least the pad', () => {
+    expect(locusOfInterval({ refName: 'chr8', start: 10_000, end: 20_000 })).toBe('chr8:9000-21000');
+    expect(locusOfInterval({ refName: 'chr8', start: 10_000, end: 10_100 })).toBe('chr8:9500-10600');
+  });
+  it('is null for a missing contig or a non finite bound', () => {
+    expect(locusOfInterval(null)).toBeNull();
+    expect(locusOfInterval({ refName: '', start: 1, end: 2 })).toBeNull();
+    expect(locusOfInterval({ refName: 'c', start: Number.NaN, end: 2 })).toBeNull();
   });
 });

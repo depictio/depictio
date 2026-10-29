@@ -24,8 +24,12 @@ import type { RefObject } from 'react';
 import type { EmbedResult } from '@genome-spy/core/types/embedApi.js';
 import type { RootSpec } from '@genome-spy/core/spec/root.js';
 import { attachZoomGate } from '../../zoomGateDom';
+import { isZoomWheel } from '../../zoomGate';
+import { scrollLanesBy, wheelPixels } from './laneScroll';
 import { BRUSH_PARAM, DATASET_NAME, GENOME_SCALE_NAME } from './genomeSpySpec';
 import type { Contig } from './genomeSpySpec';
+import { attachInteractionMode, wheelZooms } from './interactionMode';
+import type { InteractionMode } from './interactionMode';
 
 export type GenomeSpyBackend = 'webgl' | 'canvas';
 
@@ -56,6 +60,14 @@ export interface UseGenomeSpyOptions {
   onHover?: (datum: Readonly<Record<string, unknown>> | null) => void;
   /** What a drag does, appended to the zoom hint ("drag to select"). */
   dragHint?: string;
+  /** What the pointer does on the axis (default `select`, the older tile's
+   *  drag). It decides who gets a plain wheel and whether a drag may pan, and
+   *  is fixed for the life of an embed: a change rebuilds it, as the spec's
+   *  brush trigger changes with it. */
+  interactionMode?: InteractionMode;
+  /** The lanes scroll inside the embed (`BuiltGenomeSpec.scrolls`): a plain
+   *  wheel over the tile moves them (see `laneScroll.ts`). */
+  scrollLanes?: boolean;
 }
 
 export interface UseGenomeSpyResult {
@@ -122,6 +134,8 @@ export function useGenomeSpy(
     onBrush,
     onHover,
     dragHint = 'drag to select',
+    interactionMode = 'select',
+    scrollLanes = false,
   }: UseGenomeSpyOptions,
 ): UseGenomeSpyResult {
   const [api, setApi] = useState<EmbedResult | null>(null);
@@ -151,10 +165,16 @@ export function useGenomeSpy(
     // GenomeSpy zooms the genome axis on a plain wheel. The gate on its host
     // keeps that wheel from the canvas: the page scrolls, Ctrl / Cmd + wheel
     // and a two-finger pinch zoom. Its hint shows on this axis's first hover,
-    // long enough to read, with what a drag does.
+    // long enough to read, with what a drag does. In pan mode the reader asked
+    // for the wheel: it zooms, and there is nothing to hint.
+    const zoomsOnWheel = wheelZooms(interactionMode);
     const detachZoomGate = attachZoomGate(el, {
+      block: !zoomsOnWheel,
+      canZoom: () => !zoomsOnWheel,
       ownHint: { visibleMs: 6000, extra: dragHintRef.current },
     });
+    // The pointer mode keeps a drag from panning (see `attachInteractionMode`).
+    const detachMode = attachInteractionMode(el, interactionMode);
 
     (async () => {
       const [{ embed }] = await Promise.all([
@@ -187,22 +207,51 @@ export function useGenomeSpy(
           onPickRef.current?.(event.hit.datum);
         }),
       );
-      // Hover is optional: the event name is not in every GenomeSpy build, so
-      // the subscription is guarded and a failure costs only the hover publish.
+      // Hover: `marks.observeHover` reports the hovered mark (0.88 on);
+      // `marks.subscribe` takes only click, dblclick and contextmenu there, so
+      // a 'mouseover' subscription silently never fired. Older builds had the
+      // event instead. Guarded: a failure costs only the hover publish.
       try {
         const marks = result.views.root().marks as unknown as {
+          observeHover?: (cb: (hit: { datum?: Record<string, unknown> } | undefined) => void) => () => void;
           subscribe?: (
             type: string,
             cb: (event: { hit?: { datum?: Record<string, unknown> } | null }) => void,
           ) => void;
         };
-        if (typeof marks.subscribe === 'function') {
+        if (typeof marks.observeHover === 'function') {
+          let first = true;
+          unsubscribes.push(
+            marks.observeHover((hit) => {
+              // Called once at once with the current hit: not a hover yet.
+              if (first) {
+                first = false;
+                if (!hit) return;
+              }
+              onHoverRef.current?.(hit?.datum ?? null);
+            }),
+          );
+        } else if (typeof marks.subscribe === 'function') {
           marks.subscribe('mouseover', (event) => {
             onHoverRef.current?.(event?.hit?.datum ?? null);
           });
         }
       } catch {
-        // No hover event in this build.
+        // No hover API in this build.
+      }
+      if (scrollLanes) {
+        // Not passive: a wheel that moved the lanes must not scroll the page
+        // too. A wheel at the end of the lanes is the page's.
+        const onLaneWheel = (e: WheelEvent) => {
+          if (isZoomWheel(e) || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+          if (scrollLanesBy(result, wheelPixels(e.deltaY, e.deltaMode, el.clientHeight))) {
+            e.preventDefault();
+          }
+        };
+        // In the capture phase, like the zoom gate's: that one stops the
+        // plain wheel there, so a bubble listener on this element never runs.
+        el.addEventListener('wheel', onLaneWheel, { capture: true, passive: false });
+        unsubscribes.push(() => el.removeEventListener('wheel', onLaneWheel, { capture: true }));
       }
       const onLeave = () => onHoverRef.current?.(null);
       el.addEventListener('mouseleave', onLeave);
@@ -239,6 +288,7 @@ export function useGenomeSpy(
     return () => {
       cancelled = true;
       detachZoomGate();
+      detachMode();
       for (const off of unsubscribes) off();
       if (live) {
         lastViewRef.current = readViewDomain(live) ?? lastViewRef.current;
@@ -246,7 +296,7 @@ export function useGenomeSpy(
       }
       setApi(null);
     };
-  }, [container, spec, backend, lazySources]);
+  }, [container, spec, backend, lazySources, scrollLanes, interactionMode]);
 
   return { api, error, restoredView };
 }
@@ -412,6 +462,20 @@ export function pushOverlayRows(
     // A source the spec does not declare (a file-backed tile): no overlay.
   }
   return null;
+}
+
+/** Set a top-level param of the spec (`false` when the embed is finalized or
+ *  does not declare it: a file-backed tile, an older build). */
+export function setSpecParam(api: EmbedResult, name: string, value: string): boolean {
+  if (!isGenomeSpyLive(api)) return false;
+  try {
+    (api as unknown as { params?: { get?: (n: string) => { setValue: (v: string) => void } } }).params
+      ?.get?.(name)
+      .setValue(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** The linearised domain the genome axis shows now, or `null` when the build

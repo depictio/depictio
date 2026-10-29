@@ -16,8 +16,15 @@ Each file has a few homes, by route. The first one the run holds is used:
   ``artic_minion/<S>.primertrimmed.rg.sorted.bam`` (nanopore).
 
 Row order is what the browser opens on (``initial_tracks`` shows the first
-rows): one block per sample, its variants then its alignments, in the order of
-the summary.
+rows): one block per sample, its variants then its alignments. The first block
+is the sample holding the run's best supported call (the highest ``call_score``
+of ``variants_long``, the call the browser opens on), so the reads sit under the
+first call; the other samples follow in the order of the summary.
+
+The manifest holds no colour of its own: a colour column would win over the
+dashboard's palette. The tile colours the tracks by ``lineage`` instead, the
+column the dashboard's ``category_colors`` keys, so a sample keeps the hue the
+plots give its lineage.
 
 Two ways the files are read:
 - ``TRACKS_URI`` is set (the template turns it into ``remote_base_uri``): every
@@ -34,7 +41,7 @@ Output schema:
     format : Utf8       vcf / bam
     uri : Utf8          path relative to the results folder
     name : Utf8         track label shown in the browser
-    color : Utf8        per-kind colour
+    lineage : Utf8      Pangolin lineage of the sample ("Unassigned" without one)
     category : Utf8     track-selector folder
     order : Int64       row order the browser opens with (``order_column``)
 """
@@ -53,6 +60,13 @@ SOURCES: list[RecipeSource] = [
         format="CSV",
         read_kwargs={"infer_schema_length": 0},
     ),
+    # Only its best supported call is read, to open the reads of that call's sample.
+    RecipeSource(
+        ref="variants",
+        dc_ref="variants_long",
+        optional=True,
+        input_schema={"sample": pl.Utf8},
+    ),
 ]
 
 # OUTPUT SCHEMA: the columns transform() returns, checked after it.
@@ -63,12 +77,12 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "format": pl.Utf8,
     "uri": pl.Utf8,
     "name": pl.Utf8,
-    "color": pl.Utf8,
+    "lineage": pl.Utf8,
     "category": pl.Utf8,
     "order": pl.Int64,
 }
 
-# kind -> (format, candidate paths in order of preference, category, name, colour)
+# kind -> (format, candidate paths in order of preference, category, name)
 _VARIANTS = (
     "variants",
     "vcf",
@@ -81,7 +95,6 @@ _VARIANTS = (
     ),
     "Variants",
     "{s} variants",
-    "rgb(213,94,0)",
 )
 _ALIGNMENTS = (
     "alignments",
@@ -92,11 +105,38 @@ _ALIGNMENTS = (
     ),
     "Alignments",
     "{s} reads",
-    "rgb(0,114,178)",
 )
 
 
-def transform(sources: dict[str, pl.DataFrame], context=None) -> pl.DataFrame:
+def _top_call_sample(variants: pl.DataFrame | None, samples: list[str]) -> str | None:
+    """The sample of the best supported call (``call_score``), None without calls."""
+    if variants is None or variants.is_empty() or "sample" not in variants.columns:
+        return None
+    rank = next((c for c in ("call_score", "AF") if c in variants.columns), None)
+    if rank is None:
+        return None
+    best = (
+        variants.filter(pl.col(rank).is_not_null() & pl.col("sample").is_in(samples))
+        .sort([rank, "sample"], descending=[True, False])
+        .head(1)
+    )
+    return str(best["sample"][0]) if best.height else None
+
+
+def _lineages(summary: pl.DataFrame) -> dict[str, str]:
+    """Sample -> Pangolin lineage of the summary; "Unassigned" where it holds none."""
+    col = next((c for c in summary.columns if "lineage" in c.lower()), None)
+    out: dict[str, str] = {}
+    for row in summary.to_dicts():
+        sample = str(row["Sample"]).strip() if row.get("Sample") is not None else ""
+        if not sample:
+            continue
+        value = str(row[col]).strip() if col and row.get(col) is not None else ""
+        out[sample] = "Unassigned" if value in ("", "NA") else value
+    return out
+
+
+def transform(sources: dict[str, pl.DataFrame | None], context=None) -> pl.DataFrame:
     """Spell out the expected track files of every sample of the summary."""
     summary = sources["summary"]
     # A UTF-8 BOM would stay glued to the first header.
@@ -112,6 +152,12 @@ def transform(sources: dict[str, pl.DataFrame], context=None) -> pl.DataFrame:
         if s
     ]
 
+    # The sample holding the best supported call leads, so its reads open under it.
+    top = _top_call_sample(sources.get("variants"), samples)
+    if top is not None:
+        samples = [top, *[s for s in samples if s != top]]
+    lineage = _lineages(summary)
+
     def uri_for(sample_id: str, candidates: tuple[str, ...]) -> str:
         """The first candidate the run holds; the first one when none (or in place)."""
         paths = [c.format(s=sample_id) for c in candidates]
@@ -121,7 +167,7 @@ def transform(sources: dict[str, pl.DataFrame], context=None) -> pl.DataFrame:
 
     rows: list[dict] = []
     for sample_id in samples:
-        for kind, fmt, candidates, category, name, color in (_VARIANTS, _ALIGNMENTS):
+        for kind, fmt, candidates, category, name in (_VARIANTS, _ALIGNMENTS):
             rows.append(
                 {
                     "track_id": f"{sample_id}.{kind}",
@@ -130,7 +176,7 @@ def transform(sources: dict[str, pl.DataFrame], context=None) -> pl.DataFrame:
                     "format": fmt,
                     "uri": uri_for(sample_id, candidates),
                     "name": name.format(s=sample_id),
-                    "color": color,
+                    "lineage": lineage.get(sample_id, "Unassigned"),
                     "category": category,
                 }
             )

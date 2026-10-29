@@ -531,6 +531,11 @@ export interface StoredMetadata {
    *  (`default_order` "asc": the smallest) rather than the first of the list. */
   default_by?: string;
   default_order?: 'asc' | 'desc';
+  /** Select / MultiSelect / SegmentedControl: a column of the same collection
+   *  that orders the options (a `time_order` beside a `time_point`); the server
+   *  returns them in that order and the panel keeps it. Unset: natural order,
+   *  or by duration when every option is one (`30min`, `2h`). */
+  order_by?: string;
   /** `always_selected` only: facts the tab's scope banner shows about the
    *  picked value, each read from the first row of the filter's own collection
    *  that holds it. `format` is the cards' number vocabulary. */
@@ -619,12 +624,18 @@ export interface StoredMetadata {
   show_density?: boolean;
   /** Manifest column the tracks are coloured by (a condition). */
   color_by?: string;
+  /** Colour the tracks along a sequential ramp over a manifest column
+   *  (`{column, order_by?, scheme?}`); replaces `color_by`. */
+  color_scale?: { column: string; order_by?: string | null; scheme?: string } | null;
   /** Draw splice junction arcs (sashimi) on the RNA alignment tracks. */
   show_junctions?: boolean;
   /** Previous / next through the calls of `locus_from` (default on). */
   call_stepper?: boolean;
   /** Follow the genomic window of the other genome tiles (default on). */
   follow_window?: boolean;
+  /** The tile's height follows its open tracks instead of the stored grid
+   *  height (off by default; see `autofit.ts`). */
+  auto_height?: boolean;
   /** Extra views the tile can open in a large dialog. */
   views?: Array<'breakpoint' | 'circular'>;
   /** Initial display of the DNA alignment tracks. */
@@ -648,6 +659,10 @@ export interface JBrowseLocusFrom {
   sort_by?: string | null;
   /** Sort direction of `sort_by`; default true. */
   descending?: boolean;
+  /** Open on the span of the first N calls when they sit within `max_span`. */
+  span_top?: number | null;
+  /** With `span_top`: the widest span (bases) the opening view covers; default 1 Mb. */
+  max_span?: number;
   /** Column naming a call in the stepper. */
   label_column?: string | null;
   /** Columns of the second region of a fusion or SV. */
@@ -774,10 +789,23 @@ export interface DashboardData {
   advanced_viz_controls?: 'popover' | 'rail' | 'header';
   /** Content-aware tile heights (autofit v2). Absent means on. */
   autofit?: boolean;
+  /** The template revision this dashboard was last imported from (provenance,
+   *  not content: never saved from the viewer, never in a version). Absent on a
+   *  dashboard built in the viewer or imported from a plain file. */
+  template_origin?: DashboardTemplateOrigin | null;
   /** Present only when a past version was requested. Carries everything the
    *  read-only banner needs, so previewing costs one request, not two. */
   preview?: DashboardPreviewInfo;
   [key: string]: unknown;
+}
+
+/** `template_origin` of a dashboard the template import wrote. `template_version`
+ *  is the template's own revision (`template.version`), not the pipeline's. */
+export interface DashboardTemplateOrigin {
+  template_id: string;
+  template_version: string;
+  /** Naive UTC `YYYY-MM-DD HH:MM:SS`. */
+  imported_at?: string;
 }
 
 export interface DashboardPreviewInfo {
@@ -980,9 +1008,12 @@ export async function fetchUniqueValues(
   dcId: string,
   columnName: string,
   filterExpr?: string | null,
+  orderBy?: string | null,
 ): Promise<string[]> {
   const params = new URLSearchParams({ column: columnName });
   if (filterExpr) params.set('filter_expr', filterExpr);
+  // The server orders the values by this companion column.
+  if (orderBy) params.set('order_by', orderBy);
   const res = await authFetch(`${API_BASE}/deltatables/unique_values/${dcId}?${params.toString()}`);
   if (!res.ok) throw new Error(`Failed to fetch unique values: ${res.status}`);
   const body = (await res.json()) as { values?: string[] };
@@ -1244,6 +1275,8 @@ export interface FilterOptionsRequest extends DataPinFields {
   column: string;
   kind: 'unique' | 'range';
   filter_expr?: string | null;
+  /** `unique` only: the companion column ordering the values. */
+  order_by?: string | null;
 }
 
 /**
@@ -1275,12 +1308,14 @@ export async function fetchUniqueValuesAt(
   columnName: string,
   pins: DataPinFields,
   filterExpr?: string | null,
+  orderBy?: string | null,
 ): Promise<string[]> {
   const body = await fetchFilterOptions(dashboardId, {
     dc_id: dcId,
     column: columnName,
     kind: 'unique',
     ...(filterExpr ? { filter_expr: filterExpr } : {}),
+    ...(orderBy ? { order_by: orderBy } : {}),
     ...pins,
   });
   const values = body.values;
@@ -1685,7 +1720,9 @@ export type AdvancedVizKind =
   | 'ramachandran'
   | 'ranked_distribution'
   | 'spatial_cells'
-  | 'allele_grid';
+  | 'allele_grid'
+  | 'pedigree'
+  | 'ranked_table';
 
 /** Accepted dtypes for one role, plus whether the role is required. Sourced
  *  from the backend canonical schema so the builder never duplicates the
@@ -4550,8 +4587,10 @@ export interface DashboardListEntry extends DashboardSummary {
   workflow_system?: string;
   last_saved_ts?: string;
   permissions?: DashboardPermissions;
-  /** Some endpoints stamp this; matches the YAML/seed origin. */
-  template_origin?: string;
+  /** Which template revision this dashboard was last imported from; absent on
+   *  one built in the viewer or imported from a plain file. A listing's project
+   *  `template_origin` is a different thing (see `DashboardData`). */
+  template_origin?: DashboardTemplateOrigin | null;
   /** Shape can drift slightly per backend version — keep it permissive. */
   [key: string]: unknown;
 }

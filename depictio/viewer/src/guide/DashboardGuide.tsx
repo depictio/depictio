@@ -31,6 +31,7 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { genomeConfigOf, TextRenderer, useCommentsControl } from 'depictio-react-core';
+import { paletteVar } from 'depictio-react-core';
 import type {
   DashboardData,
   DashboardSummary,
@@ -290,7 +291,7 @@ const Kbd: React.FC<{ icon?: string; color?: string; children: React.ReactNode }
         style={{
           verticalAlign: '-2px',
           marginRight: 3,
-          color: color ? `var(--mantine-color-${color}-filled)` : 'var(--mantine-primary-color-filled)',
+          color: color ? paletteVar(color, 'filled') : 'var(--mantine-primary-color-filled)',
         }}
       />
     )}

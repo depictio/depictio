@@ -5,6 +5,7 @@ import Plot from './LegendAwarePlot';
 import { AdvancedVizKind, fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { categoryColorMap } from '../../categoryColors';
 import { mantineCategoricalPalette } from '../../colors';
+import { useTabHue } from '../../tabColor';
 import { isStaleFetch } from '../../fetchQueue';
 import { useCategoryColorSource, useCategoryPalette } from '../../hooks/useCategoryColors';
 import {
@@ -264,7 +265,9 @@ const RankedDistributionRenderer: React.FC<Props> = ({
     [colourSource, config.group_col, groupUniverse, palette],
   );
   const themeColours = plotlyThemeColors(isDark, theme);
-  const primary = theme.colors[theme.primaryColor]?.[isDark ? 4 : 6] ?? palette[0];
+  // Ungrouped points have no data colour: they take the tab's hue, else the theme's.
+  const tabHue = useTabHue();
+  const primary = tabHue ?? theme.colors[theme.primaryColor]?.[isDark ? 4 : 6] ?? palette[0];
   const colourOf = useCallback(
     (group: string | null) => (group !== null ? groupColours.get(group) : undefined) ?? primary,
     [groupColours, primary],

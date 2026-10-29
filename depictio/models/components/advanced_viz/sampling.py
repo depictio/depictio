@@ -172,6 +172,15 @@ KIND_SAMPLING_POLICY: dict[AdvancedVizKind, SamplingPolicy] = {
     # x loci x 2) and ``AlleleGridConfig.max_samples`` / ``max_loci`` cap what
     # is drawn after ordering, counting the rest.
     "allele_grid": "none",
+    # A pedigree is a graph held in rows: a sampled frame drops a parent, and
+    # the child under it is drawn as a founder with a missing link.
+    # ``PedigreeConfig.max_individuals`` is the guard, counting what it hides.
+    "pedigree": "none",
+    # A leaderboard is the top of an ordering: a sampled frame drops candidates
+    # at random and the rank of every row under them shifts. ``top_n`` is the
+    # guard on what is drawn; a collection past the no-sample ceiling is
+    # reduced anyway and the tile says its ranks are estimates.
+    "ranked_table": "none",
 }
 
 #: The role whose tail a ``tail`` kind must keep, and whether the interesting

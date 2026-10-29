@@ -4548,3 +4548,528 @@ def generate_allele_grid_demo() -> None:
 
 
 generate_allele_grid_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Pedigree: three families in the PED coding.
+# pedigree_demo.tsv  columns: family, individual, father, mother, sex, status,
+#                            deceased, label, note
+#
+# One row per individual, in the encoding a PED file and the nf-core samplesheets
+# use: sex 1 male / 2 female / 0 unknown, status 2 affected / 1 unaffected /
+# 0 unknown, a parent of 0 for a founder. No randomness: the three families are
+# written out because each one exists to show something.
+#   FAM001  three generations, a couple married in, a cousin, and a stillbirth
+#           (unknown sex and status, deceased)
+#   FAM002  a trio and an unaffected sibling
+#   FAM003  a mother with no father in the table, her deceased mother
+# ---------------------------------------------------------------------------
+def generate_pedigree_demo() -> None:
+    """Write pedigree_demo.tsv: 18 individuals in 3 families."""
+    header = [
+        "family",
+        "individual",
+        "father",
+        "mother",
+        "sex",
+        "status",
+        "deceased",
+        "label",
+        "note",
+    ]
+    rows = [
+        # family, individual, father, mother, sex, status, deceased, label, note
+        ["FAM001", "F1_I1", "0", "0", 1, 1, 1, "I-1", "Died at 71, unaffected"],
+        ["FAM001", "F1_I2", "0", "0", 2, 1, 0, "I-2", "Carrier"],
+        ["FAM001", "F1_II1", "F1_I1", "F1_I2", 1, 1, 0, "II-1", "Carrier"],
+        ["FAM001", "F1_II2", "F1_I1", "F1_I2", 2, 2, 0, "II-2", "Affected, onset at 6 years"],
+        ["FAM001", "F1_II3", "0", "0", 2, 1, 0, "II-3", "Married into the family"],
+        ["FAM001", "F1_II4", "0", "0", 1, 1, 0, "II-4", "Married into the family"],
+        ["FAM001", "F1_III1", "F1_II1", "F1_II3", 2, 2, 0, "III-1", "Proband"],
+        ["FAM001", "F1_III2", "F1_II1", "F1_II3", 1, 1, 0, "III-2", "Unaffected brother"],
+        ["FAM001", "F1_III3", "F1_II4", "F1_II2", 1, 2, 0, "III-3", "Affected cousin"],
+        ["FAM001", "F1_III4", "F1_II1", "F1_II3", 0, 0, 1, "III-4", "Stillbirth, sex not recorded"],
+        ["FAM002", "F2_I1", "0", "0", 1, 1, 0, "I-1", "Father"],
+        ["FAM002", "F2_I2", "0", "0", 2, 1, 0, "I-2", "Mother"],
+        ["FAM002", "F2_II1", "F2_I1", "F2_I2", 1, 2, 0, "II-1", "Proband"],
+        ["FAM002", "F2_II2", "F2_I1", "F2_I2", 2, 1, 0, "II-2", "Unaffected sister"],
+        ["FAM003", "F3_I1", "0", "0", 2, 0, 1, "I-1", "Died young, phenotype not recorded"],
+        ["FAM003", "F3_II1", "0", "F3_I1", 2, 2, 0, "II-1", "Affected, father not in the table"],
+        ["FAM003", "F3_III1", "0", "F3_II1", 1, 2, 0, "III-1", "Proband"],
+        ["FAM003", "F3_III2", "0", "F3_II1", 2, 1, 0, "III-2", "Unaffected sister"],
+    ]
+    write_tsv(OUT / "pedigree_demo.tsv", header, rows)
+
+
+generate_pedigree_demo()
+
+
+# ---------------------------------------------------------------------------
+# NN. Ranked table: top variants of a rare-disease run and outlier genes of a
+# DROP run. Written out, not drawn at random: each row exists to show a medal,
+# a badge, a bar or a genotype pattern.
+# ranked_variants_demo.tsv   variant_key, case_id, gene, hgvs_p, model_class,
+#                            impact, clinvar, rank_score, cadd, gnomad_af,
+#                            chrom, pos, gt_proband, gt_mother, gt_father
+# ranked_family_demo.tsv     case_id, individual, father, mother, sex, status,
+#                            proband  (PED coding; CASE_A a trio, CASE_B a
+#                            quartet with an unaffected sister)
+# ranked_genotypes_demo.tsv  variant_key, sample, gt_class  (long form of the
+#                            three gt_* columns, one row per variant and person)
+# ranked_outliers_demo.tsv   sample, gene, signal, status, expression,
+#                            splicing, mae, neg_log10_p, pvalue, padj, z_score,
+#                            delta_psi  (gene outliers of three samples)
+# ---------------------------------------------------------------------------
+def generate_ranked_table_demo() -> None:
+    """Write the four ranked-table fixtures."""
+    people = {
+        "CASE_A": {"proband": "A_kid", "mother": "A_mum", "father": "A_dad"},
+        "CASE_B": {"proband": "B_kid", "mother": "B_mum", "father": "B_dad"},
+    }
+    family_header = ["case_id", "individual", "father", "mother", "sex", "status", "proband"]
+    family_rows = [
+        ["CASE_A", "A_dad", 0, 0, 1, 1, 0],
+        ["CASE_A", "A_mum", 0, 0, 2, 1, 0],
+        ["CASE_A", "A_kid", "A_dad", "A_mum", 2, 2, 1],
+        ["CASE_B", "B_dad", 0, 0, 1, 1, 0],
+        ["CASE_B", "B_mum", 0, 0, 2, 1, 0],
+        ["CASE_B", "B_kid", "B_dad", "B_mum", 1, 2, 1],
+        ["CASE_B", "B_sis", "B_dad", "B_mum", 2, 1, 0],
+    ]
+    write_tsv(OUT / "ranked_family_demo.tsv", family_header, family_rows)
+
+    # case, gene, change, model, impact, clinvar, score, cadd, gnomad, chrom, pos,
+    # genotypes of (proband, mother, father)
+    variants = [
+        (
+            "CASE_A",
+            "COL6A1",
+            "p.Gly284Arg",
+            "AD de novo",
+            "HIGH",
+            "Pathogenic",
+            23,
+            32.0,
+            None,
+            "21",
+            47410740,
+            ("0/1", "0/0", "0/0"),
+        ),
+        (
+            "CASE_A",
+            "CBS",
+            "p.Ile278Thr",
+            "AR hom",
+            "MODERATE",
+            "Pathogenic",
+            21,
+            27.4,
+            0.0004,
+            "21",
+            44483184,
+            ("1/1", "0/1", "0/1"),
+        ),
+        (
+            "CASE_A",
+            "PCNT",
+            "c.3465-2A>G",
+            "AR comp-het",
+            "HIGH",
+            "Likely pathogenic",
+            19,
+            29.1,
+            0.00002,
+            "21",
+            47783920,
+            ("0/1", "0/1", "0/0"),
+        ),
+        (
+            "CASE_A",
+            "PCNT",
+            "p.Arg2213*",
+            "AR comp-het",
+            "HIGH",
+            "Likely pathogenic",
+            18,
+            38.0,
+            None,
+            "21",
+            47836711,
+            ("0/1", "0/0", "0/1"),
+        ),
+        (
+            "CASE_A",
+            "SOD1",
+            "p.Asp91Ala",
+            "AD inherited",
+            "MODERATE",
+            "Uncertain",
+            14,
+            24.8,
+            0.0011,
+            "21",
+            33039603,
+            ("0/1", "0/1", "0/0"),
+        ),
+        (
+            "CASE_A",
+            "KCNE1",
+            "p.Ser38Gly",
+            "AD inherited",
+            "LOW",
+            "Benign",
+            9,
+            12.3,
+            0.31,
+            "21",
+            35821680,
+            ("0/1", "0/0", "0/1"),
+        ),
+        (
+            "CASE_A",
+            "DYRK1A",
+            "p.Arg205*",
+            "AD de novo",
+            "HIGH",
+            "Pathogenic",
+            17,
+            41.0,
+            None,
+            "21",
+            37499845,
+            ("0/1", "0/0", "0/0"),
+        ),
+        (
+            "CASE_A",
+            "TTC3",
+            "p.Pro1004Leu",
+            "AR hom",
+            "MODERATE",
+            "Uncertain",
+            12,
+            22.0,
+            0.0021,
+            "21",
+            37152033,
+            ("1/1", "0/1", "./."),
+        ),
+        (
+            "CASE_B",
+            "SCN2A",
+            "p.Arg853Gln",
+            "AD de novo",
+            "MODERATE",
+            "Pathogenic",
+            22,
+            31.2,
+            None,
+            "2",
+            165310406,
+            ("0/1", "0/0", "0/0"),
+        ),
+        (
+            "CASE_B",
+            "SCN2A",
+            "p.Ala1773Thr",
+            "AD inherited",
+            "LOW",
+            "Benign",
+            8,
+            8.9,
+            0.12,
+            "2",
+            165393017,
+            ("0/1", "0/0", "0/1"),
+        ),
+        (
+            "CASE_B",
+            "CHD2",
+            "c.4173+1G>A",
+            "AD de novo",
+            "HIGH",
+            "Likely pathogenic",
+            20,
+            33.4,
+            None,
+            "15",
+            93544210,
+            ("0/1", "0/0", "0/0"),
+        ),
+        (
+            "CASE_B",
+            "CHD2",
+            "p.Val1203Ile",
+            "AD inherited",
+            "LOW",
+            "Uncertain",
+            7,
+            14.6,
+            0.04,
+            "15",
+            93551822,
+            ("0/1", "0/1", "0/0"),
+        ),
+        (
+            "CASE_B",
+            "GBA1",
+            "p.Leu483Pro",
+            "AR hom",
+            "MODERATE",
+            "Pathogenic",
+            16,
+            26.5,
+            0.0003,
+            "1",
+            155238105,
+            ("1/1", "0/1", "0/1"),
+        ),
+    ]
+    header = [
+        "variant_key",
+        "case_id",
+        "gene",
+        "hgvs_p",
+        "model_class",
+        "impact",
+        "clinvar",
+        "rank_score",
+        "cadd",
+        "gnomad_af",
+        "chrom",
+        "pos",
+        "gt_proband",
+        "gt_mother",
+        "gt_father",
+    ]
+    rows: list[list] = []
+    long_rows: list[list] = []
+    for case, gene, change, model, impact, clinvar, score, cadd, af, chrom, pos, gts in variants:
+        key = f"{chrom}:{pos}"
+        rows.append(
+            [
+                key,
+                case,
+                gene,
+                change,
+                model,
+                impact,
+                clinvar,
+                score,
+                cadd,
+                "absent" if af is None else af,
+                chrom,
+                pos,
+                *gts,
+            ]
+        )
+        for role, gt in zip(("proband", "mother", "father"), gts):
+            long_rows.append([key, people[case][role], gt])
+        if case == "CASE_B":
+            # The unaffected sister carries what a recessive or inherited call implies
+            sister = {"AR hom": "0/1", "AD inherited": "0/1"}.get(model, "0/0")
+            long_rows.append([key, "B_sis", sister])
+    write_tsv(OUT / "ranked_variants_demo.tsv", header, rows)
+    write_tsv(OUT / "ranked_genotypes_demo.tsv", ["variant_key", "sample", "gt_class"], long_rows)
+
+    outlier_header = [
+        "sample",
+        "gene",
+        "signal",
+        "status",
+        "expression",
+        "splicing",
+        "mae",
+        "neg_log10_p",
+        "pvalue",
+        "padj",
+        "z_score",
+        "delta_psi",
+    ]
+    outliers = [
+        (
+            "MUC1365",
+            "TIMMDC1",
+            "Expression down",
+            "Called",
+            "yes",
+            "yes",
+            "no",
+            7.4,
+            "4.1e-8",
+            0.0003,
+            -6.2,
+            0.41,
+        ),
+        (
+            "MUC1365",
+            "MCOLN1",
+            "Splicing",
+            "Called",
+            "no",
+            "yes",
+            "no",
+            5.9,
+            "1.2e-6",
+            0.004,
+            -1.1,
+            0.38,
+        ),
+        (
+            "MUC1365",
+            "ALDH18A1",
+            "Expression down",
+            "Called",
+            "yes",
+            "no",
+            "yes",
+            5.1,
+            "7.5e-6",
+            0.02,
+            -4.8,
+            0.02,
+        ),
+        (
+            "MUC1365",
+            "CLPP",
+            "Expression up",
+            "Candidate",
+            "yes",
+            "no",
+            "no",
+            3.8,
+            "1.6e-4",
+            0.21,
+            4.1,
+            0.01,
+        ),
+        (
+            "MUC1365",
+            "NDUFS4",
+            "Splicing",
+            "Not called",
+            "no",
+            "no",
+            "no",
+            2.6,
+            "2.4e-3",
+            1,
+            -0.8,
+            0.22,
+        ),
+        (
+            "MUC1365",
+            "ACAD9",
+            "Expression down",
+            "Not called",
+            "no",
+            "no",
+            "no",
+            2.1,
+            "7.9e-3",
+            1,
+            -2.9,
+            0.0,
+        ),
+        (
+            "MUC1370",
+            "NDUFAF6",
+            "Expression down",
+            "Called",
+            "yes",
+            "no",
+            "no",
+            6.8,
+            "1.6e-7",
+            0.0008,
+            -5.7,
+            0.03,
+        ),
+        (
+            "MUC1370",
+            "TMEM70",
+            "Splicing",
+            "Called",
+            "no",
+            "yes",
+            "no",
+            6.1,
+            "7.9e-7",
+            0.002,
+            -0.9,
+            0.52,
+        ),
+        (
+            "MUC1370",
+            "SURF1",
+            "Expression down",
+            "Candidate",
+            "yes",
+            "no",
+            "yes",
+            4.4,
+            "4.0e-5",
+            0.06,
+            -3.9,
+            0.04,
+        ),
+        (
+            "MUC1370",
+            "COX15",
+            "Expression up",
+            "Not called",
+            "no",
+            "no",
+            "no",
+            2.3,
+            "5.0e-3",
+            1,
+            2.6,
+            0.0,
+        ),
+        (
+            "MUC1384",
+            "POLG",
+            "Splicing",
+            "Called",
+            "no",
+            "yes",
+            "yes",
+            7.9,
+            "1.3e-8",
+            0.0001,
+            -1.4,
+            0.61,
+        ),
+        (
+            "MUC1384",
+            "TWNK",
+            "Expression down",
+            "Candidate",
+            "yes",
+            "no",
+            "no",
+            3.5,
+            "3.2e-4",
+            0.3,
+            -3.1,
+            0.0,
+        ),
+        (
+            "MUC1384",
+            "MPV17",
+            "Expression down",
+            "Not called",
+            "no",
+            "no",
+            "no",
+            1.9,
+            "1.3e-2",
+            1,
+            -2.2,
+            0.01,
+        ),
+    ]
+    write_tsv(OUT / "ranked_outliers_demo.tsv", outlier_header, [list(o) for o in outliers])
+
+
+generate_ranked_table_demo()

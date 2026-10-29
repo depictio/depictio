@@ -134,6 +134,15 @@ AdvancedVizKind = Literal[
     # from nf-core/hlatyping, LILAC in oncoanalyser). Incubating against an
     # oncoplot view of the same table; see `INCUBATING` in schemas.py.
     "allele_grid",
+    # Clinical genetics: a family tree from a PED-like table (one row per
+    # individual, with its father, mother, sex and affected status), drawn with
+    # the standard pedigree symbols (nf-core/raredisease, sarek germline).
+    "pedigree",
+    # A styled leaderboard: candidates ranked by a score, with medals on the
+    # first three, badges and bars in the cells and a hover popover of the
+    # fields behind a row (top variants of nf-core/raredisease, outlier genes
+    # of DROP).
+    "ranked_table",
 ]
 
 # Map visualization types

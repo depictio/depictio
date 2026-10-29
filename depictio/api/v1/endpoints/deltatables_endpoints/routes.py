@@ -898,6 +898,7 @@ async def get_unique_values(
     column: str,
     limit: int = 1000,
     filter_expr: str | None = None,
+    order_by: str | None = None,
     current_user: str = Depends(get_user_or_anonymous),
 ):
     """Return the sorted unique values of ``column`` within a data collection.
@@ -914,6 +915,11 @@ async def get_unique_values(
         filter_expr: Optional Polars filter expression (string) applied before
             collecting unique values. Validated through the safe-eval pipeline
             in ``depictio.models.components.filter_expr``.
+        order_by: Optional companion column giving the order of the values (a
+            ``time_order`` next to a ``time_point``): each value follows the
+            smallest key it carries, numerically when every key is a number. Unset,
+            values that all end in a duration (``30min``, ``2h``) follow it, and
+            the rest sort as strings. See ``depictio.models.components.value_order``.
         current_user: Authenticated or anonymous user (permission-checked).
 
     Returns:
@@ -1009,7 +1015,8 @@ async def get_unique_values(
     dc_id_str = str(data_collection_id)
     agg_version = _get_aggregation_version(dc_id_str)
     cache_key = (
-        f"unique_values_{dc_id_str}_{column}_{limit}_{filter_expr or 'nofilter'}_{agg_version}"
+        f"unique_values_o1_{dc_id_str}_{column}_{limit}_{filter_expr or 'nofilter'}_{agg_version}"
+        + (f"_by_{order_by}" if order_by else "")
     )
     # Negative entry: "this DC (at this version) has no such column". Keyed
     # without limit/filter because absence does not depend on them. Without it
@@ -1066,14 +1073,40 @@ async def get_unique_values(
                 )
             lazy = lazy.filter(expr)
 
+        if order_by and order_by not in lazy.collect_schema().names():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Column '{order_by}' not found in data collection {data_collection_id}.",
+            )
         try:
-            df = lazy.select(column).unique().limit(limit).collect()
+            if order_by and order_by != column:
+                # Each value takes the smallest key it carries; the ordering
+                # itself (numeric or natural) is `order_values`.
+                pairs = (
+                    lazy.select(column, order_by)
+                    .group_by(column)
+                    .agg(pl.col(order_by).min().alias("_order_key"))
+                    .limit(limit)
+                    .collect()
+                )
+                keys = {
+                    str(v): k
+                    for v, k in zip(pairs[column].to_list(), pairs["_order_key"].to_list())
+                    if v is not None
+                }
+                values = list(keys)
+            else:
+                keys = None
+                df = lazy.select(column).unique().limit(limit).collect()
+                values = df[column].drop_nulls().to_list()
         except pl.exceptions.ColumnNotFoundError:
             raise column_missing_exc
 
-        values = df[column].drop_nulls().to_list()
-        # Stable ordering — MultiSelect UX expects sorted strings.
-        values_str = sorted({str(v) for v in values})
+        # Stable ordering: the companion column's, else a duration's, else the
+        # plain string sort a MultiSelect has always had.
+        from depictio.models.components.value_order import order_values
+
+        values_str = order_values(values, keys)
         try:
             from depictio.api.cache import get_cache
 

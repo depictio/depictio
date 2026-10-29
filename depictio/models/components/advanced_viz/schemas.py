@@ -385,6 +385,25 @@ CANONICAL_SCHEMAS: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "locus": _STRING,
         "allele": _STRING,
     },
+    # One row per individual of a PED-like table: who it is, who its parents
+    # are (0, empty or null for a founder), its sex and its affected status.
+    # Identifiers may be numbers or strings (a PED file writes either), and sex
+    # and status are 1 / 2 / 0 codes or words, so they accept both.
+    # A leaderboard needs a name to show and a number to order by; everything
+    # else it draws is a column named in the config (``columns``,
+    # ``popover_columns``), so listing them as roles would be a second copy of
+    # the schema that goes stale on the next pipeline release.
+    "ranked_table": {
+        "title": _STRING | _INT,
+        "score": _NUMERIC,
+    },
+    "pedigree": {
+        "individual": _STRING | _INT,
+        "father": _STRING | _INT,
+        "mother": _STRING | _INT,
+        "sex": _NUMERIC | _STRING,
+        "status": _NUMERIC | _STRING,
+    },
 }
 
 # Per-role column-name aliases used by `suggest_viz_kinds`. The suggester
@@ -1008,6 +1027,55 @@ ROLE_NAMES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "value": frozenset({"value", "objective", "score", "quality", "confidence"}),
         "reads": frozenset({"reads", "read_count", "n_reads", "fragments", "ref_fragments"}),
     },
+    # The PED header (FID IID PAT MAT SEX PHENOTYPE) and the names peddy, somalier
+    # and nf-core samplesheets write.
+    # Rank-score vocabulary of the callers that rank candidates: GADO / Genmod
+    # (raredisease), the DROP result tables, and plain "rank_score" columns.
+    "ranked_table": {
+        "title": frozenset(
+            {
+                "title",
+                "gene",
+                "gene_name",
+                "gene_symbol",
+                "hgnc_symbol",
+                "symbol",
+                "candidate",
+                "variant_id",
+                "variant",
+            }
+        ),
+        "score": frozenset(
+            {
+                "score",
+                "rank_score",
+                "ranking_score",
+                "priority_score",
+                "priority",
+                "combined_score",
+                "weighted_score",
+            }
+        ),
+        "subtitle": frozenset(
+            {"subtitle", "hgvs", "hgvs_p", "hgvsp", "hgvs_c", "change", "protein_change"}
+        ),
+        "rank": frozenset({"rank", "ranking", "rank_position", "position_in_rank"}),
+    },
+    "pedigree": {
+        "individual": frozenset(
+            {"individual", "individual_id", "iid", "sample", "sample_id", "person", "id"}
+        ),
+        "father": frozenset({"father", "father_id", "paternal_id", "pat", "dad", "paternal"}),
+        "mother": frozenset({"mother", "mother_id", "maternal_id", "mat", "mom", "maternal"}),
+        "sex": frozenset({"sex", "gender", "reported_sex", "inferred_sex"}),
+        "status": frozenset(
+            {"status", "affected", "phenotype", "affection", "affected_status", "disease_status"}
+        ),
+        "family": frozenset({"family", "family_id", "fid", "pedigree", "kindred"}),
+        "label": frozenset({"label", "name", "display_name", "sample_name"}),
+        "deceased": frozenset({"deceased", "dead", "is_deceased", "vital_status"}),
+        "proband": frozenset({"proband", "is_proband", "index_case", "index", "propositus"}),
+    },
 }
 
 
@@ -1277,6 +1345,18 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
         "category": _STRING,
         "value": _NUMERIC,
         "reads": _NUMERIC,
+    },
+    # `family` is a PED family id (a string or an integer); `deceased` is a flag
+    # written as a boolean, 0 / 1 or a word.
+    "ranked_table": {
+        "subtitle": _STRING,
+        "rank": _NUMERIC,
+    },
+    "pedigree": {
+        "family": _STRING | _INT,
+        "label": _STRING,
+        "deceased": _BOOLEAN | _STRING,
+        "proband": _BOOLEAN | _STRING,
     },
 }
 
@@ -1931,6 +2011,20 @@ def _shape_spatial_cells(dc_schema: dict[str, str], draft: _Draft) -> None:
     draft.reasons = ["no centroid or cell morphology column (X_centroid, Area, Eccentricity)"]
 
 
+# A table is a ranking when a column says so: a title and any number would
+# otherwise make every results table a leaderboard.
+_RANKED_EVIDENCE_RE = re.compile(r"(^|_)(rank|ranking|ranked|priority)(_|$)")
+
+
+def _shape_ranked_table(dc_schema: dict[str, str], draft: _Draft) -> None:
+    """ranked_table: a name and a number are a leaderboard only with a rank-like column."""
+    if any(_RANKED_EVIDENCE_RE.search(_normalize_name(c)) for c in dc_schema):
+        return
+    draft.score = min(draft.score, _STRUCTURAL_ONLY_SCORE)
+    draft.match = "weak"
+    draft.reasons = ["no rank or priority column (rank, rank_score, priority_score)"]
+
+
 def _shape_protein(dc_schema: dict[str, str], draft: _Draft) -> None:
     """Residue-keyed protein kinds: a position alone does not make a protein table."""
     if any(_PROTEIN_EVIDENCE_RE.match(_normalize_name(c)) for c in dc_schema):
@@ -2155,6 +2249,8 @@ def _score_kind(
         _shape_hmm_logo(dc_schema, draft)
     elif kind == "spatial_cells":
         _shape_spatial_cells(dc_schema, draft)
+    elif kind == "ranked_table":
+        _shape_ranked_table(dc_schema, draft)
     elif kind == "sunburst" and not any(
         _is_string(d) and _RANK_NAME_RE.match(_normalize_name(c)) for c, d in dc_schema.items()
     ):
@@ -2499,6 +2595,23 @@ _KIND_ROLE_DESCRIPTIONS: dict[AdvancedVizKind, dict[str, str]] = {
         "category": "Optional locus class (HLA class I / II): groups the columns under a header.",
         "value": "Optional per-sample score (OptiType objective), drawn as a side bar.",
         "reads": "Optional per-sample read support, drawn as a side bar or as cell opacity.",
+    },
+    "ranked_table": {
+        "title": "Row name, drawn bold: a gene, a sample or a variant.",
+        "score": "Numeric column the rows are ordered by (the ranking metric).",
+        "subtitle": "Optional text in monospace beside the title (a protein change).",
+        "rank": "Optional precomputed rank shown in the medal; else the position by score.",
+    },
+    "pedigree": {
+        "individual": "One symbol per distinct value: the person a row describes.",
+        "father": "Identifier of the person's father; 0, empty or null for a founder.",
+        "mother": "Identifier of the person's mother; 0, empty or null for a founder.",
+        "sex": "Sex as 1 / 2 / 0 or male / female / unknown: square, circle or diamond.",
+        "status": "Affected status as 2 / 1 / 0 (or -9) or the words: filled, open or hatched.",
+        "family": "Optional family identifier: one tree per value, drawn side by side.",
+        "label": "Optional text under each symbol; the individual identifier when unbound.",
+        "deceased": "Optional flag drawn as a diagonal slash across the symbol.",
+        "proband": "Optional flag (1 / true / yes / proband) marking the proband with an arrow.",
     },
 }
 
@@ -2939,6 +3052,25 @@ KIND_METADATA: dict[AdvancedVizKind, dict[str, Any]] = {
             "Click an allele to filter the dashboard to it (HLA typing)."
         ),
         "icon": "tabler:layout-columns",
+    },
+    "ranked_table": {
+        "label": "Ranked table",
+        "description": (
+            "A leaderboard of candidates ordered by a score: medals on the first "
+            "three, badges coloured by value and bars in the cells, the fields "
+            "behind a row in a hover popover. Click a row to filter the dashboard "
+            "to it."
+        ),
+        "icon": "mdi:podium",
+    },
+    "pedigree": {
+        "label": "Pedigree",
+        "description": (
+            "A family tree from a PED table: generations top to bottom, couple "
+            "and sibship lines, square / circle / diamond by sex, filled when "
+            "affected. Click an individual to filter the dashboard to it."
+        ),
+        "icon": "mdi:family-tree",
     },
 }
 

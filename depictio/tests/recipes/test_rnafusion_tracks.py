@@ -18,6 +18,7 @@ from depictio.models.models.data_collections_types.genomic_tracks import DCGenom
 from depictio.recipes import execute_recipe
 
 TEMPLATE = Path(__file__).parents[2] / "projects/nf-core/rnafusion/4.1.3/template.yaml"
+DASHBOARD = TEMPLATE.parent / "dashboards/base.yaml"
 
 _SHEET = (
     "sample,fastq_1,fastq_2,strandedness\n"
@@ -64,7 +65,9 @@ def test_a_run_holding_none_lists_every_expected_file_in_sheet_order(tmp_path: P
     assert df["track_id"].to_list() == ["S1.alignments", "S2.alignments", "S3.alignments"]
     assert df["order"].to_list() == [1, 2, 3]
     assert df["format"].to_list() == ["bam"] * 3
-    assert df["color"].n_unique() == 3
+    # No manifest colour: it would win over the dashboard's `category_colors`.
+    assert "color" not in df.columns
+    assert df["sample"].n_unique() == 3
 
 
 def test_a_cram_run_is_listed_as_cram(tmp_path: Path) -> None:
@@ -101,6 +104,8 @@ def test_template_tracks_dc_validates_with_the_model() -> None:
     assert config.assembly == "hg38"
     assert get_assembly_preset("hg38") is not None
     assert set(config.display_defaults) == {"bam", "cram"}
+    # The tile colours by `sample`, so the manifest declares no colour column.
+    assert config.color_column is None
     assert (
         DCGenomicTracksConfig(
             **{**props, "remote_base_uri": "https://host/results"}
@@ -132,3 +137,21 @@ def test_template_wires_the_overrides_and_the_links() -> None:
     assert ("tracks", "samplesheet") in links
     # The Fusion filter narrows the breakpoint table the browser frames from.
     assert ("fusion_consensus", "arriba_fusion_links") in links
+    # A call picked on the ring opens the alignments of the sample that called it.
+    assert ("arriba_fusion_links", "tracks") in links
+
+
+def test_the_browser_colours_by_a_key_the_dashboard_declares() -> None:
+    dash = yaml.safe_load(DASHBOARD.read_text())
+    browser = next(
+        c
+        for tab in dash["tabs"]
+        for c in tab.get("components", [])
+        if c.get("component_type") == "jbrowse"
+    )
+    assert browser["color_by"] == "sample"
+    assert "sample" in dash["main_dashboard"]["category_colors"]
+    assert "ucsc_tracks" in browser
+    # The calls open in the order of the ranked bars: the index, then the reads.
+    assert browser["locus_from"]["sort_by"] == "rank_score"
+    assert browser["locus_from"]["label_column"] == "label"
