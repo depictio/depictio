@@ -1,8 +1,8 @@
 """`depictio local export`, with the compose file download faked."""
 
 import importlib.metadata
-from pathlib import Path
 import urllib.error
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
