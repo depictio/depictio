@@ -16,14 +16,16 @@ process DEPICTIO_INGEST {
     // Leave it empty to ingest one directory as is, or to lay files out flat.
     tuple val(meta), path(files, stageAs: 'staged/??/*'), val(relpaths)
     // A bundled template id (`nf-core/rnaseq/3.26.0`, `nf-core/rnaseq/latest`).
-    // Empty: derived from the pipeline's manifest, unless `project_config` is given.
+    // Empty: the CLI detects the pipeline from the run's pipeline_info/ and picks
+    // the closest bundled version, unless `project_config` is given.
     val template
     // Optional project YAML, for a pipeline Depictio ships no template for.
     path project_config
     // Optional dashboard YAMLs to import with the project.
     path dashboards
-    // Optional CLI configuration (CLI.yaml). Without it the CLI reads
-    // DEPICTIO_CLI_TOKEN / DEPICTIO_CLI_API_BASE_URL, or ~/.depictio/CLI.yaml.
+    // CLI configuration (CLI.yaml), or [] for $DEPICTIO_CLI_CONFIG_PATH /
+    // ~/.depictio/CLI.yaml. DEPICTIO_CLI_TOKEN and DEPICTIO_CLI_API_BASE_URL
+    // override the token and URL of whichever file is read; they do not replace it.
     path cli_config
 
     output:
@@ -36,49 +38,61 @@ process DEPICTIO_INGEST {
     script:
     def args = task.ext.args ?: ''
     prefix = task.ext.prefix ?: "${meta.id}"
+    // Single-quoted for the shell. Staged paths need none: Nextflow escapes them.
+    def quote = { value -> "'" + value.toString().replace("'", "'\\''") + "'" }
     def inputs = files instanceof List ? files : [files]
     def rels = relpaths ? (relpaths instanceof List ? relpaths : [relpaths]) : []
     if (rels && rels.size() != inputs.size()) {
         error "DEPICTIO_INGEST: ${inputs.size()} files but ${rels.size()} relpaths, they must pair up one to one"
     }
+    def outside = rels.find { r -> r.toString().startsWith('/') || r.toString().tokenize('/').contains('..') }
+    if (outside != null) {
+        error "DEPICTIO_INGEST: relpath '${outside}' leaves the results directory; give a path relative to it"
+    }
     if (!rels) {
         // One directory is the data root itself; anything else is laid out flat.
         rels = inputs.size() == 1 ? ['.'] : inputs.collect { f -> f.name }
     }
-    def layout = [inputs, rels].transpose().collect { f, r -> "stage_into '${f}' '${r}'" }.join('\n    ')
+    def layout = [inputs, rels].transpose().collect { f, r -> "stage_into ${f} ${quote.call(r)}" }.join('\n    ')
 
     def project_args = ''
     if (project_config) {
         project_args = "--project-config-path ${project_config}"
     } else if (template) {
-        project_args = "--template ${template}"
-    } else if (workflow.manifest.name) {
-        project_args = "--pipeline-id ${workflow.manifest.name}/${workflow.manifest.version ?: 'latest'}"
+        project_args = "--template ${quote.call(template)}"
     }
     def dashboard_list = dashboards instanceof List ? dashboards : (dashboards ? [dashboards] : [])
     def dashboard_args = dashboard_list.collect { d -> "--dashboard ${d}" }.join(' ')
     def server_args = cli_config ? "--server ${cli_config}" : ''
+    def result_json = quote.call("${prefix}.depictio.json")
     """
     # Rebuild the published layout the template's scan patterns expect. The
     # scan does not descend into symlinked directories, so directories are
-    # recreated for real with their files linked, never linked whole. A later
-    # entry wins over an earlier one at the same path, so a fresh copy of a
-    # file can be laid over a results directory.
+    # recreated for real with their files linked (-L also unfolds the symlinked
+    # directories of a publishDir mode 'symlink' tree). Links point at the staged
+    # path, which the container mounts, not at its resolved target. A later entry
+    # wins over an earlier one at the same path.
     stage_into() {
-        local src dst
-        src=\$(readlink -f "\$1")
-        dst="data_root/\$2"
+        local src="\$PWD/\$1" dst="data_root/\$2"
+        if [ ! -e "\$src" ]; then
+            echo "DEPICTIO_INGEST: input '\$1' does not exist" >&2
+            exit 1
+        fi
         if [ -d "\$src" ]; then
+            if [ -L "\$dst" ] || [ -f "\$dst" ]; then rm -f "\$dst"; fi
             mkdir -p "\$dst"
-            cp -rsf "\$src/." "\$dst/"
+            cp -rsfL "\$src/." "\$dst/"
         else
+            if [ "\$2" = . ]; then dst="data_root/\$(basename "\$1")"; fi
+            rm -rf "\$dst"
             mkdir -p "\$(dirname "\$dst")"
-            ln -sfn "\$src" "\$dst"
+            ln -s "\$src" "\$dst"
         fi
     }
     mkdir -p data_root
     ${layout}
 
+    # Expanded in a project YAML's locations ({DEPICTIO_DATA_ROOT}).
     export DEPICTIO_DATA_ROOT="\$PWD/data_root"
     depictio \\
         ingest "\$PWD/data_root" \\
@@ -86,7 +100,7 @@ process DEPICTIO_INGEST {
         ${dashboard_args} \\
         ${server_args} \\
         --triggered-by nextflow \\
-        --result-json ${prefix}.depictio.json \\
+        --result-json ${result_json} \\
         ${args}
 
     cat <<-END_VERSIONS > versions.yml

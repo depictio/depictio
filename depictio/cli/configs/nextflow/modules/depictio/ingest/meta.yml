@@ -22,11 +22,11 @@ input:
           Groovy Map containing run information, e.g. `[ id:'run1' ]`.
           `id` names the result file.
     - files:
-        type: file
+        type: directory
         description: |
-          The pipeline's results directory, or the files the template reads.
-          Directories are copied as a tree of links, so a template's scan
-          patterns see the published layout.
+          The pipeline's results directory, or the files and directories the
+          template reads. Directories are rebuilt as a tree of links, so a
+          template's scan patterns see the published layout.
         pattern: "*"
     - relpaths:
         type: list
@@ -38,8 +38,9 @@ input:
       type: string
       description: |
         Bundled template id, e.g. `nf-core/rnaseq/3.26.0` or
-        `nf-core/rnaseq/latest`. Empty: derived from `workflow.manifest`
-        (`<name>/<version>`), unless `project_config` is given.
+        `nf-core/rnaseq/latest`. Empty: the CLI detects the pipeline from the
+        run's `pipeline_info/` and picks the closest bundled version, unless
+        `project_config` is given.
   - project_config:
       type: file
       description: Project YAML for a pipeline without a bundled template. Pass `[]` to use a template.
@@ -51,23 +52,28 @@ input:
   - cli_config:
       type: file
       description: |
-        Depictio CLI configuration (`CLI.yaml`). Pass `[]` to use
-        `DEPICTIO_CLI_TOKEN` and `DEPICTIO_CLI_API_BASE_URL` instead.
+        Depictio CLI configuration (`CLI.yaml`), which may leave its token
+        out for `DEPICTIO_CLI_TOKEN` to supply. Pass `[]` to read
+        `$DEPICTIO_CLI_CONFIG_PATH` or `~/.depictio/CLI.yaml` instead.
       pattern: "*.{yaml,yml}"
 output:
-  - result:
-      - meta:
+  result:
+    - - meta:
           type: map
           description: Groovy Map containing run information
-      - "${prefix}.depictio.json":
+      - "*.depictio.json":
           type: file
           description: How the ingestion ended (status, project and dashboard ids and links)
           pattern: "*.depictio.json"
-  - versions:
-      - "versions.yml":
-          type: file
-          description: File containing software versions
-          pattern: "versions.yml"
+          ontologies:
+            - edam: "http://edamontology.org/format_3464" # JSON
+  versions:
+    - versions.yml:
+        type: file
+        description: File containing software versions
+        pattern: "versions.yml"
+        ontologies:
+          - edam: "http://edamontology.org/format_3750" # YAML
 authors:
   - "@weber8thomas"
 maintainers:

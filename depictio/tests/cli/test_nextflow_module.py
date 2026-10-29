@@ -9,11 +9,15 @@ behind would ingest with the previous release's templates.
 
 from __future__ import annotations
 
+import configparser
 import re
 import tomllib
 from pathlib import Path
 
+import typer
 import yaml
+
+from depictio.cli.depictio_cli import app
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 INGEST = REPO_ROOT / "depictio" / "cli" / "configs" / "nextflow" / "modules" / "depictio" / "ingest"
@@ -67,11 +71,19 @@ class TestInterface:
     def test_meta_yml_documents_every_emitted_channel(self):
         meta = yaml.safe_load((INGEST / "meta.yml").read_text())
         emitted = re.findall(r"emit:\s*(\w+)", _main())
-        assert [next(iter(o)) for o in meta["output"]] == emitted
+        assert list(meta["output"]) == emitted
+
+    def test_every_option_it_passes_is_an_ingest_option(self):
+        """A renamed or removed CLI option would only surface at the end of a pipeline."""
+        command = typer.main.get_command(app).commands["ingest"]
+        known = {opt for param in command.params for opt in param.opts}
+        script = _main().split("script:", 1)[1].split("stub:", 1)[0]
+        passed = set(re.findall(r"(?<![\w-])--[a-z][a-z-]+", script))
+        assert passed and passed <= known, passed - known
 
     def test_directories_are_staged_as_real_trees(self):
         """The scan skips symlinked directories, so linking one whole loses its files."""
-        assert 'cp -rsf "$src/." "$dst/"' in _main().replace("\\$", "$")
+        assert 'cp -rsfL "$src/." "$dst/"' in _main().replace("\\$", "$")
 
     def test_the_cli_is_called_as_depictio(self):
         main = _main()
@@ -89,11 +101,18 @@ class TestPinsFollowThePackageVersion:
         assert re.findall(r"depictio\[multiqc\]==(\S+)", env) == [_package_version()]
 
     def test_bumpversion_rewrites_both_pins(self):
-        cfg = (REPO_ROOT / ".bumpversion.cfg").read_text()
+        cfg = configparser.ConfigParser(interpolation=None)
+        cfg.read(REPO_ROOT / ".bumpversion.cfg")
+        version = cfg["bumpversion"]["current_version"]
         rel = INGEST.relative_to(REPO_ROOT).as_posix()
-        assert f"[bumpversion:file:{rel}/main.nf]" in cfg
-        assert f"[bumpversion:file:{rel}/environment.yml]" in cfg
+        for name in ("main.nf", "environment.yml"):
+            section = cfg[f"bumpversion:file:{rel}/{name}"]
+            search = section["search"].replace("{current_version}", version)
+            assert (INGEST / name).read_text().count(search) == 1, name
 
-    def test_the_image_entrypoint_is_cleared_for_docker(self):
+    def test_the_image_entrypoint_is_cleared_for_docker_and_podman(self):
         """The CLI image's ENTRYPOINT would otherwise receive bash as a subcommand."""
-        assert "--entrypoint" in _main()
+        assert (
+            "containerOptions \"${workflow.containerEngine in ['docker', 'podman'] "
+            "? '--entrypoint \"\"' : ''}\""
+        ) in _main()

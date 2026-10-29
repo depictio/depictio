@@ -37,13 +37,19 @@ environment installs `depictio[multiqc]` from PyPI.
 | Input | What to pass |
 | --- | --- |
 | `tuple val(meta), path(files), val(relpaths)` | The files the template reads, and where each is published, relative to the results directory. `meta.id` names the result file |
-| `val template` | A template id (`nf-core/rnaseq/3.26.0`, `nf-core/rnaseq/latest`), or `''` to derive it from `workflow.manifest` as `<name>/<version>` |
-| `path project_config` | A project YAML for a pipeline with no bundled template, else `[]` |
+| `val template` | A template id (`nf-core/rnaseq/3.26.0`, `nf-core/rnaseq/latest`), or `''` to let the CLI detect the pipeline from the run's `pipeline_info/` and pick the closest bundled version |
+| `path project_config` | A project YAML for a pipeline with no bundled template, else `[]`. Its `locations` must read `{DEPICTIO_DATA_ROOT}`, which the module sets to the rebuilt results directory |
 | `path dashboards` | Dashboard YAMLs to import with the project, else `[]`. Templates bring their own |
-| `path cli_config` | A `CLI.yaml`, else `[]` to authenticate through the environment (below) |
+| `path cli_config` | A `CLI.yaml`, else `[]` to read `$DEPICTIO_CLI_CONFIG_PATH` or `~/.depictio/CLI.yaml` (see [Authentication](#authentication-and-network)) |
 
 `task.ext.args` is appended to the command, for `--attach-run`, `--project NAME`,
-`--update-config` and the other `ingest` options.
+`--update-config`, `--var NAME=VALUE` and the other `ingest` options. It is
+written into the task's `.command.sh`, so never put a token there.
+
+Leaving `template` empty is the safer default for a pipeline: an explicit id
+must match a bundled version exactly, whereas detection from `pipeline_info/`
+falls back to the closest one with a warning, so a pipeline release newer than
+the installed depictio still ingests.
 
 ### Why `relpaths`
 
@@ -55,21 +61,23 @@ before calling the CLI. A directory is rebuilt as a real tree of links, because
 the scan does not descend into a symlinked directory.
 
 ```groovy
-ch_depictio = ch_multiqc_data                       // multiqc/multiqc_data
-    .mix(ch_gene_counts)                            // star_salmon/salmon.merged.gene_counts.tsv
-    .collect()
-    .map { files -> [ [id: 'run'], files, [
-        'multiqc/multiqc_data',
-        'star_salmon/salmon.merged.gene_counts.tsv',
-    ] ] }
+// One item each. combine keeps the order; mix().collect() would not.
+ch_depictio = ch_multiqc_data
+    .combine(ch_gene_counts)
+    .map { mqc_data, gene_counts -> [
+        [id: 'run'],
+        [ mqc_data, gene_counts ],
+        [ 'multiqc/multiqc_data', 'star_salmon/salmon.merged.gene_counts.tsv' ],
+    ] }
 
-DEPICTIO_INGEST(ch_depictio, '', [], [], [])
+DEPICTIO_INGEST(ch_depictio, 'nf-core/rnaseq/3.26.0', [], [], [])
 ```
 
-The two lists pair up by position, and a size mismatch stops the task. When
-two entries land on the same path, the later one wins and the rest of the
-earlier one is kept, so a fresh copy of some files can be laid over a whole
-results directory. Two shortcuts leave `relpaths` empty:
+The two lists pair up by position, and a size mismatch stops the task, as does
+a relpath that is absolute or contains `..`. When two entries land on the same
+path, the later one wins and the rest of the earlier one is kept, so a fresh
+copy of some files can be laid over a whole results directory. Two shortcuts
+leave `relpaths` empty:
 
 - **One directory** is used as the results directory itself. This is the
   simplest way to run the module on the results of a run that already finished:
@@ -77,12 +85,17 @@ results directory. Two shortcuts leave `relpaths` empty:
   ```groovy
   DEPICTIO_INGEST(
       Channel.of([ [id: 'run'], file(params.results, type: 'dir'), [] ]),
-      'nf-core/rnaseq/3.26.0', [], [], [],
+      '', [], [], [],
   )
   ```
 
 - **Several files** are laid out flat, which suits a project YAML whose scan
-  patterns match file names only.
+  patterns match file names only. Two inputs with the same name collide, the
+  later one winning.
+
+The rebuilt directory lives in the task's work directory, and that is the run
+location the project records. A later `--update-config` or `--attach-run`
+rescan of that location finds nothing once the work directory is cleaned.
 
 ## In an nf-core pipeline
 
@@ -90,7 +103,8 @@ An nf-core template reads files from all over the results directory (the
 rnaseq one reads about thirty globs), so wiring each of them through `relpaths`
 is not worth it. Hand over the results directory once the run's last process,
 MultiQC, is done, plus the samplesheet, which nf-core does not publish but the
-templates read from `input/`. This was run end to end on nf-core/rnaseq 3.26.0
+templates read from `input/`. The CLI finds it there only when its name
+contains `samplesheet`, hence the fixed name below. This was run end to end on nf-core/rnaseq 3.26.0
 (`-profile test,conda`): the pipeline finished, the module ingested 10 data
 collections and created the template's dashboard.
 
@@ -100,16 +114,15 @@ In the pipeline's `main.nf`, after the main workflow:
 include { DEPICTIO_INGEST } from './modules/local/depictio/ingest/main'
 
 if (params.depictio) {
-    def samplesheet = file(params.input)
     DEPICTIO_INGEST(
         NFCORE_RNASEQ.out.multiqc_report
             .collect()
             .map { _reports -> [
                 [ id: workflow.runName ],
-                [ file(params.outdir, type: 'dir'), samplesheet ],
-                [ '.', "input/${samplesheet.name}" ],
+                [ file(params.outdir, type: 'dir'), file(params.input) ],
+                [ '.', 'input/samplesheet.csv' ],
             ] },
-        '',     // template: from the manifest, nf-core/rnaseq/<version>
+        '',     // template: detected from pipeline_info/
         [], [],
         params.depictio_cli_config ? file(params.depictio_cli_config, checkIfExists: true) : [],
     )
@@ -146,17 +159,19 @@ nf-schema rejects them.
 
 The route flags are the per-template part: each template documents its
 variables in its `template.yaml`, and the pipeline is the one place that knows
-its own parameters. The CLI reads a run's `params.json` for ampliseq only, so
-without them a `--skip_alignment` rnaseq run looks for `star_salmon/` and
-fails.
+its own parameters. The CLI reads the run's `params.json`, but derives route
+flags from it for a few pipelines only (ampliseq, viralrecon, demultiplex), not
+rnaseq: without them a `--skip_alignment` rnaseq run looks for `star_salmon/`
+and fails.
 
 The results directory is read as published, so it relies on MultiQC's own
 outputs having been copied by the time the module starts. Publishing is
 asynchronous; in the tested run it had finished, but a slow file system can
 lag. When that matters, add MultiQC's `data` output as a further `files`
-entry at its published path (`multiqc/multiqc_report_data` for a
-`--skip_alignment` run, `multiqc/<aligner>/multiqc_report_data` otherwise): it
-comes from the task, not from the copy, and wins over whatever the copy holds.
+entry at its published path, which depends on the pipeline and the MultiQC
+version (the tested `--skip_alignment` run wrote `multiqc/multiqc_report_data`):
+it comes from the task, not from the copy, and wins over whatever the copy
+holds.
 
 ## Authentication and network
 
@@ -171,9 +186,12 @@ process {
 }
 ```
 
-Without a `cli_config` file, the CLI reads `DEPICTIO_CLI_TOKEN` and
-`DEPICTIO_CLI_API_BASE_URL`. Keep the token in a Nextflow secret rather than in
-a file:
+The CLI always reads a `CLI.yaml`: the one passed as `cli_config`, else
+`$DEPICTIO_CLI_CONFIG_PATH`, else `~/.depictio/CLI.yaml`, which a container
+does not have. `DEPICTIO_CLI_TOKEN` and `DEPICTIO_CLI_API_BASE_URL` only
+override the token and URL of the file that was read; they do not replace it,
+since it also carries the storage settings. So pass a `CLI.yaml` as
+`cli_config`, and keep its token out of it in a Nextflow secret:
 
 ```bash
 nextflow secrets set DEPICTIO_CLI_TOKEN <long-lived CLI token>
@@ -185,11 +203,11 @@ process {
         secret = ['DEPICTIO_CLI_TOKEN']
     }
 }
-env.DEPICTIO_CLI_API_BASE_URL = 'https://depictio.example.org'
 ```
 
 The secret reaches the task's environment without being written into its
-`.command.*` files.
+`.command.*` files. A `cli_config` that holds the token is staged like any
+input, so on a cloud executor it is uploaded to the work directory's bucket.
 
 ## Failure
 
@@ -210,10 +228,25 @@ process {
 with the project and dashboard ids and links. `versions.yml` carries the depictio
 version, as in any nf-core module.
 
-## The container entrypoint
+## Containers
 
 The CLI image's `ENTRYPOINT` is `depictio-cli`, so that `docker run <image>
 ingest …` works on its own. Nextflow does not override an entrypoint, which
 would hand the task's bash to the CLI as a subcommand, so under Docker and Podman
 the module clears it with `--entrypoint ""`. Singularity and Apptainer run the
-task with `exec`, which ignores it.
+task with `exec`, which ignores it. Two limits follow:
+
+- A `containerOptions` set for this process in a config replaces the module's,
+  and with it the override: add `--entrypoint ""` to yours.
+- Executors that do not start the container with `docker run`, such as AWS
+  Batch, keep the entrypoint. Use the conda environment there.
+
+The image runs as its own user, `depictio`. Run Docker with the host's user,
+as nf-core pipelines already do, so the task can write its work directory:
+
+```groovy
+docker.runOptions = '-u $(id -u):$(id -g)'
+```
+
+The staging uses GNU `cp -s`, which the image and Linux hosts have. macOS's
+`cp` has no `-s`, so on a Mac run the module in the container, not under conda.
