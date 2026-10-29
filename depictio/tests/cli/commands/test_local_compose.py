@@ -1,10 +1,12 @@
 """`depictio local export`, with the compose file download faked."""
 
 import importlib.metadata
+from pathlib import Path
 import urllib.error
 from unittest.mock import MagicMock
 
 import pytest
+import yaml
 
 from depictio.cli.cli import local_compose, local_stack
 from depictio.cli.cli.local_stack import LocalStackError, Paths
@@ -80,6 +82,9 @@ def test_export_compose_copies_data_and_pins_the_local_versions(
     # The local 8.0.23 data runs on the newest 8.0 image: older ones refuse
     # Linux 6.19+ kernels (SERVER-121912).
     assert "image: mongo:8.0.34" in override
+    # The release's compose file may predate the workaround, so the override sets it.
+    mongo = yaml.safe_load(override)["services"]["mongo"]
+    assert mongo["environment"]["GLIBC_TUNABLES"] == "glibc.pthread.rseq=1"
     assert "image: chrislusf/seaweedfs:4.46" in override
     assert "./data/mongo:/data/db" in override
     assert f'user: "{local_compose.os.getuid()}:{local_compose.os.getgid()}"' in override
@@ -255,3 +260,18 @@ def test_an_unwritable_out_is_refused_before_stopping_the_server(
 )
 def test_the_mongo_image_is_one_that_starts_on_recent_kernels(installed, image):
     assert local_compose.mongo_image_tag(installed) == image
+
+
+@pytest.mark.parametrize(
+    "compose",
+    [
+        "docker-compose.yaml",
+        "docker-compose.dev.yaml",
+        "docker-compose/docker-compose.no-minio.yaml",
+    ],
+)
+def test_every_compose_file_lets_mongo_start_on_recent_kernels(compose):
+    """The official image refuses Linux 6.19+ unless glibc owns rseq (SERVER-121912)."""
+    root = Path(__file__).resolve().parents[4]
+    mongo = yaml.safe_load((root / compose).read_text())["services"]["mongo"]
+    assert mongo["environment"]["GLIBC_TUNABLES"] == "glibc.pthread.rseq=1"
