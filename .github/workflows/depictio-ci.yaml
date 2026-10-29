@@ -545,6 +545,11 @@ jobs:
     permissions:
       contents: read
       packages: read
+    env:
+      # The exported docker-compose.yaml is the shipped one, telemetry on, read from the
+      # shell. CI=true does not reach the containers. (`local up` is a plain process on
+      # the runner and already sees CI.)
+      DEPICTIO_TELEMETRY_ENABLED: "false"
     steps:
       - uses: actions/checkout@v7
 
