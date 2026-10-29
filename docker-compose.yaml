@@ -11,7 +11,7 @@
 
 services:
   mongo:
-    image: mongo:8.0.14
+    image: mongo:8.0.34
     container_name: mongo
     command: mongod --port 27018
     volumes:
