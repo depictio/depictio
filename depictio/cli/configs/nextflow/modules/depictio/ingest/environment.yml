@@ -7,4 +7,4 @@ dependencies:
   - conda-forge::pip
   - pip:
       # [multiqc]: the nf-core templates ingest MultiQC reports.
-      - depictio[multiqc]==1.19.2
+      - depictio[multiqc]==1.19.3
