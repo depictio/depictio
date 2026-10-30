@@ -15,6 +15,7 @@ from depictio.api.v1.db import (
 )
 from depictio.api.v1.s3 import s3_client
 from depictio.models.models.users import UserBeanie
+from depictio.models.s3_utils import delete_keys
 
 
 class BucketResponse(BaseModel):
@@ -254,16 +255,9 @@ async def cleanup_orphaned_s3_files(
             total_size_bytes += sum(obj.get("Size", 0) for obj in objects)
 
             if not dry_run:
-                # Delete objects in batches of 1000 (S3 limit)
-                batch_size = 1000
-                for i in range(0, len(objects), batch_size):
-                    batch = [{"Key": obj["Key"]} for obj in objects[i : i + batch_size]]
-                    response = s3_client.delete_objects(
-                        Bucket=bucket_name, Delete={"Objects": batch}
-                    )
-                    errors = response.get("Errors", [])
-                    if errors:
-                        logger.error(f"Errors deleting objects: {errors}")
+                errors = delete_keys(s3_client, bucket_name, (obj["Key"] for obj in objects))
+                if errors:
+                    logger.error(f"Errors deleting objects: {errors}")
 
         if recent_prefixes:
             logger.info(

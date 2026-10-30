@@ -31,6 +31,7 @@ from depictio.api.v1.s3 import polars_s3_config, s3_client
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.deltatables import Aggregation, DeltaTableAggregated
 from depictio.models.models.users import User
+from depictio.models.s3_utils import delete_keys
 
 _MAX_PER_FILE_BYTES = 50 * 1024 * 1024
 _MAX_TOTAL_BYTES = 500 * 1024 * 1024
@@ -504,9 +505,7 @@ def clear_table_data(*, data_collection_id: str, current_user) -> dict:
             {"Key": obj["Key"]} for page in pages for obj in page.get("Contents", []) or []
         ]
         if objects_to_delete:
-            for i in range(0, len(objects_to_delete), 1000):
-                batch = objects_to_delete[i : i + 1000]
-                s3_client.delete_objects(Bucket=bucket, Delete={"Objects": batch})
+            delete_keys(s3_client, bucket, (o["Key"] for o in objects_to_delete))
             deleted_s3_count = len(objects_to_delete)
             logger.info(f"Cleared {deleted_s3_count} S3 object(s) under {delta_loc}")
         else:

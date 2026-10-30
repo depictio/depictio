@@ -11,7 +11,7 @@ only a real server rejects — mongomock is more permissive than mongod.
 
 Requires a mongod reachable at DEPICTIO_TEST_MONGO_PORT (default 27055):
 
-    docker run -d --name depictio-issue932-mongo -p 27055:27017 mongo:8.0.14
+    docker run -d --name depictio-issue932-mongo -p 27055:27017 mongo:8.0.34
 """
 
 import os
@@ -38,7 +38,7 @@ pytestmark = pytest.mark.skipif(
     not _mongo_reachable(),
     reason=(
         f"no mongod on localhost:{MONGO_PORT}; start one with: docker run -d "
-        f"--name depictio-issue932-mongo -p {MONGO_PORT}:27017 mongo:8.0.14"
+        f"--name depictio-issue932-mongo -p {MONGO_PORT}:27017 mongo:8.0.34"
     ),
 )
 

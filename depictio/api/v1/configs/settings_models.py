@@ -97,6 +97,21 @@ def _warn_legacy_s3_env() -> None:
     )
 
 
+def default_s3_checksums_when_required() -> None:
+    """Make every boto3/aiobotocore client send checksums only when an API requires them.
+
+    boto3 >= 1.36 adds CRC checksums to every upload by default, which Google Cloud
+    Storage's S3 API and several on-premise gateways reject. ``when_required`` is the
+    pre-1.36 behaviour and still works on AWS. Set in the environment, so it also
+    reaches the s3fs clients; an explicit ``AWS_*`` value wins.
+    """
+    os.environ.setdefault("AWS_REQUEST_CHECKSUM_CALCULATION", "when_required")
+    os.environ.setdefault("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_required")
+
+
+default_s3_checksums_when_required()
+
+
 # ── Core Services ─────────────────────────────────────────────────────────────
 
 

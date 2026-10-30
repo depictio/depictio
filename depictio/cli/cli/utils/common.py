@@ -127,6 +127,10 @@ def validate_depictio_cli_config(depictio_cli_config: dict) -> CLIConfig:
         # reached CLIConfig and the X-Depictio-CLI-Instance header was never sent
         # via this path — the admin monitoring UI showed hostnames only.
         instance_label=depictio_cli_config.get("instance_label"),
+        # Dropped here too, so every s3:// source outside the instance's bucket
+        # (another endpoint, e.g. Google Cloud Storage) was read from the
+        # instance's own store instead.
+        remote_storage_options=depictio_cli_config.get("remote_storage_options"),
     )
     # The URL and the user only: the configuration holds the access token, and
     # verbose logs of a pipeline run are archived.
