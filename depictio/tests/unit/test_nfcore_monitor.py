@@ -455,3 +455,15 @@ def test_diff_structure_counts_only_paths_the_old_run_had(nfm: ModuleType) -> No
     assert diff.n_checked == 2
     assert [p for _, _, p in diff.lost_paths] == ["multiqc/ms2rescore/*.tsv"]
     assert diff.removed == ["multiqc/ms2rescore/"]
+
+
+def test_verified_reason_names_the_paths_that_were_compared(nfm: ModuleType) -> None:
+    passed = [nfm.RecipeCheck("t", "r", "PASS", "ok")]
+    structure = nfm.StructureDiff([], [], [], [], n_checked=29)
+    verdict = nfm.compute_verdict(
+        "3.10.0", "3.11.0", new_data=True, n_problems=0, recipe_results=passed, structure=structure
+    )
+    assert verdict.key == "verified"
+    assert verdict.reason == (
+        "1 of 1 file-based recipes ran on its data; 29 path(s) the template reads are unchanged"
+    )

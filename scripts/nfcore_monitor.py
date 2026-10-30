@@ -617,7 +617,10 @@ def compute_verdict(
     bound = _layout_bound(recipe_results or [])
     n_pass = sum(r.status == "PASS" for r in bound)
     if n_pass and n_pass * 2 >= len(bound):
-        return Verdict("verified", f"{n_pass} of {len(bound)} file-based recipes ran on its data")
+        reason = f"{n_pass} of {len(bound)} file-based recipes ran on its data"
+        if structure is not None and structure.n_checked:
+            reason += f"; {structure.n_checked} path(s) the template reads are unchanged"
+        return Verdict("verified", reason)
     if structure is not None and structure.n_checked:
         elsewhere = len(structure.removed) + len(structure.added) + len(structure.moved)
         reason = f"{structure.n_checked} path(s) the template reads are unchanged"
