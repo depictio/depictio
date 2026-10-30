@@ -506,6 +506,7 @@ class StructureDiff(NamedTuple):
     added: list[str]  # directories only the new run has
     moved: list[tuple[str, str]]  # (old dir, new dir): same name elsewhere, or close name
     lost_paths: list[tuple[str, str, str]]  # (dc_tag, ref, path) the template reads, gone
+    n_checked: int = 0  # paths the template reads that exist in the old run, so can be compared
 
 
 def dir_tree(keys: list[str], depth: int = STRUCTURE_DEPTH) -> set[str]:
@@ -551,14 +552,12 @@ def diff_structure(
             gone.remove(old)
             new.remove(target)
     old_set, new_set = set(old_keys), set(new_keys)
-    lost = [
-        (tag, ref, path)
-        for tag, ref, path, optional in source_paths
-        if not optional
-        and _path_resolves(path, old_keys, old_set)
-        and not _path_resolves(path, new_keys, new_set)
-    ]
-    return StructureDiff(gone, new, moved, lost)
+    # Both the recipes' sources and the manifest's keys are read paths; one that
+    # the old run never had cannot be compared, so it is not counted as checked.
+    read = [(tag, ref, path) for tag, ref, path, optional in source_paths if not optional]
+    comparable = [r for r in read if _path_resolves(r[2], old_keys, old_set)]
+    lost = [r for r in comparable if not _path_resolves(r[2], new_keys, new_set)]
+    return StructureDiff(gone, new, moved, lost, len({r[2] for r in comparable}))
 
 
 # ---------------------------------------------------------------------------
@@ -619,10 +618,17 @@ def compute_verdict(
     n_pass = sum(r.status == "PASS" for r in bound)
     if n_pass and n_pass * 2 >= len(bound):
         return Verdict("verified", f"{n_pass} of {len(bound)} file-based recipes ran on its data")
+    if structure is not None and structure.n_checked:
+        elsewhere = len(structure.removed) + len(structure.added) + len(structure.moved)
+        reason = f"{structure.n_checked} path(s) the template reads are unchanged"
+        if elsewhere:
+            reason += f"; {elsewhere} directory change(s) elsewhere"
+        if bound:
+            reason += f"; {n_pass} of {len(bound)} recipes ran"
+        return Verdict("probable", reason)
     if structure is not None:
         return Verdict(
-            "probable",
-            f"run folder unchanged where the template reads ({n_pass} of {len(bound)} recipes ran)",
+            "unverified", "nothing the template reads could be compared with the old run"
         )
     return Verdict("unverified", "the release's run is real but there is nothing to compare it to")
 
@@ -834,11 +840,11 @@ def report_pipeline(
 
     # The template's DATA_ROOT may be a sub-directory of the megatest run
     # (rnaseq `aligner_star_salmon/`), and its manifest pins the run it was built on.
-    run_root, pinned_sha = "", None
+    run_root, pinned_sha, manifest_keys = "", None, []
     manifest = manifest_path(pipeline, local)
     if manifest.is_file():
         loaded = load_manifest(manifest)
-        run_root, pinned_sha = loaded.run_root, loaded.results_sha
+        run_root, pinned_sha, manifest_keys = loaded.run_root, loaded.results_sha, loaded.keys
 
     print(f"→ nf-core/{pipeline}: {local} (local) → {new_version} (release)", file=sys.stderr)
     template = load_template(pipeline, local)
@@ -889,7 +895,8 @@ def report_pipeline(
         except Exception as exc:  # noqa: BLE001 - reported, never crashes the run
             structure_lines = [f"## Run structure — not compared ({type(exc).__name__}: {exc})", ""]
         else:
-            structure = diff_structure(old_keys, keys, source_paths)
+            read_paths = source_paths + [("manifest", "keys", k, False) for k in manifest_keys]
+            structure = diff_structure(old_keys, keys, read_paths)
             old_label = sha_to_tag(index, pipeline, pinned_sha) or f"run {pinned_sha[:8]}"
             structure_lines = render_structure(structure, old_label, len(old_keys), len(keys))
 
