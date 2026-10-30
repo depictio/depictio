@@ -324,23 +324,66 @@ write_tsv(
 
 
 # ---------------------------------------------------------------------------
-# 4. Stacked taxonomy: 18 samples × 9 taxa, two ranks (Phylum + Genus).
-#    abundance is INTEGER raw read counts now (per-sample totals in
-#    5,000–50,000 range) — the previous fixture was already per-sample
-#    normalised, which made the renderer's "normalise to one" toggle look
-#    like a no-op. With raw counts the toggle now has a visible effect: OFF
-#    shows raw counts; ON locks the y-axis to [0, 1] and stacks to fractions.
-# columns: sample_id, taxon, rank, abundance, lineage
+# 4. Stacked taxonomy: 18 samples (gut / skin / soil), two ranks (Phylum +
+#    Genus), 38 genera of 9 phyla in two kingdoms. Every genus carries its
+#    real lineage (Kingdom > Phylum > Class > Order > Family > Genus), so the
+#    sunburst tab draws a Krona-like multi-ring chart from the Genus rows.
+#    abundance is INTEGER raw read counts (per-sample totals in the
+#    5,000-50,000 range) so the renderer's "normalise to one" toggle has a
+#    visible effect. Habitat weights make the three groups differ (Firmicutes
+#    and Bacteroidetes in gut, Actinobacteria on skin, Proteobacteria and
+#    Acidobacteria in soil), and lognormal noise keeps the arcs uneven.
+#    Phylum rows leave Kingdom blank: they repeat the sum of their genera for
+#    the stacked bars' Phylum rank, and a blank root keeps the sunburst from
+#    counting the same reads twice.
+# columns: sample_id, taxon, rank, abundance, lineage,
+#          Kingdom, Phylum, Class, Order, Family, Genus
 # ---------------------------------------------------------------------------
 SAMPLES = [f"sample_{c}_{n}" for c in ("gut", "skin", "soil") for n in range(1, 7)]
-PHYLA = ["Firmicutes", "Bacteroidetes", "Proteobacteria", "Actinobacteria", "Verrucomicrobia"]
-GENERA = {
-    "Firmicutes": ["Lactobacillus", "Faecalibacterium", "Clostridium"],
-    "Bacteroidetes": ["Bacteroides", "Prevotella"],
-    "Proteobacteria": ["Escherichia"],
-    "Actinobacteria": ["Bifidobacterium"],
-    "Verrucomicrobia": ["Akkermansia"],
+
+# (Kingdom, Phylum, Class, Order, Family, Genus): (gut, skin, soil) weight
+TAXA: dict[tuple[str, str, str, str, str, str], tuple[float, float, float]] = {
+    ("Bacteria", "Firmicutes", "Clostridia", "Eubacteriales", "Oscillospiraceae", "Faecalibacterium"): (14, 0.2, 0.3),
+    ("Bacteria", "Firmicutes", "Clostridia", "Eubacteriales", "Oscillospiraceae", "Ruminococcus"): (6, 0.1, 0.4),
+    ("Bacteria", "Firmicutes", "Clostridia", "Eubacteriales", "Lachnospiraceae", "Roseburia"): (7, 0.1, 0.2),
+    ("Bacteria", "Firmicutes", "Clostridia", "Eubacteriales", "Lachnospiraceae", "Blautia"): (8, 0.2, 0.2),
+    ("Bacteria", "Firmicutes", "Clostridia", "Eubacteriales", "Clostridiaceae", "Clostridium"): (3, 0.3, 2.5),
+    ("Bacteria", "Firmicutes", "Bacilli", "Lactobacillales", "Lactobacillaceae", "Lactobacillus"): (2.5, 1.0, 0.2),
+    ("Bacteria", "Firmicutes", "Bacilli", "Lactobacillales", "Streptococcaceae", "Streptococcus"): (1.5, 6, 0.1),
+    ("Bacteria", "Firmicutes", "Bacilli", "Bacillales", "Staphylococcaceae", "Staphylococcus"): (0.2, 16, 0.2),
+    ("Bacteria", "Firmicutes", "Bacilli", "Bacillales", "Bacillaceae", "Bacillus"): (0.3, 0.6, 4),
+    ("Bacteria", "Firmicutes", "Negativicutes", "Veillonellales", "Veillonellaceae", "Veillonella"): (2, 2, 0.1),
+    ("Bacteria", "Bacteroidetes", "Bacteroidia", "Bacteroidales", "Bacteroidaceae", "Bacteroides"): (20, 0.4, 0.3),
+    ("Bacteria", "Bacteroidetes", "Bacteroidia", "Bacteroidales", "Prevotellaceae", "Prevotella"): (8, 2.5, 0.2),
+    ("Bacteria", "Bacteroidetes", "Bacteroidia", "Bacteroidales", "Rikenellaceae", "Alistipes"): (4, 0.1, 0.1),
+    ("Bacteria", "Bacteroidetes", "Bacteroidia", "Bacteroidales", "Tannerellaceae", "Parabacteroides"): (3, 0.1, 0.1),
+    ("Bacteria", "Bacteroidetes", "Flavobacteriia", "Flavobacteriales", "Flavobacteriaceae", "Flavobacterium"): (0.1, 0.5, 5),
+    ("Bacteria", "Bacteroidetes", "Sphingobacteriia", "Sphingobacteriales", "Chitinophagaceae", "Chitinophaga"): (0.1, 0.2, 3.5),
+    ("Bacteria", "Proteobacteria", "Gammaproteobacteria", "Enterobacterales", "Enterobacteriaceae", "Escherichia"): (3, 0.3, 0.3),
+    ("Bacteria", "Proteobacteria", "Gammaproteobacteria", "Enterobacterales", "Enterobacteriaceae", "Klebsiella"): (1.2, 0.2, 0.3),
+    ("Bacteria", "Proteobacteria", "Gammaproteobacteria", "Pseudomonadales", "Pseudomonadaceae", "Pseudomonas"): (0.2, 1.5, 7),
+    ("Bacteria", "Proteobacteria", "Gammaproteobacteria", "Pseudomonadales", "Moraxellaceae", "Acinetobacter"): (0.1, 4, 1.5),
+    ("Bacteria", "Proteobacteria", "Alphaproteobacteria", "Hyphomicrobiales", "Nitrobacteraceae", "Bradyrhizobium"): (0.05, 0.2, 9),
+    ("Bacteria", "Proteobacteria", "Alphaproteobacteria", "Hyphomicrobiales", "Rhizobiaceae", "Rhizobium"): (0.05, 0.1, 4),
+    ("Bacteria", "Proteobacteria", "Alphaproteobacteria", "Sphingomonadales", "Sphingomonadaceae", "Sphingomonas"): (0.1, 1.2, 5),
+    ("Bacteria", "Proteobacteria", "Betaproteobacteria", "Burkholderiales", "Burkholderiaceae", "Burkholderia"): (0.1, 0.3, 3.5),
+    ("Bacteria", "Proteobacteria", "Betaproteobacteria", "Burkholderiales", "Sutterellaceae", "Sutterella"): (1.5, 0.05, 0.05),
+    ("Bacteria", "Proteobacteria", "Deltaproteobacteria", "Desulfovibrionales", "Desulfovibrionaceae", "Desulfovibrio"): (1, 0.05, 0.8),
+    ("Bacteria", "Actinobacteria", "Actinomycetia", "Bifidobacteriales", "Bifidobacteriaceae", "Bifidobacterium"): (5, 0.2, 0.1),
+    ("Bacteria", "Actinobacteria", "Actinomycetia", "Propionibacteriales", "Propionibacteriaceae", "Cutibacterium"): (0.2, 24, 0.3),
+    ("Bacteria", "Actinobacteria", "Actinomycetia", "Mycobacteriales", "Corynebacteriaceae", "Corynebacterium"): (0.2, 14, 0.4),
+    ("Bacteria", "Actinobacteria", "Actinomycetia", "Micrococcales", "Micrococcaceae", "Micrococcus"): (0.05, 4, 1.5),
+    ("Bacteria", "Actinobacteria", "Actinomycetia", "Kitasatosporales", "Streptomycetaceae", "Streptomyces"): (0.05, 0.2, 8),
+    ("Bacteria", "Actinobacteria", "Coriobacteriia", "Coriobacteriales", "Coriobacteriaceae", "Collinsella"): (3, 0.05, 0.05),
+    ("Bacteria", "Verrucomicrobia", "Verrucomicrobiae", "Verrucomicrobiales", "Akkermansiaceae", "Akkermansia"): (4, 0.05, 0.1),
+    ("Bacteria", "Verrucomicrobia", "Spartobacteria", "Chthoniobacterales", "Chthoniobacteraceae", "Chthoniobacter"): (0.02, 0.02, 3),
+    ("Bacteria", "Acidobacteria", "Acidobacteriia", "Acidobacteriales", "Acidobacteriaceae", "Granulicella"): (0.02, 0.05, 5),
+    ("Bacteria", "Acidobacteria", "Blastocatellia", "Blastocatellales", "Blastocatellaceae", "Blastocatella"): (0.02, 0.02, 3),
+    ("Archaea", "Euryarchaeota", "Methanobacteria", "Methanobacteriales", "Methanobacteriaceae", "Methanobrevibacter"): (2.5, 0.05, 0.3),
+    ("Archaea", "Thaumarchaeota", "Nitrososphaeria", "Nitrososphaerales", "Nitrososphaeraceae", "Nitrososphaera"): (0.02, 0.1, 2.5),
 }
+PHYLA = list(dict.fromkeys(lineage[1] for lineage in TAXA))
+HABITAT_INDEX = {"gut": 0, "skin": 1, "soil": 2}
 
 
 def _allocate_counts(total: int, weights: dict[str, float]) -> dict[str, int]:
@@ -360,46 +403,34 @@ def _allocate_counts(total: int, weights: dict[str, float]) -> dict[str, int]:
     return out
 
 
-# Pre-built kingdom mapping so each rank row carries its full ancestry
-# split into separate columns — drives the sunburst hierarchical viz.
-KINGDOM = "Bacteria"
+# Its own RNG, so the fixtures after this one keep their values: ``R`` makes
+# the same 1 randint + 13 gauss draws per sample as the 9-genus fixture did.
+RT = random.Random(20261030)
 
 rows = []
 for s in SAMPLES:
-    # Per-sample total in 5k–50k range so the OFF state of the normalise
-    # toggle shows realistic raw-count y-axis values.
     sample_total = R.randint(5_000, 50_000)
+    for _ in range(13):
+        R.gauss(0.0, 1.0)
+    h = HABITAT_INDEX[s.split("_")[1]]
 
-    # Phylum-level: allocate counts directly.
-    phylum_weights = {p: max(0.01, R.gauss(1.0, 0.6)) for p in PHYLA}
-    phylum_counts = _allocate_counts(sample_total, phylum_weights)
+    genus_weights = {
+        lineage: w[h] * RT.lognormvariate(0.0, 0.45) for lineage, w in TAXA.items()
+    }
+    genus_counts = _allocate_counts(sample_total, genus_weights)
+
+    phylum_counts = {p: 0 for p in PHYLA}
+    for lineage, count in genus_counts.items():
+        phylum_counts[lineage[1]] += count
     for p, count in phylum_counts.items():
-        # Phylum rows: leaf-level columns (Class/Order/Family/Genus) blank.
-        rows.append([s, p, "Phylum", count, p, KINGDOM, p, "", "", "", ""])
+        # Phylum rows: Kingdom and the ranks below Phylum blank (see above).
+        rows.append([s, p, "Phylum", count, p, "", p, "", "", "", ""])
 
-    # Genus-level: within each phylum, distribute the phylum's counts across
-    # its genera so the Phylum and Genus rows agree on per-sample totals.
-    for p in PHYLA:
-        if not GENERA[p]:
-            continue
-        genus_weights = {g: max(0.01, R.gauss(1.0, 0.5)) for g in GENERA[p]}
-        genus_counts = _allocate_counts(phylum_counts[p], genus_weights)
-        for g, count in genus_counts.items():
-            rows.append(
-                [
-                    s,
-                    g,
-                    "Genus",
-                    count,
-                    f"{p};{g}",
-                    KINGDOM,
-                    p,
-                    f"{p}_class",
-                    f"{p}_order",
-                    f"{p}_family",
-                    g,
-                ]
-            )
+    for lineage, count in genus_counts.items():
+        kingdom, phylum, klass, order, family, genus = lineage
+        rows.append(
+            [s, genus, "Genus", count, f"{phylum};{genus}", kingdom, phylum, klass, order, family, genus]
+        )
 
 write_tsv(
     OUT / "stacked_taxonomy_demo.tsv",

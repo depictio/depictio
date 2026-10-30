@@ -58,6 +58,7 @@ components:
       metadata_dc_id: "646b0f3c1e4a2d7f8e5b8d0a"
       taxon_col: "taxon"
       color_col: "group"
+      extra_color_cols: ["Phylum", "Class", "Order", "Family", "Genus"]
       label_col: "resistance_profile"
       default_layout: "rectangular"
       ladderize: true

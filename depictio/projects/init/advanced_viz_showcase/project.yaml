@@ -168,7 +168,7 @@ workflows:
       # ----------------------------------------------------------------
       - id: "646b0f3c1e4a2d7f8e5b8d05"
         data_collection_tag: "stacked_taxonomy_demo"
-        description: "Synthetic taxonomy: 18 samples x 9 taxa, two ranks (Phylum + Genus)"
+        description: "Synthetic taxonomy: 18 samples x 38 genera of 9 phyla, two ranks (Phylum + Genus)"
         config:
           type: "Table"
           metatype: "Aggregate"
@@ -186,9 +186,9 @@ workflows:
               rank: "Taxonomic rank (Phylum or Genus)"
               abundance: "Relative abundance, normalised within (sample, rank)"
               lineage: "Phylum;Genus path for Genus rows, Phylum alone for Phylum rows"
-              Kingdom: "Top-level taxonomic kingdom (Bacteria) — sunburst root"
+              Kingdom: "Kingdom (Bacteria or Archaea), sunburst root; blank on Phylum rows so the sunburst counts each read once"
               Phylum: "Phylum — second-level sunburst arc"
-              Class: "Class — third-level sunburst arc (synthetic '<Phylum>_class')"
+              Class: "Class — third-level sunburst arc"
               Order: "Order — fourth-level sunburst arc"
               Family: "Family — fifth-level sunburst arc"
               Genus: "Genus — leaf-level sunburst arc"
@@ -455,6 +455,11 @@ workflows:
               habitat: "Habitat (Gut / Respiratory / Environmental / Soil)"
               genome_size_mb: "Genome size in megabases"
               resistance_profile: "MDR / Susceptible / Variable"
+              Phylum: "Phylum (same as group), a rank the tree summary collapses to"
+              Class: "Class"
+              Order: "Order"
+              Family: "Family"
+              Genus: "Genus"
 
       # ----------------------------------------------------------------
       # Variant-benchmarking demo DCs (pr_benchmark / confusion_matrix /

@@ -24,13 +24,16 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "title_size": "sm",
       "title_align": "left",
       "section": "Phylogenetic tree",
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
       "body": "A Newick tree of bacterial isolates with a metadata strip joined on the tip label. Colour by and tip search are in the tile header; click an internal node to highlight its clade and export it. The tree reads two collections, so the tab carries no filter that would prune the strip and leave the topology. Input: IQ-TREE or FastTree output of nf- core/bactmap or nf-core/pathogensurveillance.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null,
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -75,13 +78,32 @@
         "taxon_col": "taxon",
         "color_col": "group",
         "label_col": "resistance_profile",
-        "extra_color_cols": null,
+        "extra_color_cols": [
+          "Phylum",
+          "Class",
+          "Order",
+          "Family",
+          "Genus"
+        ],
         "category_palettes": null,
         "default_layout": "rectangular",
         "ladderize": true,
         "show_metadata_strip": true,
         "show_branch_lengths": false,
-        "show_internal_labels": false
+        "show_internal_labels": false,
+        "collapse_rank": null,
+        "top_n": 10,
+        "size_by": "tips",
+        "show_shares": null,
+        "abundance_wf_id": null,
+        "abundance_dc_id": null,
+        "abundance_dc_tag": null,
+        "abundance_col": "rel_abundance",
+        "abundance_sample_col": "sample",
+        "abundance_split_col": null,
+        "show_split": true,
+        "split_scale": "shared",
+        "show_tip_dots": true
       },
       "wf_tag": "python/advanced_viz_demo"
     }
@@ -171,6 +193,7 @@
   "main_tab_name": null,
   "tab_icon": "mdi:family-tree",
   "tab_icon_color": "lime",
+  "tab_group": null,
   "parent_dashboard_title": null,
   "filter_sections": [],
   "grid_sections": [
@@ -181,11 +204,25 @@
       "description": "A Newick tree with its metadata annotation strip",
       "collapsed": false,
       "persistent": false,
-      "pin": "top"
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     }
   ],
   "funnel_filtering": true,
   "brand_theme": null,
+  "category_colors": null,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "open_with_defaults": false,
+  "show_guide": true,
+  "guide_intro": "",
   "advanced_viz_controls": "popover",
   "autofit": true
 }

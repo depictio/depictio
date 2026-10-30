@@ -24,13 +24,16 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "title_size": "sm",
       "title_align": "left",
       "section": "Hierarchy",
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
       "body": "The same abundance table as concentric rings from kingdom outwards, arc size set by abundance. Click a wedge to zoom into that lineage; the start rank and the rank that drives colour are in the tile header. It reads the hierarchy rather than selecting from it: the left panel narrows the data. Input: nf-core/ampliseq or nf-core/taxprofiler classifications.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null,
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -48,7 +51,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Synthetic taxonomy: 18 samples x 9 taxa, two ranks (Phylum + Genus)",
+        "description": "Synthetic taxonomy: 18 samples x 38 genera of 9 phyla, two ranks (Phylum + Genus)",
         "data_collection_tag": "stacked_taxonomy_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -77,9 +80,9 @@
         "abundance_col": "abundance",
         "category_palette": null,
         "start_rank": null,
-        "colour_by_rank": null,
-        "max_depth": 3,
-        "palette": "tab20",
+        "colour_by_rank": "Phylum",
+        "max_depth": 6,
+        "palette": "tab10",
         "show_counts": true,
         "min_percent": 0.5
       },
@@ -100,7 +103,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Synthetic taxonomy: 18 samples x 9 taxa, two ranks (Phylum + Genus)",
+        "description": "Synthetic taxonomy: 18 samples x 38 genera of 9 phyla, two ranks (Phylum + Genus)",
         "data_collection_tag": "stacked_taxonomy_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -123,7 +126,9 @@
       "group": "Taxonomy",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#F68B33",
       "icon_name": "mdi:bacteria",
       "wf_tag": "python/advanced_viz_demo"
@@ -143,7 +148,7 @@
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Synthetic taxonomy: 18 samples x 9 taxa, two ranks (Phylum + Genus)",
+        "description": "Synthetic taxonomy: 18 samples x 38 genera of 9 phyla, two ranks (Phylum + Genus)",
         "data_collection_tag": "stacked_taxonomy_demo",
         "dc_specific_properties": null,
         "_id": {
@@ -166,7 +171,9 @@
       "group": "Taxonomy",
       "timescale": null,
       "show_marks": null,
+      "show_mark_labels": null,
       "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#2E7D32",
       "icon_name": "mdi:bacteria",
       "wf_tag": "python/advanced_viz_demo"
@@ -274,6 +281,7 @@
   "main_tab_name": null,
   "tab_icon": "mdi:chart-donut",
   "tab_icon_color": "orange",
+  "tab_group": null,
   "parent_dashboard_title": null,
   "filter_sections": [
     {
@@ -283,7 +291,14 @@
       "description": "Restricts which lineages the rings are built from",
       "collapsed": false,
       "persistent": false,
-      "pin": "top"
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     }
   ],
   "grid_sections": [
@@ -294,11 +309,25 @@
       "description": "The taxonomy as concentric rings, drillable in place",
       "collapsed": false,
       "persistent": false,
-      "pin": "top"
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     }
   ],
   "funnel_filtering": true,
   "brand_theme": null,
+  "category_colors": null,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "open_with_defaults": false,
+  "show_guide": true,
+  "guide_intro": "",
   "advanced_viz_controls": "popover",
   "autofit": true
 }

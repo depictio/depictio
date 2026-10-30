@@ -46,9 +46,90 @@ TARGETS: dict[str, tuple[str, int]] = {
     "gsea_running_score": ("gsea_running_score", 0),
     "sashimi": ("sashimi", 0),
     "scatter_xy": ("scatter_xy", 0),
+    "cnv_profile": ("cnv_profile", 0),
+    "complex_heatmap": ("complex_heatmap", 0),
+    "contact_map": ("contact_map", 0),
+    "coverage_track": ("coverage_track", 0),
+    "da_barplot": ("da_barplot", 0),
+    "damage_profile": ("damage_profile", 0),
+    "dot_plot": ("dotplot", 0),
+    "embedding": ("clustering_umap", 0),
+    "genome_chord": ("genome_chord", 0),
+    "genome_view": ("genome_view", 1),
+    "group_compare": ("group_compare", 0),
+    "knee_plot": ("knee_plot", 0),
+    "lollipop": ("lollipop", 0),
+    "manhattan": ("manhattan", 0),
+    "oncoplot": ("oncoplot", 0),
+    "parallel_coordinates": ("parallel_coordinates", 0),
+    "phylogenetic": ("phylogeny", 0),
+    "phylogenetic_summary": ("phylogeny", 0),
+    "rarefaction": ("rarefaction", 0),
+    "record_card": ("record_card", 0),
+    "sankey": ("categorical_flow", 0),
+    "stacked_taxonomy": ("stacked_taxonomy", 0),
+    "sunburst": ("sunburst", 0),
+    "transcript_structure": ("transcript_structure", 0),
+    "upset_plot": ("upset", 0),
+    "volcano": ("volcano", 0),
+    "controls_header": ("volcano", 0),
+    "controls_popover": ("volcano", 0),
+    "controls_rail": ("volcano", 0),
 }
 # docs image name -> the viz_kind stored in the seed (differs for retired kinds)
-SEED_KIND = {"roc_pr_curve": "pr_benchmark"}
+SEED_KIND = {
+    "roc_pr_curve": "pr_benchmark",
+    "phylogenetic_summary": "phylogenetic",
+    "controls_header": "volcano",
+    "controls_popover": "volcano",
+    "controls_rail": "volcano",
+}
+
+
+def _placement(label: str, keep_open: bool = False):
+    """Switch the tile's controls placement with the switch in its controls."""
+
+    def act(page, tile):
+        # DOM clicks: the tile head overlaps the placement switch.
+        tile.get_by_text(label, exact=True).first.dispatch_event("click")
+        page.wait_for_timeout(2500)
+        # Switching to the popover opens it; open it if it is not.
+        opener = tile.get_by_label("Viz settings")
+        if keep_open and opener.count():
+            opener.first.dispatch_event("click")
+            page.wait_for_timeout(1500)
+
+    return act
+
+
+def _phylo_summary(page, tile):
+    """Full tree -> Summary by rank, collapsed to Genus, top 12 (header controls)."""
+    tile.get_by_text("Summary by rank", exact=True).first.click()
+    page.wait_for_timeout(2500)
+    tile.get_by_label("Collapse to").click()
+    page.get_by_role("option", name="Genus", exact=True).click()
+    page.wait_for_timeout(800)
+    top_n = tile.get_by_label("Top N")
+    top_n.fill("12")
+    top_n.press("Enter")
+    page.evaluate("document.activeElement && document.activeElement.blur()")
+    page.wait_for_timeout(3000)
+
+
+def _sashimi_arcs(page, tile):
+    """Arcs view: the GenomeSpy view fails at v1.19.3 (subscribeMarkEvent of undefined)."""
+    tile.get_by_text("Arcs", exact=True).first.dispatch_event("click")
+    page.wait_for_timeout(4000)
+
+
+# docs image name -> what to do on the tile before the shot
+ACTIONS = {
+    "sashimi": _sashimi_arcs,
+    "phylogenetic_summary": _phylo_summary,
+    "controls_header": _placement("Under the title"),
+    "controls_rail": _placement("In a side rail"),
+    "controls_popover": _placement("In the settings popover", keep_open=True),
+}
 
 HIDE_CSS = (
     ".hoverlayer, .modebar-container, .mantine-Notifications-root "
@@ -103,8 +184,14 @@ def main() -> int:
                 # Close the filter panel so tiles take the full grid width.
                 close = page.get_by_label("Close filters")
                 if close.count():
-                    close.first.click()
+                    # A DOM click: on a tall viewport the sidebar overlaps the button.
+                    close.first.evaluate("e => e.click()")
                     page.wait_for_timeout(2500)
+                if name in ACTIONS:
+                    ACTIONS[name](page, tile)
+                    # Off the tile, so its hover chrome does not show.
+                    page.mouse.move(1, 1)
+                    page.wait_for_timeout(800)
                 box = tile.bounding_box()
                 png = args.out / f"{name}_{theme}.png"
                 page.screenshot(

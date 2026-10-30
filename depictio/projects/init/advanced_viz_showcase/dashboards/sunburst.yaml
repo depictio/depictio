@@ -64,6 +64,9 @@ components:
       viz_kind: "sunburst"
       rank_cols: ["Kingdom", "Phylum", "Class", "Order", "Family", "Genus"]
       abundance_col: "abundance"
+      colour_by_rank: "Phylum"
+      max_depth: 6
+      palette: "tab10"
       controls_placement: "header"
     layout: { x: 0, y: 2, w: 8, h: 9 }
 
