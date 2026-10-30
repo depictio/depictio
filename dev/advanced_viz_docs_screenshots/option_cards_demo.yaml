@@ -1,0 +1,51 @@
+main_dashboard:
+  title: Domain databases
+  subtitle: One reference database at a time
+  project_tag: Protein Annotation
+  main_tab_name: Domains
+  tab_icon: mdi:database-search-outline
+  tab_icon_color: violet
+  icon: mdi:database-search-outline
+  icon_color: violet
+  workflow_system: nf-core
+  filter_panel_default: collapsed
+  components:
+  - component_type: interactive
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_domains
+    interactive_component_type: SegmentedControl
+    column_name: database
+    column_type: object
+    default_value: pfam
+    placement: top
+    title: Reference database
+    tag: oc-db
+    index: oc-db
+    option_cards:
+      pfam: {label: Pfam, icon: 'mdi:dna', description: Curated families}
+      funfam: {label: FunFam, icon: 'mdi:family-tree', description: CATH functional families}
+      metagroot: {label: MetagRoot, icon: 'mdi:bacteria-outline', description: Metagenome families}
+      nmpfams: {label: NMPFamsDB, icon: 'mdi:flask-outline', description: Novel protein families}
+      interproscan: {label: InterProScan, icon: 'mdi:magnify-scan', description: Member databases}
+    layout: {x: 0, y: 0, w: 8, h: 3}
+  - component_type: card
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_domains
+    aggregation: count
+    column_name: label
+    column_type: object
+    display:
+      icon_name: mdi:puzzle-outline
+      icon_color: violet
+      caption: domains in this database
+    tag: oc-card
+    index: oc-card
+    title: Domains
+    layout: {x: 0, y: 3, w: 2, h: 2}
+  - component_type: table
+    workflow_tag: proteinannotator
+    data_collection_tag: proteinannotator_domains
+    tag: oc-table
+    index: oc-table
+    title: Domain table
+    layout: {x: 2, y: 3, w: 6, h: 6}
