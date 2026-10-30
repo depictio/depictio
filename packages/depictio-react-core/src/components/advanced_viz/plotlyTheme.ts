@@ -69,7 +69,9 @@ function retintAxis(axis: unknown, c: PlotlyThemeColors): Record<string, unknown
   a.color = c.textColor;
   a.gridcolor = c.gridColor;
   a.zerolinecolor = c.zeroLineColor;
-  a.linecolor = c.gridColor;
+  // An axis that draws its own line in its own colour (an embedding's thick
+  // axis, the Ramachandran frame) keeps it; the rest take the grid colour.
+  if (!(a.showline === true && typeof a.linecolor === 'string')) a.linecolor = c.gridColor;
   const tickfont = (a.tickfont || {}) as Record<string, unknown>;
   a.tickfont = { ...tickfont, color: c.textColor };
   if (a.title != null) {
