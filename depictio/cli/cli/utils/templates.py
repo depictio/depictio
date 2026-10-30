@@ -28,6 +28,7 @@ import httpx
 import yaml
 
 from depictio.cli.cli.utils.data_root import DataRoot, as_data_root
+from depictio.cli.cli.utils.record_sheets import RECORD_SHEET_SUFFIXES
 from depictio.cli.cli_logging import logger
 from depictio.models.models.nextflow import PARAMS_GLOBS
 from depictio.models.models.templates import (
@@ -1278,6 +1279,17 @@ def _pick_input_file(root: DataRoot, keyword: str, suffixes: tuple[str, ...]) ->
     return root.url(candidates[0]) if candidates else None
 
 
+def _pick_input_samplesheet(root: DataRoot) -> str | None:
+    """The run's ``input/*samplesheet*`` sheet: CSV/TSV first, else a YAML/JSON one.
+
+    A record sheet is only the fallback, so a run that ships both keeps the
+    CSV/TSV sheet it has always been detected with.
+    """
+    return _pick_input_file(
+        root, "samplesheet", (".csv", ".tsv", ".tab", ".txt")
+    ) or _pick_input_file(root, "samplesheet", RECORD_SHEET_SUFFIXES)
+
+
 def _introspect_pipeline_params(root: DataRoot | str, variables: dict[str, str]) -> None:
     """Read the run's nf-core ``params.json`` and set synthesized template flags.
 
@@ -1580,7 +1592,7 @@ def resolve_template(
     # 3c. Auto-resolve SAMPLESHEET_FILE from the run's input/ directory when not
     # supplied, so the caller does not have to pass an explicit path.
     if "SAMPLESHEET_FILE" not in variables and root is not None:
-        samplesheet = _pick_input_file(root, "samplesheet", (".csv", ".tsv", ".tab", ".txt"))
+        samplesheet = _pick_input_samplesheet(root)
         if samplesheet:
             variables["SAMPLESHEET_FILE"] = samplesheet
             logger.info(f"Samplesheet auto-detected: {samplesheet}")
