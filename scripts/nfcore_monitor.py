@@ -28,15 +28,25 @@ resolution, the empty-run check and the S3 helpers live in
 own run is empty or missing the report degrades to the newest real run and
 says so in its header.
 
+Each pipeline gets one verdict from the evidence there is: ✅ verified (most
+file-based recipes ran on the release's own data), 🟡 probable (the run folder is
+unchanged where the template reads), ⚪ unverified (no usable run of that release:
+nothing is judged from another release's data) and ❌ review needed (a major
+version bump, a path the template reads left the run folder, or a failing check).
+The run folder of the release is compared with the run the template pins in its
+``megatest.yaml`` (directories, moved or renamed ones, paths the recipes read).
+
 Usage::
 
     python scripts/nfcore_monitor.py check [--json]
     python scripts/nfcore_monitor.py report --pipeline ampliseq [--version V] [--results-hash H] [--out FILE]
+    python scripts/nfcore_monitor.py wave [--out-dir .nfcore-monitor]   # every pipeline with an update
 """
 
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 import os
 import sys
@@ -70,9 +80,9 @@ from nfcore_megatest import (  # noqa: E402
     load_manifest,
     load_pipelines_index,
     manifest_path,
-    newest_nonempty_run,
     release_for_version,
     resolve_run,
+    sha_to_tag,
 )
 
 __all__ = [
@@ -242,10 +252,16 @@ def substitute_vars(path: str, variables: dict[str, str]) -> str:
     other vars are filled from ``variables``. Unknown tokens are left intact so
     they surface as unresolved in the report.
     """
-    out = path.replace("{DATA_ROOT}/", "").replace("{DATA_ROOT}", "")
+    out = path
     for name, value in variables.items():
         out = out.replace(f"{{{name}}}", value)
-    return out
+    # After the vars: a var's value may itself start with ``{DATA_ROOT}/``.
+    return out.replace("{DATA_ROOT}/", "").replace("{DATA_ROOT}", "")
+
+
+def is_user_input(path: str) -> bool:
+    """True for a path under ``input/``: the samplesheet the user supplies, not a run output."""
+    return path.startswith("input/")
 
 
 def _template_vars(template: dict) -> dict[str, str]:
@@ -313,9 +329,10 @@ def collect_recipe_source_paths(
             raw = overrides.get(src.ref, src.path)
             if not raw:
                 continue
-            entries.append(
-                (tag, src.ref, substitute_vars(raw, variables), bool(src.optional) or dc_optional)
-            )
+            path = substitute_vars(raw, variables)
+            if is_user_input(path):
+                continue  # supplied by the user, the megatest cannot contain it
+            entries.append((tag, src.ref, path, bool(src.optional) or dc_optional))
     return entries
 
 
@@ -367,6 +384,10 @@ def _validate_one_recipe(
         rel = substitute_vars(raw, variables)
         if "{" in rel:
             return RecipeCheck(dc_tag, recipe_name, "SKIPPED", f"unresolved var in {rel}")
+        if is_user_input(rel):
+            return RecipeCheck(
+                dc_tag, recipe_name, "SKIPPED", f"user input, not a run output: {rel}"
+            )
         if rel not in sizes:
             if dc_optional or src.optional:
                 return RecipeCheck(
@@ -473,6 +494,157 @@ def _nearest_prefix(path: str, keys: list[str]) -> str | None:
     return None
 
 
+# ---------------------------------------------------------------------------
+# Run-folder structure: old pinned run vs the release's run
+# ---------------------------------------------------------------------------
+STRUCTURE_DEPTH = 2  # deeper levels hold sample names, which differ run to run
+_MOVE_SIMILARITY = 0.85
+
+
+class StructureDiff(NamedTuple):
+    removed: list[str]  # directories only the old run has
+    added: list[str]  # directories only the new run has
+    moved: list[tuple[str, str]]  # (old dir, new dir): same name elsewhere, or close name
+    lost_paths: list[tuple[str, str, str]]  # (dc_tag, ref, path) the template reads, gone
+
+
+def dir_tree(keys: list[str], depth: int = STRUCTURE_DEPTH) -> set[str]:
+    """Every directory of the run down to ``depth`` levels, as ``a/b/``."""
+    dirs: set[str] = set()
+    for key in keys:
+        parts = key.split("/")[:-1]
+        for level in range(1, min(len(parts), depth) + 1):
+            dirs.add("/".join(parts[:level]) + "/")
+    return dirs
+
+
+def _same_directory(old: str, new: str) -> bool:
+    """Same leaf name, a close one, or one whose words contain the other's
+    (``star_salmon`` -> ``salmon``): a directory that moved or was renamed."""
+    a, b = old.rstrip("/").rsplit("/", 1)[-1], new.rstrip("/").rsplit("/", 1)[-1]
+    if a == b or difflib.SequenceMatcher(None, a, b).ratio() >= _MOVE_SIMILARITY:
+        return True
+    wa, wb = set(a.replace("-", "_").split("_")), set(b.replace("-", "_").split("_"))
+    return wa <= wb or wb <= wa
+
+
+def diff_structure(
+    old_keys: list[str],
+    new_keys: list[str],
+    source_paths: list[tuple[str, str, str, bool]],
+) -> StructureDiff:
+    """What changed in the run folder, and which of it the template reads.
+
+    Directories are compared to ``STRUCTURE_DEPTH`` levels. A directory that
+    vanished next to a new one with the same name or a very close one is
+    reported as moved, not as one removal plus one addition. ``lost_paths`` are
+    the (non-optional) paths the recipes read that resolved in the old run and
+    no longer do: the drift that breaks a template.
+    """
+    old_dirs, new_dirs = dir_tree(old_keys), dir_tree(new_keys)
+    gone, new = sorted(old_dirs - new_dirs), sorted(new_dirs - old_dirs)
+    moved: list[tuple[str, str]] = []
+    for old in list(gone):
+        target = next((n for n in new if _same_directory(old, n)), None)
+        if target is not None:
+            moved.append((old, target))
+            gone.remove(old)
+            new.remove(target)
+    old_set, new_set = set(old_keys), set(new_keys)
+    lost = [
+        (tag, ref, path)
+        for tag, ref, path, optional in source_paths
+        if not optional
+        and _path_resolves(path, old_keys, old_set)
+        and not _path_resolves(path, new_keys, new_set)
+    ]
+    return StructureDiff(gone, new, moved, lost)
+
+
+# ---------------------------------------------------------------------------
+# Verdict: one answer per pipeline, from the evidence there actually is
+# ---------------------------------------------------------------------------
+VERDICT_LABELS = {
+    "review": "❌ review needed",
+    "verified": "✅ verified",
+    "probable": "🟡 probable",
+    "unverified": "⚪ unverified",
+}
+
+
+class Verdict(NamedTuple):
+    key: str  # a VERDICT_LABELS key
+    reason: str
+
+    @property
+    def label(self) -> str:
+        return VERDICT_LABELS[self.key]
+
+
+def is_major_bump(local: str, new: str) -> bool:
+    try:
+        return Version(new).major > Version(local).major
+    except InvalidVersion:
+        return False
+
+
+def _layout_bound(results: list[RecipeCheck]) -> list[RecipeCheck]:
+    """Recipes that read run files: the ones that can break when the layout moves."""
+    return [r for r in results if not r.detail.startswith("consumes upstream")]
+
+
+def compute_verdict(
+    local: str,
+    new: str,
+    *,
+    new_data: bool,
+    n_problems: int,
+    recipe_results: list[RecipeCheck] | None,
+    structure: StructureDiff | None,
+) -> Verdict:
+    """Order matters: a major bump always needs a person; without the release's own
+    data nothing else counts; then drift, then how much actually ran.
+    """
+    if is_major_bump(local, new):
+        return Verdict("review", f"major version bump {local} → {new}")
+    if not new_data:
+        return Verdict("unverified", "no usable megatest run for this release")
+    if structure is not None and structure.lost_paths:
+        return Verdict(
+            "review", f"{len(structure.lost_paths)} path(s) the template reads left the run folder"
+        )
+    if n_problems:
+        return Verdict("review", f"{n_problems} issue(s) against the release's megatest")
+    bound = _layout_bound(recipe_results or [])
+    n_pass = sum(r.status == "PASS" for r in bound)
+    if n_pass and n_pass * 2 >= len(bound):
+        return Verdict("verified", f"{n_pass} of {len(bound)} file-based recipes ran on its data")
+    if structure is not None:
+        return Verdict(
+            "probable",
+            f"run folder unchanged where the template reads ({n_pass} of {len(bound)} recipes ran)",
+        )
+    return Verdict("unverified", "the release's run is real but there is nothing to compare it to")
+
+
+def _cap(items: list[str], limit: int = 15) -> list[str]:
+    return items[:limit] + ([f"… and {len(items) - limit} more"] if len(items) > limit else [])
+
+
+def render_structure(diff: StructureDiff, old_label: str, n_old: int, n_new: int) -> list[str]:
+    """The ``## Run structure`` section."""
+    lines = [f"## Run structure vs {old_label} — {n_old} → {n_new} keys"]
+    for tag, ref, path in diff.lost_paths:
+        lines.append(f"- ❌ `{tag}` ({ref}) reads `{path}`, gone from the run folder")
+    lines += [f"- 🔀 `{old}` → `{new}` (moved or renamed)" for old, new in diff.moved[:15]]
+    lines += [f"- ➖ `{d}` only in {old_label}" for d in _cap(diff.removed)]
+    lines += [f"- ➕ `{d}` only in the release" for d in _cap(diff.added)]
+    if len(lines) == 1:
+        lines.append(f"- same directories (to {STRUCTURE_DEPTH} levels) as {old_label}")
+    lines.append("")
+    return lines
+
+
 def build_drift_report(
     pipeline: str,
     local_version: str,
@@ -484,6 +656,8 @@ def build_drift_report(
     catalog_result: tuple[str, str] | None = None,
     run_root: str = "",
     note: str | None = None,
+    verdict: Verdict | None = None,
+    structure_lines: list[str] | None = None,
 ) -> tuple[str, int]:
     """Render a markdown drift report. Returns ``(markdown, n_problems)``.
 
@@ -492,8 +666,9 @@ def build_drift_report(
     real files, run ``transform()`` and assert ``OUTPUT_SCHEMA``.
     Layer 3 (when ``catalog_result`` given): static ``catalog validate`` gate.
     ``run_root`` names the sub-directory of the run that is the DATA_ROOT and
-    ``note`` is printed under the header (e.g. when the report had to fall back
-    to another run because the release's own megatest is empty).
+    ``note`` is printed under the header. ``verdict`` replaces the legacy
+    two-state headline and ``structure_lines`` (``render_structure``) add the
+    old-vs-new run folder section.
     """
     key_set = set(keys)
     resolved: list[tuple[str, str, str]] = []
@@ -513,7 +688,10 @@ def build_drift_report(
     failed_recipes = [r for r in (recipe_results or []) if r.status == "FAIL"]
     catalog_failed = catalog_result is not None and catalog_result[0] == "FAIL"
     n_problems = len(missing) + len(failed_recipes) + (1 if catalog_failed else 0)
-    overall = "❌ action needed" if n_problems else "✅ still valid"
+    if verdict is not None:
+        overall = f"{verdict.label} — {verdict.reason}"
+    else:
+        overall = "❌ action needed" if n_problems else "✅ still valid"
 
     megatest = f"**{overall}** · Megatest: `s3://{MEGATEST_BUCKET}/{results_prefix}`"
     if run_root:
@@ -523,9 +701,13 @@ def build_drift_report(
         "",
         megatest,
         "",
+        f"Upstream changes: https://github.com/nf-core/{pipeline}/blob/master/CHANGELOG.md",
+        "",
     ]
     if note:
         lines += [f"> ⚠️ {note}", ""]
+    if structure_lines:
+        lines += structure_lines
 
     # Layer 2: recipe execution
     if recipe_results is not None:
@@ -570,7 +752,11 @@ def build_drift_report(
     if new_version != local_version:
         lines += [
             "## Next steps",
-            "Template still valid (or once the drift above is fixed), ship the new version with:",
+            (
+                "Read the changelog and this report first, then ship the new version with:"
+                if verdict is not None and verdict.key in ("review", "unverified")
+                else "Ship the new version with:"
+            ),
             "```",
             f"python scripts/bump_template_version.py --pipeline {pipeline} "
             f"--new-version {new_version}",
@@ -599,95 +785,251 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_report(args: argparse.Namespace) -> int:
-    pipeline = args.pipeline
+class ReportError(RuntimeError):
+    """A report that cannot be produced; ``code`` is the CLI exit status."""
+
+    def __init__(self, message: str, code: int) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+class PipelineReport(NamedTuple):
+    pipeline: str
+    local: str
+    new: str
+    verdict: Verdict
+    markdown: str
+    n_problems: int
+
+
+def _run_prefix(pipeline: str, sha: str, run_root: str) -> str:
+    root = run_root.strip("/")
+    return f"{pipeline}/results-{sha}/" + (f"{root}/" if root else "")
+
+
+def report_pipeline(
+    pipeline: str,
+    new_version: str | None = None,
+    *,
+    results_hash: str | None = None,
+    no_exec: bool = False,
+    max_file_mb: float = 50.0,
+    index: dict[str, Any] | None = None,
+) -> PipelineReport:
+    """Validate the template of ``pipeline`` against ``new_version``'s megatest run.
+
+    Only the release's own run counts as evidence. When it is empty or missing
+    the report says so and judges nothing from some other release's data: that
+    used to compare the pinned run with itself and call it valid.
+    """
     pipelines = discover_pipelines()
     if pipeline not in pipelines:
-        print(f"Unknown pipeline '{pipeline}' (have: {', '.join(pipelines)})", file=sys.stderr)
-        return 2
+        raise ReportError(f"Unknown pipeline '{pipeline}' (have: {', '.join(pipelines)})", 2)
     local = str(local_latest_version(pipelines[pipeline]))
-    index = load_index_or_none()
+    if index is None:
+        index = load_index_or_none()
     new_version = (
-        args.version or latest_release_tag(pipeline, index, os.environ.get("GITHUB_TOKEN")) or local
+        new_version or latest_release_tag(pipeline, index, os.environ.get("GITHUB_TOKEN")) or local
     )
 
     # The template's DATA_ROOT may be a sub-directory of the megatest run
-    # (rnaseq `aligner_star_salmon/`): the local version's manifest knows it.
-    run_root = ""
+    # (rnaseq `aligner_star_salmon/`), and its manifest pins the run it was built on.
+    run_root, pinned_sha = "", None
     manifest = manifest_path(pipeline, local)
     if manifest.is_file():
-        run_root = load_manifest(manifest).run_root
+        loaded = load_manifest(manifest)
+        run_root, pinned_sha = loaded.run_root, loaded.results_sha
 
     print(f"→ nf-core/{pipeline}: {local} (local) → {new_version} (release)", file=sys.stderr)
-    note: str | None = None
+    template = load_template(pipeline, local)
+    catalog_result = None if no_exec else run_catalog_validate()
+
     try:
         results_prefix = resolve_results_prefix(
-            pipeline, args.results_hash, version=new_version, index=index, run_root=run_root
+            pipeline, results_hash, version=new_version, index=index, run_root=run_root
         )
     except MegatestError as exc:
-        # The release's own megatest is empty/missing: degrade to the newest
-        # real run so the drift report still says something, and flag it.
-        fallback = newest_nonempty_run(pipeline, index=index, run_root=run_root)
-        if fallback is None:
-            print(f"error: {exc}", file=sys.stderr)
-            return 3
-        note = (
-            f"{exc.reason}. Falling back to the newest real run "
-            f"`{fallback.prefix}` (release {fallback.tag or 'unknown'})."
+        verdict = compute_verdict(
+            local, new_version, new_data=False, n_problems=0, recipe_results=None, structure=None
         )
-        print(f"! {note}", file=sys.stderr)
-        results_prefix = fallback.root_prefix
+        lines = [
+            f"# nf-core/{pipeline} drift report — {local} → {new_version}",
+            "",
+            f"**{verdict.label} — {verdict.reason}**",
+            "",
+            f"Upstream changes: https://github.com/nf-core/{pipeline}/blob/master/CHANGELOG.md",
+            "",
+            f"> ⚠️ {exc.reason}",
+            "",
+            "Nothing was compared: another release's run says nothing about this one.",
+            "",
+        ]
+        if catalog_result is not None:
+            lines += [f"## Catalog validate — {catalog_result[0]}", f"- {catalog_result[1]}", ""]
+        print(f"! {exc.reason}", file=sys.stderr)
+        return PipelineReport(pipeline, local, new_version, verdict, "\n".join(lines), 0)
+
     print(f"→ megatest results: {results_prefix}", file=sys.stderr)
     objects = list_objects(results_prefix)
     keys = [k for k, _ in objects]
-    print(f"→ listing s3://{MEGATEST_BUCKET}/{results_prefix}  ({len(keys)} keys)", file=sys.stderr)
-
-    template = load_template(pipeline, local)
     source_paths = collect_recipe_source_paths(template, pipeline, local)
-    print(f"→ layer 1: checking {len(source_paths)} recipe source paths", file=sys.stderr)
+    print(f"→ checking {len(source_paths)} recipe source paths", file=sys.stderr)
+
+    # Old run (the one the template was built on) vs the release's run.
+    structure: StructureDiff | None = None
+    structure_lines: list[str] | None = None
+    new_sha = results_prefix.split("/")[1].removeprefix("results-")
+    if not pinned_sha:
+        structure_lines = ["## Run structure — not compared (the template pins no run)", ""]
+    elif pinned_sha == new_sha:
+        structure_lines = ["## Run structure — not compared (same run as the template's)", ""]
+    else:
+        try:
+            old_keys = [k for k, _ in list_objects(_run_prefix(pipeline, pinned_sha, run_root))]
+        except Exception as exc:  # noqa: BLE001 - reported, never crashes the run
+            structure_lines = [f"## Run structure — not compared ({type(exc).__name__}: {exc})", ""]
+        else:
+            structure = diff_structure(old_keys, keys, source_paths)
+            old_label = sha_to_tag(index, pipeline, pinned_sha) or f"run {pinned_sha[:8]}"
+            structure_lines = render_structure(structure, old_label, len(old_keys), len(keys))
 
     recipe_results: list[RecipeCheck] | None = None
-    catalog_result: tuple[str, str] | None = None
-    if not args.no_exec:
+    if not no_exec:
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
-            print("→ layer 2: running recipes against megatest data", file=sys.stderr)
+            print("→ running recipes against megatest data", file=sys.stderr)
             recipe_results = validate_recipes(
-                template,
-                pipeline,
-                local,
-                results_prefix,
-                objects,
-                Path(tmp),
-                max_file_mb=args.max_file_mb,
+                template, pipeline, local, results_prefix, objects, Path(tmp), max_file_mb
             )
-        print("→ layer 3: depictio dev catalog validate", file=sys.stderr)
-        catalog_result = run_catalog_validate()
 
-    report, n_problems = build_drift_report(
-        pipeline,
+    # n_problems is what the legacy report counts; the verdict reads it from a
+    # first rendering, then the final one carries the verdict itself.
+    _, n_problems = build_drift_report(
+        pipeline, local, new_version, results_prefix, source_paths, keys, recipe_results,
+        catalog_result, run_root=run_root,
+    )  # fmt: skip
+    verdict = compute_verdict(
         local,
         new_version,
-        results_prefix,
-        source_paths,
-        keys,
-        recipe_results,
-        catalog_result,
-        run_root=run_root,
-        note=note,
+        new_data=True,
+        n_problems=n_problems,
+        recipe_results=recipe_results,
+        structure=structure,
     )
-    status = "✅ valid" if n_problems == 0 else f"⚠️ {n_problems} issue(s)"
+    report, _ = build_drift_report(
+        pipeline, local, new_version, results_prefix, source_paths, keys, recipe_results,
+        catalog_result, run_root=run_root, verdict=verdict, structure_lines=structure_lines,
+    )  # fmt: skip
+    return PipelineReport(pipeline, local, new_version, verdict, report, n_problems)
+
+
+def cmd_report(args: argparse.Namespace) -> int:
+    try:
+        result = report_pipeline(
+            args.pipeline,
+            args.version,
+            results_hash=args.results_hash,
+            no_exec=args.no_exec,
+            max_file_mb=args.max_file_mb,
+        )
+    except ReportError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return exc.code
+    status = result.verdict.label
     if args.out:
         out = Path(args.out)
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(report)
+        out.write_text(result.markdown)
         print(f"Report written to {out}", file=sys.stderr)
-        # The only stdout line: the short status, for the workflow to put in the PR title.
-        print(status)
+        print(status)  # the only stdout line
     else:
-        print(report)
+        print(result.markdown)
         print(f"\n{status}", file=sys.stderr)
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Wave: every pipeline with a newer release, one report each, one summary
+# ---------------------------------------------------------------------------
+_VERDICT_ORDER = ["review", "verified", "probable", "unverified"]
+
+
+def wave_title(reports: list[PipelineReport]) -> str:
+    counts = [
+        f"{VERDICT_LABELS[k].split()[0]}{n}"
+        for k in _VERDICT_ORDER
+        if (n := sum(r.verdict.key == k for r in reports))
+    ]
+    return f"nf-core wave: {len(reports)} release(s) — {' '.join(counts)}"
+
+
+def build_wave_summary(reports: list[PipelineReport]) -> str:
+    """The body of the wave's one draft PR."""
+    rows = sorted(reports, key=lambda r: (_VERDICT_ORDER.index(r.verdict.key), r.pipeline))
+    lines = [
+        f"# {wave_title(reports)}",
+        "",
+        "| Pipeline | Template → release | Verdict | Why | Report |",
+        "|---|---|---|---|---|",
+    ]
+    for r in rows:
+        lines.append(
+            f"| `{r.pipeline}` | {r.local} → {r.new} | {r.verdict.label} | {r.verdict.reason} "
+            f"| `.nfcore-monitor/{r.pipeline}-{r.new}.md` |"
+        )
+    lines += [
+        "",
+        "**How to ship:** bump the ✅ and 🟡 together in one PR, each ❌ in its own, and wait "
+        "for a real run before bumping a ⚪ unless its changelog is trivial.",
+        "```",
+        "python scripts/bump_template_version.py --pipeline <name> --new-version <version>",
+        "```",
+        "This PR only carries the reports. Do not merge it: close it once the wave is handled; "
+        "the next run reopens one.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def cmd_wave(args: argparse.Namespace) -> int:
+    index = load_index_or_none()
+    updates = check_updates(token=os.environ.get("GITHUB_TOKEN"), index=index)
+    targets = [(str(u["pipeline"]), str(u["remote"])) for u in updates if u["update_available"]]
+    if args.force_pipeline and args.force_pipeline not in {p for p, _ in targets}:
+        targets.append((args.force_pipeline, ""))
+    reports: list[PipelineReport] = []
+    for pipeline, version in targets:
+        try:
+            reports.append(
+                report_pipeline(
+                    pipeline,
+                    version or None,
+                    no_exec=args.no_exec,
+                    max_file_mb=args.max_file_mb,
+                    index=index,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 - one broken pipeline must not sink the wave
+            local = str(local_latest_version(discover_pipelines().get(pipeline, [Version("0")])))
+            verdict = Verdict("unverified", f"report failed: {type(exc).__name__}: {exc}")
+            reports.append(
+                PipelineReport(
+                    pipeline,
+                    local,
+                    version or "?",
+                    verdict,
+                    f"# {pipeline}\n\n{verdict.reason}\n",
+                    0,
+                )
+            )
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for r in reports:
+        (out_dir / f"{r.pipeline}-{r.new}.md").write_text(r.markdown)
+    if reports:
+        (out_dir / "SUMMARY.md").write_text(build_wave_summary(reports))
+    print(wave_title(reports) if reports else "")
     return 0
 
 
@@ -724,6 +1066,15 @@ def main(argv: list[str] | None = None) -> int:
         help="Skip downloading/executing recipe sources larger than this (default 50)",
     )
     p_report.set_defaults(func=cmd_report)
+
+    p_wave = sub.add_parser(
+        "wave", help="Report every pipeline with a newer release: one file each + SUMMARY.md"
+    )
+    p_wave.add_argument("--out-dir", default=".nfcore-monitor", help="Where the reports go")
+    p_wave.add_argument("--force-pipeline", default="", help="Report this one even without update")
+    p_wave.add_argument("--no-exec", action="store_true", help="Skip recipe execution")
+    p_wave.add_argument("--max-file-mb", type=float, default=50.0)
+    p_wave.set_defaults(func=cmd_wave)
 
     args = parser.parse_args(argv)
     return int(args.func(args))
