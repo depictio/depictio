@@ -366,6 +366,11 @@ def test_diff_structure_identical_runs_is_empty(nfm: ModuleType) -> None:
         ({"local": "1.0.0", "new": "1.0.1", "new_data": True, "lost": True}, "review"),
         ({"local": "1.0.0", "new": "1.0.1", "new_data": True, "passes": 3, "skips": 1}, "verified"),
         ({"local": "1.0.0", "new": "1.0.1", "new_data": True, "structure": True}, "probable"),
+        # a run folder that compares clean on nothing proves nothing
+        (
+            {"local": "1.0.0", "new": "1.0.1", "new_data": True, "structure": True, "checked": 0},
+            "unverified",
+        ),
         ({"local": "1.0.0", "new": "1.0.1", "new_data": True}, "unverified"),
     ],
 )
@@ -379,7 +384,7 @@ def test_compute_verdict(nfm: ModuleType, kwargs: dict, key: str) -> None:
     structure = None
     if kwargs.get("structure") or kwargs.get("lost"):
         lost = [("t", "r", "p")] if kwargs.get("lost") else []
-        structure = nfm.StructureDiff([], [], [], lost)
+        structure = nfm.StructureDiff([], [], [], lost, n_checked=kwargs.get("checked", 3))
     verdict = nfm.compute_verdict(
         kwargs["local"],
         kwargs["new"],
@@ -436,3 +441,29 @@ def test_wave_summary_orders_by_verdict_and_titles_counts(nfm: ModuleType) -> No
     rows = [line for line in body if line.startswith("| `")]
     assert [r.split("`")[1] for r in rows] == ["a", "c", "b"]  # review, verified, unverified
     assert ".nfcore-monitor/a-1.1.0.md" in summary
+
+
+def test_diff_structure_counts_only_paths_the_old_run_had(nfm: ModuleType) -> None:
+    old = ["multiqc/multiqc_data/multiqc.parquet", "multiqc/ms2rescore/a.tsv"]
+    new = ["multiqc/multiqc_data/multiqc.parquet"]
+    read = [
+        ("manifest", "keys", "multiqc/multiqc_data/*.parquet", False),  # in both
+        ("manifest", "keys", "multiqc/ms2rescore/*.tsv", False),  # read, then gone
+        ("manifest", "keys", "never/existed/*.csv", False),  # not in the old run: not checked
+    ]
+    diff = nfm.diff_structure(old, new, read)
+    assert diff.n_checked == 2
+    assert [p for _, _, p in diff.lost_paths] == ["multiqc/ms2rescore/*.tsv"]
+    assert diff.removed == ["multiqc/ms2rescore/"]
+
+
+def test_verified_reason_names_the_paths_that_were_compared(nfm: ModuleType) -> None:
+    passed = [nfm.RecipeCheck("t", "r", "PASS", "ok")]
+    structure = nfm.StructureDiff([], [], [], [], n_checked=29)
+    verdict = nfm.compute_verdict(
+        "3.10.0", "3.11.0", new_data=True, n_problems=0, recipe_results=passed, structure=structure
+    )
+    assert verdict.key == "verified"
+    assert verdict.reason == (
+        "1 of 1 file-based recipes ran on its data; 29 path(s) the template reads are unchanged"
+    )
