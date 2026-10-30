@@ -43,7 +43,7 @@ components:
     section: 'Cell embedding'
     body: >
       4,355 cells from four donors, one point per cell on the UMAP of a clustered and annotated
-      PBMC sample, coloured by cell type. Thousands of points draw small; Colour by switches to
+      PBMC sample, coloured by cell type. Colour by switches to
       the donor or the number of detected genes. Input: the cell table of nf-core/scrnaseq
       after clustering and annotation (Scanpy or Seurat obs with its X_umap).
     layout: { x: 0, y: 0, w: 8, h: 2 }
@@ -64,8 +64,9 @@ components:
       dim_2_col: "umap_2"
       cluster_col: "cell_type"
       axis_prefix: "UMAP"
-      point_size: 3
+      point_size: 6
       plot_style: "default"
+      axis_line_width: 3
       show_density: false
       selection_enabled: true
       controls_placement: "header"

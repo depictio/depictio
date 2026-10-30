@@ -133,10 +133,9 @@ ACTIONS = {
     "controls_popover": _placement("In the settings popover", keep_open=True),
 }
 
-# docs image name -> chrome style (`?chrome=`). The Glass chrome's Plotly patch
-# drops axis lines, so the embedding's "Axis lines" plot style only shows in
-# the Classic chrome ("base").
-CHROME = {"embedding": "base", "embedding_pca": "base"}
+# docs image name -> chrome style (`?chrome=`), for a shot that needs the
+# Classic look ("base") rather than the default Glass.
+CHROME: dict[str, str] = {}
 
 HIDE_CSS = (
     ".hoverlayer, .modebar-container, .mantine-Notifications-root "

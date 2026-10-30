@@ -64,7 +64,10 @@ components:
       dim_2_col: "PC2"
       cluster_col: "group"
       point_size: 25
+      marker_outline: true
+      marker_outline_color: "background"
       plot_style: "default"
+      axis_line_width: 3
       show_density: false
       selection_enabled: true
       controls_placement: "header"
