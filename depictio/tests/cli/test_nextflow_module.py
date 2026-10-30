@@ -103,6 +103,12 @@ class TestInterface:
         assert "trap 'depictio local down" in main
         assert re.search(r"^\s*depictio local down$", main, re.MULTILINE)
 
+    def test_the_stack_takes_its_options_from_ext_args2(self):
+        """The API port (--port) is set from a config, as nf-core does for a second command."""
+        script = _main().split("script:", 1)[1].split("stub:", 1)[0]
+        assert re.search(r"def args2 = task\.ext\.args2 \?: ''", script)
+        assert re.search(r"depictio local up --no-open --examples none \$\{args2\}", script)
+
     def test_directories_are_staged_as_real_trees(self):
         """The scan skips symlinked directories, so linking one whole loses its files."""
         assert 'cp -rsfL "$src/." "$dst/"' in _main().replace("\\$", "$")

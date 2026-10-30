@@ -39,6 +39,8 @@ process DEPICTIO_INGEST {
 
     script:
     def args = task.ext.args ?: ''
+    // Options of `depictio local up`, e.g. '--port 8123' for the API port.
+    def args2 = task.ext.args2 ?: ''
     prefix = task.ext.prefix ?: "${meta.id}"
     // Single-quoted for the shell. Staged paths need none: Nextflow escapes them.
     def quote = { value -> "'" + value.toString().replace("'", "'\\''") + "'" }
@@ -74,7 +76,7 @@ process DEPICTIO_INGEST {
     def start_stack = !artifact ? '' : """
     export DEPICTIO_LOCAL_HOME="\$PWD/stack"
     trap 'depictio local down >/dev/null 2>&1 || true' EXIT
-    depictio local up --no-open --examples none
+    depictio local up --no-open --examples none ${args2}
     """
     // Stopped first, so MongoDB and SeaweedFS flush, then only what reopening the
     // artifact reads is kept: no binaries, logs, caches or Redis queue. The

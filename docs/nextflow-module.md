@@ -194,6 +194,21 @@ ingestion, the stack is stopped first, so MongoDB and SeaweedFS flush, and only
 what reopening reads is kept: no binaries, logs, caches or Redis queue, and not
 MongoDB's 100 MB preallocated journal file.
 
+`task.ext.args2` is passed to `depictio local up`. Use it to fix the API port
+when the default one is taken or filtered on the machine:
+
+```groovy
+process {
+    withName: 'DEPICTIO_INGEST' {
+        ext.args2 = '--port 8123'
+    }
+}
+```
+
+MongoDB, Redis and SeaweedFS always take free ports. Two `DEPICTIO_INGEST`
+tasks running at once on the same machine are not supported: a pipeline runs
+one.
+
 ```
 results/depictio/
 ├── <run>.depictio.json        how the ingestion ended, project and dashboard ids
