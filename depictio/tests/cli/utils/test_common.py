@@ -142,6 +142,19 @@ class TestCommon:
                 assert config_dict["api_base_url"] == "https://api.depictio.dev"
                 assert config_dict["s3_storage"]["bucket"] == "depictio-bucket"
 
+        def test_keeps_remote_storage_options(self, sample_cli_config):
+            """The storage settings of an external bucket (e.g. a public GCS one) reach the
+            pipeline: dropped here, every s3:// source fell back to the instance's store."""
+            sample_cli_config["remote_storage_options"] = {
+                "endpoint_url": "https://storage.googleapis.com",
+                "bucket": "gcp-public-data--broad-references",
+            }
+            with patch("depictio.cli.cli.utils.common.logger"):
+                result = validate_depictio_cli_config(sample_cli_config)
+            assert result.remote_storage_options is not None
+            assert result.remote_storage_options.endpoint_url == "https://storage.googleapis.com"
+            assert result.remote_storage_options.bucket == "gcp-public-data--broad-references"
+
         def test_invalid_config(self):
             """Test validate_depictio_cli_config with invalid config"""
             with pytest.raises(Exception):

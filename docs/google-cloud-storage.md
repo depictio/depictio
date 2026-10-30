@@ -5,8 +5,9 @@ that protocol through its [XML API](https://cloud.google.com/storage/docs/intero
 at `https://storage.googleapis.com`, authenticated with **HMAC keys**. So Depictio can use
 a GCS bucket with the usual `DEPICTIO_S3_*` settings. No GCS-specific backend is involved.
 
-> **Status:** these steps have not yet been checked against a real GCS bucket. Items
-> marked **[to be validated]** are what such a test needs to confirm. A native `gs://`
+> **Status:** reading a public GCS bucket was checked end to end (see below). Using
+> GCS as the instance's own storage (HMAC keys, writes, deletes) has not been yet:
+> items marked **[to be validated]** are what such a test needs to confirm. A native `gs://`
 > backend (service-account or Workload Identity auth, no HMAC keys) is not available.
 
 ## 1. Prepare the bucket
@@ -30,6 +31,34 @@ DEPICTIO_S3_BUCKET=<your-bucket>
 
 With `EXTERNAL_SERVICE=true` the API, the worker and the CLI all use the public URL.
 Don't start the bundled `s3` service.
+
+## Reading pipeline results from a GCS bucket
+
+This is separate from the instance storage above: the instance can stay on SeaweedFS
+(or anything else) while it **reads** its sources from a GCS bucket. Give the
+endpoint as the project's storage settings, or as `remote_storage_options` in the CLI
+configuration:
+
+```yaml
+# CLI configuration (e.g. the one `depictio local up` writes)
+remote_storage_options:
+  endpoint_url: https://storage.googleapis.com
+  bucket: <bucket>
+  # access_key_id / secret_access_key: an HMAC key for a private bucket.
+  # Leave both out for a public bucket: it is read without a signature.
+```
+
+and point a data collection at an `s3://<bucket>/<key>` location (`scan: {mode: url}`,
+`s3_prefix` or a manifest). Checked on 2026-10-30 against the public
+`gs://gcp-public-data--broad-references` bucket, with `depictio local up` and
+`depictio ingest --project-config-path` (a `url` scan of a 7,558-row BED file): no
+keys, the read went through `storage.googleapis.com` and the table was ingested into
+the instance's Delta store. The project storage test
+(`POST /projects/{id}/storage/test`) passes with the same settings.
+
+The run-folder browser and *create a project from a run* ask for keys on a bucket
+outside the instance's allowlist. `DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS` reads its buckets
+on the AWS endpoint only, so it cannot open a public GCS bucket.
 
 ## What Depictio adjusts for GCS
 
