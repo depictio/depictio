@@ -27,10 +27,19 @@ cp -r "$(dirname "$(depictio config nextflow)")/modules/depictio" modules/local/
 include { DEPICTIO_INGEST } from './modules/local/depictio/ingest/main'
 ```
 
-The process runs `depictio ingest` with the pipeline's bundled template, which
-brings the template's dashboards with it. Its container is the
-`ghcr.io/depictio/depictio-cli` image of the same release, and its conda
-environment installs `depictio[local]` from PyPI: MultiQC for the templates, and the local server for `server 'local'`.
+By default the module builds an **artifact**, like `shinyngs/app` builds a
+Shiny app rather than serving one: the task starts a single-user depictio of its
+own, ingests the run into it with the pipeline's bundled template (which brings
+the template's dashboards), stops it, and emits its data directory. The
+pipeline publishes that directory; anyone reopens it later with one command.
+Nothing outlives the task, so the module runs the same on any executor.
+
+Its conda environment installs `depictio[local]` from PyPI: MultiQC for the
+templates, and MongoDB, Redis and SeaweedFS (fetched by `depictio local up`)
+for the stack. The container is the `ghcr.io/depictio/depictio-cli` image of
+the same release, which has only the `multiqc` extra, not `local`: the artifact
+needs the conda environment (or a local install) until an image carries the
+stack.
 
 ## Inputs
 
@@ -40,8 +49,7 @@ environment installs `depictio[local]` from PyPI: MultiQC for the templates, and
 | `val template` | A template id (`nf-core/rnaseq/3.26.0`, `nf-core/rnaseq/latest`), or `''` to let the CLI detect the pipeline from the run's `pipeline_info/` and pick the closest bundled version |
 | `path project_config` | A project YAML for a pipeline with no bundled template, else `[]`. Its `locations` must read `{DEPICTIO_DATA_ROOT}`, which the module sets to the rebuilt results directory |
 | `path dashboards` | Dashboard YAMLs to import with the project, else `[]`. Templates bring their own |
-| `path cli_config` | A `CLI.yaml`, else `[]` to read `$DEPICTIO_CLI_CONFIG_PATH` or `~/.depictio/CLI.yaml` (see [Choosing the server](#choosing-the-server)) |
-| `val server` | `''` for the instance `cli_config` names, or `'local'` for the single-user server `depictio local up` runs on the launching machine, started when it does not run yet |
+| `path cli_config` | `[]` (the default) to build an artifact, or the `CLI.yaml` of an existing instance to send the run there instead (see [Sending to an existing instance](#sending-to-an-existing-instance), not the default, may change) |
 
 `task.ext.args` is appended to the command, for `--attach-run`, `--project NAME`,
 `--update-config`, `--var NAME=VALUE` and the other `ingest` options. It is
@@ -125,8 +133,7 @@ if (params.depictio) {
             ] },
         '',     // template: detected from pipeline_info/
         [], [],
-        params.depictio_cli_config ? file(params.depictio_cli_config, checkIfExists: true) : [],
-        params.depictio_server,   // '' or 'local'
+        [],     // no cli_config: build an artifact
     )
 }
 ```
@@ -135,15 +142,17 @@ In its `nextflow.config`:
 
 ```groovy
 params {
-    depictio            = true
-    depictio_cli_config = null
-    depictio_server     = ''    // 'local': the depictio local up server
+    depictio = true
 }
 
 process {
     withName: 'DEPICTIO_INGEST' {
-        executor      = 'local'
         errorStrategy = 'ignore'
+        publishDir    = [
+            path: { "${params.outdir}/depictio" },
+            mode: params.publish_dir_mode,
+            saveAs: { filename -> filename.equals('versions.yml') ? null : filename },
+        ]
         ext.args      = { [
             // One project per run. A '/' in a project name breaks the CLI's
             // lookup by name, hence the last part of the manifest name only.
@@ -157,8 +166,7 @@ process {
 }
 ```
 
-Declare the `depictio*` parameters in `nextflow_schema.json` too, or
-nf-schema rejects them.
+Declare `depictio` in `nextflow_schema.json` too, or nf-schema rejects it.
 
 The route flags are the per-template part: each template documents its
 variables in its `template.yaml`, and the pipeline is the one place that knows
@@ -176,50 +184,59 @@ version (the tested `--skip_alignment` run wrote `multiqc/multiqc_report_data`):
 it comes from the task, not from the copy, and wins over whatever the copy
 holds.
 
-## Choosing the server
+## The artifact
 
-Four set-ups, one module. Each was run end to end against the nf-core/rnaseq
-3.26.0 results: project created, 12 data collections, template dashboard.
+The task gives its stack a home in its own work directory
+(`DEPICTIO_LOCAL_HOME="$PWD/stack"`), so it never touches `~/.depictio/local`,
+and `depictio local up` picks free ports, so it runs beside any other stack on
+the machine. A `trap` stops the stack on every exit, failed or not. After the
+ingestion, the stack is stopped first, so MongoDB and SeaweedFS flush, and only
+what reopening reads is kept: no binaries, logs, caches or Redis queue, and not
+MongoDB's 100 MB preallocated journal file.
 
-| Set-up | `cli_config` | `server` | Secrets | `ext.args` |
-| --- | --- | --- | --- | --- |
-| No server yet, single user | `[]` | `'local'` | none | |
-| A `depictio local up` server already runs | `[]` | `'local'` | none | |
-| A remote instance | its `CLI.yaml` | `''` | `DEPICTIO_CLI_TOKEN` | |
-| A remote multi-user instance, as a given user | its `CLI.yaml` | `''` | `DEPICTIO_AUTH_PROVISIONING_API_KEY` | `--user alice@lab.org` |
-
-### A local server: `server 'local'`
-
-The task runs `depictio local up`, which reuses the server when it runs and
-starts it otherwise (the first start downloads MongoDB, Redis and SeaweedFS,
-about 700 MB, into `~/.depictio/local`), then ingests with `--server local`.
-The server's processes run in their own sessions, so they outlive the task and
-the pipeline: open the link the result JSON gives, and stop it with
-`depictio local down`. `DEPICTIO_LOCAL_HOME` picks another home, as for the CLI.
-
-That only holds where the task shares the machine and its lifetime with you:
-
-```groovy
-process {
-    withName: 'DEPICTIO_INGEST' {
-        executor = 'local'
-    }
-}
+```
+results/depictio/
+├── <run>.depictio.json        how the ingestion ended, project and dashboard ids
+└── <run>_depictio/            the artifact
+    ├── .depictio-local-home
+    ├── secrets.json  ports.json
+    ├── keys/  cli/              token-signing keys, the admin CLI configuration
+    ├── mongo/                   MongoDB data
+    └── s3/                      SeaweedFS data (the ingested tables, MultiQC reports)
 ```
 
-The module refuses `server 'local'` on any other executor, and inside a Docker,
-Podman, Singularity or Apptainer container, which stops with the task, with a
-message saying so. Run it with `-profile conda`, whose environment brings
-`depictio[local]`, or with depictio installed on the launching machine.
+For the nf-core/rnaseq 3.26.0 test profile it weighs about 100 MB.
 
-### A remote instance
+Reopen it, on any machine with `depictio[local]` installed:
 
-The CLI always reads a `CLI.yaml`: the one passed as `cli_config`, else
-`$DEPICTIO_CLI_CONFIG_PATH`, else `~/.depictio/CLI.yaml`, which a container
-does not have. `DEPICTIO_CLI_TOKEN` and `DEPICTIO_CLI_API_BASE_URL` only
-override the token and URL of the file that was read; they do not replace it,
-since it also carries the storage settings. So pass a `CLI.yaml` as
-`cli_config`, and keep its token out of it in a Nextflow secret:
+```bash
+DEPICTIO_LOCAL_HOME=results/depictio/<run>_depictio depictio local up
+```
+
+The first start fetches MongoDB, Redis and SeaweedFS into the artifact's `env/`
+(about 700 MB, seconds from a warm conda-forge cache). The dashboard link in the
+result JSON holds the dashboard id; its port is the one the task used, which
+`up` reuses when free. `depictio local down` with the same `DEPICTIO_LOCAL_HOME`
+stops it.
+
+The artifact holds the stack's keys, admin token and storage password, like any
+local home: share it as you would the data itself. A stack runs a single user,
+so the artifact does too.
+
+Inside the task, `depictio local up` fetches the same binaries into the work
+directory. Under conda they come from the conda-forge package cache after the
+first run; without that cache, every task downloads them, so the node needs
+network access to conda-forge.
+
+## Sending to an existing instance
+
+*Not the default, may change.* Given the `CLI.yaml` of an existing instance as
+`cli_config`, the task sends the run there and builds no artifact.
+
+The CLI always reads a `CLI.yaml`. `DEPICTIO_CLI_TOKEN` and
+`DEPICTIO_CLI_API_BASE_URL` only override the token and URL of the file that
+was read; they do not replace it, since it also carries the storage settings.
+Keep the token out of the file, in a Nextflow secret:
 
 ```bash
 nextflow secrets set DEPICTIO_CLI_TOKEN <long-lived CLI token>
@@ -237,37 +254,14 @@ The secret reaches the task's environment without being written into its
 `.command.*` files. A `cli_config` that holds the token is staged like any
 input, so on a cloud executor it is uploaded to the work directory's bucket.
 
-### A multi-user instance, as a given user
+On a multi-user instance, `--user` in `ext.args` names the person the run
+belongs to, and the instance's provisioning key comes from a
+`DEPICTIO_AUTH_PROVISIONING_API_KEY` secret: the account is created on its
+first run and reused afterwards, and the task log ends with a one-time login
+link (see [Pipeline provisioning](pipeline-provisioning-magic-link.md)).
 
-On an instance where each run belongs to the person who launched it, the CLI
-provisions that person: `--user` names them, and the instance's provisioning
-key, which the server must have too, comes from a secret. The account is
-created on its first run and reused afterwards, whether provisioning or a
-registration made it; the project and its dashboards are owned by that user,
-and the task log ends with a one-time login link for them (see
-[Pipeline provisioning](pipeline-provisioning-magic-link.md)).
-
-```bash
-nextflow secrets set DEPICTIO_AUTH_PROVISIONING_API_KEY <the instance's key>
-```
-
-```groovy
-process {
-    withName: 'DEPICTIO_INGEST' {
-        secret   = ['DEPICTIO_AUTH_PROVISIONING_API_KEY']
-        ext.args = { "--user ${params.depictio_user}" }
-    }
-}
-```
-
-`cli_config` still names the instance and its storage; its own token is not
-used, the run acting with the provisioned user's.
-
-### Network
-
-The task talks to the Depictio API, so the node it runs on needs network
-access to it. On a cluster whose compute nodes have none, run it on the head
-node with `executor = 'local'`.
+The task then talks to that instance, so the node it runs on needs network
+access to it.
 
 ## Failure
 
@@ -284,11 +278,17 @@ process {
 
 ## Output
 
-`<meta.id>.depictio.json` is the CLI's `--result-json`: how the ingestion ended,
-with the project and dashboard ids and links. `versions.yml` carries the depictio
-version, as in any nf-core module.
+`<meta.id>_depictio/` is the artifact (see [The artifact](#the-artifact)),
+absent when the run is sent to an instance. `<meta.id>.depictio.json` is the
+CLI's `--result-json`: how the ingestion ended, with the project and dashboard
+ids and links. `versions.yml` carries the depictio version, as in any nf-core
+module.
 
 ## Containers
+
+The `depictio-cli` image lacks the `local` extra, so today it can only send a
+run to an existing instance; building the artifact in a container needs an
+image that carries the stack.
 
 The CLI image's `ENTRYPOINT` is `depictio-cli`, so that `docker run <image>
 ingest …` works on its own. Nextflow does not override an entrypoint, which

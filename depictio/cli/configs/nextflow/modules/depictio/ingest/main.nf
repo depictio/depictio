@@ -23,18 +23,14 @@ process DEPICTIO_INGEST {
     path project_config
     // Optional dashboard YAMLs to import with the project.
     path dashboards
-    // CLI configuration (CLI.yaml) of a remote instance, or [] for
-    // $DEPICTIO_CLI_CONFIG_PATH / ~/.depictio/CLI.yaml. DEPICTIO_CLI_TOKEN and
-    // DEPICTIO_CLI_API_BASE_URL override the token and URL of whichever file is
-    // read; they do not replace it.
+    // [] (the default): build an artifact, a single-user depictio holding the
+    // run, which the task starts, fills, stops and emits; nothing outlives it.
+    // A CLI.yaml instead sends the run to that existing instance (not the default,
+    // may change). DEPICTIO_CLI_TOKEN overrides the token of the file.
     path cli_config
-    // '' for the instance cli_config names, or 'local' for the single-user server
-    // `depictio local up` runs on this machine: reused when it runs, started
-    // otherwise. 'local' needs executor 'local' and no container, since the server
-    // must outlive the task.
-    val server
 
     output:
+    tuple val(meta), path("${prefix}_depictio"), emit: artifact, optional: true
     tuple val(meta), path("${prefix}.depictio.json"), emit: result
     path "versions.yml"                              , emit: versions
 
@@ -69,25 +65,30 @@ process DEPICTIO_INGEST {
     }
     def dashboard_list = dashboards instanceof List ? dashboards : (dashboards ? [dashboards] : [])
     def dashboard_args = dashboard_list.collect { d -> "--dashboard ${d}" }.join(' ')
-    def local_server = (server ?: '').toString() == 'local'
-    if (server && !local_server) {
-        error "DEPICTIO_INGEST: server is 'local' or '', not '${server}'; reach a remote instance with cli_config"
-    }
-    if (local_server && cli_config) {
-        error "DEPICTIO_INGEST: server 'local' and a cli_config name two servers; pass one"
-    }
-    if (local_server && task.executor != 'local') {
-        error "DEPICTIO_INGEST: server 'local' needs executor 'local', not '${task.executor}': the server must run where the pipeline is launched"
-    }
-    def server_args = local_server ? '--server local' : (cli_config ? "--server ${cli_config}" : '')
-    // The server's processes run in their own sessions, so they outlive the task,
-    // but not the container a task runs in.
-    def start_local = !local_server ? '' : """
-    if [ -e /.dockerenv ] || [ -e /run/.containerenv ] || [ -n "\${SINGULARITY_CONTAINER:-}\${APPTAINER_CONTAINER:-}" ]; then
-        echo "DEPICTIO_INGEST: server 'local' cannot run inside a container, which stops with the task; disable the container for this process (conda or a local install)" >&2
-        exit 1
-    fi
+    def artifact = !cli_config
+    def server_args = artifact ? '--server local' : "--server ${cli_config}"
+    def artifact_dir = quote.call("${prefix}_depictio")
+    // The stack's home is in the work directory, so it never touches
+    // ~/.depictio/local, and its ports are picked free, so it runs beside any other
+    // stack. It is stopped on every exit, so nothing outlives the task.
+    def start_stack = !artifact ? '' : """
+    export DEPICTIO_LOCAL_HOME="\$PWD/stack"
+    trap 'depictio local down >/dev/null 2>&1 || true' EXIT
     depictio local up --no-open --examples none
+    """
+    // Stopped first, so MongoDB and SeaweedFS flush, then only what reopening the
+    // artifact reads is kept: no binaries, logs, caches or Redis queue. The
+    // preallocated journal file is 100 MB of nothing.
+    def keep_stack = !artifact ? '' : """
+    depictio local down
+    trap - EXIT
+    mkdir -p ${artifact_dir}
+    for kept in .depictio-local-home secrets.json ports.json keys cli mongo s3; do
+        mv "stack/\$kept" ${artifact_dir}/
+    done
+    rm -f ${artifact_dir}/mongo/journal/WiredTigerPreplog.*
+    # The binaries and logs left are close to 1 GB; a failed task keeps them.
+    rm -rf stack
     """
     def result_json = quote.call("${prefix}.depictio.json")
     """
@@ -117,7 +118,7 @@ process DEPICTIO_INGEST {
     mkdir -p data_root
     ${layout}
 
-    ${start_local}
+    ${start_stack}
     # Expanded in a project YAML's locations ({DEPICTIO_DATA_ROOT}).
     export DEPICTIO_DATA_ROOT="\$PWD/data_root"
     depictio \\
@@ -128,6 +129,7 @@ process DEPICTIO_INGEST {
         --triggered-by nextflow \\
         --result-json ${result_json} \\
         ${args}
+    ${keep_stack}
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
@@ -137,7 +139,9 @@ process DEPICTIO_INGEST {
 
     stub:
     prefix = task.ext.prefix ?: "${meta.id}"
+    def stub_artifact = cli_config ? '' : "mkdir -p '${prefix}_depictio/mongo' '${prefix}_depictio/s3' && touch '${prefix}_depictio/.depictio-local-home'"
     """
+    ${stub_artifact}
     echo '{"status": "stub"}' > ${prefix}.depictio.json
 
     cat <<-END_VERSIONS > versions.yml

@@ -85,13 +85,23 @@ class TestInterface:
 
         script = _main().split("script:", 1)[1].split("stub:", 1)[0]
         local_up = re.findall(r"depictio local up([^\n]*)", script)
-        assert local_up, "server 'local' no longer starts the local server"
+        assert local_up, "the artifact no longer starts its stack"
         up_flags = flags("".join(local_up))
         assert up_flags <= options(root.commands["local"].commands["up"]), up_flags
-        ingest_flags = flags(re.sub(r"depictio local up[^\n]*", "", script))
+        ingest_flags = flags(re.sub(r"depictio local (up|down)[^\n]*", "", script))
         assert ingest_flags and ingest_flags <= options(root.commands["ingest"]), (
             ingest_flags - options(root.commands["ingest"])
         )
+
+    def test_the_artifact_stack_lives_in_the_work_directory(self):
+        """Never ~/.depictio/local: the task's stack is its own, and so is its data."""
+        assert 'export DEPICTIO_LOCAL_HOME="$PWD/stack"' in _main().replace("\\$", "$")
+
+    def test_the_artifact_stack_is_stopped_on_every_exit(self):
+        """A failed ingestion must not leave MongoDB, SeaweedFS or the API running."""
+        main = _main()
+        assert "trap 'depictio local down" in main
+        assert re.search(r"^\s*depictio local down$", main, re.MULTILINE)
 
     def test_directories_are_staged_as_real_trees(self):
         """The scan skips symlinked directories, so linking one whole loses its files."""

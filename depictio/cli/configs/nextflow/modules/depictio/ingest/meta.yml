@@ -52,19 +52,24 @@ input:
   - cli_config:
       type: file
       description: |
-        Depictio CLI configuration (`CLI.yaml`), which may leave its token
-        out for `DEPICTIO_CLI_TOKEN` to supply. Pass `[]` to read
-        `$DEPICTIO_CLI_CONFIG_PATH` or `~/.depictio/CLI.yaml` instead.
+        Pass `[]` (the default) to build an artifact: the task runs a
+        single-user depictio, ingests the run into it, stops it and emits its
+        data directory. A depictio CLI configuration (`CLI.yaml`) instead sends
+        the run to that existing instance, with no artifact; this mode is not
+        the default and may change. `DEPICTIO_CLI_TOKEN` overrides its token.
       pattern: "*.{yaml,yml}"
-  - server:
-      type: string
-      description: |
-        `''` for the instance `cli_config` names (or the CLI's default), or
-        `local` for the single-user server `depictio local up` runs on the
-        machine that launched the pipeline: reused when it runs, started
-        otherwise. `local` needs `executor 'local'` and no container.
-      enum: ["", "local"]
 output:
+  artifact:
+    - - meta:
+          type: map
+          description: Groovy Map containing run information
+      - "*_depictio":
+          type: directory
+          description: |
+            A depictio data directory holding the run (MongoDB, object storage,
+            keys). Reopen it with `DEPICTIO_LOCAL_HOME=<dir> depictio local up`.
+            Absent when `cli_config` sends the run to an existing instance.
+          pattern: "*_depictio"
   result:
     - - meta:
           type: map
