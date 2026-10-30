@@ -74,7 +74,7 @@ def build(
     sample_col = config.get("sample_id_col")
     color_col = controls.get("color_by") or _default_color_column(config)
 
-    point_size = float(controls.get("point_size", config.get("point_size", 6)))
+    explicit_size = controls.get("point_size", config.get("point_size"))
 
     xs = [_as_float(v) for v in (rows.get(dim1_key) or [])]
     ys = [_as_float(v) for v in (rows.get(dim2_key) or [])]
@@ -85,8 +85,12 @@ def build(
     )
     color_values = rows.get(color_col) if color_col else None
 
-    # Dense embeddings get smaller points, matching denseAutoSize in the TSX.
-    size = min(point_size, 4.0) if len(xs) > 1000 else point_size
+    # An explicit size is drawn as given; unset, dense embeddings get smaller
+    # points (effectivePointSize in embeddingStyle.ts).
+    if explicit_size is not None:
+        size = float(explicit_size)
+    else:
+        size = 4.0 if len(xs) > 1000 else 6.0
     marker_base = {"size": size, "opacity": 0.85, "line": {"width": 0}}
 
     def customdata(indices: list[int]) -> list[str]:

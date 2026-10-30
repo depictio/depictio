@@ -329,7 +329,15 @@ class EmbeddingConfig(_BaseVizConfig):
         ),
     )
     show_density: bool = Field(default=False, description="Overlay density contours")
-    point_size: int = Field(default=6, ge=1, le=30)
+    point_size: int | None = Field(
+        default=None,
+        ge=1,
+        le=30,
+        description=(
+            "Marker size in px. Unset, 6, shrinking to 4 past 1,000 points; "
+            "set, drawn as given at any point count"
+        ),
+    )
     marker_outline_width: float = Field(
         default=1.5,
         ge=0.5,
@@ -352,6 +360,19 @@ class EmbeddingConfig(_BaseVizConfig):
     )
     show_centroids: bool = Field(default=False, description="Mark each colour group's centroid")
     marker_outline: bool = Field(default=False, description="Draw a thin outline around each point")
+    marker_outline_color: Literal["contrast", "background"] = Field(
+        default="contrast",
+        description=(
+            "Outline colour: 'contrast' is the text colour (dark on light, light "
+            "on dark), 'background' the page colour, a halo between overlapping points"
+        ),
+    )
+    axis_line_width: float = Field(
+        default=1,
+        ge=1,
+        le=6,
+        description="Axis line width in px for the 'default' (axis lines) plot style",
+    )
     legend_pos: Literal["right", "bottom", "in-tr", "hidden"] = Field(
         default="right", description="Where the colour legend sits"
     )

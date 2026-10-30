@@ -38,6 +38,13 @@ import { usePersistedVizControl } from './usePersistedVizControl';
 import { splitFigureByGroups } from './groupSplit';
 import { useSelectionRevision } from './selectionGesture';
 import { embeddingAxisTitles, type EmbeddingMethod } from './embeddingAxes';
+import {
+  clampAxisLineWidth,
+  DEFAULT_POINT_SIZE,
+  effectivePointSize,
+  outlineColour,
+  type OutlineColourMode,
+} from './embeddingStyle';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
 import { usePlotSelectionReset } from '../usePlotSelectionReset';
@@ -54,7 +61,13 @@ interface EmbeddingConfig {
   /** Explicit value→colour overrides for the categorical colour column.
    *  Wins over the default palette-index assignment from stableColorMap. */
   category_palette?: Record<string, string> | null;
-  point_size?: number;
+  /** Unset (null), points shrink to 4 px past 1,000 of them; set, the size is
+   *  drawn as given. */
+  point_size?: number | null;
+  /** Axis line width in px (1-6) for the "Axis lines" plot style. */
+  axis_line_width?: number;
+  /** Outline colour: the text colour ("contrast") or the page's ("background"). */
+  marker_outline_color?: OutlineColourMode;
   show_density?: boolean;
   /** Names the dimensions on the axes and in the hover: `PCo` gives PCo1 /
    *  PCo2. Unset, live mode takes the method's and precomputed mode keeps
@@ -130,15 +143,22 @@ const EmbeddingRenderer: React.FC<Props> = ({
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
   const config = (metadata.config || {}) as EmbeddingConfig;
-  // 6 to agree with EmbeddingConfig.point_size in
-  // depictio/models/components/advanced_viz/configs.py. The two layers used to
-  // disagree, so an unconfigured component drew 7 px and a configured one 6.
-  const [pointSize, setPointSize] = usePersistedVizControl(metadata, 'point_size', 6);
+  // Null unless the config or the viewer names a size: then the size follows
+  // the point count (see effectivePointSize), and an explicit size is drawn
+  // as given, however many points there are.
+  const [pointSize, setPointSize] = usePersistedVizControl<number | null>(metadata, 'point_size', null);
   const [showCentroids, setShowCentroids] = usePersistedVizControl(metadata, 'show_centroids', false);
   const [markerOutline, setMarkerOutline] = usePersistedVizControl(metadata, 'marker_outline', false);
   // Outline width in px. The old hardcoded 0.5 was invisible at any point size,
   // which is what the "outline?? je ne vois rien" report was about.
   const [outlineWidth, setOutlineWidth] = usePersistedVizControl(metadata, 'marker_outline_width', 1.5);
+  const [outlineMode, setOutlineMode] = usePersistedVizControl<OutlineColourMode>(
+    metadata,
+    'marker_outline_color',
+    'contrast',
+  );
+  // Axis line width of the "Axis lines" style; 1 px is the historical look.
+  const [axisLineWidth, setAxisLineWidth] = usePersistedVizControl<number>(metadata, 'axis_line_width', 1);
   // Axis furniture preset. "default" is exactly what this renderer has always
   // drawn (axis lines, no grid, no tick labels), so a shipped dashboard is
   // untouched; "grid" adds gridlines and ticks, and "clean" strips the axes,
@@ -561,10 +581,12 @@ const EmbeddingRenderer: React.FC<Props> = ({
       }
     }
 
-    const denseAutoSize = x.length > 1000 ? Math.min(pointSize, 4) : pointSize;
-    // An opaque, contrasting stroke. The old line was 0.5 px of translucent
-    // background colour, which was invisible at every point size.
-    const outline = markerOutline ? { width: outlineWidth, color: textColor } : { width: 0 };
+    const denseAutoSize = effectivePointSize(pointSize, x.length);
+    // An opaque stroke, in the text colour or the page's. The old line was
+    // 0.5 px of translucent background colour, invisible at every point size.
+    const outline = markerOutline
+      ? { width: outlineWidth, color: outlineColour(outlineMode, isDark, textColor) }
+      : { width: 0 };
     const baseMarker2D = {
       size: denseAutoSize,
       opacity: 0.85,
@@ -723,8 +745,10 @@ const EmbeddingRenderer: React.FC<Props> = ({
       showticklabels: gridStyle,
       ticks: (gridStyle ? 'outside' : '') as '' | 'outside',
       showline: !cleanStyle,
-      linecolor: zeroLineColor,
-      linewidth: 1,
+      // The 1 px default is a quiet rule; a thicker line is asked for to be
+      // seen, so it takes the text colour.
+      linecolor: clampAxisLineWidth(axisLineWidth) > 1 ? textColor : zeroLineColor,
+      linewidth: clampAxisLineWidth(axisLineWidth),
       mirror: false,
       color: textColor,
       tickfont: { color: textColor },
@@ -849,6 +873,8 @@ const EmbeddingRenderer: React.FC<Props> = ({
     showCentroids,
     markerOutline,
     outlineWidth,
+    outlineMode,
+    axisLineWidth,
     plotStyle,
     legendPos,
     ncontours,
@@ -1102,6 +1128,17 @@ const EmbeddingRenderer: React.FC<Props> = ({
             description="Axis furniture drawn around the points"
             allowDeselect={false}
           />
+          {plotStyle !== 'clean' ? (
+            <VizNumberInput
+              label="Axis line width"
+              value={axisLineWidth}
+              onChange={(v) => setAxisLineWidth(clampAxisLineWidth(Number(v)))}
+              min={1}
+              max={6}
+              step={0.5}
+              decimalScale={1}
+            />
+          ) : null}
           <VizSelect
             label="Legend"
             value={legendPos}
@@ -1130,8 +1167,8 @@ const EmbeddingRenderer: React.FC<Props> = ({
         <VizControlGroup title="Markers">
           <VizNumberInput
             label="Point size"
-            value={pointSize}
-            onChange={(v) => setPointSize(Math.max(1, Number(v) || 6))}
+            value={pointSize ?? DEFAULT_POINT_SIZE}
+            onChange={(v) => setPointSize(Math.max(1, Math.min(30, Number(v) || DEFAULT_POINT_SIZE)))}
             min={1}
             max={30}
           />
@@ -1156,6 +1193,18 @@ const EmbeddingRenderer: React.FC<Props> = ({
               max={4}
               step={0.5}
               decimalScale={1}
+            />
+          ) : null}
+          {markerOutline ? (
+            <VizSelect
+              label="Outline colour"
+              value={outlineMode}
+              onChange={(v) => v && setOutlineMode(v as OutlineColourMode)}
+              data={[
+                { value: 'contrast', label: 'Contrast (text colour)' },
+                { value: 'background', label: 'Background (halo)' },
+              ]}
+              allowDeselect={false}
             />
           ) : null}
         </VizControlGroup>
@@ -1218,6 +1267,8 @@ const EmbeddingRenderer: React.FC<Props> = ({
       showCentroids,
       markerOutline,
       outlineWidth,
+      outlineMode,
+      axisLineWidth,
       legendPos,
     ],
   );
