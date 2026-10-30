@@ -205,6 +205,10 @@ STATIC_IDS = {
             # never registered here, so seeded deploys 404'd on these tiles.
             "coverage_track_demo": "646b0f3c1e4a2d7f8e5b8d50",
             "categorical_flow_demo": "646b0f3c1e4a2d7f8e5b8d51",
+            # Embedding tabs: a single-cell UMAP (thousands of small points) and a
+            # sample PCA (a few large ones).
+            "sc_umap_demo": "646b0f3c1e4a2d7f8e5b8df0",
+            "sample_pca_demo": "646b0f3c1e4a2d7f8e5b8df2",
             # Same omission as the two above, for the benchmark family. Their
             # four tabs ship YAML with no `dashboard_id` and are not boot-seeded,
             # but project.yaml declares the DCs, and every declared DC has to be
@@ -316,6 +320,8 @@ STATIC_IDS = {
             "advanced_viz_benchmark_pr": "646b0f3c1e4a2d7f8e5b8d62",
             "advanced_viz_benchmark_confusion": "646b0f3c1e4a2d7f8e5b8d63",
             "advanced_viz_benchmark_ci": "646b0f3c1e4a2d7f8e5b8d64",
+            "advanced_viz_sc_umap": "646b0f3c1e4a2d7f8e5b8df1",
+            "advanced_viz_sample_pca": "646b0f3c1e4a2d7f8e5b8df3",
         },
     },
     # nf-core/viralrecon 3.0.0 viral-genome analysis template, a six-tab

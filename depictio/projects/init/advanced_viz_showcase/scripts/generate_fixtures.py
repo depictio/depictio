@@ -3911,3 +3911,78 @@ def generate_protein_family_demo() -> None:
 
 
 generate_protein_family_demo()
+
+
+# ---------------------------------------------------------------------------
+# Single-cell UMAP: 4,355 PBMC-like cells in 10 annotated cell types of
+# uneven size, laid out the way a PBMC 3k UMAP usually looks (one T/NK
+# continent, B cells apart, the myeloid island with its DCs, a speck of
+# platelets). Its own RNG, so the fixtures above keep their values.
+# columns: cell_id, umap_1, umap_2, cell_type, donor, n_genes
+# ---------------------------------------------------------------------------
+def generate_sc_umap_demo() -> None:
+    rng = np.random.default_rng(20261030)
+    # cell type: (cells, [(centre x, centre y, sd x, sd y, angle, weight), ...])
+    cell_types = {
+        "Naive CD4 T": (1100, [(-4.0, 2.2, 1.0, 0.55, 0.5, 0.6), (-2.9, 3.1, 0.7, 0.45, 0.9, 0.4)]),
+        "Memory CD4 T": (750, [(-3.0, 0.6, 0.8, 0.5, 0.2, 0.7), (-1.9, 1.4, 0.5, 0.4, 0.6, 0.3)]),
+        "CD8 T": (520, [(-0.9, -0.2, 0.7, 0.45, -0.4, 0.7), (-0.2, 0.7, 0.4, 0.35, 0.3, 0.3)]),
+        "NK": (260, [(0.9, -1.1, 0.55, 0.4, -0.6, 1.0)]),
+        "B": (560, [(-2.6, -5.0, 0.8, 0.6, 0.3, 0.8), (-1.6, -5.6, 0.45, 0.35, 0.0, 0.2)]),
+        "CD14 Mono": (780, [(6.0, 3.2, 0.9, 0.7, 1.1, 0.75), (5.2, 4.4, 0.5, 0.4, 0.6, 0.25)]),
+        "FCGR3A Mono": (260, [(7.6, 1.2, 0.55, 0.45, 0.4, 1.0)]),
+        "DC": (70, [(4.4, 5.6, 0.35, 0.3, 0.0, 1.0)]),
+        "pDC": (30, [(2.6, -4.2, 0.25, 0.2, 0.0, 1.0)]),
+        "Platelet": (25, [(1.8, 6.4, 0.15, 0.12, 0.0, 1.0)]),
+    }
+    genes_mu = {"Naive CD4 T": 820, "Memory CD4 T": 900, "CD8 T": 880, "NK": 950, "B": 870,
+                "CD14 Mono": 1350, "FCGR3A Mono": 1250, "DC": 1450, "pDC": 1100, "Platelet": 420}
+    rows = []
+    n = 0
+    for cell_type, (count, parts) in cell_types.items():
+        weights = np.array([p[5] for p in parts])
+        picks = rng.choice(len(parts), size=count, p=weights / weights.sum())
+        for k in picks:
+            cx, cy, sx, sy, angle, _ = parts[k]
+            dx, dy = rng.normal(0.0, sx), rng.normal(0.0, sy)
+            x = cx + dx * math.cos(angle) - dy * math.sin(angle)
+            y = cy + dx * math.sin(angle) + dy * math.cos(angle)
+            donor = f"donor_{rng.integers(1, 5)}"
+            n_genes = max(200, int(rng.normal(genes_mu[cell_type], genes_mu[cell_type] * 0.18)))
+            rows.append([f"cell_{n:05d}", round(x, 4), round(y, 4), cell_type, donor, n_genes])
+            n += 1
+    order = rng.permutation(len(rows))
+    write_tsv(
+        OUT / "sc_umap_demo.tsv",
+        ["cell_id", "umap_1", "umap_2", "cell_type", "donor", "n_genes"],
+        [rows[i] for i in order],
+    )
+
+
+generate_sc_umap_demo()
+
+
+# ---------------------------------------------------------------------------
+# Sample PCA: 80 bulk RNA-seq samples, four disease states of 20, on PC1/PC2
+# of the normalised counts. The states overlap the way real cohorts do, so a
+# big marker per sample still reads. Its own RNG.
+# columns: sample_id, PC1, PC2, group, batch
+# ---------------------------------------------------------------------------
+def generate_sample_pca_demo() -> None:
+    rng = np.random.default_rng(20261031)
+    groups = {
+        "healthy": (-14.0, -4.0, 5.0, 4.0),
+        "mild": (-3.0, 6.0, 5.5, 4.5),
+        "severe": (16.0, 2.0, 6.5, 5.5),
+        "recovered": (-8.0, 9.0, 5.0, 4.0),
+    }
+    rows = []
+    for g, (cx, cy, sx, sy) in groups.items():
+        for i in range(20):
+            batch = f"batch_{1 + i % 2}"
+            shift = 2.5 if batch == "batch_2" else 0.0
+            rows.append([f"{g}_{i + 1:02d}", round(rng.normal(cx, sx), 3), round(rng.normal(cy, sy) + shift, 3), g, batch])
+    write_tsv(OUT / "sample_pca_demo.tsv", ["sample_id", "PC1", "PC2", "group", "batch"], rows)
+
+
+generate_sample_pca_demo()

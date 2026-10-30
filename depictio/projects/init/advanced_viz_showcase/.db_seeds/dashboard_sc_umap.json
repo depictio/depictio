@@ -1,0 +1,293 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8df1"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8df1"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "scumap-text",
+      "component_type": "text",
+      "title": "Single-cell UMAP",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "Cell embedding",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "4,355 cells from four donors, one point per cell on the UMAP of a clustered and annotated PBMC sample, coloured by cell type. Thousands of points draw small; Colour by switches to the donor or the number of detected genes. Input: the cell table of nf-core/scrnaseq after clustering and annotation (Scanpy or Seurat obs with its X_umap).\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null,
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "scumap-embedding",
+      "component_type": "advanced_viz",
+      "title": "PBMC cells (UMAP)",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "sc_umap_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8df0"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Single-cell UMAP: 4,355 PBMC-like cells in 10 annotated cell types",
+        "data_collection_tag": "sc_umap_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8df0"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One point per cell, coloured by annotated cell type. Pre-computed UMAP coordinates.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Cell embedding",
+      "viz_kind": "embedding",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "embedding",
+        "sample_id_col": "cell_id",
+        "dim_1_col": "umap_1",
+        "dim_2_col": "umap_2",
+        "dim_3_col": null,
+        "cluster_col": "cell_type",
+        "color_col": null,
+        "category_palette": null,
+        "compute_method": null,
+        "umap_n_neighbors": 15,
+        "umap_min_dist": 0.1,
+        "tsne_perplexity": 30.0,
+        "tsne_n_iter": 1000,
+        "pcoa_distance": "bray_curtis",
+        "axis_prefix": "UMAP",
+        "show_density": false,
+        "point_size": 3,
+        "marker_outline_width": 1.5,
+        "plot_style": "default",
+        "default_color_by": null,
+        "show_centroids": false,
+        "marker_outline": false,
+        "legend_pos": "right",
+        "ncontours": 14,
+        "density_opacity": 0.45,
+        "view_3d": false,
+        "reverse_scale": true,
+        "hover_cols": [],
+        "selection_enabled": true,
+        "selection_column": null
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "scumap-f-celltype",
+      "component_type": "interactive",
+      "title": "Cell type",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "sc_umap_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8df0"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Single-cell UMAP: 4,355 PBMC-like cells in 10 annotated cell types",
+        "data_collection_tag": "sc_umap_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8df0"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Cell scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "cell_type",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Cells",
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "#3F51B5",
+      "icon_name": "mdi:blood-bag",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-scumap-f-celltype",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-scumap-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-scumap-embedding",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Single-cell UMAP",
+  "subtitle": "Cells of a PBMC sample on their UMAP, coloured by annotated cell type",
+  "icon": "mdi:scatter-plot",
+  "icon_color": "indigo",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 50,
+  "main_tab_name": null,
+  "tab_icon": "mdi:blood-bag",
+  "tab_icon_color": "indigo",
+  "tab_group": null,
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Cell scope",
+      "icon": "mdi:filter-variant",
+      "color": "indigo",
+      "description": "Restricts which cells are drawn, not the embedding itself",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Cell embedding",
+      "icon": "mdi:chart-scatter-plot",
+      "color": "indigo",
+      "description": "One point per cell, coloured by cell type",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "category_colors": null,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "open_with_defaults": false,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

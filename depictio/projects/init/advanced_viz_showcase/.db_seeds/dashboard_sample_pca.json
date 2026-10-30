@@ -1,0 +1,293 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8df3"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8df3"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "spca-text",
+      "component_type": "text",
+      "title": "Sample PCA",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "Sample PCA",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Eighty bulk RNA-seq samples in four disease states, one large point per sample on PC1 and PC2 of the normalised counts. With few points a big marker reads at a glance; Colour by switches to the sequencing batch. Input: the PCA table of an nf-core/rnaseq or nf-core/differentialabundance QC report.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null,
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "spca-embedding",
+      "component_type": "advanced_viz",
+      "title": "Samples by disease state (PCA)",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "sample_pca_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8df2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample PCA: 80 bulk RNA-seq samples in four disease states",
+        "data_collection_tag": "sample_pca_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8df2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One point per sample on the first two principal components, coloured by disease state.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample PCA",
+      "viz_kind": "embedding",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "embedding",
+        "sample_id_col": "sample_id",
+        "dim_1_col": "PC1",
+        "dim_2_col": "PC2",
+        "dim_3_col": null,
+        "cluster_col": "group",
+        "color_col": null,
+        "category_palette": null,
+        "compute_method": null,
+        "umap_n_neighbors": 15,
+        "umap_min_dist": 0.1,
+        "tsne_perplexity": 30.0,
+        "tsne_n_iter": 1000,
+        "pcoa_distance": "bray_curtis",
+        "axis_prefix": null,
+        "show_density": false,
+        "point_size": 25,
+        "marker_outline_width": 1.5,
+        "plot_style": "default",
+        "default_color_by": null,
+        "show_centroids": false,
+        "marker_outline": false,
+        "legend_pos": "right",
+        "ncontours": 14,
+        "density_opacity": 0.45,
+        "view_3d": false,
+        "reverse_scale": true,
+        "hover_cols": [],
+        "selection_enabled": true,
+        "selection_column": null
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "spca-f-group",
+      "component_type": "interactive",
+      "title": "Disease state",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "sample_pca_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8df2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample PCA: 80 bulk RNA-seq samples in four disease states",
+        "data_collection_tag": "sample_pca_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8df2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Sample scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "group",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Samples",
+      "timescale": null,
+      "show_marks": null,
+      "show_mark_labels": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "#7E57C2",
+      "icon_name": "mdi:flask-outline",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-spca-f-group",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-spca-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-spca-embedding",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Sample PCA",
+  "subtitle": "Bulk RNA-seq samples on their first two principal components",
+  "icon": "mdi:chart-scatter-plot",
+  "icon_color": "violet",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 51,
+  "main_tab_name": null,
+  "tab_icon": "mdi:flask-outline",
+  "tab_icon_color": "violet",
+  "tab_group": null,
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Sample scope",
+      "icon": "mdi:filter-variant",
+      "color": "violet",
+      "description": "Restricts which samples are drawn",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Sample PCA",
+      "icon": "mdi:chart-scatter-plot",
+      "color": "violet",
+      "description": "One large point per sample, coloured by disease state",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "category_colors": null,
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "open_with_defaults": false,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

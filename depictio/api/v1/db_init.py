@@ -451,6 +451,8 @@ async def create_initial_dashboards(
                 "benchmark_pr",
                 "benchmark_confusion",
                 "benchmark_ci",
+                "sc_umap",
+                "sample_pca",
             )
         ),
         # nf-core/viralrecon multi-tab dashboard. Seed JSONs are snapshotted

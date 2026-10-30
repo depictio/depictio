@@ -72,6 +72,49 @@ workflows:
               cluster: "True cluster label used to generate the point (control/treatment/recovery)"
               color: "Continuous gradient correlated with dim_1"
 
+      - id: "646b0f3c1e4a2d7f8e5b8df0"
+        data_collection_tag: "sc_umap_demo"
+        description: "Single-cell UMAP: 4,355 PBMC-like cells in 10 annotated cell types"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/sc_umap_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              cell_id: "Cell barcode-like identifier (cell_00000..)"
+              umap_1: "UMAP dimension 1"
+              umap_2: "UMAP dimension 2"
+              cell_type: "Annotated cell type (Naive CD4 T, CD14 Mono, B, ...)"
+              donor: "Donor the cell comes from (donor_1..donor_4)"
+              n_genes: "Number of genes detected in the cell"
+
+      - id: "646b0f3c1e4a2d7f8e5b8df2"
+        data_collection_tag: "sample_pca_demo"
+        description: "Sample PCA: 80 bulk RNA-seq samples in four disease states"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "/app/depictio/projects/init/advanced_viz_showcase/data/sample_pca_demo.tsv"
+          dc_specific_properties:
+            format: "TSV"
+            polars_kwargs:
+              separator: "\t"
+            columns_description:
+              sample_id: "Sample identifier (healthy_01 .. recovered_20)"
+              PC1: "Principal component 1"
+              PC2: "Principal component 2"
+              group: "Disease state (healthy / mild / severe / recovered)"
+              batch: "Sequencing batch (batch_1 / batch_2)"
+
       - id: "646b0f3c1e4a2d7f8e5b8d06"
         data_collection_tag: "embedding_umap"
         description: "UMAP projection of the same synthetic feature matrix"

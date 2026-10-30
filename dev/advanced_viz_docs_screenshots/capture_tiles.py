@@ -53,7 +53,8 @@ TARGETS: dict[str, tuple[str, int]] = {
     "da_barplot": ("da_barplot", 0),
     "damage_profile": ("damage_profile", 0),
     "dot_plot": ("dotplot", 0),
-    "embedding": ("clustering_umap", 0),
+    "embedding": ("sc_umap", 0),
+    "embedding_pca": ("sample_pca", 0),
     "genome_chord": ("genome_chord", 0),
     "genome_view": ("genome_view", 1),
     "group_compare": ("group_compare", 0),
@@ -78,6 +79,7 @@ TARGETS: dict[str, tuple[str, int]] = {
 }
 # docs image name -> the viz_kind stored in the seed (differs for retired kinds)
 SEED_KIND = {
+    "embedding_pca": "embedding",
     "roc_pr_curve": "pr_benchmark",
     "phylogenetic_summary": "phylogenetic",
     "controls_header": "volcano",
@@ -131,6 +133,11 @@ ACTIONS = {
     "controls_popover": _placement("In the settings popover", keep_open=True),
 }
 
+# docs image name -> chrome style (`?chrome=`). The Glass chrome's Plotly patch
+# drops axis lines, so the embedding's "Axis lines" plot style only shows in
+# the Classic chrome ("base").
+CHROME = {"embedding": "base", "embedding_pca": "base"}
+
 HIDE_CSS = (
     ".hoverlayer, .modebar-container, .mantine-Notifications-root "
     "{display:none!important}"
@@ -173,7 +180,8 @@ def main() -> int:
                     "localStorage.setItem('depictio.walkthrough.builder', 'seen');"
                 )
                 page = ctx.new_page()
-                page.goto(f"{args.base}/dashboard/{dash_id}?no-walkthrough=1")
+                chrome = f"&chrome={CHROME[name]}" if name in CHROME else ""
+                page.goto(f"{args.base}/dashboard/{dash_id}?no-walkthrough=1{chrome}")
                 page.add_style_tag(content=HIDE_CSS)
                 tile = page.locator(
                     f'.depictio-component-chrome[data-component-type="advanced_viz"]'
