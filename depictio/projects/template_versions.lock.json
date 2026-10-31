@@ -590,7 +590,19 @@
     },
     "nf-core/sarek/3.10.0": {
       "version": "2.0.0",
-      "content_hash": "ff9a9be9834f60c8c8dcdd397bd652c82da76875beb7eb3fd7ca8c12b43e94c4",
+      "content_hash": "ddd30b19645db72e9647309511bb65c95226b3a14427092390881fa6aeecb2d9",
+      "catalog": {
+        "bcftools": "1.0.0",
+        "mosdepth": "1.0.0",
+        "multiqc": "1.0.0",
+        "snpeff": "1.0.0",
+        "vcf": "1.0.0",
+        "vcftools": "1.0.0"
+      }
+    },
+    "nf-core/sarek/3.11.0": {
+      "version": "2.0.0",
+      "content_hash": "0944a4be7aa5326a1dfc05d40faea12df7f21941925bd7fe33897fc4db92efb4",
       "catalog": {
         "bcftools": "1.0.0",
         "mosdepth": "1.0.0",

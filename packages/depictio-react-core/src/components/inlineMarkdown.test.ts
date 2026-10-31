@@ -94,6 +94,14 @@ describe('parseInlineMarkdown', () => {
   });
 });
 
+describe('section links', () => {
+  it('reads a section: link, spaces included', () => {
+    expect(parseInlineMarkdown('[3 rows](section:Sample sheet)')).toEqual([
+      { type: 'link', value: '3 rows', href: 'section:Sample sheet', external: false },
+    ]);
+  });
+});
+
 describe('inline icons', () => {
   it('reads an icon in image syntax', () => {
     expect(parseInlineMarkdown('![](icon:mdi:dna) Pipeline')).toEqual([
