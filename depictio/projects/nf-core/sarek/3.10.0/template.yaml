@@ -753,6 +753,9 @@ workflows:
                 - "*variant_calling/consensus/*"
                 - "*.freebayes.vcf.gz"
                 - "*.mutect2.vcf.gz"
+                # NGSCheckMate's SNP-panel genotypes check that a pair is one person;
+                # they are not calls.
+                - "*reports/*"
           dc_specific_properties:
             format: "TSV"
             polars_kwargs:
