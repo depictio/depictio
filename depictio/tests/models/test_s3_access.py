@@ -421,7 +421,8 @@ class TestClientFactory:
         # The EMBL gateway rejects the default CRC checksums of boto3 >= 1.36.
         assert config.request_checksum_calculation == "when_required"
         assert config.response_checksum_validation == "when_required"
-        assert config.s3 == {"addressing_style": "path"}
+        # Newer botocore also fills `payload_signing_enabled`; only the addressing is ours.
+        assert config.s3["addressing_style"] == "path"
         assert config.retries == {"mode": "standard", "total_max_attempts": 3}
         assert (config.connect_timeout, config.read_timeout) == (12.0, 12.0)
         assert client.meta.endpoint_url == "https://s3.example.org"
@@ -437,7 +438,7 @@ class TestClientFactory:
 
         assert config.signature_version is UNSIGNED
         assert config.request_checksum_calculation == "when_required"
-        assert not config.s3
+        assert "addressing_style" not in (config.s3 or {})
 
     def test_keys_are_passed_only_for_signed_project_and_instance_targets(self, monkeypatch):
         seen: list[dict] = []
