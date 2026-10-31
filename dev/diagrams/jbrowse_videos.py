@@ -544,6 +544,33 @@ async def _browser_locus(lanes) -> tuple[str, int] | None:
     return m.group(1), int((lo + hi) / 2 * 1_000_000)
 
 
+async def _band_x(page, canvas) -> float | None:
+    """Page x of the browser's window drawn on the lanes: the column with the most
+    pale-blue band pixels (the band spans every lane, a call only one)."""
+    import io
+
+    from PIL import Image
+
+    b = await canvas.bounding_box()
+    if not b:
+        return None
+    png = await page.screenshot(clip=b)
+    img = Image.open(io.BytesIO(png)).convert("RGB")
+    sx = img.width / b["width"]
+    best, best_x = 0, None
+    for px in range(int(img.width * 0.04), img.width):
+        n = 0
+        for py in range(0, img.height, 3):
+            r, g, bl = img.getpixel((px, py))
+            if bl > 200 and bl - r > 15 and bl - g > 5:
+                n += 1
+        if n > best:
+            best, best_x = n, px
+    if best_x is None or best < img.height / 3 * 0.3:
+        return None
+    return b["x"] + best_x / sx
+
+
 async def peak_brush(page, hand: Hand, rec: Recorder, ids: dict[str, str], name: str) -> None:
     """A Locus tab of a peak pipeline: widen the lanes around the browser's best
     call, brush the peak in their middle, then read it in the browser."""
@@ -570,9 +597,8 @@ async def peak_brush(page, hand: Hand, rec: Recorder, ids: dict[str, str], name:
         await hand.type(field_, f"{chrom}:{max(centre - span, 1):,}-{centre + span:,}")
     else:
         # No locus field: zoom the lanes on the browser's band with Ctrl + wheel.
-        band = lanes.get_by_text("Browser view").last
         bb = await canvas.bounding_box()
-        x = (await band.bounding_box() or bb)["x"]
+        x = await _band_x(page, canvas) or bb["x"] + bb["width"] / 2
         await hand.glide(x, bb["y"] + bb["height"] * 0.5)
         await page.keyboard.down("Control")
         for _ in range(8):
@@ -585,9 +611,10 @@ async def peak_brush(page, hand: Hand, rec: Recorder, ids: dict[str, str], name:
     await hand.click(lanes.locator('[data-testid="genome-view-interaction-mode"] label').nth(2))
     cb = await canvas.bounding_box()
     y = cb["y"] + cb["height"] * 0.5
-    await hand.drag(
-        cb["x"] + cb["width"] * PEAK_BRUSH[0], y, cb["x"] + cb["width"] * PEAK_BRUSH[1], y, steps=25
-    )
+    # Centred on the browser's band: the zoom keeps it under the cursor, not mid-lanes.
+    half = cb["width"] * (PEAK_BRUSH[1] - PEAK_BRUSH[0]) / 2
+    bx = await _band_x(page, canvas) or cb["x"] + cb["width"] / 2
+    await hand.drag(bx - half, y, bx + half, y, steps=25)
     await hand.caption("The browser opens on the brushed window")
     await _beat(page, 3000)
     await _scroll_to(page, tile, offset=60, smooth=True, ms=1200)
@@ -595,7 +622,7 @@ async def peak_brush(page, hand: Hand, rec: Recorder, ids: dict[str, str], name:
     await _local_sd(page, hand, tile)
     await hand.zoom(tile, scale=1.2, hold=1300)
     await hand.caption("Zoom in on the peak, then along to the genes beside it", hold=300)
-    await _zoom_in(page, hand, tile, 2)
+    await _zoom_in(page, hand, tile, 1)
     track = tile.locator('[data-testid^="trackRenderingContainer"]').nth(2)
     tb = await track.bounding_box()
     ty = tb["y"] + tb["height"] / 2
@@ -715,6 +742,15 @@ async def ranked_rows(page, hand: Hand, rec: Recorder, ids: dict[str, str]) -> N
         # The picked variant sits in the middle of the window: its star there.
         cx = rb["x"] + rb["width"] / 2
         point = await _find_saturated(page, cx - 80, rb["y"], 160, min(rb["height"], 60))
+    vcf = tile.locator(
+        '[data-testid^="trackRenderingContainer"][data-testid$=".ranked_research"]'
+    ).first
+    vb = await vcf.bounding_box() if await vcf.count() else None
+    if point and vb:
+        # The same variant in the genmod VCF: its record holds the compound partners.
+        point = (
+            await _find_saturated(page, point[0] - 40, vb["y"], 80, min(vb["height"], 40)) or point
+        )
     if point:
         await hand.caption("Click it: its ranking, inheritance model and compound partners")
         await hand.click_at(*point)

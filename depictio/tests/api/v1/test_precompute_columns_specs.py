@@ -470,3 +470,17 @@ def test_time_column_specs_are_bson_encodable() -> None:
     [spec] = precompute_columns_specs(df, REAL_AGG_FUNCTIONS, _dc_data())
 
     bson_encode(spec["specs"])
+
+
+def test_megabyte_cells_keep_the_specs_inside_one_mongo_document() -> None:
+    # CNVkit's .call.cns lists every gene of a segment in one cell, megabytes on an
+    # exome; the mode and the unique_values preview used to copy them whole and the
+    # upsert failed with DocumentTooLarge.
+    genes = [",".join(f"G{i}_{j}" for j in range(300_000)) for i in range(30)]
+    df = pl.DataFrame({"gene": genes, "log2": [0.1] * len(genes)})
+    specs = precompute_columns_specs(df, REAL_AGG_FUNCTIONS, _dc_data())
+    gene = next(s for s in specs if s["name"] == "gene")["specs"]
+    assert gene["unique_values"]
+    for value in [*gene["unique_values"], *(v for v in gene.values() if isinstance(v, str))]:
+        assert len(value) <= 256
+    assert len(bson_encode({"specs": specs})) < 64_000
